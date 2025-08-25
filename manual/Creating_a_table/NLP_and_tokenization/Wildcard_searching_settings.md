@@ -443,7 +443,7 @@ table products {
 
 Expanded queries take naturally longer to complete, but can possibly improve the search quality, as the documents with exact form matches should be ranked generally higher than documents with stemmed or infix matches.
 
-**Note that the existing query syntax does not allow to emulate this kind of expansion**, because internal expansion works on keyword level and expands keywords within phrase or quorum operators too (which is not possible through the query syntax). Take a look at the examples and how expand_keywords affects the search result weights and how "runsy" is found by "runs" w/o the need to add a star:
+**Note that the existing query syntax does not allow you to emulate this kind of expansion**, because internal expansion works on keyword level and expands keywords within phrase or quorum operators too (which is not possible through the query syntax). Take a look at the examples and how expand_keywords affects the search result weights and how "runsy" is found by "runs" w/o the need to add a star:
 
 <!-- intro -->
 ##### expand_keywords is enabled

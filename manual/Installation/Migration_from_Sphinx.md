@@ -121,7 +121,7 @@ Here's the complete list of `index_converter` options:
 * `--index` specifies which table should be converted
 * `--path` - instead of using a config file, a path containing table(s) can be used
 * `--strip-path` - strips path from filenames referenced by table: stopwords, exceptions and wordforms
-* `--large-docid` - allows to convert documents with ids larger than 2^63 and display a warning, otherwise it will just exit on the large id with an error. This option was added as in Manticore 3.x doc ids are signed bigint, while previously they were unsigned
+* `--large-docid` - allows you to convert documents with ids larger than 2^63 and display a warning, otherwise it will just exit on the large id with an error. This option was added as in Manticore 3.x doc ids are signed bigint, while previously they were unsigned
 * `--output-dir <dir>` - writes the new files in a chosen folder rather than the same location as with the existing table files. When this option set, existing table files will remain untouched at their location.
 * `--all` - converts all tables from the config
 * `--killlist-target <targets>` sets the target tables for which kill-lists will be applied. This option should be used only in conjunction with the `--index` option

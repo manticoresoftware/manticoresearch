@@ -2042,6 +2042,6 @@ table products {
 attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 
-When updating attributes the changes are first written to in-memory copy of attributes. This setting allows to set the interval between flushing the updates to disk. It defaults to 0, which disables the periodic flushing, but flushing will still occur at normal shut-down.
+When updating attributes the changes are first written to in-memory copy of attributes. This setting allows you to set the interval between flushing the updates to disk. It defaults to 0, which disables the periodic flushing, but flushing will still occur at normal shut-down.
 
 <!-- proofread -->

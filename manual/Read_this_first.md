@@ -50,7 +50,7 @@ Real-time tables can be used in both RT and plain modes. In the RT mode a real-t
 
 #### SQL vs JSON
 Manticore provides multiple ways and interfaces to manage your schemas and data, but the two main are:
-* **SQL**. This is a native Manticore's language which enables all Manticore's functionality. **The best practice is to use SQL to**:
+* **SQL**. This is Manticore's native language which enables all Manticore's functionality. **The best practice is to use SQL to**:
   * manage your schemas and do other DBA routines as it's the easiest way to do that
   * design your queries as SQL is much closer to natural language than the JSON DSL which is important when you design something new. You can use Manticore SQL via any MySQL client or [/sql](Connecting_to_the_server/MySQL_protocol.md).
 * **JSON**. Most functionality is also available via JSON domain specific language. This is especially useful when you integrate Manticore with your application as with JSON you can do it more programmatically than with SQL. The best practice is to **first explore how to do something via SQL and then use JSON to integrate it into your application.**

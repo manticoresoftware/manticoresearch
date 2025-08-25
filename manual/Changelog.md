@@ -964,7 +964,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) MCL: crash on select when too many ft fields
 * [Issue #470](https://github.com/manticoresoftware/manticoresearch/issues/470) sql_joined_field can't be stored
 * [Issue #713](https://github.com/manticoresoftware/manticoresearch/issues/713) Crash when using LEVENSHTEIN()
-* [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpected and cant to normal restart
+* [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpectedly and can't restart normally
 * [Issue #788](https://github.com/manticoresoftware/manticoresearch/issues/788) CALL KEYWORDS through /sql returns control char which breaks json
 * [Issue #789](https://github.com/manticoresoftware/manticoresearch/issues/789) mariadb can't create table FEDERATED
 * [Issue #796](https://github.com/manticoresoftware/manticoresearch/issues/796) WARNING: dlopen() failed: /usr/bin/lib_manticore_columnar.so: cannot open shared object file: No such file or directory
@@ -1385,7 +1385,7 @@ sys	0m0.047s
   </details>
 
 - **[ALTER](Updating_table_schema_and_settings.md) can add/remove a full-text field** (in RT mode). Previously it could only add/remove an attribute.
-- 🔬 **Experimental: pseudo-sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
+- 🔬 **Experimental: pseudo-sharding for full-scan queries** - allows you to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
 
 ### Minor changes
 <!-- example -->

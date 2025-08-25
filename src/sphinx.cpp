@@ -1607,6 +1607,7 @@ public:
 	void			AddItem ( const char * pToken, YYSTYPE * pStart=NULL, YYSTYPE * pEnd=NULL );
 	void			AliasLastItem ( YYSTYPE * pAlias );
 	void			AddOption ( YYSTYPE * pOpt, YYSTYPE * pVal );
+	bool			AddDistinct ( YYSTYPE * pNewExpr, YYSTYPE * pStart, YYSTYPE * pEnd );
 
 private:
 	void			AutoAlias ( CSphQueryItem & tItem, YYSTYPE * pStart, YYSTYPE * pEnd );
@@ -1808,6 +1809,34 @@ void SelectParser_t::AddOption ( YYSTYPE * pOpt, YYSTYPE * pVal )
 		int64_t iMaxPredicted = strtoull ( szNumber, NULL, 10 );
 		m_pQuery->m_iMaxPredictedMsec = int(iMaxPredicted > INT_MAX ? INT_MAX : iMaxPredicted );
 	}
+}
+
+bool SelectParser_t::AddDistinct ( YYSTYPE * pNewExpr, YYSTYPE * pStart, YYSTYPE * pEnd )
+{
+	CSphString sDistinct;
+	sDistinct.SetBinary ( m_pStart + pNewExpr->m_iStart, pNewExpr->m_iEnd - pNewExpr->m_iStart );
+	sphColumnToLowercase ( const_cast<char *>( sDistinct.cstr() ) );
+	
+	// Check if this distinct expression already exists
+	if ( m_pQuery->m_dGroupDistinct.Contains ( sDistinct ) )
+	{
+		int iIndex = m_pQuery->m_dGroupDistinct.GetFirst ( [&sDistinct] ( const CSphString & s ) { return s==sDistinct; } );
+		CSphString sItemName;
+		sItemName.SetSprintf ( "@distinct_%d", iIndex );
+		AddItem ( sItemName.cstr(), pStart, pEnd );
+		return true;
+	}
+	
+	// Add new distinct expression
+	int iDistinctIndex = m_pQuery->m_dGroupDistinct.GetLength();
+	m_pQuery->m_dGroupDistinct.Add ( sDistinct );
+	
+	// Create unique @distinct_N item name
+	CSphString sItemName;
+	sItemName.SetSprintf ( "@distinct_%d", iDistinctIndex );
+	
+	AddItem ( sItemName.cstr(), pStart, pEnd );
+	return true;
 }
 
 bool ParseSelectList ( CSphString & sError, CSphQuery & tQuery )
@@ -2083,7 +2112,7 @@ void CSphIndex::SetMutableSettings ( const MutableIndexSettings_c & tSettings )
 
 static bool DetectNonClonableSorters ( const CSphQuery & tQuery )
 {
-	if ( !tQuery.m_sGroupDistinct.IsEmpty() )
+	if ( !tQuery.m_dGroupDistinct.IsEmpty() )
 		return true;
 
 	// FIXME: also need to handle 
@@ -2108,7 +2137,7 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & 
 	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 		return false;
 
-	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
+	bool bDistinct = !tQuery.m_dGroupDistinct.IsEmpty();
 	if ( bHasSI )
 	{
 		// check for count distinct precalc

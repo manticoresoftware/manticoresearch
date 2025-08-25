@@ -1466,7 +1466,7 @@ static bool TryToCreateSpecialFilter ( std::unique_ptr<ISphFilter> & pFilter, co
 	assert ( !pFilter );
 
 	// try to create a filter on a special attribute
-	if ( sAttrName.Begins("@") && !bHaving && ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" ) )
+	if ( sAttrName.Begins("@") && !bHaving && ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName.Begins("@distinct_") ) )
 	{
 		sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
 		return false;

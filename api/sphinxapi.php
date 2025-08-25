@@ -43,7 +43,7 @@ define ( "SEARCHD_COMMAND_STATUS",		5 );
 define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x120 );
+define ( "VER_COMMAND_SEARCH",		0x121 );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
 define ( "VER_COMMAND_UPDATE",		0x104 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );

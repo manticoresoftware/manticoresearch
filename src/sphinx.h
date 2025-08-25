@@ -583,7 +583,7 @@ struct CSphQuery
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
 	ESphGroupBy		m_eGroupFunc = SPH_GROUPBY_ATTR;	///< function to pre-process group-by attribute value with
 	CSphString		m_sGroupSortBy { "@groupby desc" };	///< sorting clause for groups in group-by mode
-	CSphString		m_sGroupDistinct;		///< count distinct values for this attribute
+	CSphVector<CSphString>	m_dGroupDistinct;	///< count distinct values for multiple attributes
 
 	int				m_iCutoff = -1;			///< matches count threshold to stop searching at (<=0 means to search until all matches are found)
 

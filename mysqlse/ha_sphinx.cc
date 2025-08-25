@@ -160,6 +160,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
+
 	VER_COMMAND_SEARCH		= 0x119,
 };
 
@@ -302,9 +303,9 @@ struct CSphSEShare
 	uint			m_iUseCount;
 #if MYSQL_VERSION_ID<50610
 	CHARSET_INFO *	m_pTableQueryCharset;
-#else	
+#else
 	const CHARSET_INFO *	m_pTableQueryCharset;
-#endif	
+#endif
 
 	int					m_iTableFields;
 	char **				m_sTableField;
@@ -437,7 +438,7 @@ struct CSphSEThreadTable
 	CHARSET_INFO *		m_pQueryCharset;
 #else
 	const CHARSET_INFO *		m_pQueryCharset;
-#endif	
+#endif
 
 	bool				m_bReplace;		///< are we doing an INSERT or REPLACE
 
@@ -2108,7 +2109,7 @@ int ha_sphinx::open ( const char * name, int, uint )
 		CSphTLS * pTls = (CSphTLS *)( *tmp );
 		SafeDelete ( pTls );
 		*tmp = NULL;
-	}	
+	}
 	#else
 	if ( table->in_use->ha_data [ sphinx_hton.slot ] )
 	{
@@ -2360,16 +2361,16 @@ int ha_sphinx::write_row ( byte * )
 			} else
 			{
 				(*ppField)->val_str ( &sValue );
-				
+
 				int iLen = sValue.length();
 				bool bMva = ( iLen>1 && sValue.ptr()[0]=='(' && sValue.ptr()[iLen-1]==')' );
-				
+
 				if ( !bMva )
 					sQuery.append ( "'" );
 				sValue.print ( &sQuery );
 				if ( !bMva )
 					sQuery.append ( "'" );
-				
+
 				sValue.length(0);
 			}
 		}

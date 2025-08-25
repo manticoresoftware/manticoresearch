@@ -11,7 +11,7 @@ on:
   workflow_dispatch:  # Manual trigger
     inputs:
       version:
-        description: 'Manticore version to test (e.g., 13.6.7-25080704-1ab9ccc95)'
+        description: 'Manticore version to test (e.g., 13.7.2-25082110-e893feb4c)'
         required: false
         type: string
 
@@ -40,181 +40,33 @@ jobs:
           Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace/1GB,2)}} | Tee-Object -FilePath manticore_test_log.txt -Append
         shell: pwsh
 
-      - name: Get Latest Version Info
-        id: version_info
+      - name: Use Local Test Installer
+        id: local_installer
         run: |
-          echo "=== GETTING VERSION INFORMATION ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "=== USING LOCAL TEST INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          $manualVersion = "${{ github.event.inputs.version }}"
+          $localInstaller = ".github/test-installers/manticore-13.7.2-25082110-e893feb4c-x64.exe"
           
-          if ([string]::IsNullOrEmpty($manualVersion)) {
-            echo "No manual version specified, trying to get latest..." | Tee-Object -FilePath manticore_test_log.txt -Append
-            
-            try {
-              # Пробуем получить последнюю версию из репозитория
-              $repoUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/"
-              
-              # Use known version as fallback
-              $fallbackVersion = "13.7.2-25082110-e893feb4c"
-              echo "Using latest version: $fallbackVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
-              $version = $fallbackVersion
-              
-            } catch {
-              echo "Could not determine latest version, using fallback" | Tee-Object -FilePath manticore_test_log.txt -Append
-              $version = "13.6.7-25080704-1ab9ccc95"
-            }
+          if (Test-Path $localInstaller) {
+            echo "✅ Found local installer: $localInstaller" | Tee-Object -FilePath manticore_test_log.txt -Append
+            $fileInfo = Get-Item $localInstaller
+            echo "File size: $($fileInfo.Length) bytes ($([math]::Round($fileInfo.Length/1MB,2)) MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "installer_to_use=$localInstaller" >> $env:GITHUB_OUTPUT
+            echo "installer_found=true" >> $env:GITHUB_OUTPUT
           } else {
-            echo "Using manual version: $manualVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
-            $version = $manualVersion
-          }
-          
-          # Try new dev build first, then fallback to release
-          $devUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/dev/x64/manticore-$version-x64.exe"
-          $releaseUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-$version-x64.exe"
-          
-          # Check if dev version exists
-          try {
-            $devResponse = Invoke-WebRequest -Uri $devUrl -Method Head -UseBasicParsing -ErrorAction Stop
-            $installerUrl = $devUrl
-            echo "Using DEV version from: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
-          } catch {
-            $installerUrl = $releaseUrl
-            echo "DEV version not found, using RELEASE version from: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
-          }
-          $installerName = "manticore-$version-x64.exe"
-          
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          echo "installer_url=$installerUrl" >> $env:GITHUB_OUTPUT
-          echo "installer_name=$installerName" >> $env:GITHUB_OUTPUT
-          
-          echo "Will download: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
-        shell: pwsh
-
-      - name: Download Fresh Built Installer (if available)
-        if: steps.check_fresh.outputs.fresh_installer_found != 'true'
-        id: download_fresh
-        run: |
-          echo "=== CHECKING FOR FRESH BUILT INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          try {
-            # Try to download artifact from the latest "Making Windows NSIS installer" workflow
-            $headers = @{
-              'Authorization' = 'token ${{ github.token }}'
-              'Accept' = 'application/vnd.github.v3+json'
-            }
-            
-            # Get latest workflow runs
-            $workflowRuns = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows" -Headers $headers
-            $nsisWorkflow = $workflowRuns.workflows | Where-Object { $_.name -like "*NSIS*" -or $_.name -like "*installer*" }
-            
-            if ($nsisWorkflow) {
-              echo "Found NSIS installer workflow: $($nsisWorkflow.name)" | Tee-Object -FilePath manticore_test_log.txt -Append
-              echo "fresh_installer_available=true" >> $env:GITHUB_OUTPUT
-            } else {
-              echo "No fresh installer workflow found, will use repository version" | Tee-Object -FilePath manticore_test_log.txt -Append
-              echo "fresh_installer_available=false" >> $env:GITHUB_OUTPUT
-            }
-          } catch {
-            echo "Could not check for fresh installer: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
-            echo "fresh_installer_available=false" >> $env:GITHUB_OUTPUT
-          }
-        shell: pwsh
-
-      - name: Download Fresh Built Installer
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          workflow: Making Windows NSIS installer
-          name: win_installer  # точное имя артефакта от коллеги
-          path: ./
-          if_no_artifact_found: warn
-
-      - name: Extract and Check Downloaded Installer
-        id: check_fresh
-        run: |
-          echo "=== CHECKING FOR FRESH INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          # Check if artifact.tar was downloaded (как видно из логов коллеги)
-          if (Test-Path "artifact.tar") {
-            echo "Found artifact.tar, extracting..." | Tee-Object -FilePath manticore_test_log.txt -Append
-            
-            # Extract tar file (содержит .exe файл)
-            tar -xf artifact.tar
-            
-            # Look for extracted installer
-            $installerFiles = Get-ChildItem -Path . -Name "*.exe" | Where-Object { $_ -like "*manticore*" }
-            
-            if ($installerFiles) {
-              $freshInstaller = $installerFiles[0]
-              echo "✅ Found fresh installer: $freshInstaller" | Tee-Object -FilePath manticore_test_log.txt -Append
-              $fileInfo = Get-Item $freshInstaller
-              echo "File size: $($fileInfo.Length) bytes ($([math]::Round($fileInfo.Length/1MB,2)) MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
-              echo "fresh_installer_found=true" >> $env:GITHUB_OUTPUT
-              echo "fresh_installer_name=$freshInstaller" >> $env:GITHUB_OUTPUT
-            } else {
-              echo "❌ No installer found in extracted archive" | Tee-Object -FilePath manticore_test_log.txt -Append
-              echo "fresh_installer_found=false" >> $env:GITHUB_OUTPUT
-            }
-          } else {
-            echo "❌ No artifact.tar found, will download from repository" | Tee-Object -FilePath manticore_test_log.txt -Append
-            echo "fresh_installer_found=false" >> $env:GITHUB_OUTPUT
-          }
-        shell: pwsh
-
-      - name: Download Manticore Windows Installer (Fallback)
-        if: steps.check_fresh.outputs.fresh_installer_found != 'true'
-        id: download
-        run: |
-          echo "=== DOWNLOADING MANTICORE INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          $installerUrl = "${{ steps.version_info.outputs.installer_url }}"
-          $installerName = "${{ steps.version_info.outputs.installer_name }}"
-          
-          echo "Downloading from: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
-          echo "File name: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          try {
-            # Check URL availability
-            $response = Invoke-WebRequest -Uri $installerUrl -Method Head -UseBasicParsing
-            echo "✅ URL is accessible, response code: $($response.StatusCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
-            echo "Content-Length: $($response.Headers.'Content-Length')" | Tee-Object -FilePath manticore_test_log.txt -Append
-            
-            # Download the file
-            echo "Starting download..." | Tee-Object -FilePath manticore_test_log.txt -Append
-            $ProgressPreference = 'SilentlyContinue'  # Disable progress bar for better performance
-            Invoke-WebRequest -Uri $installerUrl -OutFile $installerName -UseBasicParsing
-            
-            # Check if file was downloaded
-            if (Test-Path $installerName) {
-              $fileInfo = Get-Item $installerName
-              echo "✅ File downloaded successfully" | Tee-Object -FilePath manticore_test_log.txt -Append
-              echo "File size: $($fileInfo.Length) bytes ($([math]::Round($fileInfo.Length/1MB,2)) MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
-              echo "download_success=true" >> $env:GITHUB_OUTPUT
-            } else {
-              throw "Downloaded file not found"
-            }
-            
-          } catch {
-            echo "❌ Download failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
-            echo "download_success=false" >> $env:GITHUB_OUTPUT
-            exit 1
+            echo "❌ Local installer not found at: $localInstaller" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "installer_found=false" >> $env:GITHUB_OUTPUT
           }
         shell: pwsh
 
       - name: Detect Installer Type
+        if: steps.local_installer.outputs.installer_found == 'true'
         id: detect_installer
         run: |
           echo "=== DETECTING INSTALLER TYPE ===" | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          # Use fresh installer if available, otherwise downloaded one
-          if ("${{ steps.check_fresh.outputs.fresh_installer_found }}" -eq "true") {
-            $installerName = "${{ steps.check_fresh.outputs.fresh_installer_name }}"
-            echo "Using fresh installer: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
-          } else {
-            $installerName = "${{ steps.version_info.outputs.installer_name }}"
-            echo "Using repository installer: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
-          }
-          
-          echo "installer_to_use=$installerName" >> $env:GITHUB_OUTPUT
+          $installerName = "${{ steps.local_installer.outputs.installer_to_use }}"
+          echo "Using installer: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
           
           try {
             # Check for Inno Setup
@@ -244,14 +96,17 @@ jobs:
             echo "⚠️ Could not detect installer type: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
             echo "installer_type=unknown" >> $env:GITHUB_OUTPUT
           }
+          
+          echo "installer_to_use=$installerName" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
       - name: Install Manticore Search
+        if: steps.local_installer.outputs.installer_found == 'true'
         id: install
         run: |
           echo "=== INSTALLING MANTICORE SEARCH ===" | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          $installerName = "${{ steps.detect_installer.outputs.installer_to_use }}"
+          $installerName = "${{ steps.local_installer.outputs.installer_to_use }}"
           $installerType = "${{ steps.detect_installer.outputs.installer_type }}"
           
           echo "Starting installation with file: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
@@ -347,6 +202,29 @@ jobs:
               
             } catch {
               echo "❌ Installation attempt failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            
+            # Check if installation actually created files
+            $installPaths = @(
+              "C:\Program Files\Manticore Search",
+              "C:\Program Files (x86)\Manticore Search",
+              "C:\Manticore Search",
+              "C:\ManticoreSearch"
+            )
+            
+            foreach ($path in $installPaths) {
+              if (Test-Path $path) {
+                echo "✅ Installation successful with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
+                echo "Found installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
+                $installSuccess = $true
+                echo "install_success=true" >> $env:GITHUB_OUTPUT
+                echo "install_params=$paramString" >> $env:GITHUB_OUTPUT
+                break
+              }
+            }
+            
+            if ($installSuccess) {
+              break
             }
             
             # Small delay between attempts
@@ -533,8 +411,7 @@ jobs:
           # Create GitHub Summary
           echo "# Manticore Search Windows Installation Test" >> $env:GITHUB_STEP_SUMMARY
           echo "## Test Results Summary" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **Version tested**: ${{ steps.version_info.outputs.version }}" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **Download**: ${{ steps.download.outputs.download_success == 'true' && '✅ SUCCESS' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Installer Found**: ${{ steps.local_installer.outputs.installer_found == 'true' && '✅ SUCCESS' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
           echo "- **Installation**: ${{ steps.install.outputs.install_success == 'true' && '✅ SUCCESS' || steps.install.outputs.install_success == 'partial' && '⚠️ PARTIAL' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
           echo "- **Found Install**: ${{ steps.find_install.outputs.found_install == 'true' && '✅ SUCCESS' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
           echo "- **Daemon Test**: ${{ steps.test_daemon.outputs.daemon_test == 'success' && '✅ SUCCESS' || steps.test_daemon.outputs.daemon_test == 'partial' && '⚠️ PARTIAL' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY

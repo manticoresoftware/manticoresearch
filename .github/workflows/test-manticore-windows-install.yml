@@ -61,6 +61,7 @@ jobs:
 
       - name: Detect Installer Type
         if: steps.local_installer.outputs.installer_found == 'true'
+        continue-on-error: true  # Не останавливать workflow если детекция не удалась
         id: detect_installer
         run: |
           echo "=== DETECTING INSTALLER TYPE ===" | Tee-Object -FilePath manticore_test_log.txt -Append
@@ -70,26 +71,19 @@ jobs:
           
           try {
             # Check for Inno Setup
-            $innoCheck = findstr /M /C:"Inno Setup" $installerName 2>$null
-            if ($LASTEXITCODE -eq 0) {
+            $innoOutput = cmd /c "findstr /M /C:`"Inno Setup`" `"$installerName`" 2>nul"
+            if ($innoOutput) {
               echo "✅ Detected: Inno Setup installer" | Tee-Object -FilePath manticore_test_log.txt -Append
               echo "installer_type=inno" >> $env:GITHUB_OUTPUT
             } else {
               # Check for NSIS
-              $nsisCheck = findstr /M /C:"NSIS" $installerName 2>$null
-              if ($LASTEXITCODE -eq 0) {
+              $nsisOutput = cmd /c "findstr /M /C:`"NSIS`" `"$installerName`" 2>nul"
+              if ($nsisOutput) {
                 echo "✅ Detected: NSIS installer" | Tee-Object -FilePath manticore_test_log.txt -Append
                 echo "installer_type=nsis" >> $env:GITHUB_OUTPUT
               } else {
-                # Check for MSI wrapper
-                $msiCheck = findstr /M /C:"Windows Installer" $installerName 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                  echo "✅ Detected: MSI-based installer" | Tee-Object -FilePath manticore_test_log.txt -Append
-                  echo "installer_type=msi" >> $env:GITHUB_OUTPUT
-                } else {
-                  echo "⚠️ Unknown installer type, will try common parameters" | Tee-Object -FilePath manticore_test_log.txt -Append
-                  echo "installer_type=unknown" >> $env:GITHUB_OUTPUT
-                }
+                echo "⚠️ Unknown installer type, will try common parameters" | Tee-Object -FilePath manticore_test_log.txt -Append
+                echo "installer_type=unknown" >> $env:GITHUB_OUTPUT
               }
             }
           } catch {

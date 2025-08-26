@@ -298,15 +298,102 @@ jobs:
           name: win_installer
           path: build/manticore-*.exe
 
-  # Test Windows installer after build_nsis
+  # virtual job to simplify the CI
+  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
+  publish:
+    name: OK to publish?
+    runs-on: ubuntu-22.04
+    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
+    if: |
+      (github.repository == 'manticoresoftware/manticoresearch')
+      && (
+        (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
+        || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
+        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
+      )
+    steps:
+      - run: echo "Ready to publish"
+
+  publish_debian_ubuntu:
+    needs: [publish, pack]
+    strategy:
+      fail-fast: true
+      matrix:
+        DISTR: [bionic, focal, jammy, bullseye, bookworm]
+        arch: [x86_64, aarch64]
+    runs-on: ubuntu-22.04
+    name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+          type: deb
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
+
+  publish_rhel:
+    needs: [publish, pack]
+    strategy:
+      fail-fast: true
+      matrix:
+        DISTR: [7, 8, 9, 10]
+        arch: [x86_64, aarch64]
+    runs-on: ubuntu-22.04
+    name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: ${{ matrix.DISTR }}
+          arch: ${{ matrix.arch }}
+          artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
+          type: rpm
+          delimiter: "_"
+          target: ${{ needs.pack.outputs.target }}
+
+  publish_macos:
+    name: Publishing MacOS
+    needs: [publish, pack]
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [x86_64, arm64]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: macos
+          arch: ${{ matrix.arch }}
+          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
+
+  publish_windows:
+    name: Publishing Windows packages to repo.manticoresearch.com
+    needs: [publish, pack]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr: windows
+          arch: x64
+          artifact: build_windows_RelWithDebInfo_x64
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
+
+  # Test Windows installer after publishing Windows packages
   test_windows_installer:
     name: Test Windows NSIS installer
-    needs: [build_nsis, pack]
+    needs: [publish_windows, pack]
     runs-on: windows-latest
-    if: |
-      always() &&
-      needs.pack.outputs.should_continue == 'true' &&
-      needs.build_nsis.result == 'success'
     steps:
     - name: Download Windows installer artifact
       uses: actions/download-artifact@v4
@@ -342,6 +429,19 @@ jobs:
         echo "=== CHECKING INSTALLER FILE ==="
         Get-ChildItem ./installer
         
+        # Check if we have a tar archive
+        $tarFile = Get-ChildItem ./installer/*.tar | Select-Object -First 1
+        if ($tarFile) {
+          echo "Found tar archive: $($tarFile.FullName)"
+          echo "Extracting tar archive..."
+          
+          # Extract tar archive
+          tar -xf $tarFile.FullName -C ./installer
+          
+          echo "Files after extraction:"
+          Get-ChildItem ./installer
+        }
+        
         $installer = Get-ChildItem ./installer/*.exe | Select-Object -First 1
         if (-not $installer) {
           Write-Error "No installer found in artifact"
@@ -358,6 +458,12 @@ jobs:
       timeout-minutes: 5
       run: |
         echo "=== INSTALLING MANTICORE ==="
+        
+        # Extract tar if needed
+        $tarFile = Get-ChildItem ./installer/*.tar -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($tarFile) {
+          tar -xf $tarFile.FullName -C ./installer
+        }
         
         $installer = Get-ChildItem ./installer/*.exe | Select-Object -First 1
         
@@ -550,97 +656,6 @@ jobs:
         }
       shell: pwsh
       continue-on-error: true
-
-  # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
-  publish:
-    name: OK to publish?
-    runs-on: ubuntu-22.04
-    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis, test_windows_installer]
-    if: |
-      (github.repository == 'manticoresoftware/manticoresearch')
-      && (
-        (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-        || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-        || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
-        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
-      )
-    steps:
-      - run: echo "Ready to publish"
-
-  publish_debian_ubuntu:
-    needs: [publish, pack]
-    strategy:
-      fail-fast: true
-      matrix:
-        DISTR: [bionic, focal, jammy, bullseye, bookworm]
-        arch: [x86_64, aarch64]
-    runs-on: ubuntu-22.04
-    name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: ${{ matrix.DISTR }}
-          arch: ${{ matrix.arch }}
-          artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
-          type: deb
-          delimiter: "-"
-          target: ${{ needs.pack.outputs.target }}
-
-  publish_rhel:
-    needs: [publish, pack]
-    strategy:
-      fail-fast: true
-      matrix:
-        DISTR: [7, 8, 9, 10]
-        arch: [x86_64, aarch64]
-    runs-on: ubuntu-22.04
-    name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: ${{ matrix.DISTR }}
-          arch: ${{ matrix.arch }}
-          artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
-          type: rpm
-          delimiter: "_"
-          target: ${{ needs.pack.outputs.target }}
-
-  publish_macos:
-    name: Publishing MacOS
-    needs: [publish, pack]
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: [x86_64, arm64]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: macos
-          arch: ${{ matrix.arch }}
-          artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
-          type: arc
-          delimiter: "-"
-          target: ${{ needs.pack.outputs.target }}
-
-  publish_windows:
-    name: Publishing Windows packages to repo.manticoresearch.com
-    needs: [publish, pack]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: manticoresoftware/publish_to_repo@main
-        with:
-          ssh_key: ${{ secrets.REPO_SSH_KEY }}
-          distr: windows
-          arch: x64
-          artifact: build_windows_RelWithDebInfo_x64
-          type: arc
-          delimiter: "-"
-          target: ${{ needs.pack.outputs.target }}
 
   publish_nsis:
     name: Publishing Windows NSIS installer

@@ -430,7 +430,7 @@ jobs:
         Get-ChildItem ./installer
         
         # Check if we have a tar archive
-        $tarFile = Get-ChildItem ./installer/*.tar | Select-Object -First 1
+        $tarFile = Get-ChildItem ./installer/*.tar -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($tarFile) {
           echo "Found tar archive: $($tarFile.FullName)"
           echo "Extracting tar archive..."
@@ -439,10 +439,11 @@ jobs:
           tar -xf $tarFile.FullName -C ./installer
           
           echo "Files after extraction:"
-          Get-ChildItem ./installer
+          Get-ChildItem ./installer -Recurse -Name
         }
         
-        $installer = Get-ChildItem ./installer/*.exe | Select-Object -First 1
+        # Look for installer recursively (it might be in build subdirectory)
+        $installer = Get-ChildItem ./installer -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $installer) {
           Write-Error "No installer found in artifact"
           exit 1
@@ -459,16 +460,21 @@ jobs:
       run: |
         echo "=== INSTALLING MANTICORE ==="
         
-        # Extract tar if needed
+        # Extract tar if needed and not already extracted
         $tarFile = Get-ChildItem ./installer/*.tar -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($tarFile) {
-          tar -xf $tarFile.FullName -C ./installer
+          $buildDir = Get-ChildItem ./installer/build -ErrorAction SilentlyContinue
+          if (-not $buildDir) {
+            tar -xf $tarFile.FullName -C ./installer
+          }
         }
         
-        $installer = Get-ChildItem ./installer/*.exe | Select-Object -First 1
+        # Look for installer recursively
+        $installer = Get-ChildItem ./installer -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
         
         if (-not $installer) {
           echo "ERROR: Installer not found!"
+          Get-ChildItem ./installer -Recurse
           exit 1
         }
         
@@ -603,9 +609,19 @@ jobs:
             New-Item -Path "data" -ItemType Directory -Force | Out-Null
           }
           
-          # Start searchd
+          # Start searchd - IMPORTANT: quote the paths to handle spaces
           echo "Starting searchd..."
-          $process = Start-Process -FilePath ".\bin\searchd.exe" -ArgumentList "--config", ".\etc\manticoresearch\manticore.conf" -PassThru -NoNewWindow -RedirectStandardError "searchd_error.txt" -RedirectStandardOutput "searchd_output.txt"
+          
+          # Use quotes around paths with spaces
+          $searchdExe = Join-Path $manticoreDir "bin\searchd.exe"
+          $configFile = Join-Path $manticoreDir "etc\manticoresearch\manticore.conf"
+          
+          # Start process with properly quoted paths
+          $process = Start-Process -FilePath "$searchdExe" `
+                                   -ArgumentList "--config", "`"$configFile`"" `
+                                   -PassThru -NoNewWindow `
+                                   -RedirectStandardError "searchd_error.txt" `
+                                   -RedirectStandardOutput "searchd_output.txt"
           
           # Wait for startup
           Start-Sleep -Seconds 10

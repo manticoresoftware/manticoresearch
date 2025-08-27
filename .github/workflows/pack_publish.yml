@@ -656,17 +656,26 @@ jobs:
             }
           }
           
-          # Test HTTP API with correct query
+          # Test HTTP API using curl
           echo "Testing HTTP API..."
-          try {
-            $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST -Body "query=SELECT 1" -ContentType "application/x-www-form-urlencoded" -UseBasicParsing -ErrorAction Stop
-            if ($response.StatusCode -eq 200) {
-              echo "Manticore HTTP API is responding successfully"
-              $contentPreview = $response.Content.Substring(0, [Math]::Min(200, $response.Content.Length))
-              echo "Response preview: $contentPreview..."
+          $curlResult = curl.exe -s -X POST "http://localhost:9308/sql" -d "query=SELECT 1" 2>&1
+          $curlExitCode = $LASTEXITCODE
+          
+          if ($curlExitCode -eq 0) {
+            echo "Manticore HTTP API is responding successfully"
+            # Parse JSON result if needed
+            try {
+              $jsonResult = $curlResult | ConvertFrom-Json
+              if ($jsonResult.data -and $jsonResult.data[0]."1" -eq "1") {
+                echo "API test query returned correct result: 1"
+              }
+              echo "Full response: $curlResult"
+            } catch {
+              echo "Response: $curlResult"
             }
-          } catch {
-            echo "Could not connect to Manticore HTTP API: $_"
+          } else {
+            echo "Failed to connect to Manticore HTTP API. Curl exit code: $curlExitCode"
+            echo "Error output: $curlResult"
           }
         } else {
           echo "ERROR: searchd.exe not found"

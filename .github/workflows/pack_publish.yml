@@ -656,12 +656,14 @@ jobs:
             }
           }
           
-          # Test HTTP API
+          # Test HTTP API with correct query
           echo "Testing HTTP API..."
           try {
-            $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST -Body "query=SHOW STATUS" -ContentType "application/x-www-form-urlencoded" -UseBasicParsing -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST -Body "query=SELECT 1" -ContentType "application/x-www-form-urlencoded" -UseBasicParsing -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
-              echo "Manticore HTTP API is responding"
+              echo "Manticore HTTP API is responding successfully"
+              $contentPreview = $response.Content.Substring(0, [Math]::Min(200, $response.Content.Length))
+              echo "Response preview: $contentPreview..."
             }
           } catch {
             echo "Could not connect to Manticore HTTP API: $_"

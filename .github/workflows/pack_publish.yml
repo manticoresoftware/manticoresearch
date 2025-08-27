@@ -152,6 +152,25 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
+#  debug_info:
+#    name: Debug GitHub Event Info
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - name: Print GitHub Event Info
+#        run: |
+#          echo "GitHub Event Name: ${{ github.event_name }}"
+#          echo "GitHub Ref: ${{ github.ref }}"
+#          echo "GitHub Ref Type: ${{ github.ref_type }}"
+#          echo "GitHub Ref Name: ${{ github.ref_name }}"
+#          echo "GitHub Actor: ${{ github.actor }}"
+#          echo "GitHub Repository: ${{ github.repository }}"
+#          echo "GitHub SHA: ${{ github.sha }}"
+#          echo "GitHub Run Number: ${{ github.run_number }}"
+#          echo "GitHub Run Attempt: ${{ github.run_attempt }}"
+#          echo "GitHub Workflow: ${{ github.workflow }}"
+#          echo "GitHub Event JSON:"
+#          echo '${{ toJSON(github.event) }}'
+
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
@@ -277,7 +296,7 @@ jobs:
     env:
       CI_COMMIT_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |
@@ -299,7 +318,6 @@ jobs:
           path: build/manticore-*.exe
 
   # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
@@ -401,269 +419,96 @@ jobs:
         name: win_installer
         path: ./installer
     
-    - name: System Information
-      run: |
-        echo "=== SYSTEM INFORMATION ==="
-        Get-CimInstance Win32_OperatingSystem | Select-Object WindowsProductName, WindowsVersion, WindowsBuildLabEx
-        echo "Current user: $env:USERNAME"
-        Get-PSDrive C | Select-Object Used,Free
-      shell: pwsh
-    
-    - name: Check Docker Availability
-      run: |
-        echo "=== CHECKING DOCKER AVAILABILITY ==="
-        try {
-          $dockerVersion = docker --version 2>&1
-          echo "Docker version: $dockerVersion"
-          docker info 2>&1 | Select-Object -First 10
-          echo "Docker daemon is running"
-        } catch {
-          echo "Docker is not available: $_"
-          echo "Note: Installer may require Docker for some components"
-        }
-      shell: pwsh
-      continue-on-error: true
-    
-    - name: Check Downloaded Installer
-      run: |
-        echo "=== CHECKING INSTALLER FILE ==="
-        Get-ChildItem ./installer
-        
-        # Check if we have a tar archive
-        $tarFile = Get-ChildItem ./installer/*.tar -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($tarFile) {
-          echo "Found tar archive: $($tarFile.FullName)"
-          echo "Extracting tar archive..."
-          
-          # Extract tar archive
-          tar -xf $tarFile.FullName -C ./installer
-          
-          echo "Files after extraction:"
-          Get-ChildItem ./installer -Recurse -Name
-        }
-        
-        # Look for installer recursively (it might be in build subdirectory)
-        $installer = Get-ChildItem ./installer -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $installer) {
-          Write-Error "No installer found in artifact"
-          exit 1
-        }
-        
-        echo "Found installer: $($installer.FullName)"
-        $fileInfo = Get-Item $installer.FullName
-        $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-        echo "File size: $($fileInfo.Length) bytes ($fileSizeMB MB)"
-      shell: pwsh
-    
-    - name: Install Manticore
+    - name: Extract and Install Manticore
       timeout-minutes: 5
       run: |
-        echo "=== INSTALLING MANTICORE ==="
+        echo "=== EXTRACTING INSTALLER ==="
+        tar -xf ./installer/artifact.tar -C ./installer
         
-        # Extract tar if needed and not already extracted
-        $tarFile = Get-ChildItem ./installer/*.tar -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($tarFile) {
-          $buildDir = Get-ChildItem ./installer/build -ErrorAction SilentlyContinue
-          if (-not $buildDir) {
-            tar -xf $tarFile.FullName -C ./installer
-          }
-        }
+        $installer = "./installer/build/manticore-*.exe"
+        $installerFile = Get-ChildItem $installer | Select-Object -First 1
         
-        # Look for installer recursively
-        $installer = Get-ChildItem ./installer -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        
-        if (-not $installer) {
+        if (-not $installerFile) {
           echo "ERROR: Installer not found!"
           Get-ChildItem ./installer -Recurse
           exit 1
         }
         
-        echo "Starting silent installation with /S flag..."
-        echo "Installing from: $($installer.FullName)"
-        $process = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+        echo "=== INSTALLING MANTICORE ==="
+        echo "Installing from: $($installerFile.FullName)"
         
+        $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
         echo "Installation process exited with code: $($process.ExitCode)"
         
-        if ($process.ExitCode -eq 0) {
-          echo "Installation completed successfully (exit code 0)"
-        } elseif ($process.ExitCode -eq 1) {
-          echo "Installation returned exit code 1 (possible download error)"
-          echo "This may happen if installer couldn't download additional components"
-        } elseif ($process.ExitCode -eq 6) {
-          echo "Installation returned exit code 6 (Docker pull failed for executor)"
-          echo "Core components should still be installed"
-        } else {
-          echo "Installation exited with unexpected code $($process.ExitCode)"
-        }
-        
-        # Wait for installation to complete
-        Start-Sleep -Seconds 30
+        Start-Sleep -Seconds 10
       shell: pwsh
     
-    - name: Verify Installation
+    - name: Verify Installation and Test
       run: |
         echo "=== VERIFYING INSTALLATION ==="
         
-        # Check installation paths
-        $possiblePaths = @(
-          "C:\Program Files (x86)\Manticore",
-          "C:\Program Files\Manticore",
-          "C:\Manticore"
-        )
-        
-        $foundPath = $null
-        foreach ($path in $possiblePaths) {
-          if (Test-Path $path) {
-            echo "Found Manticore installation at: $path"
-            $foundPath = $path
-            
-            # Check for key executables
-            $searchd = Get-ChildItem -Path $path -Filter "searchd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            $indexer = Get-ChildItem -Path $path -Filter "indexer.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            
-            if ($searchd) {
-              echo "searchd.exe found at: $($searchd.FullName)"
-              # Get version
-              try {
-                & $searchd.FullName --version
-              } catch {
-                echo "Could not get version: $_"
-              }
-            } else {
-              echo "ERROR: searchd.exe not found!"
-              exit 1
-            }
-            
-            if ($indexer) {
-              echo "indexer.exe found at: $($indexer.FullName)"
-            }
-            
-            # Show directory structure
-            echo "Directory structure:"
-            Get-ChildItem -Path $path -Directory | ForEach-Object {
-              echo "  $($_.Name)"
-            }
-            
-            break
-          }
-        }
-        
-        if (-not $foundPath) {
-          echo "ERROR: Manticore installation directory not found"
+        $installPath = "C:\Program Files (x86)\Manticore"
+        if (-not (Test-Path $installPath)) {
+          echo "ERROR: Manticore not installed at expected path: $installPath"
           exit 1
         }
-      shell: pwsh
-    
-    - name: Start and Test Manticore
-      run: |
+        
+        echo "Manticore installed at: $installPath"
+        
+        $searchdPath = "$installPath\bin\searchd.exe"
+        $indexerPath = "$installPath\bin\indexer.exe"
+        
+        if (-not (Test-Path $searchdPath)) {
+          echo "ERROR: searchd.exe not found at: $searchdPath"
+          exit 1
+        }
+        
+        if (-not (Test-Path $indexerPath)) {
+          echo "ERROR: indexer.exe not found at: $indexerPath"
+          exit 1
+        }
+        
+        echo "searchd.exe found at: $searchdPath"
+        echo "indexer.exe found at: $indexerPath"
+        
+        & $searchdPath --version
+        
         echo "=== STARTING MANTICORE SERVICE ==="
         
-        # Find searchd.exe
-        $searchdPath = $null
-        $possiblePaths = @(
-          "C:\Program Files (x86)\Manticore\bin\searchd.exe",
-          "C:\Program Files\Manticore\bin\searchd.exe",
-          "C:\Manticore\bin\searchd.exe"
-        )
+        Push-Location $installPath
         
-        foreach ($path in $possiblePaths) {
-          if (Test-Path $path) {
-            $searchdPath = $path
-            echo "Found searchd.exe at: $searchdPath"
-            break
-          }
-        }
+        $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
         
-        if ($searchdPath) {
-          # Create minimal config
-          $manticoreDir = Split-Path -Parent (Split-Path -Parent $searchdPath)
-          $configDir = Join-Path $manticoreDir "etc\manticoresearch"
-          $configPath = Join-Path $configDir "manticore.conf"
-          
-          if (-not (Test-Path $configDir)) {
-            New-Item -Path $configDir -ItemType Directory -Force | Out-Null
-          }
-          
-          # Create minimal working config
-          $configContent = @'
-        searchd {
-            listen = 127.0.0.1:9312
-            listen = 127.0.0.1:9306:mysql
-            listen = 127.0.0.1:9308:http
-            log = searchd.log
-            query_log = query.log
-            pid_file = searchd.pid
-            data_dir = data
-        }
-        '@
-          
-          Set-Content -Path $configPath -Value $configContent -Force
-          echo "Created minimal config at: $configPath"
-          
-          # Change to Manticore directory
-          Push-Location $manticoreDir
-          echo "Working directory: $(Get-Location)"
-          
-          # Create data directory
-          if (-not (Test-Path "data")) {
-            New-Item -Path "data" -ItemType Directory -Force | Out-Null
-          }
-          
-          # Start searchd - IMPORTANT: quote the paths to handle spaces
-          echo "Starting searchd..."
-          
-          # Use quotes around paths with spaces
-          $searchdExe = Join-Path $manticoreDir "bin\searchd.exe"
-          $configFile = Join-Path $manticoreDir "etc\manticoresearch\manticore.conf"
-          
-          # Start process with properly quoted paths
-          $process = Start-Process -FilePath "$searchdExe" `
-                                   -ArgumentList "--config", "`"$configFile`"" `
-                                   -PassThru -NoNewWindow `
-                                   -RedirectStandardError "searchd_error.txt" `
-                                   -RedirectStandardOutput "searchd_output.txt"
-          
-          # Wait for startup
-          Start-Sleep -Seconds 10
-          
-          # Check if running
-          $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
-          if ($manticoreProcess) {
-            echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
-          } else {
-            echo "WARNING: Manticore searchd is not running"
-            if (Test-Path "searchd_error.txt") {
-              echo "Error output:"
-              Get-Content "searchd_error.txt"
-            }
-            if (Test-Path "searchd_output.txt") {
-              echo "Standard output:"
-              Get-Content "searchd_output.txt"
-            }
-          }
-          
-          Pop-Location
-          
-          # Check ports
-          echo "Checking network ports..."
-          $ports = @(9306, 9308, 9312)
-          foreach ($port in $ports) {
-            $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue -InformationLevel Quiet
-            if ($connection) {
-              echo "Port $port is listening"
-            } else {
-              echo "Port $port is not listening"
-            }
-          }
-          
-          echo "=== TEST COMPLETED SUCCESSFULLY ==="
-          echo "Manticore is installed, running and all ports are accessible"
+        Start-Sleep -Seconds 10
+        
+        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        if ($manticoreProcess) {
+          echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
         } else {
-          echo "ERROR: searchd.exe not found"
+          echo "ERROR: Manticore searchd is not running"
           exit 1
         }
+        
+        Pop-Location
+        
+        echo "=== TESTING MANTICORE CONNECTION ==="
+        
+        # Test using MySQL client if available
+        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
+        if (Test-Path $mysqlPath) {
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SHOW VERSION"
+        } else {
+          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+          if ($connection) {
+            echo "Port 9306 (MySQL) is listening"
+          } else {
+            echo "ERROR: Port 9306 is not listening"
+            exit 1
+          }
+        }
+        
+        echo "=== TEST COMPLETED SUCCESSFULLY ==="
       shell: pwsh
-      continue-on-error: true
 
   publish_nsis:
     name: Publishing Windows NSIS installer
@@ -690,7 +535,7 @@ jobs:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |

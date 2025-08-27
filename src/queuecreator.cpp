@@ -535,16 +535,17 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 		for ( auto & sGroupBy : dGroupBy )
 		{
-			int iAttr = tSchema.GetAttrIndex ( sGroupBy.cstr() );
+			int iAttr = GetAliasedAttrIndex ( sGroupBy, m_tQuery, tSchema );
+			bool bJoined = iAttr>=0 && tSchema.GetAttr(iAttr).IsJoined();
 
 			CSphString sJsonExpr;
-			if ( iAttr<0 && sphJsonNameSplit ( sGroupBy.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonColumn ) )
+			if ( ( iAttr<0 || bJoined ) && sphJsonNameSplit ( sGroupBy.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonColumn ) )
 			{
 				sJsonExpr = sGroupBy;
 				sGroupBy = sJsonColumn;
+				iAttr = tSchema.GetAttrIndex ( sGroupBy.cstr() );
 			}
 
-			iAttr = tSchema.GetAttrIndex ( sGroupBy.cstr() );
 			if ( iAttr<0 )
 				return Err( "group-by attribute '%s' not found", sGroupBy.cstr() );
 

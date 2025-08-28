@@ -91,8 +91,7 @@ select_expr:
 	| SEL_GROUPBY '(' ')'		{ pParser->AddItem ( "groupby()", &$1, &$3 ); }
 	| SEL_COUNT '(' '*' ')' 	{ pParser->AddItem ( "count(*)", &$1, &$4 ); }
 	| SEL_COUNT '(' SEL_DISTINCT SEL_TOKEN ')' 
-		// FIXME: may be check if $4 == this->m_sGroupDistinct and warn/error, if not?
-					{ pParser->AddItem ( "@distinct", &$1, &$5 ); }
+					{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
 expr:

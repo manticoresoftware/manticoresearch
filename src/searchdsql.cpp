@@ -1239,27 +1239,42 @@ bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNod
 {
 	CSphString sDistinct;
 	ToString ( sDistinct, *pNewExpr );
-	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() && m_pQuery->m_sGroupDistinct!=sDistinct )
+	
+	// Check if this distinct expression already exists
+	if ( m_pQuery->m_dGroupDistinct.Contains ( sDistinct ) )
 	{
-		yyerror ( this, "too many COUNT(DISTINCT) clauses" );
-		return false;
+		CSphString sItemName;
+		sItemName.SetSprintf ( "@distinct_%d", m_pQuery->m_dGroupDistinct.GetFirst ( [&sDistinct] ( const CSphString & s ) { return s==sDistinct; } ) );
+		return AddItem ( sItemName.cstr(), pStart, pEnd );
 	}
-
-	m_pQuery->m_sGroupDistinct = sDistinct;
-	return AddItem ( "@distinct", pStart, pEnd );
+	
+	// Add new distinct expression
+	int iDistinctIndex = m_pQuery->m_dGroupDistinct.GetLength();
+	m_pQuery->m_dGroupDistinct.Add ( sDistinct );
+	
+	// Create unique @distinct_N item name
+	CSphString sItemName;
+	sItemName.SetSprintf ( "@distinct_%d", iDistinctIndex );
+	
+	return AddItem ( sItemName.cstr(), pStart, pEnd );
 }
 
 void SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr )
 {
+	CSphString sDistinct;
 	if ( !pNewExpr )
 	{
-		m_pQuery->m_sGroupDistinct = "id";
+		sDistinct = "id";
 	}
 	else
 	{
-		ToString ( m_pQuery->m_sGroupDistinct, *pNewExpr );
-		sphColumnToLowercase ( const_cast<char *>( m_pQuery->m_sGroupDistinct.cstr() ) );
+		ToString ( sDistinct, *pNewExpr );
+		sphColumnToLowercase ( const_cast<char *>( sDistinct.cstr() ) );
 	}
+	
+	// Add to vector if not already present
+	if ( !m_pQuery->m_dGroupDistinct.Contains ( sDistinct ) )
+		m_pQuery->m_dGroupDistinct.Add ( sDistinct );
 }
 
 bool SqlParser_c::AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc )
@@ -1267,32 +1282,41 @@ bool SqlParser_c::AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, Sq
 	if ( !AddDistinct ( pNewExpr, pStart, pEnd ) )
 		return false;
 
-	m_pQuery->m_sOrderBy.SetSprintf ( "@distinct %s", ( bSortAsc ? "asc" : "desc" ) );
+	// Find the index of this distinct expression for the new naming scheme
+	CSphString sDistinct;
+	ToString ( sDistinct, *pNewExpr );
+	int iIndex = m_pQuery->m_dGroupDistinct.GetFirst ( [&sDistinct] ( const CSphString & s ) { return s==sDistinct; } );
+	
+	m_pQuery->m_sOrderBy.SetSprintf ( "@distinct_%d %s", iIndex, ( bSortAsc ? "asc" : "desc" ) );
 	return true;
 }
 
 bool SqlParser_c::MaybeAddFacetDistinct()
 {
-	if ( m_pQuery->m_sGroupDistinct.IsEmpty() )
-		return true;
-
-	// distinct could be already added by order by
-	if ( m_pQuery->m_dItems.Contains ( bind ( &CSphQueryItem::m_sExpr ), "@distinct" ) )
-		return true;
-
-	CSphQueryItem tItem;
-	tItem.m_sExpr = "@distinct";
-	tItem.m_eAggrFunc = SPH_AGGR_NONE;
-	tItem.m_sAlias.SetSprintf ( "count(distinct %s)", m_pQuery->m_sGroupDistinct.cstr() );
-
-	int iCountPos = m_pQuery->m_dItems.GetFirst ( [] ( const CSphQueryItem & tElem ) { return ( tElem.m_sExpr=="count(*)" ); });
-	if ( iCountPos==-1 )
+	// Handle multiple distinct fields
+	for ( int i = 0; i < m_pQuery->m_dGroupDistinct.GetLength(); i++ )
 	{
-		yyerror ( this, "can not find COUNT clause" );
-		return false;
-	}
+		CSphString sItemName;
+		sItemName.SetSprintf ( "@distinct_%d", i );
+			
+		// Skip if already added
+		if ( m_pQuery->m_dItems.Contains ( bind ( &CSphQueryItem::m_sExpr ), sItemName ) )
+			continue;
+			
+		CSphQueryItem tItem;
+		tItem.m_sExpr = sItemName;
+		tItem.m_eAggrFunc = SPH_AGGR_NONE;
+		tItem.m_sAlias.SetSprintf ( "count(distinct %s)", m_pQuery->m_dGroupDistinct[i].cstr() );
 
-	m_pQuery->m_dItems.Insert ( iCountPos, tItem );
+		int iCountPos = m_pQuery->m_dItems.GetFirst ( [] ( const CSphQueryItem & tElem ) { return ( tElem.m_sExpr=="count(*)" ); });
+		if ( iCountPos==-1 )
+		{
+			yyerror ( this, "can not find COUNT clause" );
+			return false;
+		}
+
+		m_pQuery->m_dItems.Insert ( iCountPos, tItem );
+	}
 
 	return SetNewSyntax();
 }
@@ -2084,7 +2108,7 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
 
 static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
-	CSphString sDistinct;
+	CSphVector<CSphString> dReferenceDistinct;
 
 	// need to keep order of query items same as at select list however do not duplicate items
 	// that is why raw Vector.Uniq does not work here
@@ -2100,15 +2124,31 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 			tItem.QueryItemHash();
 		}
 
-		if ( !tQuery.m_sGroupDistinct.IsEmpty() )
+		// Check distinct consistency across FACET queries
+		if ( !tQuery.m_dGroupDistinct.IsEmpty() )
 		{
-			if ( !sDistinct.IsEmpty() && sDistinct!=tQuery.m_sGroupDistinct )
+			if ( dReferenceDistinct.IsEmpty() )
 			{
-				sError.SetSprintf ( "distinct field for all FACET queries should be the same '%s', query %d got '%s'", sDistinct.cstr(), i, tQuery.m_sGroupDistinct.cstr() );
-				return false;
+				// First query with distinct - use as reference
+				dReferenceDistinct = tQuery.m_dGroupDistinct;
 			}
-			if ( sDistinct.IsEmpty() )
-				sDistinct = tQuery.m_sGroupDistinct;
+			else
+			{
+				// Validate that all distinct expressions match the reference
+				if ( dReferenceDistinct.GetLength() != tQuery.m_dGroupDistinct.GetLength() )
+				{
+					sError.SetSprintf ( "distinct expressions count mismatch in FACET query %d", i );
+					return false;
+				}
+				for ( int j = 0; j < dReferenceDistinct.GetLength(); j++ )
+				{
+					if ( dReferenceDistinct[j] != tQuery.m_dGroupDistinct[j] )
+					{
+						sError.SetSprintf ( "distinct field for all FACET queries should be the same '%s', query %d got '%s'", dReferenceDistinct[j].cstr(), i, tQuery.m_dGroupDistinct[j].cstr() );
+						return false;
+					}
+				}
+			}
 		}
 	}
 	// got rid of duplicates
@@ -2142,7 +2182,11 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 			}
 		}
 
-		tStmt.m_tQuery.m_sGroupDistinct = sDistinct;
+		// Set distinct for all statements
+		if ( !dReferenceDistinct.IsEmpty() )
+		{
+			tStmt.m_tQuery.m_dGroupDistinct = dReferenceDistinct;
+		}
 	}
 
 	return true;
@@ -2287,9 +2331,10 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		// need to keep same wide result set schema
 		if ( dStmt.GetLength()>1 )
 		{
-			const CSphString & sDistinct = dStmt[0].m_tQuery.m_sGroupDistinct;
+			// Copy distinct expressions from first statement to all others
+			const auto & dDistinct = dStmt[0].m_tQuery.m_dGroupDistinct;
 			for ( int i=1; i<dStmt.GetLength(); i++ )
-				dStmt[i].m_tQuery.m_sGroupDistinct = sDistinct;
+				dStmt[i].m_tQuery.m_dGroupDistinct = dDistinct;
 		}
 	}
 

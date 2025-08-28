@@ -165,7 +165,7 @@ public:
 		// check whether we sort by distinct
 		if constexpr ( DISTINCT )
 		{
-			const CSphColumnInfo * pDistinct = m_pSchema->GetAttr("@distinct");
+			const CSphColumnInfo * pDistinct = m_pSchema->GetAttr("@distinct_0");
 			assert(pDistinct);
 
 			for ( const auto & tLocator : m_tGroupSorter.m_tLocator )

@@ -51,7 +51,6 @@
   "Searching/Full_text_matching/Profiling.md": "398b040e4ce41502466ae056842ea8a8",
   "Searching/Full_text_matching/Escaping.md": "54bfdca8fa2e27516e4434c0756c3ab4",
   "Searching/Full_text_matching/Basic_usage.md": "eb5c5014c70097582d445e59cb2e9b15",
-  "Searching/Full_text_matching/Boolean_optimization.md": "5c3f1d472eb7893323733cf409241a94",
   "Searching/Grouping.md": "1ebf8e8c9c0927de68dff2833f8f5134",
   "Searching/Expressions.md": "f89c74fe818b4478e4775ac789f54990",
   "Searching/Faceted_search.md": "d086c5da91521a2e0528cf371745fa70",
@@ -85,7 +84,6 @@
   "Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md": "1abf62ed870494aaf530c923c042aff8",
   "Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md": "aac6487064cf3436836d0f96d27d7b0f",
   "Extensions/SphinxSE.md": "168474b567585e0e39a9f58feae0cd60",
-  "README.md": "87db79806be1388506efd49d0c99ec88",
   "Listing_tables.md": "1d48e5d79f5f210be8ec38fcc1ec970f",
   "Starting_the_server/Manually.md": "6fa10a410656882a4ae073ba24143814",
   "Starting_the_server/Windows.md": "b25053d62a5e2a8a4b7a04fc7a23d967",
@@ -178,5 +176,7 @@
   "Changelog.md": "ce8bb6448787740724134b0dd19126b3",
   "Searching/Full_text_matching/Operators.md": "3d381c07770897772da85df6dda98305",
   "Updating_table_schema_and_settings.md": "39fe1c80063e98752083b24bb132016a",
-  "Searching/KNN.md": "45e93625bbcd4e3cb5a11043de0e2741"
+  "Searching/KNN.md": "45e93625bbcd4e3cb5a11043de0e2741",
+  "Searching/Full_text_matching/Boolean_optimization.md": "cc38dc5a5df17960f000fea049be6e3b",
+  "README.md": "e266ef394776c9c21c3949b4ae138a1a"
 }

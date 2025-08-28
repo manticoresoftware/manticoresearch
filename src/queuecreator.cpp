@@ -1007,14 +1007,6 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		{
 			if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
 				return Err ( "can not aggregate non-scalar attribute '%s'",	tItem.m_sExpr.cstr() );
-
-			if ( !bPlainAttr && !bColumnar && ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR ) )
-			{
-				bPlainAttr = true;
-				for ( const auto & i : m_tQuery.m_dItems )
-					if ( sExpr==i.m_sAlias )
-						bPlainAttr = false;
-			}
 		}
 	}
 
@@ -1523,7 +1515,7 @@ bool QueueCreator_c::AddKNNDistColumn()
 		return false;
 	}
 
-	if ( tKNN.m_sEmbStr.IsEmpty() && pAttr->m_tKNN.m_iDims!=tKNN.m_dVec.GetLength() )
+	if ( !tKNN.m_sEmbStr && pAttr->m_tKNN.m_iDims!=tKNN.m_dVec.GetLength() )
 	{
 		m_sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", tKNN.m_sAttr.cstr(), pAttr->m_tKNN.m_iDims, tKNN.m_dVec.GetLength() );
 		return false;

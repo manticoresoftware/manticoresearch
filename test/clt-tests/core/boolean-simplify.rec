@@ -13,7 +13,7 @@ mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into
 | transformed_tree | AND(KEYWORD(a, querypos=1)) |
 +------------------+-----------------------------+
 ––– input –––
-searchd --stopwait
+searchd --stopwait > /dev/null
 ––– output –––
 ––– input –––
 sed -i '/^searchd {/a\    boolean_simplify = 0' /etc/manticoresearch/manticore.conf

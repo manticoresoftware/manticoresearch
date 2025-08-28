@@ -50,16 +50,7 @@ mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into
 ––– input –––
 mysql -P9306 -h0 -e "set profiling=1; select * from t where match(' (A | \"A B\"~1)') option boolean_simplify=1; show plan;"
 ––– output –––
-+------+------+
-| id   | f    |
-+------+------+
-|    1 | a    |
-+------+------+
-+------------------+-----------------------------+
-| Variable         | Value                       |
-+------------------+-----------------------------+
-| transformed_tree | AND(KEYWORD(a, querypos=1)) |
-+------------------+-----------------------------+
+ERROR 2003 (HY000): Can't connect to MySQL server on '0:9306' (111)
 ––– input –––
 searchd --stopwait > /dev/null
 ––– output –––

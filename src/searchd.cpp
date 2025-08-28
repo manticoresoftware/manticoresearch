@@ -1722,7 +1722,8 @@ enum
 	QFLAG_FACET_HEAD			= 1UL << 10,
 	QFLAG_JSON_QUERY			= 1UL << 11,
 	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
-	QFLAG_LOCAL_DF_SET			= 1UL << 13
+	QFLAG_LOCAL_DF_SET			= 1UL << 13,
+	QFLAG_SIMPLIFY_SET			= 1UL << 14
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -1745,7 +1746,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	DWORD uFlags = 0;
 	uFlags |= QFLAG_SORT_KBUFFER * q.m_bSortKbuffer;
 	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
-	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify;
+	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify.value_or ( CSphQuery::m_bDefaultSimplify );
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
@@ -1755,6 +1756,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
 	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
+	uFlags |= QFLAG_SIMPLIFY_SET * q.m_bSimplify.has_value();
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -2727,7 +2729,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	{
 		// parse simple flags
 		tQuery.m_bSortKbuffer = !!( uFlags & QFLAG_SORT_KBUFFER );
-		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
+
+		// simplify is optional query option and might be set by the daemon config
+		if ( uVer<0x127 || ( uVer>=0x127 && ( uFlags & QFLAG_SIMPLIFY_SET )==QFLAG_SIMPLIFY_SET ) )
+			tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
+
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
 		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )
@@ -20655,6 +20661,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
+	if ( hSearchd ( "boolean_simplify" ) )
+		SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", CSphQuery::m_bDefaultSimplify )!=0 );
+
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );

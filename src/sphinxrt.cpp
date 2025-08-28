@@ -7413,7 +7413,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 	SwitchProfile ( pProfiler, SPH_QSTATE_TRANSFORMS );
 
 	// FIXME!!! provide segments list instead index
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, tQuery.m_bSimplify, pThis );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, GetBooleanSimplify ( tQuery ), pThis );
 
 	int iExpandKw = ExpandKeywords ( iExpandKeywords, tQuery.m_eExpandKeywords, tSettings, bKeywordDict );
 	if ( iExpandKw!=KWE_DISABLED )

@@ -194,6 +194,20 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 ```
 <!-- end -->
 
+### boolean_simplify
+
+<!-- example conf boolean_simplify -->
+This setting controls the default value for [boolean_simplify](../Searching/Options.md#boolean_simplify) search option. It is optional, with a default value of 1 (enabled).
+
+When set to 1, the server will automatically apply [boolean query optimization](../Searching/Full_text_matching/Boolean_optimization.md) to improve query performance. When set to 0, queries will be executed without optimization by default. This default can be overridden on a per-query basis using the corresponding search option `boolean_simplify`.
+
+<!-- request Example -->
+```ini
+searchd {
+    boolean_simplify = 0  # disable boolean optimization by default
+}
+```
+<!-- end -->
 
 ### buddy_path
 

@@ -29,6 +29,7 @@ class XQParser_t;
 // #define XQ_DUMP_NODE_ADDR 1
 
 static bool g_bOnlyNotAllowed = false;
+static std::optional<bool> g_bBooleanSimplify;
 
 void AllowOnlyNot ( bool bAllowed )
 {
@@ -38,6 +39,22 @@ void AllowOnlyNot ( bool bAllowed )
 bool IsAllowOnlyNot()
 {
 	return g_bOnlyNotAllowed;
+}
+
+void SetBooleanSimplify ( bool bSimplify )
+{
+	g_bBooleanSimplify = bSimplify;
+}
+
+bool GetBooleanSimplify ( const CSphQuery & tQuery )
+{
+	if ( tQuery.m_bSimplify.has_value() )
+		return tQuery.m_bSimplify.value();
+
+	if ( g_bBooleanSimplify.has_value() )
+		return g_bBooleanSimplify.value();
+
+	return CSphQuery::m_bDefaultSimplify;
 }
 
 NodeEstimate_t & NodeEstimate_t::operator+= ( const NodeEstimate_t & tRhs )

@@ -120,6 +120,8 @@ Integer. Max time in milliseconds to wait for remote queries to complete, see [t
 ### boolean_simplify
 `0` or `1` (`1` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
 
+This option can also be set globally in the [searchd configuration](../Server_settings/Searchd.md#boolean_simplify) to change the default behavior for all queries. The per-query option will override the global setting.
+
 ### comment
 String, user comment that gets copied to a query log file.
 

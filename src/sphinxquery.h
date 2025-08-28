@@ -405,6 +405,9 @@ XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery );
 void	AllowOnlyNot ( bool bAllowed );
 bool	IsAllowOnlyNot();
 
+/// global setting for boolean simplification
+void	SetBooleanSimplify ( bool bSimplify );
+bool	GetBooleanSimplify ( const CSphQuery & tQuery );
 CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
 int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  );

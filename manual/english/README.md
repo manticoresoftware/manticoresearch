@@ -124,7 +124,7 @@
     * [• Updating table FT settings in plain mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• Rebuilding a secondary index](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Changing a distributed table](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
-* [⪢ Functions](Functions.md)
+* [⪢ Functions]
     * [• Mathematical functions](Functions/Mathematical_functions.md)
     * [• Searching and ranking functions](Functions/Searching_and_ranking_functions.md)
     * [• Type casting functions](Functions/Type_casting_functions.md)

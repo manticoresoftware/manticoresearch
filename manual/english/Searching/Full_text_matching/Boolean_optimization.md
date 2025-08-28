@@ -1,5 +1,5 @@
 # Boolean optimization
-Queries can be automatically optimized if `OPTION boolean_simplify=1` is specified. Some transformations performed by this optimization include:
+Full-text queries are automatically optimized when `OPTION boolean_simplify=1` is set (this is enabled by default). Some of the transformations made by this optimization include:
 
 * Excess brackets: `((A | B) | C)` becomes `(A | B | C)`; `((A B) C)` becomes `(A B C)`
 * Excess AND NOT: `((A !N1) !N2)` becomes `(A !(N1 | N2))`
@@ -10,9 +10,7 @@ Queries can be automatically optimized if `OPTION boolean_simplify=1` is specifi
 * Common phrase: `("X A B" | "Y A B")` becomes `("("X"|"Y") A B")`
 * Common AND NOT: `((A !X) | (A !Y) | (A !Z))` becomes `(A !(X Y Z))`
 * Common OR NOT: `((A !(N | N1)) | (B !(N | N2)))` becomes `(( (A !N1) | (B !N2) ) !N)`
-Note that optimizing queries consumes CPU time, so for simple queries or hand-optimized queries, you'll achieve better results with the default `boolean_simplify=0` value. Simplifications often benefit complex queries or algorithmically generated queries.
-
-> NOTE: This is an experimental functionality and should be used with caution. It is recommended to verify that a query returns the same documents with and without adding `OPTION boolean_simplify=1`. While this optimization can simplify and improve the performance of complex or algorithmically generated queries, it also consumes additional CPU time. For simpler or manually optimized queries, the default `boolean_simplify=0` value might yield better results.
+Note that optimizing queries consumes CPU time, so in some cases for very simple queries or hand-optimized queries, you may achieve better results by disabling optimization with `boolean_simplify=0`.
 
 Queries like `-dog`, which could potentially include all documents from the collection are not allowed by default. To allow them, you must specify `not_terms_only_allowed=1` either as a [global setting](../../Server_settings/Searchd.md#not_terms_only_allowed) or as a [search option](../../Server_settings/Searchd.md#not_terms_only_allowed).
 

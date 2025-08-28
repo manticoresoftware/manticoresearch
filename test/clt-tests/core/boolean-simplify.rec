@@ -1,6 +1,9 @@
 ––– input –––
 sed -i '/^searchd {/a\    boolean_simplify = 0' /etc/manticoresearch/manticore.conf
 ––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 mysql -P9306 -h0 -e "show settings"

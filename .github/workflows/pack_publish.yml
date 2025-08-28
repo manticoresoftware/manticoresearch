@@ -302,8 +302,10 @@ jobs:
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
+        # without adding the safe.directory the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
       - name: Make installer
+        # TODO: remove the hardcoded paths /builds/ below
         run: |
           mkdir -p /builds/manticoresearch/dev/build/
           /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh ${{ needs.pack.outputs.target }}
@@ -474,9 +476,10 @@ jobs:
         # Disable Buddy before starting Manticore
         $configPath = "$installPath\etc\manticoresearch\manticore.conf"
         if (Test-Path $configPath) {
-          $config = Get-Content $configPath
-          $config = $config -replace "buddy_path\s*=.*", "buddy_path = "
-          Set-Content $configPath $config
+          $config = Get-Content $configPath -Raw
+          # Add buddy_path with empty value to disable it
+          $config = $config -replace "(searchd\s*\{)", "`$1`n    buddy_path = "
+          Set-Content -Path $configPath -Value $config -Force
         }
         
         echo "=== STARTING MANTICORE SERVICE ==="
@@ -499,10 +502,16 @@ jobs:
         
         echo "=== TESTING MANTICORE CONNECTION ==="
         
-        # Test connection
+        # Test connection with basic SQL command that works without Buddy
         $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
         if (Test-Path $mysqlPath) {
-          & $mysqlPath -P9306 -h127.0.0.1 -e "SHOW VERSION"
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
+          if ($LASTEXITCODE -eq 0) {
+            echo "MySQL connection successful"
+          } else {
+            echo "ERROR: MySQL connection failed"
+            exit 1
+          }
         } else {
           $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
           if ($connection) {

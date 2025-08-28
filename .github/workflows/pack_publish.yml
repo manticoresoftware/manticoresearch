@@ -302,10 +302,8 @@ jobs:
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
-        # without adding the safe.directory the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
       - name: Make installer
-        # TODO: remove the hardcoded paths /builds/ below
         run: |
           mkdir -p /builds/manticoresearch/dev/build/
           /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh ${{ needs.pack.outputs.target }}
@@ -473,7 +471,7 @@ jobs:
         
         & $searchdPath --version
         
-        # Disable Buddy in configuration for GitHub Actions environment
+        # Disable Buddy before starting Manticore
         $configPath = "$installPath\etc\manticoresearch\manticore.conf"
         if (Test-Path $configPath) {
           $config = Get-Content $configPath

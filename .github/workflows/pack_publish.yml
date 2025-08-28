@@ -443,7 +443,7 @@ jobs:
         Start-Sleep -Seconds 10
       shell: pwsh
     
-    - name: Verify Installation and Test
+    - name: Configure and Test Manticore
       run: |
         echo "=== VERIFYING INSTALLATION ==="
         
@@ -472,6 +472,15 @@ jobs:
         echo "indexer.exe found at: $indexerPath"
         
         & $searchdPath --version
+        
+        # Modify configuration to disable Buddy
+        $configPath = "$installPath\etc\manticoresearch\manticore.conf"
+        if (Test-Path $configPath) {
+          $config = Get-Content $configPath
+          $config = $config -replace "buddy_path\s*=.*", "buddy_path = "
+          Set-Content $configPath $config
+          echo "Configuration modified"
+        }
         
         echo "=== STARTING MANTICORE SERVICE ==="
         

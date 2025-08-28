@@ -16,5 +16,5 @@ searchd {
 }
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -P9306 -h0 -e "show settings"
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into t values(1, 'a'); set profiling=1; select * from t where match(' (A | "A B"~1)') option boolean_simplify=0; show plan;"
 ––– output –––

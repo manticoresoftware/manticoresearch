@@ -13722,6 +13722,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
+	SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", 1 )!=0 );
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );

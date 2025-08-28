@@ -907,6 +907,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		// parse simple flags
 		tQuery.m_bSortKbuffer = !!( uFlags & QFLAG_SORT_KBUFFER );
 		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
+		// Only consider it explicit if it differs from global default
+		tQuery.m_bExplicitSimplify = (tQuery.m_bSimplify != GetBooleanSimplify());
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
 		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )

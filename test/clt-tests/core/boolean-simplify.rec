@@ -31,7 +31,7 @@ mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into
   PROXIMITY(distance=1, KEYWORD(a, querypos=2), KEYWORD(b, querypos=3))) |
 +------------------+--------------------------------------------------------------------------------------------------------------+
 ––– input –––
-searchd --stopwait
+searchd --stopwait > /dev/null
 ––– output –––
 ––– input –––
 sed -i 's/^\(\s*boolean_simplify\s*=\s*\)0/\11/' /etc/manticoresearch/manticore.conf

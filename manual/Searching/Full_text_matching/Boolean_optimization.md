@@ -1,5 +1,5 @@
 # Boolean optimization
-Full-text queries are automatically optimized when `OPTION boolean_simplify=1` is set (this is enabled by default). Some of the transformations made by this optimization include:
+Full-text queries are automatically optimized when the `boolean_simplify` search option (or the corresponding [global setting](../../Server_settings/Searchd.md#boolean_simplify)) is set to `1` (enabled by default). Some of the changes made by this optimization include:
 
 * Excess brackets: `((A | B) | C)` becomes `(A | B | C)`; `((A B) C)` becomes `(A B C)`
 * Excess AND NOT: `((A !N1) !N2)` becomes `(A !(N1 | N2))`

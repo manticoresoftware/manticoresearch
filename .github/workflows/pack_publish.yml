@@ -407,7 +407,7 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
 
-  # Test Windows installer after publishing Windows packages
+  # Test Windows installer without Docker/Buddy on GitHub Actions
   test_windows_installer:
     name: Test Windows NSIS installer
     needs: [publish_windows, pack]
@@ -437,13 +437,13 @@ jobs:
         echo "=== INSTALLING MANTICORE ==="
         echo "Installing from: $($installerFile.FullName)"
         
-        $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+        $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S /NOEXECUTOR" -Wait -PassThru -NoNewWindow
         echo "Installation process exited with code: $($process.ExitCode)"
         
         Start-Sleep -Seconds 10
       shell: pwsh
     
-    - name: Configure and Test Manticore
+    - name: Test Manticore without Buddy
       run: |
         echo "=== VERIFYING INSTALLATION ==="
         
@@ -473,13 +473,12 @@ jobs:
         
         & $searchdPath --version
         
-        # Modify configuration to disable Buddy
+        # Disable Buddy in configuration for GitHub Actions environment
         $configPath = "$installPath\etc\manticoresearch\manticore.conf"
         if (Test-Path $configPath) {
           $config = Get-Content $configPath
           $config = $config -replace "buddy_path\s*=.*", "buddy_path = "
           Set-Content $configPath $config
-          echo "Configuration modified"
         }
         
         echo "=== STARTING MANTICORE SERVICE ==="
@@ -502,7 +501,7 @@ jobs:
         
         echo "=== TESTING MANTICORE CONNECTION ==="
         
-        # Test using MySQL client if available
+        # Test connection
         $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
         if (Test-Path $mysqlPath) {
           & $mysqlPath -P9306 -h127.0.0.1 -e "SHOW VERSION"

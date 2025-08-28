@@ -1,5 +1,5 @@
 ––– input –––
-cat /etc/manticoresearch/manticore.conf
+sed -i '/^searchd {/a\    boolean_simplify = 0' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––

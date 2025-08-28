@@ -1,3 +1,4 @@
 ––– input –––
 echo "  a"|grep a
 ––– output –––
+a

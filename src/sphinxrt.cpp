@@ -7691,7 +7691,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 	SwitchProfile ( pProfiler, SPH_QSTATE_TRANSFORMS );
 
 	// FIXME!!! provide segments list instead index
-	TransformExtendedQueryArgs_t tTranformArgs { GetEffectiveBooleanSimplify ( &tQuery ), tParsed.m_bNeedPhraseTransform, pThis };
+	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, pThis };
 	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, tMeta.m_sError, tTranformArgs ) )
 		return 0;
 

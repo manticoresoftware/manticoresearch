@@ -549,8 +549,8 @@ struct CSphQuery
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bSimplify = true;			///< whether to apply boolean simplification
-	bool			m_bExplicitSimplify = false;		///< whether boolean_simplify was explicitly set via options
+	std::optional<bool> m_bSimplify;			///< whether to apply boolean simplification
+	static constexpr bool m_bDefaultSimplify = true;
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized

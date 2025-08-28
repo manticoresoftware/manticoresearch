@@ -10977,7 +10977,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
-	TransformExtendedQueryArgs_t tTranformArgs { GetEffectiveBooleanSimplify ( &tQuery ), tParsed.m_bNeedPhraseTransform, this };
+	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
 	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs ) )
 		return false;
 
@@ -11076,7 +11076,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			TransformExtendedQueryArgs_t tTranformArgs { GetEffectiveBooleanSimplify ( &tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
+			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
 			if ( !sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs ) )
 			{
 				tMeta.m_iMultiplier = -1;

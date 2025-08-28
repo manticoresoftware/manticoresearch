@@ -24,7 +24,7 @@ class XQParser_t;
 #include "bissphinxquery.h"
 
 static bool g_bOnlyNotAllowed = false;
-static bool g_bBooleanSimplify = true;
+static std::optional<bool> g_bBooleanSimplify;
 
 void AllowOnlyNot ( bool bAllowed )
 {
@@ -41,20 +41,15 @@ void SetBooleanSimplify ( bool bSimplify )
 	g_bBooleanSimplify = bSimplify;
 }
 
-bool GetBooleanSimplify ()
+bool GetBooleanSimplify ( const CSphQuery & tQuery )
 {
-	return g_bBooleanSimplify;
-}
+	if ( tQuery.m_bSimplify.has_value() )
+		return tQuery.m_bSimplify.value();
 
-bool GetEffectiveBooleanSimplify ( const CSphQuery * pQuery )
-{
-	// If no query provided, use global setting
-	if ( !pQuery )
-		return g_bBooleanSimplify;
-	
-	// If query explicitly set boolean_simplify option, use that value
-	// Otherwise use global setting
-	return pQuery->m_bExplicitSimplify ? pQuery->m_bSimplify : g_bBooleanSimplify;
+	if ( g_bBooleanSimplify.has_value() )
+		return g_bBooleanSimplify.value();
+
+	return CSphQuery::m_bDefaultSimplify;
 }
 
 namespace {

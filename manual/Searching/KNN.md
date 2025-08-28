@@ -55,7 +55,151 @@ table test_vec {
 
 ### Inserting vector data
 
-After creating the table, you need to insert your vector data, ensuring it matches the dimensions you specified when creating the table. You can also insert an empty vector; this means that the document will be excluded from vector search results.
+#### Auto Embeddings (Recommended)
+
+The easiest way to work with vector data is using **auto embeddings**. With this feature, you create a table with `MODEL_NAME` and `FROM` parameters, then simply insert your text data - Manticore automatically generates embeddings for you.
+
+##### Creating a table with auto embeddings
+
+When creating a table for auto embeddings, specify:
+- `MODEL_NAME`: The embedding model to use
+- `FROM`: Which fields to use for embedding generation (empty means all text/string fields)
+
+**Supported models:**
+- **Sentence Transformers**: Any model from Hugging Face (e.g., `sentence-transformers/all-MiniLM-L6-v2`)
+- **OpenAI**: Models like `openai/text-embedding-ada-002` (requires API key)
+- **Voyage**: Voyage AI models (requires API key)  
+- **Jina**: Jina AI models (requires API key)
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- Using sentence-transformers (no API key needed)
+CREATE TABLE products (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+) engine='columnar';
+
+-- Using OpenAI (requires API_KEY parameter with environment variable)
+CREATE TABLE products_openai (
+    title TEXT,
+    description TEXT, 
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='${OPENAI_API_KEY}'
+) engine='columnar';
+
+-- Using all text fields for embeddings (FROM is empty)
+CREATE TABLE products_all (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+) engine='columnar';
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.01 sec)
+Query OK, 0 rows affected (0.01 sec)  
+Query OK, 0 rows affected (0.01 sec)
+```
+
+##### Inserting data with auto embeddings
+
+When using auto embeddings, **do not specify the vector field** in your INSERT statement. The embeddings are generated automatically from the text fields specified in the `FROM` parameter.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- Insert text data only - embeddings generated automatically
+INSERT INTO products (title) VALUES 
+('machine learning artificial intelligence'),
+('banana fruit sweet yellow');
+
+-- Insert multiple fields - both used for embedding if FROM='title,description'  
+INSERT INTO products_openai (title, description) VALUES
+('smartphone', 'latest mobile device with advanced features'),
+('laptop', 'portable computer for work and gaming');
+
+-- Insert empty vector (document excluded from vector search)
+INSERT INTO products (title, embedding_vector) VALUES 
+('no embedding item', ());
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 2 rows affected (0.00 sec)
+Query OK, 2 rows affected (0.00 sec)
+Query OK, 1 row affected (0.00 sec)
+```
+
+##### Environment variables for API-based models
+
+For remote models requiring API keys, you need to:
+1. Set the appropriate environment variables
+2. Reference them in the `API_KEY` parameter using `${VARIABLE_NAME}` syntax
+
+```bash
+# For OpenAI models
+export OPENAI_API_KEY="your-openai-api-key"
+
+# For Voyage models  
+export VOYAGE_API_KEY="your-voyage-api-key"
+
+# For Jina models
+export JINA_API_KEY="your-jina-api-key"
+```
+
+Then use the `API_KEY` parameter in your CREATE TABLE statement:
+
+```sql
+-- OpenAI example with API_KEY parameter
+CREATE TABLE products_with_openai (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='${OPENAI_API_KEY}'
+) engine='columnar';
+```
+
+##### Searching with auto embeddings
+
+Search works the same way - provide your query text and Manticore will generate embeddings and find similar documents:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine learning');
+```
+
+<!-- response SQL -->
+
+```sql
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 | 0.12345678 |
+|    2 | 0.87654321 |
++------+------------+
+2 rows in set (0.00 sec)
+```
+
+#### Manual Vector Insertion
+
+Alternatively, you can manually insert pre-computed vector data, ensuring it matches the dimensions you specified when creating the table. You can also insert an empty vector; this means that the document will be excluded from vector search results.
 
 <!-- intro -->
 ##### SQL:

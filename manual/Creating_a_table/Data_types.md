@@ -2483,13 +2483,129 @@ let search_res = search_api.search(search_req).await;
 
 ## Float vector
 
+### Auto Embeddings (Recommended)
+
+The most convenient way to work with float vectors is using **auto embeddings**. This feature automatically generates embeddings from your text data using machine learning models, eliminating the need to manually compute and insert vectors.
+
+#### Benefits of Auto Embeddings
+- **Simplified workflow**: Just insert text, embeddings are generated automatically
+- **No manual vector computation**: No need to run separate embedding models
+- **Consistent embeddings**: Same model ensures consistent vector representations
+- **Multiple model support**: Choose from sentence-transformers, OpenAI, Voyage, and Jina models
+- **Flexible field selection**: Control which fields are used for embedding generation
+
+#### Creating tables with auto embeddings
+
+When creating a table with auto embeddings, specify these additional parameters:
+- `MODEL_NAME`: The embedding model to use for automatic vector generation
+- `FROM`: Which fields to use for embedding generation (empty string means all text/string fields)
+
+**Supported embedding models:**
+- **Sentence Transformers**: Any Hugging Face model (e.g., `sentence-transformers/all-MiniLM-L6-v2`) - no API key required
+- **OpenAI**: Models like `openai/text-embedding-ada-002` - requires `API_KEY='${OPENAI_API_KEY}'` parameter
+- **Voyage**: Voyage AI models - requires `API_KEY='${VOYAGE_API_KEY}'` parameter
+- **Jina**: Jina AI models - requires `API_KEY='${JINA_API_KEY}'` parameter
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+-- Using sentence-transformers model (no API key needed)
+CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+) engine='columnar';
+
+-- Using OpenAI model (requires API_KEY parameter with environment variable)
+CREATE TABLE products_openai (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='${OPENAI_API_KEY}'
+) engine='columnar';
+
+-- Using all text fields for embeddings (FROM is empty)
+CREATE TABLE products_all_fields (
+    title TEXT,
+    description TEXT,
+    tags TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+) engine='columnar';
+```
+
+#### FROM parameter usage
+
+The `FROM` parameter controls which fields are used for embedding generation:
+
+- **Specific fields**: `FROM='title'` - only the title field is used
+- **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
+- **All text fields**: `FROM=''` (empty) - all TEXT and STRING fields in the table are used
+- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+
+#### Environment setup for API-based models
+
+For remote models requiring API keys, you need to:
+1. Set the appropriate environment variables
+2. Reference them in the `API_KEY` parameter using `${VARIABLE_NAME}` syntax in your CREATE TABLE statement
+
+```bash
+# For OpenAI models
+export OPENAI_API_KEY="your-openai-api-key-here"
+
+# For Voyage models
+export VOYAGE_API_KEY="your-voyage-api-key-here"
+
+# For Jina models  
+export JINA_API_KEY="your-jina-api-key-here"
+```
+
+Example CREATE TABLE statements with API_KEY parameter:
+
+```sql
+-- OpenAI example
+CREATE TABLE products_openai (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='${OPENAI_API_KEY}'
+) engine='columnar';
+
+-- Voyage example  
+CREATE TABLE products_voyage (
+    title TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='voyage/voyage-large-2' FROM='title' API_KEY='${VOYAGE_API_KEY}'
+) engine='columnar';
+```
+
+#### Inserting data with auto embeddings
+
+When using auto embeddings, **do not specify the vector field** in your INSERT statements. The embeddings are automatically generated from the specified text fields:
+
+```sql
+-- Insert text data - embeddings generated automatically
+INSERT INTO products (title, description) VALUES 
+('smartphone', 'latest mobile device with camera'),
+('laptop computer', 'portable workstation for developers');
+
+-- Insert with empty vector (excluded from vector search)
+INSERT INTO products (title, description, embedding_vector) VALUES
+('no-vector item', 'this item has no embedding', ());
+```
+
+### Manual Float Vector Usage
+
 <!-- example for creating float_vector -->
-Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from multi-valued attributes (MVAs) in several important ways:
+Alternatively, you can work with manually computed float vectors. Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from multi-valued attributes (MVAs) in several important ways:
 - Preserves the exact order of values (unlike MVAs which may reorder)
 - Retains duplicate values (unlike MVAs which deduplicate)
 - No additional processing during insertion (unlike MVAs which sort and deduplicate)
 
-### Usage and Limitations
+#### Usage and Limitations
 - Currently only supported in real-time tables
 - Can only be utilized in KNN (k-nearest neighbor) searches
 - Not supported in plain tables or other functions/expressions
@@ -2498,7 +2614,7 @@ Float vector attributes allow storing variable-length lists of floats, primarily
 - Float vectors cannot be used in regular filters or sorting
 - The only way to filter by `float_vector` values is through vector search operations (KNN)
 
-### Common Use Cases
+#### Common Use Cases
 - Image embeddings for similarity search
 - Text embeddings for semantic search
 - Feature vectors for machine learning

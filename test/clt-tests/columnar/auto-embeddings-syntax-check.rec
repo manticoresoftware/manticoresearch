@@ -120,6 +120,11 @@ mysql -h0 -P9306 -e "INSERT INTO test_single_field (embedding_vector) VALUES((0,
 ––– output –––
 ERROR 1064 (42000) at line 1: attribute 'embedding_vector' has model_name=sentence-transformers/all-MiniLM-L6-v2 specified, but vector contents with 3 values is provided
 ––– comment –––
+Testing that replace will succeed
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO test_single_field (id, title) VALUES(1,'natural language processing')"; echo $?
+––– output –––
+––– comment –––
 Verify single field data exists
 ––– input –––
 mysql -h0 -P9306 -e "SELECT count(*) FROM test_single_field WHERE id=1"

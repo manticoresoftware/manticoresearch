@@ -19,7 +19,7 @@ searchd --stopwait > /dev/null
 sed -i '/^searchd {/a\    boolean_simplify = 0' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
-cat /etc/manticoresearch/manticore.conf
+cat /etc/manticoresearch/manticore.conf|grep boolean_simplify
 ––– output –––
 searchd {
     boolean_simplify = 0

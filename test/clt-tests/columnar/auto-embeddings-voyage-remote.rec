@@ -18,7 +18,7 @@ ERROR 1064 (42000) at line 1: error adding table 'test_valid_model_no_api_key': 
 ––– comment –––
 Test table creation with valid OpenAI model and KEY
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_openai_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title, content' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_voyage_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title, content' API_KEY='${VOYAGE_API_KEY}') engine = 'columnar'"; echo $?
 ––– output –––
 0
 ––– comment –––

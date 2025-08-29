@@ -6,19 +6,19 @@ Start Manticore Search
 ––– comment –––
 Test error case: Invalid OpenAI model name
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_invalid_model (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/invalid-model-name-12345' FROM = 'title') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid_model (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/invalid-model-name-12345' FROM = 'title') " 2>&1
 ––– output –––
 #!/.*ERROR.*(model.*not.*found|invalid.*model|model.*does.*not.*exist|configuration).*/!#
 ––– comment –––
 Test that we have error when creating WITHOUT api_key passed
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_valid_model_no_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_valid_model_no_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title') " 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_valid_model_no_api_key': prealloc: Invalid API key for remote model
 ––– comment –––
 Test table creation with valid OpenAI model and KEY
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_openai_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title, content' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title, content' API_KEY='${OPENAI_API_KEY}') "; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -64,7 +64,7 @@ SUCCESS: Same FROM fields produce same vector
 ––– comment –––
 Test different FROM field combinations produce different vectors
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_openai_title_only (title TEXT, content TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; mysql -h0 -P9306 -e "INSERT INTO test_openai_title_only (id, title, content) VALUES(1, 'machine learning algorithms', 'completely different content here')"; MD5_MULTI=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); MD5_SINGLE=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_title_only WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); echo "multi_field_md5: $MD5_MULTI"; echo "single_field_md5: $MD5_SINGLE"; if [ "$MD5_MULTI" != "$MD5_SINGLE" ]; then echo "SUCCESS: Different FROM specifications produce different vectors"; else echo "INFO: FROM field comparison result"; fi
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_title_only (title TEXT, content TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title' API_KEY='${OPENAI_API_KEY}') "; mysql -h0 -P9306 -e "INSERT INTO test_openai_title_only (id, title, content) VALUES(1, 'machine learning algorithms', 'completely different content here')"; MD5_MULTI=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); MD5_SINGLE=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_title_only WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); echo "multi_field_md5: $MD5_MULTI"; echo "single_field_md5: $MD5_SINGLE"; if [ "$MD5_MULTI" != "$MD5_SINGLE" ]; then echo "SUCCESS: Different FROM specifications produce different vectors"; else echo "INFO: FROM field comparison result"; fi
 ––– output –––
 multi_field_md5: #!/[0-9a-f]{32}/!#
 single_field_md5: #!/[0-9a-f]{32}/!#
@@ -72,7 +72,7 @@ SUCCESS: Different FROM specifications produce different vectors
 ––– comment –––
 Test error case: FROM referencing non-existent field with OpenAI model
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_openai_invalid_field (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_invalid_field (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'nonexistent_field') " 2>&1
 ––– output –––
 #!/.*ERROR.*(field|column|nonexistent).*/!#
 ––– comment –––

@@ -8,13 +8,13 @@ Test FROM clause functionality by creating two tables with different FROM specif
 ––– comment –––
 Table 1: Vector generated from title1 field only
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_from_title1 (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_from_title1 (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1') "; echo $?
 ––– output –––
 0
 ––– comment –––
 Table 2: Vector generated from title2 field only
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_from_title2 (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title2') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_from_title2 (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title2') "; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -86,31 +86,31 @@ SUCCESS: Same input produces same vector
 ––– comment –––
 Test error case: invalid model name
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_invalid (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'invalid-model-name' FROM = 'title1') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'invalid-model-name' FROM = 'title1') " 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_invalid': prealloc: Failed to download model configuration
 ––– comment –––
 Test error case: FROM referencing non-existent field
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_invalid_field (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid_field (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'nonexistent_field') " 2>&1
 ––– output –––
 #!/.*ERROR.*(field|column|nonexistent).*/!#
 ––– comment –––
 Test error case: FROM not specified
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_from_specified (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from_specified (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') " 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from_specified': 'from' setting empty for KNN attribute 'embedding_vector'
 ––– comment –––
 Test error case: FROM specified but empty
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_from_set_to_empty (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_from_set_to_empty (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') " 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_from_set_to_empty': 'from' setting empty for KNN attribute 'embedding_vector'
 ––– comment –––
 Test multiple fields in FROM clause
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_multi_from (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1, title2') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_multi_from (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1, title2') "; echo $?
 ––– output –––
 0
 ––– input –––
@@ -134,7 +134,7 @@ single_field_md5: #!/[a-f0-9]{32}/!#
 ––– comment –––
 Test MODEL_NAME without FROM clause (fails)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'"
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') "
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'embedding_vector'
 ––– comment –––

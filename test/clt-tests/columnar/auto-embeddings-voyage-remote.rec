@@ -24,7 +24,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_voyage_remote (title TEXT, content TEXT, 
 ––– comment –––
 Check that the table was created and not display API_KEY
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_openai_remote"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_voyage_remote"
 ––– output –––
 +--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Table              | Create Table                                                                                                                                                                                                                        |
@@ -56,7 +56,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as record_count FROM test_openai_remote WHE
 ––– comment –––
 Test vector generation consistency - the same input should produce the same vector MD5. We try to cut precision due to storing in Manticore with a lower one than OpenAI provides, so there may be differences in some cases.
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test_openai_remote (id, title, content, description) VALUES(2, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'different description')"; MD5_1=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); MD5_2=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=2" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); echo "vector_md5_1: $MD5_1"; echo "vector_md5_2: $MD5_2"; if [ "$MD5_1" = "$MD5_2" ]; then echo "SUCCESS: Same FROM fields produce same vector"; else echo "FAIL: Different vectors (FROM does not include description field and should not change generated vector value)"; fi
+mysql -h0 -P9306 -e "INSERT INTO test_voyage_remote (id, title, content, description) VALUES(2, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'different description')"; MD5_1=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_voyage_remote WHERE id=1" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); MD5_2=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=2" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); echo "vector_md5_1: $MD5_1"; echo "vector_md5_2: $MD5_2"; if [ "$MD5_1" = "$MD5_2" ]; then echo "SUCCESS: Same FROM fields produce same vector"; else echo "FAIL: Different vectors (FROM does not include description field and should not change generated vector value)"; fi
 ––– output –––
 vector_md5_1: #!/[0-9a-f]{32}/!#
 vector_md5_2: #!/[0-9a-f]{32}/!#
@@ -64,7 +64,7 @@ SUCCESS: Same FROM fields produce same vector
 ––– comment –––
 Test different FROM field combinations produce different vectors
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_openai_title_only (title TEXT, content TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; mysql -h0 -P9306 -e "INSERT INTO test_openai_title_only (id, title, content) VALUES(1, 'machine learning algorithms', 'completely different content here')"; MD5_MULTI=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); MD5_SINGLE=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_title_only WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); echo "multi_field_md5: $MD5_MULTI"; echo "single_field_md5: $MD5_SINGLE"; if [ "$MD5_MULTI" != "$MD5_SINGLE" ]; then echo "SUCCESS: Different FROM specifications produce different vectors"; else echo "INFO: FROM field comparison result"; fi
+mysql -h0 -P9306 -e "CREATE TABLE test_voyage_title_only (title TEXT, content TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; mysql -h0 -P9306 -e "INSERT INTO test_voyage_title_only (id, title, content) VALUES(1, 'machine learning algorithms', 'completely different content here')"; MD5_MULTI=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); MD5_SINGLE=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_title_only WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); echo "multi_field_md5: $MD5_MULTI"; echo "single_field_md5: $MD5_SINGLE"; if [ "$MD5_MULTI" != "$MD5_SINGLE" ]; then echo "SUCCESS: Different FROM specifications produce different vectors"; else echo "INFO: FROM field comparison result"; fi
 ––– output –––
 multi_field_md5: #!/[0-9a-f]{32}/!#
 single_field_md5: #!/[0-9a-f]{32}/!#

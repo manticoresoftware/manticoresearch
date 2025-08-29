@@ -124,6 +124,7 @@ Testing that replace will succeed
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO test_single_field (id, title) VALUES(1,'natural language processing')"; echo $?
 ––– output –––
+0
 ––– comment –––
 Verify single field data exists
 ––– input –––

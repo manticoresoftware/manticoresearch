@@ -40,7 +40,7 @@ embedding float_vector knn_type='hnsw' knn_dims='1024' hnsw_similarity='L2' mode
 ––– comment –––
 Test data insertion with auto-generated vectors
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test__remote (id, title, content, description) VALUES(1, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'advanced AI research')"; echo $?
+mysql -h0 -P9306 -e "INSERT INTO test_voyage_remote (id, title, content, description) VALUES(1, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'advanced AI research')"; echo $?
 ––– output –––
 0
 ––– comment –––

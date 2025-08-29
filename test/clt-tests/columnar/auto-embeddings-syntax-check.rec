@@ -6,7 +6,7 @@ Start Manticore Search
 ––– comment –––
 Test successful table creation with MODEL_NAME and FROM
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test (title1 TEXT, title2 TEXT, strattr STRING, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1, title2, strattr') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test (title1 TEXT, title2 TEXT, strattr STRING, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1, title2, strattr') "; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -70,31 +70,31 @@ mysql -h0 -P9306 -e "SELECT embedding_vector FROM test WHERE id = 2"
 ––– comment –––
 Test error case: invalid model name
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_invalid (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'invalid-model-name' FROM = 'title1') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'invalid-model-name' FROM = 'title1') " 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_invalid': prealloc: Failed to download model configuration
 ––– comment –––
 Test error case: FROM clause without MODEL_NAME
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_model (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' FROM = 'title1') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_no_model (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' FROM = 'title1') " 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: knn_dims and hnsw_similarity are required if knn_type='hnsw' near ') engine = 'columnar''
+ERROR 1064 (42000) at line 1: P03: knn_dims and hnsw_similarity are required if knn_type='hnsw' near ') '
 ––– comment –––
 Test case: MODEL_NAME without FROM clause (should fail)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'"
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') "
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'embedding_vector'
 ––– comment –––
 ERROR 1064 (42000) at line 1: Cannot create table with column names missing
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_invalid_field (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid_field (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'nonexistent_field') " 2>&1
 ––– output –––
 #!/.*ERROR.*(field|column|nonexistent).*/!#
 ––– comment –––
 Test successful case with single field in FROM
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_single_field (title TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_single_field (title TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title') "; echo $?
 ––– output –––
 0
 ––– comment –––

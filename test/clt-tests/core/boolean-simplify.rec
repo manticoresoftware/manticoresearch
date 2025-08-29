@@ -1,0 +1,110 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into t values(1, 'a'); set profiling=1; select * from t where match(' (A | \"A B\"~1)'); show plan;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | a    |
++------+------+
++------------------+-----------------------------+
+| Variable         | Value                       |
++------------------+-----------------------------+
+| transformed_tree | AND(KEYWORD(a, querypos=1)) |
++------------------+-----------------------------+
+––– input –––
+searchd --stopwait > /dev/null
+––– output –––
+––– input –––
+sed -i '/^searchd {/a\    boolean_simplify = 0' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+    boolean_simplify = 0
+    listen = 127.0.0.1:9312
+    listen = 127.0.0.1:9306:mysql
+    listen = 127.0.0.1:9308:http
+    log = /var/log/manticore/searchd.log
+    query_log = /var/log/manticore/query.log
+    pid_file = /var/run/manticore/searchd.pid
+    data_dir = /var/lib/manticore
+}
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into t values(1, 'a'); set profiling=1; select * from t where match(' (A | \"A B\"~1)'); show plan;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | a    |
++------+------+
++------------------+--------------------------------------------------------------------------------------------------------------+
+| Variable         | Value                                                                                                        |
++------------------+--------------------------------------------------------------------------------------------------------------+
+| transformed_tree | OR(
+  AND(KEYWORD(a, querypos=1)), 
+  PROXIMITY(distance=1, KEYWORD(a, querypos=2), KEYWORD(b, querypos=3))) |
++------------------+--------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -P9306 -h0 -e "set profiling=1; select * from t where match(' (A | \"A B\"~1)') option boolean_simplify=1; show plan;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | a    |
++------+------+
++------------------+-----------------------------+
+| Variable         | Value                       |
++------------------+-----------------------------+
+| transformed_tree | AND(KEYWORD(a, querypos=1)) |
++------------------+-----------------------------+
+––– input –––
+searchd --stopwait > /dev/null
+––– output –––
+––– input –––
+sed -i 's/^\(\s*boolean_simplify\s*=\s*\)0/\11/' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+    boolean_simplify = 1
+    listen = 127.0.0.1:9312
+    listen = 127.0.0.1:9306:mysql
+    listen = 127.0.0.1:9308:http
+    log = /var/log/manticore/searchd.log
+    query_log = /var/log/manticore/query.log
+    pid_file = /var/run/manticore/searchd.pid
+    data_dir = /var/lib/manticore
+}
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text); insert into t values(1, 'a'); set profiling=1; select * from t where match(' (A | \"A B\"~1)'); show plan;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | a    |
++------+------+
++------------------+-----------------------------+
+| Variable         | Value                       |
++------------------+-----------------------------+
+| transformed_tree | AND(KEYWORD(a, querypos=1)) |
++------------------+-----------------------------+
+––– input –––
+mysql -P9306 -h0 -e "set profiling=1; select * from t where match(' (A | \"A B\"~1)') option boolean_simplify=0; show plan;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | a    |
++------+------+
++------------------+--------------------------------------------------------------------------------------------------------------+
+| Variable         | Value                                                                                                        |
++------------------+--------------------------------------------------------------------------------------------------------------+
+| transformed_tree | OR(
+  AND(KEYWORD(a, querypos=1)), 
+  PROXIMITY(distance=1, KEYWORD(a, querypos=2), KEYWORD(b, querypos=3))) |
++------------------+--------------------------------------------------------------------------------------------------------------+

@@ -401,6 +401,10 @@ XQNode_t * CloneKeyword ( const XQNode_t * pNode );
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
 bool	IsAllowOnlyNot();
+
+/// global setting for boolean simplification
+void	SetBooleanSimplify ( bool bSimplify );
+bool	GetBooleanSimplify ( const CSphQuery & tQuery );
 CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
 inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {

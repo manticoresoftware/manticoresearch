@@ -1,4 +1,4 @@
-Test remote OpenAI embeddings API integration with auto-generation from text fields. Tests API key handling, model specification, error cases, and vector generation consistency using / model prefix.
+Test remote VoyageAI embeddings API integration with auto-generation from text fields. Tests API key handling, model specification, error cases, and vector generation consistency using / model prefix.
 
 ––– comment –––
 Start Manticore Search
@@ -16,7 +16,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_valid_model_no_api_key (title TEXT, embed
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_valid_model_no_api_key': prealloc: Invalid API key for remote model
 ––– comment –––
-Test table creation with valid OpenAI model and KEY
+Test table creation with valid VoyageAI model and KEY
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_voyage_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'voyage/voyage-3.5-lite' FROM = 'title, content' API_KEY='${VOYAGE_API_KEY}') engine = 'columnar'"; echo $?
 ––– output –––
@@ -54,7 +54,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as record_count FROM test_voyage_remote WHE
 |            1 |
 +--------------+
 ––– comment –––
-Test vector generation consistency - the same input should produce the same vector MD5. We try to cut precision due to storing in Manticore with a lower one than OpenAI provides, so there may be differences in some cases.
+Test vector generation consistency - the same input should produce the same vector MD5. We try to cut precision due to storing in Manticore with a lower one than VoyageAI provides, so there may be differences in some cases.
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_voyage_remote (id, title, content, description) VALUES(2, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'different description')"; MD5_1=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_voyage_remote WHERE id=1" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); MD5_2=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_voyage_remote WHERE id=2" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); echo "vector_md5_1: $MD5_1"; echo "vector_md5_2: $MD5_2"; if [ "$MD5_1" = "$MD5_2" ]; then echo "SUCCESS: Same FROM fields produce same vector"; else echo "FAIL: Different vectors (FROM does not include description field and should not change generated vector value)"; fi
 ––– output –––
@@ -70,7 +70,7 @@ multi_field_md5: #!/[0-9a-f]{32}/!#
 single_field_md5: #!/[0-9a-f]{32}/!#
 SUCCESS: Different FROM specifications produce different vectors
 ––– comment –––
-Test error case: FROM referencing non-existent field with OpenAI model
+Test error case: FROM referencing non-existent field with VoyageAI model
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test__invalid_field (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'voyage/text-embedding-ada-002' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
 ––– output –––
@@ -82,7 +82,7 @@ if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_voyage_no_from'" | grep -q test_v
 ––– output –––
 #!/(insert_result: (0|ERROR.*dimension.*mismatch.*)|insert_result: skipped \(table not created\))/!#
 ––– comment –––
-Show table structure to verify OpenAI model configuration
+Show table structure to verify VoyageAI model configuration
 ––– input –––
 if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test__no_from'" | grep -q test_voyage_no_from; then mysql -h0 -P9306 -e "SHOW CREATE TABLE test_voyage_no_from"; else echo "table_structure: skipped (table not created)"; fi
 ––– output –––
@@ -90,6 +90,6 @@ if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test__no_from'" | grep -q test_voyage_
 ––– comment –––
 Test API key environment variable handling
 ––– input –––
-if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "dummy_key_for_testing" ]; then echo "API key is available for testing"; else echo "API key not available - using dummy for error testing"; fi
+if [ -n "$VOYAGE_API_KEY" ] && [ "$VOYAGE_API_KEY" != "dummy_key_for_testing" ]; then echo "API key is available for testing"; else echo "API key not available - using dummy for error testing"; fi
 ––– output –––
 #!/(API key is available for testing|API key not available - using dummy for error testing)/!#

@@ -54,7 +54,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as record_count FROM test_openai_remote WHE
 |            1 |
 +--------------+
 ––– comment –––
-Test vector generation consistency - same input should produce same vector MD5
+Test vector generation consistency - the same input should produce the same vector MD5. We try to cut precision due to storing in Manticore with a lower one than OpenAI provides, so there may be differences in some cases.
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_openai_remote (id, title, content, description) VALUES(2, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'different description')"; MD5_1=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); MD5_2=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=2" | grep -v embedding | sed 's/[0-9]\+\.[0-9]\+/\n&\n/g' | grep -E '^[0-9]+\.[0-9]+$' | awk '{printf "%.7f\n", $1}' | tr '\n' ',' | sed 's/,$//' | md5sum | awk '{print $1}'); echo "vector_md5_1: $MD5_1"; echo "vector_md5_2: $MD5_2"; if [ "$MD5_1" = "$MD5_2" ]; then echo "SUCCESS: Same FROM fields produce same vector"; else echo "FAIL: Different vectors (FROM does not include description field and should not change generated vector value)"; fi
 ––– output –––

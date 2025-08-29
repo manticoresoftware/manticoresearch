@@ -27,6 +27,12 @@ on:
       OPENAI_API_KEY:
         required: true
         description: "OpenAI API key for CLT tests"
+      VOYAGE_API_KEY:
+        required: true
+        description: "Voyage API key for CLT tests"
+      JINA_API_KEY:
+        required: true
+        description: "Jina API key for CLT tests"
 
 jobs:
   clt:
@@ -36,6 +42,8 @@ jobs:
     continue-on-error: ${{ inputs.continue_on_error }}
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -92,4 +100,4 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
-          run_args: "-e OPENAI_API_KEY"
+          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY"

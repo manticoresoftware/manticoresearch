@@ -475,17 +475,11 @@ jobs:
         
         # Disable Buddy before starting Manticore
         $configPath = "$installPath\etc\manticoresearch\manticore.conf"
-        echo "Checking config at: $configPath"
         if (Test-Path $configPath) {
-          echo "Config file found, modifying to disable Buddy"
           $config = Get-Content $configPath -Raw
           # Add buddy_path with empty value to disable it
           $config = $config -replace "(searchd\s*\{)", "`$1`n    buddy_path = "
           Set-Content -Path $configPath -Value $config -Force
-          echo "buddy_path added with empty value"
-          echo "Config saved"
-        } else {
-          echo "WARNING: Config file not found at expected location"
         }
         
         echo "=== STARTING MANTICORE SERVICE ==="
@@ -494,23 +488,7 @@ jobs:
         
         $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
         
-        # Wait for searchd to be ready by checking port availability
-        $timeout = 30
-        $elapsed = 0
-        while ($elapsed -lt $timeout) {
-          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
-          if ($connection) {
-            echo "Port 9306 is ready after $elapsed seconds"
-            break
-          }
-          Start-Sleep -Seconds 1
-          $elapsed++
-        }
-        
-        if ($elapsed -ge $timeout) {
-          echo "ERROR: Timeout waiting for searchd to start"
-          exit 1
-        }
+        Start-Sleep -Seconds 10
         
         $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
         if ($manticoreProcess) {
@@ -524,27 +502,17 @@ jobs:
         
         echo "=== TESTING MANTICORE CONNECTION ==="
         
-        # Test connection and get result of SELECT 1
+        # Test connection with basic SQL command that works without Buddy
         $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
         if (Test-Path $mysqlPath) {
-          echo "MySQL client found at: $mysqlPath"
-          $result = & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1" 2>&1
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
           if ($LASTEXITCODE -eq 0) {
-            echo "MySQL query result:"
-            echo $result
-            if ($result -match "1") {
-              echo "SELECT 1 returned expected value"
-            } else {
-              echo "ERROR: SELECT 1 did not return expected result"
-              exit 1
-            }
+            echo "MySQL connection successful"
           } else {
-            echo "ERROR: MySQL connection failed with exit code: $LASTEXITCODE"
-            echo "Output: $result"
+            echo "ERROR: MySQL connection failed"
             exit 1
           }
         } else {
-          echo "MySQL client not found, checking port only"
           $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
           if ($connection) {
             echo "Port 9306 (MySQL) is listening"

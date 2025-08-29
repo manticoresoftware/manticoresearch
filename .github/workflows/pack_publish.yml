@@ -285,6 +285,7 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
+
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack]
@@ -295,7 +296,7 @@ jobs:
     env:
       CI_COMMIT_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |
@@ -317,7 +318,6 @@ jobs:
           path: build/manticore-*.exe
 
   # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
@@ -407,9 +407,127 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
 
+  # Test Windows installer without Docker/Buddy on GitHub Actions
+  test_windows_installer:
+    name: Test Windows NSIS installer
+    needs: [publish_windows, pack]
+    runs-on: windows-latest
+    steps:
+    - name: Download Windows installer artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: win_installer
+        path: ./installer
+    
+    - name: Extract and Install Manticore
+      timeout-minutes: 5
+      run: |
+        echo "=== EXTRACTING INSTALLER ==="
+        tar -xf ./installer/artifact.tar -C ./installer
+        
+        $installer = "./installer/build/manticore-*.exe"
+        $installerFile = Get-ChildItem $installer | Select-Object -First 1
+        
+        if (-not $installerFile) {
+          echo "ERROR: Installer not found!"
+          Get-ChildItem ./installer -Recurse
+          exit 1
+        }
+        
+        echo "=== INSTALLING MANTICORE ==="
+        echo "Installing from: $($installerFile.FullName)"
+        
+        $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S /NOEXECUTOR" -Wait -PassThru -NoNewWindow
+        echo "Installation process exited with code: $($process.ExitCode)"
+        
+        Start-Sleep -Seconds 10
+      shell: pwsh
+    
+    - name: Test Manticore without Buddy
+      run: |
+        echo "=== VERIFYING INSTALLATION ==="
+        
+        $installPath = "C:\Program Files (x86)\Manticore"
+        if (-not (Test-Path $installPath)) {
+          echo "ERROR: Manticore not installed at expected path: $installPath"
+          exit 1
+        }
+        
+        echo "Manticore installed at: $installPath"
+        
+        $searchdPath = "$installPath\bin\searchd.exe"
+        $indexerPath = "$installPath\bin\indexer.exe"
+        
+        if (-not (Test-Path $searchdPath)) {
+          echo "ERROR: searchd.exe not found at: $searchdPath"
+          exit 1
+        }
+        
+        if (-not (Test-Path $indexerPath)) {
+          echo "ERROR: indexer.exe not found at: $indexerPath"
+          exit 1
+        }
+        
+        echo "searchd.exe found at: $searchdPath"
+        echo "indexer.exe found at: $indexerPath"
+        
+        & $searchdPath --version
+        
+        # Disable Buddy before starting Manticore
+        $configPath = "$installPath\etc\manticoresearch\manticore.conf"
+        if (Test-Path $configPath) {
+          $config = Get-Content $configPath -Raw
+          # Add buddy_path with empty value to disable it
+          $config = $config -replace "(searchd\s*\{)", "`$1`n    buddy_path = "
+          Set-Content -Path $configPath -Value $config -Force
+        }
+        
+        echo "=== STARTING MANTICORE SERVICE ==="
+        
+        Push-Location $installPath
+        
+        $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
+        
+        Start-Sleep -Seconds 10
+        
+        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        if ($manticoreProcess) {
+          echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
+        } else {
+          echo "ERROR: Manticore searchd is not running"
+          exit 1
+        }
+        
+        Pop-Location
+        
+        echo "=== TESTING MANTICORE CONNECTION ==="
+        
+        # Test connection with basic SQL command that works without Buddy
+        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
+        if (Test-Path $mysqlPath) {
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
+          if ($LASTEXITCODE -eq 0) {
+            echo "MySQL connection successful"
+          } else {
+            echo "ERROR: MySQL connection failed"
+            exit 1
+          }
+        } else {
+          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+          if ($connection) {
+            echo "Port 9306 (MySQL) is listening"
+          } else {
+            echo "ERROR: Port 9306 is not listening"
+            exit 1
+          }
+        }
+        
+        echo "=== TEST COMPLETED SUCCESSFULLY ==="
+      shell: pwsh
+
   publish_nsis:
     name: Publishing Windows NSIS installer
-    needs: [publish_windows, publish, pack]
+    needs: [test_windows_installer, publish, pack]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
@@ -432,7 +550,7 @@ jobs:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |

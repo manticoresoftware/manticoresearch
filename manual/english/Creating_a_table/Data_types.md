@@ -2509,7 +2509,7 @@ Float vector attributes allow storing variable-length lists of floats, primarily
 
 ** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
 
-For information about using float vectors in searches, see [KNN search](../Searching/KNN.md).
+For more details on setting up float vectors and using them in searches, see [KNN search](../Searching/KNN.md).
 
 ### Auto Embeddings (Recommended)
 

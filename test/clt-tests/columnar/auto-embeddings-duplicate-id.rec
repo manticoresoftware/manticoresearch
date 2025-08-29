@@ -18,9 +18,11 @@ ERROR 1064 (42000) at line 1: duplicate id '1'
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_columnar (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1') engine = 'columnar'"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_columnar (id, title1, title2) VALUES(1, 'machine learning artificial intelligence', 'banana fruit sweet yellow')"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_columnar (id, title1, title2) VALUES(1, 'machine learning artificial intelligence', 'banana fruit sweet yellow')"
 ––– output –––

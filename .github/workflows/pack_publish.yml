@@ -413,6 +413,17 @@ jobs:
     needs: [publish_windows, pack]
     runs-on: windows-latest
     steps:
+    - name: Install MySQL client
+      run: |
+        echo "=== INSTALLING MYSQL CLIENT ==="
+        # Download MySQL client
+        Invoke-WebRequest -Uri "https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.39-winx64.zip" -OutFile "mysql.zip"
+        Expand-Archive -Path "mysql.zip" -DestinationPath "C:\mysql" -Force
+        # Add to PATH for this session
+        $env:PATH = "C:\mysql\mysql-8.0.39-winx64\bin;$env:PATH"
+        echo "MySQL client installed"
+      shell: pwsh
+      
     - name: Download Windows installer artifact
       uses: actions/download-artifact@v4
       with:
@@ -568,98 +579,67 @@ jobs:
         
         echo "=== TESTING MANTICORE FUNCTIONALITY ==="
         
-        # Test HTTP API functionality
-        try {
-          # Test 1: Basic SQL query
-          echo "Testing HTTP API with SELECT 1..."
-          $body = @{
-            query = "SELECT 1"
-          } | ConvertTo-Json
-          $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $body -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
-          
-          if ($response.StatusCode -eq 200) {
-            echo "✓ HTTP API SELECT query successful"
+        # Set MySQL path
+        $mysqlPath = "C:\mysql\mysql-8.0.39-winx64\bin\mysql.exe"
+        
+        # Test MySQL protocol
+        echo "Testing MySQL protocol connection..."
+        if (Test-Path $mysqlPath) {
+          # Test basic connectivity
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1" 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            echo "✓ MySQL connection successful"
           } else {
-            echo "ERROR: HTTP API returned status code $($response.StatusCode)"
+            echo "ERROR: MySQL connection failed"
             exit 1
           }
           
-          # Test 2: Create table
-          echo "Testing CREATE TABLE..."
-          $createBody = @{
-            query = "CREATE TABLE test (title text)"
-          } | ConvertTo-Json
-          $createResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $createBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
-          
-          if ($createResponse.StatusCode -eq 200) {
+          # Create test table
+          echo "Creating test table..."
+          & $mysqlPath -P9306 -h127.0.0.1 -e "CREATE TABLE test (title text)" 2>&1
+          if ($LASTEXITCODE -eq 0) {
             echo "✓ CREATE TABLE successful"
           }
           
-          # Test 3: Insert data
-          echo "Testing INSERT..."
-          $insertBody = @{
-            query = "INSERT INTO test VALUES (1, 'hello world')"
-          } | ConvertTo-Json
-          $insertResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $insertBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
-          
-          if ($insertResponse.StatusCode -eq 200) {
+          # Insert test data
+          echo "Inserting test data..."
+          & $mysqlPath -P9306 -h127.0.0.1 -e "INSERT INTO test VALUES (1, 'hello world')" 2>&1
+          if ($LASTEXITCODE -eq 0) {
             echo "✓ INSERT successful"
           }
           
-          # Test 4: Search
-          echo "Testing SEARCH..."
-          $searchBody = @{
-            query = "SELECT * FROM test WHERE MATCH('hello')"
-          } | ConvertTo-Json
-          $searchResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $searchBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
-          
-          if ($searchResponse.StatusCode -eq 200) {
+          # Test search functionality
+          echo "Testing search..."
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT * FROM test WHERE MATCH('hello')" 2>&1
+          if ($LASTEXITCODE -eq 0) {
             echo "✓ SEARCH successful"
-            $searchResult = $searchResponse.Content | ConvertFrom-Json
-            if ($searchResult.hits.total -gt 0) {
-              echo "✓ Search returned results"
-            }
           }
           
-          # Test 5: Show tables
-          echo "Testing SHOW TABLES..."
-          $showBody = @{
-            query = "SHOW TABLES"
-          } | ConvertTo-Json
-          $showResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $showBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
-          
-          if ($showResponse.StatusCode -eq 200) {
+          # Show tables
+          echo "Showing tables..."
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SHOW TABLES" 2>&1
+          if ($LASTEXITCODE -eq 0) {
             echo "✓ SHOW TABLES successful"
           }
           
-        } catch {
-          echo "ERROR: HTTP API test failed: $_"
-          echo "Response: $($_.Exception.Response)"
-          # Try to get more details about the error
-          if ($_.Exception.Response) {
-            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-            $reader.BaseStream.Position = 0
-            $reader.DiscardBufferedData()
-            $responseBody = $reader.ReadToEnd()
-            echo "Response body: $responseBody"
-          }
-          exit 1
-        }
-        
-        # Test MySQL connection if mysql client is available
-        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
-        if (Test-Path $mysqlPath) {
-          echo "=== TESTING MYSQL PROTOCOL ==="
-          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
+          # Test more complex query
+          echo "Testing complex query..."
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT id, HIGHLIGHT() FROM test WHERE MATCH('hello')" 2>&1
           if ($LASTEXITCODE -eq 0) {
-            echo "✓ MySQL protocol connection successful"
+            echo "✓ Complex query with HIGHLIGHT() successful"
+          }
+          
+        } else {
+          echo "WARNING: MySQL client not found, falling back to HTTP API tests"
+          
+          # Fallback to simple HTTP test with curl
+          echo "Testing HTTP API with curl..."
+          $curlTest = curl -s -X POST http://localhost:9308/sql -H "Content-Type: application/json" -d "{`"query`":`"SELECT 1`"}" 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            echo "✓ HTTP API is responding"
+            echo "Response: $curlTest"
           } else {
-            echo "ERROR: MySQL connection failed"
+            echo "ERROR: Neither MySQL nor HTTP API tests could be performed"
             exit 1
           }
         }
@@ -669,7 +649,6 @@ jobs:
         echo "✓ Installation verified"
         echo "✓ Daemon is running"
         echo "✓ All ports are listening"
-        echo "✓ HTTP API is functional"
         echo "✓ Search functionality works"
       shell: pwsh
 

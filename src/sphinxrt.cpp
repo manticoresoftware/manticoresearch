@@ -377,13 +377,11 @@ int RtSegment_t::GetStride () const NO_THREAD_SAFETY_ANALYSIS
 	return int ( m_dRows.GetLength() / m_uRows );
 }
 
-const CSphRowitem * RtSegment_t::FindAliveRow ( DocID_t tDocid ) const
+
+bool RtSegment_t::IsAlive ( DocID_t tDocid ) const
 {
 	RowID_t tRowID = GetRowidByDocid(tDocid);
-	if ( tRowID==INVALID_ROWID || m_tDeadRowMap.IsSet(tRowID) )
-		return nullptr;
-
-	return GetDocinfoByRowID(tRowID);
+	return tRowID!=INVALID_ROWID && !m_tDeadRowMap.IsSet(tRowID);
 }
 
 
@@ -391,6 +389,7 @@ const CSphRowitem * RtSegment_t::GetDocinfoByRowID ( RowID_t tRowID ) const NO_T
 {
 	return m_dRows.GetLength() ? &m_dRows[tRowID*GetStride()] : nullptr;
 }
+
 
 RowID_t RtSegment_t::GetAliveRowidByDocid ( DocID_t tDocID ) const
 {
@@ -2098,14 +2097,14 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 			do
 				tDocID = UidShort ();
 			while ( tGuard.m_dRamSegs.any_of (
-					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); } ) );
+					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); } ) );
 
 			tDoc.SetID ( tDocID );
 		} else
 		{
 			// docID was provided, but that is new insert and we need to check for duplicates
 			assert ( !bReplace && tDocID!=0 );
-			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
+			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); })
 				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
 			{
 				sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tDocID );

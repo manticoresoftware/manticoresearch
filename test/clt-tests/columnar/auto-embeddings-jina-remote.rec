@@ -12,7 +12,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_invalid_model (title TEXT, embedding FLOA
 ––– comment –––
 Test that we have error when creating WITHOUT api_key passed
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_valid_model_no_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'jina/jina-embeddings-v3' FROM = 'title') " 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_valid_model_no_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'jina/jina-embeddings-v2-base-en' FROM = 'title') " 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_valid_model_no_api_key': prealloc: Invalid API key for remote model
 ––– comment –––

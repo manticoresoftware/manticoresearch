@@ -61,9 +61,6 @@ mysql -h0 -P9306 -e "INSERT INTO test_jina_remote (id, title, content, descripti
 vector_md5_1: #!/[0-9a-f]{32}/!#
 vector_md5_2: #!/[0-9a-f]{32}/!#
 SUCCESS: Same FROM fields produce same vector
-––– input –––
-mysql -h0 -P9306 -e "select * from test_jina_remote \G"
-––– output –––
 ––– comment –––
 Test different FROM field combinations produce different vectors
 ––– input –––

@@ -572,8 +572,11 @@ jobs:
         try {
           # Test 1: Basic SQL query
           echo "Testing HTTP API with SELECT 1..."
+          $body = @{
+            query = "SELECT 1"
+          } | ConvertTo-Json
           $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body '{"query":"SELECT 1"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+            -Body $body -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
           
           if ($response.StatusCode -eq 200) {
             echo "✓ HTTP API SELECT query successful"
@@ -584,8 +587,11 @@ jobs:
           
           # Test 2: Create table
           echo "Testing CREATE TABLE..."
+          $createBody = @{
+            query = "CREATE TABLE test (title text)"
+          } | ConvertTo-Json
           $createResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body '{"query":"CREATE TABLE test (title text)"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+            -Body $createBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
           
           if ($createResponse.StatusCode -eq 200) {
             echo "✓ CREATE TABLE successful"
@@ -593,8 +599,11 @@ jobs:
           
           # Test 3: Insert data
           echo "Testing INSERT..."
+          $insertBody = @{
+            query = "INSERT INTO test VALUES (1, 'hello world')"
+          } | ConvertTo-Json
           $insertResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body '{"query":"INSERT INTO test VALUES (1, \"hello world\")"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+            -Body $insertBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
           
           if ($insertResponse.StatusCode -eq 200) {
             echo "✓ INSERT successful"
@@ -602,8 +611,11 @@ jobs:
           
           # Test 4: Search
           echo "Testing SEARCH..."
+          $searchBody = @{
+            query = "SELECT * FROM test WHERE MATCH('hello')"
+          } | ConvertTo-Json
           $searchResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body '{"query":"SELECT * FROM test WHERE MATCH(\"hello\")"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+            -Body $searchBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
           
           if ($searchResponse.StatusCode -eq 200) {
             echo "✓ SEARCH successful"
@@ -615,8 +627,11 @@ jobs:
           
           # Test 5: Show tables
           echo "Testing SHOW TABLES..."
+          $showBody = @{
+            query = "SHOW TABLES"
+          } | ConvertTo-Json
           $showResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body '{"query":"SHOW TABLES"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+            -Body $showBody -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
           
           if ($showResponse.StatusCode -eq 200) {
             echo "✓ SHOW TABLES successful"
@@ -625,6 +640,14 @@ jobs:
         } catch {
           echo "ERROR: HTTP API test failed: $_"
           echo "Response: $($_.Exception.Response)"
+          # Try to get more details about the error
+          if ($_.Exception.Response) {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $reader.BaseStream.Position = 0
+            $reader.DiscardBufferedData()
+            $responseBody = $reader.ReadToEnd()
+            echo "Response body: $responseBody"
+          }
           exit 1
         }
         

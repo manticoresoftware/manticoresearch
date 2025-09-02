@@ -440,7 +440,24 @@ jobs:
         $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S /NOEXECUTOR" -Wait -PassThru -NoNewWindow
         echo "Installation process exited with code: $($process.ExitCode)"
         
-        Start-Sleep -Seconds 10
+        # Smart wait for installation completion
+        echo "Waiting for installation to complete..."
+        $maxAttempts = 30
+        $attempt = 0
+        while ($attempt -lt $maxAttempts) {
+          if ((Test-Path "C:\Program Files (x86)\Manticore\bin\searchd.exe") -and 
+              (Test-Path "C:\Program Files (x86)\Manticore\etc\manticoresearch\manticore.conf")) {
+            echo "Installation files detected after $($attempt) seconds"
+            break
+          }
+          Start-Sleep -Seconds 1
+          $attempt++
+        }
+        
+        if ($attempt -eq $maxAttempts) {
+          echo "ERROR: Installation did not complete within $maxAttempts seconds"
+          exit 1
+        }
       shell: pwsh
     
     - name: Test Manticore without Buddy
@@ -488,41 +505,149 @@ jobs:
         
         $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
         
-        Start-Sleep -Seconds 10
+        # Smart wait for daemon to be ready
+        echo "Waiting for Manticore daemon to be ready..."
+        $maxAttempts = 30
+        $attempt = 0
+        $allPortsReady = $false
         
-        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
-        if ($manticoreProcess) {
-          echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
-        } else {
-          echo "ERROR: Manticore searchd is not running"
+        while ($attempt -lt $maxAttempts -and -not $allPortsReady) {
+          Start-Sleep -Seconds 1
+          $attempt++
+          
+          # Check if process is still running
+          $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+          if (-not $manticoreProcess) {
+            echo "ERROR: Manticore searchd process died during startup"
+            exit 1
+          }
+          
+          # Check all three ports
+          $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9308 = Test-NetConnection -ComputerName localhost -Port 9308 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9312 = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue -InformationLevel Quiet
+          
+          if ($port9306 -and $port9308 -and $port9312) {
+            $allPortsReady = $true
+            echo "All ports are ready after $attempt seconds"
+          }
+        }
+        
+        if (-not $allPortsReady) {
+          echo "ERROR: Manticore did not start properly within $maxAttempts seconds"
+          echo "Port 9306 status: $port9306"
+          echo "Port 9308 status: $port9308"
+          echo "Port 9312 status: $port9312"
           exit 1
         }
         
+        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
+        
         Pop-Location
         
-        echo "=== TESTING MANTICORE CONNECTION ==="
+        echo "=== TESTING MANTICORE PORTS ==="
         
-        # Test connection with basic SQL command that works without Buddy
+        # Test all three ports
+        $ports = @(9306, 9308, 9312)
+        $portDescriptions = @{
+          9306 = "MySQL protocol"
+          9308 = "HTTP/HTTPS API"
+          9312 = "Sphinx protocol"
+        }
+        
+        foreach ($port in $ports) {
+          $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue -InformationLevel Quiet
+          if ($connection) {
+            echo "✓ Port $port ($($portDescriptions[$port])) is listening"
+          } else {
+            echo "ERROR: Port $port ($($portDescriptions[$port])) is not listening"
+            exit 1
+          }
+        }
+        
+        echo "=== TESTING MANTICORE FUNCTIONALITY ==="
+        
+        # Test HTTP API functionality
+        try {
+          # Test 1: Basic SQL query
+          echo "Testing HTTP API with SELECT 1..."
+          $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body '{"query":"SELECT 1"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+          
+          if ($response.StatusCode -eq 200) {
+            echo "✓ HTTP API SELECT query successful"
+          } else {
+            echo "ERROR: HTTP API returned status code $($response.StatusCode)"
+            exit 1
+          }
+          
+          # Test 2: Create table
+          echo "Testing CREATE TABLE..."
+          $createResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body '{"query":"CREATE TABLE test (title text)"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+          
+          if ($createResponse.StatusCode -eq 200) {
+            echo "✓ CREATE TABLE successful"
+          }
+          
+          # Test 3: Insert data
+          echo "Testing INSERT..."
+          $insertResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body '{"query":"INSERT INTO test VALUES (1, \"hello world\")"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+          
+          if ($insertResponse.StatusCode -eq 200) {
+            echo "✓ INSERT successful"
+          }
+          
+          # Test 4: Search
+          echo "Testing SEARCH..."
+          $searchResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body '{"query":"SELECT * FROM test WHERE MATCH(\"hello\")"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+          
+          if ($searchResponse.StatusCode -eq 200) {
+            echo "✓ SEARCH successful"
+            $searchResult = $searchResponse.Content | ConvertFrom-Json
+            if ($searchResult.hits.total -gt 0) {
+              echo "✓ Search returned results"
+            }
+          }
+          
+          # Test 5: Show tables
+          echo "Testing SHOW TABLES..."
+          $showResponse = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body '{"query":"SHOW TABLES"}' -ContentType "application/json" -UseBasicParsing -ErrorAction Stop
+          
+          if ($showResponse.StatusCode -eq 200) {
+            echo "✓ SHOW TABLES successful"
+          }
+          
+        } catch {
+          echo "ERROR: HTTP API test failed: $_"
+          echo "Response: $($_.Exception.Response)"
+          exit 1
+        }
+        
+        # Test MySQL connection if mysql client is available
         $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
         if (Test-Path $mysqlPath) {
+          echo "=== TESTING MYSQL PROTOCOL ==="
           & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
           if ($LASTEXITCODE -eq 0) {
-            echo "MySQL connection successful"
+            echo "✓ MySQL protocol connection successful"
           } else {
             echo "ERROR: MySQL connection failed"
             exit 1
           }
-        } else {
-          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
-          if ($connection) {
-            echo "Port 9306 (MySQL) is listening"
-          } else {
-            echo "ERROR: Port 9306 is not listening"
-            exit 1
-          }
         }
         
-        echo "=== TEST COMPLETED SUCCESSFULLY ==="
+        echo ""
+        echo "=== ALL TESTS COMPLETED SUCCESSFULLY ==="
+        echo "✓ Installation verified"
+        echo "✓ Daemon is running"
+        echo "✓ All ports are listening"
+        echo "✓ HTTP API is functional"
+        echo "✓ Search functionality works"
       shell: pwsh
 
   publish_nsis:

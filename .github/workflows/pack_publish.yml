@@ -584,22 +584,42 @@ jobs:
           exit 1
         }
         
-        echo "=== TESTING MANTICORE FUNCTIONALITY WITH POWERSHELL ==="
+        echo "=== TESTING MANTICORE FUNCTIONALITY WITH .NET WEBCLIENT ==="
+        
+        # Helper function to make HTTP requests
+        function Send-ManticoreQuery {
+          param($Query)
+          
+          $url = "http://localhost:9308/sql"
+          $jsonBody = "{`"query`":`"$Query`"}"
+          
+          $webClient = New-Object System.Net.WebClient
+          $webClient.Headers.Add("Content-Type", "application/json; charset=utf-8")
+          $webClient.Encoding = [System.Text.Encoding]::UTF8
+          
+          try {
+            $response = $webClient.UploadString($url, "POST", $jsonBody)
+            $webClient.Dispose()
+            return $response | ConvertFrom-Json
+          } catch {
+            $webClient.Dispose()
+            throw $_
+          }
+        }
         
         # Test 1: Basic SELECT query
         echo "`nTest 1: Testing SELECT 1..."
         try {
-          $jsonBody = '{"query":"SELECT 1"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response1 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response1.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "SELECT 1"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ SELECT 1 query successful"
         } catch {
           echo "ERROR: SELECT 1 query failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
+          if ($_.Exception.Response) {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $reader.BaseStream.Position = 0
+            $responseBody = $reader.ReadToEnd()
+            echo "Error response: $responseBody"
           }
           exit 1
         }
@@ -607,66 +627,40 @@ jobs:
         # Test 2: Create table
         echo "`nTest 2: Creating table..."
         try {
-          $jsonBody = '{"query":"CREATE TABLE test_table (title text, content text, gid integer)"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response2 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response2.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "CREATE TABLE test_table (title text, content text, gid integer)"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ CREATE TABLE successful"
         } catch {
           echo "ERROR: CREATE TABLE failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 3: Insert data
         echo "`nTest 3: Inserting data..."
         try {
-          # Use single quotes inside SQL, backticks for escaping PowerShell quotes
-          $jsonBody = "{`"query`":`"INSERT INTO test_table VALUES (1, 'Hello World', 'This is a test document', 100)`"}"
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response3 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response3.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "INSERT INTO test_table VALUES (1, 'Hello World', 'This is a test document', 100)"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ INSERT successful"
         } catch {
           echo "ERROR: INSERT failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 4: Insert more data
         echo "`nTest 4: Inserting more data..."
         try {
-          $jsonBody = "{`"query`":`"INSERT INTO test_table VALUES (2, 'Test Document', 'Another test content', 200)`"}"
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response4 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response4.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "INSERT INTO test_table VALUES (2, 'Test Document', 'Another test content', 200)"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ Second INSERT successful"
         } catch {
           echo "ERROR: Second INSERT failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 5: Search with MATCH
         echo "`nTest 5: Testing MATCH search..."
         try {
-          $jsonBody = "{`"query`":`"SELECT * FROM test_table WHERE MATCH('Hello')`"}"
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response5 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response5.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "SELECT * FROM test_table WHERE MATCH('Hello')"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           if ($result.hits.total -gt 0) {
             echo "✓ MATCH search successful - found $($result.hits.total) results"
@@ -676,20 +670,13 @@ jobs:
           }
         } catch {
           echo "ERROR: MATCH search failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 6: Select all
         echo "`nTest 6: Testing SELECT ALL..."
         try {
-          $jsonBody = '{"query":"SELECT * FROM test_table"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response6 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response6.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "SELECT * FROM test_table"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           if ($result.hits.total -eq 2) {
             echo "✓ SELECT ALL returned 2 records"
@@ -699,56 +686,35 @@ jobs:
           }
         } catch {
           echo "ERROR: SELECT ALL failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 7: Update data
         echo "`nTest 7: Testing UPDATE..."
         try {
-          $jsonBody = '{"query":"UPDATE test_table SET gid=300 WHERE id=1"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response7 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response7.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "UPDATE test_table SET gid=300 WHERE id=1"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ UPDATE successful"
         } catch {
           echo "ERROR: UPDATE failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 8: Delete data
         echo "`nTest 8: Testing DELETE..."
         try {
-          $jsonBody = '{"query":"DELETE FROM test_table WHERE id=2"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response8 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response8.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "DELETE FROM test_table WHERE id=2"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ DELETE successful"
         } catch {
           echo "ERROR: DELETE failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 9: Verify deletion
         echo "`nTest 9: Verifying deletion..."
         try {
-          $jsonBody = '{"query":"SELECT * FROM test_table"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response9 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response9.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "SELECT * FROM test_table"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           if ($result.hits.total -eq 1) {
             echo "✓ DELETE verified, 1 record remains"
@@ -758,20 +724,13 @@ jobs:
           }
         } catch {
           echo "ERROR: DELETE verification failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 10: Show tables
         echo "`nTest 10: Testing SHOW TABLES..."
         try {
-          $jsonBody = '{"query":"SHOW TABLES"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response10 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response10.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "SHOW TABLES"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           $tableFound = $false
           foreach ($row in $result.data) {
@@ -788,38 +747,24 @@ jobs:
           }
         } catch {
           echo "ERROR: SHOW TABLES failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 11: Drop table
         echo "`nTest 11: Testing DROP TABLE..."
         try {
-          $jsonBody = '{"query":"DROP TABLE test_table"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response11 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response11.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "DROP TABLE test_table"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ DROP TABLE successful"
         } catch {
           echo "ERROR: DROP TABLE failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         
         # Test 12: Verify table dropped
         echo "`nTest 12: Verifying table dropped..."
         try {
-          $jsonBody = '{"query":"SHOW TABLES"}'
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
-          $response12 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
-            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
-          $result = $response12.Content | ConvertFrom-Json
+          $result = Send-ManticoreQuery -Query "SHOW TABLES"
           echo "Response: $($result | ConvertTo-Json -Compress)"
           $tableFound = $false
           if ($result.data) {
@@ -838,9 +783,6 @@ jobs:
           }
         } catch {
           echo "ERROR: DROP verification failed: $_"
-          if ($_.ErrorDetails.Message) {
-            echo "Error details: $($_.ErrorDetails.Message)"
-          }
           exit 1
         }
         

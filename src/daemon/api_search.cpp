@@ -37,7 +37,8 @@ enum
 	QFLAG_FACET_HEAD			= 1UL << 10,
 	QFLAG_JSON_QUERY			= 1UL << 11,
 	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12,
-	QFLAG_LOCAL_DF_SET			= 1UL << 13
+	QFLAG_LOCAL_DF_SET			= 1UL << 13,
+	QFLAG_SIMPLIFY_SET			= 1UL << 14
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -60,7 +61,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	DWORD uFlags = 0;
 	uFlags |= QFLAG_SORT_KBUFFER * q.m_bSortKbuffer;
 	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
-	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify;
+	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify.value_or ( CSphQuery::m_bDefaultSimplify );
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
@@ -70,6 +71,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
 	uFlags |= QFLAG_LOCAL_DF_SET * q.m_bLocalDF.has_value();
+	uFlags |= QFLAG_SIMPLIFY_SET * q.m_bSimplify.has_value();
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -281,6 +283,10 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
+
+		tOut.SendByte ( !!tKNN.m_sEmbStr );
+		if ( tKNN.m_sEmbStr )
+			tOut.SendString ( tKNN.m_sEmbStr->cstr() );
 	}
 
 	tOut.SendInt ( (int)q.m_eJiebaMode );
@@ -902,7 +908,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	{
 		// parse simple flags
 		tQuery.m_bSortKbuffer = !!( uFlags & QFLAG_SORT_KBUFFER );
-		tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
+
+		// simplify is optional query option and might be set by the daemon config
+		if ( uVer<0x127 || ( uVer>=0x127 && ( uFlags & QFLAG_SIMPLIFY_SET )==QFLAG_SIMPLIFY_SET ) )
+			tQuery.m_bSimplify = !!( uFlags & QFLAG_SIMPLIFY );
+
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
 		if ( uVer<0x125 || ( uVer>=0x125 && ( uFlags & QFLAG_LOCAL_DF_SET )==QFLAG_LOCAL_DF_SET ) )
@@ -1045,6 +1055,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			tKNN.m_dVec.Resize ( tReq.GetInt() );
 			for ( auto & i : tKNN.m_dVec )
 				i = tReq.GetFloat();
+
+			if ( uMasterVer>=26 )
+			{
+				bool bHasEmb = !!tReq.GetInt();
+				if ( bHasEmb )
+					tKNN.m_sEmbStr = tReq.GetString();
+			}
 		}
 	}
 

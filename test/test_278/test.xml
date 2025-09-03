@@ -806,6 +806,26 @@ drop table join2b;
 drop table d1;
 drop table d2;
 
+<!-- join on string attributes -->
+create table employee_test (name text, position_id string);
+create table position_test (name text, real_id string);
+
+insert into employee_test(name, position_id) VALUES ('Employee', '1');
+insert into position_test(name, real_id) VALUES ('Cat petter', '1');
+
+select name, position_test.name from employee_test left join position_test on employee_test.position_id = position_test.real_id;
+drop table employee_test;
+drop table position_test;
+
+<!-- regression for a crash of join on multiple facets -->
+create table t1;
+create table t2(i int, j json);
+insert into t1 values (1);
+insert into t2 values (1, 1, '{"w":"a"}');
+SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.i FACET t2.j.w, t2.i;;
+drop table t1;
+drop table t2;
+
 </sphinxql>
 </queries>
 

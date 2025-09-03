@@ -10039,7 +10039,8 @@ enum class Alter_e
 	DropColumn,
 	ModifyColumn,
 	RebuildSI,
-	RebuildKNN
+	RebuildKNN,
+	ApiKey
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10093,23 +10094,34 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			continue;
 		}
 
-		CSphString sAddError;
+		CSphString sAlterError;
 
-		if ( eAction==Alter_e::AddColumn || eAction == Alter_e::ModifyColumn )
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError, eAction == Alter_e::ModifyColumn );
-		else if ( eAction==Alter_e::DropColumn )
-			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAddError );
-		else if ( eAction==Alter_e::RebuildSI )
+		switch ( eAction )
 		{
-			WIdx_c ( pServed )->AlterSI ( sAddError );
+		case Alter_e::AddColumn:
+		case Alter_e::ModifyColumn:
+			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+			break;
 
-		} else if ( eAction==Alter_e::RebuildKNN )
-		{
-			WIdx_c ( pServed )->AlterKNN ( sAddError );
+		case Alter_e::DropColumn:
+			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
+			break;
+
+		case Alter_e::RebuildSI:
+			WIdx_c(pServed)->AlterSI(sAlterError);
+			break;
+
+		case Alter_e::RebuildKNN:
+			WIdx_c(pServed)->AlterKNN(sAlterError);
+			break;
+
+		case Alter_e::ApiKey:
+			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
 		}
 
-		if ( !sAddError.IsEmpty() )
-			dErrors.Submit ( sName, nullptr, sAddError.cstr() );
+		if ( !sAlterError.IsEmpty() )
+			dErrors.Submit ( sName, nullptr, sAlterError.cstr() );
 	}
 
 	if ( !dErrors.IsEmpty() )
@@ -10445,6 +10457,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	else
 		tOut.Error ( sError.cstr() );
 }
+
 
 // STMT_SHOW_PLAN: SHOW PLAN
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot )
@@ -11236,6 +11249,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_REBUILD_KNN:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_KEY:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey );
 		return true;
 
 	case STMT_SHOW_PLAN:
@@ -13705,6 +13722,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
+	if ( hSearchd ( "boolean_simplify" ) )
+		SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", CSphQuery::m_bDefaultSimplify )!=0 );
+
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );

@@ -1,0 +1,510 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE products (id INT, name TEXT, price FLOAT, category_id INT)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE categories (id INT, title TEXT, description TEXT)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE users (id BIGINT, username STRING, email STRING)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (1, 'Laptop', 999.99, 1), (2, 'Mouse', 29.99, 2)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO categories VALUES (1, 'Electronics', 'Devices'), (2, 'Accessories', 'Add-ons')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO users VALUES (1, 'john', 'john@test.com'), (2, 'jane', 'jane@test.com')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++------------+------+
+| Table      | Type |
++------------+------+
+| categories | rt   |
+| products   | rt   |
+| users      | rt   |
++------------+------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW FULL TABLES"
+––– output –––
++---------------------+------------+
+| Tables_in_Manticore | Table_type |
++---------------------+------------+
+| categories          | BASE TABLE |
+| products            | BASE TABLE |
+| users               | BASE TABLE |
++---------------------+------------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW ENGINES"
+––– output –––
++--------+---------+-----------------------+--------------+------+------------+
+| Engine | Support | Comment               | Transactions | XA   | Savepoints |
++--------+---------+-----------------------+--------------+------+------------+
+| MyISAM | DEFAULT | MyISAM storage engine | NO           | NO   | NO         |
++--------+---------+-----------------------+--------------+------+------------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW CHARSET"
+––– output –––
++---------+---------------+--------------------+--------+
+| Charset | Description   | Default collation  | Maxlen |
++---------+---------------+--------------------+--------+
+| utf8mb4 | UTF-8 Unicode | utf8mb4_0900_ai_ci |      4 |
++---------+---------------+--------------------+--------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW COLLATION"
+––– output –––
++-----------------+---------+------+---------+----------+---------+
+| Collation       | Charset | Id   | Default | Compiled | Sortlen |
++-----------------+---------+------+---------+----------+---------+
+| utf8_general_ci | utf8    |   33 | Yes     | Yes      | 1       |
++-----------------+---------+------+---------+----------+---------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW VARIABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: autocommit
+        Value: 1
+*************************** 2. row ***************************
+Variable_name: auto_optimize
+        Value: 1
+*************************** 3. row ***************************
+Variable_name: optimize_cutoff
+        Value: %{NUMBER}
+*************************** 4. row ***************************
+Variable_name: collation_connection
+        Value: libc_ci
+*************************** 5. row ***************************
+Variable_name: query_log_format
+        Value: sphinxql
+*************************** 6. row ***************************
+Variable_name: session_read_only
+        Value: 0
+*************************** 7. row ***************************
+Variable_name: log_level
+        Value: info
+*************************** 8. row ***************************
+Variable_name: max_allowed_packet
+        Value: 134217728
+*************************** 9. row ***************************
+Variable_name: character_set_client
+        Value: utf8
+*************************** 10. row ***************************
+Variable_name: character_set_connection
+        Value: utf8
+*************************** 11. row ***************************
+Variable_name: grouping_in_utc
+        Value: 0
+*************************** 12. row ***************************
+Variable_name: timezone
+        Value: UTC
+*************************** 13. row ***************************
+Variable_name: last_insert_id
+        Value: 0
+*************************** 14. row ***************************
+Variable_name: pseudo_sharding
+        Value: 1
+*************************** 15. row ***************************
+Variable_name: secondary_indexes
+        Value: 1
+*************************** 16. row ***************************
+Variable_name: accurate_aggregation
+        Value: 0
+*************************** 17. row ***************************
+Variable_name: distinct_precision_threshold
+        Value: 3500
+*************************** 18. row ***************************
+Variable_name: threads_ex_effective
+        Value:
+*************************** 19. row ***************************
+Variable_name: cluster_user
+        Value: cluster
+*************************** 20. row ***************************
+Variable_name: thread_stack
+        Value: 1048576
+*************************** 21. row ***************************
+Variable_name: threads_ex
+        Value:
+*************************** 22. row ***************************
+Variable_name: user
+        Value: root
+––– input –––
+mysql -h0 -P9306 -e "SHOW VARIABLES LIKE 'character_set%'"
+––– output –––
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| character_set_client     | utf8  |
+| character_set_connection | utf8  |
++--------------------------+-------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@version"
+––– output –––
++-----------+
+| @@version |
++-----------+
+| 8.0.43    |
++-----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@version_comment"
+––– output –––
++-----------------------------------+
+| @@version_comment                 |
++-----------------------------------+
+| git branch master...origin/master |
++-----------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit"
+––– output –––
++--------------+
+| @@autocommit |
++--------------+
+|            1 |
++--------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT DATABASE()"
+––– output –––
++------------+
+| database() |
++------------+
+| Manticore  |
++------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT VERSION()"
+––– output –––
++-----------------------------------------------------------------------------------------------------------------------------------------------+
+| version()                                                                                                                                     |
++-----------------------------------------------------------------------------------------------------------------------------------------------+
+| %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION}) |
++-----------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_results"
+––– output –––
++-------------------------+
+| @@character_set_results |
++-------------------------+
+| utf8mb4                 |
++-------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client"
+––– output –––
++------------------------+
+| @@character_set_client |
++------------------------+
+| utf8                   |
++------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_server"
+––– output –––
++------------------------+
+| @@character_set_server |
++------------------------+
+| utf8mb4                |
++------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@collation_server"
+––– output –––
++--------------------+
+| @@collation_server |
++--------------------+
+| utf8mb4_0900_ai_ci |
++--------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@init_connect"
+––– output –––
++----------------+
+| @@init_connect |
++----------------+
+|                |
++----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@interactive_timeout"
+––– output –––
++-----------------------+
+| @@interactive_timeout |
++-----------------------+
+| 28800                 |
++-----------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@license"
+––– output –––
++-----------+
+| @@license |
++-----------+
+| GPL       |
++-----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@lower_case_table_names"
+––– output –––
++--------------------------+
+| @@lower_case_table_names |
++--------------------------+
+|                        1 |
++--------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@net_write_timeout"
+––– output –––
++---------------------+
+| @@net_write_timeout |
++---------------------+
+| 60                  |
++---------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@performance_schema\G"
+––– output –––
+*************************** 1. row ***************************
+@@performance_schema: 1
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@sql_mode"
+––– output –––
++-----------------------------------------------------------------------------------------------------------------------+
+| @@sql_mode                                                                                                            |
++-----------------------------------------------------------------------------------------------------------------------+
+| ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION |
++-----------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@system_time_zone"
+––– output –––
++--------------------+
+| @@system_time_zone |
++--------------------+
+| UTC                |
++--------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@time_zone"
+––– output –––
++-------------+
+| @@time_zone |
++-------------+
+| SYSTEM      |
++-------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@wait_timeout"
+––– output –––
++----------------+
+| @@wait_timeout |
++----------------+
+| 28800          |
++----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@GLOBAL.character_set_server"
+––– output –––
++-------------------------------+
+| @@GLOBAL.character_set_server |
++-------------------------------+
+| utf8mb4                       |
++-------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@GLOBAL.collation_server"
+––– output –––
++---------------------------+
+| @@GLOBAL.collation_server |
++---------------------------+
+| utf8mb4_0900_ai_ci        |
++---------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@SESSION.sql_mode"
+––– output –––
++-----------------------------------------------------------------------------------------------------------------------+
+| @@SESSION.sql_mode                                                                                                    |
++-----------------------------------------------------------------------------------------------------------------------+
+| ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION |
++-----------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@SESSION.autocommit\G"
+––– output –––
+*************************** 1. row ***************************
+@@SESSION.autocommit: 1
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_results, @@character_set_client, @@character_set_server"
+––– output –––
++-------------------------+------------------------+------------------------+
+| @@character_set_results | @@character_set_client | @@character_set_server |
++-------------------------+------------------------+------------------------+
+| utf8mb4                 | utf8                   | utf8mb4                |
++-------------------------+------------------------+------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@GLOBAL.character_set_server, @@GLOBAL.collation_server"
+––– output –––
++-------------------------------+---------------------------+
+| @@GLOBAL.character_set_server | @@GLOBAL.collation_server |
++-------------------------------+---------------------------+
+| utf8mb4                       | utf8mb4_0900_ai_ci        |
++-------------------------------+---------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW FULL TABLES FROM information_schema"
+––– output –––
++------------------------------+------------+
+| Tables_in_information_schema | Table_type |
++------------------------------+------------+
+| categories                   | BASE TABLE |
+| products                     | BASE TABLE |
+| users                        | BASE TABLE |
++------------------------------+------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT NOW()"
+––– output –––
++------------+
+| now()      |
++------------+
+| %{NUMBER} |
++------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT category_id, COUNT(*) FROM products GROUP BY category_id"
+––– output –––
++-------------+----------+
+| category_id | count(*) |
++-------------+----------+
+|           1 |        1 |
+|           2 |        1 |
++-------------+----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products\G"
+––– output –––
+*************************** 1. row ***************************
+         id: 1
+       name: Laptop
+      price: #!/[0-9]+\.[0-9]+/!#
+category_id: 1
+*************************** 2. row ***************************
+         id: 2
+       name: Mouse
+      price: #!/[0-9]+\.[0-9]+/!#
+category_id: 2
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE price > 50"
+––– output –––
++------+--------+------------+-------------+
+| id   | name   | price      | category_id |
++------+--------+------------+-------------+
+|    1 | Laptop | #!/[0-9]+\.[0-9]+/!# |           1 |
++------+--------+------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY price DESC"
+––– output –––
++------+--------+------------+-------------+
+| id   | name   | price      | category_id |
++------+--------+------------+-------------+
+|    1 | Laptop | #!/[0-9]+\.[0-9]+/!# |           1 |
+|    2 | Mouse  |  #!/[0-9]+\.[0-9]+/!# |           2 |
++------+--------+------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products LIMIT 1"
+––– output –––
++------+--------+------------+-------------+
+| id   | name   | price      | category_id |
++------+--------+------------+-------------+
+|    1 | Laptop | #!/[0-9]+\.[0-9]+/!# |           1 |
++------+--------+------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT name, price FROM products"
+––– output –––
++--------+------------+
+| name   | price      |
++--------+------------+
+| Laptop | #!/[0-9]+\.[0-9]+/!# |
+| Mouse  |  #!/[0-9]+\.[0-9]+/!# |
++--------+------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT MAX(price) FROM products"
+––– output –––
++------------+
+| max(price) |
++------------+
+| #!/[0-9]+\.[0-9]+/!# |
++------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT MIN(price) FROM products"
+––– output –––
++------------+
+| min(price) |
++------------+
+|  #!/[0-9]+\.[0-9]+/!# |
++------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_simple"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown local table(s) 'test_simple' in search request
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM information_schema.tables"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW PLUGINS"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "USE manticore"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as table_count, 'tables' as type FROM information_schema.tables"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA='manticore'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_timestamp (id INT, created_at TIMESTAMP)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bool (id INT, is_active BOOL)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO products VALUES (1, 'Updated Laptop', 1099.99, 1)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_simple (id INT, name TEXT, value FLOAT)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++----------------+------+
+| Table          | Type |
++----------------+------+
+| categories     | rt   |
+| products       | rt   |
+| test_bool      | rt   |
+| test_simple    | rt   |
+| test_timestamp | rt   |
+| users          | rt   |
++----------------+------+
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_simple VALUES (1, 'test1', 10.5), (2, 'test2', 20.7)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_simple WHERE id = 1"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE test_simple"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++----------------+------+
+| Table          | Type |
++----------------+------+
+| categories     | rt   |
+| products       | rt   |
+| test_bool      | rt   |
+| test_timestamp | rt   |
+| users          | rt   |
++----------------+------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM information_schema.tables"
+––– output –––
+ERROR 1064 (42000) at line 1: Undefined array key "TABLE_NAME"
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@isolation"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown sysvar @@isolation
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@tx_isolation"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation

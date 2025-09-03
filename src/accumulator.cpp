@@ -209,7 +209,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	int iRowSize = tSchema.GetRowSize();
 	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
 	std::vector<std::string_view> dTexts;
-	bool bHaveSkipped = false;
+	DWORD uNumSkipped = 0;
 	IntVec_t dResultIds(m_uAccumDocs);
 	CSphRowitem * pRow = m_dAccumRows.Begin();
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
@@ -241,19 +241,19 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		else
 		{
 			dResultIds[tRowID] = -1;
-			bHaveSkipped = true;
+			uNumSkipped++;
 		}
 	}
 
 	std::string sErrorSTL;
 	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
-	if ( !tAttrWithModel.m_pModel->Convert ( dTexts, bHaveSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL ) )
+	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL ) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;
 	}
 
-	if ( bHaveSkipped )
+	if ( uNumSkipped )
 	{
 		dEmbeddingsForAttr.resize ( dResultIds.GetLength() );
 		ARRAY_FOREACH ( i, dResultIds )

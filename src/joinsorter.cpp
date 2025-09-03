@@ -1545,7 +1545,12 @@ bool JoinSorter_c::RunFinalBatch()
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
 	if ( !RunFinalBatch() )
+	{
+		if ( m_bErrorFlag )
+			sError = m_sErrorMessage;
+
 		return false;
+	}
 
 	if ( !m_bFinalCalcOnly )
 	{
@@ -1709,7 +1714,7 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 			return false;
 		}
 
-		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING;
+		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING || pAttr1->m_eAttrType==SPH_ATTR_STRINGPTR;
 
 		tFilter.m_sAttrName = sAttrIdx2;
 		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING : SPH_FILTER_VALUES;

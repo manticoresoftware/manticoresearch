@@ -548,16 +548,11 @@ jobs:
         
         # Test all three ports
         echo "Testing port 9306 (MySQL protocol)..."
-        try {
-          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
-          if ($connection) {
-            echo "✓ Port 9306 (MySQL) is listening"
-          } else {
-            echo "ERROR: Port 9306 is not listening"
-            exit 1
-          }
-        } catch {
-          echo "ERROR: Port 9306 test failed: $_"
+        $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+        if ($connection) {
+          echo "✓ Port 9306 (MySQL) is listening"
+        } else {
+          echo "ERROR: Port 9306 is not listening"
           exit 1
         }
         
@@ -594,10 +589,12 @@ jobs:
         # Test 1: Basic SELECT query
         echo "`nTest 1: Testing SELECT 1..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"SELECT 1"}'
-          $response1 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response1 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"SELECT 1"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response1 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response1.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ SELECT 1 query successful"
         } catch {
           echo "ERROR: SELECT 1 query failed: $_"
@@ -610,10 +607,12 @@ jobs:
         # Test 2: Create table
         echo "`nTest 2: Creating table..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"CREATE TABLE test_table (title text, content text, gid integer)"}'
-          $response2 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response2 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"CREATE TABLE test_table (title text, content text, gid integer)"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response2 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response2.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ CREATE TABLE successful"
         } catch {
           echo "ERROR: CREATE TABLE failed: $_"
@@ -626,10 +625,13 @@ jobs:
         # Test 3: Insert data
         echo "`nTest 3: Inserting data..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"INSERT INTO test_table VALUES (1, \"Hello World\", \"This is a test document\", 100)"}'
-          $response3 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response3 | ConvertTo-Json -Compress)"
+          # Use single quotes inside SQL, backticks for escaping PowerShell quotes
+          $jsonBody = "{`"query`":`"INSERT INTO test_table VALUES (1, 'Hello World', 'This is a test document', 100)`"}"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response3 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response3.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ INSERT successful"
         } catch {
           echo "ERROR: INSERT failed: $_"
@@ -642,10 +644,12 @@ jobs:
         # Test 4: Insert more data
         echo "`nTest 4: Inserting more data..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"INSERT INTO test_table VALUES (2, \"Test Document\", \"Another test content\", 200)"}'
-          $response4 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response4 | ConvertTo-Json -Compress)"
+          $jsonBody = "{`"query`":`"INSERT INTO test_table VALUES (2, 'Test Document', 'Another test content', 200)`"}"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response4 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response4.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ Second INSERT successful"
         } catch {
           echo "ERROR: Second INSERT failed: $_"
@@ -658,12 +662,14 @@ jobs:
         # Test 5: Search with MATCH
         echo "`nTest 5: Testing MATCH search..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"SELECT * FROM test_table WHERE MATCH(\"Hello\")"}'
-          $response5 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response5 | ConvertTo-Json -Compress)"
-          if ($response5.hits.total -gt 0) {
-            echo "✓ MATCH search successful - found $($response5.hits.total) results"
+          $jsonBody = "{`"query`":`"SELECT * FROM test_table WHERE MATCH('Hello')`"}"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response5 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response5.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
+          if ($result.hits.total -gt 0) {
+            echo "✓ MATCH search successful - found $($result.hits.total) results"
           } else {
             echo "ERROR: MATCH search returned no results"
             exit 1
@@ -679,14 +685,16 @@ jobs:
         # Test 6: Select all
         echo "`nTest 6: Testing SELECT ALL..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"SELECT * FROM test_table"}'
-          $response6 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response6 | ConvertTo-Json -Compress)"
-          if ($response6.hits.total -eq 2) {
+          $jsonBody = '{"query":"SELECT * FROM test_table"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response6 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response6.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
+          if ($result.hits.total -eq 2) {
             echo "✓ SELECT ALL returned 2 records"
           } else {
-            echo "ERROR: SELECT ALL expected 2 records, got $($response6.hits.total)"
+            echo "ERROR: SELECT ALL expected 2 records, got $($result.hits.total)"
             exit 1
           }
         } catch {
@@ -700,10 +708,12 @@ jobs:
         # Test 7: Update data
         echo "`nTest 7: Testing UPDATE..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"UPDATE test_table SET gid=300 WHERE id=1"}'
-          $response7 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response7 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"UPDATE test_table SET gid=300 WHERE id=1"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response7 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response7.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ UPDATE successful"
         } catch {
           echo "ERROR: UPDATE failed: $_"
@@ -716,10 +726,12 @@ jobs:
         # Test 8: Delete data
         echo "`nTest 8: Testing DELETE..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"DELETE FROM test_table WHERE id=2"}'
-          $response8 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response8 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"DELETE FROM test_table WHERE id=2"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response8 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response8.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ DELETE successful"
         } catch {
           echo "ERROR: DELETE failed: $_"
@@ -732,14 +744,16 @@ jobs:
         # Test 9: Verify deletion
         echo "`nTest 9: Verifying deletion..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"SELECT * FROM test_table"}'
-          $response9 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response9 | ConvertTo-Json -Compress)"
-          if ($response9.hits.total -eq 1) {
+          $jsonBody = '{"query":"SELECT * FROM test_table"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response9 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response9.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
+          if ($result.hits.total -eq 1) {
             echo "✓ DELETE verified, 1 record remains"
           } else {
-            echo "ERROR: Expected 1 record after DELETE, got $($response9.hits.total)"
+            echo "ERROR: Expected 1 record after DELETE, got $($result.hits.total)"
             exit 1
           }
         } catch {
@@ -753,12 +767,14 @@ jobs:
         # Test 10: Show tables
         echo "`nTest 10: Testing SHOW TABLES..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"SHOW TABLES"}'
-          $response10 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response10 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"SHOW TABLES"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response10 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response10.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           $tableFound = $false
-          foreach ($row in $response10.data) {
+          foreach ($row in $result.data) {
             if ($row.Index -eq "test_table") {
               $tableFound = $true
               break
@@ -781,10 +797,12 @@ jobs:
         # Test 11: Drop table
         echo "`nTest 11: Testing DROP TABLE..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"DROP TABLE test_table"}'
-          $response11 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response11 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"DROP TABLE test_table"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response11 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response11.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           echo "✓ DROP TABLE successful"
         } catch {
           echo "ERROR: DROP TABLE failed: $_"
@@ -797,13 +815,15 @@ jobs:
         # Test 12: Verify table dropped
         echo "`nTest 12: Verifying table dropped..."
         try {
-          $headers = @{"Content-Type" = "application/json"}
-          $body = '{"query":"SHOW TABLES"}'
-          $response12 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
-          echo "Response: $($response12 | ConvertTo-Json -Compress)"
+          $jsonBody = '{"query":"SHOW TABLES"}'
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+          $response12 = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST `
+            -Body $bytes -ContentType "application/json; charset=utf-8" -UseBasicParsing
+          $result = $response12.Content | ConvertFrom-Json
+          echo "Response: $($result | ConvertTo-Json -Compress)"
           $tableFound = $false
-          if ($response12.data) {
-            foreach ($row in $response12.data) {
+          if ($result.data) {
+            foreach ($row in $result.data) {
               if ($row.Index -eq "test_table") {
                 $tableFound = $true
                 break

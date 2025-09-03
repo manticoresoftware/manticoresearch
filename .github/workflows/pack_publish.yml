@@ -546,7 +546,7 @@ jobs:
         
         echo "=== TESTING MANTICORE PORTS WITH POWERSHELL ==="
         
-        # Test all three ports with Invoke-WebRequest
+        # Test all three ports
         echo "Testing port 9306 (MySQL protocol)..."
         try {
           $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
@@ -594,56 +594,73 @@ jobs:
         # Test 1: Basic SELECT query
         echo "`nTest 1: Testing SELECT 1..."
         try {
-          $body = @{ query = "SELECT 1" } | ConvertTo-Json -Compress
-          $response1 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"SELECT 1"}'
+          $response1 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response1 | ConvertTo-Json -Compress)"
           echo "✓ SELECT 1 query successful"
         } catch {
           echo "ERROR: SELECT 1 query failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 2: Create table
         echo "`nTest 2: Creating table..."
         try {
-          $body = @{ query = "CREATE TABLE test_table (title text, content text, gid integer)" } | ConvertTo-Json -Compress
-          $response2 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"CREATE TABLE test_table (title text, content text, gid integer)"}'
+          $response2 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response2 | ConvertTo-Json -Compress)"
           echo "✓ CREATE TABLE successful"
         } catch {
           echo "ERROR: CREATE TABLE failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 3: Insert data
         echo "`nTest 3: Inserting data..."
         try {
-          $body = @{ query = "INSERT INTO test_table VALUES (1, 'Hello World', 'This is a test document', 100)" } | ConvertTo-Json -Compress
-          $response3 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"INSERT INTO test_table VALUES (1, \"Hello World\", \"This is a test document\", 100)"}'
+          $response3 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response3 | ConvertTo-Json -Compress)"
           echo "✓ INSERT successful"
         } catch {
           echo "ERROR: INSERT failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 4: Insert more data
         echo "`nTest 4: Inserting more data..."
         try {
-          $body = @{ query = "INSERT INTO test_table VALUES (2, 'Test Document', 'Another test content', 200)" } | ConvertTo-Json -Compress
-          $response4 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"INSERT INTO test_table VALUES (2, \"Test Document\", \"Another test content\", 200)"}'
+          $response4 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response4 | ConvertTo-Json -Compress)"
           echo "✓ Second INSERT successful"
         } catch {
           echo "ERROR: Second INSERT failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 5: Search with MATCH
         echo "`nTest 5: Testing MATCH search..."
         try {
-          $body = @{ query = "SELECT * FROM test_table WHERE MATCH('Hello')" } | ConvertTo-Json -Compress
-          $response5 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"SELECT * FROM test_table WHERE MATCH(\"Hello\")"}'
+          $response5 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response5 | ConvertTo-Json -Compress)"
           if ($response5.hits.total -gt 0) {
             echo "✓ MATCH search successful - found $($response5.hits.total) results"
@@ -653,14 +670,18 @@ jobs:
           }
         } catch {
           echo "ERROR: MATCH search failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 6: Select all
         echo "`nTest 6: Testing SELECT ALL..."
         try {
-          $body = @{ query = "SELECT * FROM test_table" } | ConvertTo-Json -Compress
-          $response6 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"SELECT * FROM test_table"}'
+          $response6 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response6 | ConvertTo-Json -Compress)"
           if ($response6.hits.total -eq 2) {
             echo "✓ SELECT ALL returned 2 records"
@@ -670,38 +691,50 @@ jobs:
           }
         } catch {
           echo "ERROR: SELECT ALL failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 7: Update data
         echo "`nTest 7: Testing UPDATE..."
         try {
-          $body = @{ query = "UPDATE test_table SET gid=300 WHERE id=1" } | ConvertTo-Json -Compress
-          $response7 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"UPDATE test_table SET gid=300 WHERE id=1"}'
+          $response7 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response7 | ConvertTo-Json -Compress)"
           echo "✓ UPDATE successful"
         } catch {
           echo "ERROR: UPDATE failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 8: Delete data
         echo "`nTest 8: Testing DELETE..."
         try {
-          $body = @{ query = "DELETE FROM test_table WHERE id=2" } | ConvertTo-Json -Compress
-          $response8 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"DELETE FROM test_table WHERE id=2"}'
+          $response8 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response8 | ConvertTo-Json -Compress)"
           echo "✓ DELETE successful"
         } catch {
           echo "ERROR: DELETE failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 9: Verify deletion
         echo "`nTest 9: Verifying deletion..."
         try {
-          $body = @{ query = "SELECT * FROM test_table" } | ConvertTo-Json -Compress
-          $response9 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"SELECT * FROM test_table"}'
+          $response9 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response9 | ConvertTo-Json -Compress)"
           if ($response9.hits.total -eq 1) {
             echo "✓ DELETE verified, 1 record remains"
@@ -711,14 +744,18 @@ jobs:
           }
         } catch {
           echo "ERROR: DELETE verification failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 10: Show tables
         echo "`nTest 10: Testing SHOW TABLES..."
         try {
-          $body = @{ query = "SHOW TABLES" } | ConvertTo-Json -Compress
-          $response10 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"SHOW TABLES"}'
+          $response10 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response10 | ConvertTo-Json -Compress)"
           $tableFound = $false
           foreach ($row in $response10.data) {
@@ -735,32 +772,42 @@ jobs:
           }
         } catch {
           echo "ERROR: SHOW TABLES failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 11: Drop table
         echo "`nTest 11: Testing DROP TABLE..."
         try {
-          $body = @{ query = "DROP TABLE test_table" } | ConvertTo-Json -Compress
-          $response11 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"DROP TABLE test_table"}'
+          $response11 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response11 | ConvertTo-Json -Compress)"
           echo "✓ DROP TABLE successful"
         } catch {
           echo "ERROR: DROP TABLE failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         
         # Test 12: Verify table dropped
         echo "`nTest 12: Verifying table dropped..."
         try {
-          $body = @{ query = "SHOW TABLES" } | ConvertTo-Json -Compress
-          $response12 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          $headers = @{"Content-Type" = "application/json"}
+          $body = '{"query":"SHOW TABLES"}'
+          $response12 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Headers $headers -Body $body
           echo "Response: $($response12 | ConvertTo-Json -Compress)"
           $tableFound = $false
-          foreach ($row in $response12.data) {
-            if ($row.Index -eq "test_table") {
-              $tableFound = $true
-              break
+          if ($response12.data) {
+            foreach ($row in $response12.data) {
+              if ($row.Index -eq "test_table") {
+                $tableFound = $true
+                break
+              }
             }
           }
           if (-not $tableFound) {
@@ -771,6 +818,9 @@ jobs:
           }
         } catch {
           echo "ERROR: DROP verification failed: $_"
+          if ($_.ErrorDetails.Message) {
+            echo "Error details: $($_.ErrorDetails.Message)"
+          }
           exit 1
         }
         

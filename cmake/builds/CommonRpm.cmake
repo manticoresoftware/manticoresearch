@@ -44,7 +44,7 @@ set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 set ( CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR} )
 
 set ( CPACK_RPM_SEARCHD_PACKAGE_NAME "manticore-server-core" )
-set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}, manticore-tzdata => ${DEP_TZDATA_VERSION}, manticore-tzdata < ${TZDATA_VERNUM_MAX}" )
+set ( CPACK_RPM_SEARCHD_PACKAGE_REQUIRES "manticore-common = ${MYVER}, manticore-tzdata = ${DEP_TZDATA_VERSION}, manticore-tzdata < ${TZDATA_VERNUM_MAX}" )
 set ( CPACK_RPM_SEARCHD_INSTALL_WITH_EXEC ON )
 set ( CPACK_RPM_SEARCHD_PACKAGE_OBSOLETES "sphinx" )
 
@@ -69,7 +69,7 @@ set ( CPACK_RPM_COMMON_PACKAGE_ARCHITECTURE noarch )
 set ( CPACK_RPM_COMMON_PACKAGE_CONFLICTS "sphinx" )
 
 set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
-set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata, manticore-buddy => ${DEP_BUDDY_VERSION}, manticore-buddy < ${BUDDY_VERNUM_MAX}" )
+set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server = ${MYVER}, manticore-tools = ${MYVER}, manticore-devel = ${MYVER}, manticore-icudata, manticore-buddy = ${DEP_BUDDY_VERSION}, manticore-buddy < ${BUDDY_VERNUM_MAX}" )
 set ( CPACK_RPM_META_PACKAGE_CONFLICTS "sphinx" )
 set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore-all" )
 set ( CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX OFF )

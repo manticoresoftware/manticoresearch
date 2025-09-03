@@ -181,6 +181,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+      # We have to checkout to access .github/workflows/ in further steps
       - name: Run dependency check script
         run: |
           bash dist/check_deps_in_repos.sh --target ${{ needs.pack.outputs.target }}
@@ -321,6 +322,7 @@ jobs:
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
+    # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
@@ -440,10 +442,23 @@ jobs:
         $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S /NOEXECUTOR" -Wait -PassThru -NoNewWindow
         echo "Installation process exited with code: $($process.ExitCode)"
         
-        Start-Sleep -Seconds 10
+        # Wait for installation to complete and verify with MySQL if available
+        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
+        if (Test-Path $mysqlPath) {
+          Start-Sleep -Seconds 5
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            echo "MySQL connection verified installation is complete"
+          } else {
+            echo "MySQL not ready yet, waiting..."
+            Start-Sleep -Seconds 5
+          }
+        } else {
+          Start-Sleep -Seconds 10
+        }
       shell: pwsh
     
-    - name: Test Manticore without Buddy
+    - name: Test Manticore Full Functionality
       run: |
         echo "=== VERIFYING INSTALLATION ==="
         
@@ -488,41 +503,304 @@ jobs:
         
         $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
         
-        Start-Sleep -Seconds 10
+        # Smart wait for daemon to be ready
+        echo "Waiting for Manticore daemon to be ready..."
+        $maxAttempts = 30
+        $attempt = 0
+        $allPortsReady = $false
         
-        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
-        if ($manticoreProcess) {
-          echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
-        } else {
-          echo "ERROR: Manticore searchd is not running"
+        while ($attempt -lt $maxAttempts -and -not $allPortsReady) {
+          Start-Sleep -Seconds 1
+          $attempt++
+          
+          # Check if process is still running
+          $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+          if (-not $manticoreProcess) {
+            echo "ERROR: Manticore searchd process died during startup"
+            exit 1
+          }
+          
+          # Check all three ports
+          $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9308 = Test-NetConnection -ComputerName localhost -Port 9308 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9312 = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue -InformationLevel Quiet
+          
+          if ($port9306 -and $port9308 -and $port9312) {
+            $allPortsReady = $true
+            echo "All ports are ready after $attempt seconds"
+          }
+        }
+        
+        if (-not $allPortsReady) {
+          echo "ERROR: Manticore did not start properly within $maxAttempts seconds"
+          echo "Port 9306 status: $port9306"
+          echo "Port 9308 status: $port9308"
+          echo "Port 9312 status: $port9312"
           exit 1
         }
         
+        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
+        
         Pop-Location
         
-        echo "=== TESTING MANTICORE CONNECTION ==="
+        echo "=== TESTING MANTICORE PORTS WITH POWERSHELL ==="
         
-        # Test connection with basic SQL command that works without Buddy
-        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
-        if (Test-Path $mysqlPath) {
-          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
-          if ($LASTEXITCODE -eq 0) {
-            echo "MySQL connection successful"
-          } else {
-            echo "ERROR: MySQL connection failed"
-            exit 1
-          }
-        } else {
+        # Test all three ports with Invoke-WebRequest
+        echo "Testing port 9306 (MySQL protocol)..."
+        try {
           $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
           if ($connection) {
-            echo "Port 9306 (MySQL) is listening"
+            echo "✓ Port 9306 (MySQL) is listening"
           } else {
             echo "ERROR: Port 9306 is not listening"
             exit 1
           }
+        } catch {
+          echo "ERROR: Port 9306 test failed: $_"
+          exit 1
         }
         
-        echo "=== TEST COMPLETED SUCCESSFULLY ==="
+        echo "Testing port 9308 (HTTP API)..."
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9308/" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            echo "✓ Port 9308 (HTTP API) is accessible - Status: $($response.StatusCode)"
+          } else {
+            echo "ERROR: Port 9308 returned status: $($response.StatusCode)"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: Port 9308 test failed: $_"
+          exit 1
+        }
+        
+        echo "Testing port 9312 (Sphinx protocol)..."
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9312/" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            echo "✓ Port 9312 (Sphinx/HTTP) is accessible - Status: $($response.StatusCode)"
+          } else {
+            echo "ERROR: Port 9312 returned status: $($response.StatusCode)"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: Port 9312 test failed: $_"
+          exit 1
+        }
+        
+        echo "=== TESTING MANTICORE FUNCTIONALITY WITH POWERSHELL ==="
+        
+        # Test 1: Basic SELECT query
+        echo "`nTest 1: Testing SELECT 1..."
+        try {
+          $body = @{ query = "SELECT 1" } | ConvertTo-Json -Compress
+          $response1 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response1 | ConvertTo-Json -Compress)"
+          echo "✓ SELECT 1 query successful"
+        } catch {
+          echo "ERROR: SELECT 1 query failed: $_"
+          exit 1
+        }
+        
+        # Test 2: Create table
+        echo "`nTest 2: Creating table..."
+        try {
+          $body = @{ query = "CREATE TABLE test_table (title text, content text, gid integer)" } | ConvertTo-Json -Compress
+          $response2 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response2 | ConvertTo-Json -Compress)"
+          echo "✓ CREATE TABLE successful"
+        } catch {
+          echo "ERROR: CREATE TABLE failed: $_"
+          exit 1
+        }
+        
+        # Test 3: Insert data
+        echo "`nTest 3: Inserting data..."
+        try {
+          $body = @{ query = "INSERT INTO test_table VALUES (1, 'Hello World', 'This is a test document', 100)" } | ConvertTo-Json -Compress
+          $response3 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response3 | ConvertTo-Json -Compress)"
+          echo "✓ INSERT successful"
+        } catch {
+          echo "ERROR: INSERT failed: $_"
+          exit 1
+        }
+        
+        # Test 4: Insert more data
+        echo "`nTest 4: Inserting more data..."
+        try {
+          $body = @{ query = "INSERT INTO test_table VALUES (2, 'Test Document', 'Another test content', 200)" } | ConvertTo-Json -Compress
+          $response4 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response4 | ConvertTo-Json -Compress)"
+          echo "✓ Second INSERT successful"
+        } catch {
+          echo "ERROR: Second INSERT failed: $_"
+          exit 1
+        }
+        
+        # Test 5: Search with MATCH
+        echo "`nTest 5: Testing MATCH search..."
+        try {
+          $body = @{ query = "SELECT * FROM test_table WHERE MATCH('Hello')" } | ConvertTo-Json -Compress
+          $response5 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response5 | ConvertTo-Json -Compress)"
+          if ($response5.hits.total -gt 0) {
+            echo "✓ MATCH search successful - found $($response5.hits.total) results"
+          } else {
+            echo "ERROR: MATCH search returned no results"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: MATCH search failed: $_"
+          exit 1
+        }
+        
+        # Test 6: Select all
+        echo "`nTest 6: Testing SELECT ALL..."
+        try {
+          $body = @{ query = "SELECT * FROM test_table" } | ConvertTo-Json -Compress
+          $response6 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response6 | ConvertTo-Json -Compress)"
+          if ($response6.hits.total -eq 2) {
+            echo "✓ SELECT ALL returned 2 records"
+          } else {
+            echo "ERROR: SELECT ALL expected 2 records, got $($response6.hits.total)"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: SELECT ALL failed: $_"
+          exit 1
+        }
+        
+        # Test 7: Update data
+        echo "`nTest 7: Testing UPDATE..."
+        try {
+          $body = @{ query = "UPDATE test_table SET gid=300 WHERE id=1" } | ConvertTo-Json -Compress
+          $response7 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response7 | ConvertTo-Json -Compress)"
+          echo "✓ UPDATE successful"
+        } catch {
+          echo "ERROR: UPDATE failed: $_"
+          exit 1
+        }
+        
+        # Test 8: Delete data
+        echo "`nTest 8: Testing DELETE..."
+        try {
+          $body = @{ query = "DELETE FROM test_table WHERE id=2" } | ConvertTo-Json -Compress
+          $response8 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response8 | ConvertTo-Json -Compress)"
+          echo "✓ DELETE successful"
+        } catch {
+          echo "ERROR: DELETE failed: $_"
+          exit 1
+        }
+        
+        # Test 9: Verify deletion
+        echo "`nTest 9: Verifying deletion..."
+        try {
+          $body = @{ query = "SELECT * FROM test_table" } | ConvertTo-Json -Compress
+          $response9 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response9 | ConvertTo-Json -Compress)"
+          if ($response9.hits.total -eq 1) {
+            echo "✓ DELETE verified, 1 record remains"
+          } else {
+            echo "ERROR: Expected 1 record after DELETE, got $($response9.hits.total)"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: DELETE verification failed: $_"
+          exit 1
+        }
+        
+        # Test 10: Show tables
+        echo "`nTest 10: Testing SHOW TABLES..."
+        try {
+          $body = @{ query = "SHOW TABLES" } | ConvertTo-Json -Compress
+          $response10 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response10 | ConvertTo-Json -Compress)"
+          $tableFound = $false
+          foreach ($row in $response10.data) {
+            if ($row.Index -eq "test_table") {
+              $tableFound = $true
+              break
+            }
+          }
+          if ($tableFound) {
+            echo "✓ SHOW TABLES successful - test_table found"
+          } else {
+            echo "ERROR: test_table not found in SHOW TABLES"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: SHOW TABLES failed: $_"
+          exit 1
+        }
+        
+        # Test 11: Drop table
+        echo "`nTest 11: Testing DROP TABLE..."
+        try {
+          $body = @{ query = "DROP TABLE test_table" } | ConvertTo-Json -Compress
+          $response11 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response11 | ConvertTo-Json -Compress)"
+          echo "✓ DROP TABLE successful"
+        } catch {
+          echo "ERROR: DROP TABLE failed: $_"
+          exit 1
+        }
+        
+        # Test 12: Verify table dropped
+        echo "`nTest 12: Verifying table dropped..."
+        try {
+          $body = @{ query = "SHOW TABLES" } | ConvertTo-Json -Compress
+          $response12 = Invoke-RestMethod -Uri "http://localhost:9308/sql" -Method POST -Body $body -ContentType "application/json"
+          echo "Response: $($response12 | ConvertTo-Json -Compress)"
+          $tableFound = $false
+          foreach ($row in $response12.data) {
+            if ($row.Index -eq "test_table") {
+              $tableFound = $true
+              break
+            }
+          }
+          if (-not $tableFound) {
+            echo "✓ Table successfully dropped"
+          } else {
+            echo "ERROR: Table still exists after DROP"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: DROP verification failed: $_"
+          exit 1
+        }
+        
+        # Test MySQL connection if mysql client is available
+        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
+        if (Test-Path $mysqlPath) {
+          echo "=== TESTING MYSQL PROTOCOL ==="
+          & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1"
+          if ($LASTEXITCODE -eq 0) {
+            echo "✓ MySQL protocol connection successful"
+          } else {
+            echo "ERROR: MySQL connection failed"
+            exit 1
+          }
+        }
+        
+        echo ""
+        echo "=== ALL TESTS COMPLETED SUCCESSFULLY ==="
+        echo "✓ Installation verified"
+        echo "✓ Daemon is running"
+        echo "✓ All ports are accessible via PowerShell"
+        echo "✓ HTTP API is functional"
+        echo "✓ CREATE TABLE works"
+        echo "✓ INSERT works"
+        echo "✓ SELECT works"
+        echo "✓ MATCH search works"
+        echo "✓ UPDATE works"
+        echo "✓ DELETE works"
+        echo "✓ DROP TABLE works"
+        echo "✓ All basic functionality verified"
       shell: pwsh
 
   publish_nsis:

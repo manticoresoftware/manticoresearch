@@ -30,6 +30,10 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 {
 	CSphString sPrefix = "Error resolving local time zone from";
 	CSphString sTimeZoneFile = "/etc/localtime";
+	const char * szTZDefault = getenv("TZDEFAULT");
+	if ( szTZDefault )
+		sTimeZoneFile = szTZDefault;
+
 	const char * szTZ = getenv("TZ");
 	if ( szTZ )
 	{
@@ -38,7 +42,8 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 		if ( *szTZ==':' )
 			++szTZ;
 
-		sTimeZoneFile = szTZ;
+		if ( *szTZ )
+			sTimeZoneFile = szTZ;
 	}
 	else
 		sPrefix.SetSprintf ( "%s '%s'", sPrefix.cstr(), sTimeZoneFile.cstr() );
@@ -57,7 +62,10 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 		sTimeZoneDir.SetSprintf ( "%s/", sTimeZoneDir.cstr() );
 
 	CSphString sTimeZonePath;
-	sTimeZonePath.SetSprintf ( "%s%s", sTimeZoneDir.cstr(), sTimeZoneFile.cstr() );
+	if ( IsPathAbsolute(sTimeZoneFile) )
+		sTimeZonePath = sTimeZoneFile;
+	else
+		sTimeZonePath.SetSprintf ( "%s%s", sTimeZoneDir.cstr(), sTimeZoneFile.cstr() );
 
 	bool bExists = false, bSymlink = false;
 	std::tie ( bExists, bSymlink ) = IsSymlink(sTimeZonePath);
@@ -79,23 +87,15 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 		sTimeZonePath = sResolved;
 	}
 
-	if ( IsPathAbsolute(sTimeZonePath) )
+	sTimeZonePath = RealPath(sTimeZonePath);
+	if ( !sphFileExists(sTimeZonePath) )
 	{
-		if ( !sphFileExists(sTimeZonePath) )
-		{
-			sWarning = sPrefix;
-			return "UTC";
-		}
-
-		if ( sTimeZonePath.Begins ( sTimeZoneDir.cstr() ) )
-			return sTimeZonePath.SubString ( sTimeZoneDir.Length(), sTimeZonePath.Length()-sTimeZoneDir.Length() );
-
 		sWarning = sPrefix;
 		return "UTC";
 	}
 
-	if ( sphFileExists(sTimeZonePath) )
-		return sTimeZoneFile;
+	if ( sTimeZonePath.Begins ( sTimeZoneDir.cstr() ) )
+		return sTimeZonePath.SubString ( sTimeZoneDir.Length(), sTimeZonePath.Length()-sTimeZoneDir.Length() );
 
 	sWarning = sPrefix;
 	return "UTC";

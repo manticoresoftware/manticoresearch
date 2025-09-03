@@ -2483,11 +2483,14 @@ let search_res = search_api.search(search_req).await;
 
 ## Float vector
 
-<!-- example for creating float_vector -->
-Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from multi-valued attributes (MVAs) in several important ways:
+<!-- example float_vector_auto -->
+
+Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from [multi-valued attributes](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVAs) in several important ways:
 - Preserves the exact order of values (unlike MVAs which may reorder)
 - Retains duplicate values (unlike MVAs which deduplicate)
 - No additional processing during insertion (unlike MVAs which sort and deduplicate)
+
+Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. 
 
 ### Usage and Limitations
 - Currently only supported in real-time tables
@@ -2499,12 +2502,103 @@ Float vector attributes allow storing variable-length lists of floats, primarily
 - The only way to filter by `float_vector` values is through vector search operations (KNN)
 
 ### Common Use Cases
-- Image embeddings for similarity search
 - Text embeddings for semantic search
-- Feature vectors for machine learning
 - Recommendation system vectors
+- Image embeddings for similarity search
+- Feature vectors for machine learning
 
 ** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
+
+For more details on setting up float vectors and using them in searches, see [KNN search](../Searching/KNN.md).
+
+### Auto Embeddings (Recommended)
+
+The most convenient way to work with float vectors is using **auto embeddings**. This feature automatically generates embeddings from your text data using machine learning models, eliminating the need to manually compute and insert vectors.
+
+#### Benefits of Auto Embeddings
+- **Simplified workflow**: Just insert text, embeddings are generated automatically
+- **No manual vector computation**: No need to run separate embedding models
+- **Consistent embeddings**: Same model ensures consistent vector representations
+- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage, and Jina models
+- **Flexible field selection**: Control which fields are used for embedding generation
+
+#### Creating tables with auto embeddings
+
+When creating a table with auto embeddings, specify these additional parameters:
+- `MODEL_NAME`: The embedding model to use for automatic vector generation
+- `FROM`: Which fields to use for embedding generation (empty string means all text/string fields)
+
+**Supported embedding models:**
+- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
+- **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
+- **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
+- **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using OpenAI model (requires API_KEY parameter)
+```sql
+CREATE TABLE products_openai (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
+);
+```
+
+Using all text fields for embeddings (FROM is empty)
+```sql
+CREATE TABLE products_all_fields (
+    title TEXT,
+    description TEXT,
+    tags TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+);
+```
+
+<!-- end -->
+
+#### FROM parameter usage
+
+The `FROM` parameter controls which fields are used for embedding generation:
+
+- **Specific fields**: `FROM='title'` - only the title field is used
+- **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
+- **All text fields**: `FROM=''` (empty) - all `text` (full-text field) and `string` (string attribute) fields in the table are used
+- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+
+#### Inserting data with auto embeddings
+
+When using auto embeddings, **do not specify the vector field** in your INSERT statements. The embeddings are automatically generated from the specified text fields:
+
+```sql
+-- Insert text data - embeddings generated automatically
+INSERT INTO products (title, description) VALUES 
+('smartphone', 'latest mobile device with camera'),
+('laptop computer', 'portable workstation for developers');
+
+-- Insert with empty vector (excluded from vector search)
+INSERT INTO products (title, description, embedding_vector) VALUES
+('no-vector item', 'this item has no embedding', ());
+```
+
+### Manual Float Vector Usage
+
+<!-- example for creating float_vector -->
+Alternatively, you can work with manually computed float vectors. 
 
 <!-- intro -->
 ##### SQL:
@@ -2609,8 +2703,6 @@ table products
 ```
 
 <!-- end -->
-
-For information about configuring and using float vectors in searches, see [KNN search](../Searching/KNN.md).
 
 ## Multi-value integer (MVA)
 

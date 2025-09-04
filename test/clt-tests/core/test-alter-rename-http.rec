@@ -40,7 +40,7 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 ––– comment –––
 Test HTTP API basic functionality
 ––– input –––
-curl -s "http://localhost:9308/sql?query=SHOW+VERSION" | grep -o '"Component":"Daemon"'
+curl -s "http://localhost:9308/cli_json" -d "SHOW VERSION" | grep -o '"Component":"Daemon"'
 ––– output –––
 "Component":"Daemon"
 ––– comment –––

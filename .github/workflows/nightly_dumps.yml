@@ -31,11 +31,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.6.9
+      - uses: manticoresoftware/clt@0.7.3
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/
           run_args: --privileged
+          ui_host: "https://clt.manticoresearch.com"
 
   clt_test_migration_es_ms:
     name: Testing data migration from elastic to manticore
@@ -44,14 +45,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.6.9
+      - uses: manticoresoftware/clt@0.7.3
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
           run_args: --privileged
+          ui_host: "https://clt.manticoresearch.com"
+
       - name: Upload .rep File
         if: always()  
         uses: actions/upload-artifact@v4
         with:
           name: test-migration-es-ms-rep
           path: test/clt-tests/migration-es-ms/test-migration-es-ms.rep
+

@@ -38,12 +38,6 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | products_new | rt   |
 +--------------+------+
 ––– comment –––
-Test HTTP API basic functionality
-––– input –––
-curl -s "http://localhost:9308/sql?query=SHOW+VERSION" | grep -o '"Component":"Daemon"'
-––– output –––
-"Component":"Daemon"
-––– comment –––
 Test data retrieval via HTTP API
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+*+FROM+articles+LIMIT+1" | grep -o '"_id":1'

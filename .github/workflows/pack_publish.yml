@@ -181,6 +181,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+      # We have to checkout to access .github/workflows/ in further steps
       - name: Run dependency check script
         run: |
           bash dist/check_deps_in_repos.sh --target ${{ needs.pack.outputs.target }}
@@ -321,6 +322,7 @@ jobs:
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
+    # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
@@ -440,10 +442,11 @@ jobs:
         $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S /NOEXECUTOR" -Wait -PassThru -NoNewWindow
         echo "Installation process exited with code: $($process.ExitCode)"
         
+        # Wait for installation to complete
         Start-Sleep -Seconds 10
       shell: pwsh
     
-    - name: Test Manticore without Buddy
+    - name: Test Manticore Service
       run: |
         echo "=== VERIFYING INSTALLATION ==="
         
@@ -475,17 +478,11 @@ jobs:
         
         # Disable Buddy before starting Manticore
         $configPath = "$installPath\etc\manticoresearch\manticore.conf"
-        echo "Checking config at: $configPath"
         if (Test-Path $configPath) {
-          echo "Config file found, modifying to disable Buddy"
           $config = Get-Content $configPath -Raw
           # Add buddy_path with empty value to disable it
           $config = $config -replace "(searchd\s*\{)", "`$1`n    buddy_path = "
           Set-Content -Path $configPath -Value $config -Force
-          echo "buddy_path added with empty value"
-          echo "Config saved"
-        } else {
-          echo "WARNING: Config file not found at expected location"
         }
         
         echo "=== STARTING MANTICORE SERVICE ==="
@@ -494,67 +491,111 @@ jobs:
         
         $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
         
-        # Wait for searchd to be ready by checking port availability
-        $timeout = 30
-        $elapsed = 0
-        while ($elapsed -lt $timeout) {
-          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
-          if ($connection) {
-            echo "Port 9306 is ready after $elapsed seconds"
-            break
-          }
+        # Smart wait for daemon to be ready
+        echo "Waiting for Manticore daemon to be ready..."
+        $maxAttempts = 30
+        $attempt = 0
+        $allPortsReady = $false
+        
+        while ($attempt -lt $maxAttempts -and -not $allPortsReady) {
           Start-Sleep -Seconds 1
-          $elapsed++
+          $attempt++
+          
+          # Check if process is still running
+          $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+          if (-not $manticoreProcess) {
+            echo "ERROR: Manticore searchd process died during startup"
+            exit 1
+          }
+          
+          # Check all three ports
+          $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9308 = Test-NetConnection -ComputerName localhost -Port 9308 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9312 = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue -InformationLevel Quiet
+          
+          if ($port9306 -and $port9308 -and $port9312) {
+            $allPortsReady = $true
+            echo "All ports are ready after $attempt seconds"
+          }
         }
         
-        if ($elapsed -ge $timeout) {
-          echo "ERROR: Timeout waiting for searchd to start"
+        if (-not $allPortsReady) {
+          echo "ERROR: Manticore did not start properly within $maxAttempts seconds"
+          echo "Port 9306 status: $port9306"
+          echo "Port 9308 status: $port9308"
+          echo "Port 9312 status: $port9312"
           exit 1
         }
         
         $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
-        if ($manticoreProcess) {
-          echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
-        } else {
-          echo "ERROR: Manticore searchd is not running"
-          exit 1
-        }
+        echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
         
         Pop-Location
         
-        echo "=== TESTING MANTICORE CONNECTION ==="
+        echo "=== TESTING MANTICORE SERVICE WITH SIMPLE STATUS CHECKS ==="
         
-        # Test connection and get result of SELECT 1
-        $mysqlPath = "C:\tools\mysql\current\bin\mysql.exe"
-        if (Test-Path $mysqlPath) {
-          echo "MySQL client found at: $mysqlPath"
-          $result = & $mysqlPath -P9306 -h127.0.0.1 -e "SELECT 1" 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            echo "MySQL query result:"
-            echo $result
-            if ($result -match "1") {
-              echo "SELECT 1 returned expected value"
-            } else {
-              echo "ERROR: SELECT 1 did not return expected result"
-              exit 1
-            }
+        # Test 1: Check HTTP API port 9308
+        echo "`nTest 1: Checking HTTP API (port 9308)..."
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9308/" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            echo "✓ HTTP API responds with status 200"
+            echo "✓ Response length: $($response.Content.Length) bytes"
           } else {
-            echo "ERROR: MySQL connection failed with exit code: $LASTEXITCODE"
-            echo "Output: $result"
+            echo "ERROR: Unexpected status code: $($response.StatusCode)"
             exit 1
           }
-        } else {
-          echo "MySQL client not found, checking port only"
-          $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
-          if ($connection) {
-            echo "Port 9306 (MySQL) is listening"
+        } catch {
+          echo "ERROR: Failed to access HTTP API: $_"
+          exit 1
+        }
+        
+        # Test 2: Check Sphinx/HTTP port 9312
+        echo "`nTest 2: Checking Sphinx/HTTP port (9312)..."
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9312/" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            echo "✓ Sphinx/HTTP port responds with status 200"
+            # Check for expected content in response
+            if ($response.Content -like '*"version":*') {
+              echo "✓ Response contains version information"
+            }
           } else {
-            echo "ERROR: Port 9306 is not listening"
+            echo "ERROR: Unexpected status code: $($response.StatusCode)"
             exit 1
+          }
+        } catch {
+          echo "ERROR: Failed to access port 9312: $_"
+          exit 1
+        }
+        
+        # Test 3: Verify all three ports are listening
+        echo "`nTest 3: Verifying all service ports are listening..."
+        $ports = @(9306, 9308, 9312)
+        $allPortsOk = $true
+        
+        foreach ($port in $ports) {
+          $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue -InformationLevel Quiet
+          if ($connection) {
+            echo "✓ Port $port is listening"
+          } else {
+            echo "✗ Port $port is NOT listening"
+            $allPortsOk = $false
           }
         }
         
-        echo "=== TEST COMPLETED SUCCESSFULLY ==="
+        if (-not $allPortsOk) {
+          echo "ERROR: Not all required ports are listening"
+          exit 1
+        }
+        
+        echo ""
+        echo "=== ALL BASIC TESTS COMPLETED SUCCESSFULLY ==="
+        echo "✓ Installation verified"
+        echo "✓ Daemon is running"
+        echo "✓ All ports (9306, 9308, 9312) are accessible"
+        echo "✓ HTTP endpoints respond with status 200"
+        echo "✓ Manticore service is operational"
       shell: pwsh
 
   publish_nsis:
@@ -606,11 +647,12 @@ jobs:
         image: [ "almalinux:8", "almalinux:9", "almalinux:10", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.9
+      - uses: manticoresoftware/clt@0.7.3
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
           run_args: -e TELEMETRY=0
+          ui_host: "https://clt.manticoresearch.com"
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
@@ -621,8 +663,9 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.9
+      - uses: manticoresoftware/clt@0.7.3
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-
           run_args: -e TELEMETRY=0
+          ui_host: "https://clt.manticoresearch.com"

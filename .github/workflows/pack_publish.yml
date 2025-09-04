@@ -584,22 +584,30 @@ jobs:
           exit 1
         }
         
-        echo "=== TESTING MANTICORE FUNCTIONALITY WITH .NET WEBCLIENT ==="
+        echo "=== TESTING MANTICORE FUNCTIONALITY WITH POWERSHELL ==="
         
         # Helper function to make HTTP requests
         function Send-ManticoreQuery {
           param($Query)
           
           $url = "http://localhost:9308/sql"
-          $jsonBody = "{`"query`":`"$Query`"}"
+          
+          # Create object and convert to JSON properly
+          $bodyObject = @{
+            query = $Query
+          }
+          $jsonBody = $bodyObject | ConvertTo-Json -Compress -Depth 1
+          
+          # Debug output
+          echo "Debug: Sending query: $Query"
+          echo "Debug: JSON body: $jsonBody"
           
           $webClient = New-Object System.Net.WebClient
           $webClient.Headers.Add("Content-Type", "application/json")
           $webClient.Encoding = [System.Text.Encoding]::UTF8
           
           try {
-            # FIX: UploadString only takes 2 parameters (url, data)
-            # Method POST is used automatically when uploading data
+            # UploadString with only 2 parameters (url, data)
             $response = $webClient.UploadString($url, $jsonBody)
             $webClient.Dispose()
             return $response | ConvertFrom-Json

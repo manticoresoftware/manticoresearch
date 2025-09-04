@@ -594,14 +594,25 @@ jobs:
           $jsonBody = "{`"query`":`"$Query`"}"
           
           $webClient = New-Object System.Net.WebClient
-          $webClient.Headers.Add("Content-Type", "application/json; charset=utf-8")
+          $webClient.Headers.Add("Content-Type", "application/json")
           $webClient.Encoding = [System.Text.Encoding]::UTF8
           
           try {
-            $response = $webClient.UploadString($url, "POST", $jsonBody)
+            # FIX: UploadString only takes 2 parameters (url, data)
+            # Method POST is used automatically when uploading data
+            $response = $webClient.UploadString($url, $jsonBody)
             $webClient.Dispose()
             return $response | ConvertFrom-Json
           } catch {
+            if ($_.Exception.Response) {
+              try {
+                $responseStream = $_.Exception.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($responseStream)
+                $errorBody = $reader.ReadToEnd()
+                $reader.Close()
+                echo "Server error response: $errorBody"
+              } catch {}
+            }
             $webClient.Dispose()
             throw $_
           }
@@ -615,12 +626,6 @@ jobs:
           echo "✓ SELECT 1 query successful"
         } catch {
           echo "ERROR: SELECT 1 query failed: $_"
-          if ($_.Exception.Response) {
-            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-            $reader.BaseStream.Position = 0
-            $responseBody = $reader.ReadToEnd()
-            echo "Error response: $responseBody"
-          }
           exit 1
         }
         

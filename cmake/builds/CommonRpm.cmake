@@ -161,6 +161,7 @@ configure_file ( ${SCR}/manticore-indexer.service.in "${dirtools}/manticore-inde
 configure_file ( ${SCR}/manticore-indexer@.service.in "${dirtools}/manticore-indexer@.service" @ONLY )
 configure_file ( ${SCR}/manticore-indexer_global.default.in "${dirtools}/manticore-indexer_global" @ONLY )
 
+
 # installation
 
 # stuff going to /etc

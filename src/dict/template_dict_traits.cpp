@@ -16,7 +16,7 @@
 #include <libstemmer.h>
 #endif
 
-#include "sphinxstem.h"
+#include "stem/sphinxstem.h"
 
 #include "word_forms.h"
 #include "tokenizer/multiform_container.h"

@@ -14,7 +14,7 @@
 #define _sphinxrt_
 
 #include "sphinxutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxint.h"
 #include "killlist.h"
 #include "attribute.h"

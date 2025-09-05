@@ -13,7 +13,9 @@
 #pragma once
 
 #include "std/ints.h"
-#include "fileio.h"
+#include "std/blobs.h"
+#include "std/vector.h"
+#include <memory>
 
 static constexpr Str_t g_sTagInfixBlocks = FROMS ( "infix-blocks" );
 static constexpr Str_t g_sTagInfixEntries = FROMS ( "infix-entries" );
@@ -28,6 +30,7 @@ struct InfixBlock_t
 	DWORD m_iOffset;
 };
 
+class CSphWriter;
 
 /// infix hash builder
 class ISphInfixBuilder

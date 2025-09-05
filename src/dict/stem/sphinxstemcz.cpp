@@ -10,7 +10,7 @@
 //
 
 #include "sphinxstd.h"
-#include <string.h>
+#include <cstring>
 
 
 struct ClampRule_t

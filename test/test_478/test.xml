@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>PREPARE/EXECUTE with user variables and parameters</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<sphqueries>
+<sphinxql>
+<!-- Create test table for parameterized prepared statements -->
+CREATE TABLE param_test(id BIGINT, name TEXT, category INTEGER, score FLOAT);
+
+<!-- Insert test data -->
+INSERT INTO param_test(id, name, category, score) VALUES 
+(1, 'alpha', 10, 95.5),
+(2, 'beta', 10, 87.3),
+(3, 'gamma', 20, 92.1),
+(4, 'delta', 20, 89.7),
+(5, 'epsilon', 30, 94.2);
+
+<!-- Test 1: User variable functionality that should work -->
+SET GLOBAL @myvar = (100);
+SELECT id, name, score FROM param_test WHERE category = 10;
+
+<!-- Test 2: Try various user variable SET syntax -->
+SET GLOBAL @test_cat = (20);
+SET GLOBAL @min_score = (90);
+
+<!-- Test 3: PREPARE statements with placeholders for future parameter support -->
+PREPARE find_by_id FROM 'SELECT * FROM param_test WHERE id = ?';
+PREPARE find_by_category FROM 'SELECT * FROM param_test WHERE category = ?';
+PREPARE find_range FROM 'SELECT * FROM param_test WHERE score BETWEEN ? AND ?';
+
+<!-- Test 4: Execute without parameters (will show parameter mismatch errors) -->
+EXECUTE find_by_id;
+EXECUTE find_by_category;
+EXECUTE find_range;
+
+<!-- Test 5: Complex queries without parameters -->
+PREPARE complex_no_params FROM 'SELECT category, COUNT(*) as cnt, AVG(score) as avg_score FROM param_test GROUP BY category HAVING COUNT(*) > 1';
+EXECUTE complex_no_params;
+
+<!-- Test 6: Test prepared statement caching and reuse -->
+PREPARE reusable FROM 'SELECT name, score FROM param_test WHERE score > 90.0 ORDER BY score DESC';
+EXECUTE reusable;
+EXECUTE reusable;
+EXECUTE reusable;
+
+<!-- Test 7: Test DDL operations in prepared statements -->
+PREPARE create_temp FROM 'CREATE TABLE temp_table(id INTEGER, value TEXT)';
+EXECUTE create_temp;
+
+PREPARE insert_temp FROM 'INSERT INTO temp_table VALUES (1, "test")';
+EXECUTE insert_temp;
+
+PREPARE select_temp FROM 'SELECT * FROM temp_table';
+EXECUTE select_temp;
+
+PREPARE drop_temp FROM 'DROP TABLE temp_table';
+EXECUTE drop_temp;
+
+<!-- Test 8: Error cases -->
+<!-- Try to prepare statement with syntax error -->
+PREPARE bad_syntax FROM 'SELEC * FORM param_test';
+
+<!-- Try to prepare empty statement -->
+PREPARE empty_stmt FROM '';
+
+<!-- Test 9: Edge cases with statement names -->
+PREPARE `quoted_name` FROM 'SELECT COUNT(*) FROM param_test';
+EXECUTE `quoted_name`;
+
+PREPARE name_with_123 FROM 'SELECT MAX(score) FROM param_test';
+EXECUTE name_with_123;
+
+<!-- Test 10: Cleanup -->
+DEALLOCATE PREPARE find_by_id;
+DEALLOCATE PREPARE find_by_category;
+DEALLOCATE PREPARE find_range;
+DEALLOCATE PREPARE complex_no_params;
+DEALLOCATE PREPARE reusable;
+DEALLOCATE PREPARE create_temp;
+DEALLOCATE PREPARE insert_temp;
+DEALLOCATE PREPARE select_temp;
+DEALLOCATE PREPARE drop_temp;
+DEALLOCATE PREPARE `quoted_name`;
+DEALLOCATE PREPARE name_with_123;
+
+<!-- Test 11: Try to execute deallocated statement -->
+EXECUTE find_by_id;
+
+DROP TABLE param_test;
+
+</sphinxql>
+</sphqueries>
+
+</test>

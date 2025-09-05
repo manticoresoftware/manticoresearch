@@ -76,7 +76,7 @@ set ( CPACK_DEBIAN_SERVER_PACKAGE_BREAKS "${breaks}" )
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
 seta ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-common (= ${CPACK_PACKAGE_VERSION})" )
-set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-backup (= ${DEP_BACKUP_VERSION} )" )
+seta ( CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "manticore-backup (= ${DEP_BACKUP_VERSION} )" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONTROL_EXTRA "${dirtools}/conffiles" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_REPLACES "${breaks}" )

@@ -1,4 +1,8 @@
+––– comment –––
+Extended timezone test based on original test from documentation
 ––– block: ../base/start-searchd –––
+––– comment –––
+Check initial timezone and basic SET GLOBAL functionality (original test)
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
@@ -59,3 +63,239 @@ mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timesta
 [ $(( ($(date -d "$(cat /tmp/bkk.txt)" +%s) - $(date -d "$(cat /tmp/utc.txt)" +%s) + 43200) % 86400 - 43200 >= 25200 )) ] && echo "At least 7 hours apart" || echo "Less than 7 hours apart"
 ––– output –––
 At least 7 hours apart
+––– comment –––
+NEW TEST: Save current config and check TZ environment variable inheritance
+––– input –––
+cp /etc/manticoresearch/manticore.conf /tmp/manticore.conf.backup
+––– output –––
+––– input –––
+searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+export TZ=Asia/Tokyo && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: Asia/Tokyo
+––– input –––
+mysql -h0 -P9306 -e "select hour(now()) as tokyo_hour\G" | grep "tokyo_hour:" | awk '{print $2}' > /tmp/tokyo_hour.txt
+––– output –––
+––– comment –––
+Test different TZ format - simple UTC
+––– input –––
+searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+export TZ=UTC && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: UTC
+––– input –––
+mysql -h0 -P9306 -e "select hour(now()) as utc_hour\G" | grep "utc_hour:" | awk '{print $2}' > /tmp/tz_utc_hour.txt
+––– output –––
+––– comment –––
+Test system files /etc/localtime and /etc/timezone
+––– input –––
+if [ -L /etc/localtime ]; then cp -P /etc/localtime /tmp/localtime.backup; fi
+––– output –––
+––– input –––
+if [ -f /etc/timezone ]; then cp /etc/timezone /tmp/timezone.backup; fi
+––– output –––
+––– input –––
+searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+ln -snf /usr/share/zoneinfo/Asia/Singapore /etc/localtime && echo "Asia/Singapore" > /etc/timezone
+––– output –––
+––– input –––
+unset TZ && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: Asia/Singapore
+––– comment –––
+Test Europe/London through system files (previously problematic)
+––– input –––
+searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+ln -snf /usr/share/zoneinfo/Europe/London /etc/localtime && echo "Europe/London" > /etc/timezone
+––– output –––
+––– input –––
+searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: Europe/London
+––– input –––
+echo "Europe/London works correctly from system files"
+––– output –––
+Europe/London works correctly from system files
+––– comment –––
+Test configuration file timezone setting
+––– input –––
+searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+cat > /tmp/manticore_tz.conf << 'EOF'
+searchd {
+    timezone = America/New_York
+    listen = 9306:mysql41
+    listen = 9308:http
+    pid_file = /var/run/manticore/searchd.pid
+    data_dir = /var/lib/manticore
+    log = /var/log/manticore/searchd.log
+    query_log = /var/log/manticore/query.log
+}
+EOF
+––– output –––
+––– input –––
+searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] Using time zone 'America/New_York'
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: America/New_York
+––– comment –––
+Test priority: config should override TZ and system files
+––– input –––
+searchd --stopwait --config /tmp/manticore_tz.conf 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+export TZ=Africa/Cairo
+––– output –––
+––– input –––
+ln -snf /usr/share/zoneinfo/Australia/Sydney /etc/localtime && echo "Australia/Sydney" > /etc/timezone
+––– output –––
+––– input –––
+searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] Using time zone 'America/New_York'
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: America/New_York
+––– input –––
+echo "Priority test: Config (America/New_York) overrides TZ (Africa/Cairo) and system (Australia/Sydney)"
+––– output –––
+Priority test: Config (America/New_York) overrides TZ (Africa/Cairo) and system (Australia/Sydney)
+––– comment –––
+Test HOUR() function with different timezones
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='UTC';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select hour(1615787586) as h_utc\G" | grep "h_utc:" | awk '{print $2}' > /tmp/hour_utc.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='Asia/Tokyo';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select hour(1615787586) as h_tokyo\G" | grep "h_tokyo:" | awk '{print $2}' > /tmp/hour_tokyo.txt
+––– output –––
+––– input –––
+UTC_H=$(cat /tmp/hour_utc.txt)
+––– output –––
+––– input –––
+TOKYO_H=$(cat /tmp/hour_tokyo.txt)
+––– output –––
+––– input –––
+DIFF=$(( (TOKYO_H - UTC_H + 24) % 24 ))
+––– output –––
+––– input –––
+if [ $DIFF -eq 9 ]; then echo "HOUR(timestamp) works: Tokyo is UTC+9"; else echo "HOUR() error: diff is $DIFF, expected 9"; fi
+––– output –––
+HOUR(timestamp) works: Tokyo is UTC+9
+––– comment –––
+Test special timezone formats
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='GMT';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: GMT
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='EST5EDT';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}' > /tmp/est_format.txt
+––– output –––
+––– input –––
+echo "EST5EDT format result: $(cat /tmp/est_format.txt)"
+––– output –––
+#!/EST5EDT format result: .*/!#
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='Asia/Kolkata';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+        Value: Asia/Kolkata
+––– input –––
+mysql -h0 -P9306 -e "select hour(now()) as kolkata_h, minute(now()) as kolkata_m\G" | grep -E "kolkata_h:|kolkata_m:" | awk '{print $2}' | tr '\n' ':' | sed 's/:$//' > /tmp/kolkata_time.txt
+––– output –––
+––– input –––
+echo "Kolkata (UTC+5:30) time: $(cat /tmp/kolkata_time.txt)"
+––– output –––
+#!/Kolkata \(UTC\+5:30\) time: .*/!#
+––– comment –––
+Cleanup and restore original configuration
+––– input –––
+searchd --stopwait --config /tmp/manticore_tz.conf 2>&1 | grep "successfully sent SIGTERM"
+––– output –––
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+if [ -f /tmp/localtime.backup ]; then mv /tmp/localtime.backup /etc/localtime; fi
+––– output –––
+––– input –––
+if [ -f /tmp/timezone.backup ]; then mv /tmp/timezone.backup /etc/timezone; fi
+––– output –––
+––– input –––
+mv /tmp/manticore.conf.backup /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /tmp/manticore_tz.conf /tmp/*.txt
+––– output –––
+––– input –––
+searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+echo "Extended timezone test completed"
+––– output –––
+Extended timezone test completed
+
+

@@ -35,6 +35,7 @@ static CSphString g_sAuthFile;
 /// auth load
 
 static void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tDst );
+static bool MakeBuddyToken ( AuthUsers_t & tAuth, CSphString & sError );
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
 {
@@ -60,6 +61,9 @@ void AuthConfigure ( const CSphConfigSection & hSearchd )
 	g_sAuthFile = RealPath ( sFile );
 	AuthUsersMutablePtr_t tAuth = ReadAuthFile ( g_sAuthFile, sError );
 	if ( !tAuth )
+		sphFatal ( "%s", sError.cstr() );
+
+	if ( !MakeBuddyToken ( *tAuth.get(), sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
 	tAuth->m_bEnabled = true;
@@ -114,6 +118,42 @@ bool AuthReload ( CSphString & sError )
 		g_tAuth = std::move ( tAuth );
 	}
 	GetBearerCache().Invalidate();
+
+	return true;
+}
+
+bool MakeBuddyToken ( AuthUsers_t & tAuth, CSphString & sError )
+{
+	AuthUserCred_t & tEntry = tAuth.m_hUserToken.AddUnique ( GetAuthBuddyName() );
+
+	// username
+	tEntry.m_sUser = GetAuthBuddyName();
+
+	// salt
+	tEntry.m_dSalt.Reset ( HASH20_SIZE );
+	if ( !MakeRandBuf ( tEntry.m_dSalt, sError ) )
+		return false;
+
+	// mysql sha1
+	VecTraits_T<BYTE> dSha1 ( tEntry.m_tPwdSha1.data(), tEntry.m_tPwdSha1.size() );
+	if ( !MakeRandBuf ( dSha1, sError ) )
+		return false;
+
+	// sha256
+	tEntry.m_dPwdSha256.Reset ( HASH256_SIZE );
+	if ( !MakeRandBuf ( tEntry.m_dPwdSha256, sError ) )
+		return false;
+
+	// add admin perms
+	UserPerms_t & dPerms = tAuth.m_hUserPerms.AddUnique ( GetAuthBuddyName() );
+	for ( int i=0; i<(int)AuthAction_e::UNKNOWN; i++ )
+	{
+		UserPerm_t tPerm;
+		tPerm.m_eAction = (AuthAction_e)i;
+		tPerm.m_bAllow = true;
+		tPerm.SetTarget ( "*" );
+		dPerms.Add ( tPerm );
+	}
 
 	return true;
 }

@@ -304,6 +304,8 @@ jobs:
     uses: ./.github/workflows/clt_tests.yml
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGER_API_KEY: ${{ secrets.VOYAGER_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
       docker_image: test-kit:img
       artifact_name: manticore_test_kit.img

@@ -30,6 +30,10 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 {
 	CSphString sPrefix = "Error resolving local time zone from";
 	CSphString sTimeZoneFile = "/etc/localtime";
+	const char * szTZDefault = getenv("TZDEFAULT");
+	if ( szTZDefault )
+		sTimeZoneFile = szTZDefault;
+
 	const char * szTZ = getenv("TZ");
 	if ( szTZ )
 	{
@@ -38,7 +42,8 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 		if ( *szTZ==':' )
 			++szTZ;
 
-		sTimeZoneFile = szTZ;
+		if ( *szTZ )
+			sTimeZoneFile = szTZ;
 	}
 	else
 		sPrefix.SetSprintf ( "%s '%s'", sPrefix.cstr(), sTimeZoneFile.cstr() );
@@ -53,37 +58,44 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 	else
 		sPrefix.SetSprintf ( "%s and time zone dir '%s'", sPrefix.cstr(), sTimeZoneDir.cstr() );
 
-	CSphString sResolved;
-	if ( IsSymlink(sTimeZoneFile) && !ResolveSymlink ( sTimeZoneFile, sResolved ) )
+	if ( !sTimeZoneDir.Ends("/") )
+		sTimeZoneDir.SetSprintf ( "%s/", sTimeZoneDir.cstr() );
+
+	CSphString sTimeZonePath;
+	if ( IsPathAbsolute(sTimeZoneFile) )
+		sTimeZonePath = sTimeZoneFile;
+	else
+		sTimeZonePath.SetSprintf ( "%s%s", sTimeZoneDir.cstr(), sTimeZoneFile.cstr() );
+
+	bool bExists = false, bSymlink = false;
+	std::tie ( bExists, bSymlink ) = IsSymlink(sTimeZonePath);
+	if ( !bExists )
 	{
 		sWarning = sPrefix;
 		return "UTC";
 	}
 
-	sTimeZoneFile = sResolved;
-
-	if ( IsPathAbsolute(sTimeZoneFile) )
+	if ( bSymlink )
 	{
-		if ( !sphFileExists(sTimeZoneFile) )
+		CSphString sResolved;
+		if ( !ResolveSymlink ( sTimeZonePath, sResolved ) )
 		{
 			sWarning = sPrefix;
 			return "UTC";
 		}
 
-		if ( sTimeZoneFile.Begins ( sTimeZoneDir.cstr() ) )
-			return sTimeZoneFile.SubString ( sTimeZoneDir.Length(), sTimeZoneFile.Length()-sTimeZoneDir.Length() );
+		sTimeZonePath = sResolved;
+	}
 
+	sTimeZonePath = RealPath(sTimeZonePath);
+	if ( !sphFileExists(sTimeZonePath) )
+	{
 		sWarning = sPrefix;
 		return "UTC";
 	}
 
-	if ( !sTimeZoneDir.Ends("/") )
-		sTimeZoneDir.SetSprintf ( "%s/", sTimeZoneDir.cstr() );
-
-	CSphString sCheck;
-	sCheck.SetSprintf ( "%s%s", sTimeZoneDir.cstr(), sTimeZoneFile.cstr() );
-	if ( sphFileExists(sCheck) )
-		return sTimeZoneFile;
+	if ( sTimeZonePath.Begins ( sTimeZoneDir.cstr() ) )
+		return sTimeZonePath.SubString ( sTimeZoneDir.Length(), sTimeZonePath.Length()-sTimeZoneDir.Length() );
 
 	sWarning = sPrefix;
 	return "UTC";

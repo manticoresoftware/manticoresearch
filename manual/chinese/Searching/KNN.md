@@ -1,10 +1,10 @@
 # K近邻向量搜索
 
-Manticore Search 支持将您的机器学习模型生成的嵌入向量添加到每个文档中，然后对其进行近邻搜索。这使您能够构建相似度搜索、推荐、语义搜索和基于自然语言处理算法的相关性排序等功能，还包括图像、视频和声音搜索等。
+Manticore Search 支持将机器学习模型生成的嵌入向量添加到每个文档中，然后基于这些向量进行最近邻搜索。这使您能够构建诸如相似性搜索、推荐系统、语义搜索和基于自然语言处理算法的相关性排序功能，此外还包括图像、视频和声音搜索等。
 
 ## 什么是嵌入向量？
 
-嵌入向量是一种将数据（如文本、图像或声音）表示为高维空间中向量的方法。这些向量经过设计，使它们之间的距离能够反映所代表数据的相似性。这个过程通常使用诸如词嵌入（例如 Word2Vec、BERT）用于文本，或神经网络用于图像等算法。向量空间的高维特性，即每个向量具有多个分量，允许表示复杂且细腻的项目间关系。相似性通过这些向量之间的距离来衡量，常用的方法包括欧几里得距离或余弦相似度。
+嵌入向量是一种表示数据（如文本、图像或声音）的方法，将其表示为高维空间中的向量。这些向量经过设计，使得它们之间的距离能够反映所代表数据的相似性。此过程通常采用诸如词嵌入（例如 Word2Vec、BERT）等算法用于文本，或者神经网络用于图像。向量空间的高维特性——每个向量包含多个分量——使得能够表示项目之间复杂且细致的关系。其相似性通过向量之间的距离来衡量，通常使用欧几里得距离或余弦相似度等方法。
 
 Manticore Search 利用 HNSW 库实现了 k 近邻（KNN）向量搜索功能。该功能是 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) 的一部分。
 
@@ -55,7 +55,124 @@ table test_vec {
 
 ### 插入向量数据
 
-创建表之后，您需要插入向量数据，确保其维度与建表时指定的维度一致。您也可以插入空向量；这意味着该文档将从向量搜索结果中排除。
+#### 自动嵌入（推荐）
+
+处理向量数据最简单的方法是使用**自动嵌入**。通过此功能，您只需带有 `MODEL_NAME` 和 `FROM` 参数创建表，然后插入文本数据——Manticore 会自动为您生成嵌入向量。
+
+##### 创建带有自动嵌入的表
+
+创建支持自动嵌入的表时，需要指定：
+- `MODEL_NAME`：使用的嵌入模型
+- `FROM`：指定用于生成嵌入的字段（为空表示使用所有文本/字符串字段）
+
+**支持的嵌入模型：**
+- **Sentence Transformers**：任意[适用的基于 BERT 的 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如 `sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。创建表时，Manticore 会自动下载模型。
+- **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002`——需要指定 `API_KEY='<OPENAI_API_KEY>'` 参数
+- **Voyage**：Voyage AI 嵌入模型——需要指定 `API_KEY='<VOYAGE_API_KEY>'` 参数
+- **Jina**：Jina AI 嵌入模型——需要指定 `API_KEY='<JINA_API_KEY>'` 参数
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+使用 sentence-transformers（无需 API 密钥）
+```sql
+CREATE TABLE products (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 OpenAI（需要 API_KEY 参数）
+```sql
+CREATE TABLE products_openai (
+    title TEXT,
+    description TEXT, 
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
+);
+```
+
+使用所有文本字段生成嵌入（FROM 为空）
+```sql
+CREATE TABLE products_all (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
+);
+```
+
+<!-- end -->
+
+##### 使用自动嵌入插入数据
+
+<!-- example inserting_embeddings -->
+
+使用自动嵌入时，**不要在 INSERT 语句中指定向量字段**。嵌入向量会自动根据 `FROM` 参数中指定的文本字段生成。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+仅插入文本数据——嵌入自动生成
+```sql
+INSERT INTO products (title) VALUES 
+('machine learning artificial intelligence'),
+('banana fruit sweet yellow');
+```
+
+插入多个字段——若 FROM='title,description'，两者都用于生成嵌入  
+```sql
+INSERT INTO products_openai (title, description) VALUES
+('smartphone', 'latest mobile device with advanced features'),
+('laptop', 'portable computer for work and gaming');
+```
+
+插入空向量（该文档将被排除在向量搜索之外）
+```sql
+INSERT INTO products (title, embedding_vector) VALUES 
+('no embedding item', ());
+```
+
+<!-- end -->
+
+##### 使用自动嵌入搜索
+
+<!-- example embeddings_search -->
+搜索方法相同——提供查询文本，Manticore 会自动生成嵌入并查找相似文档：
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine learning');
+```
+
+<!-- response SQL -->
+
+```sql
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 | 0.12345678 |
+|    2 | 0.87654321 |
++------+------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
+
+#### 手动向量插入
+
+<!-- example manual_vector -->
+或者，您也可以手动插入预先计算好的向量数据，确保其维度与创建表时指定的一致。您还可以插入空向量，这意味着该文档将被排除在向量搜索结果之外。
 
 <!-- intro -->
 ##### SQL:

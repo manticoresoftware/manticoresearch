@@ -3,7 +3,6 @@ run-name: 🔬 Test ${{ github.sha }}
 
 #on: workflow_call
 
-
 on:
   push:
     branches:
@@ -177,7 +176,6 @@ jobs:
       results_name: "Linux release test results"
       timeout: 10
 
-
   pack_jammy_cache_check:
     needs: changes
     name: Jammy x86_64 package [check cache]
@@ -311,6 +309,49 @@ jobs:
       artifact_name: manticore_test_kit.img
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}
+
+  # NEW JOB: Save CLT test artifacts
+  clt_artifacts:
+    name: Save CLT test artifacts
+    needs: clt
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download docker image
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        continue-on-error: true
+        with:
+          name: manticore_test_kit.img
+          path: .
+      
+      - name: Load docker image
+        run: docker load -i manticore_test_kit.img
+        continue-on-error: true
+      
+      - name: Extract test files from container
+        run: |
+          # Create container from image
+          CONTAINER_ID=$(docker create ghcr.io/${{ github.repository_owner }}/manticoresearch:test-kit-*)
+          
+          # Create directory for artifacts
+          mkdir -p clt_test_artifacts
+          
+          # Copy test result files
+          docker cp $CONTAINER_ID:/tmp/test_scale_columnar.txt clt_test_artifacts/ 2>/dev/null || true
+          docker cp $CONTAINER_ID:/tmp/test_scale_rowwise.txt clt_test_artifacts/ 2>/dev/null || true
+          docker cp $CONTAINER_ID:/tmp/test_*.txt clt_test_artifacts/ 2>/dev/null || true
+          
+          # Clean up
+          docker rm $CONTAINER_ID
+        continue-on-error: true
+      
+      - name: Upload CLT test files
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clt-test-files
+          path: clt_test_artifacts/
+          retention-days: 7
 
   test_kit_docker_push:
     if: always() && needs.changes.outputs.source == 'true'

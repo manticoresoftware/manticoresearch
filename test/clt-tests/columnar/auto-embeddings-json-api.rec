@@ -1,0 +1,108 @@
+Test auto-embeddings functionality via JSON API
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+Install jq for JSON parsing
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– comment –––
+Create table with auto-embeddings
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_json (
+    title TEXT,
+    content TEXT,
+    embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title,content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– comment –––
+Verify table structure
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json" | grep -o "knn_dims='384'"
+––– output –––
+knn_dims='384'
+––– comment –––
+Insert via JSON API (returns null but works)
+––– input –––
+curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":1,"doc":{"title":"machine learning","content":"neural networks"}}' | jq -r 'if ._id then ._id else "inserted" end'
+––– output –––
+#!/1|inserted/!#
+––– comment –––
+Verify document exists and has embedding
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_json WHERE KNN(embedding, 1, 'machine learning neural networks')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– comment –––
+Bulk insert test
+––– input –––
+curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"test_json","id":2,"doc":{"title":"computer vision","content":"image recognition"}}}
+{"insert":{"index":"test_json","id":3,"doc":{"title":"NLP","content":"text processing"}}}
+' | jq -r 'if .items then "bulk_ok" else "bulk_fail" end'
+––– output –––
+bulk_ok
+––– comment –––
+Verify bulk inserted documents have embeddings
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+––– comment –––
+Test KNN search via JSON API
+––– input –––
+curl -s -X POST http://localhost:9308/search -d '{"index":"test_json","knn":{"field":"embedding","query_text":"artificial intelligence","k":2}}' | jq -r '.hits.total'
+––– output –––
+null
+––– comment –––
+Replace document (regenerates embedding)
+––– input –––
+curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r 'if ._id then "replaced" else "replace_ok" end'
+––– output –––
+#!/replaced|replace_ok/!#
+––– comment –––
+Verify embedding was regenerated
+––– input –––
+mysql -h0 -P9306 -e "SELECT title FROM test_json WHERE id=1 AND KNN(embedding, 1, 'updated ML networks')"
+––– output –––
++------------+
+| title      |
++------------+
+| updated ML |
++------------+
+––– comment –––
+Test deterministic embeddings
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_json (id, title, content) VALUES (100, 'test', 'data')";
+curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":101,"doc":{"title":"test","content":"data"}}' > /dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json WHERE id=100" > /tmp/v1.txt
+mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json WHERE id=101" > /tmp/v2.txt
+diff -q /tmp/v1.txt /tmp/v2.txt > /dev/null && echo "Vectors identical" || echo "Vectors differ"
+––– output –––
+Vectors identical
+––– comment –––
+Final verification
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+

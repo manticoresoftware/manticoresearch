@@ -1,0 +1,522 @@
+Test edge cases and error conditions for auto-embeddings
+
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+Test empty values in FROM fields
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty (
+    title TEXT,
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title, content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, content) VALUES (1, 'Content without title')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, title) VALUES (2, 'Title without content')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, title, content) VALUES (4, '', 'Non-empty content')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, title, content) VALUES (5, '', '')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_unicode (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content_text'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (1, '🔥 Machine Learning is awesome! 🚀💻')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (2, '机器学习和人工智能的未来')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (3, 'التعلم الآلي والذكاء الاصطناعي')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (4, 'English текст 日本語 mixed المختلط')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (5, '@#$%^&*()_+-=[]{}|;:<>?,./~\`')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_unicode WHERE KNN(vec, 2, '机器学习 🚀')"
+––– output –––
++------+
+| id   |
++------+
+|    2 |
+|    3 |
+|    4 |
+|    1 |
+|    5 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (100, 'Text with SQL: DROP TABLE test; SELECT * FROM users;')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT content_text FROM test_unicode WHERE id=100"
+––– output –––
++------------------------------------------------------+
+| content_text                                         |
++------------------------------------------------------+
+| Text with SQL: DROP TABLE test; SELECT * FROM users; |
++------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (101, 'Line 1
+Line 2
+	Tabbed line
+Line 4')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (102, '<html><body><h1>Title</h1><script>alert(1)</script></body></html>')"; echo $?
+––– output –––
+0
+––– input –––
+HUGE_TEXT=$(python3 -c "print('neural network ' * 1000)")
+mysql -h0 -P9306 -e "CREATE TABLE test_huge (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content_text'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_huge (id, content_text) VALUES (1, '$HUGE_TEXT')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_concurrent (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do
+    mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title) VALUES (999, 'Concurrent insert $i')" 2>&1 &
+done
+wait
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id=999"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_auto_dims (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content_text'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_auto_dims"
+––– output –––
++----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table          | Create Table                                                                                                                                                                                             |
++----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| test_auto_dims | CREATE TABLE test_auto_dims (
+id bigint,
+content_text text,
+vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+) engine='columnar' |
++----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_rapid (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content_text'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+for i in $(seq 1 20); do
+    mysql -h0 -P9306 -e "REPLACE INTO test_rapid (id, content_text) VALUES (1, 'Iteration $i')" 2>/dev/null
+done
+mysql -h0 -P9306 -e "SELECT content_text FROM test_rapid WHERE id=1"
+––– output –––
++--------------+
+| content_text |
++--------------+
+| Iteration 20 |
++--------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'vec'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_circular (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='vec'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_circular': prealloc: embedding source attribute 'vec' is not a string
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bad_from (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='nonexistent_field'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_bad_from': prealloc: embedding source 'nonexistent_field' not found
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM=''
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_empty_from': 'from' setting empty for KNN attribute 'vec'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid_model (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='non-existent-model/invalid-name'
+    FROM='content_text'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_invalid_model': prealloc: Failed to download model configuration
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_prefix (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='all-MiniLM-L6-v2'
+    FROM='content_text'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_no_prefix': prealloc: Failed to download model configuration
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty_row (
+    title TEXT,
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title, content'
+) engine='rowwise'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty_row (id, content) VALUES (1, 'Content without title')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_empty_row WHERE KNN(vec, 1, 'test query')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_compare_row (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+) engine='rowwise'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_compare_col (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_compare_row (id, title) VALUES (1, 'Machine learning algorithms')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_compare_col (id, title) VALUES (1, 'Machine learning algorithms')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_compare_row WHERE KNN(vec, 1, 'machine learning')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_compare_col WHERE KNN(vec, 1, 'machine learning')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– input –––
+manticore-load --quiet --json --init="CREATE TABLE test_scale_columnar (
+    id BIGINT,
+    title TEXT,
+    description TEXT,
+    category STRING ATTRIBUTE,
+    age INT,
+    salary FLOAT,
+    discount FLOAT,
+    is_active BOOL,
+    last_login TIMESTAMP,
+    product_codes MULTI,
+    large_values MULTI64,
+    additional_info JSON,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title, description'
+) engine='columnar'" --load="INSERT INTO test_scale_columnar (id, title, description, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info) VALUES (<increment>, 'Document title <increment>', 'Document description <increment>', 'cat_<increment>', <int/18/65>, <float/1000.0/100000.0>, <float/0.0/50.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/5/100/999>), (<array/1/3/1000000/9999999>), '{\"rating\":<int/1/5>,\"verified\":<int/0/1>}')" --batch-size=500 --threads=2 --total=5000
+––– output –––
+{
+    "threads": %{NUMBER},
+    "batch_size": %{NUMBER},
+    "time": "%{NUMBER}:%{NUMBER}",
+    "total_operations": 5000,
+    "operations_per_second": %{NUMBER},
+    "qps": {
+        "avg": #!/[0-9]+(\.[0-9]+)?/!#,
+        "p99": %{NUMBER},
+        "p95": %{NUMBER},
+        "p5": %{NUMBER},
+        "p1": %{NUMBER}
+    },
+    "latency": {
+        "avg": #!/[0-9]+(\.[0-9]+)?/!#,
+        "p50": %{NUMBER},
+        "p95": %{NUMBER},
+        "p99": %{NUMBER}
+    }
+}
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_scale_columnar"
+––– output –––
++-------+
+| total |
++-------+
+|  5000 |
++-------+
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE test_scale_columnar;"
+––– output –––
++-----------------+--------------+-------------------------+
+| Field           | Type         | Properties              |
++-----------------+--------------+-------------------------+
+| id              | bigint       | columnar fast_fetch     |
+| title           | text         | indexed stored          |
+| description     | text         | indexed stored          |
+| category        | string       | columnar fast_fetch     |
+| age             | uint         | columnar fast_fetch     |
+| salary          | float        | columnar fast_fetch     |
+| discount        | float        | columnar fast_fetch     |
+| is_active       | bool         | columnar fast_fetch     |
+| last_login      | timestamp    | columnar fast_fetch     |
+| product_codes   | mva          | columnar fast_fetch     |
+| large_values    | mva64        | columnar fast_fetch     |
+| additional_info | json         |                         |
+| vec             | float_vector | columnar knn fast_fetch |
++-----------------+--------------+-------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_scale_columnar ORDER BY id ASC LIMIT 100" > /tmp/test_scale_columnar.txt
+––– output –––
+––– input –––
+md5sum /tmp/test_scale_columnar.txt
+––– output –––
+054388f569b2d9089be71ad8e3bc6301  /tmp/test_scale_columnar.txt
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_columnar WHERE KNN(vec, 3, 'Document title 100') LIMIT 3"
+––– output –––
++-------+----------------------+-----------+------------+
+| id    | title                | category  | knn_dist() |
++-------+----------------------+-----------+------------+
+| 10012 | Document title 10011 | cat_10009 | 0.28152120 |
+| 10020 | Document title 10019 | cat_10017 | 0.28869095 |
+| 10052 | Document title 10051 | cat_10049 | 0.31627020 |
++-------+----------------------+-----------+------------+
+––– input –––
+manticore-load --quiet --json --init="CREATE TABLE test_scale_rowwise (
+    id BIGINT,
+    title TEXT,
+    description TEXT,
+    category STRING ATTRIBUTE,
+    age INT,
+    salary FLOAT,
+    discount FLOAT,
+    is_active BOOL,
+    last_login TIMESTAMP,
+    product_codes MULTI,
+    large_values MULTI64,
+    additional_info JSON,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title, description'
+) engine='rowwise'" --load="INSERT INTO test_scale_rowwise (id, title, description, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info) VALUES (<increment>, 'Document title <increment>', 'Document description <increment>', 'cat_<increment>', <int/18/65>, <float/1000.0/100000.0>, <float/0.0/50.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/5/100/999>), (<array/1/3/1000000/9999999>), '{\"rating\":<int/1/5>,\"verified\":<int/0/1>}')" --batch-size=500 --threads=2 --total=5000
+––– output –––
+{
+    "threads": %{NUMBER},
+    "batch_size": %{NUMBER},
+    "time": "%{NUMBER}:%{NUMBER}",
+    "total_operations": 5000,
+    "operations_per_second": %{NUMBER},
+    "qps": {
+        "avg": #!/[0-9]+(\.[0-9]+)?/!#,
+        "p99": %{NUMBER},
+        "p95": %{NUMBER},
+        "p5": %{NUMBER},
+        "p1": %{NUMBER}
+    },
+    "latency": {
+        "avg": #!/[0-9]+(\.[0-9]+)?/!#,
+        "p50": %{NUMBER},
+        "p95": %{NUMBER},
+        "p99": %{NUMBER}
+    }
+}
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_scale_rowwise"
+––– output –––
++-------+
+| total |
++-------+
+|  5000 |
++-------+
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE test_scale_rowwise;"
+––– output –––
++-----------------+--------------+----------------+
+| Field           | Type         | Properties     |
++-----------------+--------------+----------------+
+| id              | bigint       |                |
+| title           | text         | indexed stored |
+| description     | text         | indexed stored |
+| category        | string       |                |
+| age             | uint         |                |
+| salary          | float        |                |
+| discount        | float        |                |
+| is_active       | bool         |                |
+| last_login      | timestamp    |                |
+| product_codes   | mva          |                |
+| large_values    | mva64        |                |
+| additional_info | json         |                |
+| vec             | float_vector | knn            |
++-----------------+--------------+----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_scale_rowwise ORDER BY id ASC LIMIT 100" > /tmp/test_scale_rowwise.txt
+––– output –––
+––– input –––
+md5sum /tmp/test_scale_rowwise.txt
+––– output –––
+61a59d3c01ffad469297bc29c2277e3d  /tmp/test_scale_rowwise.txt
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_rowwise WHERE KNN(vec, 3, 'Document title 100') LIMIT 3"
+––– output –––
++-------+----------------------+-----------+------------+
+| id    | title                | category  | knn_dist() |
++-------+----------------------+-----------+------------+
+| 10012 | Document title 10011 | cat_10009 | 0.28152120 |
+| 10020 | Document title 10019 | cat_10017 | 0.28869095 |
+| 10052 | Document title 10051 | cat_10049 | 0.31627020 |
++-------+----------------------+-----------+------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_batch_perf (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+START_TIME=$(date +%s)
+mysql -h0 -P9306 -e "INSERT INTO test_batch_perf (id, content) VALUES
+(1, 'First text'), (2, 'Second text'), (3, 'Third text'),
+(4, 'Fourth text'), (5, 'Fifth text')"
+END_TIME=$(date +%s)
+echo "Batch insert time: $((END_TIME - START_TIME)) seconds"
+––– output –––
+Batch insert time: %{NUMBER} seconds
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE perf_test_row (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='rowwise'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE perf_test_col (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+START_TIME=$(date +%s%N)
+for i in {1..10}; do
+    mysql -h0 -P9306 -e "INSERT INTO perf_test_row (id, content) VALUES ($i, 'Test content $i')" 2>/dev/null
+done
+END_TIME=$(date +%s%N)
+echo "Row-wise 10 inserts: $(( (END_TIME - START_TIME) / 1000000 )) ms"
+––– output –––
+Row-wise 10 inserts: %{NUMBER} ms
+––– input –––
+START_TIME=$(date +%s%N)
+for i in {1..10}; do
+    mysql -h0 -P9306 -e "INSERT INTO perf_test_col (id, content) VALUES ($i, 'Test content $i')" 2>/dev/null
+done
+END_TIME=$(date +%s%N)
+echo "Columnar 10 inserts: $(( (END_TIME - START_TIME) / 1000000 )) ms"
+––– output –––
+Columnar 10 inserts: %{NUMBER} ms
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty_search (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'";
+mysql -h0 -P9306 -e "SELECT id FROM test_empty_search WHERE KNN(vec, 5, 'search query')"; echo $?
+––– output –––
+0

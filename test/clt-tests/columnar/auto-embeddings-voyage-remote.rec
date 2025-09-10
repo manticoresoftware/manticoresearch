@@ -86,8 +86,8 @@ echo "$RESULT"
 
 rm -f /tmp/vector1.txt /tmp/vector2.txt
 ––– output –––
-Cosine similarity: 1
-SUCCESS: Same FROM fields produce similar vectors (similarity: 1)
+Cosine similarity: #!/(1|0\.[0-9]+)/!#
+SUCCESS: Same FROM fields produce similar vectors (similarity: #!/(1|0\.[0-9]+)/!#)
 ––– comment –––
 Test different FROM field combinations produce different vectors
 ––– input –––

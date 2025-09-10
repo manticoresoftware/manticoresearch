@@ -38,6 +38,32 @@ create table t;
 select * from t option scroll = '!';
 drop table t;
 
+<!-- error on int64 ids -->
+create table test ( name string );
+insert into test (id, name) values (1, 'A'), (2, 'B'), (3, 'C'), (4, 'D'), (11453019889550859933, 'E'), (5, 'F');
+select * from test order by name asc, id desc limit 5;
+show scroll;
+select * from test order by name asc, id desc limit 5 option scroll='eyJvcmRlcl9ieV9zdHIiOiJuYW1lIGFzYywgaWQgZGVzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoibmFtZSIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6IkUiLCJ0eXBlIjoic3RyaW5nIn0seyJhdHRyIjoiaWQiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTE0NTMwMTk4ODk1NTA4NTk5MzMsInR5cGUiOiJpbnQifV19';
+drop table test;
+
+<!-- more issues with int64 ids -->
+drop table if exists test_log;
+create table test_log (id bigint,req_time TIMESTAMP,sp_id string);
+insert into test_log values (5767972917807677442, 1751422494, '200002');
+insert into test_log values (5767972917807677443, 1751422495, '200002');
+insert into test_log values (5767972917807677444, 1751422496, '200002');
+insert into test_log values (5767972917807677445, 1751422497, '200002');
+insert into test_log values (5767972917807677441, 1751422498, '200002');
+select id from test_log where sp_id='200002' and req_time>1751299200 and req_time&lt;1753977600 order by id asc limit 2;
+show scroll;
+select id from test_log where sp_id='200002' and req_time>1751299200 and req_time&lt;1753977600 order by id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo1NzY3OTcyOTE3ODA3Njc3NDQyLCJ0eXBlIjoiaW50In1dfQ==';
+show scroll;
+select id from test_log where sp_id='200002' and req_time>1751299200 and req_time&lt;1753977600 order by id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo1NzY3OTcyOTE3ODA3Njc3NDQ0LCJ0eXBlIjoiaW50In1dfQ==';
+show scroll;
+select id from test_log where sp_id='200002' and req_time>1751299200 and req_time&lt;1753977600 order by id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo1NzY3OTcyOTE3ODA3Njc3NDQ1LCJ0eXBlIjoiaW50In1dfQ==';
+
+drop table test_log;
+
 </sphinxql>
 </queries>
 

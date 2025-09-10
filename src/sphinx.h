@@ -517,7 +517,7 @@ struct KnnSearchSettings_t
 	bool			m_bRescore = false;		///< KNN rescoring
 	float			m_fOversampling = 1.0f;	///< KNN oversampling
 	CSphVector<float> m_dVec;				///< KNN anchor vector
-	CSphString		m_sEmbStr;				///< string to generate embeddings from
+	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
 };
 
 /// search query. Pure struct, no member functions
@@ -549,7 +549,8 @@ struct CSphQuery
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bSimplify = true;			///< whether to apply boolean simplification
+	std::optional<bool> m_bSimplify;			///< whether to apply boolean simplification
+	static constexpr bool m_bDefaultSimplify = true;
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
@@ -1332,6 +1333,7 @@ public:
 	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
+	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 public:

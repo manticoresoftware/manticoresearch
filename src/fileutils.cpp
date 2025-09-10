@@ -883,32 +883,32 @@ CSphString RealPath ( const CSphString& sPath )
 }
 
 
-bool IsSymlink ( const CSphString & sFile )
+std::pair<bool,bool> IsSymlink ( const CSphString & sFile )
 {
 #if _WIN32
 	DWORD uAttrs = GetFileAttributes ( sFile.cstr() );
 	if ( uAttrs==INVALID_FILE_ATTRIBUTES )
-		return false;
+		return { false, false };
 
 	if ( !( uAttrs & FILE_ATTRIBUTE_REPARSE_POINT ) )
-		return false;
+		return { false, false };
 
 	WIN32_FIND_DATA tFindData;
 	HANDLE hFind = FindFirstFile ( sFile.cstr(), &tFindData );
 	if ( hFind==INVALID_HANDLE_VALUE )
-		return false;
+		return { false, false };
 
 	bool bSymlink = tFindData.dwReserved0==IO_REPARSE_TAG_SYMLINK;
 	FindClose(hFind);
 
-	return bSymlink;
+	return { true, bSymlink };
 #else
 	struct_stat tStat = {0};
 
 	if ( lstat ( sFile.cstr(), &tStat ) )
-		return false;	// not found
+		return { false, false };	// not found
 
-	return S_ISLNK(tStat.st_mode);
+	return { true, S_ISLNK(tStat.st_mode) };
 #endif
 }
 

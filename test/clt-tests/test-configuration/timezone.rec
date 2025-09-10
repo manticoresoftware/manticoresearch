@@ -107,10 +107,10 @@ mysql -h0 -P9306 -e "select hour(now()) as utc_hour\G" | grep "utc_hour:" | awk 
 ––– comment –––
 Test system files /etc/localtime and /etc/timezone
 ––– input –––
-if [ -L /etc/localtime ]; then cp -P /etc/localtime /tmp/localtime.backup; fi
+cp -P /etc/localtime /tmp/localtime.backup
 ––– output –––
 ––– input –––
-if [ -f /etc/timezone ]; then cp /etc/timezone /tmp/timezone.backup; fi
+cp /etc/timezone /tmp/timezone.backup
 ––– output –––
 ––– input –––
 searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
@@ -159,17 +159,10 @@ searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
-cat > /tmp/manticore_tz.conf << 'EOF'
-searchd {
-    timezone = America/New_York
-    listen = 9306:mysql41
-    listen = 9308:http
-    pid_file = /var/run/manticore/searchd.pid
-    data_dir = /var/lib/manticore
-    log = /var/log/manticore/searchd.log
-    query_log = /var/log/manticore/query.log
-}
-EOF
+cp /etc/manticoresearch/manticore.conf /tmp/manticore_tz.conf
+––– output –––
+––– input –––
+sed -i '/^searchd {/a\    timezone = America/New_York' /tmp/manticore_tz.conf
 ––– output –––
 ––– input –––
 searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
@@ -249,12 +242,9 @@ mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 mysql -h0 -P9306 -e "set global timezone='EST5EDT';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}' > /tmp/est_format.txt
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
-––– input –––
-echo "EST5EDT format result: $(cat /tmp/est_format.txt)"
-––– output –––
-#!/EST5EDT format result: .*/!#
+        Value: EST5EDT
 ––– input –––
 mysql -h0 -P9306 -e "set global timezone='Asia/Kolkata';"
 ––– output –––
@@ -276,10 +266,10 @@ searchd --stopwait --config /tmp/manticore_tz.conf 2>&1 | grep "successfully sen
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
-if [ -f /tmp/localtime.backup ]; then mv /tmp/localtime.backup /etc/localtime; fi
+mv /tmp/localtime.backup /etc/localtime
 ––– output –––
 ––– input –––
-if [ -f /tmp/timezone.backup ]; then mv /tmp/timezone.backup /etc/timezone; fi
+mv /tmp/timezone.backup /etc/timezone
 ––– output –––
 ––– input –––
 mv /tmp/manticore.conf.backup /etc/manticoresearch/manticore.conf
@@ -287,15 +277,3 @@ mv /tmp/manticore.conf.backup /etc/manticoresearch/manticore.conf
 ––– input –––
 rm -f /tmp/manticore_tz.conf /tmp/*.txt
 ––– output –––
-––– input –––
-searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
-––– output –––
-––– input –––
-sleep 2
-––– output –––
-––– input –––
-echo "Extended timezone test completed"
-––– output –––
-Extended timezone test completed
-
-

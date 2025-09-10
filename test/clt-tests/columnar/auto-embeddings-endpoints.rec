@@ -61,14 +61,6 @@ curl -s "http://localhost:9308/cli?select%20id,%20title%20from%20emb_test%20wher
 | 2  | computer vision  |
 +----+------------------+
 ––– comment –––
-CLI_JSON endpoint with distance
-––– input –––
-curl -s "http://localhost:9308/cli_json?select%20id,%20title,%20ROUND(@knn_dist,6)%20as%20distance%20from%20emb_test%20where%20knn(vec,%201,%20'learning')" | jq -r '.[0].data[0] | "ID: \(.id)\nTitle: \(.title)\nDistance: \(.distance)"'
-––– output –––
-ID: 1
-Title: machine learning
-Distance: 1.082378
-––– comment –––
 SQL mode=raw endpoint
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select count(*) from emb_test where knn(vec, 2, 'neural networks')" | jq -r '.[0].data[0]."count(*)"'

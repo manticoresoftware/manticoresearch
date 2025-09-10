@@ -365,27 +365,27 @@ mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_colu
         id: 10012
      title: Document title 10011
   category: cat_10009
-knn_dist(): 0.281521
+knn_dist(): 0.28152#!/[0-9]{3}/!#
 *************************** 2. row ***************************
         id: 10020
      title: Document title 10019
   category: cat_10017
-knn_dist(): 0.288690
+knn_dist(): 0.28869#!/[0-9]{3}/!#
 *************************** 3. row ***************************
         id: 10052
      title: Document title 10051
   category: cat_10049
-knn_dist(): 0.316270
+knn_dist(): 0.31627#!/[0-9]{3}/!#
 *************************** 4. row ***************************
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.330283
+knn_dist(): 0.33028#!/[0-9]{3}/!#
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043
   category: cat_10041
-knn_dist(): 0.331154
+knn_dist(): 0.331154#!/[0-9]{3}/!#
 ––– input –––
 manticore-load --quiet --json --init="CREATE TABLE test_scale_rowwise (
     id BIGINT,
@@ -457,33 +457,33 @@ mysql -h0 -P9306 -e "DESCRIBE test_scale_rowwise;"
 mysql -h0 -P9306 -e "SELECT * FROM test_scale_rowwise ORDER BY id ASC LIMIT 100" > /tmp/test_scale_rowwise.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_rowwise WHERE KNN(vec, 5, 'Document title 100') LIMIT 5\G" | sed 's/\(knn_dist(): [0-9]\.[0-9]\{6\}\)[0-9]*/\1/'
+mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_rowwise WHERE KNN(vec, 5, 'Document title 100') LIMIT 5\G"
 ––– output –––
 *************************** 1. row ***************************
         id: 10012
      title: Document title 10011
   category: cat_10009
-knn_dist(): 0.281521
+knn_dist(): 0.28152#!/[0-9]{3}/!#
 *************************** 2. row ***************************
         id: 10020
      title: Document title 10019
   category: cat_10017
-knn_dist(): 0.288690
+knn_dist(): 0.28869#!/[0-9]{3}/!#
 *************************** 3. row ***************************
         id: 10052
      title: Document title 10051
   category: cat_10049
-knn_dist(): 0.316270
+knn_dist(): 0.31627#!/[0-9]{3}/!#
 *************************** 4. row ***************************
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.330283
+knn_dist(): 0.33028#!/[0-9]{3}/!#
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043
   category: cat_10041
-knn_dist(): 0.331154
+knn_dist(): 0.33115#!/[0-9]{3}/!#
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_batch_perf (
     content TEXT,

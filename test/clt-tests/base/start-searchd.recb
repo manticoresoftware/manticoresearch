@@ -5,6 +5,3 @@ rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null;
 if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
 ––– output –––
 Accepting connections!
-––– input –––
-sleep 3
-––– output –––

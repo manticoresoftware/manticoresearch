@@ -1058,7 +1058,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 			if ( uMasterVer>=26 )
 			{
-				bool bHasEmb = !!tReq.GetInt();
+				bool bHasEmb = !!tReq.GetByte();
 				if ( bHasEmb )
 					tKNN.m_sEmbStr = tReq.GetString();
 			}

@@ -26,9 +26,9 @@ Check that the table was created and not display API_KEY
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_model_remote"
 ––– output –––
-+------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table            | Create Table                                                                                                                                                                                              |
-+------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table             | Create Table                                                                                                                                                                                                             |
++-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | test_model_remote | CREATE TABLE test_model_remote (
 id bigint,
 title text,
@@ -36,7 +36,7 @@ content text,
 description text,
 embedding float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
 ) |
-+------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– comment –––
 Test data insertion with auto-generated vectors
 ––– input –––
@@ -78,14 +78,15 @@ mysql -h0 -P9306 -e "CREATE TABLE test_model_invalid_field (title TEXT, embeddin
 ––– comment –––
 Test manual vector insertion without auto-generation
 ––– input –––
-if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_model_no_from'" | grep -q test_model_no_from; then mysql -h0 -P9306 -e "INSERT INTO test_model_no_from (id, title, embedding) VALUES(1, 'test title', '(0.1, 0.2, 0.3, 0.4, 0.5)')"; echo "insert_result: $?"; else echo "insert_result: skipped (table not created)"; fi
+mysql -h0 -P9306 -e "INSERT INTO test_model_no_auto (id, title, embedding) VALUES(1, 'test title', '(0.1, 0.2, 0.3, 0.4, 0.5)')"
 ––– output –––
-#!/(insert_result: (0|ERROR.*dimension.*mismatch.*)|insert_result: skipped \(table not created\))/!#
-––– comment –––
 ––– comment –––
 Show table structure to verify sentence-transformers model configuration
 ––– input –––
-if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_model_no_from'" | grep -q test_model_no_from; then mysql -h0 -P9306 -e "SHOW CREATE TABLE test_model_no_from"; else echo "table_structure: skipped (table not created)"; fi
+mysql -h0 -P9306 -e "SELECT COUNT(*) as record_count FROM test_model_no_auto"
 ––– output –––
-#!/(.*CREATE TABLE test_model_no_from.*model_name='sentence-transformers\\/all-MiniLM-L6-v2'.*engine='columnar'.*|table_structure: skipped \\(table not created\\))/!#
-
++--------------+
+| record_count |
++--------------+
+|            1 |
++--------------+

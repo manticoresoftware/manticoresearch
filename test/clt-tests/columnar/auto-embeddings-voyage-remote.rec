@@ -3,7 +3,7 @@ Test remote VoyageAI embeddings API integration with auto-generation from text f
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––
-––– block ./base –––
+––– block: ./base –––
 ––– comment –––
 Test error case: Invalid VoyageAI model name
 ––– input –––

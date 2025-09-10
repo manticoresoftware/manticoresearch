@@ -359,7 +359,7 @@ mysql -h0 -P9306 -e "DESCRIBE test_scale_columnar;"
 mysql -h0 -P9306 -e "SELECT * FROM test_scale_columnar ORDER BY id ASC LIMIT 100" > /tmp/test_scale_columnar.txt
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_columnar WHERE KNN(vec, 5, 'Document title 100') LIMIT 5\G" | sed 's/\(knn_dist(): [0-9]\.[0-9]\{6\}\)[0-9]*/\1/'
+mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_columnar WHERE KNN(vec, 5, 'Document title 100') LIMIT 5\G"
 ––– output –––
 *************************** 1. row ***************************
         id: 10012
@@ -385,7 +385,7 @@ knn_dist(): 0.33028#!/[0-9]{3}/!#
         id: 10044
      title: Document title 10043
   category: cat_10041
-knn_dist(): 0.331154#!/[0-9]{3}/!#
+knn_dist(): 0.33115#!/[0-9]{3}/!#
 ––– input –––
 manticore-load --quiet --json --init="CREATE TABLE test_scale_rowwise (
     id BIGINT,

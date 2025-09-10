@@ -75,9 +75,9 @@ true
 ––– comment –––
 JSON API search limitation - query_text not supported
 ––– input –––
-curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query_text":"quantum","k":1}}' | jq -r '.error' | grep -o "query_vector.*missing"
+curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query_text":"quantum","k":1}}'
 ––– output –––
-query_vector" property missing
+{"error":"\"query_vector\" property missing"}
 ––– comment –––
 === PART 3: RAMCHUNK VS DISK CHUNK BEHAVIOR ===
 ––– comment –––

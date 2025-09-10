@@ -55,7 +55,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as record_count FROM test_voyage_remote WHE
 |            1 |
 +--------------+
 ––– comment –––
-Test vector generation consistency - the same input should produce the same vector MD5. We try to cut precision due to storing in Manticore with a lower one than VoyageAI provides, so there may be differences in some cases.
+We check consistency by using cosine similarity to compare vectors because it's not deterministic and we want to avoid floating point precision issues.
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_voyage_remote (id, title, content, description) VALUES(2, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'different description')"
 
@@ -86,9 +86,8 @@ echo "$RESULT"
 
 rm -f /tmp/vector1.txt /tmp/vector2.txt
 ––– output –––
-vector_md5_1: #!/[0-9a-f]{32}/!#
-vector_md5_2: #!/[0-9a-f]{32}/!#
-SUCCESS: Same FROM fields produce same vector
+Cosine similarity: 1
+SUCCESS: Same FROM fields produce similar vectors (similarity: 1)
 ––– comment –––
 Test different FROM field combinations produce different vectors
 ––– input –––

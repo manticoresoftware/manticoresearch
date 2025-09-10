@@ -17,6 +17,7 @@
 #include "searchdaemon.h"
 
 void AuthConfigure ( const CSphConfigSection & hSearchd );
+void AuthDone();
 bool IsAuthEnabled();
 
 struct AgentConn_t;
@@ -25,7 +26,8 @@ void SetAuth ( const CSphString & sUser, CSphVector<AgentConn_t *> & dRemotes );
 void SetAuth ( const CSphString & sUser, AgentConn_t * pAgent );
 CSphString GetBearer ( const CSphString & sUser );
 bool AuthReload ( CSphString & sError );
-bool ChangeAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
+bool ChangeAuth ( char * sSrc, const CSphString & sClusterName, const CSphString & sNodeName, CSphString & sError );
+void AuthLogInit ( const CSphConfigSection & hSearchd );
 
 ServedIndexRefPtr_c MakeDynamicAuthIndex ( const CSphString & sName, StringBuilder_c & sError );
 
@@ -33,3 +35,5 @@ int DeleteAuthDocuments ( const CSphString & sName, const SqlStmt_t & tStmt, CSp
 bool DeleteAuthDocuments ( const RtAccum_t & tAccum, int * pDeletedCount, CSphString & sError );
 bool InsertAuthDocuments ( const SqlStmt_t & tStmt, CSphString & sError );
 bool InsertAuthDocuments ( const RtAccum_t & tAccum, CSphString & sError );
+
+int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath );

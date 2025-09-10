@@ -65,6 +65,7 @@ AuthUsersMutablePtr_t CopyAuth();
 
 AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError );
 bool SaveAuthFile ( const AuthUsers_t & tAuth, const CSphString & sFile, CSphString & sError );
+bool ReadAuthFile ( const CSphString & sFile, CSphFixedVector<char> & dRawJson, CSphString & sError );
 
 const CSphString & GetPrefixAuth();
 const CSphString & GetIndexNameAuthUsers();
@@ -72,14 +73,16 @@ const CSphString & GetIndexNameAuthPerms();
 const CSphString & GetAuthBuddyName();
 
 void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth );
-CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen, CSphString & sError );
-CSphFixedVector<BYTE> ReadHexVec (  const char * sName, const bson::Bson_c & tRoot, int iHashLen, CSphString & sError );
+CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen, bool bAllowEmpty, CSphString & sError );
+CSphFixedVector<BYTE> ReadHexVec (  const char * sName, const bson::Bson_c & tRoot, int iHashLen, bool bAllowEmpty, CSphString & sError );
 void SortUserPerms ( UserPerms_t & dPerms );
 CSphString WriteJson ( const AuthUsers_t & tAuth );
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 bool CreateAuthFile ( const CSphString & sFile, CSphString & sError );
 void CopyVec ( const BYTE * pSrc, int ilen, CSphFixedVector<BYTE> & dDst );
 bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError );
+CSphString AuthGetPath ( const CSphConfigSection & hSearchd );
+HASH256_t GetPwdHash256 ( const AuthUserCred_t & tEntry, const CSphString & sPwd );
 
 class BearerCache_i
 {

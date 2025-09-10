@@ -10,12 +10,12 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "searchdha.h"
 #include "searchdssl.h"
 
 #include "auth_common.h"
 #include "auth_proto_api.h"
 #include "gcm_nonce.h"
+#include "auth_log.h"
 #include "auth.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -200,7 +200,10 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 
 	const BYTE * pEncrypted = nullptr;
 	if ( !tIn.GetBytesZerocopy ( &pEncrypted, iReplySize ) )
+	{
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), "buffer read failed" );
 		return false;
+	}
 
 	GcmUserKey_c tKey ( true );
 
@@ -209,7 +212,10 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 	dDecrypted.Resize ( 0 );
 
 	if ( !DecryptGCM ( dEncryptedData, dDecrypted, sUser, tKey, sError ) )
+	{
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), sError.cstr() );
 		return false;
+	}
 
 	tIn.SetBuffer ( std::move ( dDecrypted ) );
 
@@ -222,8 +228,11 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 	if ( eDecryptedCmd!=eCmd || uDecryptedVer!=uVer )
 	{
 		sError.SetSprintf ( "invalid decryption (command=%d(%d), ver=%u(%u))", eCmd, eDecryptedCmd, uVer, uDecryptedVer );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::API, session::szClientName(), "invalid decryption: command/version mismatch" );
 		return false;
 	}
+
+	AuthLog().AuthSuccess ( sUser, AccessMethod_e::API, session::szClientName() );
 
 	return true;
 }

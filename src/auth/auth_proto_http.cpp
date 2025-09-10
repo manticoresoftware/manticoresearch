@@ -14,20 +14,24 @@
 #include "searchdhttp.h"
 
 #include "auth_common.h"
-#include "auth_proto_http.h"
+#include "auth_log.h"
 #include "auth.h"
 
 /////////////////////////////////////////////////////////////////////////////
 /// HTTP
 
-static bool CheckPwd ( const AuthUserCred_t & tEntry, const CSphString & sPwd )
+HASH256_t GetPwdHash256 ( const AuthUserCred_t & tEntry, const CSphString & sPwd )
 {
 	std::unique_ptr<SHA256_i> pHasher { CreateSHA256() };
 	pHasher->Init();
 	pHasher->Update ( tEntry.m_dSalt.Begin(), tEntry.m_dSalt.GetLength() );
 	pHasher->Update ( (const BYTE*)sPwd.cstr(), sPwd.Length() );
-	HASH256_t tPwdHash = pHasher->FinalHash();
+	return pHasher->FinalHash();
+}
 
+static bool CheckPwd ( const AuthUserCred_t & tEntry, const CSphString & sPwd )
+{
+	HASH256_t tPwdHash = GetPwdHash256 ( tEntry, sPwd );
 	int iCmp = memcmp ( tEntry.m_dPwdSha256.Begin(), tPwdHash.data(), tPwdHash.size() );
 	return ( iCmp==0 );
 }
@@ -60,6 +64,7 @@ static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tR
 	if ( iDel==-1 )
 	{
 		tRes.m_sError = "Failed to find user:password delimiter";
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName(), "malformed authentication string - missing delimiter" );
 		return FailAuth ( tRes, dReply );
 	}
 
@@ -72,15 +77,21 @@ static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tR
 	if ( !pUser || sPwd.IsEmpty() )
 	{
 		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		if ( !pUser )
+			AuthLog().AuthFailure ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName(), "user does not exist" );
+		else
+			AuthLog().AuthFailure ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName(), "no password provided" );
 		return FailAuth ( tRes, dReply );
 	}
 
 	if ( !CheckPwd ( *pUser, sPwd ) )
 	{
 		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: YES)", sUser.cstr() );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName(), "invalid password" );
 		return FailAuth ( tRes, dReply );
 	} else
 	{
+		AuthLog().AuthSuccess ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName() );
 		return true;
 	}
 }
@@ -120,10 +131,11 @@ static bool CheckCacheMatched ( const HASH256_t & tHashTokenData, const AuthUser
 
 static bool CheckAuthBearer ( const Str_t & sToken, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
 {
-	CSphFixedVector<BYTE> dHexToken = ReadHexVec ( "token", sToken, AuthUserCred_t::m_iSourceTokenLen, tRes.m_sError );
+	CSphFixedVector<BYTE> dHexToken = ReadHexVec ( "token", sToken, AuthUserCred_t::m_iSourceTokenLen, false, tRes.m_sError );
 	if ( !tRes.m_sError.IsEmpty() )
 	{
 		tRes.m_sError.SetSprintf ( "Access denied for token '%s', error: %s", sToken.first, tRes.m_sError.cstr() );
+		AuthLog().AuthFailure ( sToken, AccessMethod_e::HTTP_BEARER, session::szClientName(), "malformed token" );
 		return FailAuth ( tRes, dReply );
 	}
 
@@ -131,16 +143,23 @@ static bool CheckAuthBearer ( const Str_t & sToken, HttpProcessResult_t & tRes, 
 	AuthUsersPtr_t pUsers = GetAuth();
 	
 	if ( CheckCacheMatched ( tHashTokenData, pUsers, sUser ) )
+	{
+		AuthLog().AuthSuccess ( sUser, AccessMethod_e::HTTP_BEARER, session::szClientName() );
 		return true;
+	}
 
 	for ( const auto & tItem : pUsers->m_hUserToken )
 	{
 		const auto & tUser = tItem.second;
 		if ( CheckBearerMatched ( tHashTokenData, tUser, sUser ) )
+		{
+			AuthLog().AuthSuccess ( sUser, AccessMethod_e::HTTP_BEARER, session::szClientName() );
 			return true;
+		}
 	}
 
 	tRes.m_sError.SetSprintf ( "Access denied for token '%s'", sToken.first );
+	AuthLog().AuthFailure ( sToken, AccessMethod_e::HTTP_BEARER, session::szClientName(), "invalid token" );
 	return FailAuth ( tRes, dReply );
 }
 
@@ -160,6 +179,7 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 		tRes.m_bSkipBuddy = true;
 		tRes.m_sError = "Authorization header field missed";
 		sphHttpErrorReply ( dReply, tRes.m_eReplyHttpCode, tRes.m_sError.cstr(), R"(WWW-Authenticate: Basic realm="Manticore daemon", charset="UTF-8")" );
+		AuthLog().AuthFailure ( "", AccessMethod_e::HTTP_BASIC, session::szClientName(), "authorization header is missing" );
 		return false;
 	}
 
@@ -170,6 +190,7 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 	if ( !bBasicToken && !bBearerToken )
 	{
 		tRes.m_sError = "Only Basic and Bearer authorization supported";
+		AuthLog().AuthFailure ( "", AccessMethod_e::HTTP_BASIC, session::szClientName(), "unsupported authorization type" );
 		return FailAuth ( tRes, dReply );
 	}
 

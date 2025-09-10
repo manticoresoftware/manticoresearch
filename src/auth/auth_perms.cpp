@@ -13,6 +13,7 @@
 #include "sphinxstd.h"
 
 #include "auth_common.h"
+#include "auth_log.h"
 #include "auth.h"
 
 #include "auth_perms.h"
@@ -58,6 +59,8 @@ bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphStri
 
 	sphLogDebug ( "Permission denied for user '%s', action(%s) to '%s'", sUser.cstr(), GetActionName ( eAction ), sTarget.scstr() ); // !COMMIT
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
+	AuthLog().AuthDenied ( sUser, session::szClientName(), eAction, sTarget );
+
 	return false;
 }
 

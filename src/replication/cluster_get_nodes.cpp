@@ -415,7 +415,7 @@ bool SetAuth ( const ClusterDesc_t & tDesc, const AgentConn_t * pAgent, const Cl
 		return true;
 
 	CSphString sTmp;
-	if ( !ChangeAuth ( const_cast<char *>( tReply.m_sAuth.cstr() ), tDesc.m_sName, sTmp ) )
+	if ( !ChangeAuth ( const_cast<char *>( tReply.m_sAuth.cstr() ), tDesc.m_sName, pAgent->m_tDesc.GetMyUrl(), sTmp ) )
 	{
 		sError += sTmp.cstr();
 		return false;

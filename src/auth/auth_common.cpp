@@ -10,20 +10,13 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxstd.h"
-#include "sphinxutils.h"
-#include "fileutils.h"
-#include "std/base64.h"
-#include "std/fnv64.h"
-#include "sphinxjson.h"
-#include <filesystem>
 #include "searchdssl.h"
+#include <filesystem>
 
 #ifdef _WIN32
 #include <aclapi.h>
 #endif
 
-#include "auth_perms.h"
 #include "auth_common.h"
 
 static const CSphString g_sBuddyName ( "system.buddy" );
@@ -66,13 +59,14 @@ static void FromString ( Str_t sSrc, CSphFixedVector<BYTE> & dBuf )
 	}
 }
 
-CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen, CSphString & sError )
+CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen, bool bAllowEmpty, CSphString & sError )
 {
 	CSphFixedVector<BYTE> dRes ( 0 );
 
 	if ( IsEmpty ( sRaw ) )
 	{
-		sError.SetSprintf ( "empty '%s'", sName );
+		if ( !bAllowEmpty )
+			sError.SetSprintf ( "empty '%s'", sName );
 		return dRes;
 	}
 
@@ -86,7 +80,7 @@ CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen,
 	return dRes;
 }
 
-CSphFixedVector<BYTE> ReadHexVec ( const char * sName, const bson::Bson_c & tRoot, int iHashLen, CSphString & sError )
+CSphFixedVector<BYTE> ReadHexVec ( const char * sName, const bson::Bson_c & tRoot, int iHashLen, bool bAllowEmpty, CSphString & sError )
 {
 	CSphFixedVector<BYTE> dRes ( 0 );
 
@@ -98,6 +92,9 @@ CSphFixedVector<BYTE> ReadHexVec ( const char * sName, const bson::Bson_c & tRoo
 	}
 
 	Str_t sRaw = bson::ToStr ( tChild );
+	if ( !sRaw.second && bAllowEmpty )
+		return dRes;
+
 	if ( sRaw.second/2!=iHashLen )
 	{
 		sError.SetSprintf ( "node '%s' has wrong hash size %d, expected %d", sName, sRaw.second/2, iHashLen );
@@ -113,44 +110,58 @@ static bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUser
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 static bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError );
 
-AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
+bool ReadAuthFile ( const CSphString & sFile, CSphFixedVector<char> & dRawJson, CSphString & sError )
 {
 	if ( !sphIsReadable ( sFile, &sError ) )
 	{
 		sError.SetSprintf ( "can not read the '%s': %s", sFile.cstr(), sError.cstr() );
-		return nullptr;
+		return false;
 	}
 
 	if ( !CheckFileIsPrivate ( sFile, sError ) )
-		return nullptr;
+		return false;
 
 	CSphAutoreader tReader;
 	if ( !tReader.Open ( sFile, sError ) )
 	{
 		sError.SetSprintf ( "can not read the '%s', error: %s", sFile.cstr(), sError.cstr() );
-		return nullptr;
+		return false;
 	}
 
 	int iSize = (int)tReader.GetFilesize();
-	if ( !iSize )
-		sError.SetSprintf ( "can not read the '%s', error: file empty", sFile.cstr() );
+	// empty file - valid state, not error
+	// means authentication enabled but no users created
+	if ( iSize==0 )
+	{
+		dRawJson.Reset ( 0 );
+		return true;
+	}
 
-	CSphFixedVector<char> dRawJson ( iSize + 2 );
-	auto iRead = (int64_t)sphReadThrottled ( tReader.GetFD(), dRawJson.begin(), iSize );
+	dRawJson.Reset ( iSize + 2 );
+	auto iRead = (int64_t)sphReadThrottled ( tReader.GetFD(), dRawJson.Begin(), iSize );
 	if ( iRead!=iSize )
 	{
 		sError.SetSprintf ( "can not read the'%s', error: wrong size %d(%d)", sFile.cstr(), (int)iRead, iSize );
-		return nullptr;
+		return false;
 	}
 	if ( tReader.GetErrorFlag() )
 	{
 		sError.SetSprintf ( "can not read the '%s', error: %s", sFile.cstr(), tReader.GetErrorMessage().cstr() );
-		return nullptr;
+		return false;
 	}
 
 	dRawJson[iSize] = '\0'; // safe gap
 	dRawJson[iSize+1] = '\0';
-	return ReadAuth ( dRawJson.begin(), sFile, sError );
+	return true;
+}
+
+AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
+{
+	CSphFixedVector<char> dRawJson ( 0 );
+	if ( !ReadAuthFile ( sFile, dRawJson, sError ) )
+		return nullptr;
+
+	return ReadAuth ( dRawJson.Begin(), sFile, sError );
 }
 
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError )
@@ -200,17 +211,17 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 
 		AuthUserCred_t tEntry;
 		tEntry.m_sUser = bson::String ( tNode.ChildByName ( "username" ) );
-		tEntry.m_dSalt = ReadHexVec ( "salt", tNode, HASH20_SIZE, sError );
+		tEntry.m_dSalt = ReadHexVec ( "salt", tNode, HASH20_SIZE, false, sError );
 
 		bson::Bson_c tHashes { tNode.ChildByName ( "hashes" ) };
 
-		auto dSha1 = ReadHexVec ( "password_sha1_no_salt", tHashes, HASH20_SIZE, sError );
+		auto dSha1 = ReadHexVec ( "password_sha1_no_salt", tHashes, HASH20_SIZE, false, sError );
 		if ( !sError.IsEmpty() )
 			return;
 		memcpy ( tEntry.m_tPwdSha1.data(), dSha1.Begin(), HASH20_SIZE );
 
-		tEntry.m_dPwdSha256 = ReadHexVec ( "password_sha256", tHashes, HASH256_SIZE, sError );
-		tEntry.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tHashes, HASH256_SIZE, sError );
+		tEntry.m_dPwdSha256 = ReadHexVec ( "password_sha256", tHashes, HASH256_SIZE, false, sError );
+		tEntry.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tHashes, HASH256_SIZE, true, sError );
 
 		if ( !sError.IsEmpty() )
 		{
@@ -233,28 +244,17 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 			sError.SetSprintf ( "can not read users from the '%s', error: multiple user %s entries", sFile.cstr(), tEntry.m_sUser.cstr() );
 			return;
 		}
-		//if ( hSalts [ tEntry.m_sSalt ] )
-		//{
-		//	sError.SetSprintf ( "can not read users from the '%s', error: multiple salt entries '%s'", sFile.cstr(), BinToHex ( (const BYTE *)tEntry.m_sSalt.cstr(), tEntry.m_sSalt.Length() ).cstr() );
-		//	return;
-		//}
-		//if ( tAuth->m_hHttpToken2User ( tEntry.m_sRawBearerSha256 ) )
-		//{
-		//	sError.SetSprintf ( "can not read users from the '%s', error: multiple bearer entries '%s'", sFile.cstr(), tEntry.m_sRawBearerSha256.cstr() );
-		//	return;
-		//}
 
 		if ( !tEntry.MakeApiKey ( sError ) )
 			return;
 
-		//hSalts.Add ( tEntry.m_sSalt );
 		AddUser ( tEntry, tAuth );
 	});
 	if ( !sError.IsEmpty() )
 		return false;
 
 	// should NOT fail daemon start if file provided but no users read
-	return	Validate ( tAuth, sError );
+	return Validate ( tAuth, sError );
 }
 
 AuthAction_e ReadAction ( Str_t sAction )
@@ -427,6 +427,9 @@ bool SaveAuthFile ( const AuthUsers_t & tAuth, const CSphString & sFile, CSphStr
 	CSphString sNewFile;
 	sNewFile.SetSprintf ( "%s.new", sFile.cstr() );
 
+	if ( !CreateAuthFile ( sNewFile, sError ) )
+		return false;
+
 	CSphWriter tWriter;
 	if ( !tWriter.OpenFile ( sNewFile, sError ) )
 		return false;
@@ -580,7 +583,7 @@ bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
 		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
 		return false;
 	}
-    
+	
 	DWORD uTokenSize = 0;
 	GetTokenInformation ( hToken, TokenUser, NULL, 0, &uTokenSize );
 	if ( ::GetLastError()!=ERROR_INSUFFICIENT_BUFFER )
@@ -599,7 +602,7 @@ bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
 		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
 		return false;
 	}
-    
+	
 	PSID pUserSid = ( ( PTOKEN_USER )dTokenUser.Begin() )->User.Sid;
 
 	EXPLICIT_ACCESS_A tEA[3];
@@ -711,7 +714,7 @@ bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError )
 
 bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
 {
-	int iFD = ::open ( sFile.cstr(), SPH_O_NEW, 0600);
+	int iFD = ::open ( sFile.cstr(), SPH_O_NEW, 0600 );
 	if ( iFD==-1 )
 	{
 		sError.SetSprintf ( "failed to open %s: %s", sFile.cstr(), strerrorm(errno) );
@@ -768,6 +771,9 @@ static bool Validate ( const AuthUsersMutablePtr_t & tAuth, Key_fn fnKey, const 
 	for ( const auto & tIt : tAuth->m_hUserToken )
 	{
 		CSphString sKey = fnKey ( tIt.second );
+		if ( sKey.IsEmpty() )
+			continue;
+
 		const AuthUserCred_t ** ppExisted = hFields ( sKey );
 		if ( ppExisted )
 			sUsersDups.Appendf ( "%s=%s", tIt.second.m_sUser.cstr(), ( *ppExisted )->m_sUser.cstr() );
@@ -791,9 +797,6 @@ bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError )
 
 	Key_fn fnSalt = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_dSalt ); };
 	bValid &= Validate ( tAuth, fnSalt, "salt", sBuilder );
-
-	Key_fn fnSha1 = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_tPwdSha1 ); };
-	bValid &= Validate ( tAuth, fnSha1, "password_sha1_no_salt", sBuilder );
 
 	Key_fn fnSha256 = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_dPwdSha256 ); };
 	bValid &= Validate ( tAuth, fnSha256, "password_sha256", sBuilder );
@@ -854,3 +857,18 @@ CSphString BearerCache_c::FindUser ( const HASH256_t & tHash ) const
 	return CSphString ( pUser ? *pUser : "" );
 }
 
+CSphString AuthGetPath ( const CSphConfigSection & hSearchd )
+{
+	CSphString sFile = hSearchd.GetStr ( "auth" );
+	if ( sFile.IsEmpty() || sFile=="0" )
+		return {};
+
+	if ( IsConfigless() )
+	{
+		if ( sFile!="1" )
+			sphFatal ( "cat not set file name in RT mode, enable auth with the '1'" );
+		sFile = GetDatadirPath ( "auth.json" );
+	}
+
+	return RealPath ( sFile );
+}

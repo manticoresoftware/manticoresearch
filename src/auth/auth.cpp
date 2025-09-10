@@ -10,20 +10,14 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "std/base64.h"
-#include "searchdha.h"
 #include "dynamic_idx.h"
-#include "searchdsql.h"
 #include "docs_collector.h"
-#include "client_session.h"
 #include "searchdreplication.h"
-#include "netfetch.h"
 #include "searchdssl.h"
 
 #include "auth_common.h"
-#include "auth_proto_mysql.h"
-#include "auth_proto_http.h"
-#include "auth_proto_api.h"
+#include "auth_log.h"
+#include "daemon/logger.h"
 #include "auth.h"
 
 static CSphMutex g_tAuthLock;
@@ -39,26 +33,18 @@ static bool MakeBuddyToken ( AuthUsers_t & tAuth, CSphString & sError );
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
 {
-	CSphString sFile = hSearchd.GetStr ( "auth" );
-	if ( sFile.IsEmpty() || sFile=="0" )
+	g_sAuthFile = AuthGetPath ( hSearchd );
+	if ( g_sAuthFile.IsEmpty() )
 		return;
 
-	if ( !IsCurlAvailable() )
-		sphFatal ( "no curl found, can not start auth" );
-
 	CSphString sError;
-	if ( IsConfigless() )
+	// need to create empty file for bootstrap to work
+	if ( !sphIsReadable ( g_sAuthFile, nullptr ) )
 	{
-		if ( sFile!="1" )
-			sphFatal ( "cat not set file name in RT mode, enable auth with the '1'" );
-		sFile = GetDatadirPath ( "auth.json" );
-
-		// need to create ewmpty file in the RT mode
-		if ( !sphIsReadable ( sFile, nullptr ) && !CreateAuthFile ( sFile, sError ) )
-			sphFatal ( "%s", sError.cstr() );
+		if ( !CreateAuthFile ( g_sAuthFile, sError ) )
+			sphFatal ( "Failed to create authentication file '%s': %s", g_sAuthFile.cstr(), sError.cstr() );
 	}
 
-	g_sAuthFile = RealPath ( sFile );
 	AuthUsersMutablePtr_t tAuth = ReadAuthFile ( g_sAuthFile, sError );
 	if ( !tAuth )
 		sphFatal ( "%s", sError.cstr() );
@@ -73,6 +59,22 @@ void AuthConfigure ( const CSphConfigSection & hSearchd )
 		g_tAuth = std::move ( tAuth );
 	}
 	GetBearerCache().Invalidate();
+}
+
+void AuthLogInit ( const CSphConfigSection & hSearchd )
+{
+	if ( !IsAuthEnabled() )
+		return;
+
+	auto sDaemonLog = sphGetLogFile();
+	bool bLogStdout = LogIsStdout();
+	bool bLogSyslog = LogIsSyslog();
+	AuthLog().Init ( sDaemonLog, hSearchd, bLogStdout, bLogSyslog );
+}
+
+void AuthDone()
+{
+	AuthLog().Close();
 }
 
 bool IsAuthEnabled()
@@ -108,7 +110,10 @@ bool AuthReload ( CSphString & sError )
 
 	AuthUsersMutablePtr_t tAuth = ReadAuthFile ( g_sAuthFile, sError );
 	if ( !tAuth )
+	{
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), ( "authentication data reload" ), sError );
 		return false;
+	}
 
 	{
 		ScopedMutex_t tLock ( g_tAuthLock );
@@ -118,6 +123,8 @@ bool AuthReload ( CSphString & sError )
 		g_tAuth = std::move ( tAuth );
 	}
 	GetBearerCache().Invalidate();
+
+	AuthLog().Reload ( AuthLogGetSessionCtx(), CSphString() );
 
 	return true;
 }
@@ -565,7 +572,7 @@ static int DeletePerms ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError
 	return iDeleted;
 }
 
-bool DeleteAuthDocuments (const RtAccum_t & tAccum, int * pDeletedCount, CSphString & sError)
+bool DeleteAuthDocuments ( const RtAccum_t & tAccum, int * pDeletedCount, CSphString & sError )
 {
 	assert ( tAccum.m_dCmd.GetLength() );
 
@@ -581,19 +588,46 @@ bool DeleteAuthDocuments (const RtAccum_t & tAccum, int * pDeletedCount, CSphStr
 	return ( sError.IsEmpty() );
 }
 
+static CSphString GetFilterString ( const SqlStmt_t & tStmt, const char * sName )
+{
+	assert ( sName );
+
+	int iVal = tStmt.m_tQuery.m_dFilters.GetFirst ( [&sName] ( const auto & tFilter ) { return ( tFilter.m_sAttrName==sName && tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength()==1 ); } );
+	if ( iVal!=-1 )
+		return tStmt.m_tQuery.m_dFilters[iVal].m_dStrings[0];
+	else
+		return {};
+}
+
 int DeleteAuthDocuments ( const CSphString & sName, const SqlStmt_t & tStmt, CSphString & sError )
 {
+	bool bUser = ( sName==GetIndexNameAuthUsers() );
+	const char * sLogAction = ( bUser ? "delete user" : "delete permission" );
+
 	cServedIndexRefPtr_c pIndex { MakeDynamicAuthIndex ( sName, true ) };
 	if ( !pIndex )
 	{
 		sError.SetSprintf ( "no such table %s", sName.cstr() );
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), sLogAction, sError );
+		return 0;
+	}
+
+	CSphString sUser = GetFilterString ( tStmt, ( bUser ? AuthUsersIndex_c::GetColumnName ( AuthUsersIndex_c::SchemaColumn_e::Username ) : AuthPermsIndex_c::GetColumnName ( AuthPermsIndex_c::SchemaColumn_e::Username ) ) );
+	if ( sUser.IsEmpty() )
+	{
+		sError.SetSprintf ( "no user set" );
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), sLogAction, sError );
 		return 0;
 	}
 
 	DocsCollector_c tDocs { tStmt.m_tQuery, tStmt.m_bJson, sName, pIndex, &sError };
 	auto dDocs = tDocs.GetValuesSlice();
 	if ( !sError.IsEmpty() || dDocs.IsEmpty() )
+	{
+		if ( !sError.IsEmpty() )
+			AuthLog().ActionFailed ( AuthLogGetSessionCtx(), sLogAction, sError );
 		return 0;
+	}
 
 	RtAccum_t tAccum;
 	tAccum.m_dAccumKlist.Append ( dDocs );
@@ -602,7 +636,22 @@ int DeleteAuthDocuments ( const CSphString & sName, const SqlStmt_t & tStmt, CSp
 	tAccum.m_dCmd.Add ( std::move ( pCmd ) );
 
 	int iDeletedCount = 0;
-	HandleCmdReplicateDelete ( tAccum, iDeletedCount );
+	if ( !HandleCmdReplicateDelete ( tAccum, iDeletedCount ) )
+	{
+		sError = TlsMsg::MoveToString();
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), sLogAction, sError );
+	} else
+	{
+		if ( bUser )
+		{
+			AuthLog().UserDeleted ( AuthLogGetSessionCtx(), sUser );
+		} else
+		{
+			CSphString sAction = GetFilterString ( tStmt, AuthPermsIndex_c::GetColumnName ( AuthPermsIndex_c::SchemaColumn_e::Action ) );
+			CSphString sActionTarget = GetFilterString ( tStmt, AuthPermsIndex_c::GetColumnName ( AuthPermsIndex_c::SchemaColumn_e::Target ) );
+			AuthLog().PermissionRevoked ( AuthLogGetSessionCtx(), sUser, sAction, sActionTarget );
+		}
+	}
 	return iDeletedCount;
 }
 
@@ -629,7 +678,7 @@ static int GetSchemaColumn ( const AuthPermsIndex_c::SchemaColumn_e eCol, const 
 	return GetSchemaColumn ( AuthPermsIndex_c::GetColumnName ( eCol ), dSchema, sError );
 }
 
-static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const SqlInsert_t & tVal, int iRow, AuthUserCred_t & tUser, CSphString & sError )
+static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const SqlInsert_t & tVal, AuthUserCred_t & tUser, CSphString & sError )
 {
 	switch ( eCol )
 	{
@@ -637,43 +686,43 @@ static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const S
 		tUser.m_sUser = tVal.m_sVal;
 		if ( tUser.m_sUser.IsEmpty() )
 		{
-			sError.SetSprintf ( "empty 'username' at %d document", iRow );
+			sError.SetSprintf ( "empty 'username'" );
 			return false;
 		}
 	return true;
 
 	case AuthUsersIndex_c::SchemaColumn_e::Salt:
-		tUser.m_dSalt = ReadHexVec ( "salt", FromStr ( tVal.m_sVal ), HASH20_SIZE, sError );
+		tUser.m_dSalt = ReadHexVec ( "salt", FromStr ( tVal.m_sVal ), HASH20_SIZE, false, sError );
 	return true;
 
 	case AuthUsersIndex_c::SchemaColumn_e::Hashes:
 	{
 		if ( tVal.m_sVal.IsEmpty() )
 		{
-			sError.SetSprintf ( "empty 'hashes' at %d document", iRow );
+			sError.SetSprintf ( "empty 'hashes'" );
 			return false;
 		}
 		CSphVector<BYTE> tRawBson;
 		if ( !sphJsonParse ( tRawBson, const_cast<char *>( tVal.m_sVal.cstr() ), false, false, false, sError ) )
 		{
-			sError.SetSprintf ( "can not read user 'hashes' at %d document, error: %s", iRow, sError.cstr() );
+			sError.SetSprintf ( "can not read user 'hashes', error: %s", sError.cstr() );
 			return false;
 		}
 
 		bson::Bson_c tBsonSrc ( tRawBson );
 		if ( tBsonSrc.IsEmpty() || !tBsonSrc.IsAssoc() )
 		{
-			sError.SetSprintf ( "can not read user 'hashes' at %d document, error: wrong json", iRow );
+			sError.SetSprintf ( "can not read user 'hashes', error: wrong json" );
 			return false;
 		}
 
-		auto dSha1 = ReadHexVec ( "password_sha1_no_salt", tBsonSrc, HASH20_SIZE, sError );
+		auto dSha1 = ReadHexVec ( "password_sha1_no_salt", tBsonSrc, HASH20_SIZE, false, sError );
 		if ( !sError.IsEmpty() )
 			return false;
 		memcpy ( tUser.m_tPwdSha1.data(), dSha1.Begin(), HASH20_SIZE );
 
-		tUser.m_dPwdSha256 = ReadHexVec ( "password_sha256", tBsonSrc, HASH256_SIZE, sError );
-		tUser.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tBsonSrc, HASH256_SIZE, sError );
+		tUser.m_dPwdSha256 = ReadHexVec ( "password_sha256", tBsonSrc, HASH256_SIZE, false, sError );
+		tUser.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tBsonSrc, HASH256_SIZE, true, sError );
 
 		return sError.IsEmpty();
 	}
@@ -686,11 +735,17 @@ static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const S
 	return false;
 }
 
-static CSphFixedVector< int > CheckInsertUsers ( const SqlStmt_t & tStmt, CSphString & sError )
+static CSphFixedVector< int > CheckInsertUser ( const SqlStmt_t & tStmt, CSphString & sError )
 {
 	const int iExp = tStmt.m_iSchemaSz;
 	const int iAttrsCount = (int)AuthUsersIndex_c::SchemaColumn_e::Hashes;
 	CSphFixedVector< int > dMapping ( iAttrsCount );
+
+	if ( tStmt.m_iRowsAffected>1 )
+	{
+		sError.SetSprintf ( "only single user document supported" );
+		return dMapping;
+	}
 
 	if ( tStmt.m_dInsertSchema.GetLength() )
 	{
@@ -753,69 +808,60 @@ static void UserRead ( MemoryReader_c & tReader, AuthUserCred_t & tUser )
 	GetArrayFixed ( tUser.m_dApiKey, tReader );
 }
 
-static bool ApplyUsers ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c & tWriter, CSphString & sError )
+static bool ApplyUser ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c & tWriter, CSphString & sError, CSphString & sUser )
 {
-	CSphFixedVector< int > dMapping = CheckInsertUsers ( tStmt, sError );
+	CSphFixedVector< int > dMapping = CheckInsertUser ( tStmt, sError );
 	if ( !sError.IsEmpty() )
 		return false;
 
 	AuthUsersMutablePtr_t tAuthValidate = CopyAuth();
 
-	tWriter.ZipInt ( tStmt.m_iRowsAffected );
+	AuthUserCred_t tUser;
 
-	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; iRow++ )
+	bool bOk = true;
+	bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0]], tUser, sError );
+	bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Salt, tStmt.m_dInsertValues[dMapping[1]], tUser, sError );
+	bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Hashes, tStmt.m_dInsertValues[dMapping[2]], tUser, sError );
+	if ( !bOk && !sError.IsEmpty() )
 	{
-		AuthUserCred_t tUser;
-
-		bool bOk = true;
-		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0] + iRow * dMapping.GetLength()], iRow, tUser, sError );
-		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Salt, tStmt.m_dInsertValues[dMapping[1] + iRow * dMapping.GetLength()], iRow, tUser, sError );
-		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Hashes, tStmt.m_dInsertValues[dMapping[2] + iRow * dMapping.GetLength()], iRow, tUser, sError );
-		if ( !bOk && !sError.IsEmpty() )
-		{
-			sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
-			return false;
-		}
-
-		auto * pCurUser = tAuthValidate->m_hUserToken ( tUser.m_sUser );
-		if ( pCurUser && !bReplace )
-		{
-			sError.SetSprintf ( "duplicate user '%s', use REPLACE", tUser.m_sUser.cstr() );
-			return false;
-		}
-		if ( !tUser.MakeApiKey ( sError ) )
-			return false;
-
-		UserWrite ( tWriter, tUser );
-
-		if ( pCurUser )
-			*pCurUser = tUser;
-		else
-			AddUser ( tUser, tAuthValidate );
+		sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
+		return false;
 	}
+
+	auto * pCurUser = tAuthValidate->m_hUserToken ( tUser.m_sUser );
+	if ( pCurUser && !bReplace )
+	{
+		sError.SetSprintf ( "duplicate user '%s', use REPLACE", tUser.m_sUser.cstr() );
+		return false;
+	}
+	if ( !tUser.MakeApiKey ( sError ) )
+		return false;
+
+	UserWrite ( tWriter, tUser );
+	sUser = tUser.m_sUser;
+
+	if ( pCurUser )
+		*pCurUser = tUser;
+	else
+		AddUser ( tUser, tAuthValidate );
 
 	return Validate ( tAuthValidate, sError );
 }
 
-static void CommitUsers ( const VecTraits_T<BYTE> & dData, AuthUsersMutablePtr_t & tAuth )
+static void CommitUser ( const VecTraits_T<BYTE> & dData, AuthUsersMutablePtr_t & tAuth )
 {
 	MemoryReader_c tReader ( dData );
-	int iUsers = tReader.UnzipInt();
-	
 	AuthUserCred_t tUser;
-	for ( int i=0; i<iUsers; i++ )
-	{
-		UserRead ( tReader, tUser );
+	UserRead ( tReader, tUser );
 
-		// delete all hashes but keep the existed perms
-		if ( tAuth->m_hUserToken.Exists ( tUser.m_sUser ) )
-			DeleteUser ( tAuth, tUser.m_sUser, false );
+	// delete all hashes but keep the existed perms
+	if ( tAuth->m_hUserToken.Exists ( tUser.m_sUser ) )
+		DeleteUser ( tAuth, tUser.m_sUser, false );
 
-		AddUser ( tUser, tAuth );
-	}
+	AddUser ( tUser, tAuth );
 }
 
-static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const SqlInsert_t & tVal, int iRow, UserPerm_t & tPerm, CSphString & sUser, CSphString & sError )
+static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const SqlInsert_t & tVal, UserPerm_t & tPerm, CSphString & sUser, CSphString & sError )
 {
 	switch ( eCol )
 	{
@@ -823,7 +869,7 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 		sUser = tVal.m_sVal;
 		if ( sUser.IsEmpty() )
 		{
-			sError.SetSprintf ( "empty 'username' at %d document", iRow );
+			sError.SetSprintf ( "empty 'username'" );
 			return false;
 		}
 	return true;
@@ -832,7 +878,7 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 		tPerm.m_eAction = ReadAction ( FromStr ( tVal.m_sVal ) );
 		if ( tPerm.m_eAction==AuthAction_e::UNKNOWN )
 		{
-			sError.SetSprintf ( "unknown action '%s' at %d document", tVal.m_sVal.cstr(), iRow );
+			sError.SetSprintf ( "unknown action '%s'", tVal.m_sVal.cstr() );
 			return false;
 		}
 	return true;
@@ -841,7 +887,7 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 		tPerm.SetTarget ( tVal.m_sVal );
 		if ( tPerm.m_sTarget.IsEmpty() )
 		{
-			sError.SetSprintf ( "empty 'target' at %d document", iRow );
+			sError.SetSprintf ( "empty 'target'" );
 			return false;
 		}
 	return true;
@@ -851,7 +897,7 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 		int64_t iVal = tVal.GetValueInt();
 		if ( iVal!=0 && iVal!=1 )
 		{
-			sError.SetSprintf ( "wrong allowed '" INT64_FMT "' at %d document", iVal, iRow );
+			sError.SetSprintf ( "wrong allowed '" INT64_FMT "'", iVal );
 			return false;
 		}
 		tPerm.m_bAllow = ( iVal==1 );
@@ -865,7 +911,7 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 			CSphVector<BYTE> tRawBson;
 			if ( !sphJsonParse ( tRawBson, const_cast<char *>( tVal.m_sVal.cstr() ), false, false, false, sError ) )
 			{
-				sError.SetSprintf ( "can not read user 'budget' at %d document, error: %s", iRow, sError.cstr() );
+				sError.SetSprintf ( "can not read user 'budget', error: %s", sError.cstr() );
 				return false;
 			}
 		}
@@ -882,12 +928,18 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 	return false;
 }
 
-static CSphFixedVector< int > CheckInsertPerms ( const SqlStmt_t & tStmt, CSphString & sError )
+static CSphFixedVector< int > CheckInsertPerm ( const SqlStmt_t & tStmt, CSphString & sError )
 {
 	const int iExp = tStmt.m_iSchemaSz;
 	// attributes without ID
 	const int iAttrsCount = (int)AuthPermsIndex_c::SchemaColumn_e::Budget;
 	CSphFixedVector< int > dMapping ( iAttrsCount );
+
+	if ( tStmt.m_iRowsAffected>1 )
+	{
+		sError.SetSprintf ( "only single permission document supported" );
+		return dMapping;
+	}
 
 	if ( tStmt.m_dInsertSchema.GetLength() )
 	{
@@ -953,76 +1005,64 @@ static void PermRead ( MemoryReader_c & tReader, CSphString & sUser, UserPerm_t 
 
 }
 
-static bool ApplyPerms ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c & tWriter, CSphString & sError )
+static bool ApplyPerm ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c & tWriter, CSphString & sError, CSphString & sUser, CSphString & sAction, CSphString & sTarget )
 {
-	CSphFixedVector< int > dMapping = CheckInsertPerms ( tStmt, sError );
+	CSphFixedVector< int > dMapping = CheckInsertPerm ( tStmt, sError );
 	if ( !sError.IsEmpty() )
 		return false;
 
 	const AuthUsersPtr_t tAuth = GetAuth();
 
-	tWriter.ZipInt ( tStmt.m_iRowsAffected );
+	UserPerm_t tPerm;
 
-	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; iRow++ )
+	bool bOk = true;
+	bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0]], tPerm, sUser, sError );
+	bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Action, tStmt.m_dInsertValues[dMapping[1]], tPerm, sUser, sError );
+	bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Target, tStmt.m_dInsertValues[dMapping[2]], tPerm, sUser, sError );
+	bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Allow, tStmt.m_dInsertValues[dMapping[3]], tPerm, sUser, sError );
+	bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Budget, tStmt.m_dInsertValues[dMapping[4]], tPerm, sUser, sError );
+	if ( !bOk )
+		return false;
+
+	SphAttr_t tPermHash = Hash ( sUser, tPerm );
+	const UserPerms_t * pPerms = tAuth->m_hUserPerms ( sUser );
+	if ( pPerms )
 	{
-		CSphString sUser;
-		UserPerm_t tPerm;
-
-		bool bOk = true;
-		bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0] + iRow * dMapping.GetLength()], iRow, tPerm, sUser, sError );
-		bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Action, tStmt.m_dInsertValues[dMapping[1] + iRow * dMapping.GetLength()], iRow, tPerm, sUser, sError );
-		bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Target, tStmt.m_dInsertValues[dMapping[2] + iRow * dMapping.GetLength()], iRow, tPerm, sUser, sError );
-		bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Allow, tStmt.m_dInsertValues[dMapping[3] + iRow * dMapping.GetLength()], iRow, tPerm, sUser, sError );
-		bOk &= SetPermMember ( AuthPermsIndex_c::SchemaColumn_e::Budget, tStmt.m_dInsertValues[dMapping[4] + iRow * dMapping.GetLength()], iRow, tPerm, sUser, sError );
-		if ( !bOk )
-			return false;
-
-		SphAttr_t tPermHash = Hash ( sUser, tPerm );
-		const UserPerms_t * pPerms = tAuth->m_hUserPerms ( sUser );
-		if ( pPerms )
+		int iReplaced = pPerms->GetFirst ( [&] ( const UserPerm_t & tItem ) { return ( Hash ( sUser, tItem )==tPermHash ); });
+		if ( iReplaced!=-1 && !bReplace )
 		{
-			int iReplaced = pPerms->GetFirst ( [&] ( const UserPerm_t & tItem ) { return ( Hash ( sUser, tItem )==tPermHash ); });
-			if ( iReplaced!=-1 && !bReplace )
-			{
-				sError.SetSprintf ( "duplicate perms for user '%s', use REPLACE", sUser.cstr() );
-				return false;
-			}
+			sError.SetSprintf ( "duplicate perms for user '%s', use REPLACE", sUser.cstr() );
+			return false;
 		}
-
-		PermWrite ( tWriter, sUser, tPerm );
 	}
+
+	PermWrite ( tWriter, sUser, tPerm );
+	sAction = GetActionName ( tPerm.m_eAction );
+	sTarget = tPerm.m_sTarget;
 
 	return true;
 }
 
-static void CommitPerms ( const VecTraits_T<BYTE> & dData, AuthUsersMutablePtr_t & tAuth )
+static void CommitPerm ( const VecTraits_T<BYTE> & dData, AuthUsersMutablePtr_t & tAuth )
 {
-	sph::StringSet hUsers;
-
 	MemoryReader_c tReader ( dData );
-	int iUsers = tReader.UnzipInt();
 	
 	AuthUserCred_t tUser;
-	for ( int i=0; i<iUsers; i++ )
-	{
-		CSphString sUser;
-		UserPerm_t tPerm;
-		PermRead ( tReader, sUser, tPerm );
 
-		UserPerms_t & dPerms = tAuth->m_hUserPerms.AddUnique ( sUser );
+	CSphString sUser;
+	UserPerm_t tPerm;
+	PermRead ( tReader, sUser, tPerm );
+
+	UserPerms_t & dPerms = tAuth->m_hUserPerms.AddUnique ( sUser );
 		
-		SphAttr_t tPermHash = Hash ( sUser, tPerm );
-		int iReplaced = dPerms.GetFirst ( [&] ( const UserPerm_t & tItem ) { return ( Hash ( sUser, tItem )==tPermHash ); });
-		if ( iReplaced!=-1 )
-			dPerms[iReplaced] =  tPerm;
-		else
-			dPerms.Add ( tPerm );
+	SphAttr_t tPermHash = Hash ( sUser, tPerm );
+	int iReplaced = dPerms.GetFirst ( [&] ( const UserPerm_t & tItem ) { return ( Hash ( sUser, tItem )==tPermHash ); });
+	if ( iReplaced!=-1 )
+		dPerms[iReplaced] =  tPerm;
+	else
+		dPerms.Add ( tPerm );
 
-		hUsers.Add ( sUser );
-	}
-
-	for ( const auto & tUser : hUsers )
-		SortUserPerms ( tAuth->m_hUserPerms[ tUser.first ] );
+	SortUserPerms ( tAuth->m_hUserPerms[ sUser ] );
 }
 
 bool InsertAuthDocuments ( const SqlStmt_t & tStmt, CSphString & sError )
@@ -1033,23 +1073,42 @@ bool InsertAuthDocuments ( const SqlStmt_t & tStmt, CSphString & sError )
 	dBuf.Reserve ( 512 );
 	MemoryWriter_c tWriter ( dBuf );
 
+	CSphString sUser, sPermAction, sPermTarget;
+
 	bool bOk = false;
-	if ( tStmt.m_sIndex==GetIndexNameAuthUsers() )
-		bOk = ApplyUsers ( tStmt, bReplace, tWriter, sError );
+	const bool bUser = ( tStmt.m_sIndex==GetIndexNameAuthUsers() );
+	if ( bUser )
+		bOk = ApplyUser ( tStmt, bReplace, tWriter, sError, sUser );
 	else
-		bOk = ApplyPerms ( tStmt, bReplace, tWriter, sError );
+		bOk = ApplyPerm ( tStmt, bReplace, tWriter, sError, sUser, sPermAction, sPermTarget );
 
-	if ( !bOk )
-		return false;
+	if ( bOk )
+	{
+		RtAccum_t tAccum;
+		tAccum.m_dBlobs.Append ( dBuf );
 
-	RtAccum_t tAccum;
-	tAccum.m_dBlobs.Append ( dBuf );
+		auto pCmd = MakeReplicationCommand ( ReplCmd_e::AUTH_ADD, tStmt.m_sIndex, GetFirstClusterName() );
+		pCmd->m_bCheckIndex = false;
+		tAccum.m_dCmd.Add ( std::move ( pCmd ) );
 
-	auto pCmd = MakeReplicationCommand ( ReplCmd_e::AUTH_ADD, tStmt.m_sIndex, GetFirstClusterName() );
-	pCmd->m_bCheckIndex = false;
-	tAccum.m_dCmd.Add ( std::move ( pCmd ) );
+		bOk = HandleCmdReplicate ( tAccum );
+	}
 
-	return HandleCmdReplicate ( tAccum );
+	if ( bOk )
+	{
+		if ( bUser )
+		{
+			AuthLog().UserAdded ( AuthLogGetSessionCtx(), sUser );
+		} else
+		{
+			AuthLog().PermissionGranted ( AuthLogGetSessionCtx(), sUser, sPermAction, sPermTarget );
+		}
+	} else
+	{
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), ( bUser ? "create user" : "grant permission" ), sUser, sError );
+	}
+
+	return bOk;
 }
 
 bool InsertAuthDocuments ( const RtAccum_t & tAccum, CSphString & sError )
@@ -1057,24 +1116,46 @@ bool InsertAuthDocuments ( const RtAccum_t & tAccum, CSphString & sError )
 	AuthUsersMutablePtr_t tAuth = CopyAuth();
 
 	if ( tAccum.m_dCmd[0]->m_sIndex==GetIndexNameAuthUsers() )
-		CommitUsers ( tAccum.m_dBlobs, tAuth );
+		CommitUser ( tAccum.m_dBlobs, tAuth );
 	else
-		CommitPerms ( tAccum.m_dBlobs, tAuth );
+		CommitPerm ( tAccum.m_dBlobs, tAuth );
 
 	return SaveAuth ( std::move( tAuth ), sError );
 }
 
-bool ChangeAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError )
+static void ReportClusterFailure ( const CSphString & sClusterName, const CSphString & sNodeName, const CSphString & sError )
 {
-	AuthUsersMutablePtr_t tAuth = ReadAuth ( sSrc, sSrcName, sError );
+	CSphString sMsg;
+	sMsg.SetSprintf ( "join cluster '%s' via node '%s'", sClusterName.cstr(), sNodeName.cstr() );
+	AuthLog().ActionFailed ( AuthLogGetSessionCtx(), sMsg, sError );
+}
+
+bool ChangeAuth ( char * sSrc, const CSphString & sClusterName, const CSphString & sNodeName, CSphString & sError )
+{
+	AuthLog().ClusterJoinOverride ( sClusterName );
+
+	AuthUsersMutablePtr_t tAuth = ReadAuth ( sSrc, sClusterName, sError );
 	if ( !tAuth )
+	{
+		ReportClusterFailure ( sClusterName, sNodeName, sError );
 		return false;
+	}
 
 	AuthUsersPtr_t pCurAuth = GetAuth();
 	const AuthUserCred_t * pSrcBuddy = pCurAuth->m_hUserToken ( GetAuthBuddyName() );
 	AddBuddyToken ( pSrcBuddy, *tAuth );
 
-	return SaveAuth ( std::move( tAuth ), sError );
+	bool bOk = SaveAuth ( std::move( tAuth ), sError );
+	if ( bOk )
+	{
+		CSphString sCurAuth = WriteJson ( *pCurAuth.get() );
+		AuthLog().ClusterBackupData ( sCurAuth, sClusterName, sNodeName );
+	} else
+	{
+		ReportClusterFailure ( sClusterName, sNodeName, sError );
+	}
+
+	return bOk;
 }
 
 static CSphFixedVector<BYTE> CreateBearerToken ( const VecTraits_T<BYTE> & dSalt, const VecTraits_T<BYTE> & dRawToken )
@@ -1109,12 +1190,16 @@ static CSphString CreateBearerToken ( const CSphString & sUser, CSphString & sEr
 	if ( !pUser )
 	{
 		sError.SetSprintf ( "user '%s' not found", sUser.cstr() );
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), ( "bearer token" ), sUser, sError );
 		return {};
 	}
 
 	CSphFixedVector<BYTE> dRawToken ( AuthUserCred_t::m_iSourceTokenLen );
 	if ( !MakeRandBuf ( dRawToken, sError ) )
+	{
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), ( "bearer token" ), sUser, sError );
 		return {};
+	}
 
 	AuthUserCred_t tNewUser = *pUser;
 	tNewUser.m_dBearerSha256 = CreateBearerToken ( pUser->m_dSalt, dRawToken );
@@ -1125,10 +1210,15 @@ static CSphString CreateBearerToken ( const CSphString & sUser, CSphString & sEr
 
 	// FIXMEE!!! save only via replicate, bot not for the buddy user
 	if ( !SaveAuth ( std::move ( tNewUsers ), sError ) )
+	{
+		AuthLog().ActionFailed ( AuthLogGetSessionCtx(), ( "bearer token" ), sUser, sError );
 		return {};
+	}
 
 	auto tHashTokenData = CalcBinarySHA2 ( dRawToken.Begin(), dRawToken.GetLength() );
 	GetBearerCache().AddUser ( tHashTokenData, sUser );
+
+	AuthLog().UserTokenChanged ( AuthLogGetSessionCtx(),  sUser );
 
 	return BinToHex ( dRawToken );
 }

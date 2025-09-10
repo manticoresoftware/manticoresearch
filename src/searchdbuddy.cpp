@@ -607,11 +607,6 @@ static void DisableExpectHeader ( StrVec_t & dHeaders )
 	dHeaders.Add ( "Expect:" );
 }
 
-std::pair<bool, CSphString> GetReply ( UrlResult_t && tRes )
-{
-	return std::make_pair ( tRes.m_bOk, std::move ( tRes.m_sRes ) );
-}
-
 static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !HasBuddy() )
@@ -650,7 +645,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	dHeaders.Add ( SphSprintf ( "Request-ID: %d_%u", session::GetConnID(), sphCRC32 ( sQuery.first, sQuery.second, sphRand() ) ) );
 	DisableExpectHeader ( dHeaders );
 
-	return GetReply ( PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders ) );
+	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
 
 bool IsBuddyQuery ( const OptionsHash_t & hOptions )

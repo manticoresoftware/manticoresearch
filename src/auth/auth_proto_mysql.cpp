@@ -13,9 +13,9 @@
 #include "sphinxutils.h"
 
 #include "searchdsql.h"
-#include "searchdaemon.h"
 #include "auth_common.h"
 #include "auth_proto_mysql.h"
+#include "auth_log.h"
 #include "auth.h"
 
 static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
@@ -91,15 +91,21 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 	if ( !pUser || dClientHash.IsEmpty() )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		if ( !pUser )
+			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "user does not exist" );
+		else
+			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "no password provided" );
 		return false;
 	}
 
 	if ( !CheckPwd ( tAuth, *pUser, dClientHash ) )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: YES)", sUser.cstr() );
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "invalid password" );
 		return false;
 	} else
 	{
+		AuthLog().AuthSuccess ( sUser, AccessMethod_e::SQL, session::szClientName() );
 		return true;
 	}
 }

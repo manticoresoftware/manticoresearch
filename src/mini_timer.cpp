@@ -112,16 +112,16 @@ private:
 		return (int)( ( pTask->m_iTimeoutTimeUS - MicroTimerImpl() ) / sph::TICKS_GRANULARITY );
 	}
 
-	[[nodiscard]] MiniTimer_c* PopNextDeadlinedAction() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	[[nodiscard]] std::pair<MiniTimer_c*,Handler> PopNextDeadlinedAction() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		if ( m_dTimeouts.IsEmpty() )
-			return nullptr;
+			return { nullptr, nullptr };
 
 		auto pRoot = (MiniTimer_c*)m_dTimeouts.Root();
 		assert ( pRoot->m_iTimeoutTimeUS > 0 );
 		if ( !sph::TimeExceeded ( pRoot->m_iTimeoutTimeUS, MicroTimerImpl() ) )
-			return nullptr;
+			return { nullptr, nullptr };
 
 		// timeout reached; have to do an action
 		DEBUGT << "timeout happens for " << pRoot << " deadline " << timestamp_t ( pRoot->m_iTimeoutTimeUS );
@@ -129,14 +129,14 @@ private:
 		m_dTimeouts.Pop();
 		DEBUGT << "Oneshot task removed: " << pRoot;
 
-		return pRoot;
+		return  { pRoot, pRoot->m_fnOnTimer };
 	}
 
 	void ProcessTimerActions() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
-		for ( MiniTimer_c* pRoot = PopNextDeadlinedAction(); pRoot; pRoot = PopNextDeadlinedAction() )
-			if ( pRoot->m_fnOnTimer )
-				pRoot->m_fnOnTimer();
+		for ( auto [pRoot, fnTimer] = PopNextDeadlinedAction(); pRoot; std::tie(pRoot, fnTimer) = PopNextDeadlinedAction() )
+			if ( fnTimer )
+				fnTimer();
 	}
 
 	void Loop() noexcept
@@ -163,15 +163,15 @@ private:
 		m_pCounterThread.store ( nullptr, std::memory_order_relaxed );
 	}
 
-	[[nodiscard]] MiniTimer_c* PopNextAction() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	[[nodiscard]] std::pair<MiniTimer_c*,Handler> PopNextAction() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		if ( m_dTimeouts.IsEmpty() )
-			return nullptr;
+			return { nullptr, nullptr };
 
 		auto pRoot = (MiniTimer_c*)m_dTimeouts.Root();
 		m_dTimeouts.Pop();
-		return pRoot;
+		return { pRoot, pRoot->m_fnOnTimer };
 	}
 
 	/// abandon and release all events (on shutdown)
@@ -180,9 +180,9 @@ private:
 		DEBUGT << "AbortScheduled()";
 		assert ( IsInterrupted() );
 
-		for ( MiniTimer_c* pRoot = PopNextAction(); pRoot; pRoot = PopNextAction() )
-			if ( pRoot->m_fnOnTimer )
-				pRoot->m_fnOnTimer();
+		for ( auto [pRoot, fnTimer] = PopNextAction(); pRoot; std::tie(pRoot, fnTimer) = PopNextAction() )
+			if ( fnTimer )
+				fnTimer();
 	}
 
 public:

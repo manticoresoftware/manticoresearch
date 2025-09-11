@@ -63,7 +63,7 @@ curl -s "http://localhost:9308/cli?select%20id,%20title%20from%20emb_test%20wher
 ––– comment –––
 CLI_JSON endpoint with distance
 ––– input –––
-curl -s "http://localhost:9308/cli_json?select%20id,%20title,%20@knn_dist%20from%20emb_test%20where%20knn(vec,%201,%20'learning')" | jq -r '.[0].data[0] | "ID: \(.id)\nTitle: \(.title)\nDistance: \(.["@knn_dist"])"'
+curl -s "http://localhost:9308/cli_json?select%20id,%20title,%20@knn_dist%20from%20emb_test%20where%20knn(vec,%201,%20'learning')" | jq -r '.[0].data[0] | "ID: \(.id)\nTitle: \(.title)\nDistance: \(.["@knn_dist"] | tostring)"'
 ––– output –––
 ID: 1
 Title: machine learning

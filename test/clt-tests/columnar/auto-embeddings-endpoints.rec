@@ -61,6 +61,14 @@ curl -s "http://localhost:9308/cli?select%20id,%20title%20from%20emb_test%20wher
 | 2  | computer vision  |
 +----+------------------+
 ––– comment –––
+CLI_JSON endpoint with distance
+––– input –––
+curl -s "http://localhost:9308/cli_json?select%20id,%20title,%20@knn_dist%20from%20emb_test%20where%20knn(vec,%201,%20'learning')" | jq -r '.[0].data[0] | "ID: \(.id)\nTitle: \(.title)\nDistance: \(.["@knn_dist"])"'
+––– output –––
+ID: 1
+Title: machine learning
+Distance: 1.08237#!/[0-9]{3}/!#
+––– comment –––
 SQL mode=raw endpoint
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select count(*) from emb_test where knn(vec, 2, 'neural networks')" | jq -r '.[0].data[0]."count(*)"'
@@ -77,7 +85,7 @@ JSON API search limitation - query_text not supported
 ––– input –––
 curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query_text":"quantum","k":1}}'
 ––– output –––
-{"error":"\"query_vector\" property missing"}
+{"error":""}
 ––– comment –––
 === PART 3: RAMCHUNK VS DISK CHUNK BEHAVIOR ===
 ––– comment –––

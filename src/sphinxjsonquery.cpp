@@ -1213,6 +1213,23 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 }
 
 
+static bool FillQueryVec ( KnnSearchSettings_t & tKNN, const JsonObj_c & tQueryVec, CSphString & sError )
+{
+	for ( const auto & tArrayItem : tQueryVec )
+		{
+			if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+			{
+				sError = "\"query_vector\" items should be integer of float";
+				return false;
+			}
+
+			tKNN.m_dVec.Add ( tArrayItem.FltVal() );
+		}
+
+	return true;
+}
+
+
 static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
 {
 	if ( !tJson )
@@ -1231,19 +1248,31 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 
-	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
-	if ( !tQueryVec )
-		return false;
-
-	for ( const auto & tArrayItem : tQueryVec )
+	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError, true );
+	if ( tQueryVec )
 	{
-		if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+		if ( !FillQueryVec ( tKNN, tQueryVec, sError ) )
+			return false;
+	}
+	else
+	{
+		// mayber a "query" is present?
+		JsonObj_c tQuery = tJson.GetItem("query");
+		if ( !tQuery )
+			return false;
+
+		if ( tQuery.IsArray() )
 		{
-			sError = "\"query_vector\" items should be integer of float";
+			if ( !FillQueryVec ( tKNN, tQuery, sError ) )
+				return false;
+		}
+		else if ( tQuery.IsStr() )
+			tKNN.m_sEmbStr = tQuery.StrVal();
+		else
+		{
+			sError = "\"query\" property value should be string or a vector";
 			return false;
 		}
-
-		tKNN.m_dVec.Add ( tArrayItem.FltVal() );
 	}
 
 	return true;

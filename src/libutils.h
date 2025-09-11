@@ -28,9 +28,9 @@
 #else
 #	include <dlfcn.h>
 #endif
+#endif // HAVE_DLOPEN
 #include "std/string.h"
 #include <utility>
-#endif // _WIN32
 
 
 class ScopedHandle_c final

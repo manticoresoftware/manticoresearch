@@ -85,7 +85,7 @@ struct XQNodeAtomPos_fn
 };
 
 
-constexpr uint64_t sphHashPhrase ( const XQNode_t * pNode )
+uint64_t sphHashPhrase ( const XQNode_t * pNode )
 {
 	assert ( pNode );
 	uint64_t uHash = 0;

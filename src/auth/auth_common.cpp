@@ -87,7 +87,8 @@ CSphFixedVector<BYTE> ReadHexVec ( const char * sName, const bson::Bson_c & tRoo
 	auto tChild = tRoot.ChildByName ( sName );
 	if ( tChild==bson::nullnode )
 	{
-		sError.SetSprintf ( "missed node '%s'", sName );
+		if ( !bAllowEmpty )
+			sError.SetSprintf ( "missed node '%s'", sName );
 		return dRes;
 	}
 

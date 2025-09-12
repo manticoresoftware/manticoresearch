@@ -693,7 +693,7 @@ static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const S
 
 	case AuthUsersIndex_c::SchemaColumn_e::Salt:
 		tUser.m_dSalt = ReadHexVec ( "salt", FromStr ( tVal.m_sVal ), HASH20_SIZE, false, sError );
-	return true;
+	return ( sError.IsEmpty() );
 
 	case AuthUsersIndex_c::SchemaColumn_e::Hashes:
 	{
@@ -724,7 +724,7 @@ static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const S
 		tUser.m_dPwdSha256 = ReadHexVec ( "password_sha256", tBsonSrc, HASH256_SIZE, false, sError );
 		tUser.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tBsonSrc, HASH256_SIZE, true, sError );
 
-		return sError.IsEmpty();
+		return ( sError.IsEmpty() );
 	}
 
 	default:
@@ -818,11 +818,17 @@ static bool ApplyUser ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c &
 
 	AuthUserCred_t tUser;
 
-	bool bOk = true;
-	bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0]], tUser, sError );
-	bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Salt, tStmt.m_dInsertValues[dMapping[1]], tUser, sError );
-	bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Hashes, tStmt.m_dInsertValues[dMapping[2]], tUser, sError );
-	if ( !bOk && !sError.IsEmpty() )
+	if ( !SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0]], tUser, sError ) )
+	{
+		sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
+		return false;
+	}
+	if ( !SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Salt, tStmt.m_dInsertValues[dMapping[1]], tUser, sError ) )
+	{
+		sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
+		return false;
+	}
+	if ( !SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Hashes, tStmt.m_dInsertValues[dMapping[2]], tUser, sError ) )
 	{
 		sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
 		return false;
@@ -834,6 +840,7 @@ static bool ApplyUser ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c &
 		sError.SetSprintf ( "duplicate user '%s', use REPLACE", tUser.m_sUser.cstr() );
 		return false;
 	}
+
 	if ( !tUser.MakeApiKey ( sError ) )
 		return false;
 

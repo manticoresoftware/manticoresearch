@@ -703,13 +703,13 @@ bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVe
 {
 	if ( IsEmpty ( tSalt ) )
 	{
-		sError = "can not generate key from an empty salt";
+		sError = "can not generate API key from an empty salt";
 		return false;
 	}
 
 	if ( IsEmpty ( tPwd ) )
 	{
-		sError = "can not generate key from an empty password_hash";
+		sError = "can not generate API key from an empty password_hash";
 		return false;
 	}
 
@@ -719,7 +719,7 @@ bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVe
 	int iRes = PKCS5_PBKDF2_HMAC ( (const char *)tPwd.first, tPwd.second, tSalt.first, tSalt.second, PBKDF2_ITER_COUNT, EVP_sha256(), dRes.GetLength(), dRes.Begin() );
 	if ( iRes!=1 )
 	{
-		SslError ( sError, "PBKDF2 key derivation from hash failed" );
+		SslError ( sError, "PBKDF2 API key derivation from hash failed" );
 		return false;
 	}
 

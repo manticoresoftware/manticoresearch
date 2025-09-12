@@ -63,12 +63,6 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
 |        2 |
 +----------+
 ––– comment –––
-Test KNN search via JSON API
-––– input –––
-curl -s -X POST http://localhost:9308/search -d '{"index":"test_json","knn":{"field":"embedding","query_text":"artificial intelligence","k":2}}' | jq -r '.hits.total'
-––– output –––
-null
-––– comment –––
 Replace document (regenerates embedding)
 ––– input –––
 curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r 'if ._id then "replaced" else "replace_ok" end'
@@ -106,3 +100,31 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json"
 +----------+
 |        5 |
 +----------+
+––– comment –––
+Optimize table for proper k parameter behavior
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json; OPTIMIZE TABLE test_json OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– comment –––
+Test KNN search via JSON API with query parameter (new in commit 17e7667)
+––– input –––
+curl -s -X POST http://localhost:9308/search -d '{"index":"test_json","knn":{"field":"embedding","query":"machine learning","k":2}}' | jq -r '.hits.total // "0"'
+––– output –––
+2
+––– comment –––
+Test that query_vector still works (backward compatibility)
+––– input –––
+VECTOR=$(python3 -c "print(','.join(['0.01']*384))")
+curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
+––– output –––
+2
+––– comment –––
+Test error when auto-embedding not configured
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE no_auto_embed (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2') engine='columnar'"
+––– output –––
+––– input –––
+curl -s -X POST http://localhost:9308/search -d '{"index":"no_auto_embed","knn":{"field":"vec","query":"test","k":1}}'
+––– output –––
+{"error":"table no_auto_embed: Embeddings generation string specified, but embeddings are not loaded"}

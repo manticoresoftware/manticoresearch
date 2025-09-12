@@ -67,6 +67,7 @@ curl -s "http://localhost:9308/cli_json?select%20id,%20title,%20@knn_dist%20from
 ––– output –––
 ID: 1
 Title: machine learning
+Distance: 1.082378#!/[0-9]{0,3}/!#
 ––– comment –––
 SQL mode=raw endpoint
 ––– input –––

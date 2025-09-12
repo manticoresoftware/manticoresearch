@@ -1,5 +1,38 @@
 # Changelog
 
+## Version 13.11.0
+
+Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.3
+Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.35.1
+
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don’t need to worry about this.
+
+### New Features and Improvements
+* 13.11.0 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [ PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) Added "query" support in JSON queries for embeddings generation.
+* 13.10.0 [v13.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.0) [ Issue #3709](https://github.com/manticoresoftware/manticoresearch/issues/3709) The manticore-server RPM package no longer owns `/run`.
+* 13.9.0 [v13.9.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.9.0) [ PR #3716](https://github.com/manticoresoftware/manticoresearch/pull/3716) Added support for `boolean_simplify` in the configuration.
+* 13.8.0 [v13.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.0) [ Issue #3253](https://github.com/manticoresoftware/manticoresearch/issues/3253) Installed sysctl config to increase vm.max_map_count for large datasets.
+
+### Bug Fixes
+* 13.10.5 [v13.10.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.5) [ PR #3737](https://github.com/manticoresoftware/manticoresearch/pull/3737) The scroll option now correctly returns all documents with large 64-bit IDs.
+* 13.10.4 [v13.10.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.4) [ PR #3736](https://github.com/manticoresoftware/manticoresearch/pull/3736) Fixed a crash when using KNN with a filter tree.
+* 13.10.3 [v13.10.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.3) [ Issue #3520](https://github.com/manticoresoftware/manticoresearch/issues/3520) The `/sql` endpoint no longer allows the SHOW VERSION command.
+* 13.10.2 [v13.10.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.2) [ PR #3637](https://github.com/manticoresoftware/manticoresearch/pull/3637) Updated the Windows installer script.
+* 13.10.1 [v13.10.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.1) Fixed local time zone detection on Linux.
+* 13.9.2 [v13.9.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.9.2) [ PR #3726](https://github.com/manticoresoftware/manticoresearch/pull/3726) Duplicate IDs in columnar mode now correctly return an error.
+* 13.9.1 [v13.9.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.9.1) [ PR #3333](https://github.com/manticoresoftware/manticoresearch/pull/3333) The manual is now auto-translated.
+* 13.8.6 [v13.8.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.6) [ PR #3715](https://github.com/manticoresoftware/manticoresearch/pull/3715) Fixed an embeddings generation issue when all docs in a batch were skipped.
+* 13.8.5 [v13.8.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.5) [ PR #3711](https://github.com/manticoresoftware/manticoresearch/pull/3711) Added Jina and Voyage embedding models, along with other automatic embeddings-related changes.
+* 13.8.4 [v13.8.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.4) [ PR #3710](https://github.com/manticoresoftware/manticoresearch/pull/3710) Fixed a crash on joined queries with multiple facets.
+* 13.8.3 [v13.8.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.3) Fixed an issue where delete/update commits in a transaction with multiple statements at the _bulk endpoint were not counted as errors.
+* 13.8.2 [v13.8.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.2) [ PR #3705](https://github.com/manticoresoftware/manticoresearch/pull/3705) Fixed a crash when joining by non-columnar string attributes and improved error reporting.
+* 13.8.1 [v13.8.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.1) [ PR #3704](https://github.com/manticoresoftware/manticoresearch/pull/3704) Fixed a crash in query embeddings when no model was specified; added embeddings string to master-agent communication; added tests.
+* 13.7.2 [v13.7.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.7.2) [ PR #Buddy#589](https://github.com/manticoresoftware/manticoresearch-buddy/pull/589) Removed the default IDF hack for fuzzy search.
+* 13.7.1 [v13.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.7.1) [ Issue #3454](https://github.com/manticoresoftware/manticoresearch/issues/3454) Fixed incorrect scroll decoding with large 64-bit IDs.
+* 13.7.0 [v13.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.7.0) [ PR #3681](https://github.com/manticoresoftware/manticoresearch/pull/3681) Added support for 'alter table <table> modify column <column> api_key=<key>'.
+* 13.6.9 [v13.6.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.9) [ Issue #3674](https://github.com/manticoresoftware/manticoresearch/issues/3674) Fixed JDBC+MySQL driver/connection pool issue with the transaction_read_only setting.
+* 13.6.8 [v13.6.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.8) [ PR #3676](https://github.com/manticoresoftware/manticoresearch/pull/3676) Fixed a crash on an empty result set returned by the embeddings model.
+
 ## Version 13.6.7
 **Released**: August 8th 2025
 

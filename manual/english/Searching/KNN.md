@@ -12,7 +12,7 @@ Manticore Search enables k-nearest neighbor (KNN) vector searches using the HNSW
 
 ### Configuring a table for KNN search
 
-To run KNN searches, you must first configure your table. Float vectors and KNN search are only supported in real-time tables (not in plain tables). The table needs to have at least one float_vector attribute, which serves as a data vector. You need to specify the following properties:
+To run KNN searches, you must first configure your table. Float vectors and KNN search are only supported in real-time tables (not in plain tables). The table needs to have at least one [float_vector](../Creating_a_table/Data_types.md#Float-vector) attribute, which serves as a data vector. You need to specify the following properties:
 * `knn_type`: A mandatory setting; currently, only `hnsw` is supported.
 * `knn_dims`: A mandatory setting that specifies the dimensions of the vectors being indexed.
 * `hnsw_similarity`: A mandatory setting that specifies the distance function used by the HNSW index. Acceptable values are:
@@ -70,6 +70,8 @@ When creating a table for auto embeddings, specify:
 - **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
 - **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
 - **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+
+More information about setting up a `float_vector` attribute can be found [here](../Creating_a_table/Data_types.md#Float-vector).
 
 <!-- intro -->
 ##### SQL:

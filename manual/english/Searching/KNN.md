@@ -167,6 +167,68 @@ SELECT id, knn_dist() FROM products WHERE knn(embedding_vector, 3, 'machine lear
 2 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+Using text query with auto-embeddings
+```json
+POST /search
+{
+    "table": "products",
+    "knn": {
+        "field": "embedding_vector",
+        "query": "machine learning",
+        "k": 3
+    }
+}
+```
+
+Using vector query directly
+```json
+POST /search
+{
+    "table": "products",
+    "knn": {
+        "field": "embedding_vector",
+        "query": [0.1, 0.2, 0.3, 0.4],
+        "k": 3
+    }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+    "took": 0,
+    "timed_out": false,
+    "hits": {
+        "total": 2,
+        "total_relation": "eq",
+        "hits": [
+            {
+                "_id": 1,
+                "_score": 1,
+                "_knn_dist": 0.12345678,
+                "_source": {
+                    "title": "machine learning artificial intelligence"
+                }
+            },
+            {
+                "_id": 2,
+                "_score": 1,
+                "_knn_dist": 0.87654321,
+                "_source": {
+                    "title": "banana fruit sweet yellow"
+                }
+            }
+        ]
+    }
+}
+```
+
 <!-- end -->
 
 #### Manual Vector Insertion
@@ -246,7 +308,7 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
       "knn":
       {
           "field": "<field>",
-          "query_vector": [<query vector>],
+          "query": "<text or vector>",
           "k": <k>,
           "ef": <ef>,
 		  "rescore": <rescore>,
@@ -258,7 +320,11 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
 The parameters are:
 * `field`: This is the name of the float vector attribute containing vector data.
 * `k`: This represents the number of documents to return and is a key parameter for Hierarchical Navigable Small World (HNSW) indexes. It specifies the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
-* `query_vector`: This is the search vector.
+* `query`: (Recommended parameter) The search query, which can be either:
+  - Text string: Automatically converted to embeddings if the field has auto-embeddings configured. Will return an error if the field doesn't have auto-embeddings.
+  - Vector array: Works the same as `query_vector`.
+* `query_vector`: (Legacy parameter) The search vector as an array of numbers. Still supported for backward compatibility.
+  **Note:** Use either `query` or `query_vector`, not both in the same request.
 * `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search.
 * `rescore`: Enables KNN rescoring (disabled by default). Set to `1` in SQL or `true` in JSON to enable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. No oversampling is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
@@ -297,7 +363,7 @@ POST /search
 	"knn":
 	{
 		"field": "image_vector",
-		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
+		"query": [0.286569,-0.031816,0.066684,0.032926],
 		"k": 5,
 		"ef": 2000, 
 		"rescore": true,
@@ -503,7 +569,7 @@ POST /search
 	"knn":
 	{
 		"field": "image_vector",
-		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
+		"query": [0.286569,-0.031816,0.066684,0.032926],
 		"k": 5,
 		"filter":
 		{

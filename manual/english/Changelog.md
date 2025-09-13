@@ -2,6 +2,17 @@
 
 ## Version 13.11.0
 
+The main highlight of this release is **Auto Embeddings** — a new feature that makes semantic search as easy as SQL.  
+No need for external services or complex pipelines: just insert text and search with natural language.
+
+### What Auto Embeddings Offer
+
+- **Automatic embedding generation** directly from your text  
+- **Natural language queries** that understand meaning, not just keywords  
+- **Support for multiple models** (OpenAI, Hugging Face, Voyage, Jina)  
+- **Seamless integration** with SQL and JSON APIs  
+
+### Recommended libraries
 Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.3
 Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.35.1
 

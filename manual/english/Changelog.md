@@ -1,6 +1,7 @@
 # Changelog
 
 ## Version 13.11.0
+**Released**: September 13th 2025
 
 The main highlight of this release is **Auto Embeddings** — a new feature that makes semantic search as easy as SQL.  
 No need for external services or complex pipelines: just insert text and search with natural language.

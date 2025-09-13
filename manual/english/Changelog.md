@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 13.11.1
+**Released**: September 13th 2025
+
+### Bug Fixes
+* 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [ Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) Fixed a crash when deleting a document with embeddings enabled.
+
 ## Version 13.11.0
 **Released**: September 13th 2025
 

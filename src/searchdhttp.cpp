@@ -28,6 +28,9 @@
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
 #include "sphinxquery/xqparser.h"
+#include "aggrexpr.h"
+#include "auth/auth_proto_http.h"
+#include "netfetch.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
@@ -73,6 +76,7 @@ EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept
 	case 200: return EHTTP_STATUS::_200;
 	case 206: return EHTTP_STATUS::_206;
 	case 400: return EHTTP_STATUS::_400;
+	case 401: return EHTTP_STATUS::_401;
 	case 403: return EHTTP_STATUS::_403;
 	case 404: return EHTTP_STATUS::_404;
 	case 405: return EHTTP_STATUS::_405;
@@ -96,6 +100,7 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_200: return "200 OK";
 	case EHTTP_STATUS::_206: return "206 Partial Content";
 	case EHTTP_STATUS::_400: return "400 Bad Request";
+	case EHTTP_STATUS::_401: return "400 Unauthorized status";
 	case EHTTP_STATUS::_403: return "403 Forbidden";
 	case EHTTP_STATUS::_404: return "404 Not Found";
 	case EHTTP_STATUS::_405: return "405 Method Not Allowed";
@@ -171,7 +176,8 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
-		{ "_bulk", nullptr }
+		{ "_bulk", nullptr },
+		{ "token", nullptr }
 };
 
 EHTTP_ENDPOINT StrToHttpEndpoint ( const CSphString& sEndpoint ) noexcept
@@ -477,6 +483,21 @@ void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply
 	dData.Append ( sReply );
 }
 
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, const char * sHeaderField )
+{
+	StringBuilder_c sHttp;
+	sHttp.Sprintf ( "HTTP/1.1 %s\r\n", HttpGetStatusName ( eCode ) );
+	sHttp.Sprintf ( "Content-Type: application/json; charset=UTF-8\r\n" );
+	sHttp.Sprintf ( "Content-Length: %d\r\n", sReply.second );
+	if ( sHeaderField && *sHeaderField )
+		sHttp.Sprintf ( "%s\r\n", sHeaderField );
+
+	sHttp.Sprintf ( "\r\n" );
+
+	dData.Reserve ( sHttp.GetLength() + sReply.second );
+	dData.Append ( (Str_t)sHttp );
+	dData.Append ( sReply );
+}
 
 HttpRequestParser_c::HttpRequestParser_c()
 {
@@ -1173,6 +1194,9 @@ public:
 		auto tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed );
 		SetStmt ( tHandler );
 
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, m_tParsed.m_tQuery.m_sIndexes, m_eHttpCode, m_sError, m_dData ) )
+			return false;
+
 		QueryProfile_c tProfile;
 		tProfile.m_eNeedPlan = (PLAN_FLAVOUR)m_tParsed.m_iPlan;
 		tProfile.m_bNeedProfile = m_tParsed.m_bProfile;
@@ -1425,12 +1449,13 @@ public:
 		m_dBuf.FinishBlock ( false ); // root object
 	}
 
-	void Error ( const char * szError, EMYSQL_ERR ) override
+	void Error ( const char * szError, EMYSQL_ERR eErr ) override
 	{
 		auto _ = m_dBuf.Object ( false );
 		DataFinish ( 0, szError, nullptr );
 		m_bError = true;
 		m_sError = szError;
+		m_eError = eErr;
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
@@ -1475,6 +1500,8 @@ public:
 		m_dBuf.FinishBlocks();
 		return m_dBuf;
 	}
+
+	EMYSQL_ERR m_eError = EMYSQL_ERR::UNKNOWN_COM_ERROR;
 
 private:
 	JsonEscapedBuilder m_dBuf;
@@ -1634,7 +1661,7 @@ public:
 		session::Execute ( m_sQuery, tOut );
 		if ( tOut.IsError() )
 		{
-			ReportError ( tOut.GetError().scstr(), EHTTP_STATUS::_500 );
+			ReportError ( tOut.GetError().scstr(), ( tOut.m_eError==EMYSQL_ERR::ACCESS_DENIED_ERROR ? EHTTP_STATUS::_403 : EHTTP_STATUS::_500 ) );
 			return false;
 		}
 		BuildReply ( tOut.Finish(), EHTTP_STATUS::_200 );
@@ -1777,6 +1804,9 @@ public:
 			return false;
 		}
 
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_tQuery.m_sIndexes, m_eHttpCode, m_sError, m_dData ) )
+			return false;
+
 		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? EHTTP_ENDPOINT::JSON_REPLACE : EHTTP_ENDPOINT::JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
@@ -1869,6 +1899,9 @@ public:
 		}
 
 		SetQueryOptions ( m_tOptions, tStmt );
+		
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_tQuery.m_sIndexes, m_eHttpCode, m_sError, m_dData ) )
+			return false;
 
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
@@ -2102,6 +2135,10 @@ public:
 				return FinishBulk ( EHTTP_STATUS::_400 );
 			}
 
+			// should check permissions for every new tnx to the new index
+			if ( tStmt.m_sIndex!=sTxnIdx && !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tStmt.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
+				return false;
+
 			if ( sTxnIdx.IsEmpty() )
 			{
 				sTxnIdx = tStmt.m_sIndex;
@@ -2248,6 +2285,13 @@ private:
 	void ReportLogError ( const char * sError, HttpErrorType_e eType , EHTTP_STATUS eStatus, bool bLogOnly );
 };
 
+class HttpTokenHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
+{
+public:
+	explicit HttpTokenHandler_c ( const OptionsHash_t & tOptions );
+	bool Process () final;
+};
+
 static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pOption = nullptr;
@@ -2367,6 +2411,9 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 		else
 			return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
 
+	case EHTTP_ENDPOINT::TOKEN:
+		return std::make_unique<HttpTokenHandler_c> ( tOptions );
+
 	case EHTTP_ENDPOINT::TOTAL:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
@@ -2381,7 +2428,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 	return nullptr;
 }
 
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
 
@@ -2389,6 +2436,12 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
+	CSphString sUser;
+	if ( !bSkipAuth && !CheckAuth ( hOptions, tRes, dResult, sUser ) )
+		return tRes;
+
+	// should set client user to pass it further into distributed index
+	session::SetUser ( sUser );
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
@@ -2421,18 +2474,21 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	tRes.m_bOk = pHandler->Process();
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
+	tRes.m_bSkipBuddy = ( tRes.m_eReplyHttpCode==EHTTP_STATUS::_403 ); // error with status code 403 Forbidden should not route into buddy
 	dResult = std::move ( pHandler->GetResult() );
 
 	return tRes;
 }
 
+/// json command over API
 void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult )
 {
 	http_method eReqType = HTTP_POST;
 
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
-	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType );
+	// no need to issue authentification as it checked at the API interface 
+	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true );
 	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, eReqType );
 }
 
@@ -2487,7 +2543,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	} else
 	{
-		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
+		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
 	}
 
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );
@@ -2499,6 +2555,15 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const cha
 	tErr.AddStr ( "error", szError );
 	CSphString sJsonError = tErr.AsString();
 	HttpBuildReply ( dData, eCode, FromStr (sJsonError), false );
+}
+
+void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField )
+{
+	JsonObj_c tErr;
+	tErr.AddStr ( "error", sError );
+	CSphString sJsonError = tErr.AsString();
+
+	HttpBuildReply ( dData, eCode, FromStr ( sJsonError ), sHeaderField );
 }
 
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,	const CSphString & sIndex, JsonEscapedBuilder & tOut )
@@ -2870,7 +2935,12 @@ bool HttpHandlerPQ_c::Process()
 		eOp = PercolateOp_e::SEARCH;
 
 	if ( IsEmpty ( m_sQuery ) )
+	{
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, m_eHttpCode, m_sError, m_dData ) )
+			return false;
+
 		return ListQueries ( sIndex );
+	}
 
 	const JsonObj_c tRoot ( m_sQuery );
 	if ( !tRoot )
@@ -2880,7 +2950,12 @@ bool HttpHandlerPQ_c::Process()
 	}
 
 	if ( !tRoot.Size() )
+	{
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, m_eHttpCode, m_sError, m_dData ) )
+			return false;
+
 		return ListQueries ( sIndex );
+	}
 
 	if ( eOp==PercolateOp_e::UNKNOWN )
 	{
@@ -2903,6 +2978,9 @@ bool HttpHandlerPQ_c::Process()
 		ReportError ( EHTTP_STATUS::_400 );
 		return false;
 	}
+
+	if ( !HttpCheckPerms ( session::GetUser(), ( eOp==PercolateOp_e::SEARCH ? AuthAction_e::READ : AuthAction_e::WRITE ), sIndex, m_eHttpCode, m_sError, m_dData ) )
+		return false;
 
 	bool bVerbose = false;
 	JsonObj_c tVerbose = tRoot.GetItem ( "verbose" );
@@ -3181,6 +3259,9 @@ bool HttpHandlerEsBulk_c::Process()
 			{
 				bNextLineMeta = false;
 			}
+
+			if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, tDoc.m_sIndex, m_eHttpCode, m_sError, m_dData ) )
+				return false;
 		}
 	}
 	CSphVector<BulkTnx_t> dTnx;
@@ -3459,4 +3540,30 @@ const char * GetErrorTypeName ( HttpErrorType_e eType )
 	default:
 		return nullptr;;
 	}
+}
+
+HttpTokenHandler_c::HttpTokenHandler_c ( const OptionsHash_t & tOptions )
+	: HttpOptionTrait_t ( tOptions )
+{
+}
+bool HttpTokenHandler_c::Process ()
+{
+	TRACE_CONN ( "conn", "HttpTokenHandler_c::Process" );
+
+	if( !HttpCheckPerms ( session::GetUser(), AuthAction_e::ADMIN, CSphString(), m_eHttpCode, m_sError, m_dData ) )
+		return false;
+
+	CSphString sToken = CreateSessionToken ( m_sError );
+	if ( !m_sError.IsEmpty() )
+	{
+		m_eHttpCode = EHTTP_STATUS::_403;
+		sphHttpErrorReply ( m_dData, m_eHttpCode, m_sError.cstr() );
+		return false;
+	}
+	
+	StringBuilder_c tOut;
+	tOut.Sprintf ( R"( {"token":"%s"} )", sToken.cstr() );
+
+	BuildReply ( tOut.cstr(), EHTTP_STATUS::_200 );
+	return true;
 }

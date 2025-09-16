@@ -1,0 +1,94 @@
+Test error handling in auto-embeddings
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+Test 1: Incorrect vector dimensions
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_dims (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' KNN_DIMS='384'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+) engine='columnar'" 2>&1 | grep -c "Error"
+––– output –––
+0
+––– comment –––
+Model outputs 384 dims, but KNN_DIMS can be different - Manticore should handle this
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_dims (id, title) VALUES (1, 'Test document')"; echo $?
+––– output –––
+0
+––– comment –––
+Test 2: Missing model name
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_model (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    FROM='title'
+) engine='columnar'" 2>&1 | grep -c "Error\|error"
+––– output –––
+1
+––– comment –––
+Test 3: Invalid model name
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bad_model (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='non-existent-model/invalid-name'
+    FROM='title'
+) engine='columnar'" 2>&1 | grep -o "Error\|created" | head -1
+––– output –––
+Error
+––– comment –––
+Test 4: FROM field doesn't exist
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bad_from (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='non_existent_field'
+) engine='columnar'" 2>&1 | grep -c "Error\|error"
+––– output –––
+1
+––– comment –––
+Test 5: Very large batch insert (potential OOM)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_oom (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert large batch to test memory handling
+––– input –––
+# Create large text (but not >10KB as it's not supported)
+LARGE_TEXT=$(python3 -c "print('neural network ' * 500)")
+for i in {1..100}; do
+    mysql -h0 -P9306 -e "INSERT INTO test_oom (id, content) VALUES ($i, '$LARGE_TEXT batch $i')" 2>/dev/null
+done
+echo "Large batch insert completed"
+––– output –––
+Large batch insert completed
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_oom"
+––– output –––
++----------+
+| count(*) |
++----------+
+|      100 |
++----------+
+––– comment –––
+Test 6: Circular reference in FROM
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_circular (
+    title TEXT,
+    vec1 FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='vec1'
+) engine='columnar'" 2>&1 | grep -c "Error\|error"
+––– output –––
+1

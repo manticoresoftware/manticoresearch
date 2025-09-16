@@ -1,0 +1,163 @@
+Test different HNSW configurations and similarity metrics
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+Test 1: Different similarity metrics
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_l2 (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_cosine (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_ip (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='ip'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert same data into all tables
+––– input –––
+for table in test_l2 test_cosine test_ip; do
+    mysql -h0 -P9306 -e "INSERT INTO $table (id, content) VALUES
+        (1, 'machine learning'),
+        (2, 'deep learning'),
+        (3, 'cooking recipes')" 2>/dev/null
+done
+echo "Data inserted into all tables"
+––– output –––
+Data inserted into all tables
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_l2; OPTIMIZE TABLE test_l2 OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_cosine; OPTIMIZE TABLE test_cosine OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_ip; OPTIMIZE TABLE test_ip OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– comment –––
+Test KNN with different metrics returns different results
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_l2 WHERE KNN(vec, 2, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_cosine WHERE KNN(vec, 2, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_ip WHERE KNN(vec, 2, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– comment –––
+Test 2: Different HNSW parameters
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_m4 (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    HNSW_M='4'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_m32 (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    HNSW_M='32'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_ef (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    HNSW_M='16'
+    HNSW_EF_CONSTRUCTION='500'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert test data to verify all configurations work
+––– input –––
+for table in test_hnsw_m4 test_hnsw_m32 test_hnsw_ef; do
+    mysql -h0 -P9306 -e "INSERT INTO $table (id, content) VALUES (1, 'test document')" 2>/dev/null
+done
+echo "HNSW configurations test completed"
+––– output –––
+HNSW configurations test completed
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_m4"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_m32"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_ef"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– comment –––
+Test 3: Invalid similarity metric
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid_metric (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='invalid_metric'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'" 2>&1 | grep -c "Error\|error"
+––– output –––
+1

@@ -1,5 +1,4 @@
 Test edge cases and error conditions for auto-embeddings
-
 ––– comment –––
 Start Manticore Search
 ––– block: ../base/start-searchd –––

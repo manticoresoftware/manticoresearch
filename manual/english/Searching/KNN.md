@@ -19,6 +19,8 @@ To run KNN searches, you must first configure your table. Float vectors and KNN 
   - `L2` - Squared L2
   - `IP` - Inner product
   - `COSINE` - Cosine similarity
+  
+  **Note:** When using `COSINE` similarity, vectors are automatically normalized upon insertion. This means the stored vector values may differ from the original input values, as they will be converted to unit vectors (vectors with a mathematical length/magnitude of 1.0) to enable efficient cosine similarity calculations. This normalization preserves the direction of the vector while standardizing its length.
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.
 * `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off.
 
@@ -237,6 +239,8 @@ POST /search
 
 <!-- example manual_vector -->
 Alternatively, you can manually insert pre-computed vector data, ensuring it matches the dimensions you specified when creating the table. You can also insert an empty vector; this means that the document will be excluded from vector search results.
+
+**Important:** When using `hnsw_similarity='cosine'`, vectors are automatically normalized upon insertion to unit vectors (vectors with a mathematical length/magnitude of 1.0). This normalization preserves the direction of the vector while standardizing its length, which is required for efficient cosine similarity calculations. This means the stored values will differ from your original input values.
 
 <!-- intro -->
 ##### SQL:

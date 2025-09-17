@@ -380,6 +380,7 @@ static std::unique_ptr<ColumnarAttrRT_i> CreateColumnarAttrRT ( ESphAttr eType, 
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_FLOAT:
+	case SPH_ATTR_TOKENCOUNT:
 		return std::make_unique<ColumnarAttr_Int_T<DWORD>> ( eType, iBits );
 
 	case SPH_ATTR_BOOL:			return std::make_unique<ColumnarAttr_Bool_c>();

@@ -4473,7 +4473,10 @@ static int ConvertToColumnarType ( ESphAttr eAttr )
 {
 	switch ( eAttr )
 	{
-	case SPH_ATTR_INTEGER:		return TOK_COLUMNAR_INT;
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TOKENCOUNT:
+		return TOK_COLUMNAR_INT;
+
 	case SPH_ATTR_TIMESTAMP:	return TOK_COLUMNAR_TIMESTAMP;
 	case SPH_ATTR_FLOAT:		return TOK_COLUMNAR_FLOAT;
 	case SPH_ATTR_BIGINT:		return TOK_COLUMNAR_BIGINT;

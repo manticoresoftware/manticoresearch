@@ -1,6 +1,5 @@
-Test auto-embeddings functionality across different API endpoints
 ––– comment –––
-Start Manticore with test-kit version for KNN text support
+Start Manticore Search with buddy
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Install jq for JSON parsing

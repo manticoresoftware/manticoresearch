@@ -1,4 +1,3 @@
-Test backup/restore with auto-embeddings using manticore-backup tool
 ––– comment –––
 Start Manticore Search with buddy
 ––– block: ../base/start-searchd-with-buddy –––

@@ -1,7 +1,6 @@
-Test edge cases and error conditions for auto-embeddings
 ––– comment –––
-Start Manticore Search
-––– block: ../base/start-searchd –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Test empty values in FROM fields
 ––– input –––
@@ -170,59 +169,6 @@ mysql -h0 -P9306 -e "SELECT content_text FROM test_rapid WHERE id=1"
 +--------------+
 | Iteration 20 |
 +--------------+
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_from (
-    content_text TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-)" 2>&1
-––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'vec'
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_circular (
-    content_text TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-    FROM='vec'
-)" 2>&1
-––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_circular': prealloc: embedding source attribute 'vec' is not a string
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_bad_from (
-    title TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-    FROM='nonexistent_field'
-)" 2>&1
-––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_bad_from': prealloc: embedding source 'nonexistent_field' not found
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
-    title TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-    FROM=''
-)" 2>&1
-––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_empty_from': 'from' setting empty for KNN attribute 'vec'
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_invalid_model (
-    content_text TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='non-existent-model/invalid-name'
-    FROM='content_text'
-)" 2>&1
-––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_invalid_model': prealloc: Failed to download model configuration
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_prefix (
-    content_text TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='all-MiniLM-L6-v2'
-    FROM='content_text'
-)" 2>&1
-––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_no_prefix': prealloc: Failed to download model configuration
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_empty_row (
     title TEXT,

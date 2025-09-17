@@ -1,6 +1,6 @@
 ––– comment –––
-Start Manticore Search
-––– block: ../base/start-searchd –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_delete ( title TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' ) engine='columnar'"; echo $?
 ––– output –––

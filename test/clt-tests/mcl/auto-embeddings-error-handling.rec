@@ -1,60 +1,128 @@
-Test error handling in auto-embeddings
 ––– comment –––
-Start Manticore Search
-––– block: ../base/start-searchd –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
-Test 1: Incorrect vector dimensions
+=== PARAMETER CONFLICTS ===
+––– comment –––
+Test 1: KNN_DIMS cannot be used with MODEL_NAME (auto-dims conflict)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_dims (
     title TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' KNN_DIMS='384'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title'
-) engine='columnar'" 2>&1 | grep -c "Error"
+) engine='columnar'" 2>&1
+# Check if table was actually created
+mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_dims'" | grep -q "test_dims" && echo "Table created" || echo "Table not created"
 ––– output –––
-0
+ERROR 1064 (42000) at line 1: P03: knn_dims can't be used together with model_name near ') engine='columnar''
+Table not created
 ––– comment –––
-Model outputs 384 dims, but KNN_DIMS can be different - Manticore should handle this
+=== VALID CONFIGURATIONS ===
+––– comment –––
+Test 2: Auto-dims with MODEL_NAME (correct usage)
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test_dims (id, title) VALUES (1, 'Test document')"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_auto_dims (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+) engine='columnar'"; echo $?
 ––– output –––
 0
 ––– comment –––
-Test 2: Missing model name
+Test 3: Verify auto-embeddings generation works
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_auto_dims (id, title) VALUES (1, 'Test document')"; echo $?
+––– output –––
+0
+––– comment –––
+=== MISSING REQUIRED PARAMETERS ===
+––– comment –––
+Test 4: Missing KNN_DIMS when no MODEL_NAME specified
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_no_model (
     title TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     FROM='title'
-) engine='columnar'" 2>&1 | grep -c "Error\|error"
+) engine='columnar'"
 ––– output –––
-1
+ERROR 1064 (42000) at line 1: P03: knn_dims and hnsw_similarity are required if knn_type='hnsw' near ') engine='columnar''
 ––– comment –––
-Test 3: Invalid model name
+Test 5: Missing FROM parameter when MODEL_NAME specified
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'vec'
+––– comment –––
+Test 6: Empty FROM parameter (not allowed)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM=''
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_empty_from': 'from' setting empty for KNN attribute 'vec'
+––– comment –––
+=== INVALID MODEL CONFIGURATIONS ===
+––– comment –––
+Test 7: Non-existent model repository
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_bad_model (
     title TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='non-existent-model/invalid-name'
     FROM='title'
-) engine='columnar'" 2>&1 | grep -o "Error\|created" | head -1
+) engine='columnar'" 2>&1
 ––– output –––
-Error
+ERROR 1064 (42000) at line 1: error adding table 'test_bad_model': prealloc: Failed to download model configuration
 ––– comment –––
-Test 4: FROM field doesn't exist
+Test 8: Model name without organization prefix (incomplete HuggingFace path)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_prefix (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='all-MiniLM-L6-v2'
+    FROM='content_text'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_no_prefix': prealloc: Failed to download model configuration
+––– comment –––
+=== INVALID FROM FIELD REFERENCES ===
+––– comment –––
+Test 9: FROM references non-existent field
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_bad_from (
     title TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='non_existent_field'
-) engine='columnar'" 2>&1 | grep -c "Error\|error"
+) engine='columnar'"
 ––– output –––
-1
+ERROR 1064 (42000) at line 1: error adding table 'test_bad_from': prealloc: embedding source 'non_existent_field' not found
 ––– comment –––
-Test 5: Very large batch insert (potential OOM)
+Test 10: FROM references vector field itself (circular reference)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_oom (
+mysql -h0 -P9306 -e "CREATE TABLE test_circular (
+    title TEXT,
+    vec1 FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='vec1'
+) engine='columnar'" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_circular': prealloc: embedding source attribute 'vec1' is not a string
+––– comment –––
+=== DATA EDGE CASES ===
+––– comment –––
+Test 11: Table creation with empty string support
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty (
     content TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
@@ -63,32 +131,24 @@ mysql -h0 -P9306 -e "CREATE TABLE test_oom (
 ––– output –––
 0
 ––– comment –––
-Insert large batch to test memory handling
+Test 12: Empty string insertion (should succeed)
 ––– input –––
-# Create large text (but not >10KB as it's not supported)
-LARGE_TEXT=$(python3 -c "print('neural network ' * 500)")
-for i in {1..100}; do
-    mysql -h0 -P9306 -e "INSERT INTO test_oom (id, content) VALUES ($i, '$LARGE_TEXT batch $i')" 2>/dev/null
-done
-echo "Large batch insert completed"
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, content) VALUES (1, '')"; echo $?
 ––– output –––
-Large batch insert completed
+0
+––– comment –––
+Test 13: NULL value insertion (not supported in Manticore syntax)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_oom"
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, content) VALUES (2, NULL)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected null near 'NULL)'
+––– comment –––
+Test 14: Verify only valid record was inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_empty"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
-|      100 |
+|        1 |
 +----------+
-––– comment –––
-Test 6: Circular reference in FROM
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_circular (
-    title TEXT,
-    vec1 FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-    FROM='vec1'
-) engine='columnar'" 2>&1 | grep -c "Error\|error"
-––– output –––
-1

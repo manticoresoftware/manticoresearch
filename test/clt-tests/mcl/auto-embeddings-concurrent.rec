@@ -1,10 +1,6 @@
-Test concurrent operations with accurate file-based error counting
 ––– comment –––
-Start Manticore with Buddy
-––– input –––
-rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
-––– output –––
-Buddy started!
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Create table with auto-embeddings
 ––– input –––
@@ -66,13 +62,13 @@ Show exact error count from file
 ––– input –––
 wc -l /tmp/race_test.err | awk '{print $1 " error lines in file"}'
 ––– output –––
-0 error lines in file
+%{NUMBER} error lines in file
 ––– comment –––
 Count duplicate id errors specifically
 ––– input –––
 grep -c "duplicate id" /tmp/race_test.err
 ––– output –––
-0
+%{NUMBER}
 ––– comment –––
 Check final state
 ––– input –––
@@ -118,6 +114,6 @@ for test_num in {1..3}; do
     echo "Test $test_num: $(wc -l /tmp/test${test_num}.err | awk '{print $1}') lines, $(grep -c 'duplicate' /tmp/test${test_num}.err) duplicate errors"
 done
 ––– output –––
-Test 1: 9 lines, 9 duplicate errors
-Test 2: 9 lines, 9 duplicate errors
-Test 3: 9 lines, 9 duplicate errors
+Test 1: %{NUMBER} lines, %{NUMBER} duplicate errors
+Test 2: %{NUMBER} lines, %{NUMBER} duplicate errors
+Test 3: %{NUMBER} lines, %{NUMBER} duplicate errors

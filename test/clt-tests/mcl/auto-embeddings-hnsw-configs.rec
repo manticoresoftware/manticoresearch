@@ -1,9 +1,8 @@
-Test different HNSW configurations and similarity metrics
 ––– comment –––
-Start Manticore Search
-––– block: ../base/start-searchd –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
-Test 1: Different similarity metrics
+Test 1: Create tables with different similarity metrics
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_l2 (
     content TEXT,
@@ -32,7 +31,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_ip (
 ––– output –––
 0
 ––– comment –––
-Insert same data into all tables
+Test 2: Insert test data into all metric tables
 ––– input –––
 for table in test_l2 test_cosine test_ip; do
     mysql -h0 -P9306 -e "INSERT INTO $table (id, content) VALUES
@@ -43,6 +42,8 @@ done
 echo "Data inserted into all tables"
 ––– output –––
 Data inserted into all tables
+––– comment –––
+Test 3: Optimize tables for consistent results
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_l2; OPTIMIZE TABLE test_l2 OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
@@ -56,7 +57,7 @@ mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_ip; OPTIMIZE TABLE test_ip OPTION sync=
 ––– output –––
 0
 ––– comment –––
-Test KNN with different metrics returns different results
+Test 4: Verify KNN search returns correct documents
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_l2 WHERE KNN(vec, 2, 'artificial intelligence')"
 ––– output –––
@@ -85,7 +86,47 @@ mysql -h0 -P9306 -e "SELECT id FROM test_ip WHERE KNN(vec, 2, 'artificial intell
 |    2 |
 +------+
 ––– comment –––
-Test 2: Different HNSW parameters
+Test 5: Compare distance values between different metrics
+––– input –––
+echo "L2 (Euclidean) distances:"
+mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_l2 WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
+––– output –––
+L2 (Euclidean) distances:
++------+------------------+------------+
+| id   | content          | distance   |
++------+------------------+------------+
+|    2 | deep learning    |   0.491045 |
+|    1 | machine learning | 0.61700082 |
+|    3 | cooking recipes  | 1.42384136 |
++------+------------------+------------+
+––– input –––
+echo "Cosine similarity distances (smaller = more similar):"
+mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_cosine WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
+––– output –––
+Cosine similarity distances (smaller = more similar):
++------+------------------+------------+
+| id   | content          | distance   |
++------+------------------+------------+
+|    2 | deep learning    | 0.24552250 |
+|    1 | machine learning | 0.30850041 |
+|    3 | cooking recipes  | 0.71192080 |
++------+------------------+------------+
+––– input –––
+echo "Inner product distances (larger negative = more similar):"
+mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_ip WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
+––– output –––
+Inner product distances (larger negative = more similar):
++------+------------------+------------+
+| id   | content          | distance   |
++------+------------------+------------+
+|    2 | deep learning    | 0.24552250 |
+|    1 | machine learning | 0.30850047 |
+|    3 | cooking recipes  | 0.71192086 |
++------+------------------+------------+
+––– comment –––
+=== HNSW INDEX PARAMETERS ===
+––– comment –––
+Test 6: Different HNSW_M values (connectivity parameter)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_m4 (
     content TEXT,
@@ -106,6 +147,8 @@ mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_m32 (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Test 7: HNSW_EF_CONSTRUCTION parameter (index build quality)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_ef (
     content TEXT,
@@ -118,7 +161,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_ef (
 ––– output –––
 0
 ––– comment –––
-Insert test data to verify all configurations work
+Test 8: Verify HNSW parameter tables work correctly
 ––– input –––
 for table in test_hnsw_m4 test_hnsw_m32 test_hnsw_ef; do
     mysql -h0 -P9306 -e "INSERT INTO $table (id, content) VALUES (1, 'test document')" 2>/dev/null
@@ -151,13 +194,54 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_ef"
 |        1 |
 +----------+
 ––– comment –––
-Test 3: Invalid similarity metric
+Test 9: Performance comparison with different M values
+––– input –––
+for i in {1..10}; do
+    mysql -h0 -P9306 -e "INSERT INTO test_hnsw_m4 (content) VALUES ('document number $i with various content')" 2>/dev/null
+    mysql -h0 -P9306 -e "INSERT INTO test_hnsw_m32 (content) VALUES ('document number $i with various content')" 2>/dev/null
+done
+echo "Additional documents inserted for performance comparison"
+––– output –––
+Additional documents inserted for performance comparison
+––– comment –––
+Test 10: Compare search results between different M values
+––– input –––
+echo "Search with M=4 (faster, less connections):"
+mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m4 WHERE KNN(vec, 3, 'document content') LIMIT 3"
+––– output –––
+Search with M=4 (faster, less connections):
++---------------------+
+| id                  |
++---------------------+
+| %{NUMBER} |
+| %{NUMBER} |
+| %{NUMBER} |
++---------------------+
+––– input –––
+echo "Search with M=32 (slower, more connections, potentially more accurate):"
+mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m32 WHERE KNN(vec, 3, 'document content') LIMIT 3"
+––– output –––
+Search with M=32 (slower, more connections, potentially more accurate):
++---------------------+
+| id                  |
++---------------------+
+| %{NUMBER} |
+| %{NUMBER} |
+| %{NUMBER} |
++---------------------+
+––– comment –––
+=== ERROR HANDLING ===
+––– comment –––
+Test 11: Invalid similarity metric
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_invalid_metric (
     content TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='invalid_metric'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='content'
-) engine='columnar'" 2>&1 | grep -c "Error\|error"
+) engine='columnar'" 2>&1
 ––– output –––
-1
+ERROR 1064 (42000) at line 1: P03: Unknown knn similarity 'INVALID_METRIC' near ''invalid_metric'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar''

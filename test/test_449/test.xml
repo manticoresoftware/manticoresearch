@@ -121,6 +121,18 @@ searchd
 	flush ramchunk t;
 	select * from t order by id asc;
 	drop table t;
+
+	<!-- regression for a crash on stored field lengths -->
+	create table book (title text) engine='columnar' index_field_lengths='1';
+	insert into book values ( 1, 'one' );
+	insert into book values ( 2, 'two tokens' );
+	insert into book values ( 3, 'three tokens tokens' );
+	select * from book order by id asc;
+	select title_len from book order by id asc;
+	flush ramchunk book;
+	select * from book order by id asc;
+	select title_len from book order by id asc;
+	drop table book;
 </sphinxql>
 </queries>
 

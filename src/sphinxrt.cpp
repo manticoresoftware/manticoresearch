@@ -3462,6 +3462,37 @@ int CommitID() {
 }
 } // namespace
 
+
+static void CalcFieldLengths ( const RtSegment_t * pSeg, const CSphSchema & tSchema, CSphVector<int64_t> & dLengths )
+{
+	int iFirstFieldLenAttr = tSchema.GetAttrId_FirstFieldLen();
+	if ( !pSeg || iFirstFieldLenAttr<0 )
+		return;
+
+	int iFields = tSchema.GetFieldsCount(); // shortcut
+	dLengths.Resize(iFields);
+	dLengths.ZeroVec();
+
+	CSphVector<PlainOrColumnar_t> dFieldLenAttrs;
+	int iColumnar = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		std::unique_ptr<Histogram_i> pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		if ( i>=iFirstFieldLenAttr && i<=tSchema.GetAttrId_LastFieldLen() )
+			dFieldLenAttrs.Add ( { tAttr, iColumnar } );
+
+		if ( tAttr.IsColumnar() )
+			iColumnar++;
+	}
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( pSeg->m_pColumnar.get(), tSchema );
+	for ( DWORD uRow = 0; uRow < pSeg->m_uRows; uRow++ )
+		for ( int iField = 0; iField < iFields; iField++ )
+			dLengths[iField] += dFieldLenAttrs[iField].Get ( uRow, pSeg->GetDocinfoByRowID(uRow), dColumnarIterators );
+}
+
+
 bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError ) REQUIRES_SHARED ( pNewSeg->m_tLock )
 {
 	// store statistics, because pNewSeg just might get merged
@@ -3470,18 +3501,8 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 	int iNewDocs = pNewSeg ? (int)pNewSeg->m_uRows : 0;
 
 	// helpers for SPH_ATTR_TOKENCOUNT attributes
-	CSphVector<int64_t> dLens;
-	int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
-	if ( pNewSeg && iFirstFieldLenAttr>=0 )
-	{
-		assert ( pNewSeg->GetStride()==m_iStride );
-		int iFields = m_tSchema.GetFieldsCount(); // shortcut
-		dLens.Resize ( iFields );
-		dLens.Fill ( 0 );
-		for ( DWORD i=0; i<pNewSeg->m_uRows; ++i )
-			for ( int j=0; j<iFields; ++j )
-				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
-	}
+	CSphVector<int64_t> dLengths;
+	CalcFieldLengths ( pNewSeg, m_tSchema, dLengths );
 
 	if ( pNewSeg && !CheckSegmentConsistency ( pNewSeg, false ) )
 		DumpInsert ( pNewSeg );
@@ -3519,10 +3540,10 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
 	m_tStats.m_iTotalBytes += iAddTotalBytes;
 
-	if ( dLens.GetLength() )
+	if ( dLengths.GetLength() )
 		for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
 		{
-			m_dFieldLensRam[i] += dLens[i];
+			m_dFieldLensRam[i] += dLengths[i];
 			m_dFieldLens[i] = m_dFieldLensRam[i] + m_dFieldLensDisk[i];
 		}
 

@@ -301,7 +301,7 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		bRebuildBlobs |= !tAttr.IsColumnar();
 		bRebuildDocstore |= tAttr.IsStored();
 
-		dDocstoreRemap[i] = ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR );
+		dDocstoreRemap[i] = m_pDocstore ? ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR ) : -1;
 	}
 
 	CSphTightVector<BYTE> dNewBlobPool;

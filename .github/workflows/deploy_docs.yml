@@ -88,6 +88,7 @@ jobs:
           sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
 
       - name: Upload artifact
+        if: always()
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: Docs error artifact

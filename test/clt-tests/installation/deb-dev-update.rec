@@ -57,7 +57,7 @@ wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb > /dev/nu
 ––– output –––
 0
 ––– input –––
-apt remove 'manticore*' > /dev/null 2>&1; echo $?
+apt -y remove 'manticore*' > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

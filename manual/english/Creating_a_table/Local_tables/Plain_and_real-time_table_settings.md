@@ -83,7 +83,7 @@ Value: **plain** (default), rt
 path = path/to/table
 ```
 
-The path to where the table will be stored or located, either absolute or relative, without the extension.
+The path to where the table will be stored or located, either absolute or relative, without the extension. 
 
 Value: The path to the table, **mandatory**
 

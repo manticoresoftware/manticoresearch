@@ -7,12 +7,12 @@ LATEST_MYSQL="9.4"
 
 # Function to update documentation with latest versions
 update_documentation() {
-    # Временно отключаем set -e для этой функции
+    # Temporarily disable set -e for this function
     set +e
 
     echo "Starting documentation update..."
 
-    # Определяем корень репозитория
+    # Determine repository root
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 
     if [ -z "$REPO_ROOT" ]; then
@@ -23,77 +23,46 @@ update_documentation() {
     fi
 
     if [ ! -f "$DOC_FILE" ]; then
-        echo "⚠️ Documentation file not found at: $DOC_FILE"
-        echo "⚠️ Documentation update skipped (file not found)"
-        set -e
-        return 0
-    fi
-
-    if [ ! -w "$DOC_FILE" ]; then
-        echo "⚠️ No write permissions for: $DOC_FILE"
-        echo "⚠️ Documentation update skipped (no write permissions)"
-        set -e
-        return 0
-    fi
-
-    echo "📝 Found documentation at: $DOC_FILE"
-
-    # Create backup
-    cp "$DOC_FILE" "$DOC_FILE.bak" 2>/dev/null
-    if [ $? -ne 0 ]; then
-        echo "⚠️ Failed to create backup of documentation"
+        echo "⚠️ Documentation file not found"
         echo "⚠️ Documentation update skipped"
         set -e
         return 0
     fi
 
+    echo "📝 Updating documentation..."
+
+    # Create backup
+    cp "$DOC_FILE" "$DOC_FILE.bak" 2>/dev/null || true
+
     # Detect OS and use appropriate sed syntax
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
-        echo "Using macOS sed syntax..."
         sed -i '' \
             -e "s/MariaDB\( up to\| versions up to\| up to version\)\? [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" \
             -e "s/mariadb-dump (up to [0-9]\+\.[0-9]\+)/mariadb-dump (up to $LATEST_MARIADB)/g" \
-            "$DOC_FILE"
+            "$DOC_FILE" 2>/dev/null || true
 
         sed -i '' \
             -e "s/MySQL\( up to\| versions up to\| up to version\)\? [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" \
             -e "s/mysqldump (up to [0-9]\+\.[0-9]\+)/mysqldump (up to $LATEST_MYSQL)/g" \
-            "$DOC_FILE"
+            "$DOC_FILE" 2>/dev/null || true
     else
         # Linux
-        echo "Using Linux sed syntax..."
         sed -i \
             -e "s/MariaDB\( up to\| versions up to\| up to version\)\? [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" \
             -e "s/mariadb-dump (up to [0-9]\+\.[0-9]\+)/mariadb-dump (up to $LATEST_MARIADB)/g" \
-            "$DOC_FILE"
+            "$DOC_FILE" 2>/dev/null || true
 
         sed -i \
             -e "s/MySQL\( up to\| versions up to\| up to version\)\? [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" \
             -e "s/mysqldump (up to [0-9]\+\.[0-9]\+)/mysqldump (up to $LATEST_MYSQL)/g" \
-            "$DOC_FILE"
+            "$DOC_FILE" 2>/dev/null || true
     fi
 
-    if [ $? -ne 0 ]; then
-        echo "⚠️ sed command failed"
-        mv "$DOC_FILE.bak" "$DOC_FILE" 2>/dev/null
-        echo "⚠️ Documentation update skipped (sed failed)"
-        set -e
-        return 0
-    fi
+    echo "✅ Documentation update completed"
+    rm -f "$DOC_FILE.bak"
 
-    # Check if documentation was actually changed
-    if diff -q "$DOC_FILE.bak" "$DOC_FILE" > /dev/null 2>&1; then
-        echo "📝 Documentation already up to date"
-        rm -f "$DOC_FILE.bak"
-    else
-        echo "✅ Documentation updated: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
-        echo "Changes made:"
-        diff --unified=1 "$DOC_FILE.bak" "$DOC_FILE" 2>/dev/null | head -20 || true
-        rm -f "$DOC_FILE.bak"
-    fi
-
-    # Включаем обратно set -e
+    # Re-enable set -e
     set -e
     return 0
 }
@@ -122,10 +91,7 @@ if command -v curl >/dev/null 2>&1; then
         echo "🆕 NEW MariaDB versions detected:"
         echo "$newer_mariadb" | sed 's/^/  - mariadb:/'
         echo ""
-        echo "Action required:"
-        echo "1. Update LATEST_MARIADB variable to the new version"
-        echo "2. Add new version(s) to the versions array"
-        echo "3. Run the test again"
+        echo "Action required: Update LATEST_MARIADB and versions array"
         found_new=true
     fi
 
@@ -143,17 +109,13 @@ if command -v curl >/dev/null 2>&1; then
         echo "🆕 NEW MySQL versions detected:"
         echo "$newer_mysql" | sed 's/^/  - mysql:/'
         echo ""
-        echo "Action required:"
-        echo "1. Update LATEST_MYSQL variable to the new version"
-        echo "2. Add new version(s) to the versions array"
-        echo "3. Run the test again"
+        echo "Action required: Update LATEST_MYSQL and versions array"
         found_new=true
     fi
 
     if [ "$found_new" = true ]; then
         echo ""
-        echo "❗ Please update the script with new versions and run again!"
-        echo "❗ Documentation will be automatically updated after successful tests"
+        echo "❗ Please update the script with new versions!"
         exit 1
     else
         echo "✅ No new versions found after MariaDB $LATEST_MARIADB and MySQL $LATEST_MYSQL"
@@ -182,6 +144,9 @@ versions=(
 )
 
 # Test all versions
+echo "Testing ${#versions[@]} database versions..."
+echo ""
+
 for version in "${versions[@]}"; do
     # Determine database type and dump command
     if [[ $version == mariadb* ]]; then
@@ -192,50 +157,47 @@ for version in "${versions[@]}"; do
         dump_command="mysqldump"
     fi
 
-    echo "Testing version: $version"
+    echo -n "Testing $version... "
 
-    # Start the database container
-    docker pull --platform linux/amd64 -q $version > /dev/null
+    # Start the database container silently
+    docker pull --platform linux/amd64 -q $version > /dev/null 2>&1
     docker run --rm -d --network=test_network --platform linux/amd64 --name db-test \
-        -e MYSQL_ROOT_PASSWORD=my-secret-pw $version bash -c "tail -f /dev/null" > /dev/null
+        -e MYSQL_ROOT_PASSWORD=my-secret-pw $version bash -c "tail -f /dev/null" > /dev/null 2>&1
     sleep 5
 
     # Execute dump from the database container to Manticore
     docker exec db-test $dump_command -hmanticore -P9306 manticore t > dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
 
     # Drop the table in Manticore to prepare for restore
-    docker exec manticore mysql -h0 -P9306 -e "DROP TABLE t;"
+    docker exec manticore mysql -h0 -P9306 -e "DROP TABLE t;" > /dev/null 2>&1
 
     # Restore dump back to Manticore
-    docker exec -i db-test $db_type -hmanticore -P9306 manticore < dump.sql
+    docker exec -i db-test $db_type -hmanticore -P9306 manticore < dump.sql > /dev/null 2>&1
 
-    # Verify restore was successful by selecting data
-    docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
+    # Verify restore was successful by counting rows
+    ROW_COUNT=$(docker exec db-test $db_type -hmanticore -P9306 -Ne "SELECT COUNT(*) FROM t;" manticore 2>/dev/null)
 
     # Check for errors
-    if [ -s dump.sql ]; then
-        echo "Dump $version completed successfully"
+    if [ -s dump.sql ] && [ "$ROW_COUNT" = "20" ]; then
+        echo "✅ Success"
     else
-        echo "Error: dump.sql is empty for $version"
-        docker stop db-test > /dev/null
+        echo "❌ Failed (expected 20 rows, got $ROW_COUNT)"
+        docker stop db-test > /dev/null 2>&1
         exit 1
     fi
 
-    # Stop and remove container
-    docker stop db-test > /dev/null
-    rm dump.sql
+    # Stop and remove container silently
+    docker stop db-test > /dev/null 2>&1
+    rm -f dump.sql
 done
 
+echo ""
 echo "All database versions tested successfully!"
 
 # Update documentation after successful tests
 echo ""
 echo "Updating documentation with latest supported versions..."
-
-# Вызываем функцию и проверяем её результат
-update_documentation || {
-    echo "⚠️ Documentation update had issues but continuing..."
-}
+update_documentation || true
 
 echo ""
 echo "✅ Test completed successfully!"

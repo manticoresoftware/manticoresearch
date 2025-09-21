@@ -57,6 +57,10 @@ wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb > /dev/nu
 ––– output –––
 0
 ––– input –––
+apt -y remove 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 dpkg -i manticore-dev-repo.noarch.deb > /dev/null | sort; echo $?
 ––– output –––
 gpg: keyring '/etc/apt/trusted.gpg.d/manticore-keyring.gpg' created

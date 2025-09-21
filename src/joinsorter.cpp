@@ -1717,7 +1717,7 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING || pAttr1->m_eAttrType==SPH_ATTR_STRINGPTR;
 
 		tFilter.m_sAttrName = sAttrIdx2;
-		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING : SPH_FILTER_VALUES;
+		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING_LIST : SPH_FILTER_VALUES;
 
 		int iFilterId = m_tJoinQuery.m_dFilters.GetLength()-1;
 		m_dFilterRemap.Add ( { iFilterId, pAttr1->m_tLocator, {}, bStringFilter } );
@@ -2022,7 +2022,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 		if ( GetJoinAttrName ( i.m_sAttrName, GetJoinedIndexName(), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
-			if ( pAttr && pAttr->IsColumnar() )
+			if ( pAttr )
 				AddToJoinSelectList ( i.m_sAttrName, i.m_sAttrName );
 		}		
 	}

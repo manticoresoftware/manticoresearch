@@ -1876,11 +1876,13 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias )
 {
-	int iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
-	if ( iSorterAttrId==-1 )
-		iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	int iSorterAttrId1 = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
+	if ( iSorterAttrId1!=-1 )
+		AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId1 );
 
-	AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId );
+	int iSorterAttrId2 = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	if ( iSorterAttrId2!=-1 && iSorterAttrId2!=iSorterAttrId1 )
+			AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId2 );
 }
 
 

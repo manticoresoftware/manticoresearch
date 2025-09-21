@@ -5,40 +5,88 @@ set -e
 LATEST_MARIADB="12.0"
 LATEST_MYSQL="9.4"
 
-# Path to documentation file
-DOC_FILE="../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-
 # Function to update documentation with latest versions
 update_documentation() {
-    if [ ! -f "$DOC_FILE" ]; then
-        echo "⚠️ Documentation file not found at $DOC_FILE, skipping documentation update"
-        return
+    # Определяем корень репозитория
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+
+    if [ -z "$REPO_ROOT" ]; then
+        echo "⚠️ Not in a git repository, trying relative path"
+        # Если не в git, используем относительный путь
+        # Из test/clt-tests/mysqldump/versions/ до корня - 4 уровня вверх
+        DOC_FILE="../../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+    else
+        # Используем абсолютный путь от корня репозитория
+        DOC_FILE="$REPO_ROOT/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
     fi
+
+    if [ ! -f "$DOC_FILE" ]; then
+        echo "⚠️ Documentation file not found at: $DOC_FILE"
+        echo "Current directory: $(pwd)"
+        echo "Looking for alternative paths..."
+
+        # Пробуем альтернативные пути
+        local alt_paths=(
+            "../../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+            "../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+            "manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+            "/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+        )
+
+        for path in "${alt_paths[@]}"; do
+            if [ -f "$path" ]; then
+                DOC_FILE="$path"
+                echo "✅ Found documentation at: $DOC_FILE"
+                break
+            fi
+        done
+
+        if [ ! -f "$DOC_FILE" ]; then
+            echo "❌ Documentation file not found. Tried:"
+            echo "  - Main path: $REPO_ROOT/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+            for path in "${alt_paths[@]}"; do
+                echo "  - $path"
+            done
+            echo "⚠️ Skipping documentation update"
+            return 0
+        fi
+    fi
+
+    echo "📝 Updating documentation at: $DOC_FILE"
 
     # Create backup of documentation
     cp "$DOC_FILE" "$DOC_FILE.bak"
 
     # Update MariaDB version in documentation
-    # Matches patterns like "MariaDB up to 12.0", "MariaDB (up to version 12.0)", etc.
-    sed -i \
+    sed -i.tmp \
         -e "s/MariaDB\( up to\| versions up to\| up to version\)\? [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" \
         -e "s/mariadb-dump (up to [0-9]\+\.[0-9]\+)/mariadb-dump (up to $LATEST_MARIADB)/g" \
         "$DOC_FILE"
 
     # Update MySQL version in documentation
-    # Matches patterns like "MySQL up to 9.4", "MySQL (up to version 9.4)", etc.
-    sed -i \
+    sed -i.tmp2 \
         -e "s/MySQL\( up to\| versions up to\| up to version\)\? [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" \
         -e "s/mysqldump (up to [0-9]\+\.[0-9]\+)/mysqldump (up to $LATEST_MYSQL)/g" \
         "$DOC_FILE"
+
+    # Cleanup temporary files
+    rm -f "$DOC_FILE.tmp" "$DOC_FILE.tmp2"
 
     # Check if documentation was actually changed
     if diff -q "$DOC_FILE.bak" "$DOC_FILE" > /dev/null; then
         echo "📝 Documentation already up to date"
         rm "$DOC_FILE.bak"
     else
-        echo "📝 Documentation updated: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
+        echo "✅ Documentation updated: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
         echo "   Backup saved as $DOC_FILE.bak"
+
+        # Show what changed
+        echo ""
+        echo "Changes made:"
+        diff --unified=1 "$DOC_FILE.bak" "$DOC_FILE" | head -20 || true
+
+        # Remove backup after showing diff
+        rm "$DOC_FILE.bak"
     fi
 }
 
@@ -180,3 +228,6 @@ update_documentation
 echo ""
 echo "✅ Test completed successfully!"
 echo "✅ Supported versions: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
+
+# Ensure we exit with success
+exit 0

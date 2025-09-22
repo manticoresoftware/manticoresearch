@@ -98,31 +98,36 @@ done
 
 echo "All database versions tested successfully!"
 
-# Update documentation with diagnostics
+# Update documentation
 echo ""
 echo "Looking for documentation file..."
-echo "Current directory: $(pwd)"
-echo "Script location: $(dirname "$0")"
 
-# Try to find git root
-if git rev-parse --show-toplevel >/dev/null 2>&1; then
-    REPO_ROOT=$(git rev-parse --show-toplevel)
-    echo "Git repository root: $REPO_ROOT"
-    DOC_FILE="$REPO_ROOT/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-else
-    echo "Not in git repository, using relative path"
-    DOC_FILE="../../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-fi
+# Try different paths
+POSSIBLE_PATHS=(
+    "../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+    "manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+    "./manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+)
 
-echo "Looking for documentation at: $DOC_FILE"
+DOC_FILE=""
+for path in "${POSSIBLE_PATHS[@]}"; do
+    if [ -f "$path" ]; then
+        DOC_FILE="$path"
+        echo "Found documentation at: $path"
+        break
+    fi
+done
 
 if [ -f "$DOC_FILE" ]; then
-    sed -i "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" "$DOC_FILE" 2>/dev/null || true
-    sed -i "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" "$DOC_FILE" 2>/dev/null || true
-    echo "✅ Documentation updated with latest versions"
+    sed -i "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" "$DOC_FILE"
+    sed -i "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" "$DOC_FILE"
+    echo "✅ Documentation updated: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
 else
-    echo "⚠️ Documentation file not found"
-    echo "Please update manually: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
+    echo "⚠️ Documentation file not found, please update manually"
+    echo "Tried paths:"
+    for path in "${POSSIBLE_PATHS[@]}"; do
+        echo "  - $path"
+    done
 fi
 
 exit 0

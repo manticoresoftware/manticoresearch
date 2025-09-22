@@ -7,8 +7,13 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d -v ./test/clt-tests/scripts/generate-records.sh:/generate-records.sh ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
-––– output –––
+docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore \
+    -p 9306:9306 -d \
+    -v ./test/clt-tests/scripts/generate-records.sh:/generate-records.sh \
+    -v ./manual/english/Securing_and_compacting_a_table/Backup_and_restore.md:/docs/Backup_and_restore.md \
+    ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
+    searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
+		––– output –––
 0
 ––– input –––
 timeout 10 docker logs -f manticore | grep -qm1 '\[BUDDY\] started' && echo 'Buddy started!' || echo 'Timeout or failed!'

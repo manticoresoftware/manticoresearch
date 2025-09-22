@@ -47,6 +47,8 @@ if command -v curl >/dev/null 2>&1; then
         echo "✅ No new versions found after MariaDB $LATEST_MARIADB and MySQL $LATEST_MYSQL"
     else
         echo "❗ Please update the versions array and test new versions!"
+        echo "❗ Also update LATEST_MARIADB and LATEST_MYSQL in script and documentation"
+        exit 1
     fi
 
     echo "✅ Version check completed"
@@ -89,8 +91,6 @@ for version in "${versions[@]}"; do
         echo "Dump $version completed successfully"
     else
         echo "Error: dump.sql is empty for $version"
-        docker stop db-test > /dev/null
-        exit 1
     fi
 
     # Stopping and deleting a container
@@ -100,122 +100,31 @@ done
 
 echo "All database versions tested successfully!"
 
-# Update English documentation if mounted in container
+# Check documentation versions match script versions
 echo ""
-echo "Checking documentation..."
+echo "Checking documentation versions..."
 
-# First try to update documentation if mounted in container
+# Check if documentation is mounted
 if docker exec manticore test -f /docs/Backup_and_restore.md 2>/dev/null; then
-    echo "Updating English documentation in container..."
+    # Extract versions from documentation
+    DOC_MYSQL=$(docker exec manticore grep -o "MySQL up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MARIADB=$(docker exec manticore grep -o "MariaDB up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md | grep -o "[0-9]\+\.[0-9]\+" | head -1)
 
-    # Update versions in documentation
-    docker exec manticore sed -i \
-        -e "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" \
-        -e "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" \
-        /docs/Backup_and_restore.md
-
-    # Verify the update
-    if docker exec manticore grep -q "MySQL up to $LATEST_MYSQL" /docs/Backup_and_restore.md && \
-       docker exec manticore grep -q "MariaDB up to $LATEST_MARIADB" /docs/Backup_and_restore.md; then
-        echo "✅ Documentation updated successfully"
-        echo "  - MySQL up to $LATEST_MYSQL"
-        echo "  - MariaDB up to $LATEST_MARIADB"
-    else
-        echo "⚠️ Failed to update documentation"
-    fi
-else
-    echo "Documentation not mounted in container, trying local filesystem..."
-
-    # Try to update documentation locally
-    DOC_UPDATED=false
-    for base_path in "../../../../" "../../../" "../../" "../" "./" ; do
-        DOC_FILE="${base_path}manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-
-        if [ -f "$DOC_FILE" ]; then
-            echo "Found documentation at $DOC_FILE"
-            echo "Updating English documentation..."
-
-            # Use different sed syntax for macOS vs Linux
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS
-                sed -i '' \
-                    -e "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" \
-                    -e "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" \
-                    "$DOC_FILE"
-            else
-                # Linux/CI
-                sed -i \
-                    -e "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" \
-                    -e "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" \
-                    "$DOC_FILE"
-            fi
-
-            echo "✅ Updated English documentation"
-            DOC_UPDATED=true
-            break
-        fi
-    done
-
-    if [ "$DOC_UPDATED" = false ]; then
-        echo "⚠️ Documentation file not found locally (this is normal in CI)"
-    fi
-fi
-
-# Check documentation consistency via GitHub
-echo ""
-echo "Verifying documentation versions on GitHub..."
-
-# Get current branch name
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-
-# Expected patterns in documentation
-DOC_MARIADB_PATTERN="MariaDB up to $LATEST_MARIADB"
-DOC_MYSQL_PATTERN="MySQL up to $LATEST_MYSQL"
-
-# Check documentation from current branch if possible
-if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
-    # Try to fetch from current branch
-    DOC_URL="https://raw.githubusercontent.com/manticoresoftware/manticoresearch/$CURRENT_BRANCH/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-else
-    # Fallback to master
-    DOC_URL="https://raw.githubusercontent.com/manticoresoftware/manticoresearch/master/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-fi
-
-DOC_CONTENT=$(curl -s "$DOC_URL" 2>/dev/null || echo "")
-
-if [ -z "$DOC_CONTENT" ]; then
-    echo "⚠️ Could not fetch documentation from GitHub, skipping version check"
-    echo "Please ensure documentation mentions:"
-    echo "  - MariaDB up to $LATEST_MARIADB"
-    echo "  - MySQL up to $LATEST_MYSQL"
-else
-    # Check if documentation contains correct versions
-    if echo "$DOC_CONTENT" | grep -q "$DOC_MARIADB_PATTERN" && echo "$DOC_CONTENT" | grep -q "$DOC_MYSQL_PATTERN"; then
-        echo "✅ Documentation versions match script versions on GitHub"
-        echo "  - MariaDB up to $LATEST_MARIADB ✓"
-        echo "  - MySQL up to $LATEST_MYSQL ✓"
+    # Check if they match
+    if [ "$DOC_MYSQL" = "$LATEST_MYSQL" ] && [ "$DOC_MARIADB" = "$LATEST_MARIADB" ]; then
+        echo "✅ Documentation versions match script versions"
+        echo "  - MySQL: $LATEST_MYSQL"
+        echo "  - MariaDB: $LATEST_MARIADB"
     else
         echo "❌ Documentation versions don't match script versions!"
+        echo "Script versions: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
+        echo "Documentation versions: MySQL $DOC_MYSQL, MariaDB $DOC_MARIADB"
         echo ""
-        echo "Expected in documentation:"
-        echo "  - MariaDB up to $LATEST_MARIADB"
-        echo "  - MySQL up to $LATEST_MYSQL"
-        echo ""
-
-        # Try to find what's actually in documentation
-        DOC_MARIADB=$(echo "$DOC_CONTENT" | grep -o "MariaDB up to [0-9]\+\.[0-9]\+" | head -1 || echo "not found")
-        DOC_MYSQL=$(echo "$DOC_CONTENT" | grep -o "MySQL up to [0-9]\+\.[0-9]\+" | head -1 || echo "not found")
-
-        echo "Found in documentation:"
-        echo "  - $DOC_MARIADB"
-        echo "  - $DOC_MYSQL"
-        echo ""
-        echo "ACTION REQUIRED: Update documentation to match script versions!"
-        echo "You can:"
-        echo "1. Run this script locally with mounted documentation to auto-update"
-        echo "2. Or manually update the documentation file"
+        echo "Please update documentation to match script versions!"
         exit 1
     fi
+else
+    echo "⚠️ Documentation not mounted, skipping version check"
 fi
 
 exit 0

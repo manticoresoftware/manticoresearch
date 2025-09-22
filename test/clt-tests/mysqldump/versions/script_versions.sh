@@ -111,6 +111,9 @@ if [ -n "$GITHUB_HEAD_REF" ]; then
 elif [ -n "$GITHUB_REF_NAME" ]; then
     # GitHub Actions push
     BRANCH="$GITHUB_REF_NAME"
+elif [ -n "$BRANCH_NAME" ]; then
+    # From workflow
+    BRANCH="$BRANCH_NAME"
 else
     # Local git
     BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")

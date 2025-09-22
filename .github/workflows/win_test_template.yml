@@ -14,11 +14,18 @@ on:
       artifact_name:
         required: true
         type: string
+      results_name:
+        required: true
+        type: string
       COLUMNAR_LOCATOR:
         required: false
         type: string
         default: ""
-
+      UNITY_BUILD:
+        required: false
+        type: number
+        default: 1
+  
 jobs:
   test_windows:
     name: ${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
@@ -35,6 +42,7 @@ jobs:
       # CTEST_REGEX: test_234
       NO_BUILD: 1
       COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
+      UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -64,7 +72,7 @@ jobs:
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --install mysql
           net start mysql
-          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
+          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; grant all on test.* to 'test'@'localhost'; create database test1; grant all on test1.* to 'test'@'localhost'; create database test2; grant all on test2.* to 'test'@'localhost'; create database test3; grant all on test3.* to 'test'@'localhost'; create database test4; grant all on test4.* to 'test'@'localhost'; create database test5; grant all on test5.* to 'test'@'localhost'; create database test6; grant all on test6.* to 'test'@'localhost'; create database test7; grant all on test7.* to 'test'@'localhost'; create database test8; grant all on test8.* to 'test'@'localhost'; create database test9; grant all on test9.* to 'test'@'localhost'; flush privileges;" -uroot
       # TODO: Uncomment the below if there's no more OpenSSL in the runner like it happened in Sep 2023 (https://github.com/actions/runner-images/issues/8344)
       # - name: Install OpenSSL
       #   run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1
@@ -77,23 +85,23 @@ jobs:
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
-        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+        run: |
+          $env:CTEST_RESOURCE = (Resolve-Path ".\misc\ctest\ubertests\ubertests_docker_image\resource.json").Path
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
-      - name: Remember status
-        if: always()
-        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-        continue-on-error: true
-      - name: Prepare test results
+
+      - name: Check test results
         if: always()
         run: |
-          mkdir build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-          cp -r build/Testing/2*/*.xml build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
-          mv build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-        continue-on-error: true
+          if ("${{ steps.test.outcome }}" -eq "failure") {
+            Write-Host "❌ Tests failed ❌"
+            exit 1
+          }
+
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status* build/test_*/*mdmp"
+          path: "*.xml build/Testing/*/*.xml build/xml build/junit*.xml build/test/error*.txt build/test/*log build/test/test_*/report* build/test/rt_*/report* build/test/col_*/report*"

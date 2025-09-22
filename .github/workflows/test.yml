@@ -392,79 +392,41 @@ jobs:
     name: Windows tests
     needs: [build_windows, win_bundle, check_branch]
     uses: ./.github/workflows/win_test_template.yml
-    strategy:
-      fail-fast: false
-      matrix:
-        name: [1_400, 401_650, 651_and_on]
-        include:
-          - name: 1_400
-            start: 1
-            end: 400
-          - name: 401_650
-            start: 401
-            end: 650
-          - name: 651_and_on
-            start: 651
-            end: 999999
     with:
-      CTEST_START: ${{ matrix.start }}
-      CTEST_END: ${{ matrix.end }}
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
-      artifact_name: windows_test_${{ matrix.name }}
+      artifact_name: windows_test_results
+      results_name: "Windows test results"
 
-  windows_tests_report:
-    name: Windows tests summary and report
+  prepare_windows_test_results:
+    name: Prepare Windows test results
     needs: test_windows
     runs-on: ubuntu-22.04
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
     container:
       image: manticoresearch/ubertests_public:331
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Download test report artifacts 1_400
+      - name: Download build artifacts
         uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
         with:
-          name: windows_test_1_400
+          name: windows_test_results
           path: .
-      - name: Download test report artifacts 401_650
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_401_650
-          path: .
-      - name: Download test report artifacts 651_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_651_and_on
-          path: .
-      - name: Convert the XML to JUnit format
-        run: |
-          shopt -s nullglob
-          for dir in build/xml_*; do
-            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
-              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
-            fi
-          done
-        shell: bash
-      - name: Publish test results
-        uses: manticoresoftware/publish-unit-test-result-action@v2
-        with:
-          check_name: Windows test results
-          compare_to_earlier_commit: false
-          files: build/xml_*/junit_tests.xml
-          comment_mode: failures
-      - name: Per-test results
-        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
-        run: |
-          for file in build/status*; do echo -n "$file: "; cat "$file"; done
-          grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'
-        shell: bash
-      - name: Upload combined artifacts
+      - name: Prepare test report xmls
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        run: |
+          find .
+          xsltproc -o junit_tests.xml misc/junit/ctest2junit.xsl "$(find build/Testing -name Test.xml | head -n 1)"
+      - name: Publish test results
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
-          name: windows_test_resuls
-          path: build
+          check_name: "Windows test results"
+          files: junit*.xml
+          compare_to_earlier_commit: false
+          comment_mode: failures

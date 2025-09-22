@@ -100,35 +100,39 @@ done
 
 echo "All database versions tested successfully!"
 
-# Check documentation versions match script versions
+# Check documentation versions via GitHub
 echo ""
-echo "Checking documentation versions..."
+echo "Checking documentation versions on GitHub..."
 
-# Debug: check what's in /docs directory
-echo "Checking /docs directory in container:"
-docker exec manticore ls -la /docs/ 2>&1 | head -10 || echo "Cannot list /docs directory"
-echo ""
-
-# Try to check if file exists using different methods
-DOC_EXISTS=false
-if docker exec manticore test -f /docs/Backup_and_restore.md 2>/dev/null; then
-    DOC_EXISTS=true
-    echo "✅ Documentation file found using 'test -f'"
-elif docker exec manticore ls /docs/Backup_and_restore.md >/dev/null 2>&1; then
-    DOC_EXISTS=true
-    echo "✅ Documentation file found using 'ls'"
-elif docker exec manticore stat /docs/Backup_and_restore.md >/dev/null 2>&1; then
-    DOC_EXISTS=true
-    echo "✅ Documentation file found using 'stat'"
+# Get PR branch name from environment or git
+if [ -n "$GITHUB_HEAD_REF" ]; then
+    # GitHub Actions PR
+    BRANCH="$GITHUB_HEAD_REF"
+elif [ -n "$GITHUB_REF_NAME" ]; then
+    # GitHub Actions push
+    BRANCH="$GITHUB_REF_NAME"
 else
-    echo "⚠️ Documentation file not found at /docs/Backup_and_restore.md"
+    # Local git
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
 fi
 
-if [ "$DOC_EXISTS" = true ]; then
+echo "Checking branch: $BRANCH"
+
+# Fetch documentation from GitHub
+DOC_URL="https://raw.githubusercontent.com/manticoresoftware/manticoresearch/$BRANCH/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+echo "Fetching: $DOC_URL"
+
+DOC_CONTENT=$(curl -sL "$DOC_URL" 2>/dev/null)
+
+if [ -z "$DOC_CONTENT" ] || echo "$DOC_CONTENT" | grep -q "404: Not Found"; then
+    echo "⚠️ Could not fetch documentation from GitHub"
+    echo "Please ensure documentation contains:"
+    echo "  - MySQL up to $LATEST_MYSQL"
+    echo "  - MariaDB up to $LATEST_MARIADB"
+else
     # Extract versions from documentation
-    echo "Extracting versions from documentation..."
-    DOC_MYSQL=$(docker exec manticore grep -o "MySQL up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md 2>/dev/null | grep -o "[0-9]\+\.[0-9]\+" | head -1)
-    DOC_MARIADB=$(docker exec manticore grep -o "MariaDB up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md 2>/dev/null | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MYSQL=$(echo "$DOC_CONTENT" | grep -o "MySQL up to [0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MARIADB=$(echo "$DOC_CONTENT" | grep -o "MariaDB up to [0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
 
     echo "Script versions: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
     echo "Documentation versions: MySQL ${DOC_MYSQL:-not found}, MariaDB ${DOC_MARIADB:-not found}"
@@ -146,15 +150,6 @@ if [ "$DOC_EXISTS" = true ]; then
         echo "Manticore supports \`mysqldump\` utility from MySQL up to $LATEST_MYSQL and \`mariadb-dump\` utility from MariaDB up to $LATEST_MARIADB."
         exit 1
     fi
-else
-    echo ""
-    echo "This is expected in CI environment if documentation is not mounted"
-    echo ""
-    echo "Please manually verify documentation contains:"
-    echo "  - MySQL up to $LATEST_MYSQL"
-    echo "  - MariaDB up to $LATEST_MARIADB"
-    echo ""
-    echo "Documentation path: manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
 fi
 
 exit 0

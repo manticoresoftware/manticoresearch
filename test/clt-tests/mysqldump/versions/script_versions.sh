@@ -104,27 +104,57 @@ echo "All database versions tested successfully!"
 echo ""
 echo "Checking documentation versions..."
 
-# Check if documentation is mounted
+# Debug: check what's in /docs directory
+echo "Checking /docs directory in container:"
+docker exec manticore ls -la /docs/ 2>&1 | head -10 || echo "Cannot list /docs directory"
+echo ""
+
+# Try to check if file exists using different methods
+DOC_EXISTS=false
 if docker exec manticore test -f /docs/Backup_and_restore.md 2>/dev/null; then
+    DOC_EXISTS=true
+    echo "✅ Documentation file found using 'test -f'"
+elif docker exec manticore ls /docs/Backup_and_restore.md >/dev/null 2>&1; then
+    DOC_EXISTS=true
+    echo "✅ Documentation file found using 'ls'"
+elif docker exec manticore stat /docs/Backup_and_restore.md >/dev/null 2>&1; then
+    DOC_EXISTS=true
+    echo "✅ Documentation file found using 'stat'"
+else
+    echo "⚠️ Documentation file not found at /docs/Backup_and_restore.md"
+fi
+
+if [ "$DOC_EXISTS" = true ]; then
     # Extract versions from documentation
-    DOC_MYSQL=$(docker exec manticore grep -o "MySQL up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md | grep -o "[0-9]\+\.[0-9]\+" | head -1)
-    DOC_MARIADB=$(docker exec manticore grep -o "MariaDB up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    echo "Extracting versions from documentation..."
+    DOC_MYSQL=$(docker exec manticore grep -o "MySQL up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md 2>/dev/null | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MARIADB=$(docker exec manticore grep -o "MariaDB up to [0-9]\+\.[0-9]\+" /docs/Backup_and_restore.md 2>/dev/null | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+
+    echo "Script versions: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
+    echo "Documentation versions: MySQL ${DOC_MYSQL:-not found}, MariaDB ${DOC_MARIADB:-not found}"
 
     # Check if they match
     if [ "$DOC_MYSQL" = "$LATEST_MYSQL" ] && [ "$DOC_MARIADB" = "$LATEST_MARIADB" ]; then
         echo "✅ Documentation versions match script versions"
-        echo "  - MySQL: $LATEST_MYSQL"
-        echo "  - MariaDB: $LATEST_MARIADB"
     else
         echo "❌ Documentation versions don't match script versions!"
-        echo "Script versions: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
-        echo "Documentation versions: MySQL $DOC_MYSQL, MariaDB $DOC_MARIADB"
         echo ""
-        echo "Please update documentation to match script versions!"
+        echo "Please update documentation file:"
+        echo "manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+        echo ""
+        echo "Add after '## Backup and restore with mysqldump' header:"
+        echo "Manticore supports \`mysqldump\` utility from MySQL up to $LATEST_MYSQL and \`mariadb-dump\` utility from MariaDB up to $LATEST_MARIADB."
         exit 1
     fi
 else
-    echo "⚠️ Documentation not mounted, skipping version check"
+    echo ""
+    echo "This is expected in CI environment if documentation is not mounted"
+    echo ""
+    echo "Please manually verify documentation contains:"
+    echo "  - MySQL up to $LATEST_MYSQL"
+    echo "  - MariaDB up to $LATEST_MARIADB"
+    echo ""
+    echo "Documentation path: manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
 fi
 
 exit 0

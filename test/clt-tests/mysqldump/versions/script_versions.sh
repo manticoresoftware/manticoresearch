@@ -98,30 +98,13 @@ done
 
 echo "All database versions tested successfully!"
 
-# ===== ДОБАВЛЕНО: Обновление документации =====
-echo ""
-echo "Updating documentation..."
-
-# Пробуем найти файл документации через разные пути
-DOC_FILE=""
-POSSIBLE_PATHS=(
-    "../../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-    "$(git rev-parse --show-toplevel 2>/dev/null)/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-)
-
-for path in "${POSSIBLE_PATHS[@]}"; do
-    if [ -f "$path" ]; then
-        DOC_FILE="$path"
-        break
-    fi
-done
+# Update documentation - ONLY THIS IS NEW
+DOC_FILE="../../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
 
 if [ -f "$DOC_FILE" ]; then
-    # Обновляем версии в документации
-    sed -i "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" "$DOC_FILE"
-    sed -i "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" "$DOC_FILE"
-    echo "✅ Documentation updated: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
-else
-    echo "⚠️ Documentation file not found, please update manually"
-    echo "   Add to documentation: MariaDB up to $LATEST_MARIADB, MySQL up to $LATEST_MYSQL"
+    sed -i "s/MariaDB up to [0-9]\+\.[0-9]\+/MariaDB up to $LATEST_MARIADB/g" "$DOC_FILE" 2>/dev/null || true
+    sed -i "s/MySQL up to [0-9]\+\.[0-9]\+/MySQL up to $LATEST_MYSQL/g" "$DOC_FILE" 2>/dev/null || true
+    echo "Documentation updated with latest versions"
 fi
+
+exit 0

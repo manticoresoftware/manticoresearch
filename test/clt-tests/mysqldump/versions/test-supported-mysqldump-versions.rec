@@ -7,6 +7,9 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
+pwd; ls -la; find . -name "Backup_and_restore.md" 2>/dev/null | head -5
+––– output –––
+––– input –––
 docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore \
     -p 9306:9306 -d \
     -v ./test/clt-tests/scripts/generate-records.sh:/generate-records.sh \

@@ -30,7 +30,7 @@ docker exec manticore mysql -h0 -P9306 -e 'show tables'
 | t     | rt   |
 +-------+------+
 ––– input –––
-bash ./test/clt-tests/mysqldump/versions/script_versions.sh
+GITHUB_HEAD_REF="doc-add-list-of-supported-mysqldump-versions" bash ./test/clt-tests/mysqldump/versions/script_versions.sh
 ––– output –––
 🔍 Checking for new major.minor versions...
 ✅ No new versions found after MariaDB 12.0 and MySQL 9.4

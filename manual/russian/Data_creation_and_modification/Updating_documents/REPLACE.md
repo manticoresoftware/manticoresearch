@@ -1,14 +1,14 @@
-# ЗАМЕНИТЬ
+# REPLACE
 
 <!-- example replace -->
 
-`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но помечает предыдущий документ с тем же ID как удалённый перед вставкой нового.
+`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но перед вставкой нового документа помечает предыдущий документ с тем же ID как удалённый.
 
-Если вам нужны обновления на месте, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
+Если вам нужны обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
 
-Синтаксис SQL-запроса `REPLACE` следующий:
+Синтаксис SQL-запроса `REPLACE` выглядит следующим образом:
 
 **Чтобы заменить весь документ:**
 ```sql
@@ -16,7 +16,7 @@ REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-Столбцы, явно не включённые в SQL-запрос, устанавливаются в значения по умолчанию, например 0 или пустую строку, в зависимости от типа данных.
+Столбцы, не указанные явно в SQL-запросе, устанавливаются в значения по умолчанию, например 0 или пустую строку, в зависимости от их типа данных.
 
 **Чтобы заменить только выбранные поля:**
 ```sql
@@ -24,13 +24,13 @@ REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-Обратите внимание, что фильтровать можно только по id в этом режиме.
+Обратите внимание, что в этом режиме вы можете фильтровать только по id.
 
-> ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Подробнее о `UPDATE` и частичном `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
+Подробнее о `UPDATE` против частичной замены `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
-См. примеры для подробностей.
+Смотрите примеры для получения более подробной информации.
 
 ## JSON REPLACE
 
@@ -48,8 +48,8 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` — это алиас эндпоинта, работает так же.
-* Эндпоинт в стиле Elasticsearch `<table>/_doc/<id>`:
+  `/index` — это псевдоним, работает так же.
+* Elasticsearch-подобный эндпоинт `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -58,7 +58,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  > ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+  > ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 * Частичная замена:
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -68,11 +68,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет делать обновления по конкретному кластеру при необходимости.
+  `<table name>` может быть либо просто именем таблицы, либо в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру, если нужно.
 
   > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-См. примеры для подробностей.
+Смотрите примеры для получения более подробной информации.
 
 <!-- intro -->
 ##### SQL:
@@ -136,11 +136,11 @@ POST /replace
 ```
 
 <!-- intro -->
-##### В стиле Elasticsearch
+##### Elasticsearch-like
 
 <!-- request Elasticsearch-like -->
 
-> ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 ```json
 PUT /products/_doc/2
@@ -190,7 +190,7 @@ POST /products/_doc/3
 ```
 
 <!-- intro -->
-##### Частичная замена в стиле Elasticsearch:
+##### Elasticsearch-like partial replace:
 
 <!-- request Elasticsearch-like partial -->
 
@@ -215,7 +215,7 @@ POST /products/_update/55
 ```
 
 <!-- intro -->
-##### Частичная замена в стиле Elasticsearch в кластере:
+##### Elasticsearch-like partial replace in cluster:
 
 <!-- request Elasticsearch-like partial in cluster -->
 
@@ -437,7 +437,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 `REPLACE` доступен для таблиц реального времени и percolate. Вы не можете заменить данные в обычной таблице.
 
-Когда вы выполняете `REPLACE`, предыдущий документ не удаляется, а помечается как удаленный, поэтому размер таблицы растет до тех пор, пока не произойдет слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+Когда вы выполняете `REPLACE`, предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
 ## Массовая замена
 
@@ -721,8 +721,7 @@ res = await indexApi.bulk(
 
 ``` go
 body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
-
-"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
 res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 ```
 
@@ -759,3 +758,4 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 <!-- end -->
 
 <!-- proofread -->
+

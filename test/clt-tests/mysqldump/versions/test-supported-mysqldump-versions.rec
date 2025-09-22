@@ -13,7 +13,7 @@ docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platfo
     -v ./manual/english/Securing_and_compacting_a_table/Backup_and_restore.md:/docs/Backup_and_restore.md \
     ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
     searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
-		––– output –––
+––– output –––
 0
 ––– input –––
 timeout 10 docker logs -f manticore | grep -qm1 '\[BUDDY\] started' && echo 'Buddy started!' || echo 'Timeout or failed!'

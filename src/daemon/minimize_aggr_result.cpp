@@ -455,6 +455,14 @@ static int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes 
 	// flatten all results into single chunk
 	auto & tFinalMatches = tRes.m_dResults.First ();
 	tFinalMatches.FillFromSorter ( pSorter );
+        // FIX(#3428): after dedupe/merge and HAVING filtering (if any), set total_found to number of groups
+        // We use the count of flattened matches (pre-LIMIT/OFFSET) as total_found for grouped queries.
+        int __having_survivors__ = tFinalMatches.m_dMatches.GetLength();
+        if ( pSorter->IsGroupby() ) {
+                // Preserve existing cutoff semantics via m_bTotalMatchesApprox elsewhere.
+                tRes.m_iTotalMatches = __having_survivors__;
+        }
+
 	Debug ( tRes.m_bSingle = true; )
 	Debug ( tRes.m_bOneSchema = true; )
 

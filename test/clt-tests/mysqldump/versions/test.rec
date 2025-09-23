@@ -1,3 +1,3 @@
 ––– input –––
-pwd; ls -la
+pwd; find test
 ––– output –––

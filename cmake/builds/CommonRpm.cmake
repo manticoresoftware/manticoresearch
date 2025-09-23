@@ -90,15 +90,12 @@ set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/;/tmp;/usr/share/man;/var;
 list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/share/man/man1;/var/log" )
 list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/systemd;/usr/lib/systemd/system-generators;/usr/lib/tmpfiles.d" )
 
-# Handle debuginfo packaging path length requirements
-# The source dir path must be longer than debuginfo sources dir path
-# Debuginfo paths typically look like: /usr/src/debug/manticore-VERSION-HASH/component/src_N
-# This can be 80-100+ characters, so we need source dir to be longer
-string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
-if (source_dir_len_ LESS 90)
-	message ( STATUS "Setting shorter RPM build source dirs prefix (/tmp) due to path length requirements for debuginfo packaging (source dir length: ${source_dir_len_})" )
-	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp" )
-endif ()
+#set ( CPACK_BUILD_SOURCE_DIRS OFF )
+#string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
+#if (source_dir_len_ LESS 75)
+#      message ( STATUS "set src prefix to /tmp/m due to too long path" )
+#      set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp" )
+#endif ()
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_COMMON_USER_FILELIST

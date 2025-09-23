@@ -31,22 +31,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set branch name
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
-          else
-            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
-          fi
       - uses: manticoresoftware/clt@0.7.3
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/
           run_args: --privileged
           ui_host: "https://clt.manticoresearch.com"
-        env:
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
 
   clt_test_migration_es_ms:
     name: Testing data migration from elastic to manticore
@@ -68,4 +58,3 @@ jobs:
         with:
           name: test-migration-es-ms-rep
           path: test/clt-tests/migration-es-ms/test-migration-es-ms.rep
-

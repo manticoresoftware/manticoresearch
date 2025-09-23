@@ -7,7 +7,12 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 docker network create test_network > /dev/null
 ––– output –––
 ––– input –––
-docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -d -v ./test/clt-tests/scripts/generate-records.sh:/generate-records.sh ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
+docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore \
+    -p 9306:9306 -d \
+    -v ./test/clt-tests/scripts/generate-records.sh:/generate-records.sh \
+    -v ./test/clt-tests/mysqldump/versions/Backup_and_restore.md:/docs/Backup_and_restore.md \
+    ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
+    searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -30,7 +35,7 @@ docker exec manticore mysql -h0 -P9306 -e 'show tables'
 | t     | rt   |
 +-------+------+
 ––– input –––
-GITHUB_HEAD_REF="doc-add-list-of-supported-mysqldump-versions" bash ./test/clt-tests/mysqldump/versions/script_versions.sh
+bash ./test/clt-tests/mysqldump/versions/script_versions.sh
 ––– output –––
 🔍 Checking for new major.minor versions...
 ✅ No new versions found after MariaDB 12.0 and MySQL 9.4

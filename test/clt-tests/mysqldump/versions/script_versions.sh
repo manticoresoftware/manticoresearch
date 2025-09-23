@@ -100,13 +100,12 @@ done
 
 echo "All database versions tested successfully!"
 
-# Check documentation versions from local file
+# Check documentation versions
 echo ""
 echo "Checking documentation versions..."
 
-# Check if documentation file exists in the same directory as this script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOC_FILE="$SCRIPT_DIR/Backup_and_restore.md"
+# Check documentation from mounted /manual volume
+DOC_FILE="/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
 
 if [ -f "$DOC_FILE" ]; then
     echo "Checking documentation file..."
@@ -133,10 +132,8 @@ if [ -f "$DOC_FILE" ]; then
     fi
 else
     echo "⚠️ Documentation file not found at $DOC_FILE"
-    echo "In CI, ensure the file is copied before running this script"
-    echo "Please verify documentation contains:"
-    echo "  - MySQL up to $LATEST_MYSQL"
-    echo "  - MariaDB up to $LATEST_MARIADB"
+    echo "Make sure manual directory is mounted with -v"
+    exit 1
 fi
 
 exit 0

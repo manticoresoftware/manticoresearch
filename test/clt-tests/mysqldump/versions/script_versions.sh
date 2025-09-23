@@ -100,42 +100,20 @@ done
 
 echo "All database versions tested successfully!"
 
-# Check documentation versions via GitHub
+# Check documentation versions from local file
 echo ""
-echo "Checking documentation versions on GitHub..."
+echo "Checking documentation versions..."
 
-# Get PR branch name from environment or git
-if [ -n "$GITHUB_HEAD_REF" ]; then
-    # GitHub Actions PR
-    BRANCH="$GITHUB_HEAD_REF"
-elif [ -n "$GITHUB_REF_NAME" ]; then
-    # GitHub Actions push
-    BRANCH="$GITHUB_REF_NAME"
-elif [ -n "$BRANCH_NAME" ]; then
-    # From workflow
-    BRANCH="$BRANCH_NAME"
-else
-    # Local git
-    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
-fi
+# Check if documentation file exists in the same directory as this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOC_FILE="$SCRIPT_DIR/Backup_and_restore.md"
 
-echo "Checking branch: $BRANCH"
+if [ -f "$DOC_FILE" ]; then
+    echo "Checking documentation file..."
 
-# Fetch documentation from GitHub
-DOC_URL="https://raw.githubusercontent.com/manticoresoftware/manticoresearch/$BRANCH/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
-echo "Fetching: $DOC_URL"
-
-DOC_CONTENT=$(curl -sL "$DOC_URL" 2>/dev/null)
-
-if [ -z "$DOC_CONTENT" ] || echo "$DOC_CONTENT" | grep -q "404: Not Found"; then
-    echo "⚠️ Could not fetch documentation from GitHub"
-    echo "Please ensure documentation contains:"
-    echo "  - MySQL up to $LATEST_MYSQL"
-    echo "  - MariaDB up to $LATEST_MARIADB"
-else
     # Extract versions from documentation
-    DOC_MYSQL=$(echo "$DOC_CONTENT" | grep -o "MySQL up to [0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
-    DOC_MARIADB=$(echo "$DOC_CONTENT" | grep -o "MariaDB up to [0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MYSQL=$(grep -o "MySQL up to [0-9]\+\.[0-9]\+" "$DOC_FILE" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MARIADB=$(grep -o "MariaDB up to [0-9]\+\.[0-9]\+" "$DOC_FILE" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
 
     echo "Script versions: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
     echo "Documentation versions: MySQL ${DOC_MYSQL:-not found}, MariaDB ${DOC_MARIADB:-not found}"
@@ -153,6 +131,12 @@ else
         echo "Manticore supports \`mysqldump\` utility from MySQL up to $LATEST_MYSQL and \`mariadb-dump\` utility from MariaDB up to $LATEST_MARIADB."
         exit 1
     fi
+else
+    echo "⚠️ Documentation file not found at $DOC_FILE"
+    echo "In CI, ensure the file is copied before running this script"
+    echo "Please verify documentation contains:"
+    echo "  - MySQL up to $LATEST_MYSQL"
+    echo "  - MariaDB up to $LATEST_MARIADB"
 fi
 
 exit 0

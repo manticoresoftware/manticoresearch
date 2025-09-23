@@ -1,1 +1,0 @@
-../../../../manual/english/Securing_and_compacting_a_table/Backup_and_restore.md

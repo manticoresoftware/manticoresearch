@@ -10,7 +10,6 @@ docker network create test_network > /dev/null
 docker run -it --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore \
     -p 9306:9306 -d \
     -v ./test/clt-tests/scripts/generate-records.sh:/generate-records.sh \
-    -v ./test/clt-tests/mysqldump/versions/Backup_and_restore.md:/docs/Backup_and_restore.md \
     ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
     searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
 ––– output –––

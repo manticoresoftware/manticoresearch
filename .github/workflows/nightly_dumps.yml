@@ -31,6 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Copy documentation for version check
+        run: |
+          cp manual/english/Securing_and_compacting_a_table/Backup_and_restore.md test/clt-tests/mysqldump/versions/Backup_and_restore.md
       - uses: manticoresoftware/clt@0.7.3
         with:
           image: manticoresearch/dind:v1

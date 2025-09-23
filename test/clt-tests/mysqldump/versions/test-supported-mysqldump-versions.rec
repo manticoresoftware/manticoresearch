@@ -841,9 +841,8 @@ Testing version: mysql:latest
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:latest completed successfully
 All database versions tested successfully!
-Checking documentation versions on GitHub...
-Checking branch: doc-add-list-of-supported-mysqldump-versions
-Fetching: https://raw.githubusercontent.com/manticoresoftware/manticoresearch/#!/[A-Za-z0-9\-]+/!#/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md
+Checking documentation versions...
+Checking documentation file...
 Script versions: MySQL 9.4, MariaDB 12.0
 Documentation versions: MySQL 9.4, MariaDB 12.0
 ✅ Documentation versions match script versions

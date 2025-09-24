@@ -82,7 +82,7 @@ jobs:
           if ! git diff --quiet; then
             echo "Auto-translate made changes, committing them..."
             git add .
-            git commit -m "Auto-translate documentation changes by ${{ github.actor }}"
+            git commit -m "docs: Auto-translate documentation changes by ${{ github.actor }}"
             git push
             echo "Changes committed and pushed successfully"
           else

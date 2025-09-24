@@ -55,6 +55,9 @@ jobs:
       - name: Run auto-translate
         run: |
           set -e
+          apt-get update -y 
+          apt-get install -y yq
+          cargo install aichat --locked
           # Configure git for commits
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"

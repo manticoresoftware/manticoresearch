@@ -61,6 +61,14 @@ jobs:
           curl -sSL https://github.com/sigoden/aichat/releases/download/v0.30.0/aichat-v0.30.0-x86_64-unknown-linux-musl.tar.gz > /tmp/aichat.tar.gz
           tar -xzf /tmp/aichat.tar.gz -C /usr/bin/
 
+          # Configure the aichat
+          mkdir -p ~/.config/aichat
+          echo "clients:" > ~/.config/aichat/config.yaml
+          echo "  - type: openai" >> ~/.config/aichat/config.yaml
+          echo "    api_key: ${{ secrets.TRANSLATOR_OPENAI_API_KEY }}" >> ~/.config/aichat/config.yaml
+          echo "  - type: claude" >> ~/.config/aichat/config.yaml
+          echo "    api_key: ${{ secrets.TRANSLATOR_ANTHROPIC_API_KEY }}" >> ~/.config/aichat/config.yaml
+
           # Configure git for commits
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"

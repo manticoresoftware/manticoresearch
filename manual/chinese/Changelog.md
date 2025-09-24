@@ -814,7 +814,7 @@ Released: March 28th 2025
 * ⚠️ [问题 #1160](https://github.com/manticoresoftware/manticoresearch/issues/1160): 为防止语法冲突，禁止在表名中使用`@`符号。
 * ⚠️ 标记为`indexed`和`attribute`的字符串字段/属性在`INSERT`、`DESC`和`ALTER`操作中现在被视为单个字段。
 * ⚠️ [问题 #1057](https://github.com/manticoresoftware/manticoresearch/issues/1057): MCL库不再在不支持SSE4.2的系统上加载。
-* ⚠️ [问题 #1143](https://github.com/manticoresoftware/manticoresearch/issues/1143): [agent_query_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent query_timeout)曾出现故障，现已修复并生效。
+* ⚠️ [问题 #1143](https://github.com/manticoresoftware/manticoresearch/issues/1143): [agent_query_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout)曾出现故障，现已修复并生效。
 
 ### Bug修复
 * [提交 2a6e](https://github.com/manticoresoftware/manticoresearch/commit/2a6ea8f7) “DROP TABLE故障”：解决了在执行DROP TABLE语句时导致RT表写操作（优化、磁盘区块保存）等待时间过长的问题。新增警告以通知在执行DROP TABLE命令后表目录非空。

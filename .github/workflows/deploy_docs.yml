@@ -9,6 +9,7 @@ on:
       - master
       - maintenance-release
       - manticore-*
+      - ci/translator
 
 env:
   DOCS_AUTOCOMMIT_TITLE: Docs_examples_update

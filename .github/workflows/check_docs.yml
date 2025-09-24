@@ -64,10 +64,12 @@ jobs:
           # Configure the aichat
           mkdir -p ~/.config/aichat
           echo "clients:" > ~/.config/aichat/config.yaml
-          echo "  - type: openai" >> ~/.config/aichat/config.yaml
-          echo "    api_key: ${{ secrets.TRANSLATOR_OPENAI_KEY }}" >> ~/.config/aichat/config.yaml
-          echo "  - type: claude" >> ~/.config/aichat/config.yaml
-          echo "    api_key: ${{ secrets.TRANSLATOR_ANTHROPIC_KEY }}" >> ~/.config/aichat/config.yaml
+          echo "- type: openai" >> ~/.config/aichat/config.yaml
+          echo "  api_key: ${{ secrets.TRANSLATOR_OPENAI_KEY }}" >> ~/.config/aichat/config.yaml
+          echo "- type: claude" >> ~/.config/aichat/config.yaml
+          echo "  api_key: ${{ secrets.TRANSLATOR_ANTHROPIC_KEY }}" >> ~/.config/aichat/config.yaml
+
+          cat ~/.config/aichat/config.yaml
 
           # Configure git for commits
           git config --global user.name "github-actions[bot]"

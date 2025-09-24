@@ -16,7 +16,7 @@ Searching is a core feature of Manticore Search. You can:
 ```sql
 SELECT
     select_expr [, select_expr] ...
-    [FROM tbl_name
+    [FROM tbl_name [, tbl_name ...]
         [{INNER | LEFT} JOIN tbl2_name]
         [WHERE where_condition]
         [GROUP BY {col_name | expr}, ... ]

@@ -12,6 +12,9 @@ on:
 jobs:
   docs_check:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: read
     defaults:
       run:
         shell: bash
@@ -29,6 +32,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Get changed files
         id: changed-files
         run: |
@@ -46,6 +50,26 @@ jobs:
              esac  
           done
           echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
+      - name: Run auto-translate
+        run: |
+          set -e
+          # Configure git for commits
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Run auto-translate
+          ./translator/bin/auto-translate
+          
+          # Check if there are any changes to commit
+          if ! git diff --quiet; then
+            echo "Auto-translate made changes, committing them..."
+            git add .
+            git commit -m "Auto-translate documentation changes by ${{ github.actor }}"
+            git push
+            echo "Changes committed and pushed successfully"
+          else
+            echo "No changes made by auto-translate"
+          fi
       - name: Check docs
         id: check
         run: |

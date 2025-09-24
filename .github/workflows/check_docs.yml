@@ -55,6 +55,7 @@ jobs:
       - name: Run auto-translate
         run: |
           set -e
+          add-apt-repository ppa:rmescandon/yq
           apt-get update -y 
           apt-get install -y yq
           cargo install aichat --locked

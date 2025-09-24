@@ -34,6 +34,7 @@ jobs:
         with:
           fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
       - name: Get changed files
         id: changed-files
         run: |

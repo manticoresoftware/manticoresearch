@@ -262,6 +262,8 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
+Manticore supports `mysqldump` utility from MySQL up to 9.4 and `mariadb-dump` utility from MariaDB up to 12.0.
+
 <!-- example mysqldump_backup -->
 
 > NOTE: some versions of `mysqldump` / `mariadb-dump` require [Manticore Buddy](../Installation/Manticore_Buddy.md). If the dump isn't working, make sure Buddy is installed.
@@ -338,4 +340,3 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 * Note that `mysqldump` does not support backing up distributed tables and cannot back up tables containing non-stored fields. For such cases, consider using `manticore-backup` or the `BACKUP` SQL command. If you have distributed tables, it is recommended to always specify the tables to be dumped.
 
 <!-- proofread -->
-

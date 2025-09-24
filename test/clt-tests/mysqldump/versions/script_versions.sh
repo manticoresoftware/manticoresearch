@@ -47,7 +47,9 @@ if command -v curl >/dev/null 2>&1; then
         echo "✅ No new versions found after MariaDB $LATEST_MARIADB and MySQL $LATEST_MYSQL"
     else
         echo "❗ Please update the versions array and test new versions!"
-        echo "❗ Also update LATEST_MARIADB and LATEST_MYSQL in script and documentation"
+        echo "❗ Also update:"
+        echo "   - LATEST_MARIADB and LATEST_MYSQL variables in this script"
+        echo "   - Version numbers in documentation (manual/english/Securing_and_compacting_a_table/Backup_and_restore.md)"
         exit 1
     fi
 
@@ -123,10 +125,13 @@ if [ -f "$DOC_FILE" ]; then
     else
         echo "❌ Documentation versions don't match script versions!"
         echo ""
+        echo "Script has: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
+        echo "Documentation has: MySQL ${DOC_MYSQL:-not found}, MariaDB ${DOC_MARIADB:-not found}"
+        echo ""
         echo "Please update documentation file:"
         echo "manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
         echo ""
-        echo "Add after '## Backup and restore with mysqldump' header:"
+        echo "Find the line after '## Backup and restore with mysqldump' and update to:"
         echo "Manticore supports \`mysqldump\` utility from MySQL up to $LATEST_MYSQL and \`mariadb-dump\` utility from MariaDB up to $LATEST_MARIADB."
         exit 1
     fi

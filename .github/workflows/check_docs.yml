@@ -58,7 +58,9 @@ jobs:
           add-apt-repository ppa:rmescandon/yq
           apt-get update -y 
           apt-get install -y yq
-          cargo install aichat --locked
+          curl -sSL https://github.com/sigoden/aichat/releases/download/v0.30.0/aichat-v0.30.0-x86_64-unknown-linux-musl.tar.gz > /tmp/aichat.tar.gz
+          tar -xzf /tmp/aichat.tar.gz -C /usr/bin/
+
           # Configure git for commits
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"

@@ -35,7 +35,7 @@
         * [• Формы слов](Creating_a_table/NLP_and_tokenization/Wordforms.md)
         * [• Исключения](Creating_a_table/NLP_and_tokenization/Exceptions.md)
         * [• Морфология](Creating_a_table/NLP_and_tokenization/Morphology.md)
-        * [• Расширенная HTML токенизация](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md)
+        * [• Продвинутая HTML-токенизация](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md)
     * [⪢ Создание распределённой таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• Создание локальной распределённой таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• Удалённые таблицы](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)

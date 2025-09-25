@@ -191,8 +191,8 @@ class EvalExprStackSize_c final : public StackMeasurer_c
 		m_sExpr.Clear ();
 		m_sExpr << "((attr_a=0)*1)";
 
-		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
-			m_sExpr << "+((attr_b=" << i << ")*" << i*2+1 << ")";
+		for ( int i = 1; i<iComplexity+1; ++i )
+			m_sExpr << " or attr_b in (" << i << ")"; // ((attr_a=0)*1) or attr_b in (1) or attr_b in (2) ...
 	}
 
 	void MockParseTest () final

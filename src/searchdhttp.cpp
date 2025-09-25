@@ -3377,9 +3377,17 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 		} else
 		{
+			bOk = false;
 			for ( int i=0; i<tTnx.m_iCount; i++ )
 			{
-				AddEsError ( -1, tResult.GetStrItem ( "error", m_sError, false ).StrVal(), "mapper_parsing_exception", dDocs[tTnx.m_iFrom+i], tItems );
+				const BulkDoc_t & tErrDoc = dDocs[tTnx.m_iFrom+i];
+				JsonObj_c tErr = tResult.GetItem ( "error" );
+				if ( tErr && tErr.IsStr() )
+					AddEsError ( -1, tErr.StrVal(), "mapper_parsing_exception", tErrDoc, tItems );
+				else if ( tErr && tErr.IsObj() && tErr.HasItem ( "type" ) && tErr.GetItem ( "type" ).IsStr() )
+					AddEsError ( -1, tErr.GetItem ( "type" ).StrVal(), "mapper_parsing_exception", tErrDoc, tItems );
+				else
+					AddEsError ( -1, m_sError.cstr(), "mapper_parsing_exception", tErrDoc, tItems );
 			}
 		}
 

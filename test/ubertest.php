@@ -222,6 +222,7 @@ if ( !$g_guesscached ) {
 	GuessColumnar();
 	GuessSecondary();
 	GuessKNN();
+	GuessEmbeddings();
 	GuessZlib();
 	if ( !$force_guess )
 		CacheGuesses();

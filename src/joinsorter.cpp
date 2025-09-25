@@ -1545,7 +1545,12 @@ bool JoinSorter_c::RunFinalBatch()
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
 	if ( !RunFinalBatch() )
+	{
+		if ( m_bErrorFlag )
+			sError = m_sErrorMessage;
+
 		return false;
+	}
 
 	if ( !m_bFinalCalcOnly )
 	{
@@ -1709,10 +1714,10 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 			return false;
 		}
 
-		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING;
+		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING || pAttr1->m_eAttrType==SPH_ATTR_STRINGPTR;
 
 		tFilter.m_sAttrName = sAttrIdx2;
-		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING : SPH_FILTER_VALUES;
+		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING_LIST : SPH_FILTER_VALUES;
 
 		int iFilterId = m_tJoinQuery.m_dFilters.GetLength()-1;
 		m_dFilterRemap.Add ( { iFilterId, pAttr1->m_tLocator, {}, bStringFilter } );
@@ -1871,11 +1876,13 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias )
 {
-	int iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
-	if ( iSorterAttrId==-1 )
-		iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	int iSorterAttrId1 = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
+	if ( iSorterAttrId1!=-1 )
+		AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId1 );
 
-	AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId );
+	int iSorterAttrId2 = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	if ( iSorterAttrId2!=-1 && iSorterAttrId2!=iSorterAttrId1 )
+			AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId2 );
 }
 
 
@@ -2017,7 +2024,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 		if ( GetJoinAttrName ( i.m_sAttrName, GetJoinedIndexName(), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
-			if ( pAttr && pAttr->IsColumnar() )
+			if ( pAttr )
 				AddToJoinSelectList ( i.m_sAttrName, i.m_sAttrName );
 		}		
 	}

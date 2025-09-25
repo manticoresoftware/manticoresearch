@@ -25,7 +25,7 @@ mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('abc 12a') OPTION fuz
 +------+---------+----------+
 | id   | f       | weight() |
 +------+---------+----------+
-|    1 | abc 12a |     3821 |
+|    1 | abc 12a |      237 |
 +------+---------+----------+
 ––– comment –––
 Test with different numeric patterns to verify scope of issue
@@ -40,7 +40,7 @@ mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('test 123abc') OPTION
 +------+-------------+----------+
 | id   | f           | weight() |
 +------+-------------+----------+
-|    3 | test 123abc |     6000 |
+|    3 | test 123abc |     4381 |
 +------+-------------+----------+
 ––– comment –––
 Test that exact matches work correctly (control test)
@@ -63,7 +63,7 @@ mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('hello world') OPTION
 +------+-------------+----------+
 | id   | f           | weight() |
 +------+-------------+----------+
-|    6 | hello world |     7882 |
+|    6 | hello world |     7461 |
 +------+-------------+----------+
 ––– comment –––
 Verify the bug: numeric words should be included in fuzzy processing

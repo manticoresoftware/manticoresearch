@@ -1923,12 +1923,17 @@ bool JsonObj_c::FetchIntItem ( int & iValue, const char * szName, CSphString & s
 
 bool JsonObj_c::FetchInt64Item ( int64_t & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
-	JsonObj_c tItem = GetIntItem ( szName, sError, bIgnoreMissing );
-	if ( tItem )
-		iValue = tItem.IntVal();
-	else if ( !sError.IsEmpty() )
-		return false;
+	JsonObj_c tItem = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tItem )
+		return sError.IsEmpty();
 
+	if ( !tItem.IsInt() && !tItem.IsUint() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
+		return false;
+	}
+
+	iValue = tItem.IntVal();
 	return true;
 }
 

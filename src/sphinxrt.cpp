@@ -16,6 +16,7 @@
 #include "sphinxsearch.h"
 #include "sphinxsort.h"
 #include "sphinxutils.h"
+#include "sphinxquery/sphinxquery.h"
 #include "fileutils.h"
 #include "sphinxplugin.h"
 #include "icu.h"
@@ -376,13 +377,11 @@ int RtSegment_t::GetStride () const NO_THREAD_SAFETY_ANALYSIS
 	return int ( m_dRows.GetLength() / m_uRows );
 }
 
-const CSphRowitem * RtSegment_t::FindAliveRow ( DocID_t tDocid ) const
+
+bool RtSegment_t::IsAlive ( DocID_t tDocid ) const
 {
 	RowID_t tRowID = GetRowidByDocid(tDocid);
-	if ( tRowID==INVALID_ROWID || m_tDeadRowMap.IsSet(tRowID) )
-		return nullptr;
-
-	return GetDocinfoByRowID(tRowID);
+	return tRowID!=INVALID_ROWID && !m_tDeadRowMap.IsSet(tRowID);
 }
 
 
@@ -390,6 +389,7 @@ const CSphRowitem * RtSegment_t::GetDocinfoByRowID ( RowID_t tRowID ) const NO_T
 {
 	return m_dRows.GetLength() ? &m_dRows[tRowID*GetStride()] : nullptr;
 }
+
 
 RowID_t RtSegment_t::GetAliveRowidByDocid ( DocID_t tDocID ) const
 {
@@ -1644,6 +1644,7 @@ private:
 	int							GetAlterGeneration() const override;
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
+	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
@@ -2098,14 +2099,14 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 			do
 				tDocID = UidShort ();
 			while ( tGuard.m_dRamSegs.any_of (
-					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); } ) );
+					[tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); } ) );
 
 			tDoc.SetID ( tDocID );
 		} else
 		{
 			// docID was provided, but that is new insert and we need to check for duplicates
 			assert ( !bReplace && tDocID!=0 );
-			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->FindAliveRow ( tDocID ); })
+			if ( tGuard.m_dRamSegs.any_of ( [tDocID] ( const ConstRtSegmentRefPtf_t & p ) { return p->IsAlive ( tDocID ); })
 				|| tGuard.m_dDiskChunks.any_of ( [tDocID] ( const ConstDiskChunkRefPtr_t & p ) { return p->Cidx().IsAlive(tDocID); }))
 			{
 				sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tDocID );
@@ -3463,6 +3464,37 @@ int CommitID() {
 }
 } // namespace
 
+
+static void CalcFieldLengths ( const RtSegment_t * pSeg, const CSphSchema & tSchema, CSphVector<int64_t> & dLengths )
+{
+	int iFirstFieldLenAttr = tSchema.GetAttrId_FirstFieldLen();
+	if ( !pSeg || iFirstFieldLenAttr<0 )
+		return;
+
+	int iFields = tSchema.GetFieldsCount(); // shortcut
+	dLengths.Resize(iFields);
+	dLengths.ZeroVec();
+
+	CSphVector<PlainOrColumnar_t> dFieldLenAttrs;
+	int iColumnar = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		std::unique_ptr<Histogram_i> pHistogram = CreateHistogram ( tAttr.m_sName, tAttr.m_eAttrType );
+		if ( i>=iFirstFieldLenAttr && i<=tSchema.GetAttrId_LastFieldLen() )
+			dFieldLenAttrs.Add ( { tAttr, iColumnar } );
+
+		if ( tAttr.IsColumnar() )
+			iColumnar++;
+	}
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( pSeg->m_pColumnar.get(), tSchema );
+	for ( DWORD uRow = 0; uRow < pSeg->m_uRows; uRow++ )
+		for ( int iField = 0; iField < iFields; iField++ )
+			dLengths[iField] += dFieldLenAttrs[iField].Get ( uRow, pSeg->GetDocinfoByRowID(uRow), dColumnarIterators );
+}
+
+
 bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError ) REQUIRES_SHARED ( pNewSeg->m_tLock )
 {
 	// store statistics, because pNewSeg just might get merged
@@ -3471,18 +3503,8 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 	int iNewDocs = pNewSeg ? (int)pNewSeg->m_uRows : 0;
 
 	// helpers for SPH_ATTR_TOKENCOUNT attributes
-	CSphVector<int64_t> dLens;
-	int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
-	if ( pNewSeg && iFirstFieldLenAttr>=0 )
-	{
-		assert ( pNewSeg->GetStride()==m_iStride );
-		int iFields = m_tSchema.GetFieldsCount(); // shortcut
-		dLens.Resize ( iFields );
-		dLens.Fill ( 0 );
-		for ( DWORD i=0; i<pNewSeg->m_uRows; ++i )
-			for ( int j=0; j<iFields; ++j )
-				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
-	}
+	CSphVector<int64_t> dLengths;
+	CalcFieldLengths ( pNewSeg, m_tSchema, dLengths );
 
 	if ( pNewSeg && !CheckSegmentConsistency ( pNewSeg, false ) )
 		DumpInsert ( pNewSeg );
@@ -3520,10 +3542,10 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
 	m_tStats.m_iTotalBytes += iAddTotalBytes;
 
-	if ( dLens.GetLength() )
+	if ( dLengths.GetLength() )
 		for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
 		{
-			m_dFieldLensRam[i] += dLens[i];
+			m_dFieldLensRam[i] += dLengths[i];
 			m_dFieldLens[i] = m_dFieldLensRam[i] + m_dFieldLensDisk[i];
 		}
 
@@ -7691,7 +7713,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 	SwitchProfile ( pProfiler, SPH_QSTATE_TRANSFORMS );
 
 	// FIXME!!! provide segments list instead index
-	TransformExtendedQueryArgs_t tTranformArgs { tQuery.m_bSimplify, tParsed.m_bNeedPhraseTransform, pThis };
+	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, pThis };
 	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, tMeta.m_sError, tTranformArgs ) )
 		return 0;
 
@@ -8080,7 +8102,13 @@ ConstRtData FilterReaderChunks ( ConstRtData tOrigin, const VecTraits_T<int64_t>
 const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSphQuery & tUpdatedQuery, const ISphSchema & tMatchSchema, CSphString & sError ) const
 {
 	auto & tKNN = tQuery.m_tKnnSettings;
-	if ( !m_pEmbeddings || tKNN.m_sAttr.IsEmpty() || tKNN.m_sEmbStr.IsEmpty() )
+	if ( !m_pEmbeddings && tKNN.m_sEmbStr )
+	{
+		sError = "Embeddings generation string specified, but embeddings are not loaded";
+		return nullptr;
+	}
+
+	if ( !m_pEmbeddings || tKNN.m_sAttr.IsEmpty() || !tKNN.m_sEmbStr )
 		return &tQuery;
 
 	auto pAttr = m_tSchema.GetAttr ( tKNN.m_sAttr.cstr() );
@@ -8101,7 +8129,7 @@ const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSp
 
 	std::vector<std::vector<float>> dEmbeddings;
 	std::vector<std::string_view> dTexts;
-	dTexts.push_back( tKNN.m_sEmbStr.cstr() );
+	dTexts.push_back( tKNN.m_sEmbStr->cstr() );
 
 	std::string sConvertError;
 	if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )
@@ -11271,6 +11299,45 @@ bool RtIndex_c::AlterSI ( CSphString & sError )
 bool RtIndex_c::AlterKNN ( CSphString & sError )
 {
 	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterKNN ( sError ); }, sError, "alter-knn" );
+}
+
+bool RtIndex_c::AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	std::string sOldKey = pAttr->m_tKNNModel.m_sAPIKey;
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIKey = sKey.cstr();
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		// attempt to revert
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIKey = sOldKey;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
 }
 
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )

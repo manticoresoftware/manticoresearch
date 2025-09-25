@@ -94,6 +94,7 @@ $g_strictverbose = false;
 $g_ssl = false;
 $g_secondary_loaded = false;
 $g_knn_loaded = false;
+$g_embeddings_loaded = false;
 $g_tzdata_loaded = false;
 $g_zlib		= false;
 
@@ -136,7 +137,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_jieba, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_embeddings_loaded, $g_tzdata_loaded, $g_zlib;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
@@ -150,6 +151,7 @@ function CacheGuesses ()
 	if ( $g_columnar_loaded ) $text .= "global \$g_columnar_loaded; \$g_columnar_loaded = true;\n";
     if ( $g_secondary_loaded ) $text .= "global \$g_secondary_loaded; \$g_secondary_loaded = true;\n";
     if ( $g_knn_loaded ) $text .= "global \$g_knn_loaded; \$g_knn_loaded = true;\n";
+    if ( $g_embeddings_loaded ) $text .= "global \$g_embeddings_loaded; \$g_embeddings_loaded = true;\n";
     if ( $g_tzdata_loaded ) $text .= "global \g_tzdata_loaded; \$g_tzdata_loaded = true;\n";
     if ( $g_zlib ) $text .= "global \$g_zlib; \$g_zlib = true;\n";
 
@@ -301,6 +303,12 @@ function GuessKNN()
 {
     global $g_knn_loaded;
     $g_knn_loaded = GuessFeature ( 'test_columnar.conf','knn library not loaded', ' (knn ');
+}
+
+function GuessEmbeddings()
+{
+    global $g_embeddings_loaded;
+    $g_embeddings_loaded = GuessFeature ( 'test_columnar.conf','embeddings library not loaded', ' (embeddings ');
 }
 
 function GuessTzData()

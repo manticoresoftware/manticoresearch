@@ -108,17 +108,15 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 {
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
-	if ( tAttr.IsColumnar() )
-	{
-		dTmp.Resize ( dEmbedding.size() );
-		ARRAY_FOREACH ( iEmb, dTmp )
-			dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
+	dTmp.Resize ( dEmbedding.size() );
+	ARRAY_FOREACH ( iEmb, dTmp )
+		dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
 
+	if ( tAttr.IsColumnar() )
 		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
-	}
 	else
 	{
-		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dEmbedding.data(), dEmbedding.size()*sizeof(float), sError ) )
+		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), sError ) )
 			return false;
 	}
 
@@ -129,7 +127,7 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 		const BYTE * pStart = tDoc.m_dFields[iId].Begin();
 		for ( auto i : dEmbedding )
 		{
-			*(DWORD*)pStart = sphF2DW ( dEmbedding[i] );
+			*(DWORD*)pStart = sphF2DW(i);
 			pStart += sizeof(DWORD);
 		}
 	}
@@ -211,7 +209,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	int iRowSize = tSchema.GetRowSize();
 	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
 	std::vector<std::string_view> dTexts;
-	bool bHaveSkipped = false;
+	DWORD uNumSkipped = 0;
 	IntVec_t dResultIds(m_uAccumDocs);
 	CSphRowitem * pRow = m_dAccumRows.Begin();
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
@@ -243,19 +241,19 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		else
 		{
 			dResultIds[tRowID] = -1;
-			bHaveSkipped = true;
+			uNumSkipped++;
 		}
 	}
 
 	std::string sErrorSTL;
 	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
-	if ( !tAttrWithModel.m_pModel->Convert ( dTexts, bHaveSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL ) )
+	if ( uNumSkipped!=m_uAccumDocs && !tAttrWithModel.m_pModel->Convert ( dTexts, uNumSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL ) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;
 	}
 
-	if ( bHaveSkipped )
+	if ( uNumSkipped )
 	{
 		dEmbeddingsForAttr.resize ( dResultIds.GetLength() );
 		ARRAY_FOREACH ( i, dResultIds )
@@ -264,6 +262,11 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 			if ( iResultId!=-1 )
 				dEmbeddingsForAttr[i] = dEmbeddingsForAttrTmp[iResultId];
 		}
+	}
+	else if ( dEmbeddingsForAttr.size()!=dResultIds.GetLength() )
+	{
+		sError = "Error generating embeddings";
+		return false;
 	}
 
 	return true;
@@ -298,7 +301,7 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		bRebuildBlobs |= !tAttr.IsColumnar();
 		bRebuildDocstore |= tAttr.IsStored();
 
-		dDocstoreRemap[i] = ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR );
+		dDocstoreRemap[i] = m_pDocstore ? ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR ) : -1;
 	}
 
 	CSphTightVector<BYTE> dNewBlobPool;
@@ -482,9 +485,12 @@ static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const A
 		}
 
 		int iOldSize = dTmp.GetLength();
-		dTmp.Resize ( iOldSize + dSrc.GetLength() + 1 );
-		dTmp[iOldSize] = ' ';
-		memcpy ( dTmp.Begin() + iOldSize + 1, dSrc.Begin(), dSrc.GetLength() );
+		int iOffset = iOldSize + ( iOldSize ? 1 : 0 );
+		dTmp.Resize ( dSrc.GetLength() + iOffset );
+		if ( iOldSize )
+			dTmp[iOldSize] = ' ';
+
+		memcpy ( dTmp.Begin() + iOffset, dSrc.Begin(), dSrc.GetLength() );
 	}
 
 	return dTmp;
@@ -514,6 +520,69 @@ void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<At
 		m_pEmbeddingsSrc->Add ( iAttrWithModel, dConcat );
 		iAttrWithModel++;
 	}
+}
+
+
+static DWORD * SetupFieldLengths ( const RtIndex_i * pIndex, const CSphSchema & tSchema, CSphVector<DWORD> & dFieldLengths )
+{
+	if ( !pIndex->GetSettings().m_bIndexFieldLens )
+		return nullptr;
+
+	dFieldLengths.Resize ( tSchema.GetAttrId_LastFieldLen() - tSchema.GetAttrId_FirstFieldLen() + 1 );
+	dFieldLengths.ZeroVec();
+	return dFieldLengths.Begin();
+}
+
+
+static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, std::unique_ptr<ColumnarBuilderRT_i> & pColumnarBuilder, const CSphVector<DWORD> & dFieldLengths, const CSphSchema & tSchema, DocstoreBuilder_i::Doc_t & dUpdatedStoredDoc, const DocstoreBuilder_i::Doc_t * pStoredDoc )
+{
+	const DocstoreBuilder_i::Doc_t * pUpdatedStoredDoc = pStoredDoc;
+
+	int iNumStoredAttrs = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+		if ( tSchema.GetAttr(i).IsStored() )
+			iNumStoredAttrs++;
+
+	bool bInitialized = false;
+	int iColumnar = 0;
+	int iStored = 0;
+	int iFirstFieldLen = tSchema.GetAttrId_FirstFieldLen();	
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		if ( i>=iFirstFieldLen && i<=tSchema.GetAttrId_LastFieldLen() )
+		{
+			assert ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT );
+			DWORD & uData = dFieldLengths[i-iFirstFieldLen];
+			if ( tAttr.IsColumnar() )
+				pColumnarBuilder->SetAttr ( iColumnar, uData );
+			else
+				sphSetRowAttr ( pRow, tAttr.m_tLocator, uData );
+
+			if ( tAttr.IsStored() )
+			{
+				if ( !bInitialized )
+				{
+					dUpdatedStoredDoc = *pStoredDoc;
+					pUpdatedStoredDoc = &dUpdatedStoredDoc;
+					bInitialized = true;
+				}
+
+				// we assume that stored attrs come last in the schema
+				int iTotalStored = dUpdatedStoredDoc.m_dFields.GetLength();
+				dUpdatedStoredDoc.m_dFields[iTotalStored - iNumStoredAttrs + iStored] = { (BYTE*)&uData, sizeof(DWORD) };
+			}
+		}
+
+		if ( tAttr.IsColumnar() )
+			iColumnar++;
+
+		if ( tAttr.IsStored() )
+			iStored++;
+	}
+
+	return pUpdatedStoredDoc;
 }
 
 
@@ -604,6 +673,9 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 			}
 			break;
 
+		case SPH_ATTR_TOKENCOUNT:
+			break; // skip for now, will be set later
+
 		default:
 			if ( tColumn.IsColumnar() )
 				m_pColumnarBuilder->SetAttr ( iColumnarAttr, tDoc.m_dColumnarAttrs[iColumnarAttr] );
@@ -625,16 +697,8 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush().first );
 	}
 
-	// handle index_field_lengths
-	DWORD* pFieldLens = nullptr;
-	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
-	{
-		int iFirst = tSchema.GetAttrId_FirstFieldLen();
-		assert ( tSchema.GetAttr ( iFirst ).m_eAttrType == SPH_ATTR_TOKENCOUNT );
-		assert ( tSchema.GetAttr ( iFirst + tSchema.GetFieldsCount() - 1 ).m_eAttrType == SPH_ATTR_TOKENCOUNT );
-		pFieldLens = pRow + ( tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
-		memset ( pFieldLens, 0, sizeof ( int ) * tSchema.GetFieldsCount() ); // NOLINT
-	}
+	CSphVector<DWORD> dFieldLengths;
+	DWORD * pFieldLengths = SetupFieldLengths ( m_pIndex, tSchema, dFieldLengths );
 
 	// accumulate hits
 	int iHits = 0;
@@ -657,11 +721,11 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				continue;
 
 			// update field lengths
-			if ( pFieldLens )
+			if ( pFieldLengths )
 			{
 				if ( HITMAN::GetField ( uFieldLastHit ) != HITMAN::GetField ( pHit->m_uWordPos ) )
 				{
-					pFieldLens[HITMAN::GetField ( uFieldLastHit )] += uFieldLastCount;
+					pFieldLengths[HITMAN::GetField ( uFieldLastHit )] += uFieldLastCount;
 					uFieldLastCount = 1;
 					uFieldLastHit = pHit->m_uWordPos;
 				}
@@ -684,11 +748,14 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 			m_dAccum.Add ( *pHit );
 			++iHits;
 		}
-		if ( pFieldLens && uFieldLastCount )
-		{
-			pFieldLens[HITMAN::GetField ( uFieldLastHit )] += uFieldLastCount;
-		}
+
+		if ( pFieldLengths && uFieldLastCount )
+			pFieldLengths [ HITMAN::GetField(uFieldLastHit) ] += uFieldLastCount;
 	}
+
+	DocstoreBuilder_i::Doc_t dUpdatedStoredDoc;
+	pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );
 

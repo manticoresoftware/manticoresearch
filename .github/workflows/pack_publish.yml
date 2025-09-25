@@ -181,6 +181,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+      # We have to checkout to access .github/workflows/ in further steps
       - name: Run dependency check script
         run: |
           bash dist/check_deps_in_repos.sh --target ${{ needs.pack.outputs.target }}
@@ -285,6 +286,7 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
+
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack]
@@ -295,7 +297,7 @@ jobs:
     env:
       CI_COMMIT_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |
@@ -317,10 +319,10 @@ jobs:
           path: build/manticore-*.exe
 
   # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
+    # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
@@ -407,9 +409,198 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
 
+  # Test Windows installer without Docker/Buddy on GitHub Actions
+  test_windows_installer:
+    name: Test Windows NSIS installer
+    needs: [publish_windows, pack]
+    runs-on: windows-latest
+    steps:
+    - name: Download Windows installer artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: win_installer
+        path: ./installer
+    
+    - name: Extract and Install Manticore
+      timeout-minutes: 5
+      run: |
+        echo "=== EXTRACTING INSTALLER ==="
+        tar -xf ./installer/artifact.tar -C ./installer
+        
+        $installer = "./installer/build/manticore-*.exe"
+        $installerFile = Get-ChildItem $installer | Select-Object -First 1
+        
+        if (-not $installerFile) {
+          echo "ERROR: Installer not found!"
+          Get-ChildItem ./installer -Recurse
+          exit 1
+        }
+        
+        echo "=== INSTALLING MANTICORE ==="
+        echo "Installing from: $($installerFile.FullName)"
+        
+        $process = Start-Process -FilePath $installerFile.FullName -ArgumentList "/S /NOEXECUTOR" -Wait -PassThru -NoNewWindow
+        echo "Installation process exited with code: $($process.ExitCode)"
+        
+        # Wait for installation to complete
+        Start-Sleep -Seconds 10
+      shell: pwsh
+    
+    - name: Test Manticore Service
+      run: |
+        echo "=== VERIFYING INSTALLATION ==="
+        
+        $installPath = "C:\Program Files (x86)\Manticore"
+        if (-not (Test-Path $installPath)) {
+          echo "ERROR: Manticore not installed at expected path: $installPath"
+          exit 1
+        }
+        
+        echo "Manticore installed at: $installPath"
+        
+        $searchdPath = "$installPath\bin\searchd.exe"
+        $indexerPath = "$installPath\bin\indexer.exe"
+        
+        if (-not (Test-Path $searchdPath)) {
+          echo "ERROR: searchd.exe not found at: $searchdPath"
+          exit 1
+        }
+        
+        if (-not (Test-Path $indexerPath)) {
+          echo "ERROR: indexer.exe not found at: $indexerPath"
+          exit 1
+        }
+        
+        echo "searchd.exe found at: $searchdPath"
+        echo "indexer.exe found at: $indexerPath"
+        
+        & $searchdPath --version
+        
+        # Disable Buddy before starting Manticore
+        $configPath = "$installPath\etc\manticoresearch\manticore.conf"
+        if (Test-Path $configPath) {
+          $config = Get-Content $configPath -Raw
+          # Add buddy_path with empty value to disable it
+          $config = $config -replace "(searchd\s*\{)", "`$1`n    buddy_path = "
+          Set-Content -Path $configPath -Value $config -Force
+        }
+        
+        echo "=== STARTING MANTICORE SERVICE ==="
+        
+        Push-Location $installPath
+        
+        $process = Start-Process -FilePath $searchdPath -PassThru -NoNewWindow
+        
+        # Smart wait for daemon to be ready
+        echo "Waiting for Manticore daemon to be ready..."
+        $maxAttempts = 30
+        $attempt = 0
+        $allPortsReady = $false
+        
+        while ($attempt -lt $maxAttempts -and -not $allPortsReady) {
+          Start-Sleep -Seconds 1
+          $attempt++
+          
+          # Check if process is still running
+          $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+          if (-not $manticoreProcess) {
+            echo "ERROR: Manticore searchd process died during startup"
+            exit 1
+          }
+          
+          # Check all three ports
+          $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9308 = Test-NetConnection -ComputerName localhost -Port 9308 -WarningAction SilentlyContinue -InformationLevel Quiet
+          $port9312 = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue -InformationLevel Quiet
+          
+          if ($port9306 -and $port9308 -and $port9312) {
+            $allPortsReady = $true
+            echo "All ports are ready after $attempt seconds"
+          }
+        }
+        
+        if (-not $allPortsReady) {
+          echo "ERROR: Manticore did not start properly within $maxAttempts seconds"
+          echo "Port 9306 status: $port9306"
+          echo "Port 9308 status: $port9308"
+          echo "Port 9312 status: $port9312"
+          exit 1
+        }
+        
+        $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        echo "Manticore searchd is running (PID: $($manticoreProcess.Id))"
+        
+        Pop-Location
+        
+        echo "=== TESTING MANTICORE SERVICE WITH SIMPLE STATUS CHECKS ==="
+        
+        # Test 1: Check HTTP API port 9308
+        echo "`nTest 1: Checking HTTP API (port 9308)..."
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9308/" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            echo "✓ HTTP API responds with status 200"
+            echo "✓ Response length: $($response.Content.Length) bytes"
+          } else {
+            echo "ERROR: Unexpected status code: $($response.StatusCode)"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: Failed to access HTTP API: $_"
+          exit 1
+        }
+        
+        # Test 2: Check Sphinx/HTTP port 9312
+        echo "`nTest 2: Checking Sphinx/HTTP port (9312)..."
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9312/" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            echo "✓ Sphinx/HTTP port responds with status 200"
+            # Check for expected content in response
+            if ($response.Content -like '*"version":*') {
+              echo "✓ Response contains version information"
+            }
+          } else {
+            echo "ERROR: Unexpected status code: $($response.StatusCode)"
+            exit 1
+          }
+        } catch {
+          echo "ERROR: Failed to access port 9312: $_"
+          exit 1
+        }
+        
+        # Test 3: Verify all three ports are listening
+        echo "`nTest 3: Verifying all service ports are listening..."
+        $ports = @(9306, 9308, 9312)
+        $allPortsOk = $true
+        
+        foreach ($port in $ports) {
+          $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue -InformationLevel Quiet
+          if ($connection) {
+            echo "✓ Port $port is listening"
+          } else {
+            echo "✗ Port $port is NOT listening"
+            $allPortsOk = $false
+          }
+        }
+        
+        if (-not $allPortsOk) {
+          echo "ERROR: Not all required ports are listening"
+          exit 1
+        }
+        
+        echo ""
+        echo "=== ALL BASIC TESTS COMPLETED SUCCESSFULLY ==="
+        echo "✓ Installation verified"
+        echo "✓ Daemon is running"
+        echo "✓ All ports (9306, 9308, 9312) are accessible"
+        echo "✓ HTTP endpoints respond with status 200"
+        echo "✓ Manticore service is operational"
+      shell: pwsh
+
   publish_nsis:
     name: Publishing Windows NSIS installer
-    needs: [publish_windows, publish, pack]
+    needs: [test_windows_installer, publish, pack]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
@@ -432,7 +623,7 @@ jobs:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |

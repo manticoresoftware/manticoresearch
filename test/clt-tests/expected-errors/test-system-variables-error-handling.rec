@@ -93,7 +93,11 @@ ERROR 1064 (42000) at line 1: unknown sysvar @@character_set
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@version;"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown sysvar @@version
++-----------+
+| @@version |
++-----------+
+| 8.0.43    |
++-----------+
 ––– comment –––
 2.1 Test in Multi-Select Queries
 ––– input –––

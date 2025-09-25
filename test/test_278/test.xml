@@ -806,6 +806,74 @@ drop table join2b;
 drop table d1;
 drop table d2;
 
+<!-- join on string attributes -->
+create table employee_test (name text, position_id string);
+create table position_test (name text, real_id string);
+
+insert into employee_test(name, position_id) VALUES ('Employee', '1');
+insert into position_test(name, real_id) VALUES ('Cat petter', '1');
+
+select name, position_test.name from employee_test left join position_test on employee_test.position_id = position_test.real_id;
+drop table employee_test;
+drop table position_test;
+
+<!-- regression for a crash of join on multiple facets -->
+create table t1;
+create table t2(i int, j json);
+insert into t1 values (1);
+insert into t2 values (1, 1, '{"w":"a"}');
+SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.i FACET t2.j.w, t2.i;;
+drop table t1;
+drop table t2;
+
+<!-- regression for a crash on join on string attributes -->
+create table employee_test (name text, position_id string);
+create table position_test (name text, real_id string, tag integer);
+
+insert into employee_test(name, position_id) VALUES ('Employee', '1');
+insert into position_test(name, real_id,tag) VALUES ('Value1', '1', 1);
+insert into position_test(name, real_id,tag) VALUES ('Value2', '1', 1);
+insert into position_test(name, real_id,tag) VALUES ('Value3', '1', 2);
+insert into position_test(name, real_id,tag) VALUES ('Value4', '1', 2);
+insert into position_test(name, real_id,tag) VALUES ('Value5', '1', 2);
+
+select name, position_test.name from employee_test left join position_test on employee_test.position_id = position_test.real_id;
+select name, position_test.name, position_test.tag from employee_test left join position_test on employee_test.position_id = position_test.real_id where position_test.tag=2;
+select name, position_test.name from employee_test left join position_test on employee_test.position_id = position_test.real_id where position_test.tag=2;
+
+drop table employee_test;
+drop table position_test;
+
+<!-- regression for sorting by aliases joined attributes -->
+create table join1 ( id bigint, title text, string_id integer );
+insert into join1 values ( 1, 'doc1', 1 );
+insert into join1 values ( 2, 'doc2', 1 );
+insert into join1 values ( 3, 'doc3', 2 );
+insert into join1 values ( 4, 'doc4', 2 );
+insert into join1 values ( 5, 'doc5', 3 );
+insert into join1 values ( 6, 'doc6', 3 );
+insert into join1 values ( 7, 'doc7', 4 );
+insert into join1 values ( 8, 'doc8', 4 );
+insert into join1 values ( 9, 'doc9', 5 );
+insert into join1 values ( 10, 'doc10', 5 );
+select * from join1 order by id asc;
+
+create table join2 ( id bigint, title text, tag integer );
+insert into join2 values ( 1, 'str1', 10 );
+insert into join2 values ( 2, 'str2', 1 );
+insert into join2 values ( 3, 'str3', 560 );
+insert into join2 values ( 4, 'str4', 2 );
+select * from join2 order by id asc;
+
+select id, title, join2.title from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+select id, title, join2.title from join1 inner join join2 on join1.string_id=join2.id order by join2.tag asc;
+select id, title, join2.title, join2.tag from join1 inner join join2 on join1.string_id=join2.id order by join2.tag asc;
+select id, title, join2.title, join2.tag as sort from join1 inner join join2 on join1.string_id=join2.id order by sort asc;
+select id, title, join2.title, join2.tag as sort from join1 inner join join2 on join1.string_id=join2.id order by sort desc;
+
+drop table join1;
+drop table join2;
+
 </sphinxql>
 </queries>
 

@@ -43,13 +43,13 @@ bool CSphColumnInfo::IsDataPtr() const
 
 bool CSphColumnInfo::IsColumnar() const
 {
-	return m_uAttrFlags & ATTR_COLUMNAR;
+	return !!(m_uAttrFlags & ATTR_COLUMNAR);
 }
 
 
 bool CSphColumnInfo::HasStringHashes() const
 {
-	return m_uAttrFlags & ATTR_COLUMNAR_HASHES;
+	return !!(m_uAttrFlags & ATTR_COLUMNAR_HASHES);
 }
 
 
@@ -67,25 +67,25 @@ bool CSphColumnInfo::IsStoredExpr() const
 
 bool CSphColumnInfo::IsIndexedKNN() const
 {
-	return m_uAttrFlags & ATTR_INDEXED_KNN;
+	return !!(m_uAttrFlags & ATTR_INDEXED_KNN);
 }
 
 
 bool CSphColumnInfo::IsJoined() const
 {
-	return m_uAttrFlags & ATTR_JOINED;
+	return !!(m_uAttrFlags & ATTR_JOINED);
 }
 
 
 bool CSphColumnInfo::IsIndexedSI() const
 {
-	return m_uAttrFlags & ATTR_INDEXED_SI;
+	return !!(m_uAttrFlags & ATTR_INDEXED_SI);
 }
 
 
 bool CSphColumnInfo::IsStored() const
 {
-	return m_uAttrFlags & CSphColumnInfo::ATTR_STORED;
+	return !!(m_uAttrFlags & CSphColumnInfo::ATTR_STORED);
 }
 
 

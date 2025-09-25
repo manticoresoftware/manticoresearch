@@ -810,7 +810,7 @@ int				ConsiderStackAbsolute ( const struct XQNode_t* pRoot );
 
 struct TransformExtendedQueryArgs_t
 {
-	bool m_bHasBooleanOptimization = true;
+	bool m_bHasBooleanOptimization = CSphQuery::m_bDefaultSimplify;
 	bool m_bNeedPhraseTransform = false;
 	const ISphKeywordsStat * m_pKeywords = nullptr;
 };

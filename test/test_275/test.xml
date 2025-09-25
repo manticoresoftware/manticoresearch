@@ -116,6 +116,12 @@ searchd
 	select id, knn_dist() from t where knn(emp,20,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303));
 	select id, knn_dist() from t where knn(emp,20,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303),{rescore=1});
 	drop table t;
+
+	<!-- regression for a crash on knn together with a filter tree -->
+	create table test ( title text,type string, pr int, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );
+	insert into test values ( 1, 'yellow bag', 'person',1 ,(0.653448,0.192478,0.017971,0.339821) ), ( 2, 'white bag', 'or',10, (-0.148894,0.748278,0.091892,-0.095406) );
+	select id, knn_dist() from test where type  =  'or' AND pr > 0 AND (type = 'person' AND pr > 1 OR type != 'person') AND  knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), {ef=2000} );
+	drop table test;
 </sphinxql>
 </queries>
 

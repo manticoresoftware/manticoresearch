@@ -2516,7 +2516,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	{
 		int iStackNeeded = -1;
 		const int TREE_SIZE_THRESH = 50;
-		if ( tCtx.m_pFilterTree->GetLength ()>TREE_SIZE_THRESH )
+		if ( tCtx.m_pFilterTree->GetLength ()>TREE_SIZE_THRESH && !Threads::IsIMocked() )
 		{
 			StackSizeParams_t tParams;
 			tParams.iMaxDepth = EvalMaxTreeHeight ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength ()-1 );

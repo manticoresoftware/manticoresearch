@@ -1706,6 +1706,8 @@ RtIndex_c::~RtIndex_c ()
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 		TRACE_SCHED ( "rt", "~RtIndex_c" );
 
+		m_dSavingTimer.UnEngage();
+
 		m_tSaving.SetShutdownFlag();
 		StopMergeSegmentsWorker();
 		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
@@ -7996,6 +7998,8 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
+	if ( IsIMocked() )
+		iStackNeed = -1;
 
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 

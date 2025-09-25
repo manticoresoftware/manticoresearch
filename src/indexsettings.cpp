@@ -15,7 +15,7 @@
 #include "sphinxstd.h"
 #include "sphinxint.h"
 #include "fileutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "icu.h"
 #include "jieba.h"
 #include "attribute.h"

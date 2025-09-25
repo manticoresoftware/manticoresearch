@@ -14,6 +14,7 @@
 #include "sphinxint.h"
 
 #include "std/crc32.h"
+#include "fileio.h"
 
 #include <array>
 

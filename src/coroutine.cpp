@@ -104,6 +104,11 @@ public:
 		return m_eState==State_e::Finished;
 	}
 
+	bool IsMocked () const noexcept
+	{
+		return m_tStack.second==StackFlavour_E::mocked_prealloc;
+	}
+
 	// yield to external context
 	void Yield_ ()
 	{
@@ -354,7 +359,7 @@ public:
 		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
-	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	ATTRIBUTE_NO_SANITIZE_ADDRESS static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
 		Worker_c tAction ( std::move ( fnHandler ), dStack );
 		auto pOldStack = Threads::TopOfStack ();
@@ -449,6 +454,11 @@ public:
 	int GetStackSize () const noexcept
 	{
 		return m_tCoroutine.GetStackSize ();
+	}
+
+	bool IsMocked () const noexcept
+	{
+		return m_tCoroutine.IsMocked ();
 	}
 
 	inline Scheduler_i * CurrentScheduler() const noexcept
@@ -646,7 +656,7 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	tEvent.WaitEvent ();
 }
 
-void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
+ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
 {
 	Coro::Worker_c::MockRun ( std::move ( fnHandler ), dStack );
 }
@@ -775,7 +785,15 @@ int MyStackSize()
 	return Threads::STACK_SIZE;
 }
 
-int64_t GetStackUsed()
+bool IsIMocked ()
+{
+	auto pWorker = Coro::Worker_c::CurrentWorker();
+	if ( pWorker )
+		return pWorker->IsMocked();
+	return false;
+}
+
+int64_t ATTRIBUTE_NO_SANITIZE_ADDRESS GetStackUsed ()
 {
 	BYTE cStack;
 	auto* pStackTop = (const BYTE*)MyStack();

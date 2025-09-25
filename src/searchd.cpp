@@ -48,6 +48,7 @@
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
+#include "dict/stem/sphinxstem.h"
 
 // services
 #include "taskping.h"

@@ -28,6 +28,7 @@
 #include "tokenizer/charset_definition_parser.h"
 #include "tokenizer/tokenizer.h"
 #include "dict/infix/infix_builder.h"
+#include "dict/stem/sphinxstem.h"
 
 namespace legacy
 {

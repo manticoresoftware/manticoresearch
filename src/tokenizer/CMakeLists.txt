@@ -10,13 +10,14 @@ hsnippetfolder ( "${CHARSET_FILTER}" "${CHARSET_TEMPLATE}" )
 file ( GLOB CHARSET_FILES "${CHARSET_FILTER}" )
 source_group ( "Charset sources" FILES ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
 
-add_library ( lowercaser lowercaser.cpp charset_definition_parser.cpp remap_range.h lowercaser_impl.h lowercaser.h
+add_library ( lowercaser OBJECT lowercaser.cpp charset_definition_parser.cpp remap_range.h lowercaser_impl.h lowercaser.h
 		charset_definition_parser.h )
 target_link_libraries ( lowercaser PRIVATE lextra )
+target_include_directories ( lowercaser PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 
-add_library ( tokenizer tokenizer.cpp tokenizer_bigram.cpp tokenizer_multiform.cpp tokenizer_plugin.cpp
+add_library ( tokenizer OBJECT tokenizer.cpp tokenizer_bigram.cpp tokenizer_multiform.cpp tokenizer_plugin.cpp
 		tokenizer_utf8.cpp tokenizerbase.cpp tokenizerbase2.cpp exceptions_trie.cpp exceptions_trie.h
 		tokenizerbase_impl.h tokenizerbase2_impl.h multiform_container.h token_filter.h tokenizer.h
-		tok_internals.h )
-target_link_libraries ( tokenizer PRIVATE lextra lowercaser )
-
+		tok_internals.h $<TARGET_OBJECTS:lowercaser>)
+target_link_libraries ( tokenizer PRIVATE lextra )
+target_include_directories ( tokenizer PRIVATE "${MANTICORE_SOURCE_DIR}/src" )

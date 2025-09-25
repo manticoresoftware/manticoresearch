@@ -15,7 +15,7 @@
 
 #include "sphinxint.h"
 #include "fileutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxplugin.h"
 #include "coroutine.h"
 #include "tokenizer/token_filter.h"

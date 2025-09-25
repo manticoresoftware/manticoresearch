@@ -15,6 +15,7 @@
 #include "attrstub.h"
 #include "vector.h"
 #include "blobs.h"
+#include <cstdarg>
 
 bool StrEq ( const char* l, const char* r );
 bool StrEqN ( const char* l, const char* r );

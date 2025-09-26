@@ -1016,7 +1016,7 @@ The purpose of this file is to enable Manticore to perform various internal task
 <!-- request Example -->
 
 ```ini
-pid_file = /var/run/manticore/searchd.pid
+pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 

@@ -1016,7 +1016,7 @@ pid_file — обязательная опция конфигурации в Man
 <!-- request Example -->
 
 ```ini
-pid_file = /var/run/manticore/searchd.pid
+pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 

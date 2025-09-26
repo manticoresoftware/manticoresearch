@@ -30,6 +30,8 @@ The Fuzzy Search feature allows for more flexible matching by accounting for sli
 
 > NOTE: The `fuzzy` option requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
+> NOTE: The `fuzzy` option is not available for [multi-queries](../Searching/Multi-queries.md).
+
 ## General syntax
 
 ### SQL

@@ -30,6 +30,8 @@ Manticore предоставляет опцию нечеткого поиска 
 
 > ПРИМЕЧАНИЕ: Опция `fuzzy` требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
 
+> ПРИМЕЧАНИЕ: Опция `fuzzy` недоступна для [мульти-запросов](../Searching/Multi-queries.md).
+
 ## Общий синтаксис
 
 ### SQL

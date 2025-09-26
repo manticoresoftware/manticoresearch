@@ -134,7 +134,7 @@ searchd > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 3; echo "Waiting for searchd to start"
+echo "Waiting for searchd to start"; sleep 3
 ––– output –––
 Waiting for searchd to start
 ––– comment –––

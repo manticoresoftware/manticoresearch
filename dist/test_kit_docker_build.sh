@@ -207,9 +207,6 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \
-    "sed -i '/listen = 127.0.0.1:9308:http/a\    log = /var/log/manticore/searchd.log\n    query_log = /var/log/manticore/query.log' /etc/manticoresearch/manticore.conf"
-
-docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
 
 echo "Exporting image to ../manticore_test_kit.img"

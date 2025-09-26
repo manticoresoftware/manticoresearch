@@ -181,9 +181,12 @@ docker create \
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \
 	'echo "Removing /build/manticore_*, because it may depend on manticore-buddy of a newer version while we'\''re installing Buddy via git clone"; rm /build/manticore_*.deb; ls -la /build/'
+
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+
+docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 # Install composer cuz we need it for buddy from the git and also development
 docker exec manticore-test-kit bash -c \
@@ -200,6 +203,8 @@ docker exec manticore-test-kit bash -c \
 	cd $buddy_path && \
 	git checkout $buddy_commit && \
 	composer install"
+
+docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \
     "sed -i '/listen = 127.0.0.1:9308:http/a\    log = /var/log/manticore/searchd.log\n    query_log = /var/log/manticore/query.log' /etc/manticoresearch/manticore.conf"

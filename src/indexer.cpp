@@ -13,7 +13,7 @@
 #include "sphinxint.h"
 #include "fileutils.h"
 #include "sphinxutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxplugin.h"
 #include "attribute.h"
 #include "cjkpreprocessor.h"

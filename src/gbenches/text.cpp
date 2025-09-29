@@ -14,7 +14,7 @@
 
 #include "sphinxint.h"
 #include "sphinxutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 
 
 class BM_parse_expr : public benchmark::Fixture

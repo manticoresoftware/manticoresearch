@@ -16,7 +16,7 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "fileutils.h"
 #include "threadutils.h"
 #include "indexfiles.h"

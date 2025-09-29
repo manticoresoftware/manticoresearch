@@ -11,7 +11,7 @@
 //
 
 #include "sphinx.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxquery/xqparser.h"
 #include "sphinxutils.h"

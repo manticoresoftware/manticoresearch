@@ -1046,7 +1046,7 @@ SearchdStats_t & gStats ()
 }
 
 // generic stats track - always to agent stats, separately to dashboard.
-static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
+void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 {
 	assert ( iCountID<=eMaxAgentStat );
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1077,7 +1077,7 @@ static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 }
 
 // special case of stats - all is ok, just need to track the time in dashboard.
-static void track_processing_time ( AgentConn_t &tAgent )
+void track_processing_time ( AgentConn_t & tAgent )
 {
 	// first we count temporary statistic (into dashboard)
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1728,6 +1728,18 @@ void AgentConn_t::SendingState ()
 	}
 }
 
+void AgentConn_t::SetDescMultiAgent()
+{
+	if ( m_pMultiAgent )
+		m_tDesc.CloneFrom ( m_pMultiAgent->ChooseAgent () );
+}
+
+void AgentConn_t::SetRecvBuf ( ByteBlob_t tBuf )
+{
+	m_dReplyBuf.Reset ( 0 );
+	m_dReplyBuf.Set ( (BYTE *)tBuf.first, tBuf.second );
+}
+
 /// prepare all necessary things to connect
 /// assume socket is NOT connected
 bool AgentConn_t::StartNextRetry ()
@@ -1881,16 +1893,23 @@ void AgentConn_t::RecvCallback ( int64_t iWaited, DWORD uReceived )
 }
 
 /// if iovec is empty, prepare (build) the request.
-void AgentConn_t::BuildData ()
+bool AgentConn_t::BuildData ()
 {
 	if ( m_pBuilder && m_dIOVec.IsEmpty () )
 	{
 		sphLogDebugA ( "%d BuildData for this=%p, m_pBuilder=%p", m_iStoreTag, this, m_pBuilder );
 		// prepare our data to send.
 		m_pBuilder->BuildRequest ( *this, m_tOutput );
+
+		CSphString sError;
+		if ( !ApiEncrypt ( m_tApiKey, m_tOutput, sError ) )
+			return Fatal ( eWrongQuery, "%s", sError.cstr() );
+
 		m_dIOVec.BuildFrom ( m_tOutput );
 	} else
 		sphLogDebugA ( "%d BuildData, already done", m_iStoreTag );
+
+	return true;
 }
 
 //! How many bytes we can read to m_pReplyCur (in bytes)
@@ -2021,7 +2040,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	// fixme! ConnectEx doesn't accept scattered buffer. Need to prepare plain one for at least MSS size
 #endif
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	if ( !m_pPollerTask )
 		ScheduleCallbacks ();
 	sphLogDebugA ( "%d overlaped ConnectEx called", m_iStoreTag );
@@ -2052,7 +2073,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 #else // _WIN32
 #if defined (MSG_FASTOPEN)
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	struct msghdr dHdr = { 0 };
 	dHdr.msg_iov = m_dIOVec.IOPtr ();
 	dHdr.msg_iovlen = m_dIOVec.IOSize ();
@@ -2065,7 +2088,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	sAddr.sae_dstaddr = pSs;
 	sAddr.sae_dstaddrlen = iLen;
 
-	BuildData ();
+	if ( !BuildData() )
+		return -1;
+
 	size_t iSent = 0;
 	auto iRes = connectx ( m_iSock, &sAddr, SAE_ASSOCID_ANY, CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT
 						   , m_dIOVec.IOPtr (), m_dIOVec.IOSize (), &iSent, nullptr );
@@ -2356,7 +2381,7 @@ bool AgentConn_t::DoQuery()
 	if ( IsPersistent() && m_iSock==-1 )
 	{
 		{
-			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST );
+			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST, 0 );
 			m_tOutput.SendInt ( 1 ); // set persistent to 1.
 		}
 		m_tOutput.StartNewChunk ();
@@ -2387,7 +2412,8 @@ bool AgentConn_t::DoQuery()
 	// for blackholes we parse query immediately, since builder will be disposed
 	// outside once we returned from the function
 	if ( IsBlackhole () )
-		BuildData ();
+		return BuildData();
+
 	return true;
 }
 
@@ -2467,8 +2493,9 @@ bool AgentConn_t::SendQuery ( DWORD uSent )
 
 	// here we have connected socket and are in process of sending blob there.
 	// prepare our data to send.
-	if ( !uSent )
-		BuildData ();
+	if ( !uSent &&  !BuildData() )
+		return false;
+
 	SSIZE_T iRes = 0;
 	while ( m_dIOVec.HasUnsent () )
 	{
@@ -2594,19 +2621,31 @@ bool AgentConn_t::CommitResult ()
 		return true;
 	}
 
-	MemInputBuffer_c tReq ( m_dReplyBuf.Begin (), m_iReplySize );
-
 	if ( m_eReplyStatus == SEARCHD_RETRY )
 	{
+		MemInputBuffer_c tReq ( m_dReplyBuf.Begin(), m_iReplySize );
 		m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
 		return BadResult ( -1 );
 	}
 
 	if ( m_eReplyStatus == SEARCHD_ERROR )
 	{
+		MemInputBuffer_c tReq ( m_dReplyBuf.Begin(), m_iReplySize );
 		m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
 		return BadResult ( -1 );
 	}
+
+	// failures unecrypted
+	if ( !ApiDecryptReply ( m_tApiKey, m_dReplyBuf, m_sFailure ) )
+	{
+		m_sFailure.SetSprintf ( "remote error: %s", m_sFailure.cstr () );
+		m_eReplyStatus = SEARCHD_ERROR;
+		return BadResult ( -1 );
+	}
+
+	m_pReplyCur = m_dReplyBuf.begin ();
+	m_iReplySize = m_dReplyBuf.GetLength();
+	MemInputBuffer_c tReq ( m_dReplyBuf );
 
 	bool bWarnings = ( m_eReplyStatus == SEARCHD_WARNING );
 	if ( bWarnings )

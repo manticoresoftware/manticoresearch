@@ -1280,7 +1280,7 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-细化网络超时行为（例如 `network_timeout`、`read_timeout` 和 `agent_query_timeout`）。
+细化网络超时行为（例如 `network_timeout` 和 `agent_query_timeout`）。
 
 设置为 0 时，超时限制发送整个请求/查询的最长时间。
 设置为 1（默认）时，超时限制网络活动之间的最长时间。

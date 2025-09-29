@@ -1280,7 +1280,7 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-Refines the behavior of networking timeouts (such as `network_timeout`, `read_timeout`, and `agent_query_timeout`).
+Refines the behavior of networking timeouts (such as `network_timeout` and `agent_query_timeout`).
 
 When set to 0, timeouts limit the maximum time for sending the entire request/query.
 When set to 1 (default), timeouts limit the maximum time between network activities.

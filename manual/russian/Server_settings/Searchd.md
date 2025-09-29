@@ -1280,7 +1280,7 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-Уточняет поведение таймаутов сети (таких как `network_timeout`, `read_timeout` и `agent_query_timeout`).
+Уточняет поведение таймаутов сети (таких как `network_timeout` и `agent_query_timeout`).
 
 При значении 0 таймауты ограничивают максимальное время на отправку всего запроса.
 При значении 1 (по умолчанию) таймауты ограничивают максимальное время между сетевой активностью.

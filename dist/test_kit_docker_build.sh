@@ -204,6 +204,9 @@ docker exec manticore-test-kit bash -c \
 	git checkout $buddy_commit && \
 	composer install"
 
+docker exec manticore-test-kit bash -c "grep -q 'query_log = /var/log/manticore/query.log' /etc/manticoresearch/manticore.conf || sed -i '/listen = 127.0.0.1:9308:http/a\    query_log = /var/log/manticore/query.log' /etc/manticoresearch/manticore.conf"
+docker exec manticore-test-kit bash -c "grep -q 'log = /var/log/manticore/searchd.log' /etc/manticoresearch/manticore.conf || sed -i '/listen = 127.0.0.1:9308:http/a\    log = /var/log/manticore/searchd.log' /etc/manticoresearch/manticore.conf"
+
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \

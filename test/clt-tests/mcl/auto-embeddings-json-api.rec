@@ -107,7 +107,7 @@ mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json; OPTIMIZE TABLE test_json OPTION s
 ––– output –––
 0
 ––– comment –––
-Test KNN search via JSON API with query parameter (new in commit 17e7667)
+Test KNN search via JSON API with query parameter
 ––– input –––
 curl -s -X POST http://localhost:9308/search -d '{"index":"test_json","knn":{"field":"embedding","query":"machine learning","k":2}}' | jq -r '.hits.total // "0"'
 ––– output –––

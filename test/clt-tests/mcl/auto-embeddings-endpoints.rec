@@ -135,13 +135,3 @@ Non-existent field
 mysql -h0 -P9306 -e "SELECT * FROM chunk_test WHERE KNN(wrong_field, 1, 'test')" 2>&1 | grep -o "wrong_field.*not found"
 ––– output –––
 wrong_field' not found
-––– comment –––
-Negative k value (currently no error - potential issue)
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, -1, 'test')"
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+

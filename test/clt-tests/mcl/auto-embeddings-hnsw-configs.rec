@@ -112,10 +112,10 @@ Cosine similarity distances (smaller = more similar):
 |    3 | cooking recipes  | 0.71192080 |
 +------+------------------+------------+
 ––– input –––
-echo "Inner product distances (larger negative = more similar):"
+echo "Inner product distances (smaller = more similar):"
 mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_ip WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
 ––– output –––
-Inner product distances (larger negative = more similar):
+Inner product distances (smaller = more similar):
 +------+------------------+------------+
 | id   | content          | distance   |
 +------+------------------+------------+
@@ -162,6 +162,9 @@ mysql -h0 -P9306 -e "CREATE TABLE test_hnsw_ef (
 0
 ––– comment –––
 Test 8: Verify HNSW parameter tables work correctly
+NOTE: This test only verifies that tables with different HNSW parameters
+can be created and used. It does NOT measure actual performance differences
+or search quality (recall/precision), as that would require large dataset.
 ––– input –––
 for table in test_hnsw_m4 test_hnsw_m32 test_hnsw_ef; do
     mysql -h0 -P9306 -e "INSERT INTO $table (id, content) VALUES (1, 'test document')" 2>/dev/null

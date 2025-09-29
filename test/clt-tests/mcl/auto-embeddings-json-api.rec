@@ -1,7 +1,7 @@
 Test auto-embeddings functionality via JSON API
 ––– comment –––
-Start Manticore Search
-––– block: ../base/start-searchd –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Install jq for JSON parsing
 ––– input –––
@@ -28,11 +28,11 @@ mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json" | grep -o "knn_dims='384'"
 ––– output –––
 knn_dims='384'
 ––– comment –––
-Insert via JSON API (returns null but works)
+Insert via JSON API (returns _id on success)
 ––– input –––
 curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":1,"doc":{"title":"machine learning","content":"neural networks"}}' | jq -r 'if ._id then ._id else "inserted" end'
 ––– output –––
-#!/1|inserted/!#
+inserted
 ––– comment –––
 Verify document exists and has embedding
 ––– input –––
@@ -49,9 +49,11 @@ Bulk insert test
 curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjson" -d '
 {"insert":{"index":"test_json","id":2,"doc":{"title":"computer vision","content":"image recognition"}}}
 {"insert":{"index":"test_json","id":3,"doc":{"title":"NLP","content":"text processing"}}}
-' | jq -r 'if .items then "bulk_ok" else "bulk_fail" end'
+' | jq '{created: .items[0].bulk.created}'
 ––– output –––
-bulk_ok
+{
+  "created": 2
+}
 ––– comment –––
 Verify bulk inserted documents have embeddings
 ––– input –––
@@ -65,9 +67,9 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
 ––– comment –––
 Replace document (regenerates embedding)
 ––– input –––
-curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r 'if ._id then "replaced" else "replace_ok" end'
+curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r '.result'
 ––– output –––
-#!/replaced|replace_ok/!#
+updated
 ––– comment –––
 Verify embedding was regenerated
 ––– input –––

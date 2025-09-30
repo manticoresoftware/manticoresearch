@@ -20,22 +20,25 @@ mysql -h0 -P9306 -e "CREATE TABLE emb_test (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title, content'
-) engine='columnar'"
+) engine='columnar'"; echo $?
 ––– output –––
+0
 ––– comment –––
 Insert test data
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO emb_test (id, title, content) VALUES
     (1, 'machine learning', 'neural networks and deep learning'),
     (2, 'computer vision', 'image recognition and processing'),
-    (3, 'natural language', 'text analysis and understanding')"
+    (3, 'natural language', 'text analysis and understanding')"; echo $?
 ––– output –––
+0
 ––– comment –––
 IMPORTANT: Optimize table to make k parameter work correctly
 Data is currently in ramchunk where k parameter is not applied
 ––– input –––
-mysql -h0 -P9306 -e "FLUSH RAMCHUNK emb_test; OPTIMIZE TABLE emb_test OPTION sync=1, cutoff=1"
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK emb_test; OPTIMIZE TABLE emb_test OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
+0
 ––– comment –––
 Verify k=2 returns exactly 2 documents after optimization
 ––– input –––
@@ -96,14 +99,16 @@ mysql -h0 -P9306 -e "CREATE TABLE chunk_test (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title'
-) engine='columnar'"
+) engine='columnar'"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO chunk_test (id, title) VALUES
     (1, 'machine learning'),
     (2, 'deep learning'),
-    (3, 'reinforcement learning')"
+    (3, 'reinforcement learning')"; echo $?
 ––– output –––
+0
 ––– comment –––
 BEFORE optimization: k parameter not applied (ramchunk behavior)
 ––– input –––
@@ -117,8 +122,9 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning
 ––– comment –––
 AFTER optimization: k parameter works correctly
 ––– input –––
-mysql -h0 -P9306 -e "FLUSH RAMCHUNK chunk_test; OPTIMIZE TABLE chunk_test OPTION sync=1, cutoff=1"
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK chunk_test; OPTIMIZE TABLE chunk_test OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning')"
 ––– output –––
@@ -135,3 +141,9 @@ Non-existent field
 mysql -h0 -P9306 -e "SELECT * FROM chunk_test WHERE KNN(wrong_field, 1, 'test')" 2>&1 | grep -o "wrong_field.*not found"
 ––– output –––
 wrong_field' not found
+––– comment –––
+Checking KNN search with negative k values
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test WHERE KNN(vec, -1, (0,0));"
+––– output –––
+ERROR 1064 (42000) at line 1: P01: k parameter must be positive near ')'

@@ -13,22 +13,32 @@ mysql -h0 -P9306 -e "CREATE TABLE test_empty (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert row with missing title (only content)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_empty (id, content) VALUES (1, 'Content without title')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert row with missing content (only title)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_empty (id, title) VALUES (2, 'Title without content')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert row with empty string title and non-empty content
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_empty (id, title, content) VALUES (4, '', 'Non-empty content')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert row with both fields as empty strings
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_empty (id, title, content) VALUES (5, '', '')"; echo $?
 ––– output –––
 0
+––– comment –––
+Create table for Unicode and special characters testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_unicode (
     content_text TEXT,
@@ -38,26 +48,38 @@ mysql -h0 -P9306 -e "CREATE TABLE test_unicode (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert text with emojis
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (1, '🔥 Machine Learning is awesome! 🚀💻')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert Chinese text
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (2, '机器学习和人工智能的未来')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert Arabic text (right-to-left script)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (3, 'التعلم الآلي والذكاء الاصطناعي')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert mixed multilingual text with various scripts
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (4, 'English текст 日本語 mixed المختلط')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert special characters and symbols
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (5, '@#$%^&*()_+-=[]{}|;:<>?,./~\`')"; echo $?
 ––– output –––
 0
+––– comment –––
+KNN in the RAM block should ignore the k parameter (return all matching records)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_unicode WHERE KNN(vec, 2, '机器学习 🚀')"
 ––– output –––
@@ -70,10 +92,14 @@ mysql -h0 -P9306 -e "SELECT id FROM test_unicode WHERE KNN(vec, 2, '机器学习
 |    1 |
 |    5 |
 +------+
+––– comment –––
+Test SQL injection-like content (should be safely stored)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (100, 'Text with SQL: DROP TABLE test; SELECT * FROM users;')"; echo $?
 ––– output –––
 0
+––– comment –––
+Verify SQL-like content is stored correctly without execution
 ––– input –––
 mysql -h0 -P9306 -e "SELECT content_text FROM test_unicode WHERE id=100"
 ––– output –––
@@ -82,6 +108,8 @@ mysql -h0 -P9306 -e "SELECT content_text FROM test_unicode WHERE id=100"
 +------------------------------------------------------+
 | Text with SQL: DROP TABLE test; SELECT * FROM users; |
 +------------------------------------------------------+
+––– comment –––
+Insert multiline text with tabs and newlines
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (101, 'Line 1
 Line 2
@@ -89,10 +117,14 @@ Line 2
 Line 4')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert HTML/XML content with script tags
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (102, '<html><body><h1>Title</h1><script>alert(1)</script></body></html>')"; echo $?
 ––– output –––
 0
+––– comment –––
+Create table for large text testing
 ––– input –––
 HUGE_TEXT=$(python3 -c "print('neural network ' * 1000)")
 mysql -h0 -P9306 -e "CREATE TABLE test_huge (
@@ -103,10 +135,14 @@ mysql -h0 -P9306 -e "CREATE TABLE test_huge (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert very large text
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_huge (id, content_text) VALUES (1, '$HUGE_TEXT')"; echo $?
 ––– output –––
 0
+––– comment –––
+Create table for concurrent insertion testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_concurrent (
     title TEXT,
@@ -116,6 +152,8 @@ mysql -h0 -P9306 -e "CREATE TABLE test_concurrent (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Test concurrent inserts with same ID (only last one should persist)
 ––– input –––
 for i in 1 2 3; do
     mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title) VALUES (999, 'Concurrent insert $i')" 2>&1 &
@@ -128,6 +166,8 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id=999"
 +----------+
 |        1 |
 +----------+
+––– comment –––
+Create table with auto-detected dimensions
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_auto_dims (
     content_text TEXT,
@@ -137,6 +177,8 @@ mysql -h0 -P9306 -e "CREATE TABLE test_auto_dims (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Verify dimensions are auto-detected as 384 for all-MiniLM-L6-v2 model
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_auto_dims"
 ––– output –––
@@ -149,6 +191,8 @@ content_text text,
 vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
 ) engine='columnar' |
 +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– comment –––
+Create table for rapid REPLACE operations testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_rapid (
     content_text TEXT,
@@ -158,6 +202,8 @@ mysql -h0 -P9306 -e "CREATE TABLE test_rapid (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Test rapid REPLACE operations (20 updates to same document)
 ––– input –––
 for i in $(seq 1 20); do
     mysql -h0 -P9306 -e "REPLACE INTO test_rapid (id, content_text) VALUES (1, 'Iteration $i')" 2>/dev/null
@@ -169,6 +215,8 @@ mysql -h0 -P9306 -e "SELECT content_text FROM test_rapid WHERE id=1"
 +--------------+
 | Iteration 20 |
 +--------------+
+––– comment –––
+Create rowwise table for empty field testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_empty_row (
     title TEXT,
@@ -179,10 +227,14 @@ mysql -h0 -P9306 -e "CREATE TABLE test_empty_row (
 ) engine='rowwise'"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert document with missing title in rowwise table
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_empty_row (id, content) VALUES (1, 'Content without title')"; echo $?
 ––– output –––
 0
+––– comment –––
+Verify KNN search works on rowwise table with partial fields
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_empty_row WHERE KNN(vec, 1, 'test query')"
 ––– output –––
@@ -191,6 +243,8 @@ mysql -h0 -P9306 -e "SELECT id FROM test_empty_row WHERE KNN(vec, 1, 'test query
 +------+
 |    1 |
 +------+
+––– comment –––
+Create rowwise table for engine comparison
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_compare_row (
     title TEXT,
@@ -200,6 +254,8 @@ mysql -h0 -P9306 -e "CREATE TABLE test_compare_row (
 ) engine='rowwise'"; echo $?
 ––– output –––
 0
+––– comment –––
+Create columnar table for engine comparison
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_compare_col (
     title TEXT,
@@ -209,14 +265,20 @@ mysql -h0 -P9306 -e "CREATE TABLE test_compare_col (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert same data into rowwise table
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_compare_row (id, title) VALUES (1, 'Machine learning algorithms')"; echo $?
 ––– output –––
 0
+––– comment –––
+Insert same data into columnar table
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_compare_col (id, title) VALUES (1, 'Machine learning algorithms')"; echo $?
 ––– output –––
 0
+––– comment –––
+Test KNN on rowwise table
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_compare_row WHERE KNN(vec, 1, 'machine learning')"
 ––– output –––
@@ -225,6 +287,8 @@ mysql -h0 -P9306 -e "SELECT id FROM test_compare_row WHERE KNN(vec, 1, 'machine 
 +------+
 |    1 |
 +------+
+––– comment –––
+Test KNN on columnar table (should produce same results)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_compare_col WHERE KNN(vec, 1, 'machine learning')"
 ––– output –––
@@ -233,6 +297,8 @@ mysql -h0 -P9306 -e "SELECT id FROM test_compare_col WHERE KNN(vec, 1, 'machine 
 +------+
 |    1 |
 +------+
+––– comment –––
+Load 5000 documents into columnar table with complex schema
 ––– input –––
 manticore-load --quiet --json --init="CREATE TABLE test_scale_columnar (
     id BIGINT,
@@ -272,6 +338,8 @@ manticore-load --quiet --json --init="CREATE TABLE test_scale_columnar (
         "p99": %{NUMBER}
     }
 }
+––– comment –––
+Verify all 5000 documents were loaded into columnar table
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_scale_columnar"
 ––– output –––
@@ -280,6 +348,8 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_scale_columnar"
 +-------+
 |  5000 |
 +-------+
+––– comment –––
+Verify schema of large columnar table
 ––– input –––
 mysql -h0 -P9306 -e "DESCRIBE test_scale_columnar;"
 ––– output –––
@@ -300,9 +370,13 @@ mysql -h0 -P9306 -e "DESCRIBE test_scale_columnar;"
 | additional_info | json         |                         |
 | vec             | float_vector | columnar knn fast_fetch |
 +-----------------+--------------+-------------------------+
+––– comment –––
+Export sample data for verification
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test_scale_columnar ORDER BY id ASC LIMIT 100" > /tmp/test_scale_columnar.txt
 ––– output –––
+––– comment –––
+Test KNN search on large columnar dataset
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_columnar WHERE KNN(vec, 5, 'Document title 100') LIMIT 5\G"
 ––– output –––
@@ -331,6 +405,8 @@ knn_dist(): 0.33028#!/[0-9]{3}/!#
      title: Document title 10043
   category: cat_10041
 knn_dist(): 0.33115#!/[0-9]{3}/!#
+––– comment –––
+Load 5000 documents into rowwise table with same schema
 ––– input –––
 manticore-load --quiet --json --init="CREATE TABLE test_scale_rowwise (
     id BIGINT,
@@ -370,6 +446,8 @@ manticore-load --quiet --json --init="CREATE TABLE test_scale_rowwise (
         "p99": %{NUMBER}
     }
 }
+––– comment –––
+Verify all 5000 documents were loaded into rowwise table
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_scale_rowwise"
 ––– output –––
@@ -378,6 +456,8 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_scale_rowwise"
 +-------+
 |  5000 |
 +-------+
+––– comment –––
+Verify schema of large rowwise table
 ––– input –––
 mysql -h0 -P9306 -e "DESCRIBE test_scale_rowwise;"
 ––– output –––
@@ -398,9 +478,13 @@ mysql -h0 -P9306 -e "DESCRIBE test_scale_rowwise;"
 | additional_info | json         |                |
 | vec             | float_vector | knn            |
 +-----------------+--------------+----------------+
+––– comment –––
+Export sample data for verification
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test_scale_rowwise ORDER BY id ASC LIMIT 100" > /tmp/test_scale_rowwise.txt
 ––– output –––
+––– comment –––
+Test KNN search on large rowwise dataset
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_scale_rowwise WHERE KNN(vec, 5, 'Document title 100') LIMIT 5\G"
 ––– output –––
@@ -429,6 +513,8 @@ knn_dist(): 0.33028#!/[0-9]{3}/!#
      title: Document title 10043
   category: cat_10041
 knn_dist(): 0.33115#!/[0-9]{3}/!#
+––– comment –––
+Create table for batch insert performance testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_batch_perf (
     content TEXT,
@@ -438,6 +524,8 @@ mysql -h0 -P9306 -e "CREATE TABLE test_batch_perf (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Test batch insert performance (5 documents in one statement)
 ––– input –––
 START_TIME=$(date +%s)
 mysql -h0 -P9306 -e "INSERT INTO test_batch_perf (id, content) VALUES
@@ -447,6 +535,8 @@ END_TIME=$(date +%s)
 echo "Batch insert time: $((END_TIME - START_TIME)) seconds"
 ––– output –––
 Batch insert time: %{NUMBER} seconds
+––– comment –––
+Create rowwise table for performance comparison
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE perf_test_row (
     content TEXT,
@@ -456,6 +546,8 @@ mysql -h0 -P9306 -e "CREATE TABLE perf_test_row (
 ) engine='rowwise'"; echo $?
 ––– output –––
 0
+––– comment –––
+Create columnar table for performance comparison
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE perf_test_col (
     content TEXT,
@@ -465,6 +557,8 @@ mysql -h0 -P9306 -e "CREATE TABLE perf_test_col (
 ) engine='columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Measure rowwise insert performance (10 individual inserts)
 ––– input –––
 START_TIME=$(date +%s%N)
 for i in {1..10}; do
@@ -474,6 +568,8 @@ END_TIME=$(date +%s%N)
 echo "Row-wise 10 inserts: $(( (END_TIME - START_TIME) / 1000000 )) ms"
 ––– output –––
 Row-wise 10 inserts: %{NUMBER} ms
+––– comment –––
+Measure columnar insert performance (10 individual inserts)
 ––– input –––
 START_TIME=$(date +%s%N)
 for i in {1..10}; do
@@ -483,6 +579,8 @@ END_TIME=$(date +%s%N)
 echo "Columnar 10 inserts: $(( (END_TIME - START_TIME) / 1000000 )) ms"
 ––– output –––
 Columnar 10 inserts: %{NUMBER} ms
+––– comment –––
+Test KNN search on empty table (should return no results)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_empty_search (
     content TEXT,

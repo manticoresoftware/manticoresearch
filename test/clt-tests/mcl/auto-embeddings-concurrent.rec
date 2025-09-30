@@ -23,13 +23,13 @@ echo "Initial insert completed"
 ––– output –––
 Initial insert completed
 ––– comment –––
-Optimize table
+Optimize table to move data to disk chunks
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_concurrent; OPTIMIZE TABLE test_concurrent OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
 0
 ––– comment –––
-Concurrent operations
+Concurrent INSERT/DELETE/REPLACE: 20 initial - 5 deleted + 10 new = 25 total
 ––– input –––
 for i in {21..30}; do
     mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title, status) VALUES ($i, 'New doc $i', 1)" 2>/dev/null &
@@ -49,16 +49,17 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_concurrent"
 |    25 |
 +-------+
 ––– comment –––
-Race condition test with exact file counting
+Race condition test: multiple concurrent INSERTs with same id
 ––– input –––
 rm -f /tmp/race_test.err
 for i in {1..10}; do
     (mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title, status) VALUES (999, 'Race $i', $i)" 2>>/tmp/race_test.err) &
 done
-wait
+wait; echo $?
 ––– output –––
+0
 ––– comment –––
-Show exact error count from file
+Count total error lines (0-9 errors expected due to race)
 ––– input –––
 wc -l /tmp/race_test.err | awk '{print $1 " error lines in file"}'
 ––– output –––
@@ -70,7 +71,7 @@ grep -c "duplicate id" /tmp/race_test.err
 ––– output –––
 %{NUMBER}
 ––– comment –––
-Check final state
+Verify only one record inserted despite race (first one wins)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id = 999"
 ––– output –––
@@ -80,7 +81,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id = 999"
 |        1 |
 +----------+
 ––– comment –––
-Test REPLACE with vectors (UPDATE doesn't work for TEXT fields)
+Test concurrent REPLACE with auto-embeddings regeneration
 ––– input –––
 for i in {11..15}; do
     mysql -h0 -P9306 -e "REPLACE INTO test_concurrent (id, title, status) VALUES ($i, 'Updated doc $i', 3)" 2>/dev/null &
@@ -89,8 +90,24 @@ wait
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_concurrent; OPTIMIZE TABLE test_concurrent OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
 0
+––– comment –––
+Verify KNN distances after REPLACE (embeddings regenerated from new titles)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') ORDER BY id LIMIT 5"
+mysql -h0 -P9306 -e "SELECT id, KNN_DIST() as dist FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') LIMIT 5"
+––– output –––
++------+------------+
+| id   | dist       |
++------+------------+
+|   13 | 0.318306#!/[0-9]{0,3}/!# |
+|   11 | 0.331902#!/[0-9]{0,3}/!# |
+|   12 | 0.333211#!/[0-9]{0,3}/!# |
+|   14 | 0.342856#!/[0-9]{0,3}/!# |
+|   15 | 0.351880#!/[0-9]{0,3}/!# |
++------+------------+
+––– comment –––
+KNN always sorts by distance - ORDER BY id is ignored
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') LIMIT 5"
 ––– output –––
 +------+
 | id   |
@@ -102,7 +119,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_concurrent WHERE KNN(vec, 5, 'Updated d
 |   15 |
 +------+
 ––– comment –––
-Multiple tests with file output
+Verify race condition behavior is consistent across multiple tables
 ––– input –––
 for test_num in {1..3}; do
     rm -f /tmp/test${test_num}.err

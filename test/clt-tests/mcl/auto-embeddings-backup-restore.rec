@@ -41,6 +41,18 @@ mysql -h0 -P9306 -e "SELECT id FROM test_backup WHERE KNN(vec, 2, 'artificial in
 |    3 |
 +------+
 ––– comment –––
+Verify KNN returns semantically closest documents (distances confirm ranking)
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title, content, KNN_DIST() as distance FROM test_backup WHERE KNN(vec, 3, 'artificial intelligence') ORDER BY distance"
+––– output –––
++------+------------------+------------------+------------+
+| id   | title            | content          | distance   |
++------+------------------+------------------+------------+
+|    1 | machine learning | neural networks  | 0.851733#!/[0-9]{0,3}/!# |
+|    3 | computer vision  | image processing | 1.130702#!/[0-9]{0,3}/!# |
+|    2 | deep learning    | transformers     | 1.311729#!/[0-9]{0,3}/!# |
++------+------------------+------------------+------------+
+––– comment –––
 Check manticore-backup is available
 ––– input –––
 manticore-backup --version | grep -c "Manticore Backup"
@@ -63,13 +75,38 @@ ls -d /tmp/backup/backup-* | wc -l
 ––– output –––
 1
 ––– comment –––
-Test FREEZE/UNFREEZE for online backup
+FREEZE returns list of table files (14 files for this table structure including .spknn)
 ––– input –––
-mysql -h0 -P9306 -e "FREEZE test_backup" | grep -c "test_backup"
+mysql -h0 -P9306 -e "FREEZE test_backup"
 ––– output –––
-14
++-----------------------------------------------------+-----------------------------------------------------+
+| file                                                | normalized                                          |
++-----------------------------------------------------+-----------------------------------------------------+
+| /var/lib/manticore/test_backup/test_backup.0.spc    | /var/lib/manticore/test_backup/test_backup.0.spc    |
+| /var/lib/manticore/test_backup/test_backup.0.spd    | /var/lib/manticore/test_backup/test_backup.0.spd    |
+| /var/lib/manticore/test_backup/test_backup.0.spds   | /var/lib/manticore/test_backup/test_backup.0.spds   |
+| /var/lib/manticore/test_backup/test_backup.0.spe    | /var/lib/manticore/test_backup/test_backup.0.spe    |
+| /var/lib/manticore/test_backup/test_backup.0.sph    | /var/lib/manticore/test_backup/test_backup.0.sph    |
+| /var/lib/manticore/test_backup/test_backup.0.sphi   | /var/lib/manticore/test_backup/test_backup.0.sphi   |
+| /var/lib/manticore/test_backup/test_backup.0.spi    | /var/lib/manticore/test_backup/test_backup.0.spi    |
+| /var/lib/manticore/test_backup/test_backup.0.spidx  | /var/lib/manticore/test_backup/test_backup.0.spidx  |
+| /var/lib/manticore/test_backup/test_backup.0.spknn  | /var/lib/manticore/test_backup/test_backup.0.spknn  |
+| /var/lib/manticore/test_backup/test_backup.0.spm    | /var/lib/manticore/test_backup/test_backup.0.spm    |
+| /var/lib/manticore/test_backup/test_backup.0.spp    | /var/lib/manticore/test_backup/test_backup.0.spp    |
+| /var/lib/manticore/test_backup/test_backup.0.spt    | /var/lib/manticore/test_backup/test_backup.0.spt    |
+| /var/lib/manticore/test_backup/test_backup.meta     | /var/lib/manticore/test_backup/test_backup.meta     |
+| /var/lib/manticore/test_backup/test_backup.settings | /var/lib/manticore/test_backup/test_backup.settings |
++-----------------------------------------------------+-----------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
 ––– comment –––
-Insert while frozen
+INSERT works while table is frozen (writes are queued)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_backup (id, title, content, status) VALUES (4, 'frozen insert', 'test data', 3)"; echo $?
 ––– output –––
@@ -81,7 +118,7 @@ mysql -h0 -P9306 -e "UNFREEZE test_backup"; echo $?
 ––– output –––
 0
 ––– comment –––
-Verify data including frozen insert
+Verify frozen insert is now visible (4 records before restore)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
 ––– output –––
@@ -138,7 +175,7 @@ echo "Waiting for searchd to start"; sleep 3
 ––– output –––
 Waiting for searchd to start
 ––– comment –––
-Verify restored data (includes frozen insert as it was backed up)
+Verify restored data (backup taken before frozen insert, so only 3 records)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
 ––– output –––

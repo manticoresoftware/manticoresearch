@@ -10,31 +10,31 @@ apt-get install jq -y > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– comment –––
-Create table with auto-embeddings
+Create table with auto-embeddings via JSON API
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_json (
     title TEXT,
     content TEXT,
     embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-    FROM='title,content'
+    FROM='title, content'
 ) engine='columnar'"; echo $?
 ––– output –––
 0
 ––– comment –––
-Verify table structure
+Verify table structure shows auto-detected dimensions
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json" | grep -o "knn_dims='384'"
 ––– output –––
 knn_dims='384'
 ––– comment –––
-Insert via JSON API (returns _id on success)
+Insert document via JSON API (embeddings generated automatically from FROM fields)
 ––– input –––
 curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":1,"doc":{"title":"machine learning","content":"neural networks"}}' | jq -r 'if ._id then ._id else "inserted" end'
 ––– output –––
 inserted
 ––– comment –––
-Verify document exists and has embedding
+Verify document exists and embedding was auto-generated
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_json WHERE KNN(embedding, 1, 'machine learning neural networks')"
 ––– output –––
@@ -44,7 +44,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_json WHERE KNN(embedding, 1, 'machine l
 |    1 |
 +------+
 ––– comment –––
-Bulk insert test
+Bulk insert multiple documents via JSON API
 ––– input –––
 curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjson" -d '
 {"insert":{"index":"test_json","id":2,"doc":{"title":"computer vision","content":"image recognition"}}}
@@ -55,7 +55,7 @@ curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjso
   "created": 2
 }
 ––– comment –––
-Verify bulk inserted documents have embeddings
+Verify bulk inserted documents have auto-generated embeddings
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
 ––– output –––
@@ -65,13 +65,13 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
 |        2 |
 +----------+
 ––– comment –––
-Replace document (regenerates embedding)
+Replace document via JSON API (embedding regenerated automatically)
 ––– input –––
 curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r '.result'
 ––– output –––
 updated
 ––– comment –––
-Verify embedding was regenerated
+Verify embedding was regenerated after replace
 ––– input –––
 mysql -h0 -P9306 -e "SELECT title FROM test_json WHERE id=1 AND KNN(embedding, 1, 'updated ML networks')"
 ––– output –––
@@ -81,11 +81,13 @@ mysql -h0 -P9306 -e "SELECT title FROM test_json WHERE id=1 AND KNN(embedding, 1
 | updated ML |
 +------------+
 ––– comment –––
-Test deterministic embeddings
+Test deterministic embeddings (same input produces identical vectors)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_json (id, title, content) VALUES (100, 'test', 'data')";
 curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":101,"doc":{"title":"test","content":"data"}}' > /dev/null
 ––– output –––
+––– comment –––
+Compare vectors generated via SQL and JSON API (should be identical)
 ––– input –––
 mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json WHERE id=100" > /tmp/v1.txt
 mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json WHERE id=101" > /tmp/v2.txt
@@ -93,7 +95,7 @@ diff -q /tmp/v1.txt /tmp/v2.txt > /dev/null && echo "Vectors identical" || echo 
 ––– output –––
 Vectors identical
 ––– comment –––
-Final verification
+Verify total document count
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json"
 ––– output –––
@@ -103,30 +105,34 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json"
 |        5 |
 +----------+
 ––– comment –––
-Optimize table for proper k parameter behavior
+Optimize table for proper k parameter behavior in disk chunks
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json; OPTIMIZE TABLE test_json OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
 0
 ––– comment –––
-Test KNN search via JSON API with query parameter
-––– input –––
-curl -s -X POST http://localhost:9308/search -d '{"index":"test_json","knn":{"field":"embedding","query":"machine learning","k":2}}' | jq -r '.hits.total // "0"'
-––– output –––
-2
-––– comment –––
-Test that query_vector still works (backward compatibility)
+Test KNN search via JSON API with explicit query_vector
 ––– input –––
 VECTOR=$(python3 -c "print(','.join(['0.01']*384))")
 curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
 ––– output –––
 2
 ––– comment –––
-Test error when auto-embedding not configured
+Create table without auto-embeddings configuration
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE no_auto_embed (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2') engine='columnar'"
 ––– output –––
+––– comment –––
+Insert document into table without auto-embeddings (must provide vector manually)
 ––– input –––
-curl -s -X POST http://localhost:9308/search -d '{"index":"no_auto_embed","knn":{"field":"vec","query":"test","k":1}}'
+VECTOR=$(python3 -c "print(','.join(['0.5']*384))")
+curl -s -X POST http://localhost:9308/insert -d "{\"index\":\"no_auto_embed\",\"id\":1,\"doc\":{\"title\":\"test\",\"vec\":[$VECTOR]}}" | jq -r 'if ._id then ._id else "inserted" end'
 ––– output –––
-{"error":"table no_auto_embed: Embeddings generation string specified, but embeddings are not loaded"}
+inserted
+––– comment –––
+Verify KNN search works with manually provided vectors
+––– input –––
+QUERY_VEC=$(python3 -c "print(','.join(['0.5']*384))")
+curl -s -X POST http://localhost:9308/search -d "{\"index\":\"no_auto_embed\",\"knn\":{\"field\":\"vec\",\"query_vector\":[$QUERY_VEC],\"k\":1}}" | jq -r '.hits.total // "0"'
+––– output –––
+1

@@ -1,0 +1,105 @@
+Test KNN parameters validation (k, ef, oversampling) - ensure negative values fail with reasonable errors in both SQL and JSON modes
+
+––– comment –––
+Start Manticore Search with Buddy
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore started!
+––– comment –––
+Create test table with KNN-enabled vector field
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, title TEXT, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
+––– output –––
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test VALUES (1, 'first', (0.1, 0.2, 0.3, 0.4)), (2, 'second', (0.5, 0.6, 0.7, 0.8)), (3, 'third', (0.9, 0.1, 0.2, 0.3));"
+––– output –––
+––– comment –––
+Test valid KNN query first (baseline)
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM knn_test WHERE knn(vector, 2, (0.1, 0.2, 0.3, 0.4));"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+––– comment –––
+SQL Mode: Test negative k parameter
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM knn_test WHERE knn(vector, -1, (0.1, 0.2, 0.3, 0.4));" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: k parameter must be positive near ')'
+––– comment –––
+SQL Mode: Test negative ef parameter
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM knn_test WHERE knn(vector, 2, (0.1, 0.2, 0.3, 0.4), {ef=-100});" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: Unable to parse KNN option 'ef' near ')'
+––– comment –––
+SQL Mode: Test negative oversampling parameter
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM knn_test WHERE knn(vector, 2, (0.1, 0.2, 0.3, 0.4), {oversampling=-2.0});" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: Unable to parse KNN option 'oversampling' near ')'
+––– comment –––
+SQL Mode: Test zero k parameter
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM knn_test WHERE knn(vector, 0, (0.1, 0.2, 0.3, 0.4));" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: k parameter must be positive near ')'
+––– comment –––
+SQL Mode: Test zero oversampling parameter (correctly fails)
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM knn_test WHERE knn(vector, 2, (0.1, 0.2, 0.3, 0.4), {oversampling=0});" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: Unable to parse KNN option 'oversampling' near ')'
+––– comment –––
+JSON Mode: Test valid KNN query first (baseline)
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2}}' | python3 -m json.tool | grep '"total"'
+––– output –––
+        "total": 3,
+––– comment –––
+JSON Mode: Test negative k parameter
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":-1}}'
+––– output –––
+{"error":"k parameter must be positive"}
+––– comment –––
+JSON Mode: Test negative ef parameter
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"ef":-100}}'
+––– output –––
+{"error":"ef parameter must be non-negative"}
+––– comment –––
+JSON Mode: Test negative oversampling parameter
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"oversampling":-2.0}}'
+––– output –––
+{"error":"oversampling parameter must be positive"}
+––– comment –––
+JSON Mode: Test zero k parameter
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":0}}'
+––– output –––
+{"error":"k parameter must be positive"}
+––– comment –––
+JSON Mode: Test zero ef parameter (allowed)
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"ef":0}}'
+––– output –––
+{"took":%{NUMBER},"timed_out":false,"hits":{"total":3,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_knn_dist":0.000000,"_source":{"title":"first","vector":[0.100000,0.200000,0.300000,0.400000]}},{"_id":2,"_score":1,"_knn_dist":0.64000005,"_source":{"title":"second","vector":[0.500000,0.600000,0.700000,0.800000]}},{"_id":3,"_score":1,"_knn_dist":0.66999990,"_source":{"title":"third","vector":[0.900000,0.100000,0.200000,0.300000]}}]}}
+––– comment –––
+JSON Mode: Test zero oversampling parameter
+––– input –––
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"oversampling":0}}'
+––– output –––
+{"error":"oversampling parameter must be positive"}

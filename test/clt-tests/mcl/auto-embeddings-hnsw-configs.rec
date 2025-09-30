@@ -210,28 +210,26 @@ Additional documents inserted for performance comparison
 Test 10: Compare search results between different M values
 ––– input –––
 echo "Search with M=4 (faster, less connections):"
-mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m4 WHERE KNN(vec, 3, 'document content') LIMIT 3"
+mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m4 WHERE KNN(vec, 3, 'document content') LIMIT 3\G"
 ––– output –––
 Search with M=4 (faster, less connections):
-+---------------------+
-| id                  |
-+---------------------+
-| %{NUMBER} |
-| %{NUMBER} |
-| %{NUMBER} |
-+---------------------+
+*************************** 1. row ***************************
+id: %{NUMBER}
+*************************** 2. row ***************************
+id: %{NUMBER}
+*************************** 3. row ***************************
+id: %{NUMBER}
 ––– input –––
 echo "Search with M=32 (slower, more connections, potentially more accurate):"
-mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m32 WHERE KNN(vec, 3, 'document content') LIMIT 3"
+mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m32 WHERE KNN(vec, 3, 'document content') LIMIT 3\G"
 ––– output –––
 Search with M=32 (slower, more connections, potentially more accurate):
-+---------------------+
-| id                  |
-+---------------------+
-| %{NUMBER} |
-| %{NUMBER} |
-| %{NUMBER} |
-+---------------------+
+*************************** 1. row ***************************
+id: %{NUMBER}
+*************************** 2. row ***************************
+id: %{NUMBER}
+*************************** 3. row ***************************
+id: %{NUMBER}
 ––– comment –––
 === ERROR HANDLING ===
 ––– comment –––

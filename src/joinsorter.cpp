@@ -1239,6 +1239,8 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	m_pRightSorter->SetSchema ( m_pRightSorterRsetSchema->CloneMe(), true );
 
 	CSphMultiQueryArgs tArgs ( GetIndexWeight ( m_tJoinQuery, m_tQuery.m_sJoinIdx ) );
+	tArgs.m_bUseSICache = true;
+
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{

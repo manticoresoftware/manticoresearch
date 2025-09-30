@@ -162,7 +162,7 @@ const char *	GetExtension ( const CSphString & sFullPath );
 CSphString		GetPathNoExtension ( const CSphString & sFullPath );
 
 CSphString		RealPath ( const CSphString& sPath );
-bool			IsSymlink ( const CSphString & sFile );
+std::pair<bool,bool> IsSymlink ( const CSphString & sFile );
 bool			ResolveSymlink ( const CSphString & sFile, CSphString & sResult );
 
 class CSphWriter;

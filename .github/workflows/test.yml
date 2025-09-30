@@ -3,7 +3,6 @@ run-name: 🔬 Test ${{ github.sha }}
 
 #on: workflow_call
 
-
 on:
   push:
     branches:
@@ -302,6 +301,10 @@ jobs:
     name: CLT
     needs: test_kit_docker_build
     uses: ./.github/workflows/clt_tests.yml
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
       docker_image: test-kit:img
       artifact_name: manticore_test_kit.img

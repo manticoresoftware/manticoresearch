@@ -85,3 +85,4 @@
 
 # dist
 /dist/docker
+/.env

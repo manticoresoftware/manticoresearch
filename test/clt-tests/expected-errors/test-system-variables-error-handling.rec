@@ -93,7 +93,11 @@ ERROR 1064 (42000) at line 1: unknown sysvar @@character_set
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@version;"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown sysvar @@version
++-----------+
+| @@version |
++-----------+
+| 8.0.43    |
++-----------+
 ––– comment –––
 2.1 Test in Multi-Select Queries
 ––– input –––
@@ -188,7 +192,7 @@ Switching to searchd without Buddy
 stdbuf -oL searchd --stopwait > /dev/null
 ––– output –––
 ––– input –––
-echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9308:http\nlog = /var/log/manticore/searchd.log\nquery_log = /var/log/manticore/query.log\npid_file = /var/run/manticore/searchd.pid\ndata_dir = /var/lib/manticore\nbuddy_path = \n}" > /tmp/manticore_without_buddy.conf; echo $?
+echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9308:http\nlog = /var/log/manticore/searchd.log\nquery_log = /var/log/manticore/query.log\npid_file = /run/manticore/searchd.pid\ndata_dir = /var/lib/manticore\nbuddy_path = \n}" > /tmp/manticore_without_buddy.conf; echo $?
 ––– output –––
 0
 ––– input –––

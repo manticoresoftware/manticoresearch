@@ -1,6 +1,9 @@
 # only cmake since 3.17 supports packaging of debuginfo
 cmake_minimum_required ( VERSION 3.17 )
 
+set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "/run")
+set ( CMAKE_INSTALL_RUNSTATEDIR "run")
+
 if (NOT installed)
 	# start with short route - set all paths
 	set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
@@ -200,6 +203,9 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPO
 
 # stuff going to /usr/local/
 install ( DIRECTORY DESTINATION /usr/local/lib/manticore COMPONENT common )
+
+# Install sysctl configuration for Manticore Search
+install ( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT server )
 
 if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 	install_icudata ( ${CMAKE_INSTALL_DATADIR}/manticore/icu )

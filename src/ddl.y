@@ -194,6 +194,13 @@ alter:
 				YYERROR;
 			}
 		}
+	| alter_table_name TOK_MODIFY_COLUMN ident TOK_API_KEY '=' TOK_QUOTED_STRING
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_EMBEDDINGS_API_KEY;
+			pParser->ToString ( tStmt.m_sAlterAttr, $3 );
+			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+   		}
 	| alter_table_name TOK_ADD TOK_COLUMN ident TOK_BIT '(' TOK_CONST_INT ')' item_option_list
 		{
 			if ( !pParser->SetupAlterTable ( $4, SPH_ATTR_INTEGER, 0, $7.GetValueInt() ) )

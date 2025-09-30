@@ -23,6 +23,16 @@ on:
         type: boolean
         description: "Continue on error"
         default: false
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+        description: "OpenAI API key for CLT tests"
+      VOYAGE_API_KEY:
+        required: true
+        description: "Voyage API key for CLT tests"
+      JINA_API_KEY:
+        required: true
+        description: "Jina API key for CLT tests"
 
 jobs:
   clt:
@@ -30,6 +40,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     continue-on-error: ${{ inputs.continue_on_error }}
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +62,8 @@ jobs:
             test_prefix: test/clt-tests/expected-errors/
           - name: Fulltext-search
             test_prefix: test/clt-tests/fulltext-search/
+          - name: MCL
+            test_prefix: test/clt-tests/mcl/
           - name: HTTP interface tests
             test_prefix: test/clt-tests/http-interface/
           - name: Indexer
@@ -76,7 +92,7 @@ jobs:
             test_prefix: test/clt-tests/vector-knn/
               
     steps:
-      - uses: manticoresoftware/clt@0.6.9
+      - uses: manticoresoftware/clt@0.7.3
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -84,3 +100,5 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
+          run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY"
+          ui_host: "https://clt.manticoresearch.com"

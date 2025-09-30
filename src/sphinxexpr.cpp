@@ -10767,7 +10767,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	int iStackNeeded = -1;
 	int iStackEval = -1;
 	const int TREE_SIZE_THRESH = 20;
-	if ( m_dNodes.GetLength ()>TREE_SIZE_THRESH )
+	if ( m_dNodes.GetLength ()>TREE_SIZE_THRESH && !Threads::IsIMocked() )
 	{
 		StackSizeParams_t tParams;
 		tParams.iMaxDepth = EvalMaxTreeHeight ( m_dNodes, m_iParsed );

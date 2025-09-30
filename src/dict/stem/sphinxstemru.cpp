@@ -10,7 +10,7 @@
 //
 
 #include "sphinxdefs.h" // for USE_LITTLE_ENDIAN
-#include <string.h>
+#include <cstring>
 
 /////////////////////////////////////////////////////////////////////////////
 // UTF-8 implementation

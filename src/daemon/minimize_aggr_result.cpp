@@ -455,14 +455,6 @@ static int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes 
 	// flatten all results into single chunk
 	auto & tFinalMatches = tRes.m_dResults.First ();
 	tFinalMatches.FillFromSorter ( pSorter );
-        // FIX(#3428): after dedupe/merge and HAVING filtering (if any), set total_found to number of groups
-        // We use the count of flattened matches (pre-LIMIT/OFFSET) as total_found for grouped queries.
-        int __having_survivors__ = tFinalMatches.m_dMatches.GetLength();
-        if ( pSorter->IsGroupby() ) {
-                // Preserve existing cutoff semantics via m_bTotalMatchesApprox elsewhere.
-                tRes.m_iTotalMatches = __having_survivors__;
-        }
-
 	Debug ( tRes.m_bSingle = true; )
 	Debug ( tRes.m_bOneSchema = true; )
 
@@ -996,6 +988,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// replace the minimized matches schema with its subset, the result set schema
 	CSphSchema tOldSchema = tRes.m_tSchema;
 	tFrontendBuilder.PopulateSchema ( tRes.m_tSchema );
+
+        // FIX(#3428): Adjust SHOW META -> total_found for GROUP BY ... HAVING
+        // After flattening/merging, m_dResults[0] holds the post-HAVING groups (if HAVING was present)
+        // or all groups otherwise. For grouped queries, cap total_found to the flattened group count.
+        if ( !tQuery.m_sGroupBy.IsEmpty() && !tRes.m_dResults.IsEmpty() )
+        {
+                   const int iGroups = tRes.m_dResults[0].m_dMatches.GetLength();
+                   if ( iGroups < tRes.m_iTotalMatches )
+                              tRes.m_iTotalMatches = iGroups;
+        }
 
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );

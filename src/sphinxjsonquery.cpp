@@ -1244,6 +1244,11 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 	auto & tKNN = tQuery.m_tKnnSettings;
 	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError ) )	return false;
 	if ( !tJson.FetchIntItem ( tKNN.m_iK, "k", sError ) )			return false;
+	if ( tKNN.m_iK <= 0 )
+	{
+		sError = "k parameter must be positive";
+		return false;
+	}
 	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;

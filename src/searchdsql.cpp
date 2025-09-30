@@ -1423,6 +1423,13 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 
 	ToString ( tKNN.m_sAttr, tAttr );
 	tKNN.m_iK = tK.GetValueInt();
+	if ( tKNN.m_iK <= 0 )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "k parameter must be positive" );
+		yyerror ( this, sError.cstr() );
+		return false;
+	}
 	if ( pOpts )
 		for ( auto & i : *pOpts )
 			if ( !ParseKNNOption ( i, tKNN ) )

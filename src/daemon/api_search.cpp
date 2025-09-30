@@ -1045,6 +1045,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		if ( !tKNN.m_sAttr.IsEmpty() )
 		{
 			tKNN.m_iK = tReq.GetInt();
+			if ( tKNN.m_iK <= 0 )
+			{
+				SendErrorReply ( tOut, "k parameter must be positive" );
+				return false;
+			}
 			tKNN.m_iEf = tReq.GetInt();
 			if ( uMasterVer>=25 )
 			{

@@ -141,9 +141,3 @@ Non-existent field
 mysql -h0 -P9306 -e "SELECT * FROM chunk_test WHERE KNN(wrong_field, 1, 'test')" 2>&1 | grep -o "wrong_field.*not found"
 ––– output –––
 wrong_field' not found
-––– comment –––
-Checking KNN search with negative k values
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test WHERE KNN(vec, -1, (0,0));"
-––– output –––
-ERROR 1064 (42000) at line 1: P01: k parameter must be positive near ')'

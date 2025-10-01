@@ -1,31 +1,25 @@
 ––– block: ../../base/dind/init –––
 ––– block: ../../base/basic-initialization-manticore-kafka –––
 ––– comment –––
-Start Kafka 4.0.0 container with KRaft mode configuration
+Start Kafka container with KRaft mode configuration
 ––– input –––
-docker run -d --network=app-network --name kafka -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_LOG_DIRS=/tmp/kraft-combined-logs -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk apache/kafka:4.0.0 > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– comment –––
-Wait for Kafka broker to be ready
-––– input –––
-timeout 30 bash -c 'until docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1; do sleep 1; done'; echo $?
+docker run -it -d --network=app-network --name kafka -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnami/kafka:3.7.0 > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– comment –––
 Create Kafka topic with 2 partitions for data distribution testing
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 2 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
+docker exec kafka kafka-topics.sh --create --topic my-data --partitions 2 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
 ––– output –––
 Created topic my-data.
 ––– comment –––
 Verify topic creation and partition configuration
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-topics.sh --describe --topic my-data --bootstrap-server localhost:9092
+docker exec kafka kafka-topics.sh --describe --topic my-data --bootstrap-server localhost:9092
 ––– output –––
-Topic: my-data	TopicId: #!/[a-zA-Z0-9_-]+/!#	PartitionCount: 2	ReplicationFactor: 1	Configs:#!/.*|	Configs: /!#
-	Topic: my-data	Partition: 0	Leader: 1	Replicas: 1	Isr: 1#!/.*|	Isr: 1/!#
-	Topic: my-data	Partition: 1	Leader: 1	Replicas: 1	Isr: 1#!/.*|	Isr: 1/!#
+Topic: my-data	TopicId: #!/[a-zA-Z0-9_-]+/!#	PartitionCount: 2	ReplicationFactor: 1	Configs:
+	Topic: my-data	Partition: 0	Leader: 0	Replicas: 0	Isr: 0
+	Topic: my-data	Partition: 1	Leader: 0	Replicas: 0	Isr: 0
 ––– comment –––
 Create Kafka source for partition 0 with specific consumer configuration
 ––– input –––
@@ -83,48 +77,46 @@ name: mv_1
 ––– comment –––
 Download test dataset for partition distribution testing
 ––– input –––
-docker exec manticore curl -s -o /tmp/dump.json https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/dump.json && docker cp manticore:/tmp/dump.json /tmp/dump.json && docker cp /tmp/dump.json kafka:/tmp/dump.json; echo $?
+docker exec kafka curl -s -o /tmp/dump.json https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/dump.json
 ––– output –––
-0
 ––– comment –––
 Download import script with key-based partitioning for balanced data distribution
 ––– input –––
-docker exec manticore curl -s -o /tmp/import.sh https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/import.sh && docker cp manticore:/tmp/import.sh /tmp/import.sh && sed -i 's|/opt/bitnami/kafka/bin/|/opt/kafka/bin/|g' /tmp/import.sh && sed -i 's|--broker-list|--bootstrap-server|g' /tmp/import.sh && docker cp /tmp/import.sh kafka:/tmp/import.sh; echo $?
+docker exec kafka curl -s -o /tmp/import.sh https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/import.sh
 ––– output –––
-0
 ––– comment –––
-Execute data import to Kafka topic
+Make import script executable and execute data import to Kafka topic
 ––– input –––
-docker exec kafka bash /tmp/import.sh; echo $?
+docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh; echo $?
 ––– output –––
 0
 ––– comment –––
 Wait until lag becomes zero and current offset is not zero for all partitions
 ––– input –––
-timeout 120 bash -c 'while true; do STATS=$(docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); if [ -z "$STATS" ]; then sleep 3; continue; fi; ALL_READY=true; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset log_end_offset lag rest <<< "$line"; if [[ "$lag" -ne 0 ]] || [[ "$current_offset" -eq 0 ]]; then ALL_READY=false; fi; fi; done <<< "$STATS"; if [ "$ALL_READY" = true ]; then echo "All partitions processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
+timeout 120 bash -c 'while true; do STATS=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); if [ -z "$STATS" ]; then sleep 3; continue; fi; ALL_READY=true; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset log_end_offset lag rest <<< "$line"; if [[ "$lag" -ne 0 ]] || [[ "$current_offset" -eq 0 ]]; then ALL_READY=false; fi; fi; done <<< "$STATS"; if [ "$ALL_READY" = true ]; then echo "All partitions processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
 ––– output –––
 All partitions processed successfully
 ––– comment –––
 Get partition counts from Kafka consumer group
 ––– input –––
-KAFKA_STATS=$(docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore | awk '/^manticore.*my-data/'); KAFKA_P0=$(echo "$KAFKA_STATS" | awk '$3==0 {print $4}'); KAFKA_P1=$(echo "$KAFKA_STATS" | awk '$3==1 {print $4}'); echo "Kafka Partition 0: $KAFKA_P0 records"; echo "Kafka Partition 1: $KAFKA_P1 records"
+KAFKA_STATS=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore | awk '/^manticore.*my-data/'); KAFKA_P0=$(echo "$KAFKA_STATS" | awk '$3==0 {print $4}'); KAFKA_P1=$(echo "$KAFKA_STATS" | awk '$3==1 {print $4}'); echo "Kafka Partition 0: $KAFKA_P0 records"; echo "Kafka Partition 1: $KAFKA_P1 records"
 ––– output –––
 Consumer group 'manticore' has no active members.
-Kafka Partition 0: %{NUMBER} records
-Kafka Partition 1: %{NUMBER} records
+Kafka Partition 0: #!/[0-9]+/!# records
+Kafka Partition 1: #!/[0-9]+/!# records
 ––– comment –––
 Check destination_shard_1 matches Kafka partition 0
 ––– input –––
 SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '); echo "Manticore Shard 1: $SHARD1_COUNT records"; if [ "$SHARD1_COUNT" -eq "$KAFKA_P0" ]; then echo "Shard 1 matches Kafka partition 0"; else echo "Shard 1 ($SHARD1_COUNT) != Kafka partition 0 ($KAFKA_P0)"; fi
 ––– output –––
-Manticore Shard 1: %{NUMBER} records
+Manticore Shard 1: #!/[0-9]+/!# records
 Shard 1 matches Kafka partition 0
 ––– comment –––
 Check destination_shard_2 matches Kafka partition 1
 ––– input –––
 SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '); echo "Manticore Shard 2: $SHARD2_COUNT records"; if [ "$SHARD2_COUNT" -eq "$KAFKA_P1" ]; then echo "Shard 2 matches Kafka partition 1"; else echo "Shard 2 ($SHARD2_COUNT) != Kafka partition 1 ($KAFKA_P1)"; fi
 ––– output –––
-Manticore Shard 2: %{NUMBER} records
+Manticore Shard 2: #!/[0-9]+/!# records
 Shard 2 matches Kafka partition 1
 ––– comment –––
 Verify data is distributed across both shards

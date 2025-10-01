@@ -32,11 +32,11 @@ docker exec manticore stdbuf -oL searchd --logdebugvv > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-docker run -it -d --network=app-network --name kafka -v ./test/clt-tests/integrations/kafka/import.sh:/import.sh -v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=controller,broker -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_LOG_DIRS=/tmp/kraft-combined-logs -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk apache/kafka:4.0.0 > /dev/null 2>&1; echo $?
+docker run -it -d --network=app-network --name kafka -v ./test/clt-tests/integrations/kafka/import.sh:/import.sh -v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnami/kafka:3.7.0 > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
+docker exec kafka kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
 ––– output –––
 Created topic my-data.
 ––– input –––
@@ -145,7 +145,7 @@ docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"; echo 
 docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_destination --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_destination --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -196,7 +196,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received
 |   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |        0 |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_metadata --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_metadata --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -255,7 +255,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metad
 |   30 | Rome Wasn't Built In A Day                  | ISO 86420:97531 | %{DATETIME} | Extra data for item 30 | 20,25,30 |  3000 |
 +------+---------------------------------------------+-----------------+---------------------+------------------------+----------+-------+
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_tags --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_tags --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -314,7 +314,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags 
 |   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_alter --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_alter --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -374,7 +374,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 |       57 |
 +----------+
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_ts --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_ts --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -433,7 +433,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts OR
 |   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+----------+-----------------+
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_combined --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_combined --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -477,7 +477,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combi
 |   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_stop --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_stop --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -538,7 +538,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigi
 ––– output –––
 ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50'
 ––– input –––
-docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_drop_source --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_drop_source --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––

@@ -14,6 +14,7 @@
 #include "ints.h"
 
 #include <cstdlib>
+#include <stdio.h>
 
 #if _WIN32
 #ifndef NDEBUG

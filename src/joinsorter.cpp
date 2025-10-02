@@ -659,6 +659,7 @@ private:
 
 	bool							m_bErrorFlag = false;
 	CSphString						m_sErrorMessage;
+	CSphString						m_sWarning;
 
 	int								m_iBatchSize = 0;
 	int								m_iBatched = 0;
@@ -1239,6 +1240,8 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	m_pRightSorter->SetSchema ( m_pRightSorterRsetSchema->CloneMe(), true );
 
 	CSphMultiQueryArgs tArgs ( GetIndexWeight ( m_tJoinQuery, m_tQuery.m_sJoinIdx ) );
+	tArgs.m_bUseSICache = true;
+
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{
@@ -1246,6 +1249,9 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 		m_sErrorMessage.SetSprintf ( "joined table %s: %s", GetJoinedIndexName().cstr(), tMeta.m_sError.cstr() );
 		return false;
 	}
+
+	if ( m_sWarning.IsEmpty() && !tMeta.m_sWarning.IsEmpty() )
+		m_sWarning = tMeta.m_sWarning;
 
 	m_dMatches.Resize(0);
 
@@ -1544,6 +1550,8 @@ bool JoinSorter_c::RunFinalBatch()
 
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
+	sWarning = m_sWarning;
+
 	if ( !RunFinalBatch() )
 	{
 		if ( m_bErrorFlag )

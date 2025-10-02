@@ -659,6 +659,7 @@ private:
 
 	bool							m_bErrorFlag = false;
 	CSphString						m_sErrorMessage;
+	CSphString						m_sWarning;
 
 	int								m_iBatchSize = 0;
 	int								m_iBatched = 0;
@@ -1249,6 +1250,9 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 		return false;
 	}
 
+	if ( m_sWarning.IsEmpty() && !tMeta.m_sWarning.IsEmpty() )
+		m_sWarning = tMeta.m_sWarning;
+
 	m_dMatches.Resize(0);
 
 	// setup join attr remap, but do it only once
@@ -1546,6 +1550,8 @@ bool JoinSorter_c::RunFinalBatch()
 
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
+	sWarning = m_sWarning;
+
 	if ( !RunFinalBatch() )
 	{
 		if ( m_bErrorFlag )

@@ -1393,12 +1393,18 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		if ( tOpt.m_eType!=VariantType_e::BIGINT )
 			return false;
 
+		if ( tOpt.m_iValue < 0 )
+			return false;
+
 		tKNN.m_iEf = (int)tOpt.m_iValue;
 		return true;
 	}
 	else if ( sName=="oversampling" )
 	{
 		if ( tOpt.m_eType!=VariantType_e::FLOAT )
+			return false;
+
+		if ( tOpt.m_fValue <= 0.0f )
 			return false;
 
 		tKNN.m_fOversampling = tOpt.m_fValue;

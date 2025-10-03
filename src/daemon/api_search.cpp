@@ -1051,10 +1051,20 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				return false;
 			}
 			tKNN.m_iEf = tReq.GetInt();
+			if ( tKNN.m_iEf < 0 )
+			{
+				SendErrorReply ( tOut, "ef parameter must be non-negative" );
+				return false;
+			}
 			if ( uMasterVer>=25 )
 			{
 				tKNN.m_bRescore = !!tReq.GetInt();
 				tKNN.m_fOversampling = tReq.GetFloat();
+				if ( tKNN.m_fOversampling <= 0.0f )
+				{
+					SendErrorReply ( tOut, "oversampling parameter must be positive" );
+					return false;
+				}
 			}
 
 			tKNN.m_dVec.Resize ( tReq.GetInt() );

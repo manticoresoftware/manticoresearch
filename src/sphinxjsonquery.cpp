@@ -1250,8 +1250,18 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return false;
 	}
 	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
+	if ( tKNN.m_iEf < 0 )
+	{
+		sError = "ef parameter must be non-negative";
+		return false;
+	}
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
+	if ( tKNN.m_fOversampling <= 0.0f )
+	{
+		sError = "oversampling parameter must be positive";
+		return false;
+	}
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError, true );
 	if ( tQueryVec )

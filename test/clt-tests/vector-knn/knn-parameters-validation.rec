@@ -94,7 +94,7 @@ curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json'
 ––– comment –––
 JSON Mode: Test zero ef parameter (allowed)
 ––– input –––
-curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"ef":0}}' | python3 -m json.tool | grep '"total"'|md5sum
+curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"ef":0}}' | python3 -m json.tool | grep '"total"'
 ––– output –––
 7d3b3a3417d00d19268cac4db378e29d  -
 ––– comment –––

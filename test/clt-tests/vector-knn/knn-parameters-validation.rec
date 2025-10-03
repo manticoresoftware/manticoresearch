@@ -102,4 +102,4 @@ JSON Mode: Test zero oversampling parameter (BUG: should fail with error but ret
 ––– input –––
 curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"oversampling":0}}'
 ––– output –––
-        "total": 3,
+{"error":"oversampling parameter must be positive"}

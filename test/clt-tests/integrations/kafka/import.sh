@@ -1,8 +1,7 @@
 #!/bin/bash
-
-bootstrap_servers='localhost:9092'
-kafka_topic='my-data'
-json_file_path='/tmp/dump.json'
-
-
-/opt/bitnami/kafka/bin/kafka-console-producer.sh --broker-list "$bootstrap_servers" --topic "$kafka_topic" < "$json_file_path"
+/opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic my-data \
+  --property parse.key=true \
+  --property key.separator=: \
+  < /docker/test/clt-tests/integrations/kafka/dump.json

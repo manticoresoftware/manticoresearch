@@ -51,37 +51,50 @@ echo ""
 # Check documentation versions
 echo "Checking documentation versions..."
 
-# Check documentation from mounted /manual volume
 DOC_FILE="/manual/english/Integration/Kafka.md"
 
-if [ -f "$DOC_FILE" ]; then
-    echo "Checking documentation file..."
+if [ ! -f "$DOC_FILE" ]; then
+    echo "❌ Documentation file not found at $DOC_FILE"
+    echo ""
+    echo "Please ensure:"
+    echo "  1. File manual/english/Integration/Kafka.md exists in repository"
+    echo "  2. Directory is mounted: -v \$(pwd)/manual:/manual"
+    echo ""
+    exit 1
+fi
 
-    # Extract version from documentation (looking for "apache/kafka:X.Y.Z is tested")
-    DOC_KAFKA=$(grep -o "apache/kafka:[0-9]\+\.[0-9]\+\.[0-9]\+" "$DOC_FILE" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" | head -1)
+echo "Checking documentation file..."
 
-    echo "Script version: Kafka $LATEST_KAFKA"
-    echo "Documentation version: Kafka ${DOC_KAFKA:-not found}"
+# Extract version from documentation
+DOC_KAFKA=$(grep -o "apache/kafka:[0-9]\+\.[0-9]\+\.[0-9]\+" "$DOC_FILE" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" | head -1)
 
-    # Check if they match
-    if [ "$DOC_KAFKA" = "$LATEST_KAFKA" ]; then
-        echo "✅ Documentation version matches script version"
-    else
-        echo "❌ Documentation version doesn't match script version!"
-        echo ""
-        echo "Script has: Kafka $LATEST_KAFKA"
-        echo "Documentation has: Kafka ${DOC_KAFKA:-not found}"
-        echo ""
-        echo "Please update documentation file:"
-        echo "manual/english/Integration/Kafka.md"
-        echo ""
-        echo "Find the line 'Currently, apache/kafka:X.Y.Z is tested and recommended' and update to:"
-        echo "Currently, apache/kafka:$LATEST_KAFKA is tested and recommended. Other versions may work but could introduce issues."
-        exit 1
-    fi
+if [ -z "$DOC_KAFKA" ]; then
+    echo "❌ Could not find Kafka version in documentation"
+    echo ""
+    echo "Please add to $DOC_FILE:"
+    echo "Currently, apache/kafka:$LATEST_KAFKA is tested and recommended."
+    echo ""
+    exit 1
+fi
+
+echo "Script version: Kafka $LATEST_KAFKA"
+echo "Documentation version: Kafka $DOC_KAFKA"
+
+# Check if they match
+if [ "$DOC_KAFKA" = "$LATEST_KAFKA" ]; then
+    echo "✅ Documentation version matches script version"
 else
-    echo "⚠️ Documentation file not found at $DOC_FILE"
-    echo "Make sure manual directory is mounted with -v"
+    echo "❌ Documentation version doesn't match script version!"
+    echo ""
+    echo "Script has: Kafka $LATEST_KAFKA"
+    echo "Documentation has: Kafka $DOC_KAFKA"
+    echo ""
+    echo "Please update documentation file:"
+    echo "manual/english/Integration/Kafka.md"
+    echo ""
+    echo "Change the line to:"
+    echo "Currently, apache/kafka:$LATEST_KAFKA is tested and recommended."
+    echo ""
     exit 1
 fi
 

@@ -4,4 +4,4 @@
   --topic my-data \
   --property parse.key=true \
   --property key.separator=: \
-  < /docker/test/clt-tests/integrations/kafka/dump.json
+  < /tmp/dump.json

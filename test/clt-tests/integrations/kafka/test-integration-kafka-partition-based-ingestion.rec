@@ -18,6 +18,23 @@ docker run -d --network=app-network --name kafka --user root \
 ––– output –––
 0
 ––– comment –––
+Download test data files using wget
+––– input –––
+docker exec kafka wget -O /tmp/dump.json https://raw.githubusercontent.com/manticoresoftware/manticoresearch/master/test/clt-tests/integrations/kafka/dump.json
+––– output –––
+––– input –––
+docker exec kafka wget -O /tmp/import.sh https://raw.githubusercontent.com/manticoresoftware/manticoresearch/master/test/clt-tests/integrations/kafka/import.sh
+––– output –––
+––– comment –––
+Fix path for apache/kafka (replace bitnami path with apache path)
+––– input –––
+docker exec kafka sed -i 's|/opt/bitnami/kafka/bin/|/opt/kafka/bin/|g' /tmp/import.sh
+––– output –––
+––– input –––
+docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh
+––– output –––
+0
+––– comment –––
 Create Kafka topic with 2 partitions for data distribution testing
 ––– input –––
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 2 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
@@ -85,8 +102,6 @@ docker exec manticore mysql -h0 -P9306 -e "SHOW MVS\G;"
 name: mv_2
 *************************** 2. row ***************************
 name: mv_1
-––– comment –––
-Make import script executable and execute data import to Kafka topic
 ––– input –––
 docker exec kafka bash /docker/test/clt-tests/integrations/kafka/import.sh; echo $?
 ––– output –––

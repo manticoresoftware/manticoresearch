@@ -48,11 +48,6 @@ docker run -d --network=app-network --name kafka \
   apache/kafka:4.1.0 > /dev/null 2>&1; echo $?
 ––– output –––
 0
-––– comment –––
-Wait for Kafka to be ready
-––– input –––
-sleep 15
-––– output –––
 ––– input –––
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 4 --replication-factor 1 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
 ––– output –––

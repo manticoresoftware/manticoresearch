@@ -46,7 +46,6 @@ if command -v curl >/dev/null 2>&1; then
 else
     echo "⚠️ curl not available - skipping version check"
 fi
-echo ""
 
 # Check documentation versions
 echo "Checking documentation versions..."

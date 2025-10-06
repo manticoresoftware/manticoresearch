@@ -14,12 +14,9 @@ docker run -d --network=app-network --name kafka --user root \
   -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
   -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
   -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk \
-  local/kafka > /dev/null 2>&1; echo $?
+  apache/kafka:4.1.0 > /dev/null 2>&1; echo $?
 ––– output –––
-#!/[a-f0-9]{64}/!#
-––– input –––
-sleep 15
-––– output –––
+0
 ––– comment –––
 Create Kafka topic with 2 partitions for data distribution testing
 ––– input –––

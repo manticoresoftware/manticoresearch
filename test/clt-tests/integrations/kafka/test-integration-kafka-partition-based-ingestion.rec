@@ -1,4 +1,22 @@
 ––– block: ../../base/dind/init –––
+––– comment –––
+Check Kafka version against documentation
+––– input –––
+apk add curl > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+bash ./test/clt-tests/integrations/kafka/script_versions_kafka.sh
+––– output –––
+🔍 Checking for new versions of Kafka...
+✅ No new versions found after apache/kafka:4.1.0
+✅ Version check completed
+
+Checking documentation versions...
+Checking documentation file...
+Script version: Kafka 4.1.0
+Documentation version: Kafka 4.1.0
+✅ Documentation version matches script version
 ––– block: ../../base/basic-initialization-manticore-kafka –––
 ––– comment –––
 Start Kafka container with KRaft mode configuration

@@ -2,7 +2,7 @@
 
 > NOTE: this functionality requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
-Manticore Search can seamlessly consume messages from a Kafka broker, allowing for real-time data indexing and search.
+Manticore supports integration with [Apache Kafka](https://kafka.apache.org/) real-time data ingestion through Kafka sources and materialized views, allowing for real-time data indexing and search. Currently, apache/kafka:4.1.0 is tested and recommended. Other versions may work but could introduce issues.
 
 To get started, you need to:
 1. **Define the source:** Specify the Kafka topic from which Manticore Search will read messages. This setup includes details like the broker’s host, port, and topic name.

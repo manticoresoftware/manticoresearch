@@ -86,7 +86,7 @@ static CSphString g_sBuddyBind = "";
 #endif
 
 #if _WIN32
-struct BuddyWindow_t : boost::process::detail::handler_base
+struct BuddyWindow_t : boost::process::detail::handler_base, boost::process::detail::uses_handles
 {
     // this function will be invoked at child process constructor before spawning process
     template <class WindowsExecutor>
@@ -94,6 +94,18 @@ struct BuddyWindow_t : boost::process::detail::handler_base
     {
         e.creation_flags = boost::winapi::CREATE_NEW_CONSOLE_;
     }
+
+	std::vector<HANDLE> get_used_handles() const
+	{
+		std::vector<HANDLE> dHandles;
+		HANDLE hOut = ::GetStdHandle ( STD_OUTPUT_HANDLE );
+		HANDLE hErr = ::GetStdHandle ( STD_ERROR_HANDLE );
+		if ( hOut && hOut!=INVALID_HANDLE_VALUE )
+			dHandles.push_back ( hOut );
+		if ( hErr && hErr!=INVALID_HANDLE_VALUE && hErr!=hOut )
+			dHandles.push_back ( hErr );
+		return dHandles;
+	}
 };
 #endif
 

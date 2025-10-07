@@ -1,5 +1,31 @@
 # 更新日志
 
+## 版本 13.13.0
+**发布**：2025年10月7日
+
+### 推荐的库
+- 推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.1.0
+- 推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.35.1
+
+如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
+
+### ⚠️ 重要提示
+
+由于配置文件已更新，**在Linux升级过程中，您可能会看到一个警告，询问是否保留您的版本或使用包中的新版本**。如果您有自定义（非默认）配置，建议保留您的版本并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。不过，即使您不更改路径，系统仍应正常工作。
+
+### 新功能和改进
+* 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) 添加了对带有SI块缓存的MCL 8.1.0的支持。
+* 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) 实现了[secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache)选项，更新了二级索引API，并内联了排序访问器。
+
+### Bug 修复
+* 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [ Issue #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) 修复了检查和调用已触发定时器之间的竞态条件。
+* 🪲 [v13.11.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.7) [ Issue #1045](https://github.com/manticoresoftware/manticoresearch/issues/1045) 通过在配置中将过时路径 `/var/run/manticore` 替换为正确的 `/run/manticore`，修复了RHEL 8系统更新期间systemd的systemctl警告。由于配置文件已更新，升级时可能会看到一个警告，询问是否保留您的版本或使用包中的新版本。如果您有自定义（非默认）配置，建议保留您的版本并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。
+* 🪲 [v13.11.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.6) [ PR #3766](https://github.com/manticoresoftware/manticoresearch/pull/3766) 添加了对MCL版本8.0.6的支持。
+* 🪲 [v13.11.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.5) [ PR #3767](https://github.com/manticoresoftware/manticoresearch/pull/3767) 改进了中文文档翻译并更新了子模块。
+* 🪲 [v13.11.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.4) [ PR #3765](https://github.com/manticoresoftware/manticoresearch/pull/3765) 修复了别名连接属性的处理。
+* 🪲 [v13.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.2) [ Issue #3065](https://github.com/manticoresoftware/manticoresearch/issues/3065) 修复了在启用index_field_lengths时向列式表插入数据时的崩溃。
+* 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [ Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) 修复了启用嵌入时删除文档导致的崩溃。
+
 ## 版本 13.11.1
 **发布日期**：2025年9月13日
 
@@ -24,13 +50,13 @@
 - 推荐 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.35.1
 
 如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心这些细节。
+如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
 
 ### 新功能与改进
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [ PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) 在 JSON 查询中添加了用于生成嵌入的 "query" 支持。
 * 🆕 [v13.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.0) [ Issue #3709](https://github.com/manticoresoftware/manticoresearch/issues/3709) manticore-server RPM 包不再拥有 `/run`。
 * 🆕 [v13.9.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.9.0) [ PR #3716](https://github.com/manticoresoftware/manticoresearch/pull/3716) 配置中添加了对 `boolean_simplify` 的支持。
 * 🆕 [v13.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.0) [ Issue #3253](https://github.com/manticoresoftware/manticoresearch/issues/3253) 安装了 sysctl 配置以增加大数据集的 vm.max_map_count。
-* 🆕 [v13.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.7.0) [ PR #3681](https://github.com/manticoresoftware/manticoresearch/pull/3681) 支持 `alter table <table> modify column <column> api_key=<key>`。
 
 ### Bug 修复
 * 🪲 [v13.10.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.5) [ PR #3737](https://github.com/manticoresoftware/manticoresearch/pull/3737) scroll 选项现在正确返回所有具有大型 64 位 ID 的文档。
@@ -58,10 +84,10 @@
 推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2  
 
 如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
+如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
 
 ### 新功能和改进
 * 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) 支持 PHRASE、PROXIMITY 和 QUORUM 运算符中显式使用 '|'（或）。
-* 🆕 [v13.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.0) [ PR #3591](https://github.com/manticoresoftware/manticoresearch/pull/3591) 查询中的自动嵌入生成（进行中，尚未准备好生产环境使用）。
 * 🆕 [v13.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.0) [ PR #3585](https://github.com/manticoresoftware/manticoresearch/pull/3585) 修正逻辑：如果设置了 buddy_path 配置，则优先使用 buddy 线程数，而非使用守护进程值。
 * 🆕 [v13.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.3.0) [ PR #3577](https://github.com/manticoresoftware/manticoresearch/pull/3577) 支持与本地分布式表的连接。
 * 🆕 [#3647](https://github.com/manticoresoftware/manticoresearch/issues/3647) 新增对 Debian 13 “Trixie”的支持。
@@ -89,6 +115,8 @@
 
 ### 不兼容变更
 * ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) 更新了 KNN 库 API 以支持空的 [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) 值。此更新未更改数据格式，但会提升 Manticore Search / MCL API 版本。
+* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) 更新了KNN库API以支持空的[float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector)值。此更新不更改数据格式，但会增加Manticore Search / MCL API版本。
+* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) 修复了KNN索引训练和构建过程中源和目标行ID不正确的错误。此更新不更改数据格式，但会增加Manticore Search / MCL API版本。
 * ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) 修复了KNN索引训练和构建过程中源和目标行ID不正确的错误。此更新不改变数据格式，但提高了Manticore Search / MCL API版本。
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0) 添加了对新的KNN向量搜索功能的支持，如量化、重评分和过采样。此版本更改了KNN数据格式和[KNN_DIST() SQL语法](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search)。新版本可以读取旧数据，但旧版本不能读取新格式。
 

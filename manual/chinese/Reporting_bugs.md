@@ -46,17 +46,17 @@ quit
 1. 通过 [VIP 端口](https://manual.manticoresearch.com/Connecting_to_the_server/HTTP#VIP-connection) 运行 `show threads option format=all`
 2. 收集 lsof 输出，因为挂起可能是由于太多连接或文件描述符打开导致的。
 ```
-lsof -p `cat /var/run/manticore/searchd.pid`
+lsof -p `cat /run/manticore/searchd.pid`
 ```
 3. 导出 core：
 ```
-gcore `cat /var/run/manticore/searchd.pid`
+gcore `cat /run/manticore/searchd.pid`
 ```
 （这会将 dump 保存到当前目录。）
 
 4. 安装并运行 gdb：
 ```
-gdb /usr/bin/searchd `cat /var/run/manticore/searchd.pid`
+gdb /usr/bin/searchd `cat /run/manticore/searchd.pid`
 ```
 注意，这将停止正在运行的 searchd，但如果它已经挂起，这不应成为问题。
 5. 在 gdb 中运行：

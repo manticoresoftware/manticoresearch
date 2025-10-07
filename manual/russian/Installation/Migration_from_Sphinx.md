@@ -7,7 +7,7 @@ Manticore Search 2.x сохраняет совместимость с Sphinxsear
 
 Имя сервиса systemd изменилось с `sphinx/sphinxsearch` на `manticore`, и сервис запускается под пользователем `manticore` (Sphinx использовал `sphinx` или `sphinxsearch`). Также используется другая папка для PID файла.
 
-Папки по умолчанию: `/var/lib/manticore`, `/var/log/manticore`, `/var/run/manticore`. Вы всё ещё можете использовать существующую конфигурацию Sphinx, но вам нужно вручную изменить права доступа на папки `/var/lib/sphinxsearch` и `/var/log/sphinxsearch`. Или просто глобально переименовать 'sphinx' в 'manticore' в системных файлах. Если вы используете другие папки (для данных, файлов wordforms и т.д.), их владельцем также должен стать пользователь `manticore`. Расположение `pid_file` следует изменить, чтобы оно соответствовало manticore.service: `/var/run/manticore/searchd.pid`.
+Папки, используемые по умолчанию, это `/var/lib/manticore`, `/var/log/manticore`, `/var/run/manticore`. Вы всё ещё можете использовать существующую конфигурацию Sphinx, но вам нужно вручную изменить права доступа для папок `/var/lib/sphinxsearch` и `/var/log/sphinxsearch`. Или просто глобально переименуйте 'sphinx' в 'manticore' в системных файлах. Если вы используете другие папки (для данных, файлов словоформ и т.д.), владельцем также должен быть пользователь `manticore`. Местоположение `pid_file` следует изменить, чтобы оно соответствовало manticore.service на `/run/manticore/searchd.pid`.
 
 Если вы хотите использовать папку Manticore, файлы таблиц нужно переместить в новый каталог данных (`/var/lib/manticore`) и сменить права на пользователя `manticore`.
 

@@ -4,7 +4,7 @@
 
 [DBeaver](https://dbeaver.io/) 是一个 SQL 客户端软件应用和数据库管理工具。对于 MySQL 数据库，它通过 JDBC 驱动应用 JDBC 应用程序接口与数据库交互。
 
-Manticore 允许您使用 DBeaver 以与 MySQL 数据库相同的方式操作存储在 Manticore 表中的数据。
+Manticore 允许您使用 DBeaver 来处理存储在 Manticore 表中的数据，就像处理存储在 MySQL 数据库中的数据一样。目前，推荐使用经过测试的 25.2.0 版本。其他版本可能可用，但可能会引入问题。
 
 ## 使用的设置
 

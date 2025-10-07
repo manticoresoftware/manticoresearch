@@ -7,7 +7,7 @@ Manticore 默认使用 `/etc/manticoresearch/manticore.conf`，而不是 sphinx.
 
 Systemd 服务名称已由 `sphinx/sphinxsearch` 改为 `manticore`，服务以 `manticore` 用户身份运行（Sphinx 使用 `sphinx` 或 `sphinxsearch`）。它还使用了不同的 PID 文件夹。
 
-默认使用的文件夹是 `/var/lib/manticore`、`/var/log/manticore`、`/var/run/manticore`。您仍然可以使用现有的 Sphinx 配置，但需要手动更改 `/var/lib/sphinxsearch` 和 `/var/log/sphinxsearch` 文件夹的权限。或者，直接在系统文件中全局将 'sphinx' 重命名为 'manticore'。如果您使用其他文件夹（用于数据、词形文件等），所有权也必须切换为 `manticore` 用户。`pid_file` 位置应更改为与 manticore.service 匹配，即 `/var/run/manticore/searchd.pid`。
+默认使用的文件夹是 `/var/lib/manticore`、`/var/log/manticore`、`/var/run/manticore`。您仍然可以使用现有的 Sphinx 配置，但需要手动更改 `/var/lib/sphinxsearch` 和 `/var/log/sphinxsearch` 文件夹的权限。或者，直接在系统文件中全局将 'sphinx' 重命名为 'manticore'。如果您使用其他文件夹（用于数据、词形文件等），所有权也必须切换为用户 `manticore`。`pid_file` 位置应更改为与 manticore.service 匹配，即 `/run/manticore/searchd.pid`。
 
 如果您想使用 Manticore 的文件夹，表文件需要移动到新的数据文件夹（`/var/lib/manticore`），并且权限必须改为 `manticore` 用户。
 

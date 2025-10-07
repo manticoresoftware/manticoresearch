@@ -1,5 +1,31 @@
 # Журнал изменений
 
+## Версия 13.13.0
+**Выпущено**: 7 октября 2025 года
+
+### Рекомендуемые библиотеки
+- Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.1.0
+- Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.35.1
+
+Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
+
+### ⚠️ Важно
+
+Поскольку файл конфигурации был обновлен, **во время обновления на Linux вы можете увидеть предупреждение с вопросом, сохранить ли вашу версию или использовать новую из пакета**. Если у вас есть пользовательская (не по умолчанию) конфигурация, рекомендуется сохранить вашу версию и обновить путь `pid_file` на `/run/manticore/searchd.pid`. Однако, даже если вы не измените путь, всё должно работать нормально.
+
+### Новые функции и улучшения
+* 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) Добавлена поддержка MCL 8.1.0 с кэшем блоков SI.
+* 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) Реализована опция [secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache), обновлено API вторичного индекса и встроены аксессоры сортировки.
+
+### Исправления ошибок
+* 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [ Issue #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) Исправлена гонка между проверкой и вызовом сработавшего таймера.
+* 🪲 [v13.11.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.7) [ Issue #1045](https://github.com/manticoresoftware/manticoresearch/issues/1045) Исправлено предупреждение systemctl на RHEL 8 при обновлениях systemd путем замены устаревшего пути `/var/run/manticore` на правильный `/run/manticore` в конфигурации. Поскольку файл конфигурации был обновлен, во время обновления вы можете увидеть предупреждение с вопросом, сохранить ли вашу версию или использовать новую из пакета. Если у вас есть пользовательская (не по умолчанию) конфигурация, рекомендуется сохранить вашу версию и обновить путь `pid_file` на `/run/manticore/searchd.pid`.
+* 🪲 [v13.11.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.6) [ PR #3766](https://github.com/manticoresoftware/manticoresearch/pull/3766) Добавлена поддержка версии MCL 8.0.6.
+* 🪲 [v13.11.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.5) [ PR #3767](https://github.com/manticoresoftware/manticoresearch/pull/3767) Улучшены переводы документации на китайский язык и обновлены подмодули.
+* 🪲 [v13.11.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.4) [ PR #3765](https://github.com/manticoresoftware/manticoresearch/pull/3765) Исправлена обработка псевдонимов объединённых атрибутов.
+* 🪲 [v13.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.2) [ Issue #3065](https://github.com/manticoresoftware/manticoresearch/issues/3065) Исправлен сбой при вставке данных в колонковую таблицу с включённым index_field_lengths.
+* 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [ Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) Исправлен сбой, возникавший при удалении документа с включёнными embeddings.
+
 ## Версия 13.11.1
 **Выпущено**: 13 сентября 2025 года
 
@@ -24,13 +50,13 @@
 - Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.35.1
 
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
+Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
 
 ### Новые функции и улучшения
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [ PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) Добавлена поддержка "query" в JSON-запросах для генерации эмбеддингов.
 * 🆕 [v13.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.0) [ Issue #3709](https://github.com/manticoresoftware/manticoresearch/issues/3709) Пакет manticore-server RPM больше не владеет `/run`.
 * 🆕 [v13.9.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.9.0) [ PR #3716](https://github.com/manticoresoftware/manticoresearch/pull/3716) Добавлена поддержка `boolean_simplify` в конфигурации.
 * 🆕 [v13.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.8.0) [ Issue #3253](https://github.com/manticoresoftware/manticoresearch/issues/3253) Установлена конфигурация sysctl для увеличения vm.max_map_count для больших наборов данных.
-* 🆕 [v13.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.7.0) [ PR #3681](https://github.com/manticoresoftware/manticoresearch/pull/3681) Добавлена поддержка `alter table <table> modify column <column> api_key=<key>`.
 
 ### Исправления ошибок
 * 🪲 [v13.10.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.5) [ PR #3737](https://github.com/manticoresoftware/manticoresearch/pull/3737) Опция прокрутки теперь корректно возвращает все документы с большими 64-битными ID.
@@ -58,10 +84,10 @@
 Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2  
 
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), то вам не о чем беспокоиться.
+Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
 
 ### Новые возможности и улучшения
 * 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) Добавлена поддержка явного символа '|' (ИЛИ) в операторах PHRASE, PROXIMITY и QUORUM.
-* 🆕 [v13.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.0) [ PR #3591](https://github.com/manticoresoftware/manticoresearch/pull/3591) Автоматическая генерация embeddings в запросах (Работа в процессе, пока не готово для продакшена).
 * 🆕 [v13.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.0) [ PR #3585](https://github.com/manticoresoftware/manticoresearch/pull/3585) Исправлена логика выбора количества потоков buddy из конфигурации buddy_path, если задано, вместо использования значения демона.
 * 🆕 [v13.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.3.0) [ PR #3577](https://github.com/manticoresoftware/manticoresearch/pull/3577) Добавлена поддержка JOIN с локальными распределёнными таблицами.
 * 🆕 [#3647](https://github.com/manticoresoftware/manticoresearch/issues/3647) Добавлена поддержка Debian 13 "Trixie"
@@ -89,6 +115,8 @@
 
 ### Ломающие изменения
 * ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Обновлено API библиотеки KNN для поддержки пустых значений [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector). Это обновление не меняет формат данных, но увеличивает версию API Manticore Search / MCL.
+* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Обновлено API библиотеки KNN для поддержки пустых значений [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector). Это обновление не меняет формат данных, но увеличивает версию API Manticore Search / MCL.
+* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Исправлена ошибка с некорректными ID строк источника и назначения при обучении и построении KNN индекса. Это обновление не меняет формат данных, но увеличивает версию API Manticore Search / MCL.
 * ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Исправлена ошибка с неправильными ID строк источника и назначения во время обучения и сборки индекса KNN. Это обновление не изменяет формат данных, но увеличивает версию API Manticore Search / MCL.
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0) Добавлена поддержка новых функций векторного поиска KNN, таких как квантизация, пересчет рейтинга и переотбор. Эта версия изменяет формат данных KNN и [синтаксис SQL KNN_DIST()](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search). Новая версия может читать старые данные, но старые версии не смогут читать новый формат.
 

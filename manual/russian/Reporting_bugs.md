@@ -46,17 +46,17 @@ quit
 1. Выполните `show threads option format=all` через [VIP порт](https://manual.manticoresearch.com/Connecting_to_the_server/HTTP#VIP-connection)
 2. Соберите вывод команды lsof, так как зависание может быть вызвано слишком большим количеством соединений или открытых файловых дескрипторов.
 ```
-lsof -p `cat /var/run/manticore/searchd.pid`
+lsof -p `cat /run/manticore/searchd.pid`
 ```
 3. Снимите core dump:
 ```
-gcore `cat /var/run/manticore/searchd.pid`
+gcore `cat /run/manticore/searchd.pid`
 ```
 (Дамп будет сохранён в текущей директории.)
 
 4. Установите и запустите gdb:
 ```
-gdb /usr/bin/searchd `cat /var/run/manticore/searchd.pid`
+gdb /usr/bin/searchd `cat /run/manticore/searchd.pid`
 ```
 Обратите внимание, что это остановит работающий searchd, но если он уже завис, это не должно быть проблемой.
 5. В gdb выполните:

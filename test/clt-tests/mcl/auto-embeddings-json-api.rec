@@ -12,7 +12,7 @@ debconf: delaying package configuration, since apt-utils is not installed
 ––– comment –––
 Create table with auto-embeddings via JSON API
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_json (
+mysql -h0 -P9306 -e "CREATE TABLE test_json_columnar (
     title TEXT,
     content TEXT,
     embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
@@ -24,19 +24,19 @@ mysql -h0 -P9306 -e "CREATE TABLE test_json (
 ––– comment –––
 Verify table structure shows auto-detected dimensions
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json" | grep -o "knn_dims='384'"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json_columnar" | grep -o "knn_dims='384'"
 ––– output –––
 knn_dims='384'
 ––– comment –––
 Insert document via JSON API (embeddings generated automatically from FROM fields)
 ––– input –––
-curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":1,"doc":{"title":"machine learning","content":"neural networks"}}' | jq -r 'if ._id then ._id else "inserted" end'
+curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json_columnar","id":1,"doc":{"title":"machine learning","content":"neural networks"}}' | jq -r 'if ._id then ._id else "inserted" end'
 ––– output –––
 inserted
 ––– comment –––
 Verify document exists and embedding was auto-generated
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id FROM test_json WHERE KNN(embedding, 1, 'machine learning neural networks')"
+mysql -h0 -P9306 -e "SELECT id FROM test_json_columnar WHERE KNN(embedding, 1, 'machine learning neural networks')"
 ––– output –––
 +------+
 | id   |
@@ -47,8 +47,8 @@ mysql -h0 -P9306 -e "SELECT id FROM test_json WHERE KNN(embedding, 1, 'machine l
 Bulk insert multiple documents via JSON API
 ––– input –––
 curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjson" -d '
-{"insert":{"index":"test_json","id":2,"doc":{"title":"computer vision","content":"image recognition"}}}
-{"insert":{"index":"test_json","id":3,"doc":{"title":"NLP","content":"text processing"}}}
+{"insert":{"index":"test_json_columnar","id":2,"doc":{"title":"computer vision","content":"image recognition"}}}
+{"insert":{"index":"test_json_columnar","id":3,"doc":{"title":"NLP","content":"text processing"}}}
 ' | jq '{created: .items[0].bulk.created}'
 ––– output –––
 {
@@ -57,7 +57,7 @@ curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjso
 ––– comment –––
 Verify bulk inserted documents have auto-generated embeddings
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar WHERE id IN (2,3)"
 ––– output –––
 +----------+
 | count(*) |
@@ -67,13 +67,13 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json WHERE id IN (2,3)"
 ––– comment –––
 Replace document via JSON API (embedding regenerated automatically)
 ––– input –––
-curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r '.result'
+curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json_columnar","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r '.result'
 ––– output –––
 updated
 ––– comment –––
 Verify embedding was regenerated after replace
 ––– input –––
-mysql -h0 -P9306 -e "SELECT title FROM test_json WHERE id=1 AND KNN(embedding, 1, 'updated ML networks')"
+mysql -h0 -P9306 -e "SELECT title FROM test_json_columnar WHERE id=1 AND KNN(embedding, 1, 'updated ML networks')"
 ––– output –––
 +------------+
 | title      |
@@ -83,21 +83,21 @@ mysql -h0 -P9306 -e "SELECT title FROM test_json WHERE id=1 AND KNN(embedding, 1
 ––– comment –––
 Test deterministic embeddings (same input produces identical vectors)
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test_json (id, title, content) VALUES (100, 'test', 'data')";
-curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json","id":101,"doc":{"title":"test","content":"data"}}' > /dev/null
+mysql -h0 -P9306 -e "INSERT INTO test_json_columnar (id, title, content) VALUES (100, 'test', 'data')";
+curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json_columnar","id":101,"doc":{"title":"test","content":"data"}}' > /dev/null
 ––– output –––
 ––– comment –––
 Compare vectors generated via SQL and JSON API (should be identical)
 ––– input –––
-mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json WHERE id=100" > /tmp/v1.txt
-mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json WHERE id=101" > /tmp/v2.txt
+mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json_columnar WHERE id=100" > /tmp/v1.txt
+mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json_columnar WHERE id=101" > /tmp/v2.txt
 diff -q /tmp/v1.txt /tmp/v2.txt > /dev/null && echo "Vectors identical" || echo "Vectors differ"
 ––– output –––
 Vectors identical
 ––– comment –––
 Verify total document count
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar"
 ––– output –––
 +----------+
 | count(*) |
@@ -107,14 +107,14 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json"
 ––– comment –––
 Optimize table for proper k parameter behavior in disk chunks
 ––– input –––
-mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json; OPTIMIZE TABLE test_json OPTION sync=1, cutoff=1"; echo $?
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json_columnar; OPTIMIZE TABLE test_json_columnar OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
 0
 ––– comment –––
 Test KNN search via JSON API with explicit query_vector
 ––– input –––
 VECTOR=$(python3 -c "print(','.join(['0.01']*384))")
-curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
+curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json_columnar\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
 ––– output –––
 2
 ––– comment –––
@@ -136,3 +136,111 @@ QUERY_VEC=$(python3 -c "print(','.join(['0.5']*384))")
 curl -s -X POST http://localhost:9308/search -d "{\"index\":\"no_auto_embed\",\"knn\":{\"field\":\"vec\",\"query_vector\":[$QUERY_VEC],\"k\":1}}" | jq -r '.hits.total // "0"'
 ––– output –––
 1
+––– comment –––
+Create table with auto-embeddings via JSON API
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_json_rowwise (
+    title TEXT,
+    content TEXT,
+    embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title, content'
+) engine='rowwise'"; echo $?
+––– output –––
+0
+––– comment –––
+Verify table structure shows auto-detected dimensions
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json_rowwise" | grep -o "knn_dims='384'"
+––– output –––
+knn_dims='384'
+––– comment –––
+Insert document via JSON API (embeddings generated automatically from FROM fields)
+––– input –––
+curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json_rowwise","id":1,"doc":{"title":"machine learning","content":"neural networks"}}' | jq -r 'if ._id then ._id else "inserted" end'
+––– output –––
+inserted
+––– comment –––
+Verify document exists and embedding was auto-generated
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_json_rowwise WHERE KNN(embedding, 1, 'machine learning neural networks')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– comment –––
+Bulk insert multiple documents via JSON API
+––– input –––
+curl -s -X POST http://localhost:9308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"test_json_rowwise","id":2,"doc":{"title":"computer vision","content":"image recognition"}}}
+{"insert":{"index":"test_json_rowwise","id":3,"doc":{"title":"NLP","content":"text processing"}}}
+' | jq '{created: .items[0].bulk.created}'
+––– output –––
+{
+  "created": 2
+}
+––– comment –––
+Verify bulk inserted documents have auto-generated embeddings
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise WHERE id IN (2,3)"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+––– comment –––
+Replace document via JSON API (embedding regenerated automatically)
+––– input –––
+curl -s -X POST http://localhost:9308/replace -d '{"index":"test_json_rowwise","id":1,"doc":{"title":"updated ML","content":"updated networks"}}' | jq -r '.result'
+––– output –––
+updated
+––– comment –––
+Verify embedding was regenerated after replace
+––– input –––
+mysql -h0 -P9306 -e "SELECT title FROM test_json_rowwise WHERE id=1 AND KNN(embedding, 1, 'updated ML networks')"
+––– output –––
++------------+
+| title      |
++------------+
+| updated ML |
++------------+
+––– comment –––
+Test deterministic embeddings (same input produces identical vectors)
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_json_rowwise (id, title, content) VALUES (100, 'test', 'data')";
+curl -s -X POST http://localhost:9308/insert -d '{"index":"test_json_rowwise","id":101,"doc":{"title":"test","content":"data"}}' > /dev/null
+––– output –––
+––– comment –––
+Compare vectors generated via SQL and JSON API (should be identical)
+––– input –––
+mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json_rowwise WHERE id=100" > /tmp/v1.txt
+mysql -h0 -P9306 --batch --skip-column-names -e "SELECT embedding FROM test_json_rowwise WHERE id=101" > /tmp/v2.txt
+diff -q /tmp/v1.txt /tmp/v2.txt > /dev/null && echo "Vectors identical" || echo "Vectors differ"
+––– output –––
+Vectors identical
+––– comment –––
+Verify total document count
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+
+––– comment –––
+Optimize table for proper k parameter behavior in disk chunks
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json_rowwise; OPTIMIZE TABLE test_json_rowwise OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– comment –––
+Test KNN search via JSON API with explicit query_vector
+––– input –––
+VECTOR=$(python3 -c "print(','.join(['0.01']*384))")
+curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json_rowwise\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
+––– output –––
+2

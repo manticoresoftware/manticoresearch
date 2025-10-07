@@ -10,7 +10,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_empty (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title, content'
-) engine='columnar'"; echo $?
+)"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -132,7 +132,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_huge (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='content_text'
-) engine='columnar'"; echo $?
+) engine='rowwise'"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -149,7 +149,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_concurrent (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title'
-) engine='columnar'"; echo $?
+)"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -199,7 +199,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_rapid (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='content_text'
-) engine='columnar'"; echo $?
+) engine='rowwise'"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -224,7 +224,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test_empty_row (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title, content'
-) engine='rowwise'"; echo $?
+)"; echo $?
 ––– output –––
 0
 ––– comment –––

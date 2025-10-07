@@ -20,7 +20,7 @@ mysql -h0 -P9306 -e "CREATE TABLE emb_test (
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title, content'
-) engine='columnar'"; echo $?
+)"; echo $?
 ––– output –––
 0
 ––– comment –––

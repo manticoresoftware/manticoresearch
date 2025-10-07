@@ -2,7 +2,7 @@
 Start Manticore Search with buddy
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_row_wise (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1') "; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_row_wise (title1 TEXT, title2 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'title1')"; echo $?
 ––– output –––
 0
 ––– input –––

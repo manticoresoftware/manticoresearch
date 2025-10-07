@@ -2,7 +2,7 @@
 Start Manticore Search with buddy
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_delete ( title TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' ) engine='columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_delete ( title TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' ) engine='rowwise'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -72,7 +72,7 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_vector_regen"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_vector_regen ( content TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='content' ) engine='columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_vector_regen ( content TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='content')"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -134,7 +134,7 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_bulk"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_bulk ( content TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='content' ) engine='columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_bulk ( content TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='content' ) engine='rowwise'"; echo $?
 ––– output –––
 0
 ––– input –––

@@ -120,14 +120,14 @@ ERROR 1064 (42000) at line 1: error adding table 'test_circular': prealloc: embe
 ––– comment –––
 === DATA EDGE CASES ===
 ––– comment –––
-Test 11: Table creation with empty string support
+Test 11: Table creation with empty string support (engine='columnar')
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_empty (
     content TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='content'
-)"; echo $?
+) engine='columnar'"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -155,14 +155,14 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_empty"
 ––– comment –––
 === ENGINE CONFIGURATION TESTS ===
 ––– comment –––
-Test 15: Default engine (row-wise) - KNN should work
+Test 15: Row-wise engine - KNN should work (engine='rowwise')
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_rowwise (
     content TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='content'
-)"; echo $?
+) engine='rowwise'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -209,7 +209,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_vec_columnar WHERE KNN(vec, 1, 'artific
 |    1 |
 +------+
 ––– comment –––
-Test 17: Full columnar table
+Test 17: Full columnar table (engine='columnar')
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_full_columnar (
     content TEXT,

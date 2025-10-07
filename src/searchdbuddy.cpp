@@ -86,7 +86,7 @@ static CSphString g_sBuddyBind = "";
 #endif
 
 #if _WIN32
-struct BuddyWindow_t : boost::process::detail::handler_base, boost::process::detail::uses_handles
+struct BuddyWindow_t : boost::process::detail::handler_base
 {
     // this function will be invoked at child process constructor before spawning process
     template <class WindowsExecutor>
@@ -94,18 +94,6 @@ struct BuddyWindow_t : boost::process::detail::handler_base, boost::process::det
     {
         e.creation_flags = boost::winapi::CREATE_NEW_CONSOLE_;
     }
-
-	std::vector<boost::winapi::HANDLE_> get_used_handles() const
-	{
-		std::vector<HANDLE> dHandles;
-		HANDLE hOut = ::GetStdHandle ( STD_OUTPUT_HANDLE );
-		HANDLE hErr = ::GetStdHandle ( STD_ERROR_HANDLE );
-		if ( hOut && hOut!=INVALID_HANDLE_VALUE )
-			dHandles.push_back ( hOut );
-		if ( hErr && hErr!=INVALID_HANDLE_VALUE && hErr!=hOut )
-			dHandles.push_back ( hErr );
-		return dHandles;
-	}
 };
 #endif
 
@@ -389,7 +377,8 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 #if _WIN32
 	BuddyWindow_t tWnd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
+	auto tPipeRedirect = ( boost::process::std_out & boost::process::std_err ) > *g_pPipe;
+	pBuddy.reset ( new boost::process::child ( sCmd, tPipeRedirect, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
 #else
 	PreservedStd_t tPreserveStd;
 	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd ) );

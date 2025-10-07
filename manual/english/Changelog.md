@@ -1,5 +1,32 @@
 # Changelog
 
+## Version 13.13.0
+**Released**: October 7th 2025
+
+### Recommended libraries
+- Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.1.0
+- Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.35.1
+
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
+
+### ⚠️ Important
+
+Since the configuration file was updated, **you might see a warning during the upgrade on Linux asking whether to keep your version or use the new one** from the package. If you have a custom (non-default) configuration, it's recommended to keep your version and update the `pid_file` path to `/run/manticore/searchd.pid`. However, it should still work normally even if you don't change the path.
+
+### New Features and Improvements
+* 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) Added support for MCL 8.1.0 with SI block cache.
+* 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) Implemented the [secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache) option, updated the secondary index API, and inlined sort accessors.
+
+### Bug Fixes
+* 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [ Issue #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) Fixed a race condition between checking and invoking a fired timer.
+* 🪲 [v13.11.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.7) [ Issue #1045](https://github.com/manticoresoftware/manticoresearch/issues/1045) Fixed a systemctl warning on RHEL 8 during systemd updates by replacing the outdated path `/var/run/manticore` with the correct `/run/manticore` in the configuration. Since the configuration file was updated, you may see a warning during upgrade asking whether to keep your version or use the new one from the package. If you have a custom (non-default) configuration, it's recommended to keep your version and update the `pid_file` path to `/run/manticore/searchd.pid`.
+* 🪲 [v13.11.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.6) [ PR #3766](https://github.com/manticoresoftware/manticoresearch/pull/3766) Added support for MCL version 8.0.6.
+* 🪲 [v13.11.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.5) [ PR #3767](https://github.com/manticoresoftware/manticoresearch/pull/3767) Improved Chinese documentation translations and updated submodules.
+* 🪲 [v13.11.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.4) [ PR #3765](https://github.com/manticoresoftware/manticoresearch/pull/3765) Fixed handling of aliased joined attributes.
+* 🪲 [v13.11.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.3) [ PR #3763](https://github.com/manticoresoftware/manticoresearch/pull/3763) Fixed a crash that could occur during batched joins on string attributes and resolved an issue where filters sometimes didn't work with LEFT JOIN.
+* 🪲 [v13.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.2) [ Issue #3065](https://github.com/manticoresoftware/manticoresearch/issues/3065) Fixed a crash when inserting data into a columnar table with index_field_lengths enabled.
+* 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [ Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) Fixed a crash that occurred when deleting a document with embeddings enabled.
+
 ## Version 13.11.1
 **Released**: September 13th 2025
 
@@ -23,7 +50,7 @@ No need for external services or complex pipelines: just insert text and search 
 - Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.3
 - Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.35.1
 
-If you follow the [official installation guide](https://manticoresearch.com/install/), you don’t need to worry about this.
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
 
 ### New Features and Improvements
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [ PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) Added "query" support in JSON queries for embeddings generation.
@@ -57,7 +84,7 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1  
 Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2  
 
-If you follow the [official installation guide](https://manticoresearch.com/install/), you don’t need to worry about this.
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
 
 ### New Features and Improvements
 * 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) Support for explicit '|' (OR) in PHRASE, PROXIMITY, and QUORUM operators.
@@ -88,8 +115,8 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 **Released**: July 8th 2025
 
 ### Breaking Changes
-* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Updated the KNN library API to support empty [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) values. This update doesn’t change the data format but does increase the Manticore Search / MCL API version.
-* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Fixed a bug with incorrect source and destination row IDs during KNN index training and building. This update doesn’t change the data format but increases the Manticore Search / MCL API version.
+* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Updated the KNN library API to support empty [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) values. This update doesn't change the data format but does increase the Manticore Search / MCL API version.
+* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Fixed a bug with incorrect source and destination row IDs during KNN index training and building. This update doesn't change the data format but increases the Manticore Search / MCL API version.
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0)  Added support for new KNN vector search features like quantization, rescoring, and oversampling. This version changes the KNN data format and the [KNN_DIST() SQL syntax](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search). The new version can read older data, but older versions won't be able to read the new format.
 
 ### New Features and Improvements

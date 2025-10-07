@@ -95,7 +95,7 @@ struct BuddyWindow_t : boost::process::detail::handler_base, boost::process::det
         e.creation_flags = boost::winapi::CREATE_NEW_CONSOLE_;
     }
 
-	std::vector<HANDLE> get_used_handles() const
+	std::vector<boost::winapi::HANDLE_> get_used_handles() const
 	{
 		std::vector<HANDLE> dHandles;
 		HANDLE hOut = ::GetStdHandle ( STD_OUTPUT_HANDLE );

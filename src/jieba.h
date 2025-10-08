@@ -35,7 +35,7 @@ inline bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sErro
 
 inline bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString & sError )
 {
-	sError.SetSprintf ( "Jieba options specified, but no Jieba support compiled; ignoring" );
+	sError = "Jieba options specified, but no Jieba support compiled; ignoring";
 	return false;
 }
 

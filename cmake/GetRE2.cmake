@@ -16,8 +16,8 @@
 # https://github.com/manticoresoftware/re2/archive/master.zip
 
 set ( RE2_REPO "https://github.com/manticoresoftware/re2" )
-set ( RE2_BRANCH "2015-06-01" ) # specific tag for reproducable builds
-set ( RE2_SRC_MD5 "023053ef20051a0fc5911a76869be59f" )
+set ( RE2_BRANCH "2015-10-08" ) # specific tag for reproducable builds
+set ( RE2_SRC_MD5 "293530e291eddb31041bb63f6ca011fe" )
 
 set ( RE2_GITHUB "${RE2_REPO}/archive/${RE2_BRANCH}.zip" )
 set ( RE2_BUNDLE "${LIBS_BUNDLE}/re2-${RE2_BRANCH}.zip" )

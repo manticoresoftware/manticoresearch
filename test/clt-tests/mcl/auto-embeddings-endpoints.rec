@@ -1,6 +1,6 @@
 ––– comment –––
 Start Manticore Search with buddy
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– comment –––
 Install jq for JSON parsing
 ––– input –––
@@ -83,7 +83,13 @@ curl -s -X POST http://localhost:9308/insert -d '{"index":"emb_test","id":10,"do
 ––– output –––
 true
 ––– comment –––
-JSON API search limitation - query_text not supported
+JSON API search with text query - correct usage
+––– input –––
+curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query":"quantum","k":1}}' | jq -r '.hits.hits[0]._source.title'
+––– output –––
+quantum computing
+––– comment –––
+JSON API search - query_text parameter is not supported (use 'query' instead)
 ––– input –––
 curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query_text":"quantum","k":1}}'
 ––– output –––
@@ -133,11 +139,3 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning
 +----------+
 |        1 |
 +----------+
-––– comment –––
-=== PART 4: ERROR HANDLING ===
-––– comment –––
-Non-existent field
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM chunk_test WHERE KNN(wrong_field, 1, 'test')" 2>&1 | grep -o "wrong_field.*not found"
-––– output –––
-wrong_field' not found

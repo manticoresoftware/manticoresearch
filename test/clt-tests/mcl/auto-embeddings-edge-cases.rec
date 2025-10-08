@@ -1,6 +1,6 @@
 ––– comment –––
 Start Manticore Search with buddy
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– comment –––
 Test empty values in FROM fields
 ––– input –––
@@ -124,10 +124,11 @@ mysql -h0 -P9306 -e "INSERT INTO test_unicode (id, content_text) VALUES (102, '<
 ––– output –––
 0
 ––– comment –––
-Create table for large text testing
+Create table for huge text testing
 ––– input –––
 HUGE_TEXT=$(python3 -c "print('neural network ' * 1000)")
 mysql -h0 -P9306 -e "CREATE TABLE test_huge (
+    id BIGINT,
     content_text TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
@@ -142,29 +143,38 @@ mysql -h0 -P9306 -e "INSERT INTO test_huge (id, content_text) VALUES (1, '$HUGE_
 ––– output –––
 0
 ––– comment –––
-Create table for concurrent insertion testing
+Verify embedding was created and KNN search works with huge text
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_concurrent (
-    title TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
-    FROM='title'
-)"; echo $?
+mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_huge WHERE KNN(vec, 1, 'machine learning')"
 ––– output –––
-0
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 | 1.#!/[0-9]+(\.[0-9]+)?/!# |
++------+------------+
 ––– comment –––
-Test concurrent inserts with same ID (only last one should persist)
+Verify document is findable with relevant query
 ––– input –––
-for i in 1 2 3; do
-    mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title) VALUES (999, 'Concurrent insert $i')" 2>&1 &
-done
-wait
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id=999"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_huge WHERE KNN(vec, 1, 'neural network')"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
 |        1 |
++----------+
+––– comment –––
+Test concurrent inserts with auto-embeddings
+––– input –––
+for i in 1 2 3; do
+    mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title) VALUES ($((1000+i)), 'Concurrent insert $i')" 2>&1 &
+done
+wait
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id >= 1001 AND id <= 1003"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
 +----------+
 ––– comment –––
 Create table with auto-detected dimensions
@@ -192,7 +202,7 @@ vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name=
 ) engine='columnar' |
 +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– comment –––
-Create table for rapid REPLACE operations testing
+Create table for REPLACE operations testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_rapid (
     content_text TEXT,

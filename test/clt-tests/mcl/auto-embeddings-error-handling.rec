@@ -256,3 +256,10 @@ mysql -h0 -P9306 -e "SHOW CREATE TABLE test_full_columnar\G" | grep -E "(vec.*fl
 Full columnar:
 vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
 ) engine='columnar'
+––– comment –––
+Test 19: Non-existent field
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM chunk_test WHERE KNN(wrong_field, 1, 'test')" 2>&1 | grep -o "wrong_field.*not found"
+––– output –––
+wrong_field' not found
+

@@ -33,8 +33,14 @@ inline bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sErro
 	return true;
 }
 
+inline bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString & sError )
+{
+	sError.SetSprintf ( "Jieba options specified, but no Jieba support compiled; ignoring" );
+	return false;
+}
+
 inline bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &,
-		const char *, CSphString & )
+	const char *, FilenameBuilder_i *, CSphString & )
 {
 	return true;
 }

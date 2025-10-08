@@ -83,6 +83,11 @@ jobs:
         # without adding the safe.directory the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
 
+      - name: Check docs translations
+        run: |
+          set -e
+          ./misc/compare_manuals.sh
+
       - name: Deploy
         run: |
           sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR

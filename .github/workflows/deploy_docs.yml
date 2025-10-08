@@ -29,6 +29,7 @@ jobs:
 
   docs_autocommit_check:
     name: Check for doc deployment autocommits
+    needs: [check]
     runs-on: ubuntu-22.04
     outputs:
       res: ${{ steps.check.outputs.res }}

@@ -1375,7 +1375,17 @@ static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString 
 
 		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
 		if ( tMatchQuery )
+		{
+			CSphQuery tStubQuery;
+			CSphString sStubError, sStubWarning;
+			if ( !ParseJsonQueryFilters ( tMatchQuery, tStubQuery, sStubError, sStubWarning ) || tStubQuery.m_dFilters.GetLength() )
+			{
+				sError = "only fulltext is allowed in joined queries; place filters in the main query";
+				return false;
+			}
+			
 			tQuery.m_sJoinQuery = tMatchQuery.AsString();
+		}
 		
 		JsonObj_c tOn = tJoinItem.GetArrayItem ( "on", sError );
 		if ( !tOn )

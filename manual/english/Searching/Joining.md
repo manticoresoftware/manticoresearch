@@ -705,28 +705,25 @@ FACET orders.details.warranty;
 POST /search
 {
   "table": "customers",
-  "query": {
-    "query_string": "alice | bob"
+  "query":  {
+      "bool": {
+          "must": [
+          {
+              "range": {
+                  "orders.details.price": {
+                      "gt": 500
+                  }
+               },
+               "query_string": "alice | bob"
+          ]
+      }
   },
   "join": [
     {
       "type": "left",
       "table": "orders",
       "query": {
-        "bool": {
-          "must": [
-            {
-              "range": {
-                "details.price": {
-                  "gt": 500
-                }
-              }
-            },
-            {
-              "query_string": "laptop | phone | tablet"
-            }
-          ]
-        }
+          "query_string": "laptop | phone | tablet"
       },
       "on": [
         {

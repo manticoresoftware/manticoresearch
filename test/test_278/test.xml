@@ -564,6 +564,42 @@ select id from join1 inner join join2 on join1.id = join2.id where join2.j.table
 }
 </query>
 
+<!-- regression for filters in the right query -->
+<query endpoint="json/search">
+{
+  "table": "join1",
+  "query": { "query_string": "title1 | title2" },
+  "options":
+  {
+	"cutoff": 1
+  },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+      "query": {"equals": {"join2.id": 1}},
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
 <sphinxql>
 <!-- cleanup -->
 drop table join1;

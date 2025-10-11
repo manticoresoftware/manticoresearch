@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>PREPARE/EXECUTE/DEALLOCATE statements</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<sphqueries>
+<sphinxql>
+<!-- Create test table for prepared statements -->
+CREATE TABLE test_prepare(id BIGINT, title TEXT, category_id INTEGER, price FLOAT);
+
+<!-- Insert some test data -->
+INSERT INTO test_prepare(id, title, category_id, price) VALUES 
+(1, 'laptop computer', 100, 999.99),
+(2, 'wireless mouse', 100, 29.99),
+(3, 'office chair', 200, 199.50);
+
+<!-- Test 1: Basic PREPARE statement with simple SELECT -->
+PREPARE stmt1 FROM 'SELECT * FROM test_prepare WHERE id = 1';
+
+<!-- Test EXECUTE statement -->
+EXECUTE stmt1;
+
+<!-- Test 2: PREPARE with complex SELECT query -->
+PREPARE complex_select FROM 'SELECT id, title, category_id * 2 as double_cat, FLOOR(price) as floor_price FROM test_prepare WHERE price > 150.0 ORDER BY price DESC';
+EXECUTE complex_select;
+
+<!-- Test 3: PREPARE with COUNT and GROUP BY -->
+PREPARE count_stmt FROM 'SELECT category_id, COUNT(*) as item_count, AVG(price) as avg_price FROM test_prepare GROUP BY category_id';
+EXECUTE count_stmt;
+
+<!-- Test 4: PREPARE with LIMIT -->
+PREPARE limit_stmt FROM 'SELECT * FROM test_prepare ORDER BY id LIMIT 2';
+EXECUTE limit_stmt;
+
+<!-- Test 5: PREPARE with WHERE IN clause -->
+PREPARE in_stmt FROM 'SELECT title, price FROM test_prepare WHERE category_id IN (100, 200)';
+EXECUTE in_stmt;
+
+<!-- Test 6: PREPARE with string operations -->
+PREPARE string_stmt FROM 'SELECT UPPER(title) as upper_title, LENGTH(title) as title_len FROM test_prepare WHERE title LIKE "%computer%"';
+EXECUTE string_stmt;
+
+<!-- Test 7: PREPARE with mathematical expressions -->
+PREPARE math_stmt FROM 'SELECT id, price, price * 1.1 as price_with_tax, SQRT(price) as sqrt_price FROM test_prepare WHERE price BETWEEN 100 AND 1000';
+EXECUTE math_stmt;
+
+<!-- Test 8: Multiple prepared statements with same name (should show error) -->
+PREPARE duplicate_name FROM 'SELECT id FROM test_prepare';
+PREPARE duplicate_name FROM 'SELECT title FROM test_prepare';
+
+<!-- Test 9: EXECUTE non-existent statement (should show error) -->
+EXECUTE non_existent_stmt;
+
+<!-- Test 10: DEALLOCATE non-existent statement (should show error) -->
+DEALLOCATE PREPARE non_existent_stmt;
+
+<!-- Test 11: Test parameterized query with positional placeholder -->
+PREPARE param_stmt FROM 'SELECT * FROM test_prepare WHERE category_id = ?';
+<!-- This should fail because we're not providing the parameter -->
+EXECUTE param_stmt;
+
+<!-- Test 12: Multiple placeholders -->
+PREPARE multi_param FROM 'SELECT * FROM test_prepare WHERE category_id = ? AND price > ?';
+<!-- This should fail because we're not providing parameters -->
+EXECUTE multi_param;
+
+<!-- Test 13: Named placeholder -->
+PREPARE named_param FROM 'SELECT * FROM test_prepare WHERE id = ?item_id';
+<!-- This should fail because we're not providing the parameter -->
+EXECUTE named_param;
+
+<!-- Test 14: Complex query with subquery-like operations -->
+PREPARE subquery_like FROM 'SELECT t1.*, (SELECT COUNT(*) FROM test_prepare t2 WHERE t2.category_id = t1.category_id) as category_count FROM test_prepare t1';
+EXECUTE subquery_like;
+
+<!-- Test 15: PREPARE with INSERT statement -->
+PREPARE insert_stmt FROM 'INSERT INTO test_prepare(id, title, category_id, price) VALUES (10, "test item", 999, 123.45)';
+EXECUTE insert_stmt;
+
+<!-- Verify the insert -->
+SELECT * FROM test_prepare WHERE id = 10;
+
+<!-- Test 16: PREPARE with UPDATE statement -->
+PREPARE update_stmt FROM 'UPDATE test_prepare SET price = 200.00 WHERE id = 10';
+EXECUTE update_stmt;
+
+<!-- Verify the update -->
+SELECT * FROM test_prepare WHERE id = 10;
+
+<!-- Test 17: PREPARE with DELETE statement -->
+PREPARE delete_stmt FROM 'DELETE FROM test_prepare WHERE id = 10';
+EXECUTE delete_stmt;
+
+<!-- Verify the delete -->
+SELECT * FROM test_prepare WHERE id = 10;
+
+<!-- Test 18: Execute same prepared statement multiple times -->
+PREPARE reuse_stmt FROM 'SELECT COUNT(*) as total_items FROM test_prepare';
+EXECUTE reuse_stmt;
+EXECUTE reuse_stmt;
+EXECUTE reuse_stmt;
+
+<!-- Test 19: DEALLOCATE statements -->
+DEALLOCATE PREPARE stmt1;
+DEALLOCATE PREPARE complex_select;
+DEALLOCATE PREPARE count_stmt;
+DEALLOCATE PREPARE limit_stmt;
+DEALLOCATE PREPARE in_stmt;
+DEALLOCATE PREPARE string_stmt;
+DEALLOCATE PREPARE math_stmt;
+DEALLOCATE PREPARE duplicate_name;
+DEALLOCATE PREPARE param_stmt;
+DEALLOCATE PREPARE multi_param;
+DEALLOCATE PREPARE named_param;
+DEALLOCATE PREPARE subquery_like;
+DEALLOCATE PREPARE insert_stmt;
+DEALLOCATE PREPARE update_stmt;
+DEALLOCATE PREPARE delete_stmt;
+DEALLOCATE PREPARE reuse_stmt;
+
+<!-- Test 20: Execute after DEALLOCATE (should show error) -->
+EXECUTE stmt1;
+
+<!-- Clean up -->
+DROP TABLE test_prepare;
+
+</sphinxql>
+</sphqueries>
+
+</test>

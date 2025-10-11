@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>MATCH in prepared statements - correct syntax</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<sphqueries>
+<sphinxql>
+<!-- Create test table -->
+CREATE TABLE myindex(id BIGINT, title TEXT, content TEXT);
+
+<!-- Insert test data -->
+INSERT INTO myindex(id, title, content) VALUES 
+(1, 'find me fast documents', 'this is content to search quickly'),
+(2, 'another document here', 'more content here for testing'),
+(3, 'fast search example text', 'find me in this text fast');
+
+<!-- ✅ CORRECT: Use escaped single quotes for MATCH string -->
+PREPARE match_basic FROM 'SELECT * FROM myindex WHERE MATCH(\'find me fast\')';
+EXECUTE match_basic;
+
+<!-- ✅ CORRECT: MATCH with proximity search -->
+PREPARE match_proximity FROM 'SELECT * FROM myindex WHERE MATCH(\'"find me fast"/2\')';
+EXECUTE match_proximity;
+
+<!-- ✅ CORRECT: MATCH with field restrictions -->
+PREPARE match_field FROM 'SELECT * FROM myindex WHERE MATCH(\'@title fast\')';
+EXECUTE match_field;
+
+<!-- ✅ CORRECT: MATCH with boolean operators -->
+PREPARE match_boolean FROM 'SELECT * FROM myindex WHERE MATCH(\'find &amp; fast\')';
+EXECUTE match_boolean;
+
+<!-- ✅ CORRECT: MATCH with phrase search -->
+PREPARE match_phrase FROM 'SELECT * FROM myindex WHERE MATCH(\'"search example"\')';
+EXECUTE match_phrase;
+
+<!-- ✅ CORRECT: MATCH with wildcards -->
+PREPARE match_wildcard FROM 'SELECT * FROM myindex WHERE MATCH(\'fast*\')';
+EXECUTE match_wildcard;
+
+<!-- ✅ CORRECT: Complex MATCH with ORDER BY -->
+PREPARE match_complex FROM 'SELECT id, title, WEIGHT() as relevance FROM myindex WHERE MATCH(\'find fast\') ORDER BY relevance DESC';
+EXECUTE match_complex;
+
+<!-- Clean up -->
+DEALLOCATE PREPARE match_basic;
+DEALLOCATE PREPARE match_proximity;
+DEALLOCATE PREPARE match_field;
+DEALLOCATE PREPARE match_boolean;
+DEALLOCATE PREPARE match_phrase;
+DEALLOCATE PREPARE match_wildcard;
+DEALLOCATE PREPARE match_complex;
+
+DROP TABLE myindex;
+
+</sphinxql>
+</sphqueries>
+
+</test>

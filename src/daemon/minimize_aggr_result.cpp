@@ -989,6 +989,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	CSphSchema tOldSchema = tRes.m_tSchema;
 	tFrontendBuilder.PopulateSchema ( tRes.m_tSchema );
 
+        // FIX(#3428): Adjust SHOW META -> total_found for GROUP BY ... HAVING
+        // After flattening/merging, m_dResults[0] holds the post-HAVING groups (if HAVING was present)
+        // or all groups otherwise. For grouped queries, cap total_found to the flattened group count.
+        if ( !tQuery.m_sGroupBy.IsEmpty() && !tRes.m_dResults.IsEmpty() )
+        {
+                   const int iGroups = tRes.m_dResults[0].m_dMatches.GetLength();
+                   if ( iGroups < tRes.m_iTotalMatches )
+                              tRes.m_iTotalMatches = iGroups;
+        }
+
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
 

@@ -84,7 +84,7 @@ JSON Mode: Test negative oversampling parameter
 ––– input –––
 curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"oversampling":-2.0}}'
 ––– output –––
-{"error":"oversampling parameter must be positive"}
+{"error":"oversampling parameter must be >= 1.0"}
 ––– comment –––
 JSON Mode: Test zero k parameter
 ––– input –––
@@ -102,4 +102,4 @@ JSON Mode: Test zero oversampling parameter
 ––– input –––
 curl -s -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d '{"table":"knn_test","knn":{"field":"vector","query_vector":[0.1,0.2,0.3,0.4],"k":2,"oversampling":0}}'
 ––– output –––
-{"error":"oversampling parameter must be positive"}
+{"error":"oversampling parameter must be >= 1.0"}

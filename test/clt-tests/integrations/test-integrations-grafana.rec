@@ -32,7 +32,6 @@ searchd {
 ––– input –––
 docker exec manticore bash -c "mkdir -p /var/log/manticore && stdbuf -oL searchd --logdebugvv > /dev/null 2>&1 &"
 ––– output –––
-
 ––– input –––
 docker exec manticore bash -c "timeout 10 bash -c 'until [ -f /var/log/manticore/searchd.log ] && grep -q \"accepting connections\" /var/log/manticore/searchd.log; do sleep 0.5; done' && echo 'Accepting connections!'"
 ––– output –––

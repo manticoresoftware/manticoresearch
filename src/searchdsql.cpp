@@ -1806,8 +1806,18 @@ bool SqlParser_c::AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull )
 
 void SqlParser_c::AddHaving ()
 {
-	assert ( m_pQuery->m_dFilters.GetLength() );
-	m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
+      // Move the last parsed filter into HAVING
+      assert ( m_pQuery->m_dFilters.GetLength() );
+      m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
+
+      // FIX(#887): The filter tree (m_dFilterTree) still contains a leaf for the
+      // just-moved HAVING predicate. If we keep it, CreateFilterTree() for WHERE
+      // will attempt to build a node for a filter that was popped <E2><86><92> it will look
+      // like a filter with an empty name and throw "filter with empty name".
+      //
+      // Remove the trailing tree op that corresponds to the just-added HAVING item.
+      if ( m_dFilterTree.GetLength() > 0 )
+          m_dFilterTree.Pop();
 }
 
 

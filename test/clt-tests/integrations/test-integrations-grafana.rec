@@ -1,0 +1,224 @@
+––– block: ../base/dind/init –––
+––– comment –––
+Create Docker network
+––– input –––
+docker network create manticore-grafana-net > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Start Manticore container
+––– input –––
+docker run -it --network=manticore-grafana-net --platform linux/amd64 \
+  -p 9306:9306 -p 9308:9308 \
+  --name manticore -d \
+  ghcr.io/manticoresoftware/manticoresearch:test-kit-fix-grafana-builder-query-buddy bash > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore sed -i 's/127.0.0.1/0.0.0.0/g' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+docker exec manticore cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+    listen = 0.0.0.0:9312
+    listen = 0.0.0.0:9306:mysql
+    listen = 0.0.0.0:9308:http
+    log = /var/log/manticore/searchd.log
+    query_log = /var/log/manticore/query.log
+    pid_file = /run/manticore/searchd.pid
+    data_dir = /var/lib/manticore
+}
+––– input –––
+docker exec manticore bash -c "mkdir -p /var/log/manticore && stdbuf -oL searchd --logdebugvv > /dev/null 2>&1 &"
+––– output –––
+––– input –––
+docker exec manticore bash -c "timeout 10 bash -c 'until [ -f /var/log/manticore/searchd.log ] && grep -q \"accepting connections\" /var/log/manticore/searchd.log; do sleep 0.5; done' && echo 'Accepting connections!'"
+––– output –––
+Accepting connections!
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT 1\G"
+––– output –––
+*************************** 1. row ***************************
+1: 1
+––– comment –––
+Start Grafana container
+––– input –––
+docker run -d --name grafana --network manticore-grafana-net -p 3000:3000 -e GF_SECURITY_ADMIN_PASSWORD=admin grafana/grafana:12.2 > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Wait for Grafana to be ready
+––– input –––
+timeout 30 bash -c 'until docker logs grafana 2>&1 | grep -q "HTTP Server Listen"; do sleep 1; done' && echo 'Grafana is ready!'
+––– output –––
+Grafana is ready!
+––– comment –––
+Verify Grafana is accessible
+––– input –––
+docker exec grafana wget -qO- http://localhost:3000/api/health
+––– output –––
+{
+  "database": "ok",
+  "version": "#!/[0-9]+\.[0-9]+\.[0-9]+/!#",
+  "commit": "#!/[a-z0-9]+/!#"
+}
+––– comment –––
+Create Manticore data source in Grafana
+––– input –––
+docker exec grafana curl -s -X POST "http://localhost:3000/api/datasources" -u "admin:admin" -H "Content-Type: application/json" -d '{"name":"Manticore","type":"mysql","url":"manticore:9306","access":"proxy"}'
+––– output –––
+{"datasource":{"id":%{NUMBER},"uid":#!/"[a-zA-Z0-9]+"/!#,"orgId":1,"name":"Manticore","type":"mysql","typeLogoUrl":#!/"[^"]*"/!#,"access":"proxy","url":"manticore:9306","user":"","database":"","basicAuth":false,"basicAuthUser":"","withCredentials":false,"isDefault":#!/(true|false)/!#,"jsonData":{},"secureJsonFields":{},"version":1,"readOnly":false,"apiVersion":#!/"[^"]*"/!#},"id":%{NUMBER},"message":"Datasource added","name":"Manticore"}
+––– comment –––
+Verify data source was created
+––– input –––
+docker exec grafana curl -s -X GET "http://localhost:3000/api/datasources/name/Manticore" -u "admin:admin"
+––– output –––
+{"id":%{NUMBER},"uid":#!/"[a-zA-Z0-9]+"/!#,"orgId":1,"name":"Manticore","type":"mysql","typeLogoUrl":#!/"[^"]*"/!#,"access":"proxy","url":"manticore:9306","user":"","database":"","basicAuth":false,"basicAuthUser":"","withCredentials":false,"isDefault":#!/(true|false)/!#,"jsonData":{},"secureJsonFields":{},"version":1,"readOnly":false,"apiVersion":#!/"[^"]*"/!#}
+––– comment –––
+Create test tables
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE products (title text, price float, created bigint)"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE users (name text, email text, registered bigint)"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE orders (order_id bigint, amount float, status string)"
+––– output –––
+––– comment –––
+Insert test data
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "INSERT INTO products (title, price, created) VALUES ('Laptop', 999.99, 1697200000), ('Mouse', 29.99, 1697210000), ('Keyboard', 79.99, 1697220000)"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "INSERT INTO users (name, email, registered) VALUES ('John Doe', 'john@test.com', 1697200000), ('Jane Smith', 'jane@test.com', 1697210000)"
+––– output –––
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "INSERT INTO orders (order_id, amount, status) VALUES (1, 500.0, 'completed'), (2, 750.5, 'completed'), (3, 320.0, 'pending')"
+––– output –––
+––– comment –––
+Verify all tables are listed
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++----------+------+
+| Table    | Type |
++----------+------+
+| orders   | rt   |
+| products | rt   |
+| users    | rt   |
++----------+------+
+––– comment –––
+Critical test: information_schema.tables must return all tables with correct table_schema and table_type
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM information_schema.tables"
+––– output –––
++------------+------------+--------------+
+| table_type | table_name | table_schema |
++------------+------------+--------------+
+| BASE TABLE | orders     | Manticore    |
+| BASE TABLE | products   | Manticore    |
+| BASE TABLE | users      | Manticore    |
++------------+------------+--------------+
+––– comment –––
+Test table discovery query used by Grafana Query Builder
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT table_name FROM information_schema.tables WHERE table_schema = 'Manticore'"
+––– output –––
++------------+
+| TABLE_NAME |
++------------+
+| orders     |
+| products   |
+| users      |
++------------+
+––– comment –––
+Test DISTINCT TABLE_SCHEMA query
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT DISTINCT TABLE_SCHEMA FROM information_schema.TABLES WHERE TABLE_TYPE != 'SYSTEM VIEW'"
+––– output –––
++-----------------------+
+| DISTINCT TABLE_SCHEMA |
++-----------------------+
+| Manticore             |
++-----------------------+
+––– comment –––
+Test SHOW FULL TABLES
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW FULL TABLES"
+––– output –––
++---------------------+------------+
+| Tables_in_Manticore | Table_type |
++---------------------+------------+
+| orders              | BASE TABLE |
+| products            | BASE TABLE |
+| users               | BASE TABLE |
++---------------------+------------+
+––– comment –––
+Execute SELECT query via Grafana API
+––– input –––
+docker exec grafana curl -s -X POST "http://localhost:3000/api/ds/query" -u "admin:admin" -H "Content-Type: application/json" -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT title, price FROM products","format":"table"}]}'
+––– output –––
+{"results":{"A":{"status":%{NUMBER},"frames":[{"schema":{"refId":"A","meta":{"typeVersion":[0,0],"executedQueryString":"SELECT title, price FROM products"},"fields":[{"name":"title","type":"string","typeInfo":{"frame":"string","nullable":true}},{"name":"price","type":"number","typeInfo":{"frame":"float64","nullable":true}}]},"data":{"values":[["Laptop","Mouse","Keyboard"],[#!/[0-9]+.[0-9]+/!#,#!/[0-9]+.[0-9]+/!#,#!/[0-9]+.[0-9]+/!#]]}}]}}}
+––– comment –––
+Test COUNT aggregation via Grafana API
+––– input –––
+docker exec grafana curl -s -X POST "http://localhost:3000/api/ds/query" -u "admin:admin" -H "Content-Type: application/json" -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT COUNT(*) as total FROM products","format":"table"}]}'
+––– output –––
+{"results":{"A":{"status":%{NUMBER},"frames":[{"schema":{"refId":"A","meta":{"typeVersion":[0,0],"executedQueryString":"SELECT COUNT(*) as total FROM products"},"fields":[{"name":"total","type":"number","typeInfo":{"frame":"int64","nullable":true}}]},"data":{"values":[[3]]}}]}}}
+––– comment –––
+Test GROUP BY via Grafana API
+––– input –––
+docker exec grafana curl -s -X POST "http://localhost:3000/api/ds/query" -u "admin:admin" -H "Content-Type: application/json" -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT status, COUNT(*) as count FROM orders GROUP BY status","format":"table"}]}'
+––– output –––
+{"results":{"A":{"status":%{NUMBER},"frames":[{"schema":{"refId":"A","meta":{"typeVersion":[0,0],"executedQueryString":"SELECT status, COUNT(*) as count FROM orders GROUP BY status"},"fields":[{"name":"status","type":"string","typeInfo":{"frame":"string","nullable":true}},{"name":"count","type":"number","typeInfo":{"frame":"int64","nullable":true}}]},"data":{"values":[["completed","pending"],[2,1]]}}]}}}
+––– comment –––
+Test AVG aggregation
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT AVG(price) as avg_price FROM products"
+––– output –––
++--------------+
+| avg_price    |
++--------------+
+| #!/[0-9]+.[0-9]+/!# |
++--------------+
+––– comment –––
+Test MAX and MIN
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT MAX(price) as max_price, MIN(price) as min_price FROM products"
+––– output –––
++------------+-----------+
+| max_price  | min_price |
++------------+-----------+
+| #!/[0-9]+.[0-9]+/!# | #!/[0-9]+.[0-9]+/!# |
++------------+-----------+
+––– comment –––
+Test ORDER BY
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT title, price FROM products ORDER BY price DESC"
+––– output –––
++----------+------------+
+| title    | price      |
++----------+------------+
+| Laptop   | #!/[0-9]+.[0-9]+/!# |
+| Keyboard | #!/[0-9]+.[0-9]+/!# |
+| Mouse    | #!/[0-9]+.[0-9]+/!# |
++----------+------------+
+––– comment –––
+Test WHERE clause
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT title FROM products WHERE price > 50"
+––– output –––
++----------+
+| title    |
++----------+
+| Laptop   |
+| Keyboard |
++----------+
+––– comment –––
+Delete data source cleanup
+––– input –––
+docker exec grafana curl -s -X DELETE "http://localhost:3000/api/datasources/name/Manticore" -u "admin:admin"
+––– output –––
+{"id":%{NUMBER},"message":"Data source deleted"}

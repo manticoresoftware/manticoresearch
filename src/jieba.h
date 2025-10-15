@@ -35,8 +35,7 @@ inline bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sErro
 
 inline bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString & sError )
 {
-	sError = "Jieba options specified, but no Jieba support compiled; ignoring";
-	return false;
+	return true;
 }
 
 inline bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &,

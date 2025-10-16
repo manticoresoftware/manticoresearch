@@ -1,5 +1,7 @@
 # 介绍
 
+测试
+
 Manticore Search 是一个高性能、多存储数据库，专为搜索和分析而构建，提供极速的全文搜索、实时索引和高级功能，如向量搜索和列式存储，以实现高效的数据分析。它设计用于处理小型和大型数据集，提供无缝的可扩展性和强大的洞察力，适用于现代应用。
 
 作为一个开源数据库（可在[GitHub](https://github.com/manticoresoftware/manticoresearch/)获取），Manticore Search 于2017年作为[Sphinx Search](https://sphinxsearch.com/)引擎的延续创建。我们的开发团队采纳了 Sphinx 的所有优秀特性，并显著提升了其功能，修复了数百个漏洞（详见我们的[更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代、快速且轻量级的数据库，拥有卓越的全文搜索能力，基于对前身的近乎完全重写而构建。

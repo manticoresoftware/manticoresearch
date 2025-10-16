@@ -37,14 +37,11 @@ jobs:
           submodules: true
           ref: ${{ github.head_ref }}
 
-      - name: Fetch master reference
+      - name: Fetch master reference and get changed files
+        id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           git fetch origin master:master --depth=1
-
-      - name: Get changed files
-        id: changed-files
-        run: |
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes
         id: doc-filepathes

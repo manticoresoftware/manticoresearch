@@ -36,6 +36,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
           ref: ${{ github.head_ref }}
+
+      - name: Fetch master reference
+        run: git fetch origin master:master --depth=1
+
       - name: Get changed files
         id: changed-files
         run: |

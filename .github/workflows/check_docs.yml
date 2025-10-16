@@ -43,6 +43,12 @@ jobs:
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           git fetch origin master:master
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+          file="manual/english/Introduction.md"
+          git -C "/__w/manticoresearch/manticoresearch" log -n 1 --pretty=format:%H -- "$file"
+
+          git -C "/__w/manticoresearch/manticoresearch" diff -U0 "$commit" -- "$file" | $DIFF_TO_YAML_CMD > "$temp_file"
+          exit 1
+
       - name: Get changed doc filepathes
         id: doc-filepathes
         run: |

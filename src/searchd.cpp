@@ -13726,8 +13726,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
-	if ( hSearchd ( "boolean_simplify" ) )
-		SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", CSphQuery::m_bDefaultSimplify )!=0 );
+	SetBooleanSimplify ( hSearchd.GetBool ( "boolean_simplify", CSphQuery::m_bDefaultSimplify ) );
 
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 

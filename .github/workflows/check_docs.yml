@@ -41,18 +41,8 @@ jobs:
         id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          git fetch origin master:master
+          git fetch origin master:master 
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
-          file="manual/english/Introduction.md"
-          commit=$(git -C "/__w/manticoresearch/manticoresearch" log -n 1 --pretty=format:%H -- "$file")
-          echo "COMMIT: $commit"
-
-          wc -l "manual/english/Introduction.md"
-          wc -l "manual/chinese/Introduction.md"
-          wc -l "manual/russian/Introduction.md"
-
-          git -C "/__w/manticoresearch/manticoresearch" diff -U0 "$commit" -- "$file" 
-          exit 1
 
       - name: Get changed doc filepathes
         id: doc-filepathes

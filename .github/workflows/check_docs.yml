@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
           ref: ${{ github.head_ref }}
@@ -44,9 +44,10 @@ jobs:
           git fetch origin master:master
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
           file="manual/english/Introduction.md"
-          git -C "/__w/manticoresearch/manticoresearch" log -n 1 --pretty=format:%H -- "$file"
+          commit=$(git -C "/__w/manticoresearch/manticoresearch" log -n 1 --pretty=format:%H -- "$file")
+          echo "COMMIT: $commit"
 
-          git -C "/__w/manticoresearch/manticoresearch" diff -U0 "$commit" -- "$file" | $DIFF_TO_YAML_CMD > "$temp_file"
+          git -C "/__w/manticoresearch/manticoresearch" diff -U0 "$commit" -- "$file" 
           exit 1
 
       - name: Get changed doc filepathes

@@ -47,6 +47,10 @@ jobs:
           commit=$(git -C "/__w/manticoresearch/manticoresearch" log -n 1 --pretty=format:%H -- "$file")
           echo "COMMIT: $commit"
 
+          wc -l "manual/english/Introduction.md"
+          wc -l "manual/chinese/Introduction.md"
+          wc -l "manual/russian/Introduction.md"
+
           git -C "/__w/manticoresearch/manticoresearch" diff -U0 "$commit" -- "$file" 
           exit 1
 

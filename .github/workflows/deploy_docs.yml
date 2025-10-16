@@ -16,6 +16,7 @@ env:
 jobs:
   check:
     uses: ./.github/workflows/check_docs.yml
+    secrets: inherit
   commit_info:
     name: Commit info
     runs-on: ubuntu-22.04

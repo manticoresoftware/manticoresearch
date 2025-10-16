@@ -95,5 +95,5 @@ jobs:
         if: always()
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
-          name: Docs error artifact
+          name: Docs deploy error artifact
           path: $DOCS_ERRORS_DIR

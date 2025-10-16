@@ -148,7 +148,7 @@ void sphUnalignedWrite ( void * pPtr, const T & tVal )
 
 #define SPHINXSE_SYSTEM_COLUMNS		3
 
-#define SPHINXSE_MAX_ALLOC			(16*1024*1024)
+#define SPHINXSE_MAX_ALLOC			(1024*1024*1024)
 #define SPHINXSE_MAX_KEYWORDSTATS	4096
 
 #define SPHINXSE_VERSION			"2.3.3-dev"

@@ -30,6 +30,8 @@ Manticore 提供模糊搜索选项以及命令 `CALL QSUGGEST` 和 `CALL SUGGEST
 
 > 注意：`fuzzy` 选项需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
 
+> 注意：`fuzzy` 选项在 [多查询](../Searching/Multi-queries.md) 中不可用。
+
 ## 一般语法
 
 ### SQL

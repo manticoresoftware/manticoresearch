@@ -47,6 +47,10 @@ if command -v curl >/dev/null 2>&1; then
         echo "✅ No new versions found after MariaDB $LATEST_MARIADB and MySQL $LATEST_MYSQL"
     else
         echo "❗ Please update the versions array and test new versions!"
+        echo "❗ Also update:"
+        echo "   - LATEST_MARIADB and LATEST_MYSQL variables in this script"
+        echo "   - Version numbers in documentation (manual/english/Securing_and_compacting_a_table/Backup_and_restore.md)"
+        exit 1
     fi
 
     echo "✅ Version check completed"
@@ -97,3 +101,44 @@ for version in "${versions[@]}"; do
 done
 
 echo "All database versions tested successfully!"
+
+# Check documentation versions
+echo ""
+echo "Checking documentation versions..."
+
+# Check documentation from mounted /manual volume
+DOC_FILE="/manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+
+if [ -f "$DOC_FILE" ]; then
+    echo "Checking documentation file..."
+
+    # Extract versions from documentation
+    DOC_MYSQL=$(grep -o "MySQL up to [0-9]\+\.[0-9]\+" "$DOC_FILE" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+    DOC_MARIADB=$(grep -o "MariaDB up to [0-9]\+\.[0-9]\+" "$DOC_FILE" | grep -o "[0-9]\+\.[0-9]\+" | head -1)
+
+    echo "Script versions: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
+    echo "Documentation versions: MySQL ${DOC_MYSQL:-not found}, MariaDB ${DOC_MARIADB:-not found}"
+
+    # Check if they match
+    if [ "$DOC_MYSQL" = "$LATEST_MYSQL" ] && [ "$DOC_MARIADB" = "$LATEST_MARIADB" ]; then
+        echo "✅ Documentation versions match script versions"
+    else
+        echo "❌ Documentation versions don't match script versions!"
+        echo ""
+        echo "Script has: MySQL $LATEST_MYSQL, MariaDB $LATEST_MARIADB"
+        echo "Documentation has: MySQL ${DOC_MYSQL:-not found}, MariaDB ${DOC_MARIADB:-not found}"
+        echo ""
+        echo "Please update documentation file:"
+        echo "manual/english/Securing_and_compacting_a_table/Backup_and_restore.md"
+        echo ""
+        echo "Find the line after '## Backup and restore with mysqldump' and update to:"
+        echo "Manticore supports \`mysqldump\` utility from MySQL up to $LATEST_MYSQL and \`mariadb-dump\` utility from MariaDB up to $LATEST_MARIADB."
+        exit 1
+    fi
+else
+    echo "⚠️ Documentation file not found at $DOC_FILE"
+    echo "Make sure manual directory is mounted with -v"
+    exit 1
+fi
+
+exit 0

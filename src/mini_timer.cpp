@@ -11,6 +11,7 @@
 #include "mini_timer.h"
 #include "threadutils.h"
 #include "timeout_queue.h"
+#include <atomic>
 
 #ifndef VERBOSE_TIMER
 #define VERBOSE_TIMER 0
@@ -37,35 +38,39 @@ CSphString Stamp()
 #define DEBUGT LOGMSG ( DEBUG, TIMER, TSKT )
 #define DEBUGX LOGMSG ( DEBUG, TIMER, TSKX )
 
-static std::atomic<int64_t> g_tmLastTimestamp { sphMicroTimer() };
+using namespace Threads;
 
-inline static int64_t MicroTimerImpl() noexcept
+namespace {
+std::atomic g_tmLastTimestamp { sphMicroTimer() };
+
+int64_t MicroTimerImpl() noexcept
 {
 	int64_t tmTimestamp = sphMicroTimer();
 	g_tmLastTimestamp.store ( tmTimestamp, std::memory_order_relaxed );
 	return tmTimestamp;
 }
 
-inline static int64_t LastTimestampImpl() noexcept
+[[nodiscard]] int64_t LastTimestampImpl() noexcept
 {
 	return g_tmLastTimestamp.load ( std::memory_order_relaxed );
 }
 
 
-int64_t sph::MicroTimer() noexcept
+/// timer thread context
+ThreadRole TimerThread;
+std::atomic g_bTimerCreated { false };
+std::atomic g_bTimerActive { false };
+} // namespace
+
+[[nodiscard]] int64_t sph::MicroTimer() noexcept
 {
 	return MicroTimerImpl();
 }
 
-int64_t sph::LastTimestamp() noexcept
+[[nodiscard]] int64_t sph::LastTimestamp() noexcept
 {
 	return LastTimestampImpl();
 }
-
-/// timer thread context
-static ThreadRole TimerThread;
-static std::atomic<bool> g_bTimerCreated { false };
-static std::atomic<bool> g_bTimerActive { false };
 
 class TinyTimer_c
 {
@@ -79,15 +84,15 @@ class TinyTimer_c
 
 	// thread
 	SphThread_t m_tCounterThread;
-	std::atomic<Threads::LowThreadDesc_t*> m_pCounterThread { nullptr };
+	std::atomic<LowThreadDesc_t*> m_pCounterThread { nullptr };
 
 private:
-	inline bool IsInterrupted() const
+	[[nodiscard]] bool IsInterrupted() const noexcept
 	{
 		return m_bInterrupted.load(std::memory_order_relaxed) || sphInterrupted(); // aliased, as we can override it in tests while mocking
 	}
 
-	void Enqueue ( MiniTimer_c& tTask ) EXCLUDES ( TimerThread )
+	void Enqueue ( MiniTimer_c& tTask ) noexcept EXCLUDES ( m_tTimeoutsGuard )
 	{
 		DEBUGT << "enqueue " << &tTask;
 		{
@@ -97,7 +102,7 @@ private:
 		Kick();
 	}
 
-	int GetNextWaitPeriodMs() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	[[nodiscard]] int GetNextWaitPeriodMs() const noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		if ( m_dTimeouts.IsEmpty() )
@@ -107,16 +112,16 @@ private:
 		return (int)( ( pTask->m_iTimeoutTimeUS - MicroTimerImpl() ) / sph::TICKS_GRANULARITY );
 	}
 
-	MiniTimer_c* PopNextDeadlinedAction() EXCLUDES ( m_tTimeoutsGuard )
+	[[nodiscard]] std::pair<MiniTimer_c*,Handler> PopNextDeadlinedAction() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		if ( m_dTimeouts.IsEmpty() )
-			return nullptr;
+			return { nullptr, nullptr };
 
 		auto pRoot = (MiniTimer_c*)m_dTimeouts.Root();
 		assert ( pRoot->m_iTimeoutTimeUS > 0 );
 		if ( !sph::TimeExceeded ( pRoot->m_iTimeoutTimeUS, MicroTimerImpl() ) )
-			return nullptr;
+			return { nullptr, nullptr };
 
 		// timeout reached; have to do an action
 		DEBUGT << "timeout happens for " << pRoot << " deadline " << timestamp_t ( pRoot->m_iTimeoutTimeUS );
@@ -124,17 +129,17 @@ private:
 		m_dTimeouts.Pop();
 		DEBUGT << "Oneshot task removed: " << pRoot;
 
-		return pRoot;
+		return  { pRoot, pRoot->m_fnOnTimer };
 	}
 
-	void ProcessTimerActions() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	void ProcessTimerActions() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
-		for ( MiniTimer_c* pRoot = PopNextDeadlinedAction(); pRoot; pRoot = PopNextDeadlinedAction() )
-			if ( pRoot->m_fnOnTimer )
-				pRoot->m_fnOnTimer();
+		for ( auto [pRoot, fnTimer] = PopNextDeadlinedAction(); pRoot; std::tie(pRoot, fnTimer) = PopNextDeadlinedAction() )
+			if ( fnTimer )
+				fnTimer();
 	}
 
-	void Loop()
+	void Loop() noexcept
 	{
 		ScopedRole_c thSched ( TimerThread );
 		m_pCounterThread.store ( &Threads::MyThd(), std::memory_order_relaxed );
@@ -158,26 +163,26 @@ private:
 		m_pCounterThread.store ( nullptr, std::memory_order_relaxed );
 	}
 
-	MiniTimer_c* PopNextAction() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	[[nodiscard]] std::pair<MiniTimer_c*,Handler> PopNextAction() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		if ( m_dTimeouts.IsEmpty() )
-			return nullptr;
+			return { nullptr, nullptr };
 
 		auto pRoot = (MiniTimer_c*)m_dTimeouts.Root();
 		m_dTimeouts.Pop();
-		return pRoot;
+		return { pRoot, pRoot->m_fnOnTimer };
 	}
 
 	/// abandon and release all events (on shutdown)
-	void AbortScheduled() REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
+	void AbortScheduled() noexcept REQUIRES ( TimerThread ) EXCLUDES ( m_tTimeoutsGuard )
 	{
 		DEBUGT << "AbortScheduled()";
 		assert ( IsInterrupted() );
 
-		for ( MiniTimer_c* pRoot = PopNextAction(); pRoot; pRoot = PopNextAction() )
-			if ( pRoot->m_fnOnTimer )
-				pRoot->m_fnOnTimer();
+		for ( auto [pRoot, fnTimer] = PopNextAction(); pRoot; std::tie(pRoot, fnTimer) = PopNextAction() )
+			if ( fnTimer )
+				fnTimer();
 	}
 
 public:
@@ -186,10 +191,10 @@ public:
 		MicroTimerImpl();
 		m_bInterrupted.store ( false, std::memory_order_release );
 		g_bTimerCreated = true;
-		Threads::RegisterIterator ( [this] ( Threads::ThreadFN& fnHandler ) {
+		RegisterIterator ( [this] ( const ThreadFN& fnHandler ) {
 			fnHandler ( m_pCounterThread.load ( std::memory_order_relaxed ) );
 		} );
-		Threads::Create ( &m_tCounterThread, [this] { Loop (); }, false, "Timer" );
+		Create ( &m_tCounterThread, [this] { Loop (); }, false, "Timer" );
 	}
 
 	~TinyTimer_c()
@@ -198,23 +203,23 @@ public:
 		Stop();
 	}
 
-	void Stop()
+	void Stop() noexcept
 	{
 		m_bInterrupted.store ( true, std::memory_order_release );
 		if ( !g_bTimerActive )
 			return;
 		Kick();
-		Threads::Join ( &m_tCounterThread );
+		Join ( &m_tCounterThread );
 	}
 
 	/// Kick the tasker
-	void Kick()
+	void Kick() noexcept
 	{
 		DEBUGX << "Timer kicked";
 		m_tSignal.SetEvent();
 	}
 
-	void EngageAt ( int64_t iTimeStampUS, MiniTimer_c& tTimer ) EXCLUDES ( TimerThread )
+	void EngageAt ( int64_t iTimeStampUS, MiniTimer_c& tTimer ) noexcept EXCLUDES ( m_tTimeoutsGuard )
 	{
 		if ( tTimer.m_iTimeoutIdx >= 0 && tTimer.m_iTimeoutTimeUS == iTimeStampUS )
 			return; // no need to re-engage if no changes
@@ -224,7 +229,7 @@ public:
 		Enqueue ( tTimer );
 	}
 
-	int64_t Engage ( int64_t iTimePeriodUS, MiniTimer_c& tTimer ) EXCLUDES ( TimerThread )
+	int64_t Engage ( int64_t iTimePeriodUS, MiniTimer_c& tTimer ) noexcept EXCLUDES ( m_tTimeoutsGuard )
 	{
 		if ( iTimePeriodUS < 0 || IsInterrupted() )
 			return -1;
@@ -232,16 +237,15 @@ public:
 		return tTimer.m_iTimeoutTimeUS;
 	}
 
-	void Remove ( MiniTimer_c& tTimer ) EXCLUDES ( m_tTimeoutsGuard, TimerThread )
+	void Remove ( MiniTimer_c& tTimer ) noexcept EXCLUDES ( m_tTimeoutsGuard )
 	{
-
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		DEBUGT << ((tTimer.m_iTimeoutIdx >= 0) ? "Removed from queue: " : "Not in queue: ") << &tTimer << " deadline " << timestamp_t ( tTimer.m_iTimeoutTimeUS );
 		m_dTimeouts.Remove ( &tTimer );
 	}
 
 	// statistics
-	void FillSchedInfo( CSphVector<sph::ScheduleInfo_t>& dRes) const EXCLUDES ( m_tTimeoutsGuard, TimerThread )
+	void FillSchedInfo( CSphVector<sph::ScheduleInfo_t>& dRes) const noexcept EXCLUDES ( m_tTimeoutsGuard )
 	{
 		ScopedMutex_t tTimeoutsLock { m_tTimeoutsGuard };
 		m_dTimeouts.DebugDump ( [&dRes] ( EnqueuedTimeout_t* pMember ) {
@@ -259,20 +263,20 @@ TinyTimer_c& g_TinyTimer()
 	return tTimer;
 }
 
-void MiniTimer_c::EngageAt ( int64_t iTimeStampUS )
+void MiniTimer_c::EngageAt ( int64_t iTimeStampUS ) noexcept
 {
 	DEBUGT << "MiniTimer_c::EngageAt " << timestamp_t ( iTimeStampUS );
 	g_TinyTimer().EngageAt ( iTimeStampUS, *this );
 }
 
-void MiniTimer_c::EngageAt ( int64_t iTimeStampUS, Threads::Handler&& fnOnTimer )
+void MiniTimer_c::EngageAt ( int64_t iTimeStampUS, Handler&& fnOnTimer ) noexcept
 {
 	DEBUGT << "MiniTimer_c::EngageAt " << timestamp_t ( iTimeStampUS );
 	SetHandler ( std::move ( fnOnTimer ) );
 	g_TinyTimer().EngageAt ( iTimeStampUS, *this );
 }
 
-int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS )
+int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS ) noexcept
 {
 	auto iTimePeriodUS = iTimePeriodMS * 1000;
 	if ( iTimePeriodUS <= 0 )
@@ -281,7 +285,7 @@ int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS )
 	return g_TinyTimer().Engage ( iTimePeriodUS, *this );
 }
 
-int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTimer )
+int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS, Handler&& fnOnTimer ) noexcept
 {
 	auto iTimePeriodUS = iTimePeriodMS * 1000;
 	if ( iTimePeriodUS <= 0 )
@@ -291,15 +295,15 @@ int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTime
 	return g_TinyTimer().Engage ( iTimePeriodUS, *this );
 }
 
-void MiniTimer_c::SetHandler ( Threads::Handler&& fnOnTimer )
+void MiniTimer_c::SetHandler ( Handler&& fnOnTimer ) noexcept
 {
 	assert ( !m_fnOnTimer );
 	m_fnOnTimer = std::move ( fnOnTimer );
 }
 
-void MiniTimer_c::UnEngage()
+void MiniTimer_c::UnEngage() noexcept
 {
-	if ( g_bTimerCreated )
+	if ( g_bTimerCreated.load(std::memory_order_relaxed) )
 		g_TinyTimer().Remove ( *this );
 }
 
@@ -309,7 +313,7 @@ MiniTimer_c::~MiniTimer_c()
 }
 
 /// returns true if provided timestamp is already reached or not
-bool sph::TimeExceeded ( int64_t tmMicroTimestamp ) noexcept
+[[nodiscard]] bool sph::TimeExceeded ( int64_t tmMicroTimestamp ) noexcept
 {
 	if ( tmMicroTimestamp <= 0 )
 		return false;

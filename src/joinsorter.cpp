@@ -659,6 +659,7 @@ private:
 
 	bool							m_bErrorFlag = false;
 	CSphString						m_sErrorMessage;
+	CSphString						m_sWarning;
 
 	int								m_iBatchSize = 0;
 	int								m_iBatched = 0;
@@ -1239,6 +1240,8 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	m_pRightSorter->SetSchema ( m_pRightSorterRsetSchema->CloneMe(), true );
 
 	CSphMultiQueryArgs tArgs ( GetIndexWeight ( m_tJoinQuery, m_tQuery.m_sJoinIdx ) );
+	tArgs.m_bUseSICache = true;
+
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{
@@ -1246,6 +1249,9 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 		m_sErrorMessage.SetSprintf ( "joined table %s: %s", GetJoinedIndexName().cstr(), tMeta.m_sError.cstr() );
 		return false;
 	}
+
+	if ( m_sWarning.IsEmpty() && !tMeta.m_sWarning.IsEmpty() )
+		m_sWarning = tMeta.m_sWarning;
 
 	m_dMatches.Resize(0);
 
@@ -1544,6 +1550,8 @@ bool JoinSorter_c::RunFinalBatch()
 
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
+	sWarning = m_sWarning;
+
 	if ( !RunFinalBatch() )
 	{
 		if ( m_bErrorFlag )
@@ -1717,7 +1725,7 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING || pAttr1->m_eAttrType==SPH_ATTR_STRINGPTR;
 
 		tFilter.m_sAttrName = sAttrIdx2;
-		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING : SPH_FILTER_VALUES;
+		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING_LIST : SPH_FILTER_VALUES;
 
 		int iFilterId = m_tJoinQuery.m_dFilters.GetLength()-1;
 		m_dFilterRemap.Add ( { iFilterId, pAttr1->m_tLocator, {}, bStringFilter } );
@@ -1876,11 +1884,13 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias )
 {
-	int iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
-	if ( iSorterAttrId==-1 )
-		iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	int iSorterAttrId1 = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
+	if ( iSorterAttrId1!=-1 )
+		AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId1 );
 
-	AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId );
+	int iSorterAttrId2 = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	if ( iSorterAttrId2!=-1 && iSorterAttrId2!=iSorterAttrId1 )
+			AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId2 );
 }
 
 
@@ -2022,7 +2032,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 		if ( GetJoinAttrName ( i.m_sAttrName, GetJoinedIndexName(), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
-			if ( pAttr && pAttr->IsColumnar() )
+			if ( pAttr )
 				AddToJoinSelectList ( i.m_sAttrName, i.m_sAttrName );
 		}		
 	}

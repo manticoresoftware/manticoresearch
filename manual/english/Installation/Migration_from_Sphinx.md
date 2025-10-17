@@ -7,7 +7,7 @@ Instead of sphinx.conf (in Linux normally located at `/etc/sphinxsearch/sphinx.c
 
 Systemd service name has changed from `sphinx/sphinxsearch` to `manticore` and the service runs under user `manticore` (Sphinx was using `sphinx` or `sphinxsearch`). It also uses a different folder for the PID file.
 
-The folders used by default are `/var/lib/manticore`, `/var/log/manticore`, `/var/run/manticore`. You can still use the existing Sphinx config, but you need to manually change permissions for `/var/lib/sphinxsearch` and `/var/log/sphinxsearch` folders. Or, just rename globally 'sphinx' to 'manticore' in system files. If you use other folders (for data, wordforms files etc.) the ownership must be also switched to user `manticore`. The `pid_file` location should be changed to match the manticore.service to `/var/run/manticore/searchd.pid`.
+The folders used by default are `/var/lib/manticore`, `/var/log/manticore`, `/var/run/manticore`. You can still use the existing Sphinx config, but you need to manually change permissions for `/var/lib/sphinxsearch` and `/var/log/sphinxsearch` folders. Or, just rename globally 'sphinx' to 'manticore' in system files. If you use other folders (for data, wordforms files etc.) the ownership must be also switched to user `manticore`. The `pid_file` location should be changed to match the manticore.service to `/run/manticore/searchd.pid`.
 
 If you want to use the Manticore folder instead, the table files need to be moved to the new data folder (`/var/lib/manticore`) and the permissions must be changed to user `manticore`.
 

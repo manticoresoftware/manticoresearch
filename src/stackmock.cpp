@@ -41,7 +41,7 @@ protected:
 		return m_dMockStack.GetULength ();
 	}
 
-	void MockInitMem ( BYTE uFiller )
+	ATTRIBUTE_NO_SANITIZE_ADDRESS void MockInitMem ( BYTE uFiller )
 	{
 		::memset ( m_dMockStack.begin (), uFiller, m_dMockStack.GetLengthBytes () );
 	}
@@ -71,7 +71,7 @@ protected:
 	}
 
 public:
-	StackSizeTuplet_t MockMeasureStack ()
+	ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t MockMeasureStack ()
 	{
 		constexpr int iMeasures = 20;
 		std::vector<std::pair<int,DWORD>> dMeasures { iMeasures };
@@ -137,7 +137,7 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 			m_sExpr << "+((attr_b=" << i << ")*" << i * 2+1 << ")";
 	}
 
-	void MockParseTest () final
+	ATTRIBUTE_NO_SANITIZE_ADDRESS void MockParseTest () final
 	{
 		struct
 		{
@@ -191,8 +191,8 @@ class EvalExprStackSize_c final : public StackMeasurer_c
 		m_sExpr.Clear ();
 		m_sExpr << "((attr_a=0)*1)";
 
-		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
-			m_sExpr << "+((attr_b=" << i << ")*" << i*2+1 << ")";
+		for ( int i = 1; i<iComplexity+1; ++i )
+			m_sExpr << " or attr_b in (" << i << ")"; // ((attr_a=0)*1) or attr_b in (1) or attr_b in (2) ...
 	}
 
 	void MockParseTest () final
@@ -511,11 +511,6 @@ public:
 	static constexpr const char * szEnv = "KNOWN_MATCH_SIZE";
 };
 
-#if defined( __clang__ ) || defined( __GNUC__ )
-#define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__ ( ( no_sanitize_address ) )
-#else
-#define ATTRIBUTE_NO_SANITIZE_ADDRESS
-#endif
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t CreateExprStackSize_c::MockMeasure()
 {

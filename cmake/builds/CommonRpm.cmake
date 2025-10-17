@@ -4,7 +4,6 @@ cmake_minimum_required ( VERSION 3.17 )
 set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "/run")
 set ( CMAKE_INSTALL_RUNSTATEDIR "run")
 
-
 if (NOT installed)
 	# start with short route - set all paths
 	set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )

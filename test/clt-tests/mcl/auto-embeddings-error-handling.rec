@@ -1,0 +1,264 @@
+––– comment –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+=== PARAMETER CONFLICTS ===
+––– comment –––
+Test 1: KNN_DIMS cannot be used with MODEL_NAME (auto-dims conflict)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_dims (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' KNN_DIMS='384'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+)" 2>&1
+# Check if table was actually created
+mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_dims'" | grep -q "test_dims" && echo "Table created" || echo "Table not created"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: knn_dims can't be used together with model_name near ')'
+Table not created
+––– comment –––
+=== VALID CONFIGURATIONS ===
+––– comment –––
+Test 2: Auto-dims with MODEL_NAME (correct usage)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_auto_dims (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+)"; echo $?
+––– output –––
+0
+––– comment –––
+Test 3: Verify auto-embeddings generation works
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_auto_dims (id, title) VALUES (1, 'Test document')"; echo $?
+––– output –––
+0
+––– comment –––
+=== MISSING REQUIRED PARAMETERS ===
+––– comment –––
+Test 4: Missing KNN_DIMS when no MODEL_NAME specified
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_model (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    FROM='title'
+)"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: knn_dims and hnsw_similarity are required if knn_type='hnsw' near ')'
+––– comment –––
+Test 5: Missing FROM parameter when MODEL_NAME specified
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'vec'
+––– comment –––
+Test 6: Empty FROM parameter (not allowed)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM=''
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_empty_from': 'from' setting empty for KNN attribute 'vec'
+––– comment –––
+=== INVALID MODEL CONFIGURATIONS ===
+––– comment –––
+Test 7: Non-existent model repository
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bad_model (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='non-existent-model/invalid-name'
+    FROM='title'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_bad_model': prealloc: Failed to download model configuration
+––– comment –––
+Test 8: Model name without organization prefix (incomplete HuggingFace path)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_no_prefix (
+    content_text TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='all-MiniLM-L6-v2'
+    FROM='content_text'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_no_prefix': prealloc: Failed to download model configuration
+––– comment –––
+=== INVALID FROM FIELD REFERENCES ===
+––– comment –––
+Test 9: FROM references non-existent field
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bad_from (
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='non_existent_field'
+)"
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_bad_from': prealloc: embedding source 'non_existent_field' not found
+––– comment –––
+Test 10: FROM references vector field itself (circular reference)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_circular (
+    title TEXT,
+    vec1 FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='vec1'
+)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_circular': prealloc: embedding source attribute 'vec1' is not a string
+––– comment –––
+=== DATA EDGE CASES ===
+––– comment –––
+Test 11: Table creation with empty string support (engine='columnar')
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_empty (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– comment –––
+Test 12: Empty string insertion (should succeed)
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, content) VALUES (1, '')"; echo $?
+––– output –––
+0
+––– comment –––
+Test 13: NULL value insertion (not supported in Manticore syntax)
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_empty (id, content) VALUES (2, NULL)" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected null near 'NULL)'
+––– comment –––
+Test 14: Verify only valid record was inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_empty"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– comment –––
+=== ENGINE CONFIGURATION TESTS ===
+––– comment –––
+Test 15: Row-wise engine - KNN should work (engine='rowwise')
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_rowwise (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='rowwise'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_rowwise (id, content) VALUES
+    (1, 'machine learning'),
+    (2, 'deep learning')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_rowwise; OPTIMIZE TABLE test_rowwise OPTION sync=1, cutoff=1"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_rowwise WHERE KNN(vec, 1, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– comment –––
+Test 16: Columnar vec attribute only
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_vec_columnar (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' engine='columnar'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_vec_columnar (id, content) VALUES
+    (1, 'machine learning'),
+    (2, 'deep learning')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_vec_columnar; OPTIMIZE TABLE test_vec_columnar OPTION sync=1, cutoff=1"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_vec_columnar WHERE KNN(vec, 1, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– comment –––
+Test 17: Full columnar table (engine='columnar')
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_full_columnar (
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='content'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_full_columnar (id, content) VALUES
+    (1, 'machine learning'),
+    (2, 'deep learning')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_full_columnar; OPTIMIZE TABLE test_full_columnar OPTION sync=1, cutoff=1"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_full_columnar WHERE KNN(vec, 1, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
+––– comment –––
+Test 18: Verify SHOW CREATE TABLE differences
+––– input –––
+echo "Row-wise (default):"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_rowwise\G" | grep -E "vec.*float_vector"
+––– output –––
+Row-wise (default):
+vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+––– input –––
+echo "Vec columnar only:"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_vec_columnar\G" | grep -E "vec.*float_vector"
+––– output –––
+Vec columnar only:
+vec float_vector engine='columnar' knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+––– input –––
+echo "Full columnar:"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_full_columnar\G" | grep -E "(vec.*float_vector|engine='columnar')"
+––– output –––
+Full columnar:
+vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+) engine='columnar'
+––– comment –––
+Test 19: Non-existent field
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_auto_dims WHERE KNN(wrong_field, 1, 'test')" 2>&1 | grep -o "wrong_field.*not found"
+––– output –––
+wrong_field' not found

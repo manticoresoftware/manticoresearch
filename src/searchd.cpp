@@ -48,6 +48,7 @@
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
+#include "dict/stem/sphinxstem.h"
 
 // services
 #include "taskping.h"
@@ -13733,6 +13734,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );
+	SetSIBlockCacheSize ( hSearchd.GetSize64 ( "secondary_index_block_cache", GetSIBlockCacheSize() ) );
 
 	CSphString sWarning;
 	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;

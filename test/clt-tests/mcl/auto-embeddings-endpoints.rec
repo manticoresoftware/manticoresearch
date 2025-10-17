@@ -1,0 +1,141 @@
+––– comment –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd –––
+––– comment –––
+Install jq for JSON parsing
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– comment –––
+=== PART 1: AUTO-EMBEDDINGS BASIC FUNCTIONALITY ===
+––– comment –––
+Create table with auto-embeddings
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE emb_test (
+    id BIGINT,
+    title TEXT,
+    content TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title, content'
+)"; echo $?
+––– output –––
+0
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO emb_test (id, title, content) VALUES
+    (1, 'machine learning', 'neural networks and deep learning'),
+    (2, 'computer vision', 'image recognition and processing'),
+    (3, 'natural language', 'text analysis and understanding')"; echo $?
+––– output –––
+0
+––– comment –––
+IMPORTANT: Optimize table to make k parameter work correctly
+Data is currently in ramchunk where k parameter is not applied
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK emb_test; OPTIMIZE TABLE emb_test OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– comment –––
+Verify k=2 returns exactly 2 documents after optimization
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM emb_test WHERE KNN(vec, 2, 'artificial intelligence')"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+––– comment –––
+=== PART 2: ENDPOINT TESTS WITH OPTIMIZED TABLE ===
+––– comment –––
+CLI endpoint - KNN with text query
+––– input –––
+curl -s "http://localhost:9308/cli?select%20id,%20title%20from%20emb_test%20where%20knn(vec,%202,%20'artificial%20intelligence')" | grep -v 'rows in set'
+––– output –––
++----+------------------+
+| id | title            |
++----+------------------+
+| 1  | machine learning |
+| 2  | computer vision  |
++----+------------------+
+––– comment –––
+CLI_JSON endpoint with distance
+––– input –––
+curl -s "http://localhost:9308/cli_json?select%20id,%20title,%20@knn_dist%20from%20emb_test%20where%20knn(vec,%201,%20'learning')" | jq -r '.[0].data[0] | "ID: \(.id)\nTitle: \(.title)\nDistance: \(.["@knn_dist"] | tostring)"'
+––– output –––
+ID: 1
+Title: machine learning
+Distance: 1.082378#!/[0-9]{0,3}/!#
+––– comment –––
+SQL mode=raw endpoint
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select count(*) from emb_test where knn(vec, 2, 'neural networks')" | jq -r '.[0].data[0]."count(*)"'
+––– output –––
+2
+––– comment –––
+JSON API insert with auto-embedding
+––– input –––
+curl -s -X POST http://localhost:9308/insert -d '{"index":"emb_test","id":10,"doc":{"title":"quantum computing","content":"quantum algorithms"}}' | jq -r '.created'
+––– output –––
+true
+––– comment –––
+JSON API search with text query - correct usage
+––– input –––
+curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query":"quantum","k":1}}' | jq -r '.hits.hits[0]._source.title'
+––– output –––
+quantum computing
+––– comment –––
+JSON API search - query_text parameter is not supported (use 'query' instead)
+––– input –––
+curl -s -X POST http://localhost:9308/search -d '{"index":"emb_test","knn":{"field":"vec","query_text":"quantum","k":1}}'
+––– output –––
+{"error":""}
+––– comment –––
+=== PART 3: RAMCHUNK VS DISK CHUNK BEHAVIOR ===
+––– comment –––
+Create new table for chunk behavior testing
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE chunk_test (
+    id BIGINT,
+    title TEXT,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO chunk_test (id, title) VALUES
+    (1, 'machine learning'),
+    (2, 'deep learning'),
+    (3, 'reinforcement learning')"; echo $?
+––– output –––
+0
+––– comment –––
+BEFORE optimization: k parameter not applied (ramchunk behavior)
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning')"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+AFTER optimization: k parameter works correctly
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK chunk_test; OPTIMIZE TABLE chunk_test OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning')"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+

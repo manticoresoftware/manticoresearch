@@ -46,17 +46,17 @@ If Manticore Search hangs, you need to collect some information that may be usef
 1. Run `show threads option format=all` trough a [VIP port](https://manual.manticoresearch.com/Connecting_to_the_server/HTTP#VIP-connection)
 2. collect the lsof output output, as hanging can be caused by too many connections or open file descriptors.
 ```
-lsof -p `cat /var/run/manticore/searchd.pid`
+lsof -p `cat /run/manticore/searchd.pid`
 ```
 3. Dump the core:
 ```
-gcore `cat /var/run/manticore/searchd.pid`
+gcore `cat /run/manticore/searchd.pid`
 ```
 (It will save the dump to the current directory.)
 
 4. Install and run gdb:
 ```
-gdb /usr/bin/searchd `cat /var/run/manticore/searchd.pid`
+gdb /usr/bin/searchd `cat /run/manticore/searchd.pid`
 ```
 Note that this will halt your running searchd, but if it's already hanging, it shouldn't be a problem.
 5. In gdb run:

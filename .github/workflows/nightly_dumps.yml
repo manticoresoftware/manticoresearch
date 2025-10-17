@@ -35,7 +35,7 @@ jobs:
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/
-          run_args: --privileged
+          run_args: --privileged -v $(pwd)/manual:/manual
           ui_host: "https://clt.manticoresearch.com"
 
   clt_test_migration_es_ms:
@@ -58,4 +58,3 @@ jobs:
         with:
           name: test-migration-es-ms-rep
           path: test/clt-tests/migration-es-ms/test-migration-es-ms.rep
-

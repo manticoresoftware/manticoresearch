@@ -50,7 +50,7 @@ jobs:
         test-suite:
           - name: Buddy
             test_prefix: test/clt-tests/buddy/
-          - name: Buddy-lugins
+          - name: Buddy-plugins
             test_prefix: test/clt-tests/buddy-plugins/
           - name: Bugs
             test_prefix: test/clt-tests/bugs/
@@ -62,8 +62,9 @@ jobs:
             test_prefix: test/clt-tests/expected-errors/
           - name: Fulltext-search
             test_prefix: test/clt-tests/fulltext-search/
-          - name: MCL
-            test_prefix: test/clt-tests/mcl/
+          - name: Auto-embeddings
+            test_prefix: test/clt-tests/ae/
+            skip_if_no_api_keys: true
           - name: HTTP interface tests
             test_prefix: test/clt-tests/http-interface/
           - name: Indexer
@@ -92,7 +93,19 @@ jobs:
             test_prefix: test/clt-tests/vector-knn/
               
     steps:
-      - uses: manticoresoftware/clt@0.7.3
+      - name: Check if auto-embeddings tests should be skipped
+        if: matrix.test-suite.skip_if_no_api_keys == true
+        run: |
+          if [ -z "$OPENAI_API_KEY" ] && [ -z "$VOYAGE_API_KEY" ] && [ -z "$JINA_API_KEY" ]; then
+            echo "SKIP_AE_TESTS=true" >> $GITHUB_ENV
+            echo "Skipping auto-embeddings tests - no API keys available"
+          else
+            echo "SKIP_AE_TESTS=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Run CLT tests
+        if: matrix.test-suite.skip_if_no_api_keys != true || env.SKIP_AE_TESTS != 'true'
+        uses: manticoresoftware/clt@0.7.3
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -102,3 +115,7 @@ jobs:
           comment_mode: failures
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY"
           ui_host: "https://clt.manticoresearch.com"
+      
+      - name: Skip auto-embeddings tests message
+        if: matrix.test-suite.skip_if_no_api_keys == true && env.SKIP_AE_TESTS == 'true'
+        run: echo "Auto-embeddings tests were skipped because no API keys (OPENAI_API_KEY, VOYAGE_API_KEY, JINA_API_KEY) are available"

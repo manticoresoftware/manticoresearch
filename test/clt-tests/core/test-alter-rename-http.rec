@@ -102,7 +102,7 @@ curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles2%20RENAME%20ar
 ––– output –––
 [{"total":0,"error":"","warning":""}]
 ––– comment –––
-Final verification of table state
+Final verification of table state (test2)
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––

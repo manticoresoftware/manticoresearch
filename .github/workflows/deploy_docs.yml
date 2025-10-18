@@ -14,6 +14,9 @@ env:
   DOCS_AUTOCOMMIT_TITLE: Docs_examples_update
 
 jobs:
+  check:
+    uses: ./.github/workflows/check_docs.yml
+    secrets: inherit
   commit_info:
     name: Commit info
     runs-on: ubuntu-22.04
@@ -27,6 +30,7 @@ jobs:
 
   docs_autocommit_check:
     name: Check for doc deployment autocommits
+    needs: [check]
     runs-on: ubuntu-22.04
     outputs:
       res: ${{ steps.check.outputs.res }}
@@ -91,5 +95,5 @@ jobs:
         if: always()
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
-          name: Docs error artifact
+          name: Docs deploy error artifact
           path: $DOCS_ERRORS_DIR

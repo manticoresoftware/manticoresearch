@@ -7621,6 +7621,7 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			tMultiArgs.m_iTotalDocs = iTotalDocs;
 			tMultiArgs.m_iThreads = dSplits[iChunk];
 			tMultiArgs.m_iTotalThreads = iThreads;
+			tMultiArgs.m_bUseSICache = tArgs.m_bUseSICache;
 
 			// we use sorters in both disk chunks and ram chunks,
 			// that's why we don't want to move to a new schema before we searched ram chunks

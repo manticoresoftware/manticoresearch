@@ -1393,6 +1393,29 @@ seamless_rotate = 1
 ```
 <!-- end -->
 
+### secondary_index_block_cache
+<!-- example conf secondary_index_block_cache -->
+
+This option specifies the size of the block cache used by secondary indexes. It is optional, with a default of 8 MB. When secondary indexes work with filters that contain many values (e.g., IN() filters), they read and process metadata blocks for these values.
+In joined queries, this process is repeated for each batch of rows from the left table, and each batch may reread the same metadata within a single joined query. This can severely affect performance. The metadata block cache keeps these blocks in memory so they
+can be reused by subsequent batches.
+
+The cache is only used in joined queries and has no effect on non-joined queries. Note that the cache size limit applies per attribute and per secondary index. Each attribute within each disk chunk operates within this limit. In the worst case, the total memory
+usage can be estimated by multiplying the limit by the number of disk chunks and the number of attributes used in joined queries.
+
+Setting `secondary_index_block_cache = 0` disables the cache.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+secondary_index_block_cache = 16M
+```
+
+<!-- end -->
+
 ### secondary_indexes
 <!-- example conf secondary_indexes -->
 

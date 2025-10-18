@@ -17,15 +17,15 @@
     * [• В Windows](Starting_the_server/Windows.md)
     * [• В MacOS](Starting_the_server/MacOS.md)
 * [3️⃣ Создание таблицы](Creating_a_table.md)
-    * [⪢ Типы данных](Creating_a_table/Data_types.md)
+    * [≫ Типы данных](Creating_a_table/Data_types.md)
         * [• Хранение атрибутов по строкам и по столбцам](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
-    * [⪢ Создание локальной таблицы](Creating_a_table/Local_tables.md)
+    * [≫ Создание локальной таблицы](Creating_a_table/Local_tables.md)
         * [✔ Таблица реального времени](Creating_a_table/Local_tables/Real-time_table.md)
         * [• Простая таблица](Creating_a_table/Local_tables/Plain_table.md)
         * [• Настройки простой и реальной таблиц](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
         * [• Перколирующая таблица](Creating_a_table/Local_tables/Percolate_table.md)
         * [• Шаблонная таблица](Creating_a_table/Local_tables/Template_table.md)
-    * [⪢ NLP и токенизация]
+    * [≫ NLP и токенизация]
         * [• Токенизация данных](Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
         * [• Поддерживаемые языки](Creating_a_table/NLP_and_tokenization/Supported_languages.md)
         * [• Языки с непрерывным письмом](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
@@ -36,18 +36,18 @@
         * [• Исключения](Creating_a_table/NLP_and_tokenization/Exceptions.md)
         * [• Морфология](Creating_a_table/NLP_and_tokenization/Morphology.md)
         * [• Продвинутая HTML-токенизация](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md)
-    * [⪢ Создание распределённой таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
+    * [≫ Создание распределённой таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• Создание локальной распределённой таблицы](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• Удалённые таблицы](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
 * [• Список таблиц](Listing_tables.md)
 * [• Удаление таблицы](Deleting_a_table.md)
 * [• Очистка таблицы](Emptying_a_table.md)
-* [⪢ Создание кластера](Creating_a_cluster/Creating_a_cluster.md)
+* [≫ Создание кластера](Creating_a_cluster/Creating_a_cluster.md)
     * [Добавление нового узла](Creating_a_cluster/Adding_a_new_node.md)
-    * [⪢ Удалённые узлы](Creating_a_cluster/Remote_nodes.md)
+    * [≫ Удалённые узлы](Creating_a_cluster/Remote_nodes.md)
         * [Зеркалирование](Creating_a_cluster/Remote_nodes/Mirroring.md)
         * [Балансировка нагрузки](Creating_a_cluster/Remote_nodes/Load_balancing.md)
-    * [⪢ Настройка репликации](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)
+    * [≫ Настройка репликации](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)
         * [Создание репликационного кластера](Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md)
         * [Присоединение к репликационному кластеру](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)
         * [Удаление репликационного кластера](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md)
@@ -60,13 +60,13 @@
     * [Протокол MySQL](Connecting_to_the_server/MySQL_protocol.md)
     * [HTTP](Connecting_to_the_server/HTTP.md)
     * [SQL через HTTP](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
-* [⪢ Создание и изменение данных](Data_creation_and_modification/Data_creation_and_modification.md)
-    * [⪢ Добавление документов в таблицу]
+* [≫ Создание и изменение данных](Data_creation_and_modification/Data_creation_and_modification.md)
+    * [≫ Добавление документов в таблицу]
         * [✔ Добавление документов в таблицу реального времени](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
         * [Добавление правил в перколирующую таблицу](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
-    * [⪢ Добавление данных из внешних хранилищ](Data_creation_and_modification/Adding_data_from_external_storages.md)
+    * [≫ Добавление данных из внешних хранилищ](Data_creation_and_modification/Adding_data_from_external_storages.md)
         * [Создание простых таблиц](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
-        * [⪢ Получение из баз данных]
+        * [≫ Получение из баз данных]
             * [Введение](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction.md)
             * [Подключение к базе данных](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md)
             * [Выполнение запросов получения данных](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md)
@@ -75,13 +75,13 @@
         * [Получение из XML потока](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_XML_streams.md)
         * [• Получение из CSV,TSV](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_CSV,TSV.md)
         * [• Схема главная+дельта](Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)
-        * [⪢ Добавление данных из таблиц]
+        * [≫ Добавление данных из таблиц]
             * [• Слияние таблиц](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
             * [• Killlists в плоских таблицах](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
             * [• Присоединение одной таблицы к другой](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
             * [• Импорт RT таблицы](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
         * [• Поворот таблицы](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
-    * [⪢ Обновление документов]
+    * [≫ Обновление документов]
         * [• REPLACE vs UPDATE](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)
         * [• REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md)
         * [• UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md)
@@ -89,7 +89,7 @@
     * [• Транзакции](Data_creation_and_modification/Transactions.md)
 * [5️⃣ Поиск]
     * [• Введение](Searching/Intro.md)
-    * [⪢ Поиск по полнотекстовому совпадению]
+    * [≫ Поиск по полнотекстовому совпадению]
         * [• Основное использование](Searching/Full_text_matching/Basic_usage.md)
         * [• Операторы](Searching/Full_text_matching/Operators.md)
         * [• Экранирование](Searching/Full_text_matching/Escaping.md)
@@ -124,7 +124,7 @@
     * [• Обновление настроек полнотекста в простом режиме](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• Перестроение вторичного индекса](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Изменение распределённой таблицы](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
-* [⪢ Функции]
+* [≫ Функции]
     * [• Математические функции](Functions/Mathematical_functions.md)
     * [• Функции поиска и ранжирования](Functions/Searching_and_ranking_functions.md)
     * [• Функции приведения типов](Functions/Type_casting_functions.md)
@@ -133,7 +133,7 @@
     * [• Геопространственные функции](Functions/Geo_spatial_functions.md)
     * [• Функции строк](Functions/String_functions.md)
     * [• Другие функции](Functions/Other_functions.md)
-* [⪢ Защита и компактирование таблицы]
+* [≫ Защита и компактирование таблицы]
     * [• Резервное копирование и восстановление](Securing_and_compacting_a_table/Backup_and_restore.md)
     * [• Несколько слов о структуре RT таблицы](Securing_and_compacting_a_table/RT_table_structure.md)
     * [• Сброс RAM-чанка в новый дисковый чанк](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md)
@@ -143,16 +143,16 @@
     * [• Заморозка таблицы](Securing_and_compacting_a_table/Freezing_a_table.md)
     * [• Сброс атрибутов](Securing_and_compacting_a_table/Flushing_attributes.md)
     * [• Сброс имен хостов](Securing_and_compacting_a_table/Flushing_hostnames.md)
-* [⪢ Безопасность]
+* [≫ Безопасность]
     * [• SSL](Security/SSL.md)
     * [• Только для чтения](Security/Read_only.md)
-* [⪢ Логирование]
+* [≫ Логирование]
     * [• Логирование запросов](Logging/Query_logging.md)
     * [• Логирование сервера](Logging/Server_logging.md)
     * [• Бинарное логирование](Logging/Binary_logging.md)
     * [• Логирование Docker](Logging/Docker_logging.md)
     * [• Ротация логов запросов и сервера](Logging/Rotating_query_and_server_logs.md)
-* [⪢ Информация и управление узлом]
+* [≫ Информация и управление узлом]
     * [• Статус узла](Node_info_and_management/Node_status.md)
     * [• SHOW META](Node_info_and_management/SHOW_META.md)
     * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md)
@@ -161,14 +161,14 @@
     * [• KILL](Node_info_and_management/KILL.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
     * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
-    * [⪢ Профилирование]
+    * [≫ Профилирование]
         * [• Профилирование запросов](Node_info_and_management/Profiling/Query_profile.md)
         * [• План запроса](Node_info_and_management/Profiling/Query_plan.md)
-    * [⪢ Настройки и статус таблиц]
+    * [≫ Настройки и статус таблиц]
         * [• SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md)
         * [• SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md)
         * [• SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
-* [⪢ Настройки сервера]
+* [≫ Настройки сервера]
     * [• Searchd](Server_settings/Searchd.md)
     * [• Общие](Server_settings/Common.md)
     * [• Специальные суффиксы](Server_settings/Special_suffixes.md)
@@ -176,22 +176,22 @@
     * [• Комментарии](Server_settings/Comments.md)
     * [• Наследование объявлений таблиц и источников](Server_settings/Inheritance_of_index_and_source_declarations.md)
     * [• Установка переменных онлайн](Server_settings/Setting_variables_online.md)
-* [⪢ Интеграция]
+* [≫ Интеграция]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
     * [Kibana](Integration/Kibana.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
-* [⪢ Расширения]
+* [≫ Расширения]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)
-    * [⪢ UDF и плагины](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+    * [≫ UDF и плагины](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
         * [Список плагинов](Extensions/UDFs_and_Plugins/Listing_plugins.md)
-        * [⪢ UDF]
+        * [≫ UDF]
             * [Создание функции](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)
             * [Удаление функции](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md)
-        * [⪢ Плагины]
+        * [≫ Плагины]
             * [• Создание плагина](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md)
             * [• Удаление плагина](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md)
             * [• Включение и отключение плагинов Buddy](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md)

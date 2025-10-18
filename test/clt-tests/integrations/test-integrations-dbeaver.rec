@@ -438,6 +438,13 @@ ERROR 1064 (42000) at line 1: unknown local table(s) 'test_simple' in search req
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM information_schema.tables"
 ––– output –––
++------------+------------+--------------+
+| table_type | table_name | table_schema |
++------------+------------+--------------+
+| BASE TABLE | categories | Manticore    |
+| BASE TABLE | products   | Manticore    |
+| BASE TABLE | users      | Manticore    |
++------------+------------+--------------+
 ––– input –––
 mysql -h0 -P9306 -e "SHOW PLUGINS"
 ––– output –––
@@ -450,6 +457,13 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as table_count, 'tables' as type FROM infor
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA='manticore'"
 ––– output –––
++------------+------------+--------------+
+| table_type | table_name | table_schema |
++------------+------------+--------------+
+| BASE TABLE | categories | Manticore    |
+| BASE TABLE | products   | Manticore    |
+| BASE TABLE | users      | Manticore    |
++------------+------------+--------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_timestamp (id INT, created_at TIMESTAMP)"
 ––– output –––

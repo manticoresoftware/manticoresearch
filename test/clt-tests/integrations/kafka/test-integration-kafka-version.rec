@@ -1,0 +1,191 @@
+––– block: ../../base/dind/init –––
+––– comment –––
+Kafka Integration Version Test
+––– input –––
+VERSIONS=("3.7.0" "3.7.1" "3.8.0" "3.8.1" "4.0.0" "4.0.1" "4.1.0")
+PASSED=0
+FAILED=0
+
+echo "Kafka Integration Version Test"
+echo "Testing:"
+for VERSION in "${VERSIONS[@]}"; do
+    echo "$VERSION"
+done
+echo ""
+
+echo "Preparing images..."
+docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest >/dev/null 2>&1
+for VERSION in "${VERSIONS[@]}"; do
+    docker pull -q apache/kafka:$VERSION >/dev/null 2>&1
+done
+echo "✓ Images ready"
+echo ""
+
+for VERSION in "${VERSIONS[@]}"; do
+    echo "→ Testing Kafka $VERSION"
+
+    # Cleanup
+    docker rm -f mtest ktest >/dev/null 2>&1 || true
+    docker network rm test-net >/dev/null 2>&1 || true
+
+    # Create network
+    docker network create test-net --driver bridge >/dev/null 2>&1
+
+    # Start Manticore (suppress platform warning)
+    docker run -d --network=test-net --name mtest \
+        ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
+        sleep infinity >/dev/null 2>&1
+
+    # Start searchd
+    docker exec -d mtest searchd --logdebugvv >/dev/null 2>&1
+    sleep 2
+
+    # Wait for Manticore
+    MANTICORE_READY=0
+    for i in $(seq 1 40); do
+        if docker exec mtest mysql -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1; then
+            MANTICORE_READY=1
+            break
+        fi
+        sleep 1
+    done
+
+    if [ $MANTICORE_READY -eq 0 ]; then
+        echo "  ✗ Manticore failed"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+
+    # Start Kafka (suppress platform warning)
+    docker run -d --network=test-net --name ktest \
+        -e KAFKA_NODE_ID=1 \
+        -e KAFKA_PROCESS_ROLES=broker,controller \
+        -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093 \
+        -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://ktest:9092 \
+        -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+        -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+        -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@ktest:9093 \
+        -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+        -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
+        apache/kafka:$VERSION >/dev/null 2>&1
+
+    # Wait for Kafka
+    sleep 5
+    KAFKA_READY=0
+    for i in $(seq 1 60); do
+        if docker exec ktest /opt/kafka/bin/kafka-broker-api-versions.sh \
+           --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+            KAFKA_READY=1
+            break
+        fi
+        sleep 3
+    done
+
+    if [ $KAFKA_READY -eq 0 ]; then
+        echo "  ✗ Kafka failed"
+        FAILED=$((FAILED + 1))
+        docker rm -f mtest ktest >/dev/null 2>&1 || true
+        docker network rm test-net >/dev/null 2>&1 || true
+        continue
+    fi
+
+    sleep 3
+    SQL_VERSION=$(echo $VERSION | tr '.' '_')
+
+    # Create topic
+    if ! docker exec ktest /opt/kafka/bin/kafka-topics.sh \
+        --create --topic test-$VERSION --bootstrap-server localhost:9092 \
+        --partitions 1 --replication-factor 1 >/dev/null 2>&1; then
+        echo "  ✗ Topic failed"
+        FAILED=$((FAILED + 1))
+        docker rm -f mtest ktest >/dev/null 2>&1 || true
+        docker network rm test-net >/dev/null 2>&1 || true
+        continue
+    fi
+
+    sleep 2
+
+    # Create source
+    if ! docker exec mtest mysql -h0 -P9306 -e \
+        "CREATE SOURCE s_$SQL_VERSION (id bigint, term text) \
+         type='kafka' broker_list='ktest:9092' topic_list='test-$VERSION' \
+         consumer_group='g_$SQL_VERSION' num_consumers='1' batch=10;" >/dev/null 2>&1; then
+        echo "  ✗ Source failed"
+        FAILED=$((FAILED + 1))
+        docker rm -f mtest ktest >/dev/null 2>&1 || true
+        docker network rm test-net >/dev/null 2>&1 || true
+        continue
+    fi
+
+    # Create table
+    docker exec mtest mysql -h0 -P9306 -e \
+        "CREATE TABLE d_$SQL_VERSION (id bigint, name text);" >/dev/null 2>&1
+
+    # Create MV
+    docker exec mtest mysql -h0 -P9306 -e \
+        "CREATE MATERIALIZED VIEW v_$SQL_VERSION TO d_$SQL_VERSION \
+         AS SELECT id, term as name FROM s_$SQL_VERSION;" >/dev/null 2>&1
+
+    # Send data
+    for i in 1 2 3; do
+        echo "{\"id\":$i,\"term\":\"test$i\"}" | \
+        docker exec -i ktest /opt/kafka/bin/kafka-console-producer.sh \
+            --bootstrap-server localhost:9092 --topic test-$VERSION >/dev/null 2>&1
+    done
+
+    # Wait and verify
+    sleep 15
+
+    # Use -N flag and extract only digits for clean number
+    COUNT=$(docker exec mtest mysql -h0 -P9306 -N -e \
+        "SELECT COUNT(*) FROM d_$SQL_VERSION" 2>/dev/null | tr -cd '0-9')
+
+    if [ "$COUNT" = "3" ]; then
+        echo "  ✓ PASS ($COUNT records)"
+        PASSED=$((PASSED + 1))
+    else
+        echo "  ✗ FAIL (expected 3, got $COUNT)"
+        FAILED=$((FAILED + 1))
+    fi
+
+    # Cleanup
+    docker rm -f mtest ktest >/dev/null 2>&1 || true
+    docker network rm test-net >/dev/null 2>&1 || true
+done
+
+# Final results
+echo ""
+echo "Results: $PASSED passed, $FAILED failed"
+if [ $FAILED -eq 0 ]; then
+    echo "✓ ALL TESTS PASSED"
+else
+    echo "✗ SOME TESTS FAILED"
+fi
+––– output –––
+Kafka Integration Version Test
+Testing:
+3.7.0
+3.7.1
+3.8.0
+3.8.1
+4.0.0
+4.0.1
+4.1.0
+Preparing images...
+✓ Images ready
+→ Testing Kafka 3.7.0
+  ✓ PASS (3 records)
+→ Testing Kafka 3.7.1
+  ✓ PASS (3 records)
+→ Testing Kafka 3.8.0
+  ✓ PASS (3 records)
+→ Testing Kafka 3.8.1
+  ✓ PASS (3 records)
+→ Testing Kafka 4.0.0
+  ✓ PASS (3 records)
+→ Testing Kafka 4.0.1
+  ✓ PASS (3 records)
+→ Testing Kafka 4.1.0
+  ✓ PASS (3 records)
+Results: 7 passed, 0 failed
+✓ ALL TESTS PASSED

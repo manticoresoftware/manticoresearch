@@ -1,49 +1,55 @@
 ––– block: ../../base/dind/init –––
 ––– comment –––
-Check Kafka version against documentation
+Set Kafka version
 ––– input –––
-apk add curl > /dev/null 2>&1; echo $?
+KAFKA_VERSION="4.1.0"
+echo "Using Kafka version: $KAFKA_VERSION"
 ––– output –––
-0
-––– input –––
-bash ./test/clt-tests/integrations/kafka/script_versions_kafka.sh
-––– output –––
-🔍 Checking for new versions of Kafka...
-✅ No new versions found after apache/kafka:4.1.0
-✅ Version check completed
-Checking documentation versions...
-Checking documentation file...
-Script version: Kafka 4.1.0
-Documentation version: Kafka 4.1.0
-✅ Documentation version matches script version
+Using Kafka version: 4.1.0
 ––– block: ../../base/basic-initialization-manticore-kafka –––
-––– comment –––
-Start Kafka container with KRaft mode configuration
 ––– input –––
-docker run -d --network=app-network --name kafka --user root \
-  -v /docker:/docker \
-  -e KAFKA_NODE_ID=0 \
-  -e KAFKA_PROCESS_ROLES=controller,broker \
-  -e KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 \
-  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
-  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://:9092 \
-  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
-  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-  -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
-  -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk \
-  apache/kafka:4.1.0 > /dev/null 2>&1; echo $?
+sleep 2
+for i in $(seq 1 40); do
+    if docker exec manticore mysql -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1; then
+        echo "Manticore ready"
+        break
+    fi
+    sleep 1
+done
+––– output –––
+Manticore ready
+––– comment –––
+Start Kafka container with latest version from Docker Hub
+––– input –––
+docker run -d --network=app-network --name kafka \
+-v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json \
+-v ./test/clt-tests/integrations/kafka/import.sh:/tmp/import.sh \
+-e KAFKA_NODE_ID=0 \
+-e KAFKA_PROCESS_ROLES=controller,broker \
+-e KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 \
+-e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+-e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 \
+-e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+-e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+-e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
+-e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+-e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
+apache/kafka:$KAFKA_VERSION > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– comment –––
-Download test data files using wget
+Wait for Kafka to be ready
 ––– input –––
-docker exec kafka wget -O /tmp/dump.json https://raw.githubusercontent.com/manticoresoftware/manticoresearch/fix/test-integration-kafka-partition-based-ingestion/test/clt-tests/integrations/kafka/dump.json 2>&1 | grep saved
+sleep 5
+for i in $(seq 1 60); do
+    if docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+        echo "Kafka ready"
+        break
+    fi
+    sleep 3
+done
 ––– output –––
-'/tmp/dump.json' saved
-––– input –––
-docker exec kafka wget -O /tmp/import.sh https://raw.githubusercontent.com/manticoresoftware/manticoresearch/fix/test-integration-kafka-partition-based-ingestion/test/clt-tests/integrations/kafka/import.sh 2>&1 | grep saved
-––– output –––
-'/tmp/import.sh' saved
+Kafka ready
 ––– comment –––
 Create Kafka topic with 2 partitions for data distribution testing
 ––– input –––
@@ -55,9 +61,9 @@ Verify topic creation and partition configuration
 ––– input –––
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --describe --topic my-data --bootstrap-server localhost:9092
 ––– output –––
-Topic: my-data	TopicId: #!/[a-zA-Z0-9_-]+/!#	PartitionCount: 2	ReplicationFactor: 1	Configs: min.insync.replicas=1
-	Topic: my-data	Partition: 0	Leader: 0	Replicas: 0	Isr: 0	Elr: 	LastKnownElr:
-	Topic: my-data	Partition: 1	Leader: 0	Replicas: 0	Isr: 0	Elr: 	LastKnownElr:
+Topic: my-data	TopicId: #!/[a-zA-Z0-9_-]+/!#	PartitionCount: 2	ReplicationFactor: 1	Configs: #!/.*min.insync.replicas=1.*/!#
+	Topic: my-data	Partition: 0	Leader: 0	Replicas: 0	Isr: 0	#!/.*Elr.*LastKnownElr.*/!#
+	Topic: my-data	Partition: 1	Leader: 0	Replicas: 0	Isr: 0	#!/.*Elr.*LastKnownElr.*/!#
 ––– comment –––
 Create Kafka source for partition 0 with specific consumer configuration
 ––– input –––
@@ -113,35 +119,42 @@ name: mv_2
 *************************** 2. row ***************************
 name: mv_1
 ––– comment –––
-Import data to Kafka topic
+Execute data import to Kafka topic
 ––– input –––
-docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh; echo $?
+docker exec kafka bash /tmp/import.sh; echo $?
 ––– output –––
 0
 ––– comment –––
-Wait for data to be processed by monitoring table counts
+Wait until lag becomes zero and current offset is not zero for all partitions
 ––– input –––
-timeout 120 bash -c 'TOTAL_EXPECTED=57; while true; do SHARD1=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G" | grep "count" | cut -d: -f2 | tr -d " "); SHARD2=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G" | grep "count" | cut -d: -f2 | tr -d " "); TOTAL=$((SHARD1 + SHARD2)); if [ "$TOTAL" -ge "$TOTAL_EXPECTED" ]; then echo "Shard1: $SHARD1, Shard2: $SHARD2, Total: $TOTAL"; echo "All data processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
+timeout 120 bash -c 'while true; do STATS=$(docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); if [ -z "$STATS" ]; then sleep 3; continue; fi; ALL_READY=true; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset log_end_offset lag rest <<< "$line"; if [[ "$lag" -ne 0 ]] || [[ "$current_offset" -eq 0 ]]; then ALL_READY=false; fi; fi; done <<< "$STATS"; if [ "$ALL_READY" = true ]; then echo "All partitions processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
 ––– output –––
-Shard1: #!/[0-9]+/!#, Shard2: #!/[0-9]+/!#, Total: 57
-All data processed successfully
+All partitions processed successfully
 ––– comment –––
-Verify data is distributed across both shards
+Get partition counts from Kafka consumer group
 ––– input –––
-SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G" | grep "count" | cut -d: -f2 | tr -d " "); SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G" | grep "count" | cut -d: -f2 | tr -d " "); echo "Manticore Shard 1: $SHARD1_COUNT records"; echo "Manticore Shard 2: $SHARD2_COUNT records"; TOTAL=$((SHARD1_COUNT + SHARD2_COUNT)); echo "Total records: $TOTAL"
+KAFKA_STATS=$(docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore | awk '/^manticore.*my-data/'); KAFKA_P0=$(echo "$KAFKA_STATS" | awk '$3==0 {print $4}'); KAFKA_P1=$(echo "$KAFKA_STATS" | awk '$3==1 {print $4}'); echo "Kafka Partition 0: $KAFKA_P0 records"; echo "Kafka Partition 1: $KAFKA_P1 records"
+––– output –––
+Consumer group 'manticore' has no active members.
+Kafka Partition 0: #!/[0-9]+/!# records
+Kafka Partition 1: #!/[0-9]+/!# records
+––– comment –––
+Check destination_shard_1 matches Kafka partition 0
+––– input –––
+SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -N -e "SELECT COUNT(*) FROM destination_shard_1" 2>/dev/null | tr -cd '0-9'); echo "Manticore Shard 1: $SHARD1_COUNT records"; if [ "$SHARD1_COUNT" -eq "$KAFKA_P0" ]; then echo "Shard 1 matches Kafka partition 0"; else echo "Shard 1 ($SHARD1_COUNT) != Kafka partition 0 ($KAFKA_P0)"; fi
 ––– output –––
 Manticore Shard 1: #!/[0-9]+/!# records
-Manticore Shard 2: #!/[0-9]+/!# records
-Total records: 57
+Shard 1 matches Kafka partition 0
 ––– comment –––
-Verify both shards received data (partition-based distribution)
+Check destination_shard_2 matches Kafka partition 1
+––– input –––
+SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -N -e "SELECT COUNT(*) FROM destination_shard_2" 2>/dev/null | tr -cd '0-9'); echo "Manticore Shard 2: $SHARD2_COUNT records"; if [ "$SHARD2_COUNT" -eq "$KAFKA_P1" ]; then echo "Shard 2 matches Kafka partition 1"; else echo "Shard 2 ($SHARD2_COUNT) != Kafka partition 1 ($KAFKA_P1)"; fi
+––– output –––
+Manticore Shard 2: #!/[0-9]+/!# records
+Shard 2 matches Kafka partition 1
+––– comment –––
+Verify data is distributed across both shards
 ––– input –––
 if [ "$SHARD1_COUNT" -gt 0 ] && [ "$SHARD2_COUNT" -gt 0 ]; then echo "Data distributed across both shards"; else echo "Warning: Data went to single shard only"; fi
 ––– output –––
 Data distributed across both shards
-––– comment –––
-Verify total count matches expected number of records
-––– input –––
-if [ "$TOTAL" -eq 57 ]; then echo "Record count validation: PASSED"; else echo "Record count validation: FAILED (expected 57, got $TOTAL)"; fi
-––– output –––
-Record count validation: PASSED

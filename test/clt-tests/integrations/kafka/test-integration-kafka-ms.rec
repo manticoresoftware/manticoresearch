@@ -11,8 +11,8 @@ Using Kafka version: 4.1.0
 Start Kafka container with latest version from Docker Hub
 ––– input –––
 docker run -d --network=app-network --name kafka --platform linux/amd64 \
--v /docker/test/clt-tests/integrations/kafka/import.sh:/import.sh \
--v /docker/test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json \
+-v ./test/clt-tests/integrations/kafka/import.sh:/import.sh \
+-v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json \
 -e KAFKA_NODE_ID=1 \
 -e KAFKA_PROCESS_ROLES=controller,broker \
 -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 \

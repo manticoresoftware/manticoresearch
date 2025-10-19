@@ -7,8 +7,10 @@ echo "Using Kafka version: $KAFKA_VERSION"
 ––– output –––
 Using Kafka version: 4.1.0
 ––– block: ../../base/basic-initialization-manticore-kafka –––
+––– comment –––
+Start Kafka container with KRaft mode configuration
 ––– input –––
-docker run -it -d --network=app-network --name kafka -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnamilegacy/kafka:3.7.0 > /dev/null 2>&1; echo $?
+docker run -it -d --network=app-network --name kafka --platform linux/amd64 -v /docker/test/clt-tests/integrations/kafka:/tmp -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk apache/kafka:$KAFKA_VERSION > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -36,8 +38,8 @@ Verify topic creation and partition configuration
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --describe --topic my-data --bootstrap-server localhost:9092
 ––– output –––
 Topic: my-data	TopicId: #!/[a-zA-Z0-9_-]+/!#	PartitionCount: 2	ReplicationFactor: 1	Configs: #!/.*min.insync.replicas=1.*/!#
-	Topic: my-data	Partition: 0	Leader: 0	Replicas: 0	Isr: 0	#!/.*Elr.*LastKnownElr.*/!#
-	Topic: my-data	Partition: 1	Leader: 0	Replicas: 0	Isr: 0	#!/.*Elr.*LastKnownElr.*/!#
+	Topic: my-data	Partition: 0	Leader: #!/[0-9]+/!#	Replicas: #!/[0-9]+/!#	Isr: #!/[0-9]+/!#	#!/.*Elr.*LastKnownElr.*/!#
+	Topic: my-data	Partition: 1	Leader: #!/[0-9]+/!#	Replicas: #!/[0-9]+/!#	Isr: #!/[0-9]+/!#	#!/.*Elr.*LastKnownElr.*/!#
 ––– comment –––
 Create Kafka source for partition 0 with specific consumer configuration
 ––– input –––
@@ -93,9 +95,9 @@ name: mv_2
 *************************** 2. row ***************************
 name: mv_1
 ––– comment –––
-Execute data import to Kafka topic
+Make import script executable and execute data import to Kafka topic
 ––– input –––
-docker exec kafka bash /tmp/import.sh; echo $?
+docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh; echo $?
 ––– output –––
 0
 ––– comment –––

@@ -2,7 +2,7 @@
 
 > 注意：此功能需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法使用，请确保 Buddy 已安装。
 
-Manticore 支持通过 Kafka 源和物化视图集成 [Apache Kafka](https://kafka.apache.org/) 实时数据摄取，实现实时数据索引和搜索。目前，**apache/kafka 版本 3.7.0-4.0.0** 已测试并支持。
+Manticore 支持通过 Kafka 源和物化视图集成 [Apache Kafka](https://kafka.apache.org/) 实时数据摄取，实现实时数据索引和搜索。目前，已测试并支持 **apache/kafka 版本 3.7.0-4.1.0**。
 
 入门步骤：
 1. **定义源：** 指定 Manticore Search 将从哪个 Kafka 主题读取消息。该配置包括代理的主机、端口及主题名称等详细信息。

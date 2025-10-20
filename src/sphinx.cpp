@@ -12618,7 +12618,7 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 }
 
 
-bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence )
+bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence, const SuggestArgs_t & tArgs )
 {
 	assert ( pTok->IsQueryTok() );
 	TokenizerRefPtr_c pTokenizer = pTok->Clone ( SPH_CLONE );
@@ -12662,7 +12662,8 @@ bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pT
 	if ( bValidWord )
 	{
 		// lets generate bigrams for short words as trigrams for 5char word could all contain the same wrong symbol
-		if ( m_iCodepoints<6 )
+		// or force bigrams if the option is set
+		if ( m_iCodepoints<6 || tArgs.m_bForceBigrams )
 			m_iNGramLen = 2;
 
 		sphBuildNGrams ( m_sWord.cstr(), m_iLen, m_iNGramLen, m_dTrigrams );

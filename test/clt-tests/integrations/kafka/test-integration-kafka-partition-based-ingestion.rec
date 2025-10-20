@@ -14,13 +14,24 @@ docker run -it -d --network=app-network --name kafka --platform linux/amd64 -v .
 ––– output –––
 0
 ––– comment –––
+Check Kafka container status
+––– input –––
+sleep 2; docker ps -a --filter name=kafka --format "{{.Status}}"
+––– output –––
+#!/Up.*/!#
+––– comment –––
 Wait for Kafka to be ready
 ––– input –––
 sleep 5
 for i in $(seq 1 60); do
-    if docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092
+    if docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; then
         echo "Kafka ready"
         break
+    fi
+    if [ $i -eq 60 ]; then
+        echo "Kafka timeout - showing logs:"
+        docker logs kafka 2>&1 | tail -50
+        exit 1
     fi
     sleep 3
 done

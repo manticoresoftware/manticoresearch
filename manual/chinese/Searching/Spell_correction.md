@@ -229,6 +229,7 @@ options: N as option_name[, M as another_option, ...]
 | result_line | 另一种显示数据的模式，每行分别返回所有建议、距离和文档数 | 0 |
 | non_char | 不跳过包含非字母符号的字典词 | 0（跳过此类词） |
 | sentence | 返回原始句子，并将最后一个单词替换为匹配词。 | 0（不返回完整句子） |
+| force_bigrams | 强制对所有单词长度使用双字母组合（2字符n-gram）而非三字母组合，这可以改善包含转置错误的单词的匹配效果 | 0（对长度≥6的单词使用三字母组合） |
 
 为了展示其工作方式，我们创建一个表并添加几个文档。
 
@@ -350,6 +351,28 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 | distance | 1      |
 | docs     | 1      |
 +----------+--------+
+```
+<!-- end -->
+
+##### 使用 force_bigrams 更好地处理转置错误
+`force_bigrams` 选项可以帮助处理包含转置错误的单词，比如 "ipohne" 与 "iphone"。通过使用双字母组合而非三字母组合，算法能更好地处理字符的转置情况。
+
+<!-- intro -->
+##### 例子：
+
+<!-- request Example -->
+
+```sql
+CALL SUGGEST('ipohne', 'products', 1 as force_bigrams);
+```
+<!-- response Example -->
+
+```sql
++--------+----------+------+
+| suggest| distance | docs |
++--------+----------+------+
+| iphone | 2        | 1    |
++--------+----------+------+
 ```
 <!-- end -->
 

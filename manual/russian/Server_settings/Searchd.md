@@ -1,73 +1,73 @@
-# Section "Searchd" in configuration
+# Раздел "Searchd" в конфигурации
 
-Ниже приведены настройки, которые используются в разделе `searchd` файла конфигурации Manticore Search для управления поведением сервера. Ниже представлен краткий обзор каждой настройки:
+Ниже приведены настройки, которые используются в разделе `searchd` файла конфигурации Manticore Search для управления поведением сервера. Ниже приводится краткое описание каждой настройки:
 
 ### access_plain_attrs
 
-Эта настройка задает дефолтные значения для экземпляра для [access_plain_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, со значением по умолчанию `mmap_preread`.
+Эта настройка устанавливает глобальные значения по умолчанию для [access_plain_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, значение по умолчанию — `mmap_preread`.
 
-Директива `access_plain_attrs` позволяет определить значение по умолчанию для [access_plain_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы на уровне таблиц имеют более высокий приоритет и переопределяют это значение по умолчанию для экземпляра, обеспечивая более тонкое управление.
+Директива `access_plain_attrs` позволяет определить значение по умолчанию для [access_plain_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы для отдельных таблиц имеют более высокий приоритет и переопределят это глобальное значение по умолчанию, обеспечивая более тонкий контроль.
 
 ### access_blob_attrs
 
-Эта настройка задает дефолтные значения для экземпляра для [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, со значением по умолчанию `mmap_preread`.
+Эта настройка устанавливает глобальные значения по умолчанию для [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, значение по умолчанию — `mmap_preread`.
 
-Директива `access_blob_attrs` позволяет определить значение по умолчанию для [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы на уровне таблиц имеют более высокий приоритет и переопределяют это значение по умолчанию для экземпляра, обеспечивая более тонкое управление.
+Директива `access_blob_attrs` позволяет определить значение по умолчанию для [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы для отдельных таблиц имеют более высокий приоритет и переопределят это глобальное значение по умолчанию, обеспечивая более тонкий контроль.
 
 ### access_doclists
 
-Эта настройка задает дефолтные значения для экземпляра для [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, со значением по умолчанию `file`.
+Эта настройка устанавливает глобальные значения по умолчанию для [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, значение по умолчанию — `file`.
 
-Директива `access_doclists` позволяет определить значение по умолчанию для [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы на уровне таблиц имеют более высокий приоритет и переопределяют это значение по умолчанию для экземпляра, обеспечивая более тонкое управление.
+Директива `access_doclists` позволяет определить значение по умолчанию для [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы для отдельных таблиц имеют более высокий приоритет и переопределят это глобальное значение по умолчанию, обеспечивая более тонкий контроль.
 
 ### access_hitlists
 
-Эта настройка задает дефолтные значения для экземпляра для [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, со значением по умолчанию `file`.
+Эта настройка устанавливает глобальные значения по умолчанию для [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, значение по умолчанию — `file`.
 
-Директива `access_hitlists` позволяет определить значение по умолчанию для [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы на уровне таблиц имеют более высокий приоритет и переопределяют это значение по умолчанию для экземпляра, обеспечивая более тонкое управление.
+Директива `access_hitlists` позволяет определить значение по умолчанию для [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы для отдельных таблиц имеют более высокий приоритет и переопределят это глобальное значение по умолчанию, обеспечивая более тонкий контроль.
 
 ### access_dict
 
-Эта настройка задает дефолтные значения для экземпляра для [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, со значением по умолчанию `mmap_preread`.
+Эта настройка устанавливает глобальные значения по умолчанию для [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). Она является необязательной, значение по умолчанию — `mmap_preread`.
 
-Директива `access_dict` позволяет определить значение по умолчанию для [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы на уровне таблиц имеют более высокий приоритет и переопределяют это значение по умолчанию для экземпляра, обеспечивая более тонкое управление.
+Директива `access_dict` позволяет определить значение по умолчанию для [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для всех таблиц, управляемых этим экземпляром searchd. Директивы для отдельных таблиц имеют более высокий приоритет и переопределят это глобальное значение по умолчанию, обеспечивая более тонкий контроль.
 
 ### agent_connect_timeout
 
-Эта настройка задает дефолтные значения для экземпляра для параметра [agent_connect_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout).
+Эта настройка устанавливает глобальные значения по умолчанию для параметра [agent_connect_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout).
 
 
 ### agent_query_timeout
 
-Эта настройка задает дефолтные значения для экземпляра для параметра [agent_query_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout). Она может быть переопределена для каждого запроса с помощью конструкции `OPTION agent_query_timeout=XXX`.
+Эта настройка устанавливает глобальные значения по умолчанию для параметра [agent_query_timeout](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout). Она может быть переопределена для каждого запроса с помощью условия `OPTION agent_query_timeout=XXX`.
 
 
 ### agent_retry_count
 
-Эта настройка — целое число, которое указывает, сколько раз Manticore будет пытаться подключиться и выполнить запрос к удаленным агентам через распределённую таблицу до сообщения о фатальной ошибке запроса. Значение по умолчанию — 0 (то есть без повторных попыток). Вы также можете задать это значение для каждого запроса отдельно с помощью конструкции `OPTION retry_count=XXX`. Если задана опция на уровне запроса, она переопределит значение, указанное в конфигурации.
+Эта настройка является целочисленным значением, определяющим, сколько раз Manticore попытается подключиться и выполнить запрос к удалённым агентам через распределённую таблицу, прежде чем отобразить фатальную ошибку запроса. Значение по умолчанию — 0 (т.е. без повторных попыток). Вы также можете задать это значение для каждого запроса с помощью условия `OPTION retry_count=XXX`. Если задана опция для конкретного запроса, она переопределит значение, указанное в конфигурации.
 
-Обратите внимание, что если в определении вашей распределённой таблицы используются [агентские зеркала](../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors), сервер будет выбирать другое зеркало для каждой попытки подключения согласно выбранной [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). В этом случае параметр `agent_retry_count` будет суммироваться для всех зеркал в наборе.
+Обратите внимание, что если вы используете [зеркала агентов](../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) в определении вашей распределённой таблицы, сервер будет выбирать другое зеркало для каждой попытки подключения в соответствии с выбранной стратегией [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). В этом случае значение `agent_retry_count` будет агрегироваться для всех зеркал в наборе.
 
-Например, если у вас 10 зеркал и установлено `agent_retry_count=5`, сервер выполнит до 50 попыток, при условии в среднем 5 попыток для каждого из 10 зеркал (с опцией `ha_strategy = roundrobin` это будет так).
+Например, если у вас 10 зеркал и задано `agent_retry_count=5`, сервер попытается выполнить до 50 попыток, предполагая в среднем 5 попыток на каждое из 10 зеркал (с опцией `ha_strategy = roundrobin` это будет так).
 
-Однако значение, указанное в опции `retry_count` для [агента](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent), служит абсолютным лимитом. Другими словами, опция `[retry_count=2]` в определении агента всегда означает максимум 2 попытки, независимо от того, указано ли у вас 1 или 10 зеркал для агента.
+Однако значение, заданное опцией `retry_count` для [агента](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent), служит абсолютным ограничением. Другими словами, опция `[retry_count=2]` в определении агента всегда означает максимум 2 попытки, независимо от того, указано ли у вас 1 или 10 зеркал для этого агента.
 
 ### agent_retry_delay
 
-Эта настройка — целое число в миллисекундах (или [специальных суффиксах](../Server_settings/Special_suffixes.md)), которое указывает задержку перед повторной попыткой запроса к удаленному агенту в случае ошибки. Это значение имеет значение только тогда, когда задан ненулевой [agent_retry_count](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md) или ненулевое значение `retry_count` для отдельного запроса. Значение по умолчанию — 500. Вы также можете указать это значение для каждого запроса отдельно с помощью конструкции `OPTION retry_delay=XXX`. Если задана опция на уровне запроса, она переопределит значение, указанное в конфигурации.
+Эта настройка является целочисленным значением в миллисекундах (или с использованием [special_suffixes](../Server_settings/Special_suffixes.md)), определяющим задержку перед повторной попыткой запроса к удалённому агенту в случае отказа. Это значение актуально только при указанном ненулевом [agent_retry_count](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md) или ненулевом параметре `retry_count` для конкретного запроса. Значение по умолчанию — 500. Вы также можете задать это значение для каждого запроса с помощью условия `OPTION retry_delay=XXX`. Если задана опция для конкретного запроса, она переопределит значение, указанное в конфигурации.
 
 
 ### attr_flush_period
 
 <!-- example conf attr_flush_period -->
-When using [Update](../Data_creation_and_modification/Updating_documents/UPDATE.md) to modify document attributes in real-time, the changes are first written to an in-memory copy of the attributes. These updates occur in a memory-mapped file, meaning the OS decides when to write the changes to disk. Upon normal shutdown of `searchd` (triggered by a `SIGTERM` signal), all changes are forced to be written to disk.
+При использовании [Update](../Data_creation_and_modification/Updating_documents/UPDATE.md) для изменения атрибутов документа в реальном времени, изменения сначала записываются во внутреннюю копию атрибутов в памяти. Эти обновления происходят в памяти, отображённой в файл, что означает, что ОС решает, когда записывать изменения на диск. При нормальном завершении работы `searchd` (инициируемом сигналом `SIGTERM`) все изменения принудительно записываются на диск.
 
-You can also instruct `searchd` to periodically write these changes back to disk to prevent data loss. The interval between these flushes is determined by `attr_flush_period`, specified in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)).
+Вы также можете указать `searchd` периодически записывать эти изменения на диск, чтобы предотвратить потерю данных. Интервал между этими сбросами определяется параметром `attr_flush_period`, указанным в секундах (или с помощью [special_suffixes](../Server_settings/Special_suffixes.md)).
 
-By default, the value is 0, which disables periodic flushing. However, flushing will still occur during a normal shutdown.
+По умолчанию значение равно 0, что отключает периодический сброс. Однако, сброс все равно происходит при нормальном завершении работы.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request Example -->
 
@@ -79,21 +79,21 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ### auto_optimize
 
 <!-- example conf auto_optimize -->
-This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) process for table compaction.
+Этот параметр управляет автоматическим процессом [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) для сжатия таблиц.
 
-By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
-* 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
-* 1 to explicitly enable it
-* to enable it while multiplying the optimization threshold by 2.
+По умолчанию сжатие таблиц происходит автоматически. Вы можете изменить это поведение с помощью параметра `auto_optimize`:
+* 0 для отключения автоматического сжатия таблиц (вы всё ещё можете вызвать `OPTIMIZE` вручную)
+* 1 для явного включения
+* для включения с умножением порога оптимизации на 2.
 
-By default, OPTIMIZE runs until the number of disk chunks is less than or equal to the number of logical CPU cores multiplied by 2.
+По умолчанию OPTIMIZE выполняется, пока количество дисковых чанков меньше или равно количеству логических ядер процессора, умноженному на 2.
 
-However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+Однако, если в таблице есть атрибуты с индексами KNN, этот порог отличается. В этом случае он устанавливается как количество физических ядер процессора, делённое на 2, для улучшения производительности поиска KNN.
 
-Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
+Обратите внимание, что переключение `auto_optimize` в положение вкл или выкл не мешает запуску [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) вручную.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request Disable -->
 ```ini
@@ -110,11 +110,11 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 ### auto_schema
 
 <!-- example conf auto_schema -->
-Manticore supports the automatic creation of tables that don't yet exist but are specified in INSERT statements. This feature is enabled by default. To disable it, set `auto_schema = 0` explicitly in your configuration. To re-enable it, set `auto_schema = 1` or remove the `auto_schema` setting from the configuration.
+Manticore поддерживает автоматическое создание таблиц, которые ещё не существуют, но указаны в операторах INSERT. Эта функция включена по умолчанию. Чтобы отключить её, явно задайте `auto_schema = 0` в вашей конфигурации. Чтобы снова включить, задайте `auto_schema = 1` или удалите параметр `auto_schema` из конфигурации.
 
-Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation.
+Имейте в виду, что HTTP-эндпоинт `/bulk` не поддерживает автоматическое создание таблиц.
 
-> NOTE: The [auto schema functionality](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> ПРИМЕЧАНИЕ: [функция авто-схемы](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
 
 <!-- request Disable -->
 ```ini
@@ -131,18 +131,18 @@ auto_schema = 1 # enable automatic table creation
 ### binlog_flush
 
 <!-- example conf binlog_flush -->
-This setting controls the binary log transaction flush/sync mode. It is optional, with a default value of 2 (flush every transaction, sync every second).
+Этот параметр управляет режимом сброса/синхронизации транзакций двоичного лога. Он необязательный, с значением по умолчанию 2 (сброс каждый транзакция, синхронизация каждую секунду).
 
-The directive determines how frequently the binary log will be flushed to the OS and synced to disk. There are three supported modes:
+Директива определяет, как часто двоичный лог будет сбрасываться в ОС и синхронизироваться с диском. Поддерживаются три режима:
 
-*  0, flush and sync every second. This offers the best performance, but up to 1 second worth of committed transactions can be lost in the event of a server crash or an OS/hardware crash.
-*  1, flush and sync every transaction. This mode provides the worst performance but guarantees that every committed transaction's data is saved.
-*  2, flush every transaction, sync every second. This mode delivers good performance and ensures that every committed transaction is saved in case of a server crash. However, in the event of an OS/hardware crash, up to 1 second worth of committed transactions can be lost.
+*  0, сброс и синхронизация каждую секунду. Это обеспечивает лучшую производительность, но в случае сбоя сервера или сбоя ОС/оборудования можно потерять до одной секунды зафиксированных транзакций.
+*  1, сброс и синхронизация каждой транзакции. Этот режим даёт наихудшую производительность, но гарантирует сохранность данных каждой зафиксированной транзакции.
+*  2, сброс каждой транзакции, синхронизация каждую секунду. Этот режим обеспечивает хорошую производительность и гарантирует, что каждая зафиксированная транзакция сохранена при сбое сервера. Однако в случае сбоя ОС/оборудования можно потерять до одной секунды зафиксированных транзакций.
 
-For those familiar with MySQL and InnoDB, this directive is similar to `innodb_flush_log_at_trx_commit`. In most cases, the default hybrid mode 2 provides a nice balance of speed and safety, with full RT table data protection against server crashes and some protection against hardware ones.
+Для тех, кто знаком с MySQL и InnoDB, эта директива похожа на `innodb_flush_log_at_trx_commit`. В большинстве случаев режим 2 — это хороший баланс между скоростью и безопасностью, с полной защитой данных таблиц RT от сбоев сервера и частичной защитой от аппаратных сбоев.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request Example -->
 
@@ -154,15 +154,15 @@ binlog_flush = 1 # ultimate safety, low speed
 ### binlog_common
 
 <!-- example conf binlog_common -->
-This setting controls how binary log files are managed. It is optional, with a default value of 0 (separate file for each table).
+Этот параметр управляет способом управления файлами двоичного лога. Он необязательный, со значением по умолчанию 0 (отдельный файл для каждой таблицы).
 
-You can choose between two ways to manage binary log files:
+Вы можете выбрать один из двух способов управления файлами двоичного лога:
 
-* Separate file for each table (default, `0`): Each table saves its changes in its own log file. This setup is good if you have many tables that get updated at different times. It allows tables to be updated without waiting for others. Also, if there is a problem with one table's log file, it does not affect the others.
-* Single file for all tables (`1`): All tables use the same binary log file. This method makes it easier to handle files because there are fewer of them. However, this could keep files longer than needed if one table still needs to save its updates. This setting might also slow things down if many tables need to update at the same time because all changes have to wait to be written to one file.
+* Отдельный файл для каждой таблицы (по умолчанию, `0`): Каждая таблица сохраняет свои изменения в собственном лог-файле. Эта настройка хороша, если у вас много таблиц, обновляемых в разное время. Она позволяет обновлять таблицы без ожидания других. Также, при проблемах с лог-файлом одной таблицы, это не влияет на остальные.
+* Один файл для всех таблиц (`1`): Все таблицы используют один и тот же файл двоичного лога. Этот метод упрощает управление файлами, поскольку их меньше. Однако это может удерживать файлы дольше, чем необходимо, если одной таблице ещё нужно сохранить обновления. Эта настройка также может замедлить работу, если много таблиц нуждаются в обновлении одновременно, так как все изменения должны ждать записи в один файл.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request Example -->
 
@@ -174,13 +174,13 @@ binlog_common = 1 # use a single binary log file for all tables
 ### binlog_max_log_size
 
 <!-- example conf binlog_max_log_size -->
-This setting controls the maximum binary log file size. It is optional, with a default value of 256 MB.
+Этот параметр контролирует максимальный размер файла двоичного лога. Он необязательный, со значением по умолчанию 256 МБ.
 
-A new binlog file will be forcibly opened once the current binlog file reaches this size limit. This results in a finer granularity of logs and can lead to more efficient binlog disk usage under certain borderline workloads. A value of 0 indicates that the binlog file should not be reopened based on size.
+Новый binlog файл будет принудительно открыт, как только текущий binlog достигнет этого размера. Это даёт более тонкую гранулярность логов и может повысить эффективность использования диска binlog при некоторых приграничных нагрузках. Значение 0 означает, что файл binlog не должен переоткрываться по размеру.
 
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request Example -->
 
@@ -193,13 +193,13 @@ binlog_max_log_size = 16M
 ### binlog_path
 
 <!-- example conf binlog_path -->
-This setting determines the path for binary log (also known as transaction log) files. It is optional, with a default value of the build-time configured data directory (e.g., `/var/lib/manticore/data/binlog.*` in Linux).
+Этот параметр определяет путь к файлам двоичного лога (также известного как журнал транзакций). Он необязательный, со значением по умолчанию каталога данных, заданного во время сборки (например, `/var/lib/manticore/data/binlog.*` в Linux).
 
-Двоичные журналы используются для восстановления данных таблицы RT после сбоев и для обновления атрибутов обычных дисковых индексов, которые в противном случае хранились бы только в ОЗУ до слива. Когда ведение журналов включено, каждая транзакция, выполненная COMMIT в таблицу RT, записывается в файл журнала. После некорректного завершения работы логи автоматически проигрываются при запуске, восстанавливая записанные изменения.
+Двоичные логи используются для восстановления данных таблицы RT после сбоев и для обновлений атрибутов простых дисковых индексов, которые в противном случае хранились бы только в ОЗУ до сброса. Когда ведение логов включено, каждая транзакция, подтверждённая в таблице RT, записывается в файл журнала. Логи затем автоматически проигрываются при запуске после некорректного завершения работы, восстанавливая зафиксированные изменения.
 
-Директива `binlog_path` задаёт расположение файлов двоичных логов. Она должна содержать только путь; `searchd` будет создавать и удалять несколько файлов `binlog.*` в этой директории по мере необходимости (включая данные бинарных логов, метаданные, файлы блокировок и т.д.).
+Директива `binlog_path` указывает расположение файлов двоичных логов. Она должна содержать только путь; `searchd` создаст и удалит несколько файлов `binlog.*` в каталоге по мере необходимости (включая данные binlog, метаданные и файлы блокировки и т.д.).
 
-Пустое значение отключает ведение двоичных логов, что улучшает производительность, но подвергает данные RT таблицы риску.
+Пустое значение отключает двоичное логирование, что улучшает производительность, но ставит данные таблицы RT под угрозу.
 
 
 <!-- intro -->
@@ -216,9 +216,9 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 ### boolean_simplify
 
 <!-- example conf boolean_simplify -->
-Этот параметр управляет значением по умолчанию для опции поиска [boolean_simplify](../Searching/Options.md#boolean_simplify). Он необязателен, значение по умолчанию — 1 (включено).
+Этот параметр контролирует значение по умолчанию для опции поиска [boolean_simplify](../Searching/Options.md#boolean_simplify). Он необязателен, значение по умолчанию — 1 (включено).
 
-При установке в 1 сервер автоматически применяет [оптимизацию булевых запросов](../Searching/Full_text_matching/Boolean_optimization.md) для улучшения производительности запросов. При значении 0 запросы выполняются без оптимизации по умолчанию. Это значение по умолчанию можно переопределить для каждого запроса отдельно с помощью соответствующей опции поиска `boolean_simplify`.
+Если задано 1, сервер автоматически применит [оптимизацию булевых запросов](../Searching/Full_text_matching/Boolean_optimization.md) для улучшения производительности запроса. Если 0 — запросы будут выполняться без оптимизации по умолчанию. Это значение по умолчанию можно переопределить для каждого запроса с помощью соответствующей опции поиска `boolean_simplify`.
 
 <!-- request Example -->
 ```ini
@@ -231,9 +231,9 @@ searchd {
 ### buddy_path
 
 <!-- example conf buddy_path -->
-Этот параметр определяет путь к бинарному файлу Manticore Buddy. Он необязателен, по умолчанию устанавливается путь, заданный при сборке, который варьируется для разных операционных систем. Обычно его не нужно изменять. Однако он может быть полезен, если вы хотите запустить Manticore Buddy в режиме отладки, внести изменения в Manticore Buddy или реализовать новый плагин. В последнем случае можно сделать `git clone` Buddy с https://github.com/manticoresoftware/manticoresearch-buddy, добавить новый плагин в каталог `./plugins/` и запустить `composer install --prefer-source` для удобства разработки, изменив каталог на исходники Buddy.
+Этот параметр определяет путь к бинарному файлу Manticore Buddy. Он необязателен, по умолчанию содержит путь, установленный при сборке, который различается в разных операционных системах. Обычно менять эту настройку не нужно. Однако она может быть полезна, если вы хотите запустить Manticore Buddy в режиме отладки, внести изменения в Manticore Buddy или реализовать новый плагин. В последнем случае вы можете выполнить `git clone` Buddy с https://github.com/manticoresoftware/manticoresearch-buddy, добавить новый плагин в каталог `./plugins/` и запустить `composer install --prefer-source` для удобства разработки после перехода в каталог с исходниками Buddy.
 
-Чтобы иметь возможность запускать `composer`, на вашем компьютере должен быть установлен PHP 8.2 или выше с следующими расширениями:
+Чтобы иметь возможность запускать `composer`, на вашей машине должна быть установлена PHP версии 8.2 или выше с следующими расширениями:
 
 ```
 --enable-dom
@@ -251,11 +251,11 @@ searchd {
 --enable-mysqlnd
 ```
 
-Также можно выбрать специальную версию `manticore-executor-dev` для Linux amd64 из релизов, например: https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
+Вы также можете выбрать специальную версию `manticore-executor-dev` для Linux amd64, доступную в релизах, например: https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
 
-Если выбрать этот путь, не забудьте связать dev-версию исполнителя manticore с `/usr/bin/php`.
+Если вы пойдёте этим путём, не забудьте связать dev-версию manticore executor с `/usr/bin/php`.
 
-Для отключения Manticore Buddy установите значение пустым, как показано в примере.
+Чтобы отключить Manticore Buddy, установите значение пустым, как показано в примере.
 
 <!-- intro -->
 ##### Пример:
@@ -276,7 +276,7 @@ buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/
 ### client_timeout
 
 <!-- example conf client_timeout -->
-Этот параметр задаёт максимальное время ожидания между запросами (в секундах или [special_suffixes](../Server_settings/Special_suffixes.md)) при использовании постоянных соединений. Необязателен, значение по умолчанию — пять минут.
+Этот параметр определяет максимальное время ожидания между запросами (в секундах или с использованием [special_suffixes](../Server_settings/Special_suffixes.md)) при использовании постоянных соединений. Он необязателен, значение по умолчанию — пять минут.
 
 
 <!-- intro -->
@@ -293,9 +293,9 @@ client_timeout = 1h
 ### collation_libc_locale
 
 <!-- example conf collation_libc_locale -->
-Локаль libc сервера. Необязательна, по умолчанию C.
+Локаль libc сервера. Необязательна, по умолчанию — C.
 
-Задаёт локаль libc, влияющую на основанные на libc сортировки (collations). Подробнее см. раздел [collations](../Searching/Collations.md).
+Задает локаль libc, влияющую на сравнения на основе libc. Подробности смотрите в разделе [collations](../Searching/Collations.md).
 
 
 <!-- intro -->
@@ -312,9 +312,9 @@ collation_libc_locale = fr_FR
 ### collation_server
 
 <!-- example conf collation_server -->
-Коллация сервера по умолчанию. Необязательна, по умолчанию libc_ci.
+Основная локаль сравнения сервера. Необязательна, значение по умолчанию — libc_ci.
 
-Определяет коллацию, используемую по умолчанию для входящих запросов. Коллация может быть переопределена для каждого запроса отдельно. Подробнее о доступных коллациях и других деталях смотрите в разделе [collations](../Searching/Collations.md).
+Определяет локаль сравнения по умолчанию для входящих запросов. Локаль сравнения можно переопределять для каждого запроса. Список доступных локалей и прочие детали см. в разделе [collations](../Searching/Collations.md).
 
 
 <!-- intro -->
@@ -331,8 +331,8 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-При указании данного параметра включается [режим реального времени](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), импперативный способ управления схемой данных. Значением должен быть путь к директории, в которой вы хотите хранить все свои таблицы, двоичные логи и всё прочее, необходимое для корректной работы Manticore Search в этом режиме.
-Индексация [обычных таблиц](../Creating_a_table/Local_tables/Plain_table.md) запрещена при указании `data_dir`. Подробнее о различиях между режимом RT и обычным режимом читайте в [этом разделе](../Read_this_first.md#Real-time-table-vs-plain-table).
+При указании этот параметр включает [режим реального времени](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29), который представляет собой императивный способ управления схемой данных. Значение должно быть путём к каталогу, где вы хотите хранить все ваши таблицы, двоичные логи и всё остальное, необходимое для корректной работы Manticore Search в этом режиме.
+Индексация [простых таблиц](../Creating_a_table/Local_tables/Plain_table.md) не разрешена при указании `data_dir`. Подробнее о различиях между режимом RT и простым режимом читайте в [этой секции](../Read_this_first.md#Real-time-table-vs-plain-table).
 
 <!-- intro -->
 ##### Пример:
@@ -347,10 +347,10 @@ data_dir = /var/lib/manticore
 ### diskchunk_flush_search_timeout
 
 <!-- example conf diskchunk_flush_search_timeout -->
-Таймаут для предотвращения автофлеша RAM-чанка, если в таблице нет поисковых запросов. Необязателен, значение по умолчанию — 30 секунд.
+Таймаут для предотвращения автоматической выгрузки RAM-чунка, если в таблице нет поисков. Необязателен, по умолчанию 30 секунд.
 
-Время проверки наличия запросов перед решением о необходимости автофлеша.
-Автофлеш будет выполнен только если в таблице был хотя бы один поиск в течение последних `diskchunk_flush_search_timeout` секунд. Работает в связке с [diskchunk_flush_write_timeout](../Server_settings/Searchd.md#diskchunk_flush_write_timeout). Соответствующая [параметр на уровне таблицы](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) имеет более высокий приоритет и перекроет это значение по умолчанию для всего инстанса, обеспечивая более тонкий контроль.
+Время для проверки поисков перед принятием решения об автоматической выгрузке.
+Автоматическая выгрузка произойдёт только если в таблице было хотя бы одно поисковое обращение в течение последних `diskchunk_flush_search_timeout` секунд. Работает совместно с [diskchunk_flush_write_timeout](../Server_settings/Searchd.md#diskchunk_flush_write_timeout). Соответствующая [настройка на уровне таблицы](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) имеет более высокий приоритет и переопределит это значение по умолчанию, обеспечивая более тонкий контроль.
 
 <!-- intro -->
 ##### Пример:
@@ -365,12 +365,12 @@ diskchunk_flush_search_timeout = 120s
 ### diskchunk_flush_write_timeout
 
 <!-- example conf diskchunk_flush_write_timeout -->
-Время ожидания без записи в секундах перед автофлешем RAM-чанка на диск. Необязателен, значение по умолчанию — 1 секунда.
+Время в секундах ожидания без записи перед автоматической выгрузкой RAM-чунка на диск. Необязателен, по умолчанию 1 секунда.
 
-Если в RAM-чанке не происходит запись в течение `diskchunk_flush_write_timeout` секунд, чанка будет сброшена на диск. Работает в связке с [diskchunk_flush_search_timeout](../Server_settings/Searchd.md#diskchunk_flush_search_timeout). Чтобы отключить авто-сброс, установите `diskchunk_flush_write_timeout = -1` явно в вашей конфигурации. Соответствующая [настройка для конкретной таблицы](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) имеет более высокий приоритет и перекроет этот глобальный по экземпляру параметр, обеспечивая более тонкий контроль.
+If no write occurs in the RAM chunk within `diskchunk_flush_write_timeout` seconds, the chunk will be flushed to disk. Works in conjunction with [diskchunk_flush_search_timeout](../Server_settings/Searchd.md#diskchunk_flush_search_timeout). To disable auto-flush, set `diskchunk_flush_write_timeout = -1` explicitly in your configuration. The corresponding [per-table setting](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) has a higher priority and will override this instance-wide default, providing more fine-grained control.
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -382,13 +382,13 @@ diskchunk_flush_write_timeout = 60s
 ### docstore_cache_size
 
 <!-- example conf docstore_cache_size -->
-Этот параметр задает максимальный размер блоков документов из хранилища документов, которые удерживаются в памяти. Необязателен, значение по умолчанию — 16m (16 мегабайт).
+This setting specifies the maximum size of document blocks from document storage that are held in memory. It is optional, with a default value of 16m (16 megabytes).
 
-Когда используется `stored_fields`, блоки документов читаются с диска и распаковываются. Поскольку каждый блок обычно содержит несколько документов, он может быть переиспользован при обработке следующего документа. Для этой цели блок хранится в кэше сервера. Кэш содержит распакованные блоки.
+When `stored_fields` is used, document blocks are read from disk and uncompressed. Since every block typically holds several documents, it may be reused when processing the next document. For this purpose, the block is held in a server-wide cache. The cache holds uncompressed blocks.
 
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -400,10 +400,10 @@ docstore_cache_size = 8m
 ### engine
 
 <!-- example conf engine -->
-Движок хранения атрибутов по умолчанию, используемый при создании таблиц в режиме RT. Может быть `rowwise` (по умолчанию) или `columnar`.
+Default attribute storage engine used when creating tables in RT mode. Can be `rowwise` (default) or `columnar`.
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -416,12 +416,12 @@ engine = columnar
 ### expansion_limit
 
 <!-- example conf expansion_limit -->
-Этот параметр определяет максимальное количество расширенных ключевых слов для одного подстановочного знака. Необязателен, значение по умолчанию — 0 (без ограничений).
+This setting determines the maximum number of expanded keywords for a single wildcard. It is optional, with a default value of 0 (no limit).
 
-При выполнении поиска подстроки в таблицах с включенным `dict = keywords` один подстановочный знак может привести к тысячам или даже миллионам совпадающих ключевых слов (подумайте о сопоставлении `a*` с целым Оксфордским словарем). Эта директива позволяет ограничить влияние таких расширений. Установка `expansion_limit = N` ограничит расширения не более чем N наиболее частотными совпадающими ключевыми словами (для каждого подстановочного знака в запросе).
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords (think of matching `a*` against the entire Oxford dictionary). This directive allows you to limit the impact of such expansions. Setting `expansion_limit = N` restricts expansions to no more than N of the most frequent matching keywords (per each wildcard in the query).
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -433,12 +433,12 @@ expansion_limit = 16
 ### expansion_merge_threshold_docs
 
 <!-- example conf expansion_merge_threshold_docs -->
-Этот параметр определяет максимальное число документов в расширенном ключевом слове, которое позволяет объединять все такие ключевые слова вместе. Необязателен, значение по умолчанию — 32.
+This setting determines the maximum number of documents in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 32.
 
-При выполнении поиска подстроки в таблицах с включенным `dict = keywords` один подстановочный знак может привести к тысячам или миллионам совпадающих ключевых слов. Эта директива позволяет увеличить лимит количества ключевых слов для объединения с целью ускорения сопоставления, но при этом использует больше памяти при поиске.
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -450,12 +450,12 @@ expansion_merge_threshold_docs = 1024
 ### expansion_merge_threshold_hits
 
 <!-- example conf expansion_merge_threshold_hits -->
-Этот параметр определяет максимальное количество попаданий в расширенном ключевом слове, позволяющее объединять все такие ключевые слова вместе. Необязателен, значение по умолчанию — 256.
+This setting determines the maximum number of hits in the expanded keyword that allows merging all such keywords together. It is optional, with a default value of 256.
 
-При выполнении поиска подстроки в таблицах с включенным `dict = keywords` один подстановочный знак может привести к тысячам или миллионам совпадающих ключевых слов. Эта директива позволяет увеличить лимит количества ключевых слов для объединения с целью ускорения сопоставления, но при этом использует больше памяти при поиске.
+When performing substring searches against tables built with `dict = keywords` enabled, a single wildcard may potentially result in thousands or even millions of matched keywords. This directive allows you to increase the limit of how many keywords will merge together to speed up matching but uses more memory in the search.
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -467,12 +467,12 @@ expansion_merge_threshold_hits = 512
 ### expansion_phrase_limit
 
 <!-- example conf expansion_phrase_limit -->
-Этот параметр контролирует максимальное количество альтернативных вариантов фразы, генерируемых из-за операторов `OR` внутри операторов `PHRASE`, `PROXIMITY` и `QUORUM`. Необязателен, значение по умолчанию — 1024.
+This setting controls the maximum number of alternative phrase variants generated due to `OR` operators inside `PHRASE`, `PROXIMITY`, and `QUORUM` operators. It is optional, with a default value of 1024.
 
-При использовании оператора `|` (OR) внутри оператора, похожего на фразу, общее количество расширенных сочетаний может расти экспоненциально в зависимости от количества альтернатив. Этот параметр помогает предотвратить чрезмерное расширение запроса, ограничивая количество перестановок, учитываемых в процессе обработки запроса. Если количество сгенерированных вариантов превысит этот предел, запрос завершится с ошибкой.
+When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing. If the number of generated variants exceeds this limit, the query will fail with an error.
 
 <!-- intro -->
-##### Пример:
+##### Example:
 
 <!-- request Example -->
 
@@ -483,32 +483,32 @@ expansion_phrase_limit = 4096
 
 ### grouping_in_utc
 
-Этот параметр указывает, будет ли группировка по времени в API и SQL рассчитываться в местном часовом поясе или в UTC. Необязателен, значение по умолчанию — 0 (означает «местный часовой пояс»).
+This setting specifies whether timed grouping in API and SQL will be calculated in the local timezone or in UTC. It is optional, with a default value of 0 (meaning 'local timezone').
 
-По умолчанию все выражения 'group by time' (например, group by day, week, month и year в API, также group by day, month, year, yearmonth, yearmonthday в SQL) выполняются с использованием местного времени. Например, если у вас есть документы с атрибутами во времени `13:00 utc` и `15:00 utc`, то в случае группировки они оба попадут в группы в соответствии с вашим локальным часовым поясом. Если вы живете в `utc`, это будет один день, но если вы живете в `utc+10`, эти документы попадут в разные группы `group by day` (поскольку 13:00 utc в часовом поясе UTC+10 — это 23:00 местного времени, а 15:00 — 01:00 следующего дня). Иногда такое поведение неприемлемо, и желательно, чтобы группировка по времени не зависела от часового пояса. Вы можете запустить сервер с определенной глобальной переменной окружения TZ, но это повлияет не только на группировку, но и на штамп времени в логах, что может быть нежелательно. Включение этой опции (либо в конфигурации, либо с помощью оператора [SET global](../Server_settings/Setting_variables_online.md#SET) в SQL) заставит все выражения группировки по времени вычисляться в UTC, оставляя остальные функции, связанные со временем (например, логирование сервера), в местном часовом поясе.
+By default, all 'group by time' expressions (like group by day, week, month, and year in API, also group by day, month, year, yearmonth, yearmonthday in SQL) are done using local time. For example, if you have documents with attributes timed `13:00 utc` and `15:00 utc`, in the case of grouping, they both will fall into facility groups according to your local timezone setting. If you live in `utc`, it will be one day, but if you live in `utc+10`, then these documents will be matched into different `group by day` facility groups (since 13:00 utc in UTC+10 timezone is 23:00 local time, but 15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to make time grouping not dependent on timezone. You can run the server with a defined global TZ environment variable, but it will affect not only grouping but also timestamping in the logs, which may be undesirable as well. Switching 'on' this option (either in config or using [SET global](../Server_settings/Setting_variables_online.md#SET) statement in SQL) will cause all time grouping expressions to be calculated in UTC, leaving the rest of time-depentend functions (i.e. logging of the server) in local TZ.
 
 
 ### timezone
 
-Этот параметр задает часовой пояс, используемый функциями, связанными с датой/временем. По умолчанию используется местный часовой пояс, но вы можете указать другой часовой пояс в формате IANA (например, `Europe/Amsterdam`).
+This setting specifies the timezone to be used by date/time-related functions. By default, the local timezone is used, but you can specify a different timezone in IANA format (e.g., `Europe/Amsterdam`).
 
-Обратите внимание, что этот параметр не влияет на логирование, которое всегда происходит в местном часовом поясе.
+Note that this setting has no impact on logging, which always operates in the local timezone.
 
-Также обратите внимание, что если используется `grouping_in_utc`, функция 'group by time' по-прежнему будет использовать UTC, в то время как другие функции, связанные с датой/временем, будут использовать указанную временную зону. В целом не рекомендуется смешивать `grouping_in_utc` и `timezone`.
+Также обратите внимание, что если используется `grouping_in_utc`, функция 'group by time' по-прежнему будет использовать UTC, тогда как другие функции, связанные с датой/временем, будут использовать указанную временную зону. В целом не рекомендуется смешивать `grouping_in_utc` и `timezone`.
 
-Вы можете настроить эту опцию либо в конфиге, либо с помощью оператора [SET global](../Server_settings/Setting_variables_online.md#SET) в SQL.
+Эту опцию можно настроить либо в конфигурации, либо с помощью оператора [SET global](../Server_settings/Setting_variables_online.md#SET) в SQL.
 
 
 ### ha_period_karma
 
 <!-- example conf ha_period_karma -->
-Этот параметр задаёт размер окна статистики зеркал агента в секундах (или [special_suffixes](../Server_settings/Special_suffixes.md)). Он является опциональным, значение по умолчанию — 60 секунд.
+Этот параметр задаёт размер окна статистики зеркал агента в секундах (или [special_suffixes](../Server_settings/Special_suffixes.md)). Опционально, значение по умолчанию — 60 секунд.
 
-Для распределённой таблицы с зеркалами агента (подробнее в [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)) мастер отслеживает несколько разных счётчиков для каждого зеркала. Эти счётчики используются для переключения отказов и балансировки (мастер выбирает лучшее зеркало для использования на основе счётчиков). Счётчики накапливаются блоками по `ha_period_karma` секунд.
+Для распределённой таблицы с зеркалами агента (подробнее в [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)) мастер отслеживает несколько разных счётчиков по каждому зеркалу. Эти счётчики затем используются для переключения на резервный узел и балансировки (мастер выбирает лучшее зеркало на основе счётчиков). Счётчики накапливаются блоками продолжительностью `ha_period_karma` секунд.
 
-После начала нового блока мастер может ещё использовать накопленные значения из предыдущего, пока новый блок не заполнится наполовину. В результате, любые предыдущие данные перестают влиять на выбор зеркала максимум через 1.5 раза от ha_period_karma секунд.
+После начала нового блока мастер может использовать накопленные значения из предыдущего блока до тех пор, пока новый блок не будет заполнен на половину. В результате, влияние предыдущей истории на выбор зеркала прекращается не более чем через 1,5 раза ha_period_karma в секундах.
 
-Хотя для выбора зеркала используется максимум два блока, до 15 последних блоков сохраняются для целей инструментирования. Эти блоки можно просмотреть с помощью команды [SHOW AGENT STATUS](../Node_info_and_management/Node_status.md#SHOW-AGENT-STATUS).
+Хотя для выбора зеркала используются максимум два блока, для инструментирования хранится до 15 последних блоков. Эти блоки можно просмотреть с помощью оператора [SHOW AGENT STATUS](../Node_info_and_management/Node_status.md#SHOW-AGENT-STATUS).
 
 
 <!-- intro -->
@@ -525,9 +525,9 @@ ha_period_karma = 2m
 ### ha_ping_interval
 
 <!-- example conf ha_ping_interval -->
-Этот параметр настраивает интервал между пингами зеркал агента в миллисекундах (или [special_suffixes](../Server_settings/Special_suffixes.md)). Опционально, значение по умолчанию — 1000 миллисекунд.
+Этот параметр задаёт интервал между ping-запросами агента к зеркалам в миллисекундах (или [special_suffixes](../Server_settings/Special_suffixes.md)). Опционально, значение по умолчанию — 1000 миллисекунд.
 
-Для распределённой таблицы с зеркалами агента (подробнее в [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)) мастер отправляет всем зеркалам команду пинга в периоды простоя. Это необходимо для отслеживания текущего статуса агента (жив или мёртв, сетевой обмен, и т.д.). Интервал между такими пингами задаётся этой директивой. Чтобы отключить пинги, установите ha_ping_interval в 0.
+Для распределённой таблицы с зеркалами агента (подробнее в [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)) мастер отправляет всем зеркалам ping-команду в периоды простоя. Это необходимо для отслеживания текущего статуса агента (включён или отключён, время сетевого отклика и т. п.). Интервал между такими ping определяется этой директивой. Чтобы отключить пинги, установите ha_ping_interval в 0.
 
 
 <!-- intro -->
@@ -543,21 +543,21 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-Опция `hostname_lookup` определяет стратегию обновления имён хостов. По умолчанию IP-адреса имён агентов кэшируются при запуске сервера, чтобы избежать избыточных запросов к DNS. Однако в некоторых случаях IP может меняться динамически (например, облачный хостинг), и может быть желательно не кэшировать IP. Установка этой опции в `request` отключает кэширование и запрашивает DNS при каждом запросе. IP-адреса также можно обновить вручную с помощью команды `FLUSH HOSTNAMES`.
+Опция `hostname_lookup` определяет стратегию обновления имён хостов. По умолчанию IP-адреса хостов агентов кэшируются при запуске сервера, чтобы избежать чрезмерных обращений к DNS. Однако в некоторых случаях IP может динамически изменяться (например, в облачном хостинге), и может потребоваться не кэшировать IP-адреса. Установка опции в `request` отключает кэширование и выполняет запрос DNS для каждого запроса. IP-адреса также можно обновлять вручную с помощью команды `FLUSH HOSTNAMES`.
 
 ### jobs_queue_size
 
-Параметр jobs_queue_size определяет, сколько "заданий" может быть в очереди одновременно. По умолчанию он неограничен.
+Параметр jobs_queue_size задаёт, сколько "заданий" может находиться в очереди одновременно. По умолчанию ограничение отсутствует.
 
-В большинстве случаев "задание" означает один запрос к одной локальной таблице (обычной таблице или дисковому чанку реального времени). Например, если у вас есть распределённая таблица, состоящая из 2 локальных таблиц или реальная таблица с 2 дисковыми чанками, поисковый запрос к любой из них создаст в очереди примерно 2 задания. Затем их обрабатывает пул потоков (размер которого задаётся параметром [threads](../Server_settings/Searchd.md#threads)). Однако в некоторых случаях, если запрос слишком сложный, может создаваться больше заданий. Изменение этого параметра рекомендуется, когда [max_connections](../Server_settings/Searchd.md#max_connections) и [threads](../Server_settings/Searchd.md#threads) недостаточны для достижения баланса между желаемой производительностью.
+В большинстве случаев "задание" означает один запрос к одной локальной таблице (обычной таблице или дисковому чанку таблицы реального времени). Например, если у вас распределённая таблица, состоящая из 2 локальных таблиц, или таблица реального времени с 2 дисковыми чанками, поисковый запрос к любой из них создаст обычно 2 задания в очереди. Затем эти задания обрабатывает пул потоков (размер которого задаётся параметром [threads](../Server_settings/Searchd.md#threads)). Однако в некоторых случаях, если запрос слишком сложный, может быть создано больше заданий. Изменение этого параметра рекомендуется, когда значения [max_connections](../Server_settings/Searchd.md#max_connections) и [threads](../Server_settings/Searchd.md#threads) недостаточны для достижения баланса между производительностью и нагрузкой.
 
 ### join_batch_size
 
-Объединения таблиц работают путём накопления партии совпадений — результатов запроса, выполненного по левой таблице. Эта партия затем обрабатывается как единый запрос по правой таблице.
+Объединения таблиц работают путём накопления пакетного набора совпадений — результатов запроса, выполненного по левой таблице. Этот пакет затем обрабатывается как единый запрос по правой таблице.
 
-Этот параметр позволяет регулировать размер партии. Значение по умолчанию — `1000`, установка в `0` отключает группировку.
+Этот параметр позволяет настраивать размер пакета. Значение по умолчанию — `1000`; установка в `0` отключает пакетную обработку.
 
-Больше размер партии может повысить производительность; однако для некоторых запросов это может привести к чрезмерному потреблению памяти.
+Больший размер пакета может улучшить производительность, однако для некоторых запросов это может привести к избыточному потреблению памяти.
 
 <!-- intro -->
 ##### Пример:
@@ -571,13 +571,13 @@ join_batch_size = 2000
 
 ### join_cache_size
 
-Каждый запрос по правой таблице определяется конкретными условиями JOIN ON, которые определяют набор результатов, извлекаемых из правой таблицы.
+Каждый запрос к правой таблице определяется конкретными условиями JOIN ON, которые определяют набор результатов, извлекаемых из правой таблицы.
 
-Если количество уникальных условий JOIN ON невелико, повторное использование результатов может быть эффективнее, чем постоянное выполнение запросов по правой таблице. Для этого наборы результатов сохраняются в кеше.
+Если уникальных условий JOIN ON немного, повторное использование результатов может быть эффективнее, чем многократное выполнение запросов к правой таблице. Для этого результаты сохраняются в кэше.
 
-Этот параметр позволяет задать размер этого кеша. Значение по умолчанию — `20 MB`, значение 0 отключает кеширование.
+Этот параметр позволяет настроить размер этого кэша. Значение по умолчанию — `20 MB`; установка в 0 отключает кэширование.
 
-Обратите внимание, что каждый поток сохраняет собственный кеш, поэтому при оценке общей памяти учитывайте количество потоков, выполняющих запросы.
+Учтите, что каждый поток поддерживает собственный кэш, поэтому при оценке общего объёма потребляемой памяти следует учитывать количество потоков, выполняющих запросы.
 
 <!-- intro -->
 ##### Пример:
@@ -592,8 +592,8 @@ join_cache_size = 10M
 ### listen_backlog
 
 <!-- example conf listen_backlog -->
-Параметр listen_backlog определяет длину очереди TCP для входящих соединений. Это особенно важно для Windows-сборок, которые обрабатывают запросы последовательно. Когда очередь соединений достигает своего лимита, новые входящие соединения будут отклоняться.
-Для сборок не Windows значение по умолчанию обычно подходит, и обычно нет необходимости регулировать эту настройку.
+Параметр listen_backlog определяет длину очереди TCP для входящих соединений. Это особенно актуально для сборок под Windows, которые обрабатывают запросы по одному. Когда очередь соединений достигает предела, новые входящие подключения будут отклоняться.
+Для сборок под другие ОС значение по умолчанию обычно подходит, и настройка этого параметра, как правило, не требуется.
 
 
 <!-- intro -->
@@ -609,9 +609,9 @@ listen_backlog = 20
 ### kibana_version_string
 
 <!-- example conf kibana_version_string -->
-Строка версии сервера, возвращаемая Kibana или OpenSearch Dashboards. Опционально — по умолчанию установлена в `7.6.0`.
+Строка версии сервера, возвращаемая Kibana или OpenSearch Dashboards. Опционально — по умолчанию установлено `7.6.0`.
 
-Некоторые версии Kibana и OpenSearch Dashboards ожидают, что сервер будет сообщать конкретный номер версии и могут вести себя по-разному в зависимости от него. Чтобы обойти такие проблемы, вы можете использовать эту настройку, благодаря которой Manticore будет сообщать Kibana или OpenSearch Dashboards пользовательскую версию.
+Некоторые версии Kibana и OpenSearch Dashboards ожидают, что сервер будет сообщать определённый номер версии и могут в зависимости от него вести себя по-разному. Чтобы обойти такие проблемы, можно использовать этот параметр, который заставляет Manticore сообщать Kibana или OpenSearch Dashboards кастомную версию.
 
 <!-- intro -->
 ##### Пример:
@@ -626,9 +626,9 @@ kibana_version_string = 1.2.3
 ### listen
 
 <!-- example conf listen -->
-Эта настройка позволяет указать IP-адрес и порт или путь к Unix-доменному сокету, на которых Manticore будет принимать подключения.
+Эта настройка позволяет указать IP-адрес и порт, либо путь к Unix-доменному сокету, на которых Manticore будет принимать подключения.
 
-Общий синтаксис для `listen`:
+Общая синтаксическая форма для `listen`:
 
 ```ini
 listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol [ "_vip" ] [ "_readonly" ] ]
@@ -640,25 +640,25 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 * либо путь к Unix-сокету (не поддерживается в Windows)
 * либо IP-адрес и диапазон портов
 
-Если вы указываете номер порта, но не адрес, `searchd` будет слушать все сетевые интерфейсы. Путь Unix-сокета определяется ведущим слэшем. Диапазон портов может быть установлен только для протокола репликации.
+Если вы указываете номер порта, но не адрес, `searchd` будет слушать на всех сетевых интерфейсах. Unix путь определяется ведущим слэшем. Диапазон портов можно указать только для протокола репликации.
 
 Вы также можете указать обработчик протокола (listener), который будет использоваться для подключений на этом сокете. Слушатели:
 
 * **Не указан** - Manticore будет принимать подключения на этом порту от:
-  - других агентов Manticore (то есть удалённая распределённая таблица)
+  - других агентов Manticore (например, удаленной распределенной таблицы)
   - клиентов через HTTP и HTTPS
-  - [Manticore Buddy](https://manticoresearch.com/blog/manticoresearch-buddy-intro/). **Убедитесь, что у вас есть слушатель этого типа (или слушатель `http`, как описано ниже), чтобы избежать ограничений в функциональности Manticore.**
-* `mysql` протокол MySQL для подключений от клиентов MySQL. Обратите внимание:
-  - также поддерживается сжатый протокол.
-  - Если включён [SSL](../Security/SSL.md#SSL), вы можете установить зашифрованное соединение.
-* `replication` - протокол репликации, используемый для общения узлов. Подробнее см. в разделе [репликация](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md). Можно указать несколько слушателей репликации, но они должны слушать на одном IP; различаться могут только порты. Когда вы определяете слушатель репликации с диапазоном портов (например, `listen = 192.168.0.1:9320-9328:replication`), Manticore не начинает сразу слушать эти порты. Вместо этого он возьмёт случайные свободные порты из указанного диапазона только при начале использования репликации. Для корректной работы репликации требуется не менее 2 портов в диапазоне.
-* `http` - то же, что и **Не указан**. Manticore будет принимать подключения на этом порту от удалённых агентов и клиентов через HTTP и HTTPS.
-* `https` - протокол HTTPS. Manticore будет принимать **только** HTTPS-соединения на этом порту. Подробнее в разделе [SSL](../Security/SSL.md).
-* `sphinx` - устаревший двоичный протокол. Используется для обслуживаний подключений от удалённых клиентов [SphinxSE](../Extensions/SphinxSE.md). Некоторые реализации клиентских библиотек Sphinx API (например, Java-клиент) требуют явного указания слушателя.
+  - [Manticore Buddy](https://manticoresearch.com/blog/manticoresearch-buddy-intro/). **Убедитесь, что у вас есть слушатель такого типа (или `http` слушатель, как указано ниже), чтобы избежать ограничений в функциональности Manticore.**
+* `mysql` протокол MySQL для подключений от MySQL клиентов. Примечания:
+  - Поддерживается также сжатый протокол.
+  - Если включен [SSL](../Security/SSL.md#SSL), можно установить зашифрованное соединение.
+* `replication` - протокол репликации, используемый для связи узлов. Подробнее см. в разделе [репликация](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md). Вы можете указать несколько слушателей репликации, но они должны все слушать на одном IP; различаться могут только порты. Если вы определяете слушатель репликации с диапазоном портов (например, `listen = 192.168.0.1:9320-9328:replication`), Manticore не сразу начинает слушать на этих портах. Вместо этого он выберет случайные свободные порты из указанного диапазона только при использовании репликации. Для корректной работы репликации требуется минимум 2 порта в диапазоне.
+* `http` - то же, что **Не указано**. Manticore будет принимать подключения на этом порту от удаленных агентов и клиентов через HTTP и HTTPS.
+* `https` - протокол HTTPS. Manticore будет принимать **только** HTTPS подключения на этом порту. Подробнее см. раздел [SSL](../Security/SSL.md).
+* `sphinx` - устаревший бинарный протокол. Используется для обслуживания подключений от удаленных клиентов [SphinxSE](../Extensions/SphinxSE.md). Некоторые реализации клиентов Sphinx API (например, Java) требуют явного объявления слушателя.
 
-Добавление суффикса `_vip` к клиентским протоколам (то есть ко всем, кроме `replication`, например `mysql_vip` или `http_vip` или просто `_vip`) заставляет создать выделенный поток для соединения, чтобы обойти различные ограничения. Это полезно для обслуживания узлов при серьёзных перегрузках, когда сервер иначе либо зависнет, либо не позволит подключиться через обычный порт.
+Добавление суффикса `_vip` к протоколам клиентов (то есть ко всем кроме `replication`, например `mysql_vip` или `http_vip` или просто `_vip`) заставляет создать отдельный поток для подключения, чтобы обойти различные ограничения. Это полезно для обслуживания узлов в случае сильной нагрузки, когда сервер иначе мог бы зависнуть или не позволить подключиться через обычный порт.
 
-Суффикс `_readonly` устанавливает для слушателя [режим только для чтения](../Security/Read_only.md) и ограничивает его приём только запросами на чтение.
+Суффикс `_readonly` устанавливает [режим только для чтения](../Security/Read_only.md) для слушателя и ограничивает его прием только запросами на чтение.
 
 <!-- intro -->
 ##### Пример:
@@ -681,54 +681,54 @@ listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from Sp
 ```
 <!-- end -->
 
-Можно указывать несколько директив `listen`. `searchd` будет слушать подключения клиентов на всех указанных портах и сокетах. Конфигурация по умолчанию, поставляемая с пакетами Manticore, задаёт прослушивание на портах:
-* `9308` и `9312` для подключений от удалённых агентов и клиентов, не основанных на MySQL
-* и на порту `9306` для подключений MySQL.
+Можно использовать несколько директив `listen`. `searchd` будет слушать клиентские подключения на всех указанных портах и сокетах. Стандартная конфигурация, поставляемая с пакетами Manticore, определяет прослушивание на портах:
+* `9308` и `9312` — для подключений от удаленных агентов и клиентов, не основанных на MySQL
+* и на порте `9306` для MySQL подключений.
 
-Если в конфигурации не указан ни один `listen`, Manticore будет ждать подключения на:
+Если в конфигурации не указано ни одного `listen`, Manticore будет ожидать подключения на:
 * `127.0.0.1:9306` для клиентов MySQL
-* `127.0.0.1:9312`  для HTTP/HTTPS и подключений от других узлов Manticore и клиентов, использующих двоичный API Manticore.
+* `127.0.0.1:9312` для HTTP/HTTPS и подключений от других узлов Manticore и клиентов, использующих бинарный API Manticore.
 
 #### Прослушивание привилегированных портов
 
-По умолчанию Linux не позволит Manticore слушать порт ниже 1024 (например, `listen = 127.0.0.1:80:http` или `listen = 127.0.0.1:443:https`), если вы не запускаете searchd от имени root. Если вы хотите, чтобы Manticore слушал порты < 1024 под не-root пользователем, рассмотрите один из следующих вариантов (любой из них должен сработать):
+По умолчанию в Linux нельзя заставить Manticore слушать порт ниже 1024 (например, `listen = 127.0.0.1:80:http` или `listen = 127.0.0.1:443:https`), если вы не запускаете searchd под root. Если вы хотите, чтобы Manticore запускался от не-root пользователя и слушал порты < 1024, рассмотрите один из следующих вариантов (любой из них должен работать):
 * Выполните команду `setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/searchd`
 * Добавьте `AmbientCapabilities=CAP_NET_BIND_SERVICE` в systemd-юнит Manticore и перезагрузите демон (`systemctl daemon-reload`).
 
-#### Технические детали протокола Sphinx API и TFO
+#### Технические подробности о протоколе Sphinx API и TFO
 <details>
-Устаревший протокол Sphinx имеет 2 этапа: обмен рукопожатием (handshake) и основной поток данных. Рукопожатие состоит из 4-байтового пакета от клиента и 4-байтового пакета от демона, с одной целью — клиент удостоверяется, что на другой стороне настоящий демон Sphinx, а демон удостоверяется, что клиент настоящий. Основной поток данных достаточно прост: обе стороны обмениваются рукопожатиями и проверяют их. Такой обмен короткими пакетами требует использования специального флага `TCP_NODELAY`, который отключает алгоритм Нейгла и задаёт TCP-соединение как диалог из небольших пакетов.
-Однако в протоколе не строго определено, кто первый начинает этот обмен. Исторически все клиенты, использующие бинарное API, начинают первыми: отправляют рукопожатие, затем читают 4 байта от демона, потом отправляют запрос и читают ответ.
-При улучшении совместимости с протоколом Sphinx мы учли следующие моменты:
+Устаревший протокол Sphinx состоит из 2 фаз: обмена рукопожатием и передачи данных. Рукопожатие состоит из 4-байтового пакета от клиента и 4-байтового пакета от демона, служащего единственной цели — клиент устанавливает, что удаленный процесс — настоящий демон Sphinx, демон устанавливает, что удаленный процесс — настоящий клиент Sphinx. Основной поток данных достаточно прост: обе стороны объявляют свои рукопожатия и проверяют их друг у друга. Такой обмен короткими пакетами предполагает использование специального флага `TCP_NODELAY`, который отключает алгоритм Нэйгла TCP и объявляет, что TCP-соединение будет проходить как диалог из маленьких пакетов.
+Однако строго не определено, кто начинает переговоры первым. Исторически все клиенты, использующие бинарный API, говорят первыми: отправляют рукопожатие, затем читают 4 байта от демона, затем отправляют запрос и читают ответ от демона.
+При улучшении совместимости протокола Sphinx мы учли следующее:
 
-1. Обычно связь мастер-агент устанавливается от известного клиента к известному хосту на известном порту. Поэтому маловероятно, что на стороне будет неверное рукопожатие. Мы можем неявно предположить, что обе стороны валидны и действительно общаются по протоколу Sphinx.
-2. Исходя из этого, мы можем «приклеить» рукопожатие к реальному запросу и отправить одним пакетом. Если на бэкенде — устаревший демон Sphinx, он просто прочитает этот слитый пакет как 4 байта рукопожатия, затем тело запроса. Поскольку оба пришли в одном пакете, на стороне бэкенда сокет экономит 1 RTT, а на стороне клиента буфер всё равно работает в обычном режиме.
-3. Продолжая предположение: поскольку пакет 'query' довольно маленький, а handshake еще меньше, давайте отправим оба в начальном TCP пакете 'SYN' с использованием современной техники TFO (tcp-fast-open). То есть: мы подключаемся к удаленному узлу с "склеенным" handshake + телом пакета. Демон принимает соединение и сразу получает и handshake, и тело в буфере сокета, так как они пришли в самом первом TCP 'SYN' пакете. Это устраняет еще один RTT.
-4. Наконец, нужно научить демон принимать это улучшение. На самом деле, со стороны приложения это означает НЕ использовать `TCP_NODELAY`. А со стороны системы это означает, что на стороне демона должен быть активирован прием TFO, а на стороне клиента — отправка TFO. По умолчанию в современных системах клиентский TFO уже активирован, поэтому нужно только настроить серверный TFO, чтобы всё заработало.
+1. Как правило, связь мастер-агент устанавливается от известного клиента к известному хосту на известном порту. Поэтому маловероятно, что конечная точка даст неправильное рукопожатие. Следовательно, можно неявно считать, что обе стороны валидны и действительно говорят на протоколе Sphinx.
+2. При таком предположении мы можем "склеить" рукопожатие и настоящий запрос и отправить их одним пакетом. Если бекенд — устаревший демон Sphinx, он просто прочитает этот склеенный пакет как 4 байта рукопожатия, затем тело запроса. Поскольку они пришли в одном пакете, у сокета бекенда нет задержки RTT, а буфер фронтенда работает, как обычно.
+3. Продолжая предположение: поскольку пакет 'query' довольно мал, а handshake ещё меньше, давайте отправим оба в начальном TCP пакете 'SYN' с использованием современной техники TFO (tcp-fast-open). То есть: мы подключаемся к удалённой ноде с «склеенным» пакетом handshake + тело. Демон принимает соединение и сразу же имеет в буфере сокета как handshake, так и тело, так как они пришли в самом первом TCP пакете 'SYN'. Это исключает еще один RTT.
+4. Наконец, научим демон принимать это улучшение. На самом деле, с точки зрения приложения, это подразумевает НЕ использовать `TCP_NODELAY`. А с точки зрения системы, это означает обеспечить, чтобы на стороне демона было включено принятие TFO, а на стороне клиента - отправка TFO. По умолчанию в современных системах клиентский TFO уже активирован, поэтому вам нужно только настроить TFO на сервере, чтобы всё заработало.
 
-Все эти улучшения, без фактического изменения самого протокола, позволили нам устранить 1.5 RTT TCP протокола при соединении. Что, если запрос и ответ могут поместиться в один TCP пакет, уменьшает сессию бинарного API с 3.5 RTT до 2 RTT — что делает сетевой обмен примерно в 2 раза быстрее.
+Все эти улучшения без фактического изменения протокола позволили нам исключить 1,5 RTT протокола TCP из соединения. Если запрос и ответ могут быть помещены в один TCP-пакет, это сокращает всю сессию бинарного API с 3,5 RTT до 2 RTT - что делает сетевой обмен примерно в 2 раза быстрее.
 
-Таким образом, все наши улучшения основаны на изначально неопределенном утверждении: "кто говорит первым". Если клиент говорит первым, мы можем применить все эти оптимизации и эффективно обработать подключение + handshake + запрос в одном TFO пакете. Более того, мы можем взглянуть на начало входящего пакета и определить реальный протокол. Именно поэтому можно подключаться к одному и тому же порту через API/http/https. Если же демон должен говорить первым, все эти оптимизации невозможны, как и мультипротокол. Вот почему у нас есть отдельный порт для MySQL и мы не объединили его с другими протоколами в один порт. Вдруг среди всех клиентов оказался один, написанный с идеей, что демон должен сначала отправить handshake. Это — отсутствие возможностей для всех описанных улучшений. Это плагин SphinxSE для mysql/mariadb. Поэтому специально для этого единственного клиента мы выделили определение протокола `sphinx` для работы в самых наследуемых условиях. А именно: обе стороны активируют `TCP_NODELAY` и обмениваются маленькими пакетами. Демон отправляет handshake при подключении, затем клиент отправляет свой, и потом всё работает обычным способом. Это не очень оптимально, но просто работает. Если вы используете SphinxSE для подключения к Manticore — вам нужно выделить слушатель с явно указанным протоколом `sphinx`. Для других клиентов — избегайте использования этого слушателя, так как он медленнее. Если вы используете другие устаревшие клиенты Sphinx API — сначала проверьте, смогут ли они работать с не выделенным мультипротокольным портом. Для связи мастер-агент через не выделенный (мультипротокольный) порт и с включенным клиентским и серверным TFO работает хорошо и определенно сделает работу сетевой подсистемы быстрее, особенно если у вас очень легкие и быстрые запросы.
+Итак, все наши улучшения строятся вокруг исходно неустановленного утверждения: «кто говорит первым». Если первым говорит клиент, мы можем применить все эти оптимизации и эффективно обработать connect + handshake + query в одном TFO-пакете. Более того, можно заглянуть в начало полученного пакета и определить реальный протокол. Вот почему можно подключаться к одному и тому же порту через API/http/https. Если первым должен говорить демон, все эти оптимизации невозможны, и мультипротокол тоже невозможен. Поэтому у нас есть выделенный порт для MySQL, и мы не объединили его со всеми другими протоколами в один порт. Внезапно, среди всех клиентов, один был написан с предположением, что демон должен отправлять handshake первым. Это - отсутствие возможности всех описанных улучшений. Это плагин SphinxSE для mysql/mariadb. Поэтому специально для этого единственного клиента мы выделили протокол `sphinx`, работающий наиболее наследуемым способом. А именно: обе стороны активируют `TCP_NODELAY` и обмениваются маленькими пакетами. Демон шлёт свой handshake при подключении, затем клиент отправляет свой, и затем всё работает обычным способом. Это не очень оптимально, но просто работает. Если вы используете SphinxSE для подключения к Manticore - вам нужно выделить listener с явно заданным протоколом `sphinx`. Для других клиентов - не используйте этот listener, так как он медленнее. Если вы используете другие устаревшие клиенты Sphinx API - сначала проверьте, могут ли они работать с неодназначенным мультипротокольным портом. Для связи master-agent использование неодназначенного (мультипротокольного) порта с включенным клиентским и серверным TFO работает хорошо и определённо ускорит работу сетевого бэкенда, особенно если у вас очень лёгкие и быстрые запросы.
 </details>
 
 ### listen_tfo
 
-Этот параметр включает флаг TCP_FASTOPEN для всех слушателей. По умолчанию им управляет система, но его можно явно отключить, установив значение в '0'.
+Эта настройка позволяет использовать флаг TCP_FASTOPEN для всех слушателей. По умолчанию он управляется системой, но может быть явно отключен установкой в '0'.
 
-Для общего понимания расширения TCP Fast Open, пожалуйста, обратитесь к [Wikipedia](https://en.wikipedia.org/wiki/TCP_Fast_Open). Кратко говоря, это позволяет исключить один TCP раунд-трип при установлении соединения.
+Для общего понимания расширения TCP Fast Open обратитесь к [Wikipedia](https://en.wikipedia.org/wiki/TCP_Fast_Open). Вкратце, оно позволяет исключить один TCP круг (RTT) при установлении соединения.
 
-На практике использование TFO во многих случаях может оптимизировать сетевую эффективность клиент-агент, как если бы были [постоянные агенты](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md), но без удержания активных соединений, а также без ограничения по максимальному количеству соединений.
+На практике использование TFO во многих случаях может оптимизировать сетевую эффективность клиент-агент, как если бы использовались [постоянные агенты](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md), но без удержания активных соединений и без ограничения максимального количества соединений.
 
-В современных ОС поддержка TFO обычно включена на системном уровне, но это всего лишь 'возможность', а не правило. Linux (как самый прогрессивный) поддерживает ее с 2011 года, начиная с ядер 3.7 (со стороны сервера). Windows поддерживает ее начиная с определенных сборок Windows 10. Другие операционные системы (FreeBSD, MacOS) тоже в игре.
+В современных ОС поддержка TFO обычно включена на системном уровне, но это лишь «возможность», а не правило. Linux (самая прогрессивная) поддерживает его с 2011 года, на ядрах начиная с 3.7 (для серверной стороны). Windows поддерживает с некоторых сборок Windows 10. Другие операционные системы (FreeBSD, MacOS) тоже включены в игру.
 
-Для Linux система проверяет переменную `/proc/sys/net/ipv4/tcp_fastopen` и ведет себя согласно ей. Бит 0 управляет клиентской стороной, бит 1 — слушателями. По умолчанию параметр установлен в 1, то есть клиенты включены, слушатели отключены.
+В Linux system сервер проверяет переменную `/proc/sys/net/ipv4/tcp_fastopen` и ведет себя согласно ей. Бит 0 управляет клиентской стороной, бит 1 - слушателями. По умолчанию параметр установлен в 1, то есть клиенты включены, слушатели выключены.
 
 ### log
 
 <!-- example conf log -->
-Параметр log задает имя файла журнала, в который будут записаны все события выполнения `searchd`. Если не указано, имя по умолчанию 'searchd.log'.
+Параметр log указывает имя файла журнала, в который будут записываться все события `searchd` во время работы. Если не указан, используется имя по умолчанию 'searchd.log'.
 
-В качестве альтернативы можно использовать имя файла 'syslog'. В этом случае события будут отправляться в демон syslog. Для использования опции syslog необходимо собрать Manticore с опцией `-–with-syslog`.
+В качестве альтернативы можно использовать в качестве имени файла 'syslog'. В этом случае события будут отправляться демону syslog. Для использования опции syslog нужно скомпилировать Manticore с опцией `-–with-syslog`.
 
 
 <!-- intro -->
@@ -745,9 +745,9 @@ log = /var/log/searchd.log
 ### max_batch_queries
 
 <!-- example conf max_batch_queries -->
-Ограничивает количество запросов в пакете. Опционально, по умолчанию 32.
+Ограничивает количество запросов в партии. Опционально, по умолчанию 32.
 
-Заставляет searchd выполнять проверку здравомыслия по количеству запросов, отправленных в одном пакете при использовании [мультизапросов](../Searching/Multi-queries.md). Установите в 0, чтобы пропустить проверку.
+Заставляет searchd выполнять проверку разумности количества запросов, отправленных в одной партии при использовании [мультизапросов](../Searching/Multi-queries.md). Установите в 0, чтобы пропустить проверку.
 
 
 <!-- intro -->
@@ -763,7 +763,7 @@ max_batch_queries = 256
 ### max_connections
 
 <!-- example max_connections -->
-Максимальное количество одновременных клиентских соединений. По умолчанию не ограничено. Обычно заметно при использовании каких-либо постоянных соединений, например CLI сессий mysql или постоянных удаленных соединений из удаленных распределенных таблиц. Если лимит достигнут, вы все равно можете подключиться к серверу используя [VIP соединение](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection). VIP соединения не учитываются в лимите.
+Максимальное количество одновременных клиентских соединений. По умолчанию неограниченно. Обычно заметно только при использовании каких-либо постоянных соединений, таких как CLI-сессии mysql или постоянные удалённые соединения от удалённых распределённых таблиц. При превышении лимита вы всё равно можете подключиться к серверу, используя [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection). VIP-соединения не учитываются в лимит.
 
 <!-- request Example -->
 ```ini
@@ -775,11 +775,11 @@ max_connections = 10
 ### max_threads_per_query
 
 <!-- example max_threads_per_query -->
-Глобальное ограничение количества потоков, которые может использовать одна операция. По умолчанию соответствующие операции могут занимать все ядра процессора, не оставляя места для других операций. Например, `call pq` к достаточно большой таблице percolate может использовать все потоки в течение нескольких десятков секунд. Установка `max_threads_per_query` в, скажем, половину от значения [threads](../Server_settings/Searchd.md#threads) обеспечит возможность параллельного выполнения нескольких таких операций `call pq`.
+Глобальное ограничение количества потоков, которые может использовать одна операция. По умолчанию соответствующие операции могут занимать все ядра CPU, не оставляя места для других операций. Например, `call pq` к достаточно большой перколятной таблице может использовать все потоки в течение десятков секунд. Установка `max_threads_per_query` в, скажем, половину от [threads](../Server_settings/Searchd.md#threads) обеспечит возможность выполнения нескольких таких операций `call pq` параллельно.
 
-Также можно установить этот параметр как переменную сессии или глобальную переменную во время работы.
+Вы также можете установить этот параметр как переменную сессии или глобальную переменную во время выполнения.
 
-Кроме того, поведение можно контролировать для каждого запроса отдельно с помощью [опции threads](../Searching/Options.md#threads).
+Кроме того, вы можете управлять поведением для каждой отдельной запроса с помощью [threads OPTION](../Searching/Options.md#threads).
 
 <!-- intro -->
 ##### Пример:
@@ -794,7 +794,7 @@ max_threads_per_query = 4
 ### max_filters
 
 <!-- example conf max_filters -->
-Максимально допустимое количество фильтров на запрос. Этот параметр используется только для внутренних проверок и не влияет напрямую на использование оперативной памяти или производительность. Необязательный, по умолчанию 256.
+Максимально допустимое количество фильтров на запрос. Этот параметр используется только для внутренних проверок целостности и напрямую не влияет на использование ОЗУ или производительность. Опционально, по умолчанию 256.
 
 
 <!-- intro -->
@@ -811,7 +811,7 @@ max_filters = 1024
 ### max_filter_values
 
 <!-- example conf max_filter_values -->
-Максимально допустимое количество значений для одного фильтра. Этот параметр используется только для внутренних проверок и не влияет напрямую на использование оперативной памяти или производительность. Необязательный, по умолчанию 4096.
+Максимально допустимое количество значений для одного фильтра. Этот параметр используется только для внутренних проверок целостности и напрямую не влияет на использование ОЗУ или производительность. Опционально, по умолчанию 4096.
 
 
 <!-- intro -->
@@ -828,9 +828,9 @@ max_filter_values = 16384
 ### max_open_files
 
 <!-- example conf max_open_files -->
-Максимальное количество файлов, которые серверу разрешено открывать, называется «мягким лимитом». Обратите внимание, что обслуживание больших фрагментированных таблиц реального времени может требовать высокого значения этого лимита, так как каждый дисковый чанк может занимать десятки или более файлов. Например, таблица реального времени с 1000 чанками может потребовать одновременного открытия тысяч файлов. Если в логах появляется ошибка 'Too many open files', попробуйте изменить этот параметр — это может помочь устранить проблему.
+Максимальное количество файлов, которые серверу разрешено открыть, называется "мягким лимитом". Обратите внимание, что обслуживание больших фрагментированных таблиц реального времени может потребовать установки этого лимита на высоком уровне, так как каждый дисковый кусок может занимать десятки и более файлов. Например, таблица реального времени с 1000 кусков может требовать открытия одновременно тысяч файлов. Если в логах появляется ошибка 'Too many open files', попробуйте отрегулировать этот параметр — это может помочь решить проблему.
 
-Существует также «жёсткий лимит», который нельзя превысить с помощью этой настройки. Этот лимит задаётся системой и может быть изменён в файле `/etc/security/limits.conf` на Linux. В других ОС могут применяться другие методы, поэтому ознакомьтесь с руководствами для дополнительной информации.
+Существует также "жесткий лимит", который нельзя превысить с помощью этой опции. Этот лимит определяется системой и может быть изменён в файле `/etc/security/limits.conf` на Linux. На других операционных системах подходы могут отличаться, поэтому обратитесь к своим руководствам для дополнительной информации.
 
 <!-- intro -->
 ##### Пример:
@@ -843,7 +843,7 @@ max_open_files = 10000
 <!-- end -->
 
 <!-- example conf max_open_files max -->
-Помимо прямых числовых значений, можно использовать магическое слово 'max', чтобы установить лимит равным текущему доступному жёсткому лимиту.
+Помимо непосредственных числовых значений, вы можете использовать магическое слово 'max', чтобы установить лимит равным текущему доступному жёсткому лимиту.
 
 <!-- intro -->
 ##### Пример:
@@ -859,7 +859,7 @@ max_open_files = max
 ### max_packet_size
 
 <!-- example conf max_packet_size -->
-Максимально допустимый размер сетевого пакета. Этот параметр ограничивает как пакеты запросов от клиентов, так и пакеты ответов от удалённых агентов в распределённой среде. Используется только для внутренних проверок и не влияет напрямую на использование оперативной памяти или производительность. Необязательный, по умолчанию 128 МБ.
+Максимально допустимый размер сетевого пакета. Этот параметр ограничивает как пакеты запросов от клиентов, так и пакеты ответов от удалённых агентов в распределённой среде. Используется только для внутренних проверок целостности, напрямую не влияет на использование ОЗУ или производительность. Опционально, по умолчанию 128M.
 
 
 <!-- intro -->
@@ -876,9 +876,9 @@ max_packet_size = 32M
 ### mysql_version_string
 
 <!-- example conf mysql_version_string -->
-Строка версии сервера, возвращаемая по протоколу MySQL. Необязательный параметр, по умолчанию пустая строка (возвращает версию Manticore).
+Строка версии сервера, возвращаемая через протокол MySQL. Опционально, по умолчанию пусто (возвращается версия Manticore).
 
-Некоторые требовательные библиотеки клиентов MySQL зависят от определённого формата номера версии, используемого MySQL, а иногда выбирают разные пути выполнения в зависимости от версии, а не от флагов возможностей. Например, Python MySQLdb 1.2.2 вызывает исключение, если версия не находится в формате X.Y.ZZ; MySQL .NET connector 6.3.x внутренне не справляется с номерами версий 1.x при определённой комбинации флагов и т.п. Чтобы обойти это, можно использовать директиву `mysql_version_string` и заставить `searchd` сообщать клиентам, подключающимся по протоколу MySQL, другую версию. (По умолчанию он сообщает свою собственную версию.)
+Некоторые придирчивые клиентские библиотеки MySQL зависят от определённого формата номера версии, используемого MySQL, и более того, иногда выбирают разный путь выполнения в зависимости от указанного номера версии (а не от флагов возможностей). Например, Python MySQLdb 1.2.2 вызывает исключение, если номер версии не соответствует формату X.Y.ZZ; MySQL .NET connector 6.3.x внутренне падает на номерах версий 1.x с определённой комбинацией флагов и т. д. Чтобы обойти это, вы можете использовать директиву `mysql_version_string` и заставить `searchd` сообщать клиентам, подключающимся по протоколу MySQL, другую версию. (По умолчанию он сообщает свою собственную версию.)
 
 
 <!-- intro -->
@@ -896,33 +896,33 @@ mysql_version_string = 5.0.37
 
 Количество сетевых потоков, по умолчанию 1.
 
-Эта настройка полезна при экстремально высокой интенсивности запросов, когда одного потока недостаточно для обработки всех входящих запросов.
+Этот параметр полезен при экстремально высоких скоростях запросов, когда одного потока недостаточно для управления всеми входящими запросами.
 
 
 ### net_wait_tm
 
-Управляет интервалом опроса в busy loop сетевого потока. По умолчанию -1, может быть установлен в -1, 0, или положительное целое число.
+Управляет интервалом цикла занятости сетевого потока. По умолчанию -1, может быть установлен в -1, 0 или положительное целое число.
 
-Если сервер настроен как чистый мастер и только маршрутизирует запросы к агентам, важно обрабатывать запросы без задержек и не допускать спячку сетевого потока. Для этого существует busy loop. После входящего запроса сетевой поток использует опрос CPU в течение `10 * net_wait_tm` миллисекунд, если `net_wait_tm` положительно, или опрашивает только CPU, если `net_wait_tm` равен `0`. Также busy loop можно отключить установкой `net_wait_tm = -1` — в таком случае poller устанавливает таймауты согласно реальным таймаутам агентов в системном вызове опроса.
+В случаях, когда сервер настроен как чистый мастер и просто маршрутизирует запросы на агентов, важно обрабатывать запросы без задержек и не допускать сна сетевого потока. Для этого используется цикл занятости. После входящего запроса сетевой поток использует CPU poll в течение `10 * net_wait_tm` миллисекунд, если `net_wait_tm` положительное число, или опрашивает только CPU, если `net_wait_tm` равен `0`. Также цикл занятости можно отключить значением `net_wait_tm = -1` — в этом случае poller устанавливает таймаут исходя из текущих таймаутов агента в системном вызове опроса.
 
-> **ПРЕДУПРЕЖДЕНИЕ:** Busy loop сильно загружает ядро процессора, поэтому установка этого значения в любое, кроме стандартного, приведёт к заметному использованию CPU даже при простое сервера.
+> **ВНИМАНИЕ:** Цикл занятости CPU действительно загружает ядро CPU, поэтому установка этого значения отличным от значения по умолчанию вызовет заметное использование CPU даже при простаивающем сервере.
 
 
 ### net_throttle_accept
 
-Определяет количество клиентов, принимаемых на каждой итерации сетевого цикла. По умолчанию 0 (без ограничений), что подходит большинству пользователей. Это тонкая настройка для управления пропускной способностью сетевого цикла в условиях высокой нагрузки.
+Определяет, сколько клиентов принимается на каждой итерации сетевого цикла. По умолчанию 0 (без ограничений), что подходит для большинства пользователей. Это опция тонкой настройки для управления пропускной способностью сетевого цикла в сценариях высокой нагрузки.
 
 
 ### net_throttle_action
 
-Определяет количество запросов, обрабатываемых на каждой итерации сетевого цикла. По умолчанию 0 (без ограничений), что подходит большинству пользователей. Это тонкая настройка для управления пропускной способностью сетевого цикла в условиях высокой нагрузки.
+Определяет, сколько запросов обрабатывается на каждой итерации сетевого цикла. По умолчанию 0 (без ограничений), что подходит для большинства пользователей. Это опция тонкой настройки для управления пропускной способностью сетевого цикла в сценариях высокой нагрузки.
 
 ### network_timeout
 
 <!-- example conf network_timeout -->
-Таймаут чтения/записи сетевого запроса клиента, в секундах (или с использованием [special_suffixes](../Server_settings/Special_suffixes.md)). Необязательный, по умолчанию 5 секунд. `searchd` принудительно закроет подключение клиента, который не отправит запрос или не прочитает результат в течение этого таймаута.
+Таймаут чтения/записи сетевого клиентского запроса в секундах (или [special_suffixes](../Server_settings/Special_suffixes.md)). Опционально, по умолчанию 5 секунд. `searchd` принудительно закроет соединение с клиентом, который не успел отправить запрос или прочитать результат в течение этого таймаута.
 
-Обратите также внимание на параметр [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). Этот параметр изменяет поведение `network_timeout` с применения к всему `query` или `result` на применение к отдельным пакетам. Обычно запрос/результат помещается в один или два пакета. Однако в случаях, когда требуется большой объем данных, этот параметр может быть незаменим для поддержания активной работы.
+Обратите также внимание на параметр [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet). Этот параметр изменяет поведение `network_timeout` с применения ко всему `query` или `result` на применение к отдельным пакетам. Обычно запрос/результат помещается в один или два пакета. Однако в случаях, когда требуется большое количество данных, этот параметр может быть бесценным для поддержания активных операций.
 
 <!-- request Example -->
 
@@ -934,11 +934,11 @@ network_timeout = 10s
 ### node_address
 
 <!-- example conf node_address -->
-Этот параметр позволяет указать сетевой адрес узла. По умолчанию он установлен на адрес репликации [listen](../Server_settings/Searchd.md#listen). Это правильно в большинстве случаев; однако, бывают ситуации, когда его приходится указывать вручную:
+Этот параметр позволяет указать сетевой адрес узла. По умолчанию он установлен на адрес репликации [listen](../Server_settings/Searchd.md#listen). В большинстве случаев это корректно; однако бывают ситуации, когда необходимо указать его вручную:
 
-* Узел за файрволом
-* Включен сетевой транслятор адресов (NAT)
-* Развертывания в контейнерах, таких как Docker или облачные развертывания
+* Узел за брандмауэром
+* Включён транслятор сетевых адресов (NAT)
+* Развёртывания с использованием контейнеров, например Docker или облачные развёртывания
 * Кластеры с узлами в более чем одном регионе
 
 
@@ -955,7 +955,7 @@ node_address = 10.101.0.10
 ### not_terms_only_allowed
 
 <!-- example conf not_terms_only_allowed -->
-Этот параметр определяет, разрешать ли запросы с использованием только [оператора отрицания](../Searching/Full_text_matching/Operators.md#Negation-operator) полнотекстового поиска. Опционально, по умолчанию 0 (отклонять запросы с использованием только оператора NOT).
+Этот параметр определяет, разрешать ли запросы, состоящие только из оператора полнотекстового поиска с [отрицанием](../Searching/Full_text_matching/Operators.md#Negation-operator). Необязательный, значение по умолчанию — 0 (запросы с одним оператором NOT отклоняются).
 
 
 <!-- intro -->
@@ -971,7 +971,7 @@ not_terms_only_allowed = 1
 ### optimize_cutoff
 
 <!-- example conf optimize_cutoff -->
-Задает порог по умолчанию для сжатия таблицы. Подробнее здесь — [Number of optimized disk chunks](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks). Этот параметр может быть переопределен опцией на уровне запроса [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks). Также может динамически изменяться через [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
+Устанавливает порог сжатия таблицы по умолчанию. Подробнее здесь — [Number of optimized disk chunks](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks). Этот параметр можно переопределить опцией запроса [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks). Также возможна динамическая смена через [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET).
 
 <!-- intro -->
 ##### Пример:
@@ -986,9 +986,9 @@ optimize_cutoff = 4
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-Этот параметр определяет максимальное количество одновременных постоянных соединений с удаленными [persistent agents](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md). Каждый раз при подключении агента, определенного в `agent_persistent`, мы пытаемся повторно использовать существующее соединение (если оно есть), или подключиться и сохранить соединение для будущего использования. Однако в некоторых случаях имеет смысл ограничить количество таких постоянных соединений. Эта директива задает лимит. Она влияет на количество соединений с хостом каждого агента во всех распределенных таблицах.
+Этот параметр определяет максимальное количество одновременных постоянных соединений с удалёнными [persistent agents](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md). Каждый раз при подключении агента, определённого под `agent_persistent`, стараемся использовать существующее соединение (если оно есть), либо подключаемся и сохраняем соединение для будущего использования. Однако в некоторых случаях имеет смысл ограничить количество таких постоянных соединений. Эта директива задаёт предел. Он влияет на количество соединений к каждому хосту агента по всем распределённым таблицам.
 
-Рекомендуется установить значение равным или меньшим, чем опция [max_connections](../Server_settings/Searchd.md#max_connections) в конфиге агента.
+Рекомендуется установить значение равным или меньшим параметра [max_connections](../Server_settings/Searchd.md#max_connections) в конфигурации агента.
 
 <!-- intro -->
 ##### Пример:
@@ -1004,10 +1004,10 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file — обязательная опция конфигурации в Manticore search, которая задает путь к файлу, в котором хранится идентификатор процесса (PID) сервера `searchd`.
+pid_file — обязательный параметр конфигурации Manticore search, задающий путь к файлу, в котором хранится идентификатор процесса сервера `searchd`.
 
-Файл с PID процесса searchd пересоздается и блокируется при запуске, и содержит PID главного серверного процесса, пока сервер работает. Файл удаляется при остановке сервера.
-Назначение этого файла — позволить Manticore выполнять различные внутренние задачи, такие как проверка, запущен ли уже экземпляр `searchd`, остановка `searchd` и уведомление его о необходимости ротации таблиц. Файл также может использоваться внешними скриптами автоматизации.
+Файл идентификатора процесса searchd пересоздаётся и блокируется при запуске, и содержит идентификатор главного процесса сервера, пока сервер работает. Файл удаляется при остановке сервера.
+Назначение этого файла — позволить Manticore выполнять различные внутренние задачи, такие как проверка наличия уже запущенного экземпляра `searchd`, остановка `searchd` и уведомление о необходимости ротировать таблицы. Файл также может использоваться внешними скриптами автоматизации.
 
 
 <!-- intro -->
@@ -1024,7 +1024,7 @@ pid_file = /run/manticore/searchd.pid
 ### predicted_time_costs
 
 <!-- example conf predicted_time_costs -->
-Затраты для модели предсказания времени запроса, в наносекундах. Опционально, по умолчанию `doc=64, hit=48, skip=2048, match=64`.
+Затраты модели предсказания времени выполнения запроса, в наносекундах. Необязательный, значение по умолчанию — `doc=64, hit=48, skip=2048, match=64`.
 
 <!-- intro -->
 ##### Пример:
@@ -1037,7 +1037,7 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 <!-- end -->
 
 <!-- example conf predicted_time_costs 1 -->
-Преждевременное прерывание запросов по времени выполнения (с помощью установки max query time) — это хорошая страховка, но она имеет свой недостаток: непредсказуемые (нестабильные) результаты. То есть если повторить один и тот же (сложный) поисковый запрос с ограничением по времени несколько раз, ограничение времени будет достигаться на разных этапах, и вы получите *разные* наборы результатов.
+Прерывание запросов до их завершения на основе времени выполнения (с помощью настройки максимального времени запроса) — удобная страховка, но она сопровождается присущим ей недостатком: неопределёнными (нестабильными) результатами. То есть, если вы повторите один и тот же (сложный) поисковый запрос с ограничением по времени несколько раз, лимит времени будет достигаться на разных этапах, и вы получите *разные* наборы результатов.
 
 <!-- intro -->
 ##### SQL:
@@ -1054,7 +1054,7 @@ SetMaxQueryTime()
 ```
 <!-- end -->
 
-Есть опция, [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time), которая позволяет ограничивать время запроса *и* получать стабильные, воспроизводимые результаты. Вместо того чтобы регулярно проверять фактическое текущее время во время оценки запроса, что является непредсказуемым, она предсказывает текущее время исполнения с помощью простой линейной модели:
+Существует опция [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time), которая позволяет ограничить время запроса *и* получить стабильные, повторяемые результаты. Вместо регулярной проверки фактического текущего времени при оценке запроса, что является неопределённым процессом, она прогнозирует текущее время выполнения с помощью простой линейной модели:
 
 ```ini
 predicted_time =
@@ -1064,19 +1064,19 @@ predicted_time =
     match_cost * found_matches
 ```
 
-Запрос прерывается досрочно, когда `predicted_time` достигает заданного предела.
+Запрос прерывается заранее, когда `predicted_time` достигает заданного предела.
 
-Конечно, это не жесткое ограничение на фактическое затраченное время (зато это жесткое ограничение на объем выполненной *обработки*), и простая линейная модель далеко не идеально точна. Поэтому настенные часы *могут* показывать время как ниже, так и выше целевого предела. Однако погрешности вполне приемлемы: например, в наших экспериментах с целевым лимитом в 100 мс большинство тестовых запросов попадало в диапазон 95–105 мс, и *все* запросы находились в диапазоне 80–120 мс. Также приятным побочным эффектом является то, что использование смоделированного времени запроса вместо измерения фактического времени выполнения приводит к некоторому уменьшению количества вызовов gettimeofday().
+Конечно, это не жёсткое ограничение на фактическое затраченное время (впрочем, оно является жёстким ограничением на количество *обработанной* работы), и простая линейная модель ни в коем случае не является идеально точной. Поэтому реальное время на часах *может* быть как меньше, так и больше заданного лимита. Однако погрешности вполне приемлемы: например, в наших экспериментах с целевым лимитом в 100 мс большинство тестовых запросов укладывались в диапазон от 95 до 105 мс, и *все* запросы — в диапазон от 80 до 120 мс. Также, в качестве приятного побочного эффекта, использование моделируемого времени запроса вместо измерения реального времени выполнения приводит к небольшому уменьшению количества вызовов gettimeofday().
 
-Ни одна пара моделей и марок серверов не идентична, поэтому директива `predicted_time_costs` позволяет настроить стоимости для приведённой выше модели. Для удобства они представлены целыми числами, которые считаются в наносекундах. (Предел в max_predicted_time считается в миллисекундах, и необходимость указывать значения стоимости как 0.000128 мc вместо 128 нс несколько более подвержена ошибкам.) Указывать все четыре стоимости одновременно не обязательно, так как пропущенные возьмутся по умолчанию. Тем не менее, мы настоятельно рекомендуем указать все стоимости для удобочитаемости.
+Ни два сервера одинаковой марки и модели не бывают идентичны, поэтому директива `predicted_time_costs` позволяет настроить затраты для приведённой выше модели. Для удобства они выражены целыми числами и считаются в наносекундах. (Ограничение в max_predicted_time считается в миллисекундах, и указание значений затрат как 0.000128 мс вместо 128 нс несколько более подвержено ошибкам.) Не обязательно указывать все четыре значения затрат одновременно, пропущенные будут иметь значения по умолчанию. Однако мы настоятельно рекомендуем указать все для удобочитаемости.
 
 
 ### preopen_tables
 
 <!-- example conf preopen_tables -->
-Директива конфигурации preopen_tables определяет, следует ли принудительно предварительно открыть все таблицы при запуске. Значение по умолчанию — 1, что означает, что все таблицы будут предварительно открыты независимо от индивидуальной настройки [preopen](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Other-performance-related-settings) для каждой таблицы. Если установить в 0, то будут действовать настройки для отдельных таблиц, которые по умолчанию равны 0.
+Директива конфигурации preopen_tables задаёт, нужно ли принудительно предварительно открывать все таблицы при запуске. Значение по умолчанию — 1, что означает, что все таблицы будут предварительно открыты независимо от настройки [preopen](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Other-performance-related-settings) для каждой таблицы. При значении 0 будут учитываться настройки для каждой таблицы, которые по умолчанию равны 0.
 
-Предварительное открытие таблиц может предотвратить гонки между поисковыми запросами и ротациями, которые иногда вызывают сбои запросов. Однако это также использует больше дескрипторов файлов. В большинстве случаев рекомендуется предварительно открывать таблицы.
+Предварительное открытие таблиц может предотвратить гонки между поисковыми запросами и ротациями, которые иногда могут приводить к сбоям запросов. Однако это также увеличивает количество используемых дескрипторов файлов. В большинстве сценариев рекомендуется предварительно открывать таблицы.
 
 Вот пример конфигурации:
 
@@ -1093,15 +1093,15 @@ preopen_tables = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-Опция конфигурации pseudo_sharding включает параллелизацию поисковых запросов к локальным простым и реальным таблицам, независимо от того, запрашиваются ли они напрямую или через распределённую таблицу. Эта функция автоматически распараллеливает запросы до количества потоков, указанного в `searchd.threads`.
+Опция конфигурации pseudo_sharding позволяет параллелить поисковые запросы к локальным простым и реальном времени таблицам, независимо от того, запрашиваются ли они напрямую или через распределённую таблицу. Эта функция автоматически распараллеливает запросы до числа потоков, заданных в `searchd.threads` # потоков.
 
-Обратите внимание, что если ваши рабочие потоки уже заняты из-за:
-* высокой конкуренции запросов
-* физического шардирования любого типа:
-  - распределённая таблица из нескольких простых/реальных таблиц
-  - реальная таблица, состоящая из слишком большого количества дисковых чанков
+Обратите внимание, что если ваши рабочие потоки уже заняты, потому что у вас:
+* высокая конкуренция запросов
+* физическое шардирование любого рода:
+  - распределённая таблица из нескольких простых/реальным времени таблиц
+  - реальное времени таблица, состоящая из слишком большого числа дисковых чанков
 
-то включение pseudo_sharding может не дать никакой выгоды и даже привести к небольшому снижению пропускной способности. Если вы отдаёте приоритет высокой пропускной способности вместо низкой задержки, рекомендуется отключить эту опцию.
+тогда включение pseudo_sharding может не дать никаких преимуществ и даже привести к небольшому снижению пропускной способности. Если для вас важна большая пропускная способность, а не меньшая задержка, рекомендуется отключить эту опцию.
 
 Включено по умолчанию.
 
@@ -1118,31 +1118,31 @@ pseudo_sharding = 0
 
 ### replication_connect_timeout
 
-Директива `replication_connect_timeout` определяет таймаут подключения к удалённому узлу. По умолчанию значение считается в миллисекундах, но может иметь [другой суффикс](../Server_settings/Special_suffixes.md). Значение по умолчанию — 1000 (1 секунда).
+Директива `replication_connect_timeout` задаёт тайм-аут подключения к удалённому узлу. По умолчанию значение считается в миллисекундах, но может иметь [другой суффикс](../Server_settings/Special_suffixes.md). Значение по умолчанию — 1000 (1 секунда).
 
-При подключении к удалённому узлу Manticore будет ждать не более этого времени для успешного установления соединения. Если таймаут достигнут, но соединение не установлено, и включены `retries`, будет выполнена повторная попытка.
+При подключении к удалённому узлу Manticore будет ждать не более указанного времени для успешного установления соединения. Если время истекает, но соединение не установлено, и включены `retries`, будет инициирована повторная попытка.
 
 
 ### replication_query_timeout
 
-Директива `replication_query_timeout` задаёт время ожидания searchd ответа от удалённого узла на выполнение запроса. Значение по умолчанию — 3000 миллисекунд (3 секунды), но может содержать `суффикс` для указания другой единицы времени.
+Директива `replication_query_timeout` задает время ожидания, в течение которого searchd будет ждать завершения запроса от удалённого узла. Значение по умолчанию — 3000 миллисекунд (3 секунды), но может быть указано с `суффиксом` для другого единицы времени.
 
-После установления соединения Manticore будет ждать максимум `replication_query_timeout` для завершения удалённым узлом. Заметьте, что этот таймаут отличается от `replication_connect_timeout`, и общая задержка от удалённого узла будет суммой обоих значений.
+После установления соединения Manticore будет ждать максимальное время `replication_query_timeout` для завершения удалённым узлом. Обратите внимание, что этот тайм-аут отличается от `replication_connect_timeout`, и возможная общая задержка из-за удалённого узла будет суммой обоих значений.
 
 
 ### replication_retry_count
 
-Эта настройка — целое число, указывающее, сколько раз Manticore попытается подключиться и выполнить запрос на удалённом узле во время репликации перед тем, как сообщить о критической ошибке запроса. Значение по умолчанию — 3.
+Эта настройка — целое число, задающее, сколько раз Manticore попытается подключиться и выполнить запрос к удалённому узлу во время репликации, прежде чем сообщить о критической ошибке запроса. Значение по умолчанию — 3.
 
 
 ### replication_retry_delay
 
-Эта настройка — целое число в миллисекундах (или [special_suffixes](../Server_settings/Special_suffixes.md)), задающее задержку перед повторной попыткой запроса к удалённому узлу в случае сбоя во время репликации. Значение актуально только при ненулевом значении. Значение по умолчанию — 500.
+Эта настройка — целое число в миллисекундах (или [special_suffixes](../Server_settings/Special_suffixes.md)) задаёт задержку перед повторной попыткой запроса к удалённому узлу при сбое во время репликации. Это значение актуально только при ненулевом значении. Значение по умолчанию — 500.
 
 ### qcache_max_bytes
 
 <!-- example conf qcache_max_bytes -->
-Эта настройка конфигурации задаёт максимальный объём оперативной памяти, выделяемый для кешированных наборов результатов, в байтах. Значение по умолчанию — 16777216, что эквивалентно 16 мегабайтам. Если значение установлено в 0, кеш запросов отключен. Подробнее о кешировании запросов см. в разделе [query cache](../Searching/Query_cache.md).
+Эта настройка конфигурации задаёт максимальный объём оперативной памяти, выделенной для кэшированных наборов результатов, в байтах. Значение по умолчанию — 16777216, что эквивалентно 16 мегабайтам. Если значение выставить в 0, кэш запросов будет отключен. Для дополнительной информации о кэше запросов, пожалуйста, обратитесь к разделу [query cache](../Searching/Query_cache.md).
 
 
 <!-- intro -->
@@ -1158,20 +1158,20 @@ qcache_max_bytes = 16777216
 
 ### qcache_thresh_msec
 
-Целое число, в миллисекундах. Минимальный порог времени работы запроса для кеширования результата. По умолчанию 3000 (3 секунды). 0 означает кешировать всё. Смотрите подробности в [query cache](../Searching/Query_cache.md). Также значение может быть выражено с помощью [special_suffixes](../Server_settings/Special_suffixes.md), но используйте это аккуратно, чтобы не запутаться с именем самой настройки, содержащей '_msec'.
+Целое число, в миллисекундах. Минимальный порог по времени выполнения запроса, при котором результат будет кэшироваться. Значение по умолчанию — 3000, или 3 секунды. 0 означает кэшировать всё. Подробности смотрите в разделе [query cache](../Searching/Query_cache.md). Это значение также может быть выражено с помощью временных [special_suffixes](../Server_settings/Special_suffixes.md), но используйте это с осторожностью, чтобы не запутаться из-за названия переменной с суффиксом '_msec'.
 
 
 ### qcache_ttl_sec
 
-Целое число, в секундах. Период хранения кешированного результата. По умолчанию 60 (1 минута). Минимальное значение — 1 секунда. Подробности в [query cache](../Searching/Query_cache.md). Также может быть выражено с помощью [special_suffixes](../Server_settings/Special_suffixes.md), но используйте аккуратно, чтобы не запутаться с именем самой настройки, содержащей '_sec'.
+Целое число, в секундах. Период действия кэшированного результата. Значение по умолчанию — 60, или 1 минута. Минимально возможное значение — 1 секунда. Подробности смотрите в разделе [query cache](../Searching/Query_cache.md). Это значение также может быть выражено с помощью временных [special_suffixes](../Server_settings/Special_suffixes.md), но используйте это с осторожностью, чтобы не запутаться из-за названия переменной с суффиксом '_sec'.
 
 
 ### query_log_format
 
 <!-- example conf query_log_format -->
-Формат журнала запросов. Опционально, допустимые значения `plain` и `sphinxql`, по умолчанию `sphinxql`.
+Формат журнала запросов. Допустимые значения: `plain` и `sphinxql`, значение по умолчанию — `sphinxql`.
 
-Режим `sphinxql` логирует валидные SQL-запросы. Режим `plain` логирует запросы в простом текстовом формате (в основном подходит для случаев чисто полнотекстового использования). Эта директива позволяет переключаться между двумя форматами при запуске поискового сервера. Формат журнала также можно изменить на лету с помощью синтаксиса `SET GLOBAL query_log_format=sphinxql`. Подробнее см. в разделе [Query logging](../Logging/Query_logging.md).
+Режим `sphinxql` логирует валидные SQL-запросы. Режим `plain` логирует запросы в текстовом формате (в основном подходит для чисто полнотекстовых сценариев). Эта директива позволяет переключаться между двумя форматами при запуске сервера поиска. Формат журнала также можно изменить на лету с помощью синтаксиса `SET GLOBAL query_log_format=sphinxql`. Более подробную информацию см. в разделе [Query logging](../Logging/Query_logging.md).
 
 
 <!-- intro -->
@@ -1186,12 +1186,12 @@ query_log_format = sphinxql
 
 ### query_log_min_msec
 
-Лимит (в миллисекундах), который предотвращает запись запроса в журнал запросов. По умолчанию 0 (все запросы записываются в журнал запросов). Эта директива указывает, что будут записываться в журнал только запросы с временем выполнения, превышающим заданный лимит (это значение также может быть выражено с помощью [специальных_суффиксов](../Server_settings/Special_suffixes.md), но используйте это с осторожностью и не путайте себя с названием самого значения, содержащего `_msec`).
+Лимит (в миллисекундах), который предотвращает запись запроса в журнал запросов. Необязательно, по умолчанию 0 (все запросы записываются в журнал запросов). Эта директива указывает, что будут логироваться только запросы, время выполнения которых превышает заданный лимит (это значение также может быть выражено с помощью [специальных_суффиксов](../Server_settings/Special_suffixes.md), но используйте это с осторожностью и не путайте с именем самого значения, содержащим `_msec`).
 
 ### query_log
 
 <!-- example conf query_log -->
-Имя файла журнала запросов. Опционально, по умолчанию пусто (не записывать запросы). Все поисковые запросы (такие как SELECT ... но не INSERT/REPLACE/UPDATE запросы) будут записаны в этот файл. Формат описан в [Логировании запросов](../Logging/Query_logging.md). В случае формата 'plain' можно использовать 'syslog' как путь к файлу журнала. В этом случае все поисковые запросы будут отправляться демону syslog с приоритетом `LOG_INFO`, с префиксом '[query]' вместо временной метки. Для использования опции syslog, Manticore должен быть собран с опцией `-–with-syslog`.
+Имя файла журнала запросов. Необязательно, по умолчанию пусто (не логировать запросы). Все поисковые запросы (такие как SELECT ... но не INSERT/REPLACE/UPDATE) будут записаны в этот файл. Формат описан в [Журналирование запросов](../Logging/Query_logging.md). В случае формата 'plain', вы можете использовать 'syslog' в качестве пути к журналу. В этом случае все поисковые запросы будут отправлены демону syslog с приоритетом `LOG_INFO`, с префиксом '[query]' вместо временной метки. Для использования опции syslog, Manticore должен быть сконфигурирован с `-–with-syslog` при сборке.
 
 
 <!-- intro -->
@@ -1208,8 +1208,8 @@ query_log = /var/log/query.log
 ### query_log_mode
 
 <!-- example conf query_log_mode -->
-Директива query_log_mode позволяет установить разные права доступа для файлов журнала searchd и журнала запросов. По умолчанию эти файлы журнала создаются с правами 600, что означает, что читать журнал могут только пользователь, под которым работает сервер, и root.
-Эта директива может быть полезна, если вы хотите разрешить другим пользователям читать файлы журнала, например решениям мониторинга, запущенным от не-root пользователей.
+Директива query_log_mode позволяет установить различные права доступа для файлов журналов searchd и query. По умолчанию эти журналы создаются с правами 600, что означает, что только пользователь, под которым запущен сервер, и пользователи root могут читать эти файлы.
+Эта директива полезна, если вы хотите разрешить другим пользователям читать файлы журналов, например, решениям для мониторинга, работающим с непривилегированными пользователями.
 
 <!-- intro -->
 ##### Пример:
@@ -1224,11 +1224,11 @@ query_log_mode  = 666
 ### read_buffer_docs
 
 <!-- example conf read_buffer_docs -->
-Директива read_buffer_docs контролирует размер буфера чтения на ключевое слово для списков документов. Для каждого вхождения ключевого слова в каждом поисковом запросе существуют два связанных буфера чтения: один для списка документов и один для списка хитов. Эта настройка позволяет контролировать размер буфера списка документов.
+Директива read_buffer_docs управляет размером буфера чтения на ключевое слово для списков документов. Для каждого вхождения ключевого слова в каждом поисковом запросе есть два связанных буфера чтения: один для списка документов и один для списка попаданий. Эта настройка позволяет управлять размером буфера списка документов.
 
-Больший размер буфера может увеличить использование ОЗУ на запрос, но, возможно, уменьшит время ввода-вывода. Имеет смысл устанавливать большие значения для медленных хранилищ, но для хранилищ с высокой производительностью операций ввода-вывода эксперименты следует проводить с низкими значениями.
+Больший размер буфера может увеличить использование ОЗУ на запрос, но может уменьшить время ввода-вывода. Имеет смысл устанавливать большие значения для медленного хранилища, но для хранилищ с высокой производительностью ввода-вывода экспериментируйте с малыми значениями.
 
-Значение по умолчанию 256K, минимальное значение 8K. Также можно задать [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) на уровне конкретной таблицы, что переопределит настройки конфигурации сервера.
+Значение по умолчанию — 256K, минимальное — 8K. Вы также можете задать [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) на уровне конкретной таблицы, что переопределит настройки на уровне сервера.
 
 
 <!-- intro -->
@@ -1245,9 +1245,9 @@ read_buffer_docs = 128K
 ### read_buffer_hits
 
 <!-- example conf read_buffer_hits -->
-Директива read_buffer_hits задаёт размер буфера чтения на ключевое слово для списков хитов в поисковых запросах. По умолчанию размер 256K, минимальное значение 8K. Для каждого вхождения ключевого слова в поисковом запросе существует два связанных буфера чтения — для списка документов и списка хитов. Увеличение размера буфера может увеличить использование ОЗУ на запрос, но снизить время ввода-вывода. Для медленных хранилищ большие размеры буфера имеют смысл, а для хранилищ с высокой производительностью ввода-вывода эксперименты должны проводиться с малыми значениями.
+Директива read_buffer_hits задаёт размер буфера чтения на ключевое слово для списков попаданий в поисковых запросах. По умолчанию размер 256K, минимальное значение — 8K. Для каждого вхождения ключевого слова в запросе связаны два буфера — для списка документов и для списка попаданий. Увеличение буфера может увеличить использование ОЗУ на запрос, но снизить время ввода-вывода. Для медленного хранилища имеет смысл использовать большие размеры буфера, для хранилищ с высокой производительностью ввода-вывода рекомендуется экспериментировать с малыми значениями.
 
-Эта настройка также может быть задана на уровне конкретной таблицы через опцию read_buffer_hits в [read_buffer_hits](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_hits), что переопределит настройки сервера.
+Эту настройку можно также задать на уровне конкретной таблицы с помощью параметра read_buffer_hits в [read_buffer_hits](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_hits), что переопределит значение на уровне сервера.
 
 <!-- intro -->
 ##### Пример:
@@ -1262,9 +1262,9 @@ read_buffer_hits = 128K
 ### read_unhinted
 
 <!-- example conf read_unhinted -->
-Размер нечёсанного чтения. Опционально, по умолчанию 32K, минимум 1K
+Размер чтения без подсказки. Необязательно, по умолчанию 32K, минимально 1K
 
-При запросах некоторые операции чтения заранее знают, сколько данных нужно прочитать, а некоторые — нет. Наиболее заметно, что размер списка хитов заранее не известен. Эта настройка позволяет контролировать, сколько данных читать в таких случаях. Она влияет на время ввода-вывода для списка хитов, уменьшая его для списков, больших чем размер нечёсанного чтения, но увеличивая для меньших списков. Эта настройка **не** влияет на использование ОЗУ, так как буфер чтения уже выделен. Поэтому она не должна превышать read_buffer.
+При выполнении запросов некоторые операции чтения заранее знают, сколько данных предстоит считать, а некоторые — нет. Наиболее заметно, что размер списка попаданий заранее неизвестен. Эта настройка позволяет контролировать объём данных, который читается в таких случаях. Она влияет на время ввода-вывода для списков попаданий, уменьшая его для списков, больших, чем размер unhinted read, и увеличивая для меньших. На использование ОЗУ не влияет, так как буфер уже выделен. Следовательно, этот параметр не должен быть больше, чем read_buffer.
 
 
 <!-- intro -->
@@ -1280,14 +1280,14 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-Уточняет поведение таймаутов сети (таких как `network_timeout` и `agent_query_timeout`).
+Уточняет поведение сетевых таймаутов (таких как `network_timeout` и `agent_query_timeout`).
 
-При значении 0 таймауты ограничивают максимальное время на отправку всего запроса.
-При значении 1 (по умолчанию) таймауты ограничивают максимальное время между сетевой активностью.
+Если установить в 0, таймауты ограничивают максимальное время отправки всего запроса/запроса.
+Если установить в 1 (по умолчанию), таймауты ограничивают максимальное время между сетевой активностью.
 
-При репликации узлу может понадобиться отправить большой файл (например, 100GB) другому узлу. Допустим, сеть может передавать данные со скоростью 1GB/c, с серией пакетов по 4-5MB каждый. Для передачи всего файла потребуется 100 секунд. Таймаут по умолчанию в 5 секунд позволил бы передать только 5GB, после чего соединение прервётся. Увеличение таймаута было бы решением, но не масштабируемым (следующий файл может быть 150GB и снова будет сбой). Однако с параметром `reset_network_timeout_on_packet`, установленным по умолчанию в 1, таймаут применяется не к всей передаче, а к отдельным пакетам. Пока передача продолжается (и данные действительно поступают в пределах таймаута), соединение поддерживается. Если передача зависает и возникает таймаут между пакетами, соединение разрывается.
+При репликации узел может отправлять большой файл (например, 100ГБ) другому узлу. Предположим, сеть передаёт данные со скоростью 1ГБ/с отдельными пакетами размером 4-5МБ. Передача всего файла займет 100 секунд. Таймаут по умолчанию в 5 секунд позволит передать только 5ГБ до разрыва соединения. Увеличение таймаута — временное решение, но оно не масштабируемо (следующий файл может быть 150ГБ, что опять вызовет сбой). Однако при установленном по умолчанию значении `reset_network_timeout_on_packet` равном 1 таймаут применяется не ко всей передаче, а к отдельным пакетам. Пока передача продолжается (и данные действительно принимаются в течение периода таймаута), соединение поддерживается. Если передача застрянет, и таймаут произойдет между пакетами, соединение будет разорвано.
 
-Обратите внимание, что при настройке распределённой таблицы каждый узел — как мастер, так и агенты — должен быть настроен. Со стороны мастера влияет `agent_query_timeout`, на агентах — `network_timeout`.
+Заметьте, если у вас настроена распределённая таблица, каждый узел — как мастер, так и агенты — должен быть настроен. Для мастера актуален `agent_query_timeout`, для агентов — `network_timeout`.
 
 <!-- intro -->
 
@@ -1305,9 +1305,9 @@ reset_network_timeout_on_packet = 0
 ### rt_flush_period
 
 <!-- example conf rt_flush_period -->
-Период проверки сброса чанка RAM для RT таблиц в секундах (или с [специальными_суффиксами](../Server_settings/Special_suffixes.md)). Опционально, значение по умолчанию 10 часов.
+Период проверки сброса RAM-чунков RT таблиц, в секундах (или с [специальными_суффиксами](../Server_settings/Special_suffixes.md)). Необязательно, по умолчанию 10 часов.
 
-Активно обновляемые RT-таблицы, полностью помещающиеся в чанки RAM, все равно могут привести к постоянно растущим бинлогам, что влияет на использование диска и время восстановления после сбоя. С этой директивой сервер поиска периодически выполняет проверку сброса, и подходящие чанки RAM могут быть сохранены, что позволяет произвести последующую очистку бинлогов. Подробнее см. [Binary logging](../Logging/Binary_logging.md).
+Активно обновляемые RT-таблицы, полностью помещающиеся в RAM-чанк, могут всё же приводить к постоянно растущим binlog, что влияет на использование диска и время восстановления после сбоя. С помощью этой директивы сервер поиска выполняет периодические проверки на возможность очистки, и пригодные RAM-чанки могут быть сохранены, что позволяет выполнить последующую очистку binlog. Подробнее см. в разделе [Бинарное логирование](../Logging/Binary_logging.md).
 
 <!-- intro -->
 ##### Пример:
@@ -1323,9 +1323,9 @@ rt_flush_period = 3600 # 1 hour
 ### rt_merge_iops
 
 <!-- example conf rt_merge_iops -->
-Максимальное количество I/O операций (в секунду), которые поток слияния RT-чанков может начать. Опционально, значение по умолчанию — 0 (без ограничений).
+Максимальное количество операций ввода-вывода (в секунду), которые потоку объединения RT-чанков разрешено запускать. Необязательно, по умолчанию значение 0 (без ограничения).
 
-Эта директива позволяет снизить нагрузку на I/O, возникающую из-за операторов `OPTIMIZE`. Гарантируется, что все операции оптимизации RT не будут генерировать больше IOPS (операций ввода-вывода в секунду), чем заданный лимит. Ограничение rt_merge_iops может уменьшить деградацию производительности поиска, вызванную процессом слияния.
+Данная директива позволяет ограничить влияние на I/O, вызываемое операторами `OPTIMIZE`. Гарантируется, что все операции оптимизации RT не будут генерировать больше операций дискового ввода-вывода (IOPS) в секунду, чем указанный лимит. Ограничение rt_merge_iops может снизить просадку производительности поиска, вызванную операциями объединения.
 
 <!-- intro -->
 ##### Пример:
@@ -1340,9 +1340,9 @@ rt_merge_iops = 40
 ### rt_merge_maxiosize
 
 <!-- example conf rt_merge_maxiosize -->
-Максимальный размер одной I/O операции, которую поток слияния RT-чанков может начать. Опционально, значение по умолчанию — 0 (без ограничений).
+Максимальный размер операции ввода-вывода, которую потоку объединения RT-чанков разрешено запускать. Необязательно, по умолчанию значение 0 (без ограничения).
 
-Эта директива позволяет снизить нагрузку на I/O, возникающую из-за операторов `OPTIMIZE`. Операции ввода-вывода, размер которых превышает этот лимит, будут разбиты на две или более операций, которые затем будут учитываться как отдельные I/O операции с точки зрения лимита [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops). Таким образом, гарантируется, что все операции оптимизации не сгенерируют более чем (rt_merge_iops * rt_merge_maxiosize) байт операций с диском в секунду.
+Данная директива позволяет ограничить влияние на I/O, вызываемое операторами `OPTIMIZE`. Операции ввода-вывода, превышающие данный лимит, будут разбиты на две и более операций, которые затем будут учитываться как отдельные операции с точки зрения лимита [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops). Таким образом, гарантируется, что все операции оптимизации не будут генерировать больше, чем (rt_merge_iops * rt_merge_maxiosize) байт дискового ввода-вывода в секунду.
 
 
 <!-- intro -->
@@ -1359,28 +1359,28 @@ rt_merge_maxiosize = 1M
 ### seamless_rotate
 
 <!-- example conf seamless_rotate -->
-Предотвращает зависание `searchd` при вращении таблиц с огромным объемом данных для предзагрузки в кеш. Опционально, значение по умолчанию — 1 (включена бесшовная ротация). На системах Windows бесшовная ротация по умолчанию отключена.
+Предотвращает "зависание" `searchd` при ротации таблиц с большим объёмом данных для предварительной загрузки в память. Необязательно, по умолчанию 1 (бесшовная ротация включена). На системах Windows бесшовная ротация по умолчанию отключена.
 
-Таблицы могут содержать данные, которые необходимо предзагрузить в RAM. В настоящее время файлы `.spa`, `.spb`, `.spi` и `.spm` полностью предзагружаются (они содержат данные атрибутов, blob-атрибутов, таблицу ключевых слов и карту удалённых строк соответственно). Без бесшовной ротации вращение таблицы пытается использовать минимально возможный объем RAM и работает следующим образом:
+Таблицы могут содержать данные, которые необходимо предварительно загрузить в ОЗУ. В настоящий момент файлы `.spa`, `.spb`, `.spi` и `.spm` полностью предварительно загружаются в память (они содержат данные атрибутов, blob-атрибутов, таблицу ключевых слов и карту "убитых" строк соответственно). Без бесшовной ротации при ротации таблицы используется минимум RAM и процесс выглядит так:
 
-1. Новые запросы временно отклоняются (с кодом ошибки "retry");
+1. Новые запросы временно отклоняются (с ошибкой "retry");
 2. `searchd` ожидает завершения всех текущих запросов;
-3. Старые таблицы освобождаются, их файлы переименовываются;
-4. Файлы новой таблицы переименовываются, и выделяется необходимый объем RAM;
-5. Новые данные атрибутов и словаря таблицы предзагружаются в RAM;
-6. `searchd` возобновляет обслуживание запросов из новой таблицы.
+3. Старая таблица освобождается, её файлы переименовываются;
+4. Файлы новой таблицы переименовываются, выделяется необходимая память;
+5. Данные атрибутов и словарей новой таблицы подгружаются в память;
+6. `searchd` возобновляет обработку запросов из новой таблицы.
 
-Однако, если данных атрибутов или словаря много, этап предзагрузки может занять заметное время — до нескольких минут в случае предзагрузки файлов объемом 1-5+ ГБ.
+Однако, если объём атрибутов или словарей значителен, то этап подгрузки может занять заметное время — до нескольких минут при подгрузке файлов в 1-5+ ГБ.
 
-При включённой бесшовной ротации процесс вращения работает так:
+При включённой бесшовной ротации процесс выглядит так:
 
-1. Выделяется RAM для хранения новой таблицы;
-2. Данные атрибутов и словаря новой таблицы асинхронно предзагружаются в RAM;
-3. При успешном завершении старая таблица освобождается, и файлы обеих таблиц переименовываются;
-4. При ошибке новая таблица освобождается;
-5. В любой момент запросы обслуживаются либо из старой, либо из новой копии таблицы.
+1. Выделяется память под новую таблицу;
+2. Данные атрибутов и словарей новой таблицы асинхронно подгружаются в память;
+3. В случае успеха освобождается старая таблица и оба набора файлов переименовываются;
+4. В случае неудачи новая таблица освобождается;
+5. В любой момент запросы обрабатываются либо из старой, либо из новой копии таблицы.
 
-Бесшовная ротация сопровождается увеличением пикового использования памяти во время вращения (так как обе копии данных `.spa/.spb/.spi/.spm` старой и новой таблицы должны находиться в RAM во время предзагрузки новой копии). Среднее использование памяти остается без изменений.
+Бесшовная ротация требует большего пикового объёма памяти во время ротации (так как одновременно в памяти находятся старые и новые данные `.spa/.spb/.spi/.spm`). Среднее потребление памяти остаётся прежним.
 
 
 <!-- intro -->
@@ -1393,14 +1393,37 @@ seamless_rotate = 1
 ```
 <!-- end -->
 
+### secondary_index_block_cache
+<!-- example conf secondary_index_block_cache -->
+
+Данная опция задаёт размер кэша блоков, используемого вторичными индексами. Необязательная, по умолчанию 8 МБ. Когда вторичные индексы работают с фильтрами, содержащими множество значений (например, фильтры IN()), они читают и обрабатывают блоки метаданных для этих значений.
+В объединённых запросах этот процесс повторяется для каждого пакета строк из левой таблицы, и каждый пакет может повторно читать одни и те же метаданные в рамках одного запроса с объединением. Это может серьёзно повлиять на производительность. Кэш блоков метаданных хранит эти блоки в памяти, чтобы
+их могли использовать последующие пакеты данных.
+
+Кэш используется только в объединённых запросах и не влияет на не объединённые запросы. Обратите внимание, что ограничение размера кэша действует для каждого атрибута и для каждого вторичного индекса. Каждый атрибут в каждом дисковом чанке работает в рамках этого лимита. В худшем случае общий объём
+использования памяти можно оценить, умножив лимит на количество дисковых чанков и количество атрибутов, используемых в объединённых запросах.
+
+Значение `secondary_index_block_cache = 0` выключает кэш.
+
+<!-- intro -->
+##### Пример:
+
+<!-- request Example -->
+
+```ini
+secondary_index_block_cache = 16M
+```
+
+<!-- end -->
+
 ### secondary_indexes
 <!-- example conf secondary_indexes -->
 
-Эта опция включает/отключает использование вторичных индексов для поисковых запросов. Опционально, по умолчанию включена (1). Обратите внимание, что для индексирования её включать не нужно, так как она всегда активна при установленной [Manticore Columnar Library](https://github.com/manticoresoftware/columnar). Наличие библиотеки также требуется для использования индексов при поиске. Доступны три режима:
+Эта опция включает/отключает использование вторичных индексов в поисковых запросах. Необязательная, по умолчанию стоит 1 (включено). Обратите внимание, для индексации включать не нужно — она всегда включена если установлена [Manticore Columnar Library](https://github.com/manticoresoftware/columnar). Эта библиотека также необходима для использования индексов при поиске. Доступно три режима:
 
-* `0`: Отключить использование вторичных индексов при поиске. Их можно включить для отдельных запросов при помощи [подсказок анализатора](../Searching/Options.md#Query-optimizer-hints)
-* `1`: Включить использование вторичных индексов при поиске. Их можно отключить для отдельных запросов при помощи [подсказок анализатора](../Searching/Options.md#Query-optimizer-hints)
-* `force`: То же, что и включение, но любые ошибки при загрузке вторичных индексов будут зафиксированы, и весь индекс не будет загружен в демон.
+* `0`: Отключить использование вторичных индексов при поиске. Можно включить индивидуально для запроса с помощью [подсказок анализатора](../Searching/Options.md#Query-optimizer-hints)
+* `1`: Включить использование вторичных индексов при поиске. Можно отключать индивидуально для запросов с помощью [подсказок анализатора](../Searching/Options.md#Query-optimizer-hints)
+* `force`: То же, что и включить, но любые ошибки при загрузке вторичных индексов будут зафиксированы, и индекс полностью не загрузится в демон.
 
 <!-- intro -->
 ##### Пример:
@@ -1416,7 +1439,7 @@ secondary_indexes = 1
 ### server_id
 
 <!-- example conf server_id -->
-Целое число, служащее идентификатором сервера и используемое в качестве исходного значения для генерации уникального короткого UUID для узлов в кластере репликации. Значение server_id должно быть уникально среди узлов кластера и находиться в диапазоне от 0 до 127. Если server_id не установлен, он вычисляется как хэш MAC-адреса и пути к PID-файлу или для короткого UUID будет использовано случайное число.
+Целое число, служащее идентификатором сервера и используемое в качестве начального значения для генерации уникального короткого UUID для узлов, входящих в состав кластера репликации. server_id должен быть уникальным среди узлов кластера и находиться в диапазоне от 0 до 127. Если server_id не установлен, он вычисляется как хеш MAC-адреса и пути к PID-файлу или в качестве начального значения для короткого UUID будет использоваться случайное число.
 
 
 <!-- intro -->
@@ -1433,9 +1456,9 @@ server_id = 1
 ### shutdown_timeout
 
 <!-- example conf shutdown_timeout -->
-Время ожидания при выполнении `searchd --stopwait`, в секундах (или с использованием [special_suffixes](../Server_settings/Special_suffixes.md)). Опционально, по умолчанию — 60 секунд.
+Время ожидания для команды `searchd --stopwait` в секундах (или [special_suffixes](../Server_settings/Special_suffixes.md)). Опционально, по умолчанию 60 секунд.
 
-При запуске `searchd --stopwait` сервер должен выполнить ряд задач перед остановкой, таких как завершение запросов, сброс RT RAM чанков, сброс атрибутов и обновление бинлога. На выполнение этих задач требуется некоторое время. `searchd --stopwait` будет ожидать до `shutdown_time` секунд, пока сервер не завершит работу. Подходящее время зависит от размера таблиц и нагрузки.
+Когда вы запускаете `searchd --stopwait`, вашему серверу нужно выполнить некоторые действия перед остановкой, такие как завершение запросов, сброс RT RAM чанков, сброс атрибутов и обновление binlog. Эти задачи требуют определенного времени. `searchd --stopwait` будет ждать до `shutdown_time` секунд, пока сервер завершает свои задачи. Подходящее время зависит от размера вашей таблицы и нагрузки.
 
 
 <!-- intro -->
@@ -1451,30 +1474,30 @@ shutdown_timeout = 3m # wait for up to 3 minutes
 
 ### shutdown_token
 
-SHA1 хеш пароля, необходимого для вызова команды 'shutdown' из подключения VIP Manticore SQL. Без него команда подкоманды 'shutdown' в режиме [debug](../Reporting_bugs.md#DEBUG) никогда не приведет к остановке сервера. Обратите внимание, что такое простое хеширование не следует считать надежной защитой, так как мы не используем соль или какой-либо современный хеш-функционал. Это предназначено как надежная мера для сервисных демонов в локальной сети.
+SHA1-хеш пароля, необходимого для вызова команды 'shutdown' из VIP Manticore SQL соединения. Без него,[debug](../Reporting_bugs.md#DEBUG) подкоманда 'shutdown' никогда не вызовет остановку сервера. Обратите внимание, что подобное простое хеширование не стоит считать надежной защитой, так как мы не используем соленый хеш или какую-либо современную хеш-функцию. Это предназначено как надежная мера для фоновых демонов в локальной сети.
 
 ### snippets_file_prefix
 
 <!-- example conf snippets_file_prefix -->
-Префикс, который добавляется к локальным именам файлов при генерации сниппетов. Необязательно, по умолчанию — текущая рабочая папка.
+Префикс, добавляемый к локальным именам файлов при генерации сниппетов. Опционально, по умолчанию - текущая рабочая папка.
 
-Этот префикс может использоваться при распределенной генерации сниппетов вместе с опциями `load_files` или `load_files_scattered`.
+Этот префикс можно использовать при распределённой генерации сниппетов вместе с опциями `load_files` или `load_files_scattered`.
 
-Обратите внимание, что это именно префикс, а **не** путь! Это означает, что если префикс установлен в "server1", а запрос относится к "file23", `searchd` попытается открыть "server1file23" (все это без кавычек). Поэтому, если вам нужен путь, необходимо включить завершающий слэш.
+Обратите внимание, что это префикс, а **не** путь! Это значит, что если префикс установлен в "server1", и запрос ссылается на "file23", `searchd` попытается открыть "server1file23" (всё это без кавычек). Таким образом, если вам нужен именно путь, необходимо включить завершающий слеш.
 
-После построения окончательного пути к файлу сервер разворачивает все относительные каталоги и сравнивает результат с значением `snippet_file_prefix`. Если результат не начинается с префикса, такой файл будет отвергнут с сообщением об ошибке.
+После формирования окончательного пути к файлу сервер разворачивает все относительные директории и сравнивает окончательный результат со значением `snippet_file_prefix`. Если результат не начинается с префикса, такой файл будет отклонён с сообщением об ошибке.
 
-Например, если вы установите его в `/mnt/data` и кто-то вызовет генерацию сниппетов с файлом `../../../etc/passwd` в качестве источника, он получит сообщение об ошибке:
+Например, если вы установите `/mnt/data` и кто-то попробует сгенерировать сниппет из файла `../../../etc/passwd`, он получит сообщение об ошибке:
 
 `File '/mnt/data/../../../etc/passwd' escapes '/mnt/data/' scope`
 
 вместо содержимого файла.
 
-Также, при неопределенном параметре и чтении `/etc/passwd`, фактически будет прочитан /daemon/working/folder/etc/passwd, поскольку значение параметра по умолчанию — рабочая папка сервера.
+Также при неустановленном параметре и чтении `/etc/passwd`, на самом деле будет читаться /daemon/working/folder/etc/passwd, поскольку параметр по умолчанию – рабочая папка сервера.
 
-Обратите внимание, что это локальная опция; она никак не влияет на агенты. Поэтому вы можете без опасений установить префикс на мастер-сервере. Запросы, направляемые агентам, не будут затронуты настройками мастера. Однако они будут затронуты собственными настройками агента.
+Учтите, что это локальная настройка; она никак не влияет на агенты. Вы можете безопасно настроить префикс на мастере. Запросы, маршрутизируемые к агентам, не будут зависеть от настроек мастера. Однако они будут зависеть от собственных настроек агента.
 
-Это может быть полезно, например, когда местоположения хранилищ документов (локальное хранилище или NAS-монты) неоднородны на разных серверах.
+Это может быть полезно, например, когда места хранения документов (локальное хранилище или точки монтирования NAS) различаются между серверами.
 
 
 <!-- intro -->
@@ -1487,17 +1510,17 @@ snippets_file_prefix = /mnt/common/server1/
 ```
 <!-- end -->
 
-> **ПРЕДУПРЕЖДЕНИЕ:** Если вы все же хотите получить доступ к файлам из корня ФС, необходимо явно установить `snippets_file_prefix` в пустое значение (строкой `snippets_file_prefix=`) или в корень (строкой `snippets_file_prefix=/`).
+> **ВНИМАНИЕ:** Если вы всё же хотите получить доступ к файлам из корня файловой системы, вы должны явно установить `snippets_file_prefix` в пустое значение (строкой `snippets_file_prefix=`) или в корень (`snippets_file_prefix=/`).
 
 
 ### sphinxql_state
 
 <!-- example conf sphinxql_state -->
-Путь к файлу, в котором будет сериализовано текущее состояние SQL.
+Путь к файлу, в который сериализуется текущее состояние SQL.
 
-При старте сервера этот файл воспроизводится. При подходящих изменениях состояния (например, SET GLOBAL) файл автоматически перезаписывается. Это позволяет предотвратить трудно диагностируемую проблему: если вы загрузили функции UDF и Manticore аварийно завершился, при (автоматическом) перезапуске ваши UDF и глобальные переменные больше не будут доступны. Использование постоянного состояния помогает обеспечить плавное восстановление без таких сюрпризов.
+При запуске сервера этот файл воспроизводится. При соответствующих изменениях состояния (например, SET GLOBAL) этот файл перезаписывается автоматически. Это помогает предотвратить трудно диагностируемые проблемы: если вы загружаете UDF-функции, но Manticore аварийно завершается, при автоматическом перезапуске ваши UDF и глобальные переменные будут недоступны. Использование постоянного состояния помогает обеспечить плавное восстановление без подобных сюрпризов.
 
-`sphinxql_state` нельзя использовать для выполнения произвольных команд, таких как `CREATE TABLE`.
+`sphinxql_state` не может использоваться для выполнения произвольных команд, таких как `CREATE TABLE`.
 
 <!-- intro -->
 ##### Пример:
@@ -1513,7 +1536,7 @@ sphinxql_state = uservars.sql
 ### sphinxql_timeout
 
 <!-- example conf sphinxql_timeout -->
-Максимальное время ожидания между запросами (в секундах или с применением [специальных суффиксов](../Server_settings/Special_suffixes.md)) при работе с SQL-интерфейсом. Необязательно, по умолчанию — 15 минут.
+Максимальное время ожидания между запросами (в секундах или [special_suffixes](../Server_settings/Special_suffixes.md)) при использовании SQL-интерфейса. Опционально, по умолчанию 15 минут.
 
 
 <!-- intro -->
@@ -1530,9 +1553,9 @@ sphinxql_timeout = 15m
 ### ssl_ca
 
 <!-- example conf ssl_ca -->
-Путь к файлу сертификата центра сертификации SSL (CA-сертификат, также известный как корневой сертификат). Необязательно, по умолчанию пусто. Если не пусто, сертификат в `ssl_cert` должен быть подписан этим корневым сертификатом.
+Путь к файлу сертификата центра сертификации (CA) SSL (также известен как корневой сертификат). Опционально, по умолчанию пусто. Если не пуст, сертификат в `ssl_cert` должен быть подписан этим корневым сертификатом.
 
-Сервер использует файл CA для проверки подписи сертификата. Файл должен быть в формате PEM.
+Сервер использует CA файл для проверки подписи сертификата. Файл должен быть в формате PEM.
 
 <!-- intro -->
 ##### Пример:
@@ -1548,9 +1571,9 @@ ssl_ca = keys/ca-cert.pem
 ### ssl_cert
 
 <!-- example conf ssl_cert -->
-Путь к SSL-сертификату сервера. Необязательно, по умолчанию пусто.
+Путь к SSL-сертификату сервера. Опционально, по умолчанию пусто.
 
-Сервер использует этот сертификат как самоподписанный открытый ключ для шифрования HTTP-трафика через SSL. Файл должен быть в формате PEM.
+Сервер использует этот сертификат в качестве самоподписанного публичного ключа для шифрования HTTP-трафика через SSL. Файл должен быть в формате PEM.
 
 
 <!-- intro -->
@@ -1567,7 +1590,7 @@ ssl_cert = keys/server-cert.pem
 ### ssl_key
 
 <!-- example conf ssl_key -->
-Путь к приватному ключу SSL-сертификата. Необязательно, по умолчанию пусто.
+Путь к ключу SSL-сертификата. Опционально, по умолчанию пусто.
 
 Сервер использует этот приватный ключ для шифрования HTTP-трафика через SSL. Файл должен быть в формате PEM.
 
@@ -1586,9 +1609,9 @@ ssl_key = keys/server-key.pem
 ### subtree_docs_cache
 
 <!-- example conf subtree_docs_cache -->
-Максимальный размер кеша документов общего поддерева, на запрос. Необязательно, по умолчанию 0 (отключено).
+Максимальный размер кеша документов общего поддерева на запрос. Опционально, по умолчанию 0 (отключено).
 
-Эта настройка ограничивает использование ОЗУ оптимизатором общего поддерева (см. [multi-queries](../Searching/Multi-queries.md)). Максимум столько памяти будет потрачено на кеширование записей документов для каждого запроса. Установка значения в 0 отключает оптимизатор.
+Эта настройка ограничивает использование ОЗУ оптимизатором общих поддеревьев (см. [multi-queries](../Searching/Multi-queries.md)). Максимально выделяется столько памяти для кеширования записей документов для каждого запроса. Установка значения 0 отключает оптимизатор.
 
 
 <!-- intro -->
@@ -1605,9 +1628,9 @@ subtree_docs_cache = 8M
 ### subtree_hits_cache
 
 <!-- example conf subtree_hits_cache -->
-Максимальный размер кеша попаданий общего поддерева, на запрос. Необязательно, по умолчанию 0 (отключено).
+Максимальный размер кэша попаданий общих поддеревьев, на запрос. Необязательно, по умолчанию 0 (отключено).
 
-Эта настройка ограничивает использование ОЗУ оптимизатором общего поддерева (см. [multi-queries](../Searching/Multi-queries.md)). Максимум столько памяти будет потрачено на кеширование вхождений ключевых слов (попаданий) для каждого запроса. Установка значения в 0 отключает оптимизатор.
+Этот параметр ограничивает использование ОЗУ оптимизатором общих поддеревьев (см. [мультизапросы](../Searching/Multi-queries.md)). Максимально столько ОЗУ будет потрачено на кэширование вхождений ключевых слов (попаданий) для каждого запроса. Установка лимита в 0 отключает оптимизатор.
 
 
 <!-- intro -->
@@ -1623,16 +1646,16 @@ subtree_hits_cache = 16M
 ### threads
 
 <!-- example threads -->
-Количество рабочих потоков (размер пула потоков) для демона Manticore. Manticore создает такое количество потоков ОС при запуске, и они выполняют все задачи внутри демона, такие как выполнение запросов, создание сниппетов и пр. Некоторые операции могут быть разбиты на подзадачи и выполняться параллельно, например:
+Количество рабочих потоков (или размер пула потоков) для демона Manticore. Manticore создаёт такое количество потоков ОС при запуске, и они выполняют все задачи внутри демона, такие как выполнение запросов, создание сниппетов и т.д. Некоторые операции могут быть разбиты на подзадачи и выполняться параллельно, например:
 
-* Поиск в таблице реального времени
-* Поиск в распределенной таблице, состоящей из локальных таблиц
+* Поиск в таблице в реальном времени
+* Поиск в распределённой таблице, состоящей из локальных таблиц
 * Вызов перколяции запроса
 * и другие
 
-По умолчанию установлено значение, равное количеству ядер CPU на сервере. Manticore создает потоки при запуске и удерживает их до остановки. Каждый подзадача может использовать один из потоков, когда это необходимо. Когда подзадача завершается, она освобождает поток, чтобы его мог использовать другой подзадача.
+По умолчанию установлено количество потоков равное числу ядер CPU на сервере. Manticore создаёт потоки при запуске и сохраняет их до остановки. Каждая подзадача может использовать один из потоков при необходимости. По завершении подзадачи поток освобождается, чтобы использоваться другой подзадачей.
 
-В случае интенсивной нагрузки типа ввода-вывода может иметь смысл установить значение выше, чем количество ядер CPU.
+В случае интенсивной I/O нагрузки может иметь смысл установить значение выше, чем число ядер CPU.
 
 <!-- request Example -->
 ```ini
@@ -1644,13 +1667,13 @@ threads = 10
 ### thread_stack
 
 <!-- example conf thread_stack -->
-Максимальный размер стека для задания (корутина, один поисковый запрос может вызвать несколько заданий/корутин). Опционально, по умолчанию 128K.
+Максимальный размер стека для задачи (корутина, один поисковый запрос может вызывать несколько задач/корутин). Необязательно, по умолчанию 128K.
 
-У каждого задания есть свой стек размером 128K. При запуске запроса проверяется, сколько стека ему требуется. Если стандартных 128K достаточно, запрос просто обработается. Если нужно больше, планируется другое задание с увеличенным стеком, которое продолжит обработку. Максимальный размер такого расширенного стека ограничен этой настройкой.
+Каждая задача имеет собственный стек размером 128K. Когда запускается запрос, проверяется, сколько стека он требует. Если стандартных 128K хватает — запрос обрабатывается напрямую. Если требуется больше, запускается другая задача с увеличенным стеком, которая продолжает обработку. Максимальный размер такого увеличенного стека ограничивается этим параметром.
 
-Установка значения на разумно высоком уровне поможет при обработке очень глубоких запросов без увеличения общего потребления ОЗУ до слишком высоких значений. Например, установка 1G не означает, что каждое новое задание займет 1G ОЗУ, но если мы видим, что требуется, скажем, стек в 100M, мы просто выделяем 100M для задания. Другие задания в то же время будут работать со стеком по умолчанию 128K. Аналогично можно запускать еще более сложные запросы, которым требуется 500M. И только если мы **увидим** внутренне, что заданию нужен стек больше 1G, обработка завершится с ошибкой и сообщением о слишком низком значении thread_stack.
+Установка значения в разумно высоком размере поможет обрабатывать очень глубокие запросы без значительного увеличения общего потребления ОЗУ. Например, установка значения 1G не означает, что каждая новая задача будет занимать 1G ОЗУ, а лишь то, что если задача требует, скажем, 100M стека, то мы выделяем именно 100M. Другие задачи при этом будут работать с дефолтным стеком в 128K. Таким образом, можно запускать ещё более сложные запросы с потребностью в 500M стека. И только если задача потребует более 1G — мы увидим ошибку и сообщим о слишком низком значении thread_stack.
 
-Однако на практике даже запрос, требующий 16M стека, часто слишком сложен для разбора и потребляет слишком много времени и ресурсов для обработки. Таким образом, демон обработает его, но ограничение таких запросов настройкой `thread_stack` выглядит вполне разумным.
+Однако на практике даже запрос, нуждающийся в стеке 16M, часто слишком сложен для обработки парсером и требует много времени и ресурсов. Поэтому демон обработает его, но ограничение таких запросов через `thread_stack` вполне разумно.
 
 
 <!-- intro -->
@@ -1667,7 +1690,7 @@ thread_stack = 8M
 ### unlink_old
 
 <!-- example conf unlink_old -->
-Определяет, следует ли удалять `.old` копии таблиц при успешной ротации. Опционально, по умолчанию 1 (удалять).
+Определяет, следует ли удалять копии таблиц с расширением `.old` при успешной ротации. Необязательно, по умолчанию 1 (удалять).
 
 
 <!-- intro -->
@@ -1684,9 +1707,9 @@ unlink_old = 0
 ### watchdog
 
 <!-- example conf watchdog -->
-Потоковый watchdog сервера. Опционально, по умолчанию 1 (watchdog включен).
+Многопоточный сторожевой процесс сервера. Необязательно, по умолчанию 1 (сторож включён).
 
-Если запрос Manticore завершится аварийно, это может привести к сбою всего сервера. При включенной функции watchdog `searchd` также поддерживает отдельный легковесный процесс, который контролирует основной процесс сервера и автоматически перезапускает его в случае аномального завершения. Watchdog включен по умолчанию.
+Когда запрос Manticore завершается с ошибкой, это может привести к падению всего сервера. При включённом сторожевом процессе у `searchd` есть отдельный лёгкий процесс, который следит за основным серверным процессом и автоматически перезапускает его в случае аномального завершения. Сторожевой процесс включён по умолчанию.
 
 <!-- request Example -->
 

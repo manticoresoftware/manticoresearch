@@ -10,15 +10,12 @@ Using Kafka version: 4.1.0
 ––– comment –––
 Start Kafka container with KRaft mode configuration
 ––– input –––
-docker run -it -d --network=app-network --name kafka --platform linux/amd64 -v ./test/clt-tests/integrations/kafka:/tmp -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk apache/kafka:$KAFKA_VERSION > /dev/null 2>&1; echo $?
+docker run -it -d --network=app-network --name kafka --platform linux/amd64 \
+-v ./test/clt-tests/integrations/kafka/import.sh:/import.sh \
+-v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json \
+-e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk apache/kafka:$KAFKA_VERSION > /dev/null 2>&1; echo $?
 ––– output –––
 0
-––– comment –––
-Check Kafka container status
-––– input –––
-sleep 2; docker ps -a --filter name=kafka --format "{{.Status}}"
-––– output –––
-#!/Up.*/!#
 ––– comment –––
 Wait for Kafka to be ready
 ––– input –––
@@ -27,11 +24,6 @@ for i in $(seq 1 60); do
     if docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; then
         echo "Kafka ready"
         break
-    fi
-    if [ $i -eq 60 ]; then
-        echo "Kafka timeout - showing logs:"
-        docker logs kafka 2>&1 | tail -50
-        exit 1
     fi
     sleep 3
 done
@@ -108,7 +100,7 @@ name: mv_1
 ––– comment –––
 Make import script executable and execute data import to Kafka topic
 ––– input –––
-docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh; echo $?
+docker exec kafka chmod +x /import.sh && docker exec kafka /import.sh; echo $?
 ––– output –––
 0
 ––– comment –––

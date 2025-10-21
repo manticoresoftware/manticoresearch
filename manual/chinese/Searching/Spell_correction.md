@@ -331,6 +331,7 @@ CALL QSUGGEST('bag with tasel', 'products', 1 as sentence);
 <!-- end -->
 
 ##### 不同的显示模式
+<!-- 示例显示 -->
 `1 as result_line` 选项改变了建议在输出中的显示方式。不再将每条建议显示为独立行，而是将所有建议、距离和文档数合并显示在一行。以下示例演示该功能：
 
 <!-- intro -->
@@ -356,6 +357,7 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 
 ##### 使用 force_bigrams 更好地处理转置错误
 `force_bigrams` 选项可以帮助处理包含转置错误的单词，比如 "ipohne" 与 "iphone"。通过使用双字母组合而非三字母组合，算法能更好地处理字符的转置情况。
+<!-- 示例强制双字 -->
 
 <!-- intro -->
 ##### 例子：
@@ -379,7 +381,6 @@ CALL SUGGEST('ipohne', 'products', 1 as force_bigrams);
 ### 演示
 
 * [这个交互式课程](https://play.manticoresearch.com/didyoumean/) 演示了 `CALL SUGGEST` 在一个小型网页应用中的工作方式。
-
 ![CALL SUGGEST 示例](didyoumean.png){.scale-0.5}
 
 

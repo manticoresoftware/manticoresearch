@@ -1077,7 +1077,7 @@ struct SuggestResult_t : public SuggestResultSet_t
 		assert ( !m_pSegments );
 	}
 
-	bool SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence, const SuggestArgs_t & tArgs );
+	bool SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence, bool bForceBigrams );
 
 	void Flattern ( int iLimit );
 };

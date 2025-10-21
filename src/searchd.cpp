@@ -5602,7 +5602,7 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 		return false;
 	}
 
-	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs ) )
+	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs.m_bForceBigrams ) )
 		pIdx->GetSuggest ( tArgs, tRes );
 
 	return true;

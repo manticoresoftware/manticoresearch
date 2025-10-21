@@ -80,6 +80,11 @@ mysql -P9306 -h0 -e "call suggest('bworn', 't', 1 as force_bigrams)"
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('bworn', 't', 0 as force_bigrams)"
 ––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| george  | 4        | 1    |
++---------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('bworn', 't', 0 as force_bigrams)"
 ––– output –––

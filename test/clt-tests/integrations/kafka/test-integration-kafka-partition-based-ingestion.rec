@@ -98,9 +98,9 @@ name: mv_2
 *************************** 2. row ***************************
 name: mv_1
 ––– comment –––
-Make import script executable and execute data import to Kafka topic
+Execute data import script to load test data into Kafka topic
 ––– input –––
-docker exec kafka chmod +x /import.sh && docker exec kafka /import.sh; echo $?
+docker exec kafka bash /import.sh; echo $?
 ––– output –––
 0
 ––– comment –––

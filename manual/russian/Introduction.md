@@ -74,9 +74,9 @@ Manticore оснащен внешним инструментом [manticore-back
 
 Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Различные инструменты MySQL могут быть использованы для интерактивной разработки запросов к Manticore, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
 
-Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Различные инструменты MySQL могут быть использованы для интерактивной разработки запросов Manticore, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
+Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Для интерактивной разработки запросов Manticore могут использоваться различные инструменты MySQL, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
 Вы можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
-Вы также можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
+Вы можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
 #### Фильтрация потоков данных, упрощенная
 
 #### Возможные применения

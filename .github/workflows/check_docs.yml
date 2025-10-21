@@ -2,6 +2,7 @@ name: 📖 Check docs
 run-name: 📖 Check docs ${{ github.sha }}
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'manual/**'
@@ -31,15 +32,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
           ref: ${{ github.head_ref }}
-      - name: Get changed files
+
+      - name: Fetch master and get changed files
         id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+          # Only fetch master if we're not already on it (avoid "Refusing to fetch into current branch" error)
+          if [ "${{ github.ref_name }}" != "master" ]; then
+            git fetch origin master:master
+          fi
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+
       - name: Get changed doc filepathes
         id: doc-filepathes
         run: |

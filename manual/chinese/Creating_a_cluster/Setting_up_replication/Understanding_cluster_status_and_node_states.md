@@ -1,53 +1,75 @@
 # 理解集群状态和节点状态
 
-本节提供有关在集群状态输出中出现的 `cluster_%_status` 和 `cluster_%_node_state` 值的详细说明，包括在不同操作场景下每种组合的含义。
+## 快速参考
 
-## cluster_%_status 值
+集群状态显示两个关键值，帮助您了解集群的健康状况：
 
-`cluster_%_status` 变量指示从该节点的角度看集群组件的状态。理解这些状态对于正确的集群管理和故障排除至关重要。
-
+- `cluster_%_status` - 集群是否可以接受写入
+- `cluster_%_node_state` - 该特定节点的当前状态
 ### PRIMARY 状态
-
+## 状态值
 <!-- example primary status -->
+<!-- example cluster status values -->
 当集群状态显示为 `PRIMARY` 时，集群具有法定人数，可以接受读写操作。这是正常的操作状态。
 
 <!-- intro -->
 ##### SQL:
 
-<!-- request SQL -->
 
+SHOW STATUS LIKE 'cluster_%_status';
+SHOW STATUS LIKE 'cluster_%_node_state';
 ```sql
-SHOW STATUS LIKE 'cluster_%_status'
 ```
 
-<!-- response SQL-->
 
 ```sql
 +----------------------------+-------+
 | Counter                    | Value |
 +----------------------------+-------+
 | cluster_posts_status       | primary |
-+----------------------------+-------+
 ```
 
 <!-- end -->
 
 `PRIMARY` 状态意味着：
+### cluster_%_status
 * 集群中的大多数节点已连接并且正在通信
+- **`primary`** - 正常运行，可读写
+- **`non-primary`** - 丢失仲裁，**写入被阻止**
+- **`disconnected`** - 节点孤立，尝试重新连接
 * 允许进行写操作，并将被复制
+### cluster_%_node_state  
 * 集群正常运行
+- **`synced`** - 正常运行
+- **`joining`** - 节点加入集群（临时状态）
+- **`donor`** - 帮助其他节点加入（临时状态）
+- **`closed`** - 节点停止
+- **`destroyed`** - 节点崩溃，需要重启
 * 保持法定人数
+## 常见场景
 
+| 发生情况 | cluster_%_status | cluster_%_node_state | 处理方法 |
+|----------|------------------|---------------------|----------|
+| 正常运行 | `primary` | `synced` | 无需操作 |
+| 大多数节点宕机 | `non-primary` | `synced` | 启动引导或等待 |
+| 节点启动中 | `disconnected` | `joining` → `synced` | 等待 |
+| 节点崩溃 | 状态各异 | `destroyed` | 重启节点 |
+| 网络分区（多数） | `primary` | `synced` | 正常继续运行 |
+| 网络分区（少数） | `non-primary` | `synced` | 等待或引导启动 |
 ### NON_PRIMARY 状态
+## 从仲裁丢失中恢复
 
 <!-- example non_primary status -->
+当大多数节点宕机并且状态显示为 `non-primary` 时：
 当集群状态显示为 `NON_PRIMARY` 时，集群已失去法定人数。这是一个关键状态，写操作被阻止以防止脑裂场景的发生。
 
 <!-- intro -->
 ##### SQL:
 
 <!-- request SQL -->
+-- 检查哪个节点具有最高序列号
 
+-- 引导集群（仅在最佳节点上运行）
 ```sql
 SHOW STATUS LIKE 'cluster_%_status'
 ```
@@ -63,6 +85,7 @@ SHOW STATUS LIKE 'cluster_%_status'
 ```
 
 <!-- end -->
+SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 
 `NON_PRIMARY` 状态发生在：
 * 集群中的超过一半的节点不可达
@@ -155,7 +178,6 @@ SHOW STATUS LIKE 'cluster_%_node_state'
 <!-- end -->
 
 `synced` 状态意味着：
-* 节点可以同时处理读和写请求
 * 所有事务都正在正常复制
 * 节点正在为集群法定人数做贡献
 * 数据与其他集群成员一致
@@ -306,17 +328,11 @@ SHOW STATUS LIKE 'cluster_%_node_state'
 | 多数分区 (5 个节点中的 3 个) | `primary` | `synced` | 继续正常操作 |
 | 完全隔离 | `disconnected` | `synced` | 检查网络连接 |
 
-### 节点故障
 
 | 场景 | cluster_%_status | cluster_%_node_state | 影响 |
-|----------|------------------|---------------------|--------|
 | 单个节点故障 (5 节点集群) | `primary` | `synced` | 集群正常继续 |
-| 超过半数节点宕机 (3+ 节点宕机) | `non-primary` | `synced` | 不允许写入 |
 | 节点宕机 | 视情况而定 | `destroyed` | 节点需要重启/恢复 |
-
 ### 关键故障场景
-
-#### 大多数节点宕机（丧失法定人数）
 
 <!-- example quorum lost scenario -->
 当集群中的大多数节点不可用时，剩余节点将显示 `NON_PRIMARY` 状态并拒绝写操作。
@@ -343,13 +359,11 @@ SHOW STATUS LIKE 'cluster_%_size';
 | cluster_posts_status       | non-primary |
 | cluster_posts_node_state   | synced |
 | cluster_posts_size         | 2 |
-+----------------------------+-------+
 ```
 
 <!-- end -->
 
 要从该场景恢复，识别 `last_committed` 值最高的节点并引导启动它：
-
 <!-- example quorum recovery -->
 
 <!-- intro -->
@@ -360,18 +374,15 @@ SHOW STATUS LIKE 'cluster_%_size';
 ```sql
 SHOW STATUS LIKE 'cluster_%_last_committed';
 SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1;
-```
 
 <!-- response SQL-->
 
-```sql
 +----------------------------+-------+
 | Counter                    | Value |
 +----------------------------+-------+
 | cluster_posts_last_committed | 1547 |
 +----------------------------+-------+
 ```
-
 <!-- request JSON -->
 
 ```json

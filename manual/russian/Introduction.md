@@ -4,7 +4,6 @@
 Как база данных с открытым исходным кодом (доступная на [GitHub](https://github.com/manticoresoftware/manticoresearch/)), Manticore Search была создана в 2017 году как продолжение движка [Sphinx Search](https://sphinxsearch.com/). Наша команда разработчиков взяла все лучшие функции Sphinx и значительно улучшила его функциональность, исправив сотни ошибок по пути (подробности изложены в нашем [Changelog](https://manual.manticoresearch.com/Changelog)). Manticore Search — это современная, быстрая и лёгкая база данных с исключительными возможностями полнотекстового поиска, построенная на основе почти полной переработки своего предшественника.
 
 ## Ключевые особенности Manticore:
-#### Мощный и быстрый полнотекстовый поиск, хорошо работающий как с малыми, так и с большими наборами данных
 
   * [Автозаполнение запроса](Searching/Autocomplete.md)
   * [Нечёткий поиск](Searching/Spell_correction.md#Fuzzy-Search)
@@ -75,10 +74,10 @@ Manticore оснащен внешним инструментом [manticore-back
 
 Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Различные инструменты MySQL могут быть использованы для интерактивной разработки запросов к Manticore, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
 
+Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Различные инструменты MySQL могут быть использованы для интерактивной разработки запросов Manticore, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
 Вы можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
-
+Вы также можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
 #### Фильтрация потоков данных, упрощенная
-Manticore предлагает специальный тип таблицы, "[percolate](Creating_a_table/Local_tables/Percolate_table.md)", который позволяет вам искать запросы вместо данных, что делает его эффективным инструментом для фильтрации потоков полнотекстовых данных. Просто сохраните свои запросы в таблице, обработайте поток данных, отправив каждую партию документов в Manticore Search, и получите только результаты, соответствующие вашим сохраненным запросам.
 
 #### Возможные применения
 Manticore Search многофункционален и может применяться в различных сценариях, включая:

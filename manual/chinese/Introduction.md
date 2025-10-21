@@ -4,7 +4,6 @@
 作为一个开源数据库（可在[GitHub](https://github.com/manticoresoftware/manticoresearch/)获得），Manticore Search 于2017年创建，作为[Sphinx Search](https://sphinxsearch.com/)引擎的延续。我们的开发团队吸取了Sphinx的所有优点，并大幅提升其功能，同时修复了数百个BUG（详见我们的[更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代、快速且轻量级的数据库，具备卓越的全文搜索能力，几乎是其前身的重写版本。
 
 ## Manticore 的主要特点有：
-#### 强大且快速的全文搜索，适用于小型和大型数据集
 
   * [查询自动补全](Searching/Autocomplete.md)
   * [模糊搜索](Searching/Spell_correction.md#Fuzzy-Search)
@@ -75,10 +74,10 @@ Manticore 配备了外部工具 [manticore-backup](Securing_and_compacting_a_tab
 
 您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)、Kibana 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。可使用各种 MySQL 工具来交互式开发 Manticore 查询，如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
 
+您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具可用于交互式开发 Manticore 查询，例如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
 您可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 结合使用。
-
+您还可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
 #### 流过滤轻松实现
-Manticore 提供一种特殊的表类型，称为“[percolate](Creating_a_table/Local_tables/Percolate_table.md)” 表，它允许您搜索查询而非数据，使其成为过滤全文数据流的高效工具。只需将查询存储到表中，处理您的数据流，将每批文档发送给 Manticore Search，并仅接收与存储查询匹配的结果。
 
 #### 可能的应用
 Manticore Search 用途广泛，可应用于多种场景，包括：

@@ -74,9 +74,9 @@ Manticore 配备了外部工具 [manticore-backup](Securing_and_compacting_a_tab
 #### 集成选项
 您可以通过 [FEDERATED 引擎](Extensions/FEDERATED.md) 或 [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/) 将 Manticore Search 集成到 MySQL/MariaDB 服务器。
 
-您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)、Kibana 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具也能用于交互式开发 Manticore 查询，如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
+您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具可用于交互式开发 Manticore 查询，例如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
 
-您可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 配合使用。
+您还可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
 
 #### 流过滤轻松实现
 Manticore 提供一种特殊类型的表，“[percolate](Creating_a_table/Local_tables/Percolate_table.md)”表，允许您搜索查询而非数据，使其成为过滤全文数据流的高效工具。只需将查询存储在表中，通过向 Manticore Search 发送每批文档处理数据流，并接收仅匹配存储查询的结果。

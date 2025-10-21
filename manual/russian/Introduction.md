@@ -74,9 +74,9 @@ Manticore оснащен внешним инструментом [manticore-back
 #### Варианты интеграции
 Вы можете интегрировать Manticore Search с сервером MySQL/MariaDB с помощью [движка FEDERATED](Extensions/FEDERATED.md) или через [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
 
-Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Для интерактивной разработки запросов к Manticore можно использовать различные MySQL-инструменты, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
+Вы можете использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) для визуализации данных, хранящихся в Manticore. Для интерактивной разработки запросов Manticore можно использовать различные MySQL инструменты, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
 
-Вы можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
+Вы также можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
 
 #### Простая фильтрация потоков
 Manticore предлагает специальный тип таблицы — "[percolate](Creating_a_table/Local_tables/Percolate_table.md)", который позволяет искать запросы вместо данных, что делает его эффективным инструментом для фильтрации полнотекстовых потоков данных. Просто сохраняйте ваши запросы в таблице, обрабатывайте поток данных, отправляя каждую партию документов в Manticore Search и получайте только результаты, которые совпадают с вашими сохраненными запросами.

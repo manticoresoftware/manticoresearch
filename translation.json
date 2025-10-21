@@ -178,5 +178,6 @@
   "README.md": "eff1619e48f822a69605ff5e69ab79e6",
   "Searching/Options.md": "2fb7f43595ee0ce2fca0919a6b0b36bb",
   "Searching/Full_text_matching/Boolean_optimization.md": "ec69041e4f95354af0641401a37aad06",
-  "Server_settings/Searchd.md": "6866a5d4584268e2afcffabc2d56a5a5"
+  "Server_settings/Searchd.md": "6866a5d4584268e2afcffabc2d56a5a5",
+  "Creating_a_cluster/Setting_up_replication/Understanding_cluster_status_and_node_states.md": "3b914909a8ea9bddbe128bb6472062e4"
 }

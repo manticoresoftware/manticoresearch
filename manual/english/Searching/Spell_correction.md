@@ -229,6 +229,7 @@ That's the only difference between them. Several options are supported for custo
 | result_line | alternate mode to display the data by returning all suggests, distances and docs each per one row | 0 |
 | non_char | do not skip dictionary words with non alphabet symbols | 0 (skip such words) |
 | sentence | Returns the original sentence along with the last word replaced by the matched one. | 0 (do not return the full sentence) |
+| force_bigrams | Forces the use of bigrams (2-character n-grams) instead of trigrams for all word lengths, which can improve matching for words with transposition errors | 0 (use trigrams for words ≥6 characters) |
 
 To show how it works, let's create a table and add a few documents to it.
 
@@ -350,6 +351,28 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 | distance | 1      |
 | docs     | 1      |
 +----------+--------+
+```
+<!-- end -->
+
+##### Using force_bigrams for better transposition handling
+The `force_bigrams` option can help with words that have transposition errors, such as "ipohne" vs "iphone". By using bigrams instead of trigrams, the algorithm can better handle character transpositions.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```sql
+CALL SUGGEST('ipohne', 'products', 1 as force_bigrams);
+```
+<!-- response Example -->
+
+```sql
++--------+----------+------+
+| suggest| distance | docs |
++--------+----------+------+
+| iphone | 2        | 1    |
++--------+----------+------+
 ```
 <!-- end -->
 

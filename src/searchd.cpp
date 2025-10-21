@@ -5602,7 +5602,7 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 		return false;
 	}
 
-	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence ) )
+	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs.m_bForceBigrams ) )
 		pIdx->GetSuggest ( tArgs, tRes );
 
 	return true;
@@ -5877,6 +5877,9 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else if ( sOpt=="sentence" )
 		{
 			tArgs.m_bSentence = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
+		} else if ( sOpt=="force_bigrams" )
+		{
+			tArgs.m_bForceBigrams = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );

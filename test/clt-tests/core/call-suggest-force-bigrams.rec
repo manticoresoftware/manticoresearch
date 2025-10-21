@@ -15,6 +15,7 @@ mysql -P9306 -h0 -e "call suggest('ipohne', 't', 1 as force_bigrams)"
 | suggest | distance | docs |
 +---------+----------+------+
 | iphone  | 2        | 1    |
+| planet  | 4        | 1    |
 +---------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('ipohne', 't', 0 as force_bigrams)"
@@ -30,27 +31,60 @@ mysql -P9306 -h0 -e "call suggest('iphonr', 't', 0 as force_bigrams)"
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('develepor', 't', 1 as force_bigrams)"
 ––– output –––
++-----------+----------+------+
+| suggest   | distance | docs |
++-----------+----------+------+
+| developer | 2        | 1    |
++-----------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('Gexrge', 't', 1 as force_bigrams)"
 ––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| george  | 1        | 1    |
++---------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('geroge', 't', 1 as force_bigrams)"
 ––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| george  | 2        | 1    |
++---------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('somtehing', 't', 1 as force_bigrams)"
 ––– output –––
++-----------+----------+------+
+| suggest   | distance | docs |
++-----------+----------+------+
+| something | 2        | 1    |
++-----------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('lanet', 't', 1 as force_bigrams)"
 ––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| planet  | 1        | 1    |
+| letter  | 4        | 1    |
++---------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('bworn', 't', 1 as force_bigrams)"
 ––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| george  | 4        | 1    |
++---------+----------+------+
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('bworn', 't', 0 as force_bigrams)"
 ––– output –––
 ––– input –––
-mysql -P9306 -h0 -e "call suggest('leter', 't', 1 as force_bigrams)"
+mysql -P9306 -h0 -e "call suggest('bworn', 't', 0 as force_bigrams)"
 ––– output –––
-––– input –––
-mysql -P9306 -h0 -e "call suggest('xxx', 't', 1 as force_bigrams)"
-––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| george  | 4        | 1    |
++---------+----------+------+

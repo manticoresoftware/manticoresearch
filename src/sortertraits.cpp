@@ -341,7 +341,11 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 				if ( pAggr )
 					m_dAggregates.Add ( pAggr );
 				else
-					assert ( 0 && "internal error: unsupported aggregate type for SUM()" );
+				{
+					CSphString sError;
+					sError.SetSprintf ( "unsupported aggregate type for SUM() on column '%s'", tAttr.m_sName.cstr() );
+					m_dAggregates.Add ( CreateAggrError(sError) );
+				}
 			}
 			break;
 		case SPH_AGGR_AVG:
@@ -356,7 +360,11 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 						pAvgs->Add ( m_dAggregates.Last() );
 				}
 				else
-					assert ( 0 && "internal error: unsupported aggregate type for AVG()" );
+				{
+					CSphString sError;
+					sError.SetSprintf ( "unsupported aggregate type for AVG() on column '%s'", tAttr.m_sName.cstr() );
+					m_dAggregates.Add ( CreateAggrError(sError) );
+				}
 			}
 			break;
 
@@ -366,7 +374,11 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 				if ( pAggr )
 					m_dAggregates.Add ( pAggr );
 				else
-					assert ( 0 && "internal error: unsupported aggregate type for MIN()" );
+				{
+					CSphString sError;
+					sError.SetSprintf ( "unsupported aggregate type for MIN() on column '%s'", tAttr.m_sName.cstr() );
+					m_dAggregates.Add ( CreateAggrError(sError) );
+				}
 			}
 			break;
 		case SPH_AGGR_MAX:
@@ -375,7 +387,11 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 				if ( pAggr )
 					m_dAggregates.Add ( pAggr );
 				else
-					assert ( 0 && "internal error: unsupported aggregate type for MAX()" );
+				{
+					CSphString sError;
+					sError.SetSprintf ( "unsupported aggregate type for MAX() on column '%s'", tAttr.m_sName.cstr() );
+					m_dAggregates.Add ( CreateAggrError(sError) );
+				}
 			}
 			break;
 		case SPH_AGGR_CAT:

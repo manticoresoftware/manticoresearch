@@ -36,4 +36,6 @@ AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr );
 
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr );
 
+AggrFunc_i * CreateAggrError ( const CSphString & sError );
+
 #endif // _aggregate_

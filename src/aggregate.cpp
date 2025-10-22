@@ -817,3 +817,24 @@ AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr )
 {
 	return new AggrConcat_c(tAttr);
 }
+
+/////////////////////////////////////////////////////////////////////
+
+/// Error aggregate function that always fails
+class AggrError_c final : public AggrFunc_i
+{
+	CSphString m_sError;
+
+public:
+	explicit AggrError_c ( const CSphString & sError ) : m_sError ( sError ) {}
+
+	void Update ( CSphMatch &, const CSphMatch &, bool, bool ) final
+	{
+		sphDie ( "aggregate error: %s", m_sError.cstr() );
+	}
+};
+
+AggrFunc_i * CreateAggrError ( const CSphString & sError )
+{
+	return new AggrError_c(sError);
+}

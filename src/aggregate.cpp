@@ -826,10 +826,15 @@ class AggrError_c final : public AggrFunc_i
 	CSphString m_sError;
 
 public:
-	explicit AggrError_c ( const CSphString & sError ) : m_sError ( sError ) {}
+	explicit AggrError_c ( const CSphString & sError ) : m_sError ( sError ) 
+	{
+		// Fail immediately when created
+		sphDie ( "aggregate error: %s", m_sError.cstr() );
+	}
 
 	void Update ( CSphMatch &, const CSphMatch &, bool, bool ) final
 	{
+		// This should never be called since we fail in constructor
 		sphDie ( "aggregate error: %s", m_sError.cstr() );
 	}
 };

@@ -13,6 +13,7 @@
 #include "queuecreator.h"
 
 #include "std/openhash.h"
+#include "sphinxutils.h"
 #include "schema/rset.h"
 #include "columnargrouper.h"
 #include "columnarsort.h"
@@ -2495,6 +2496,15 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 
 	assert ( pTop );
 	pTop->SetSchema ( m_pSorterSchema.release(), false );
+	
+	// Check for thread-local errors after SetSchema (which calls SetupBaseGrouper)
+	if ( TlsMsg::HasErr() )
+	{
+		TlsMsg::MoveError ( m_sError );
+		SafeDelete ( pTop );
+		return nullptr;
+	}
+	
 	pTop->SetState ( m_tStateMatch );
 	pTop->SetGroupState ( m_tStateGroup );
 	pTop->SetRandom ( m_bRandomize );

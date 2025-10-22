@@ -133,7 +133,7 @@ protected:
 	CSphVector<AggrFunc_i *>	m_dAggregates;
 
 	void	SetColumnar ( columnar::Columnar_i * pColumnar );
-	void	SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs = nullptr );
+	bool	SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs = nullptr );
 
 	// HAVING filtering
 	bool	EvalHAVING ( const CSphMatch& tMatch );

@@ -13,6 +13,7 @@
 #include "sortertraits.h"
 
 #include "schematransform.h"
+#include "sphinxutils.h"
 
 
 void MatchSorter_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
@@ -312,7 +313,7 @@ void BaseGroupSorter_c::SetColumnar ( columnar::Columnar_i * pColumnar )
 }
 
 
-void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs )
+bool BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs )
 {
 	m_tPregroup.ResetAttrs();
 	ResetAggregates();
@@ -345,6 +346,9 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 					CSphString sError;
 					sError.SetSprintf ( "unsupported aggregate type for SUM() on column '%s'", tAttr.m_sName.cstr() );
 					m_dAggregates.Add ( CreateAggrError(sError) );
+					// Check if error was set
+					if ( TlsMsg::HasErr() )
+						return false;
 				}
 			}
 			break;
@@ -364,6 +368,9 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 					CSphString sError;
 					sError.SetSprintf ( "unsupported aggregate type for AVG() on column '%s'", tAttr.m_sName.cstr() );
 					m_dAggregates.Add ( CreateAggrError(sError) );
+					// Check if error was set
+					if ( TlsMsg::HasErr() )
+						return false;
 				}
 			}
 			break;
@@ -378,6 +385,9 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 					CSphString sError;
 					sError.SetSprintf ( "unsupported aggregate type for MIN() on column '%s'", tAttr.m_sName.cstr() );
 					m_dAggregates.Add ( CreateAggrError(sError) );
+					// Check if error was set
+					if ( TlsMsg::HasErr() )
+						return false;
 				}
 			}
 			break;
@@ -391,6 +401,9 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 					CSphString sError;
 					sError.SetSprintf ( "unsupported aggregate type for MAX() on column '%s'", tAttr.m_sName.cstr() );
 					m_dAggregates.Add ( CreateAggrError(sError) );
+					// Check if error was set
+					if ( TlsMsg::HasErr() )
+						return false;
 				}
 			}
 			break;
@@ -407,6 +420,7 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 			m_tPregroup.AddRaw ( tAttr.m_tLocator );
 	}
 	m_tPregroup.CommitPtrs();
+	return true;
 }
 
 

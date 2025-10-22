@@ -115,7 +115,8 @@ public:
 		}
 
 		BASE::SetSchema ( pSchema, bRemapCmp );
-		SetupBaseGrouper ( pSchema, DISTINCT, &m_dAvgs );
+		if ( !SetupBaseGrouper ( pSchema, DISTINCT, &m_dAvgs ) )
+			return;
 	}
 
 	/// check if this sorter does groupby
@@ -1738,7 +1739,8 @@ public:
 		}
 
 		BASE::SetSchema ( pSchema, bRemapCmp );
-		SetupBaseGrouper ( pSchema, DISTINCT );
+		if ( !SetupBaseGrouper ( pSchema, DISTINCT ) )
+			return;
 	}
 
 	bool	IsGroupby () const final { return true; }

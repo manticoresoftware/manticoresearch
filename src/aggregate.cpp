@@ -13,6 +13,7 @@
 #include "aggregate.h"
 
 #include "schema/columninfo.h"
+#include "sphinxutils.h"
 
 /// aggregate traits for different attribute types
 template < typename T >
@@ -828,8 +829,8 @@ class AggrError_c final : public AggrFunc_i
 public:
 	explicit AggrError_c ( const CSphString & sError ) : m_sError ( sError ) 
 	{
-		// Fail immediately when created
-		sphDie ( "aggregate error: %s", m_sError.cstr() );
+		// Set error message for sorter creation to catch
+		TlsMsg::Err ( "aggregate error: %s", m_sError.cstr() );
 	}
 
 	void Update ( CSphMatch &, const CSphMatch &, bool, bool ) final

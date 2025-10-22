@@ -12,7 +12,7 @@
 * [🔰 快速入门指南](Quick_start_guide.md)
 * [2️⃣ 启动服务器](Starting_the_server.md)
     * [• 在 Linux 中](Starting_the_server/Linux.md)
-    * [• 手动方式](Starting_the_server/Manually.md)
+    * [• 手动](Starting_the_server/Manually.md)
     * [• 在 Docker 中](Starting_the_server/Docker.md)
     * [• 在 Windows 中](Starting_the_server/Windows.md)
     * [• 在 MacOS 中](Starting_the_server/MacOS.md)
@@ -23,17 +23,17 @@
         * [✔ 实时表](Creating_a_table/Local_tables/Real-time_table.md)
         * [• 普通表](Creating_a_table/Local_tables/Plain_table.md)
         * [• 普通表和实时表设置](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
-        * [• Percolate 表](Creating_a_table/Local_tables/Percolate_table.md)
+        * [• 过滤表](Creating_a_table/Local_tables/Percolate_table.md)
         * [• 模板表](Creating_a_table/Local_tables/Template_table.md)
     * [≫ 自然语言处理和分词]
         * [• 数据分词](Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
         * [• 支持的语言](Creating_a_table/NLP_and_tokenization/Supported_languages.md)
-        * [• 连续脚本语言](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
+        * [• 连续书写语言](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
         * [• 低级分词](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
         * [• 通配符搜索设置](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md)
         * [• 忽略停用词](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
-        * [• 词形变化](Creating_a_table/NLP_and_tokenization/Wordforms.md)
-        * [• 例外处理](Creating_a_table/NLP_and_tokenization/Exceptions.md)
+        * [• 词形](Creating_a_table/NLP_and_tokenization/Wordforms.md)
+        * [• 例外](Creating_a_table/NLP_and_tokenization/Exceptions.md)
         * [• 形态学](Creating_a_table/NLP_and_tokenization/Morphology.md)
         * [• 高级 HTML 分词](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md)
     * [≫ 创建分布式表](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
@@ -51,7 +51,7 @@
         * [创建复制集群](Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md)
         * [加入复制集群](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)
         * [删除复制集群](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md)
-        * [添加和移除复制集群中的表](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md)
+        * [向复制集群添加和移除表](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md)
         * [管理复制节点](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)
         * [复制集群状态](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)
         * [重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
@@ -61,12 +61,11 @@
     * [HTTP](Connecting_to_the_server/HTTP.md)
     * [通过 HTTP 的 SQL](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
 * [≫ 数据创建和修改](Data_creation_and_modification/Data_creation_and_modification.md)
-    * [≫ 向表中添加文档]
-    * [≫ 添加文档到表]
-        * [✔ 添加文档到实时表](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
+    * [≫ 向表添加文档]
+        * [✔ 向实时表添加文档](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
+        * [向过滤表添加规则](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
     * [≫ 从外部存储添加数据](Data_creation_and_modification/Adding_data_from_external_storages.md)
-    * [≫ 从外部存储添加数据](Data_creation_and_modification/Adding_data_from_external_storages.md)
-        * [≫ 从数据库获取]
+        * [创建普通表](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
         * [≫ 从数据库获取]
             * [介绍](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction.md)
             * [数据库连接](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Database_connection.md)
@@ -75,13 +74,13 @@
             * [范围查询](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Ranged_queries.md)
         * [从 XML 流获取](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_XML_streams.md)
         * [• 从 CSV,TSV 获取](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_CSV,TSV.md)
-        * [≫ 从表中添加数据]
+        * [• 主+增量模式](Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)
         * [≫ 从表中添加数据]
             * [• 合并表](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
             * [• 纯表中的 Killlists](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
             * [• 将一个表附加到另一个表](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
             * [• 导入 RT 表](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
-    * [≫ 更新文档]
+        * [• 旋转表](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
     * [≫ 更新文档]
         * [• REPLACE 与 UPDATE](Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md)
         * [• REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md)
@@ -89,7 +88,7 @@
     * [• 删除文档](Data_creation_and_modification/Deleting_documents.md)
     * [• 事务](Data_creation_and_modification/Transactions.md)
 * [5️⃣ 搜索]
-    * [≫ 全文匹配]
+    * [• 介绍](Searching/Intro.md)
     * [≫ 全文匹配]
         * [• 基本用法](Searching/Full_text_matching/Basic_usage.md)
         * [• 操作符](Searching/Full_text_matching/Operators.md)
@@ -98,62 +97,62 @@
         * [• 布尔优化](Searching/Full_text_matching/Boolean_optimization.md)
     * [• 搜索结果](Searching/Search_results.md)
     * [• 过滤器](Searching/Filters.md)
-    * [• 联接](Searching/Joining.md)
+    * [• 连接](Searching/Joining.md)
     * [• 表达式](Searching/Expressions.md)
     * [• 搜索选项](Searching/Options.md)
-    * [• 高亮显示](Searching/Highlighting.md)
+    * [• 高亮](Searching/Highlighting.md)
     * [• 排序和排名](Searching/Sorting_and_ranking.md)
     * [• 分页](Searching/Pagination.md)
     * [• 分布式搜索](Searching/Distributed_searching.md)
-    * [• 多重查询](Searching/Multi-queries.md)
+    * [• 多查询](Searching/Multi-queries.md)
     * [• 子查询](Searching/Sub-selects.md)
     * [• 分组](Searching/Grouping.md)
     * [• 分面搜索](Searching/Faceted_search.md)
     * [• 地理搜索](Searching/Geo_search.md)
-    * [• 预处理查询](Searching/Percolate_query.md)
-    * [• 自动补全](Searching/Autocomplete.md)
+    * [• 预查询](Searching/Percolate_query.md)
+    * [• 自动完成](Searching/Autocomplete.md)
     * [• 拼写纠正](Searching/Spell_correction.md)
         * [• 模糊搜索](Searching/Spell_correction.md#Fuzzy-Search)
     * [• 查询缓存](Searching/Query_cache.md)
     * [• 排序规则](Searching/Collations.md)
     * [• 基于成本的优化器](Searching/Cost_based_optimizer.md)
-    * [• K 近邻向量搜索](Searching/KNN.md)
-* [• 更新表架构和设置](Updating_table_schema_and_settings.md)
-    * [• RT 模式下更新表架构](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
-    * [• RT 模式下更新表全文设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
+    * [• K 最近邻向量搜索](Searching/KNN.md)
+* [• 更新表模式和设置](Updating_table_schema_and_settings.md)
+    * [• 在 RT 模式下更新表模式](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
+    * [• 在 RT 模式下更新表全文设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
     * [• 重命名实时表](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
-    * [• 纯模式下更新表全文设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
+    * [• 在纯模式下更新表全文设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• 重建二级索引](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
-* [≫ 函数]
+    * [• 更改分布式表](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ 函数]
     * [• 数学函数](Functions/Mathematical_functions.md)
-    * [• 搜索与排名函数](Functions/Searching_and_ranking_functions.md)
+    * [• 搜索和排名函数](Functions/Searching_and_ranking_functions.md)
     * [• 类型转换函数](Functions/Type_casting_functions.md)
     * [• 处理数组和条件的函数](Functions/Arrays_and_conditions_functions.md)
     * [• 日期和时间函数](Functions/Date_and_time_functions.md)
     * [• 地理空间函数](Functions/Geo_spatial_functions.md)
     * [• 字符串函数](Functions/String_functions.md)
-* [≫ 保护和压缩表]
+    * [• 其他函数](Functions/Other_functions.md)
 * [≫ 保护和压缩表]
     * [• 备份和恢复](Securing_and_compacting_a_table/Backup_and_restore.md)
-    * [• 关于 RT 表结构的几句话](Securing_and_compacting_a_table/RT_table_structure.md)
+    * [• 关于 RT 表结构的几点说明](Securing_and_compacting_a_table/RT_table_structure.md)
     * [• 将 RAM 块刷新到新的磁盘块](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md)
     * [• 将 RT 表刷新到磁盘](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md)
     * [• 压缩表](Securing_and_compacting_a_table/Compacting_a_table.md)
     * [• 刷新和合并期间的隔离](Securing_and_compacting_a_table/Isolation_during_flushing_and_merging.md)
     * [• 冻结表](Securing_and_compacting_a_table/Freezing_a_table.md)
     * [• 刷新属性](Securing_and_compacting_a_table/Flushing_attributes.md)
-* [≫ 安全]
+    * [• 刷新主机名](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ 安全]
     * [• SSL](Security/SSL.md)
+    * [• 只读](Security/Read_only.md)
 * [≫ 日志]
-* [≫ 日志记录]
     * [• 查询日志](Logging/Query_logging.md)
     * [• 服务器日志](Logging/Server_logging.md)
     * [• 二进制日志](Logging/Binary_logging.md)
     * [• Docker 日志](Logging/Docker_logging.md)
+    * [• 轮换查询和服务器日志](Logging/Rotating_query_and_server_logs.md)
 * [≫ 节点信息和管理]
-* [≫ 节点信息与管理]
     * [• 节点状态](Node_info_and_management/Node_status.md)
     * [• SHOW META](Node_info_and_management/SHOW_META.md)
     * [• SHOW THREADS](Node_info_and_management/SHOW_THREADS.md)
@@ -161,50 +160,50 @@
     * [• SHOW VERSION](Node_info_and_management/SHOW_VERSION.md)
     * [• KILL](Node_info_and_management/KILL.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
+    * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
     * [≫ 性能分析]
-    * [≫ 统计分析]
-        * [• 查询分析](Node_info_and_management/Profiling/Query_profile.md)
-    * [≫ 表设置和状态]
+        * [• 查询性能分析](Node_info_and_management/Profiling/Query_profile.md)
+        * [• 查询计划](Node_info_and_management/Profiling/Query_plan.md)
     * [≫ 表设置和状态]
         * [• SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md)
         * [• SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md)
-* [≫ 服务器设置]
+        * [• SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
 * [≫ 服务器设置]
     * [• Searchd](Server_settings/Searchd.md)
     * [• 通用](Server_settings/Common.md)
     * [• 特殊后缀](Server_settings/Special_suffixes.md)
     * [• 脚本配置](Server_settings/Scripted_configuration.md)
     * [• 注释](Server_settings/Comments.md)
-    * [• 表和数据源声明的继承](Server_settings/Inheritance_of_index_and_source_declarations.md)
-* [≫ 集成]
+    * [• 表和源声明的继承](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• 在线设置变量](Server_settings/Setting_variables_online.md)
 * [≫ 集成]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
     * [Kibana](Integration/Kibana.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
-* [≫ 扩展]
+    * [Apache Superset](Integration/Apache_Superset.md)
 * [≫ 扩展]
     * [SphinxSE](Extensions/SphinxSE.md)
-    * [≫ UDF 和插件](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
-    * [≫ UDF和插件](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+    * [FEDERATED](Extensions/FEDERATED.md)
+    * [≫ UDFs 和插件](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+        * [列出插件](Extensions/UDFs_and_Plugins/Listing_plugins.md)
         * [≫ UDF](Extensions/UDFs_and_Plugins/UDF.md)
-        * [≫ UDF]
             * [创建函数](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)
-        * [≫ 插件]
+            * [删除函数](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md)
         * [≫ 插件]
             * [• 创建插件](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md)
             * [• 删除插件](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md)
-            * [• 启用和禁用伙伴插件](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md)
+            * [• 启用和禁用 Buddy 插件](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md)
             * [• 重新加载插件](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md)
             * [• 排名器插件](Extensions/UDFs_and_Plugins/Plugins/Ranker_plugins.md)
-            * [• 令牌过滤插件](Extensions/UDFs_and_Plugins/Plugins/Token_filter_plugins.md)
+            * [• 令牌过滤器插件](Extensions/UDFs_and_Plugins/Plugins/Token_filter_plugins.md)
 * [• 杂项工具](Miscellaneous_tools.md)
 * [• OpenAPI 规范](Openapi.md)
-* [• 远程测量](Telemetry.md)
+* [• 遥测](Telemetry.md)
 * [• 更新日志](Changelog.md)
 * [🐞 报告错误](Reporting_bugs.md)
-* [📖 参考文献](References.md)
+* [📖 参考资料](References.md)
     * [• 旧版本](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
 

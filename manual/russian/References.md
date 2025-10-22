@@ -1,133 +1,133 @@
-# Справочники
+# References
 
-### SQL команды
-##### Управление схемой
-* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Создает новую таблицу
-* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Создает таблицу по образцу другой таблицы
-* [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Копирует таблицу
-* [CREATE SOURCE](Integration/Kafka.md#Source) - Создает источник Kafka consumer
-* [CREATE MATERIALIZED VIEW](Integration/Kafka.md#Materialized-view) - Преобразование данных из сообщений Kafka
-* [CREATE MV](Integration/Kafka.md#Materialized-view) - То же, что и команда выше
-* [DESCRIBE](Listing_tables.md#DESCRIBE) - Выводит список полей таблицы и их типы
-* [ALTER TABLE](Updating_table_schema_and_settings.md) - Изменяет схему / настройки таблицы
-* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Обновляет/восстанавливает вторичные индексы
-* [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Обновляет/восстанавливает вторичные индексы
+### SQL commands
+##### Schema management
+* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Creates new table
+* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Creates table using another one as a template
+* [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Copies a table
+* [CREATE SOURCE](Integration/Kafka.md#Source) - Create Kafka consumer source
+* [CREATE MATERIALIZED VIEW](Integration/Kafka.md#Materialized-view) - Data transformation from Kafka messages
+* [CREATE MV](Integration/Kafka.md#Materialized-view) - The same as previous
+* [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
+* [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
+* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Updates/recovers secondary indexes
 * [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
-* [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - Приостанавливает или возобновляет потребление из Kafka источника
-* [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Удаляет таблицу (если она существует)
-* [SHOW TABLES](Listing_tables.md#DESCRIBE) - Показывает список таблиц
-* [SHOW SOURCES](Integration/Kafka.md#Listing) - Показывает список источников Kafka
-* [SHOW MATERIALIZED VIEWS](Integration/Kafka.md#Listing) - Показывает список материализованных представлений
-* [SHOW MVS](Integration/Kafka.md#Listing) - Алиас для предыдущей команды
-* [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Показывает SQL команду создания таблицы
-* [SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) - Отображает информацию о доступных вторичных индексах таблицы
-* [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Показывает информацию о текущем состоянии таблицы
-* [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Показывает настройки таблицы
-* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_a_table.md#SHOW-LOCKS) - Показывает информацию о замороженных таблицах
+* [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - Suspend or resume consuming from the Kafka source
+* [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
+* [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
+* [SHOW SOURCES](Integration/Kafka.md#Listing) - Shows list of Kafka sources
+* [SHOW MATERIALIZED VIEWS](Integration/Kafka.md#Listing) - Shows list of materialized views
+* [SHOW MVS](Integration/Kafka.md#Listing) - Alias of previous command
+* [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
+* [SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) - Displays information about the available secondary indexes for the table
+* [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
+* [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
+* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_a_table.md#SHOW-LOCKS) - Shows information about frozen tables
 
-##### Управление данными
-* [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Добавляет новые документы
-* [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Заменяет существующие документы новыми
-* [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Заменяет одно или несколько полей в таблице
-* [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Выполняет обновление документов на месте
-* [DELETE](Data_creation_and_modification/Deleting_documents.md) - Удаляет документы
-* [TRUNCATE TABLE](Emptying_a_table.md) - Удаляет все документы из таблицы
+##### Data management
+* [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
+* [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces existing documents with new ones
+* [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Replaces one or multiple fields in a table
+* [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Does in-place update in documents
+* [DELETE](Data_creation_and_modification/Deleting_documents.md) - Deletes documents
+* [TRUNCATE TABLE](Emptying_a_table.md) - Deletes all documents from table
 
-##### Резервное копирование
-* [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) - Создает резервные копии таблиц
+##### Backup
+* [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) - Backs up your tables
 
 ##### SELECT
-* [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Выполняет поиск
-  * [WHERE](Searching/Filters.md#Filters) - Фильтры
-  * [GROUP BY](Searching/Grouping.md) - Группирует результаты поиска
-  * [GROUP BY ORDER](Searching/Grouping.md) - Сортирует группы
-  * [GROUP BY HAVING](Searching/Grouping.md) - Фильтрует группы
-  * [OPTION](Searching/Options.md#OPTION) - Опции запроса
-  * [FACET](Searching/Faceted_search.md) - Фасетный поиск
-  * [SUB-SELECTS](Searching/Sub-selects.md) - О использовании вложенных SELECT-запросов
-  * [JOIN](Searching/Joining.md) - Выполняет соединение таблиц в SELECT
-* [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Показывает план выполнения запроса без выполнения самого запроса
-* [SHOW META](Node_info_and_management/SHOW_META.md) - Показывает расширенную информацию о выполненном запросе
-* [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - Показывает профиль выполнения выполненного запроса
-* [SHOW PLAN](Searching/Full_text_matching/Profiling.md#Profiling-the-query-tree-in-SQL) - Показывает план выполнения запроса после того, как запрос был выполнен
-* [SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md) - Показывает предупреждения от последнего запроса
+* [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Searches
+  * [WHERE](Searching/Filters.md#Filters) - Filters
+  * [GROUP BY](Searching/Grouping.md) - Groups search results
+  * [GROUP BY ORDER](Searching/Grouping.md) - Orders groups
+  * [GROUP BY HAVING](Searching/Grouping.md) - Filters groups
+  * [OPTION](Searching/Options.md#OPTION) - Query Options
+  * [FACET](Searching/Faceted_search.md) - Faceted search
+  * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
+  * [JOIN](Searching/Joining.md) - Joining tables in SELECT
+* [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself
+* [SHOW META](Node_info_and_management/SHOW_META.md) - Shows extended information about executed query
+* [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - Shows profiling information about executed query
+* [SHOW PLAN](Searching/Full_text_matching/Profiling.md#Profiling-the-query-tree-in-SQL) - Shows query execution plan after the query was executed
+* [SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md) - Shows warnings from the latest query
 
-##### Очистка разного
-* [FLUSH ATTRIBUTES](Securing_and_compacting_a_table/Flushing_attributes.md) - Принудительно сбрасывает обновленные атрибуты на диск
-* [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Обновляет соответствия IP-адресов именам агент-хостов
-* [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Инициирует повторное открытие логов searchd и запросов (аналог USR1)
+##### Flushing misc things
+* [FLUSH ATTRIBUTES](Securing_and_compacting_a_table/Flushing_attributes.md) - Forces flushing updated attributes to disk
+* [FLUSH HOSTNAMES](Securing_and_compacting_a_table/Flushing_hostnames.md) - Renews IPs associates to agent host names
+* [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) - Initiates reopen of searchd log and query log files (similar to USR1)
 
-##### Оптимизация таблицы реального времени
-* [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Принудительно создает новый дисковый чанк
-* [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Сбрасывает RAM-чанк таблицы реального времени на диск
-* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Помещает таблицу реального времени в очередь на оптимизацию
+##### Real-time table optimization
+* [FLUSH RAMCHUNK](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) - Force creating a new disk chunk
+* [FLUSH TABLE](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#FLUSH-TABLE) - Flushes real-time table RAM chunk to disk
+* [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
-##### Импорт в таблицу реального времени
-* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Перемещает данные из обычной таблицы в таблицу реального времени
-* [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Импортирует ранее созданную RT или PQ таблицу в сервер, работающий в режиме RT
+##### Importing to a real-time table
+* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Moves data from a plain table to a real-time table
+* [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Imports previously created RT or PQ table into a server running in the RT mode
 
-##### Репликация
-* [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Присоединяется к кластеру репликации
-* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Добавляет/удаляет таблицу в кластере репликации
-* [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Изменяет настройки кластера репликации
-* [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Удаляет кластер репликации
+##### Replication
+* [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
+* [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Adds/deletes a table to a replication cluster
+* [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Changes replication cluster settings
+* [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 
-##### Поворот простой таблицы
-* [RELOAD TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Поворачивает простую таблицу
-* [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Поворачивает все простые таблицы
+##### Plain table rotate
+* [RELOAD TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates a plain table
+* [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - Rotates all plain tables
 
-##### Транзакции
-* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Начинает транзакцию
-* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Завершает транзакцию
-* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Откатывает транзакцию
+##### Transactions
+* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Begins a transaction
+* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Finishes a transaction
+* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - Rolls back a transaction
 
 ##### CALL
-* [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - Предлагает исправленные слова
-* [CALL SNIPPETS](Searching/Highlighting.md) - Создает выделенный фрагмент результатов из предоставленных данных и запроса
-* [CALL PQ](Searching/Percolate_query.md) - Выполняет перколятный запрос
-* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Используется для проверки, как ключевые слова токенизируются. Также позволяет получить токенизированные формы заданных ключевых слов
-* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Автодополнение вашего поискового запроса
+* [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - Suggests spell-corrected words
+* [CALL SNIPPETS](Searching/Highlighting.md) - Builds a highlighted results snippet from provided data and query
+* [CALL PQ](Searching/Percolate_query.md) - Runs a percolate query
+* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Used to check how keywords are tokenized. Also allows to retrieve tokenized forms of provided keywords
+* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Autocompletes your search query
 
-##### Плагины
-* [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Устанавливает пользовательскую функцию (UDF)
-* [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - Удаляет пользовательскую функцию (UDF)
-* [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - Устанавливает плагин
-* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - Устанавливает Buddy плагин
-* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - Удаляет плагин
-* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - Удаляет Buddy плагин
-* [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Перезагружает все плагины из указанной библиотеки
-* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - Реактивирует ранее отключенный Buddy плагин
-* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - Деактивирует активный Buddy плагин
+##### Plugins
+* [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Installs a user-defined function (UDF)
+* [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - Drops a user-defined function (UDF)
+* [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - Installs a plugin
+* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - Installs a Buddy plugin
+* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - Drops a plugin
+* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - Drops a Buddy plugin
+* [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Reloads all plugins from a given library
+* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - Reactivates a previously disabled Buddy plugin
+* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - Deactivates an active Buddy plugin
 
-##### Статус сервера
-* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Отображает ряд полезных счетчиков производительности
-* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Показывает все активные клиентские потоки
-* [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Показывает глобальные переменные сервера и их значения
-* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - Предоставляет подробную информацию о версии различных компонентов экземпляра.
+##### Server status
+* [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
+* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Lists all currently active client threads
+* [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Lists server-wide variables and their values
+* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - Provides detailed version information of various components of the instance.
 
-### HTTP эндпоинты
-* [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Выполняет SQL-запрос через HTTP в формате JSON
-* [/cli](Connecting_to_the_server/HTTP.md#/cli) - Предоставляет HTTP интерфейс командной строки
-* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Вставляет документ в таблицу реального времени
-* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Добавляет правило PQ в таблицу перколяции
-* [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Обновляет документ в таблице реального времени
-* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - Заменяет существующий документ в таблице реального времени или вставляет его, если он не существует
-* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Заменяет правило PQ в таблице перколяции
-* [/delete](Data_creation_and_modification/Deleting_documents.md) - Удаляет документ из таблицы
-* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Выполняет несколько операций вставки, обновления или удаления за один вызов. Подробнее о пакетных вставках [здесь](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
-* [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Выполняет поиск
-* [/search -> knn](Searching/KNN.md) - Выполняет KNN-поиск по векторам
-* [/pq/tbl_name/search](Searching/Percolate_query.md) - Выполняет обратный поиск в таблице перколяции
-* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Создает схему таблицы в стиле Elasticsearch
+### HTTP endpoints
+* [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Execute an SQL statement over HTTP JSON
+* [/cli](Connecting_to_the_server/HTTP.md#/cli) - Provides an HTTP command line interface
+* [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Inserts a document into a real-time table
+* [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Adds a PQ rule to a percolate table
+* [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - Updates a document in a real-time table
+* [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces an existing document in a real-time table or inserts it if it doesn't exist
+* [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - Replaces a PQ rule in a percolate table
+* [/delete](Data_creation_and_modification/Deleting_documents.md) - Removes a document from a table
+* [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Executes multiple insert, update, or delete operations in a single call. Learn more about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
+* [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
+* [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
+* [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
-### Общие моменты
-* [синтаксис имен полей](Creating_a_table/Data_types.md#Field-name-syntax)
-* [типы данных](Creating_a_table/Data_types.md)
-* [движок](Creating_a_table/Data_types.md)
-* [простой режим](Read_this_first.md#Real-time-mode-vs-plain-mode)
-* [режим реального времени](Read_this_first.md#Real-time-mode-vs-plain-mode)
+### Common things
+* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
+* [data types](Creating_a_table/Data_types.md)
+* [engine](Creating_a_table/Data_types.md)
+* [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
+* [real-time mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
-##### Общие настройки таблиц
+##### Common table settings
 * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
@@ -190,14 +190,14 @@
 * [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 
-##### Параметры обычной таблицы
+##### Plain table settings
 * [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
 * [source](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [stored_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [stored_only_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [columnar_attrs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 
-##### Параметры распределённой таблицы
+##### Distributed table settings
 * [local](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
 * [agent](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
 * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
@@ -208,7 +208,7 @@
 * [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy)
 * [mirror_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
 
-##### Настройки RT таблиц
+##### RT table settings
 * [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -225,389 +225,389 @@
 * [diskchunk_flush_search_timeout](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 
 
-## Операторы полнотекстового поиска
+## Full-text search operators
 * [OR](Searching/Full_text_matching/Operators.md#OR-operator)
 * [MAYBE](Searching/Full_text_matching/Operators.md#MAYBE-operator)
-* [NOT](Searching/Full_text_matching/Operators.md#Negation-operator) - оператор NOT
-* [@field](Searching/Full_text_matching/Operators.md#Field-search-operator) - оператор поиска по полю
-* [@field%5BN%5D](Searching/Full_text_matching/Operators.md#Field-search-operator) - модификатор ограничения позиции в поле
-* [@(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - оператор поиска по нескольким полям
-* [@!field](Searching/Full_text_matching/Operators.md#Field-search-operator) - оператор игнорирования поля в поиске
-* [@!(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - оператор игнорирования нескольких полей в поиске
-* [@*](Searching/Full_text_matching/Operators.md#Field-search-operator) - оператор поиска по всем полям
-* ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#Phrase-search-operator) - оператор поиска по фразе
-* ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#Proximity-search-operator) - оператор поиска по близости
-* ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#Quorum-matching-operator) - оператор кворумного совпадения
-* [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - оператор строгого порядка
-* [=word1](Searching/Full_text_matching/Operators.md#Exact-form-modifier) - модификатор точной формы
-* [^word1](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - модификатор начала поля
-* [word2$](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - модификатор конца поля
-* [word^N](Searching/Full_text_matching/Operators.md#IDF-boost-modifier) - модификатор увеличения IDF ключевого слова
-* [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-operator) - NEAR, обобщённый оператор близости
-* [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-operator) - NOTNEAR, оператор отрицания близости
-* [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - оператор PARAGRAPH
-* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - оператор SENTENCE
-* [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-limit-operator) - оператор ограничения ZONE
-* [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) - оператор ограничения ZONESPAN
-* [@@relaxed](Searching/Full_text_matching/Operators.md#Field-search-operator) - подавляет ошибки об отсутствии полей
-* [t?st](Searching/Full_text_matching/Operators.md#Wildcard-operators) - операторы подстановки
-* [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#REGEX-operator) - оператор REGEX
+* [NOT](Searching/Full_text_matching/Operators.md#Negation-operator) - NOT operator
+* [@field](Searching/Full_text_matching/Operators.md#Field-search-operator) - field search operator
+* [@field%5BN%5D](Searching/Full_text_matching/Operators.md#Field-search-operator) - field position limit modifier
+* [@(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - multi-field search operator
+* [@!field](Searching/Full_text_matching/Operators.md#Field-search-operator) - ignore field search operator
+* [@!(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - ignore multi-field search operator
+* [@*](Searching/Full_text_matching/Operators.md#Field-search-operator) - all-field search operator
+* ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#Phrase-search-operator) - phrase search operator
+* ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#Proximity-search-operator) - proximity search operator
+* ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#Quorum-matching-operator) - quorum matching operator
+* [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
+* [=word1](Searching/Full_text_matching/Operators.md#Exact-form-modifier) - exact form modifier
+* [^word1](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-start modifier
+* [word2$](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-end modifier
+* [word^N](Searching/Full_text_matching/Operators.md#IDF-boost-modifier) - keyword IDF boost modifier
+* [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-operator) - NEAR, generalized proximity operator
+* [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-operator) - NOTNEAR, negative assertion operator
+* [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - PARAGRAPH operator
+* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
+* [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-limit-operator) - ZONE limit operator
+* [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) - ZONESPAN limit operator
+* [@@relaxed](Searching/Full_text_matching/Operators.md#Field-search-operator) - suppresses errors about missing fields
+* [t?st](Searching/Full_text_matching/Operators.md#Wildcard-operators) - wildcard operators
+* [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#REGEX-operator) - REGEX operator
 
-## Функции
-##### Математические
-* [ABS()](Functions/Mathematical_functions.md#ABS%28%29) - возвращает абсолютное значение
-* [ATAN2()](Functions/Mathematical_functions.md#ATAN2%28%29) - возвращает арктангенс двух аргументов
-* [BITDOT()](Functions/Mathematical_functions.md#BITDOT%28%29) - возвращает сумму произведений каждого бита маски на его вес
-* [CEIL()](Functions/Mathematical_functions.md#CEIL%28%29) - возвращает наименьшее целое число, большее или равное аргументу
-* [COS()](Functions/Mathematical_functions.md#COS%28%29) - возвращает косинус аргумента
-* [CRC32()](Functions/Mathematical_functions.md#CRC32%28%29) - возвращает CRC32 значение аргумента
-* [EXP()](Functions/Mathematical_functions.md#EXP%28%29) - возвращает экспоненту аргумента
-* [FIBONACCI()](Functions/Mathematical_functions.md#FIBONACCI%28%29) - Возвращает N-ое число Фибоначчи, где N - целочисленный аргумент
-* [FLOOR()](Functions/Mathematical_functions.md#FLOOR%28%29) - Возвращает наибольшее целое значение, меньшее или равное аргументу
-* [GREATEST()](Functions/Mathematical_functions.md#GREATEST%28%29) - Принимает JSON/MVA массив в качестве аргумента и возвращает наибольшее значение в этом массиве
-* [IDIV()](Functions/Mathematical_functions.md#IDIV%28%29) - Возвращает результат целочисленного деления первого аргумента на второй аргумент
-* [LEAST()](Functions/Mathematical_functions.md#LEAST%28%29) - Принимает JSON/MVA массив в качестве аргумента и возвращает наименьшее значение в этом массиве
-* [LN()](Functions/Mathematical_functions.md#LN%28%29) - Возвращает натуральный логарифм аргумента
-* [LOG10()](Functions/Mathematical_functions.md#LOG10%28%29) - Возвращает десятичный логарифм аргумента
-* [LOG2()](Functions/Mathematical_functions.md#LOG2%28%29) - Возвращает бинарный логарифм аргумента
-* [MAX()](Functions/Mathematical_functions.md#MAX%28%29) - Возвращает большее из двух аргументов
-* [MIN()](Functions/Mathematical_functions.md#MIN%28%29) - Возвращает меньшее из двух аргументов
-* [POW()](Functions/Mathematical_functions.md#POW%28%29) - Возвращает первый аргумент, возведённый в степень второго аргумента
-* [RAND()](Functions/Mathematical_functions.md#RAND%28%29) - Возвращает случайное число с плавающей запятой между 0 и 1
-* [SIN()](Functions/Mathematical_functions.md#SIN%28%29) - Возвращает синус аргумента
-* [SQRT()](Functions/Mathematical_functions.md#SQRT%28%29) - Возвращает квадратный корень аргумента
-
-
-##### Поиск и ранжирование
-* [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) - Возвращает точное значение по формуле BM25F
-* [EXIST()](Functions/Searching_and_ranking_functions.md#EXIST%28%29) - Заменяет несуществующие столбцы значениями по умолчанию
-* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Формирует список значений атрибутов всех документов в группе, разделённых запятыми
-* [HIGHLIGHT()](Searching/Highlighting.md) - Подсвечивает результаты поиска
-* [MIN_TOP_SORTVAL()](Functions/Searching_and_ranking_functions.md#MIN_TOP_SORTVAL%28%29) - Возвращает значение ключа сортировки худшего найденного элемента в текущих топ-N совпадениях
-* [MIN_TOP_WEIGHT()](Functions/Searching_and_ranking_functions.md#MIN_TOP_WEIGHT%28%29) - Возвращает вес худшего найденного элемента в текущих топ-N совпадениях
-* [PACKEDFACTORS()](Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) - Выводит весовые коэффициенты
-* [REMOVE_REPEATS()](Functions/Searching_and_ranking_functions.md#REMOVE_REPEATS%28%29) - Убирает повторяющиеся отрегулированные строки с одинаковым значением 'column'
-* [WEIGHT()](Functions/Searching_and_ranking_functions.md#WEIGHT%28%29) - Возвращает балл соответствия полнотекстовому поиску
-* [ZONESPANLIST()](Functions/Searching_and_ranking_functions.md#ZONESPANLIST%28%29) - Возвращает пары совпавших зон охвата
-* [QUERY()](Functions/Searching_and_ranking_functions.md#QUERY%28%29) - Возвращает текущий полнотекстовый запрос
-
-##### Преобразование типов
-* [BIGINT()](Functions/Type_casting_functions.md#BIGINT%28%29) - Принудительно преобразует целочисленный аргумент в тип 64-битного целого
-* [DOUBLE()](Functions/Type_casting_functions.md#DOUBLE%28%29) - Принудительно преобразует данный аргумент в число с плавающей запятой
-* [INTEGER()](Functions/Type_casting_functions.md#INTEGER%28%29) - Принудительно преобразует данный аргумент в знаковый 64-битный тип
-* [TO_STRING()](Functions/Type_casting_functions.md#TO_STRING%28%29) - Принудительно преобразует аргумент в строковый тип
-* [UINT()](Functions/Type_casting_functions.md#UINT%28%29) - Преобразует данный аргумент в 32-битный беззнаковый целочисленный тип
-* [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) - Преобразует данный аргумент в 64-битный беззнаковый целочисленный тип
-* [SINT()](Functions/Type_casting_functions.md#SINT%28%29) - Интерпретирует 32-битное беззнаковое целое как знаковое 64-битное целое
-
-##### Массивы и условия
-* [ALL()](Functions/Arrays_and_conditions_functions.md#ALL%28%29) - Возвращает 1, если условие истинно для всех элементов массива
-* [ANY()](Functions/Arrays_and_conditions_functions.md#ANY%28%29) - Возвращает 1, если условие истинно для какого-либо элемента массива
-* [CONTAINS()](Functions/Arrays_and_conditions_functions.md#CONTAINS%28%29) - Проверяет, находится ли точка (x,y) внутри заданного полигона
-* [IF()](Functions/Arrays_and_conditions_functions.md#IF%28%29) - Проверяет, равен ли первый аргумент 0.0, возвращает второй аргумент, если не равен, или третий, если равен
-* [IN()](Functions/Arrays_and_conditions_functions.md#IN%28%29) - Возвращает 1, если первый аргумент равен любому из остальных аргументов, иначе 0
-* [INDEXOF()](Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29) - Проходит по всем элементам массива и возвращает индекс первого совпадающего элемента
-* [INTERVAL()](Functions/Arrays_and_conditions_functions.md#INTERVAL%28%29) - Возвращает индекс аргумента, который меньше первого аргумента
-* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - Возвращает количество элементов в MVA
-* [REMAP()](Functions/Arrays_and_conditions_functions.md#REMAP%28%29) - Позволяет делать исключения в значениях выражений в зависимости от значений условий
-
-##### Дата и время
-* [NOW()](Functions/Date_and_time_functions.md#NOW%28%29) - Возвращает текущую метку времени в виде INTEGER
-* [CURTIME()](Functions/Date_and_time_functions.md#CURTIME%28%29) - Возвращает текущее время в локальном часовом поясе
-* [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Возвращает текущую дату в локальном часовом поясе
-* [UTC_TIME()](Functions/Date_and_time_functions.md#UTC_TIME%28%29) - Возвращает текущее время в часовом поясе UTC
-* [UTC_TIMESTAMP()](Functions/Date_and_time_functions.md#UTC_TIMESTAMP%28%29) - Возвращает текущие дату/время в часовом поясе UTC
-* [SECOND()](Functions/Date_and_time_functions.md#SECOND%28%29) - Возвращает целую секунду из аргумента с меткой времени
-* [MINUTE()](Functions/Date_and_time_functions.md#MINUTE%28%29) - Возвращает целую минуту из аргумента с меткой времени
-* [HOUR()](Functions/Date_and_time_functions.md#HOUR%28%29) - Возвращает целочисленный час из аргумента временной отметки
-* [DAY()](Functions/Date_and_time_functions.md#DAY%28%29) - Возвращает целочисленный день из аргумента временной отметки
-* [MONTH()](Functions/Date_and_time_functions.md#MONTH%28%29) - Возвращает целочисленный месяц из аргумента временной отметки
-* [QUARTER()](Functions/Date_and_time_functions.md#QUARTER%28%29) - Возвращает целочисленный квартал года из аргумента временной отметки
-* [YEAR()](Functions/Date_and_time_functions.md#YEAR%28%29) - Возвращает целочисленный год из аргумента временной отметки
-* [DAYNAME()](Functions/Date_and_time_functions.md#DAYNAME%28%29) - Возвращает название дня недели для заданного аргумента временной отметки
-* [MONTHNAME()](Functions/Date_and_time_functions.md#MONTHNAME%28%29) - Возвращает название месяца для заданного аргумента временной отметки
-* [DAYOFWEEK()](Functions/Date_and_time_functions.md#DAYOFWEEK%28%29) - Возвращает целочисленный индекс дня недели для заданного аргумента временной отметки
-* [DAYOFYEAR()](Functions/Date_and_time_functions.md#DAYOFYEAR%28%29) - Возвращает целочисленное число дня в году для заданного аргумента временной отметки
-* [YEARWEEK()](Functions/Date_and_time_functions.md#YEARWEEK%28%29) - Возвращает целочисленный год и код дня первого дня текущей недели для заданного аргумента временной отметки
-* [YEARMONTH()](Functions/Date_and_time_functions.md#YEARMONTH%28%29) - Возвращает целочисленный код года и месяца из аргумента временной отметки
-* [YEARMONTHDAY()](Functions/Date_and_time_functions.md#YEARMONTHDAY%28%29) - Возвращает целочисленные коды года, месяца и дня из аргумента временной отметки
-* [TIMEDIFF()](Functions/Date_and_time_functions.md#TIMEDIFF%28%29) - Возвращает разницу между временными отметками
-* [DATEDIFF()](Functions/Date_and_time_functions.md#DATEDIFF%28%29) - Возвращает количество дней между двумя заданными временными отметками
-* [DATE()](Functions/Date_and_time_functions.md#DATE%28%29) - Форматирует часть даты из аргумента временной отметки
-* [TIME()](Functions/Date_and_time_functions.md#TIME%28%29) - Форматирует часть времени из аргумента временной отметки
-* [DATE_FORMAT()](Functions/Date_and_time_functions.md#DATE_FORMAT%28%29) - Возвращает форматированную строку на основе предоставленных аргументов даты и формата
+## Functions
+##### Mathematical
+* [ABS()](Functions/Mathematical_functions.md#ABS%28%29) - Returns absolute value
+* [ATAN2()](Functions/Mathematical_functions.md#ATAN2%28%29) - Returns arctangent function of two arguments
+* [BITDOT()](Functions/Mathematical_functions.md#BITDOT%28%29) - Returns sum of products of each bit of a mask multiplied with its weight
+* [CEIL()](Functions/Mathematical_functions.md#CEIL%28%29) - Returns smallest integer value greater or equal to the argument
+* [COS()](Functions/Mathematical_functions.md#COS%28%29) - Returns cosine of the argument
+* [CRC32()](Functions/Mathematical_functions.md#CRC32%28%29) - Returns CRC32 value of the argument
+* [EXP()](Functions/Mathematical_functions.md#EXP%28%29) - Returns exponent of the argument
+* [FIBONACCI()](Functions/Mathematical_functions.md#FIBONACCI%28%29) - Returns the N-th Fibonacci number, where N is the integer argument
+* [FLOOR()](Functions/Mathematical_functions.md#FLOOR%28%29) - Returns the largest integer value lesser or equal to the argument
+* [GREATEST()](Functions/Mathematical_functions.md#GREATEST%28%29) - Takes JSON/MVA array as the argument and returns the greatest value in that array
+* [IDIV()](Functions/Mathematical_functions.md#IDIV%28%29) - Returns result of an integer division of the first argument by the second argument
+* [LEAST()](Functions/Mathematical_functions.md#LEAST%28%29) - Takes JSON/MVA array as the argument, and returns the least value in that array
+* [LN()](Functions/Mathematical_functions.md#LN%28%29) - Returns natural logarithm of the argument
+* [LOG10()](Functions/Mathematical_functions.md#LOG10%28%29) - Returns common logarithm of the argument
+* [LOG2()](Functions/Mathematical_functions.md#LOG2%28%29) - Returns binary logarithm of the argument
+* [MAX()](Functions/Mathematical_functions.md#MAX%28%29) - Returns the larger of two arguments
+* [MIN()](Functions/Mathematical_functions.md#MIN%28%29) - Returns the smaller of two arguments
+* [POW()](Functions/Mathematical_functions.md#POW%28%29) - Returns the first argument raised to the power of the second argument
+* [RAND()](Functions/Mathematical_functions.md#RAND%28%29) - Returns random float between 0 and 1
+* [SIN()](Functions/Mathematical_functions.md#SIN%28%29) - Returns sine of the argument
+* [SQRT()](Functions/Mathematical_functions.md#SQRT%28%29) - Returns square root of the argument
 
 
-##### Геопространственные
-* [GEODIST()](Functions/Geo_spatial_functions.md#GEODIST%28%29) - Вычисляет геодезическое расстояние между двумя заданными точками
-* [GEOPOLY2D()](Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29) - Создает многоугольник с учетом кривизны Земли
-* [POLY2D()](Functions/Geo_spatial_functions.md#POLY2D%28%29) - Создает простой многоугольник в плоском пространстве
+##### Searching and ranking
+* [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) - Returns precise BM25F formula value
+* [EXIST()](Functions/Searching_and_ranking_functions.md#EXIST%28%29) - Replaces non-existing columns with default values
+* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Produces a comma-separated list of the attribute values of all documents in the group
+* [HIGHLIGHT()](Searching/Highlighting.md) - Highlights search results
+* [MIN_TOP_SORTVAL()](Functions/Searching_and_ranking_functions.md#MIN_TOP_SORTVAL%28%29) - Returns sort key value of the worst found element in the current top-N matches
+* [MIN_TOP_WEIGHT()](Functions/Searching_and_ranking_functions.md#MIN_TOP_WEIGHT%28%29) - Returns weight of the worst found element in the current top-N matches
+* [PACKEDFACTORS()](Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) - Outputs weighting factors
+* [REMOVE_REPEATS()](Functions/Searching_and_ranking_functions.md#REMOVE_REPEATS%28%29) - Removes repeated adjusted rows with the same 'column' value
+* [WEIGHT()](Functions/Searching_and_ranking_functions.md#WEIGHT%28%29) - Returns fulltext match score
+* [ZONESPANLIST()](Functions/Searching_and_ranking_functions.md#ZONESPANLIST%28%29) - Returns pairs of matched zone spans
+* [QUERY()](Functions/Searching_and_ranking_functions.md#QUERY%28%29) - Returns current full-text query
 
-##### Строковые функции
-* [CONCAT()](Functions/String_functions.md#CONCAT%28%29) - Конкатенирует две или более строк
-* [REGEX()](Functions/String_functions.md#REGEX%28%29) - Возвращает 1, если регулярное выражение совпадает со строкой атрибута, и 0 в противном случае
-* [SNIPPET()](Functions/String_functions.md#SNIPPET%28%29) - Подсвечивает результаты поиска
-* [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Возвращает подстроку строки до указанного количества вхождений разделителя
+##### Type casting
+* [BIGINT()](Functions/Type_casting_functions.md#BIGINT%28%29) - Forcibly promotes the integer argument to 64-bit type
+* [DOUBLE()](Functions/Type_casting_functions.md#DOUBLE%28%29) - Forcibly promotes given argument to floating point type
+* [INTEGER()](Functions/Type_casting_functions.md#INTEGER%28%29) - Forcibly promotes given argument to 64-bit signed type
+* [TO_STRING()](Functions/Type_casting_functions.md#TO_STRING%28%29) - Forcibly promotes the argument to string type
+* [UINT()](Functions/Type_casting_functions.md#UINT%28%29) - Converts the given argument to 32-bit unsigned integer type
+* [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) - Converts the given argument to 64-bit unsigned integer type
+* [SINT()](Functions/Type_casting_functions.md#SINT%28%29) - Interprets 32-bit unsigned integer as signed 64-bit integer
 
-##### Другие
-* [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Возвращает ID текущего подключения
-* [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Возвращает расстояние поиска KNN по вектору
-* [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Возвращает ID документов, вставленных или замененных последним оператором в текущей сессии
-* [UUID_SHORT()](Functions/Other_functions.md#UUID_SHORT%28%29) - Возвращает «короткий» универсальный идентификатор, следующий тому же алгоритму, что и для авто-генерации ID.
+##### Arrays and conditions
+* [ALL()](Functions/Arrays_and_conditions_functions.md#ALL%28%29) - Returns 1 if condition is true for all elements in the array
+* [ANY()](Functions/Arrays_and_conditions_functions.md#ANY%28%29) - Returns 1 if condition is true for any element in the array
+* [CONTAINS()](Functions/Arrays_and_conditions_functions.md#CONTAINS%28%29) - Checks whether the (x,y) point is within the given polygon
+* [IF()](Functions/Arrays_and_conditions_functions.md#IF%28%29) - Checks whether the 1st argument is equal to 0.0, returns the 2nd argument if it is not zero or the 3rd one when it is
+* [IN()](Functions/Arrays_and_conditions_functions.md#IN%28%29) - Returns 1 if the first argument is equal to any of the other arguments, or 0 otherwise
+* [INDEXOF()](Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29) - Iterates through all elements in the array and returns index of the first matching element
+* [INTERVAL()](Functions/Arrays_and_conditions_functions.md#INTERVAL%28%29) - Returns index of the argument that is less than the first argument
+* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - Returns number of elements in MVA
+* [REMAP()](Functions/Arrays_and_conditions_functions.md#REMAP%28%29) - Allows to make some exceptions of expression values depending on the condition values
 
-## Общие настройки в конфигурационном файле
-Должны быть указаны в секции `common {}` в конфигурационном файле:
-* [lemmatizer_base](Server_settings/Common.md#lemmatizer_base) - Базовый путь словарей лемматизатора
-* [progressive_merge](Server_settings/Common.md#progressive_merge) - Определяет порядок слияния дисковых чанков в таблице реального времени
-* [json_autoconv_keynames](Server_settings/Common.md#json_autoconv_keynames) - Будет ли и как автоматически конвертироваться имена ключей внутри JSON-атрибутов
-* [json_autoconv_numbers](Server_settings/Common.md#json_autoconv_numbers) - Автоматически определяет и преобразует возможные JSON строки, представляющие числа, в числовые атрибуты
-* [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - Что делать при обнаружении ошибок формата JSON
-* [plugin_dir](Server_settings/Common.md#plugin_dir) - Расположение динамических библиотек и UDF
+##### Date and time
+* [NOW()](Functions/Date_and_time_functions.md#NOW%28%29) - Returns current timestamp as an INTEGER
+* [CURTIME()](Functions/Date_and_time_functions.md#CURTIME%28%29) - Returns current time in local timezone
+* [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Returns current date in local timezone
+* [UTC_TIME()](Functions/Date_and_time_functions.md#UTC_TIME%28%29) - Returns current time in UTC timezone
+* [UTC_TIMESTAMP()](Functions/Date_and_time_functions.md#UTC_TIMESTAMP%28%29) - Returns current date/time in UTC timezone
+* [SECOND()](Functions/Date_and_time_functions.md#SECOND%28%29) - Returns integer second from the timestamp argument
+* [MINUTE()](Functions/Date_and_time_functions.md#MINUTE%28%29) - Returns integer minute from the timestamp argument
+* [HOUR()](Functions/Date_and_time_functions.md#HOUR%28%29) - Returns integer hour from the timestamp argument
+* [DAY()](Functions/Date_and_time_functions.md#DAY%28%29) - Returns integer day from the timestamp argument
+* [MONTH()](Functions/Date_and_time_functions.md#MONTH%28%29) - Returns integer month from the timestamp argument
+* [QUARTER()](Functions/Date_and_time_functions.md#QUARTER%28%29) - Returns the integer quarter of the year from a timestamp argument
+* [YEAR()](Functions/Date_and_time_functions.md#YEAR%28%29) - Returns integer year from the timestamp argument
+* [DAYNAME()](Functions/Date_and_time_functions.md#DAYNAME%28%29) - Returns the weekday name for a given timestamp argument
+* [MONTHNAME()](Functions/Date_and_time_functions.md#MONTHNAME%28%29) - Returns the name of the month for a given timestamp argument
+* [DAYOFWEEK()](Functions/Date_and_time_functions.md#DAYOFWEEK%28%29) - Returns the integer weekday index for a given timestamp argument
+* [DAYOFYEAR()](Functions/Date_and_time_functions.md#DAYOFYEAR%28%29) - Returns the integer day of the year for a given timestamp argument
+* [YEARWEEK()](Functions/Date_and_time_functions.md#YEARWEEK%28%29) - Returns the integer year and the day code of the first day of current week for a given timestamp argument
+* [YEARMONTH()](Functions/Date_and_time_functions.md#YEARMONTH%28%29) - Returns integer year and month code from the timestamp argument
+* [YEARMONTHDAY()](Functions/Date_and_time_functions.md#YEARMONTHDAY%28%29) - Returns integer year, month and day code from the timestamp argument
+* [TIMEDIFF()](Functions/Date_and_time_functions.md#TIMEDIFF%28%29) - Returns difference between the timstamps
+* [DATEDIFF()](Functions/Date_and_time_functions.md#DATEDIFF%28%29) - Returns the number of days between two given timestamps
+* [DATE()](Functions/Date_and_time_functions.md#DATE%28%29) - Formats the date part from a timestamp argument
+* [TIME()](Functions/Date_and_time_functions.md#TIME%28%29) - Formats the time part from a timestamp argument
+* [DATE_FORMAT()](Functions/Date_and_time_functions.md#DATE_FORMAT%28%29) - Returns a formatted string based on the provided date and format arguments
+
+
+##### Geo-spatial
+* [GEODIST()](Functions/Geo_spatial_functions.md#GEODIST%28%29) - Computes geosphere distance between two given points
+* [GEOPOLY2D()](Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29) - Creates a polygon that takes in account the Earth's curvature
+* [POLY2D()](Functions/Geo_spatial_functions.md#POLY2D%28%29) - Creates a simple polygon in plain space
+
+##### String
+* [CONCAT()](Functions/String_functions.md#CONCAT%28%29) - Concatenates two or more strings
+* [REGEX()](Functions/String_functions.md#REGEX%28%29) - Returns 1 if regular expression matched to string of attribute and 0 otherwise
+* [SNIPPET()](Functions/String_functions.md#SNIPPET%28%29) - Highlights search results
+* [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
+
+##### Other
+* [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
+* [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
+* [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
+* [UUID_SHORT()](Functions/Other_functions.md#UUID_SHORT%28%29) - Returns a "short" universal identifier following the same algorithm as for auto-id generation.
+
+## Common settings in configuration file
+To be put to section `common {}` in configuration file:
+* [lemmatizer_base](Server_settings/Common.md#lemmatizer_base) - Lemmatizer dictionaries base path
+* [progressive_merge](Server_settings/Common.md#progressive_merge) - Defines order of merging disk chunks in a real-time table
+* [json_autoconv_keynames](Server_settings/Common.md#json_autoconv_keynames) - Whether and how to auto-convert key names within JSON attributes
+* [json_autoconv_numbers](Server_settings/Common.md#json_autoconv_numbers) - Automatically detects and converts possible JSON strings that represent numbers into numeric attributes
+* [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - What to do if JSON format errors are found
+* [plugin_dir](Server_settings/Common.md#plugin_dir) - Location for the dynamic libraries and UDFs
 
 ## [Indexer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
-`indexer` — инструмент для создания [plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
+`indexer` is a tool to create [plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
 
-##### Настройки Indexer в конфигурационном файле
-Должны быть указаны в секции `indexer {}` в конфигурационном файле:
-* [lemmatizer_cache](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Размер кэша лемматизатора
-* [max_file_field_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Максимальный адаптивный буфер поля файла
-* [max_iops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Максимальное количество операций ввода-вывода при индексировании в секунду
-* [max_iosize](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Максимально допустимый размер операции ввода-вывода
-* [max_xmlpipe2_field](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Максимально допустимый размер поля для источника типа XMLpipe2
-* [mem_limit](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Лимит использования оперативной памяти при индексировании
-* [on_file_field_error](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Как обрабатывать ошибки ввода-вывода в полях файлов
-* [write_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Размер буфера записи
-* [ignore_non_plain](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Игнорировать предупреждения о не-простых таблицах
+##### Indexer settings in configuration file
+To be put to section `indexer {}` in configuration file:
+* [lemmatizer_cache](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Lemmatizer cache size
+* [max_file_field_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum file field adaptive buffer size
+* [max_iops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum indexation I/O operations per second
+* [max_iosize](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed I/O operation size
+* [max_xmlpipe2_field](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Maximum allowed field size for XMLpipe2 source type
+* [mem_limit](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Indexing RAM usage limit
+* [on_file_field_error](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - How to handle IO errors in file fields
+* [write_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Write buffer size
+* [ignore_non_plain](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - To ignore warnings about non-plain tables
 
-##### Параметры запуска индексатора
+##### Indexer start parameters
 ```bash
 indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 ```
-* [--all](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Перестраивает все таблицы из конфигурации
-* [--buildstops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Анализирует источник таблицы как при индексировании данных, создавая список индексируемых терминов
-* [--buildfreqs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Добавляет подсчёт частот в таблицу для --buildstops
-* [--config, -c](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Указывает путь к файлу конфигурации
-* [--dump-rows](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Выгружает строки, полученные из источников SQL, в указанный файл
-* [--help](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Отображает все доступные параметры
-* [--keep-attrs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Позволяет использовать существующие атрибуты при переиндексации
-* [--keep-attrs-names](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Указывает, какие атрибуты использовать из существующей таблицы
-* [--merge-dst-range](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Применяет заданный диапазон фильтра при слиянии
-* [--merge-killlists](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Изменяет обработку списков удаления при слиянии таблиц
-* [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Объединяет две простые таблицы в одну
-* [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Предотвращает отправку индексатором сигнала SIGHUP при включённой этой опции
-* [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Скрывает детали прогресса
-* [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Выводит SQL-запросы, отправленные индексатором в базу данных
-* [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Показывает данные, полученные из SQL-источников, как INSERT-операторы в таблицу реального времени
-* [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Подавляет весь вывод
-* [--rotate](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Запускает ротацию таблиц после завершения построения всех таблиц
-* [--sighup-each](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Триггерит ротацию каждой таблицы после её построения
-* [-v](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Показывает версию индексатора
+* [--all](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Rebuilds all tables from the config
+* [--buildstops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Analyzes the table source as if indexing the data, generating a list of indexed terms
+* [--buildfreqs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Adds the frequency count to the table for --buildstops
+* [--config, -c](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Specifies the path to the configuration file
+* [--dump-rows](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Dumps rows retrieved by SQL source(s) into the specified file
+* [--help](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Displays all available parameters
+* [--keep-attrs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Allows reuse of existing attributes when reindexing
+* [--keep-attrs-names](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Specifies which attributes to reuse from the existing table
+* [--merge-dst-range](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Applies the given filter range during merging
+* [--merge-killlists](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Alters kill list processing when merging tables
+* [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Combines two plain tables into one
+* [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Prevents indexer from sending SIGHUP when this option is enabled
+* [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Hides progress details
+* [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Outputs SQL queries sent by the indexer to the database
+* [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Displays data fetched from SQL source(s) as INSERTs into a real-time table
+* [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Suppresses all output
+* [--rotate](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Initiates table rotation after all tables are built
+* [--sighup-each](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Triggers rotation of each table after it's built
+* [-v](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - Displays indexer version
 
-## Конвертер таблиц для Manticore v2 / Sphinx v2
-`index_converter` — это инструмент, предназначенный для преобразования таблиц, созданных в Sphinx/Manticore Search 2.x, в формат таблиц Manticore Search 3.x.
+## Table Converter for Manticore v2 / Sphinx v2
+`index_converter` is a tool designed to convert tables created with Sphinx/Manticore Search 2.x into the Manticore Search 3.x table format.
 ```bash
 index_converter {--config /path/to/config|--path}
 ```
-##### Параметры запуска конвертера таблиц
-* [--config, -c](Installation/Migration_from_Sphinx.md#index_converter) - Путь к файлу конфигурации таблиц
-* [--index](Installation/Migration_from_Sphinx.md#index_converter) - Указывает, какую таблицу конвертировать
-* [--path](Installation/Migration_from_Sphinx.md#index_converter) - Задает путь, содержащий таблицу(ы) вместо файла конфигурации
-* [--strip-path](Installation/Migration_from_Sphinx.md#index_converter) - Удаляет путь из имён файлов, на которые ссылается таблица
-* [--large-docid](Installation/Migration_from_Sphinx.md#index_converter) - Позволяет конвертировать документы с id больше 2^63
-* [--output-dir](Installation/Migration_from_Sphinx.md#index_converter) - Записывает новые файлы в указанную папку
-* [--all](Installation/Migration_from_Sphinx.md#index_converter) - Конвертирует все таблицы из файла конфигурации / пути
-* [--killlist-target](Installation/Migration_from_Sphinx.md#index_converter) - Определяет целевые таблицы для применения списков удаления
+##### Table converter start parameters
+* [--config, -c](Installation/Migration_from_Sphinx.md#index_converter) - Path to table configuration file
+* [--index](Installation/Migration_from_Sphinx.md#index_converter) - Specifies which table to convert
+* [--path](Installation/Migration_from_Sphinx.md#index_converter) - Sets path containing table(s) instead of the configuration file
+* [--strip-path](Installation/Migration_from_Sphinx.md#index_converter) - Removes path from filenames referenced by table
+* [--large-docid](Installation/Migration_from_Sphinx.md#index_converter) - Allows conversion of documents with ids larger than 2^63
+* [--output-dir](Installation/Migration_from_Sphinx.md#index_converter) - Writes new files in a specified folder
+* [--all](Installation/Migration_from_Sphinx.md#index_converter) - Converts all tables from the configuration file / path
+* [--killlist-target](Installation/Migration_from_Sphinx.md#index_converter) - Sets target tables for applying kill-lists
 
 ## [Searchd](Starting_the_server/Manually.md)
-`searchd` — сервер Manticore.
+`searchd` is the Manticore server.
 
-##### Настройки searchd в файле конфигурации
-Должны быть помещены в секцию `searchd {}` файла конфигурации:
-  * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Определяет способ доступа к файлу атрибутов blob таблицы
-  * [access_doclists](Server_settings/Searchd.md#access_doclists) - Определяет способ доступа к файлу doclists таблицы
-  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Определяет способ доступа к файлу hitlists таблицы
-  * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Определяет, как поисковый сервер получает доступ к простым атрибутам таблицы
-  * [access_dict](Server_settings/Searchd.md#access_dict) - Определяет, как осуществляется доступ к файлу словаря таблицы
-  * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Таймаут подключения к удалённому агенту
-  * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Таймаут запроса к удалённому агенту
-  * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Определяет количество попыток подключения и запроса к удалённым агентам в Manticore
-  * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Определяет задержку перед повторной попыткой запроса к удалённому агенту в случае неудачи
-  * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Устанавливает период времени между сбросом обновлённых атрибутов на диск
-  * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Режим сброса/синхронизации транзакций бинарного лога
-  * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Максимальный размер файла бинарного лога
-  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Общий файл бинарного лога для всех таблиц
-  * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - Количество цифр в имени файла бинарного лога
-  * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - Стратегия сброса бинарного лога
-  * [binlog_path](Server_settings/Searchd.md#binlog_path) - Путь к файлам бинарного лога
-  * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное время ожидания между запросами при использовании постоянных соединений
-  * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Локаль libc сервера
-  * [collation_server](Server_settings/Searchd.md#collation_server) - Колляция по умолчанию на сервере
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Путь к каталогу данных, где Manticore хранит все данные ([RT режим](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
-  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут автосброса RAM-чанка при отсутствии записей в него
-  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут предотвращения автосброса RAM-чанка при отсутствии поисковых запросов к таблице
-  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, удерживаемых в памяти
-  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество расширенных ключевых слов для одного шаблона с подстановкой
-  * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Включает использование часового пояса UTC для группировки временных полей
-  * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Размер окна статистики зеркала агента
-  * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Интервал между ping-запросами зеркала агента
-  * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Стратегия обновления имён хостов
-  * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Определяет максимальное количество "заданий", разрешённых в очереди одновременно
-  * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для объединения таблиц для баланса производительности и использования памяти
-  * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кеша для повторного использования результатов JOIN-запроса
-  * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
-  * [listen](Server_settings/Searchd.md#listen) - Указывает IP-адрес и порт или путь к Unix-доменному сокету, на которых searchd будет слушать
-  * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
-  * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей
-  * [log](Server_settings/Searchd.md#log) - Путь к файлу журнала сервера Manticore
-  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Ограничивает количество запросов в пакете
-  * [max_connections](Server_settings/Searchd.md#max_connections) - Максимальное количество активных соединений
-  * [max_filters](Server_settings/Searchd.md#max_filters) - Максимально разрешённое количество фильтров на запрос
-  * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Максимально разрешённое количество значений в фильтре
-  * [max_open_files](Server_settings/Searchd.md#max_open_files) - Максимальное количество файлов, которые сервер может открыть
-  * [max_packet_size](Server_settings/Searchd.md#max_packet_size) - Максимально разрешённый размер сетевого пакета
-  * [mysql_version_string](Server_settings/Searchd.md#mysql_version_string) - Строка версии сервера, возвращаемая через протокол MySQL
-  * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - Определяет, сколько клиентов принимается на каждую итерацию сетевого цикла
-  * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - Определяет, сколько запросов обрабатывается на каждой итерации сетевого цикла
-  * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - Управляет интервалом busy loop сетевого потока
-  * [net_workers](Server_settings/Searchd.md#net_workers) - Количество сетевых потоков
-  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Таймаут сети для клиентских запросов
-  * [node_address](Server_settings/Searchd.md#node_address) - Указывает сетевой адрес узла
-  * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное количество одновременно поддерживаемых постоянных соединений с удалёнными постоянными агентами
-  * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к PID файлу сервера Manticore
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Затраты для модели прогнозирования времени запроса
-  * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Определяет, следует ли принудительно открывать все таблицы при запуске
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдо-шардинг для поисковых запросов к обычным и реальному времени таблицам
-  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем оперативной памяти, выделяемый для кэшированных наборов результатов
-  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Минимальный порог времени выполнения запроса для кэширования результата
-  * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Период истечения срока действия кэшированного набора результатов
-  * [query_log](Server_settings/Searchd.md#query_log) - Путь к файлу журнала запросов
-  * [query_log_format](Server_settings/Searchd.md#query_log_format) - Формат журнала запросов
-  * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - Запрещает логирование слишком быстрых запросов
-  * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - Режим разрешений для файла журнала запросов
-  * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Размер буфера чтения на ключевое слово для списков документов
-  * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Размер буфера чтения на ключевое слово для списков попаданий
-  * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Размер чтения без подсказок
-  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Как часто Manticore сбрасывает куски оперативной памяти таблиц реального времени на диск
-  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Максимальное число операций ввода-вывода (в секунду), которые может выполнять поток слияния кусков реального времени
-  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Максимальный размер операции ввода-вывода, которую может выполнить поток слияния кусков реального времени
-  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Предотвращает зависания searchd при повороте таблиц с большими объемами данных для предварительного кэширования
-  * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - Включает использование вторичных индексов для поисковых запросов
-  * [server_id](Server_settings/Searchd.md#server_id) - Идентификатор сервера, используемый как зерно для генерации уникального ID документа
-  * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Таймаут `--stopwait` для searchd
-  * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 хэш пароля, необходимого для вызова команды `shutdown` из VIP SQL соединения
-  * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Префикс, добавляемый к локальным именам файлов при генерации сниппетов в режиме `load_files`
-  * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Путь к файлу, где будет сериализовано текущее состояние SQL
-  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Максимальное время ожидания между запросами от MySQL клиента
-  * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - Путь к сертификату SSL центра сертификации
-  * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - Путь к SSL сертификату сервера
-  * [ssl_key](Server_settings/Searchd.md#ssl_key) - Путь к ключу SSL сертификата сервера
-  * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Максимальный размер кэша документов общего поддерева
-  * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Максимальный размер кэша попаданий общего поддерева для каждого запроса
-  * [timezone](Server_settings/Searchd.md#timezone) - Часовой пояс, используемый функциями работы с датой и временем
-  * [thread_stack](Server_settings/Searchd.md#thread_stack) - Максимальный размер стека для задачи
-  * [unlink_old](Server_settings/Searchd.md#unlink_old) - Удалять ли копии таблиц с расширением .old после успешного поворота
-  * [watchdog](Server_settings/Searchd.md#watchdog) - Включать или отключать сторожевой таймер сервера Manticore
+##### Searchd settings in a configuration file
+To be put in the `searchd {}` section of the configuration file:
+  * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Defines how table's blob attributes file is accessed
+  * [access_doclists](Server_settings/Searchd.md#access_doclists) - Defines how table's doclists file is accessed
+  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Defines how table's hitlists file is accessed
+  * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Defines how search server accesses table's plain attributes
+  * [access_dict](Server_settings/Searchd.md#access_dict) - Defines how table's dictionary file is accessed
+  * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Remote agent connection timeout
+  * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
+  * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies the number of times Manticore tries to connect and query remote agents
+  * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Specifies the delay before retrying to query a remote agent in case of failure
+  * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Sets the time period between flushing updated attributes to disk
+  * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
+  * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
+  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Common binary log file for all tables
+  * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - Number of digits in a binlog file name
+  * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - Binlog flushing strategy
+  * [binlog_path](Server_settings/Searchd.md#binlog_path) - Binary log files path
+  * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum time to wait between requests when using persistent connections
+  * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale
+  * [collation_server](Server_settings/Searchd.md#collation_server) - Default server collation
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Timeout for auto-flushing a RAM chunk if there are no writes to it
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Timeout for preventing auto-flushing a RAM chunk if there are no searches in the table
+  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Maximum size of document blocks from document storage held in memory
+  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Maximum number of expanded keywords for a single wildcard
+  * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Enables using UTC timezone for grouping time fields
+  * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Agent mirror statistics window size
+  * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Interval between agent mirror pings
+  * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Hostnames renew strategy
+  * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Defines the maximum number of "jobs" allowed in the queue simultaneously
+  * [join_batch_size](Searching/Joining.md#Join-batching) - Defines batch size for table joins to balance performance and memory usage
+  * [join_cache_size](Searching/Joining.md#Join-caching) - Defines cache size for reusing JOIN query results
+  * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – The server version string that's sent in response to Kibana requests
+  * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path for searchd to listen on
+  * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
+  * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Enables TCP_FASTOPEN flag for all listeners
+  * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
+  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the number of queries per batch
+  * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum number of active connections
+  * [max_filters](Server_settings/Searchd.md#max_filters) - Maximum allowed per-query filter count
+  * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Maximum allowed per-filter values count
+  * [max_open_files](Server_settings/Searchd.md#max_open_files) - Maximum number of files allowed to be opened by server
+  * [max_packet_size](Server_settings/Searchd.md#max_packet_size) - Maximum allowed network packet size
+  * [mysql_version_string](Server_settings/Searchd.md#mysql_version_string) - Server version string returned via MySQL protocol
+  * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - Defines how many clients are accepted on each iteration of the network loop
+  * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - Defines how many requests are processed on each iteration of the network loop
+  * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - Controls busy loop interval of a network thread
+  * [net_workers](Server_settings/Searchd.md#net_workers) - Number of network threads
+  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for client requests
+  * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
+  * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
+  * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
+  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
+  * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Determines whether to forcibly preopen all tables on startup
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
+  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Maximum RAM allocated for cached result sets
+  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Minimum wall time threshold for a query result to be cached
+  * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Expiration period for a cached result set
+  * [query_log](Server_settings/Searchd.md#query_log) - Path to query log file
+  * [query_log_format](Server_settings/Searchd.md#query_log_format) - Query log format
+  * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - Prevents logging too fast queries
+  * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - Query log file permissions mode
+  * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Per-keyword read buffer size for document lists
+  * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Per-keyword read buffer size for hit lists
+  * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Unhinted read size
+  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - How often Manticore flushes real-time tables' RAM chunks to disk
+  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Maximum number of I/O operations (per second) that real-time chunks merging thread is allowed to do
+  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Maximum size of an I/O operation that real-time chunks merging thread is allowed to do
+  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Prevents searchd stalls while rotating tables with huge amounts of data to precache
+  * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - Enables using secondary indexes for search queries
+  * [server_id](Server_settings/Searchd.md#server_id) - Server identifier used as a seed to generate a unique document ID
+  * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` timeout
+  * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 hash of the password required to invoke `shutdown` command from VIP SQL connection
+  * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Prefix to prepend to the local file names when generating snippets in `load_files` mode
+  * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Path to file where the current SQL state will be serialized
+  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Maximum time to wait between requests from a MySQL client
+  * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - Path to SSL Certificate Authority certificate file
+  * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - Path to server's SSL certificate
+  * [ssl_key](Server_settings/Searchd.md#ssl_key) - Path to SSL certificate key of the server
+  * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Maximum common subtree document cache size
+  * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Maximum common subtree hit cache size, per-query
+  * [timezone](Server_settings/Searchd.md#timezone) - Timezone used by date/time-related functions
+  * [thread_stack](Server_settings/Searchd.md#thread_stack) - Maximum stack size for a job
+  * [unlink_old](Server_settings/Searchd.md#unlink_old) - Whether to unlink .old table copies on successful rotation
+  * [watchdog](Server_settings/Searchd.md#watchdog) - Whether to enable or disable Manticore server watchdog
 
-##### Параметры запуска searchd
+##### Searchd start parameters
 ```bash
 searchd [OPTIONS]
 ```
-* [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Указывает путь к файлу конфигурации
-* [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Принудительно запускает сервер в консольном режиме
-* [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Включает сохранение core dump при крахе
-* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчет о времени работы процессора
-* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет сервис Manticore из Microsoft Management Console и других мест регистрации сервисов
-* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Запрещает серверу обслуживать входящие соединения до предварительного чтения файлов таблиц
-* [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает все доступные параметры
-* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Ограничивает сервер обслуживанием только указанной таблицы
-* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает searchd как сервис в Microsoft Management Console
-* [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчетность по операциям ввода/вывода
-* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - Переопределяет [listen](Server_settings/Searchd.md#listen) из конфигурационного файла
-* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод в лог сервера
-* [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод репликации в лог сервера
-* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер в качестве эталонного узла с защитой [перезапуска кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
-* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер в качестве узла-эталона, обходя защиту при [перезапуске кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
-* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Запускает searchd в переднем плане
-* [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Используется Microsoft Management Console для запуска searchd как службы на платформах Windows
-* [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - Переопределяет [pid_file](Server_settings/Searchd.md#pid_file) в конфигурационном файле
-* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Указывает порт, который должен прослушивать searchd, игнорируя порт, указанный в конфигурационном файле
-* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает дополнительные опции воспроизведения бинарного лога
-* [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - Присваивает указанное имя searchd при установке или удалении службы, как отображается в Microsoft Management Console
-* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Запрашивает работающую поисковую службу для возврата её статуса
-* [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Останавливает сервер Manticore
-* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Корректно останавливает сервер Manticore
-* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Убирает пути из всех имён файлов, на которые ссылается таблица
-* [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает информацию о версии
+* [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Specifies the path to the configuration file
+* [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Forces the server to run in console mode
+* [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Enables core dump saving upon crash
+* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables CPU time reporting
+* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes the Manticore service from Microsoft Management Console and other locations where services are registered
+* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Prevents the server from serving incoming connections until table files are pre-read
+* [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Displays all available parameters
+* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Restricts the server to serve only the specified table
+* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service in Microsoft Management Console
+* [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
+* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [listen](Server_settings/Searchd.md#listen) from the configuration file
+* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - Enables additional debug output in the server log
+* [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Enables extra replication debug output in the server log
+* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - Initializes a replication cluster and sets the server as a reference node with [cluster restart](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
+* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - Initializes a replication cluster and sets the server as a reference node, bypassing [cluster restart](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
+* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Keeps searchd running in the foreground
+* [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Used by Microsoft Management Console to launch searchd as a service on Windows platforms
+* [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - Overrides [pid_file](Server_settings/Searchd.md#pid_file) in the configuration file
+* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Specifies the port searchd should listen on, ignoring the port specified in the configuration file
+* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Sets additional binary log replay options
+* [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - Assigns the given name to searchd when installing or deleting the service, as displayed in Microsoft Management Console
+* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Queries the running search service to return its status
+* [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Stops the Manticore server
+* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Stops the Manticore server gracefully
+* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Removes path names from all file names referenced in the table
+* [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Displays version information
 
-##### Переменные окружения Searchd
-* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - Включает подробное логирование во время завершения работы searchd
+##### Searchd environment variables
+* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - Enables detailed logging during searchd shutdown
 
 ## [Indextool](Miscellaneous_tools.md#indextool)
-Различные функции обслуживания таблиц, полезные для отладки.
+Assorted table maintenance features helpful for troubleshooting.
 ```bash
 indextool <command> [options]
 ```
-##### Параметры запуска Indextool
-Используется для дампа различной отладочной информации, связанной с физической таблицей.
+##### Indextool Start Parameters
+Utilized for dumping various debug information related to the physical table.
 ```bash
 indextool <command> [options]
 ```
-* [--config, -c](Miscellaneous_tools.md#indextool) - Указывает путь к конфигурационному файлу
-* [--quiet, -q](Miscellaneous_tools.md#indextool) - Подавляет вывод indextool; без баннеров и пр.
-* [--help, -h](Miscellaneous_tools.md#indextool) - Список всех доступных параметров
-* [-v](Miscellaneous_tools.md#indextool) - Отображает информацию о версии
-* [Indextool](Miscellaneous_tools.md#indextool) - Проверяет конфигурационный файл
-* [--buildidf](Miscellaneous_tools.md#indextool) - Создает IDF-файл из одного или нескольких дампов словаря
-* [--build-infixes](Miscellaneous_tools.md#indextool) - Строит инфиксы для существующей таблицы dict=keywords
-* [--dumpheader](Miscellaneous_tools.md#indextool) - Быстро выводит указанный файл заголовка таблицы
-* [--dumpconfig](Miscellaneous_tools.md#indextool) - Выводит определение таблицы из данного файла заголовка таблицы в почти совместимом формате manticore.conf
-* [--dumpheader](Miscellaneous_tools.md#indextool) - Выводит заголовок таблицы по имени таблицы, осуществляя поиск пути заголовка в конфигурационном файле
-* [--dumpdict](Miscellaneous_tools.md#indextool) - Выводит словарь таблицы
-* [--dumpdocids](Miscellaneous_tools.md#indextool) - Выводит идентификаторы документов по имени таблицы
-* [--dumphitlist](Miscellaneous_tools.md#indextool) - Выводит все появления заданного ключевого слова/ID в указанной таблице
-* [--docextract](Miscellaneous_tools.md#indextool) - Выполняет проверку таблицы, проходя по всему словарю/документам/попаданиям, и собирает все слова и попадания, относящиеся к запрошенному документу
-* [--fold](Miscellaneous_tools.md#indextool) - Тестирует токенизацию на основе настроек таблицы
-* [--htmlstrip](Miscellaneous_tools.md#indextool) - Фильтрует STDIN с использованием настроек HTML-стриппера для указанной таблицы
-* [--mergeidf](Miscellaneous_tools.md#indextool) - Объединяет несколько .idf файлов в один
-* [--morph](Miscellaneous_tools.md#indextool) - Применяет морфологию к переданному STDIN и выводит результат в stdout
-* [--check](Miscellaneous_tools.md#indextool) - Проверяет файлы данных таблицы на целостность
-* [--check-id-dups](Miscellaneous_tools.md#indextool) - Проверяет наличие дубликатов ID
-* [--check-disk-chunk](Miscellaneous_tools.md#indextool) - Проверяет один дисковый чанк таблицы RT
-* [--strip-path](Miscellaneous_tools.md#indextool) - Удаляет пути из всех имён файлов, на которые ссылается таблица
-* [--rotate](Miscellaneous_tools.md#indextool) - Определяет, проверять ли таблицу на ожидание ротации при использовании `--check`
-* [--apply-killlists](Miscellaneous_tools.md#indextool) - Применяет списки удаления для всех таблиц, перечисленных в конфигурационном файле
+* [--config, -c](Miscellaneous_tools.md#indextool) - Specifies the path to the configuration file
+* [--quiet, -q](Miscellaneous_tools.md#indextool) - Keeps indextool quiet; no banner output, etc.
+* [--help, -h](Miscellaneous_tools.md#indextool) - Lists all available parameters
+* [-v](Miscellaneous_tools.md#indextool) - Displays version information
+* [Indextool](Miscellaneous_tools.md#indextool) - Verifies the configuration file
+* [--buildidf](Miscellaneous_tools.md#indextool) - Builds an IDF file from one or more dictionary dumps
+* [--build-infixes](Miscellaneous_tools.md#indextool) - Builds infixes for an existing dict=keywords table
+* [--dumpheader](Miscellaneous_tools.md#indextool) - Quickly dumps the provided table header file
+* [--dumpconfig](Miscellaneous_tools.md#indextool) - Dumps table definition from the given table header file in a nearly compliant manticore.conf format
+* [--dumpheader](Miscellaneous_tools.md#indextool) - Dumps table header by table name while looking up the header path in the configuration file
+* [--dumpdict](Miscellaneous_tools.md#indextool) - Dumps the table dictionary
+* [--dumpdocids](Miscellaneous_tools.md#indextool) - Dumps document IDs by table name
+* [--dumphitlist](Miscellaneous_tools.md#indextool) - Dumps all occurrences of the given keyword/id in the specified table
+* [--docextract](Miscellaneous_tools.md#indextool) - Runs table check pass on entire dictionary/docs/hits and collects all words and hits belonging to the requested document
+* [--fold](Miscellaneous_tools.md#indextool) - Tests tokenization based on table settings
+* [--htmlstrip](Miscellaneous_tools.md#indextool) - Filters STDIN using HTML stripper settings for the specified table
+* [--mergeidf](Miscellaneous_tools.md#indextool) - Merges multiple .idf files into a single file
+* [--morph](Miscellaneous_tools.md#indextool) - Applies morphology to the provided STDIN and outputs the result to stdout
+* [--check](Miscellaneous_tools.md#indextool) - Checks table data files for consistency
+* [--check-id-dups](Miscellaneous_tools.md#indextool) - Checks for duplicate IDs
+* [--check-disk-chunk](Miscellaneous_tools.md#indextool) - Checks a single disk chunk of an RT table
+* [--strip-path](Miscellaneous_tools.md#indextool) - Removes path names from all file names referenced in the table
+* [--rotate](Miscellaneous_tools.md#indextool) - Determines whether to check a table waiting for rotation when using `--check`
+* [--apply-killlists](Miscellaneous_tools.md#indextool) - Applies kill-lists for all tables listed in the configuration file
 
 ## [Wordbreaker](Miscellaneous_tools.md#wordbreaker)
-Разбивает составные слова на компоненты.
+Splits compound words into their components.
 ```bash
 wordbreaker [-dict path/to/dictionary_file] {split|test|bench}
 ```
 
-##### Параметры запуска Wordbreaker
-* [STDIN](Miscellaneous_tools.md#wordbreaker) - Принимает строку для разбиения на части
-* [-dict](Miscellaneous_tools.md#wordbreaker) - Указывает файл словаря для использования
-* [split|test|bench](Miscellaneous_tools.md#wordbreaker) - Указывает команду
+##### Wordbreaker start parameters
+* [STDIN](Miscellaneous_tools.md#wordbreaker) - Accepts a string to break into parts
+* [-dict](Miscellaneous_tools.md#wordbreaker) - Specifies the dictionary file to use
+* [split|test|bench](Miscellaneous_tools.md#wordbreaker) - Specifies the command
 
 ## [Spelldump](Miscellaneous_tools.md#spelldump)
-Извлекает содержимое файла словаря в формате ispell или MySpell
+Extracts the contents of a dictionary file using ispell or MySpell format
 
 ```bash
 spelldump [options] <dictionary> <affix> [result] [locale-name]
 ```
-* [dictionary](Miscellaneous_tools.md#spelldump) - Основной файл словаря
-* [affix](Miscellaneous_tools.md#spelldump) - Аффиксный файл для словаря
-* [result](Miscellaneous_tools.md#spelldump) - Указывает место вывода данных словаря
-* [locale-name](Miscellaneous_tools.md#spelldump) - Указывает локаль для использования
+* [dictionary](Miscellaneous_tools.md#spelldump) - Main dictionary file
+* [affix](Miscellaneous_tools.md#spelldump) - Affix file for the dictionary
+* [result](Miscellaneous_tools.md#spelldump) - Specifies the output destination for the dictionary data
+* [locale-name](Miscellaneous_tools.md#spelldump) - Specifies the locale details to use
 
-## Список зарезервированных ключевых слов
+## List of reserved keywords
 
-Полный алфавитный список ключевых слов, которые в данный момент зарезервированы в синтаксисе Manticore SQL (поэтому их нельзя использовать как идентификаторы).
+A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
 AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
-## Документация для старых версий Manticore
+## Documentation for old Manticore versions
 
 * [2.4.1](https://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.4.1.pdf)
 * [2.5.1](https://repo.manticoresearch.com/repository/old_docs/manticoresearch-2.5.1.pdf)
@@ -659,5 +659,6 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [13.6.7](https://manual.manticoresearch.com/manticore-13-6-7/). [Installation page](https://manticoresearch.com/install-13.6.7/)
 * [13.11.0](https://manual.manticoresearch.com/manticore-13-11-0/). [Installation page](https://manticoresearch.com/install-13.11.0/)
 * [13.11.1](https://manual.manticoresearch.com/manticore-13-11-1/). [Installation page](https://manticoresearch.com/install-13.11.1/)
+* [13.13.0](https://manual.manticoresearch.com/manticore-13-13-0/). [Installation page](https://manticoresearch.com/install-13.13.0/)
 <!-- proofread -->
 

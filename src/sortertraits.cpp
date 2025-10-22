@@ -335,17 +335,49 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 
 		switch ( tAttr.m_eAggrFunc )
 		{
-		case SPH_AGGR_SUM:	m_dAggregates.Add ( CreateAggrSum(tAttr) );	break;
+		case SPH_AGGR_SUM:
+			{
+				AggrFunc_i * pAggr = CreateAggrSum(tAttr);
+				if ( pAggr )
+					m_dAggregates.Add ( pAggr );
+				else
+					assert ( 0 && "internal error: unsupported aggregate type for SUM()" );
+			}
+			break;
 		case SPH_AGGR_AVG:
-			m_dAggregates.Add ( CreateAggrAvg ( tAttr, m_tLocCount ) );
+			{
+				AggrFunc_i * pAggr = CreateAggrAvg ( tAttr, m_tLocCount );
+				if ( pAggr )
+				{
+					m_dAggregates.Add ( pAggr );
 
-			// store avg to calculate these attributes prior to groups sort
-			if ( pAvgs )
-				pAvgs->Add ( m_dAggregates.Last() );
+					// store avg to calculate these attributes prior to groups sort
+					if ( pAvgs )
+						pAvgs->Add ( m_dAggregates.Last() );
+				}
+				else
+					assert ( 0 && "internal error: unsupported aggregate type for AVG()" );
+			}
 			break;
 
-		case SPH_AGGR_MIN:	m_dAggregates.Add ( CreateAggrMin(tAttr) );	break;
-		case SPH_AGGR_MAX:	m_dAggregates.Add ( CreateAggrMax(tAttr) );	break;
+		case SPH_AGGR_MIN:
+			{
+				AggrFunc_i * pAggr = CreateAggrMin(tAttr);
+				if ( pAggr )
+					m_dAggregates.Add ( pAggr );
+				else
+					assert ( 0 && "internal error: unsupported aggregate type for MIN()" );
+			}
+			break;
+		case SPH_AGGR_MAX:
+			{
+				AggrFunc_i * pAggr = CreateAggrMax(tAttr);
+				if ( pAggr )
+					m_dAggregates.Add ( pAggr );
+				else
+					assert ( 0 && "internal error: unsupported aggregate type for MAX()" );
+			}
+			break;
 		case SPH_AGGR_CAT:
 			m_dAggregates.Add ( CreateAggrConcat(tAttr) );
 			m_tPregroup.AddPtr ( tAttr.m_tLocator );

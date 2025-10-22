@@ -157,10 +157,10 @@ Manticore versions:
 ```sql
 BACKUP
   [{TABLE | TABLES} a[, b]]
+  到 path_to_backup
   [{OPTION | OPTIONS}
     async = {on | off | 1 | 0 | true | false | yes | no}
     [, compress = {on | off | 1 | 0 | true | false | yes | no}]
-  ]
   TO path_to_backup
 ```
 
@@ -172,17 +172,48 @@ BACKUP TABLES a, b TO /backup
 
 有一些选项可用于控制和调整备份过程，例如：
 
-* `async`：使备份非阻塞，允许您立即收到带有查询 ID 的响应，并在备份进行时运行其他查询。默认值为 `0`。
+* `async`：使备份成为非阻塞操作，允许你立即收到包含备份路径的响应，并在备份进行时运行其他查询。默认值为 `0`。
 * `compress`：启用使用 zstd 的文件压缩。默认值为 `0`。
+
 例如，要以异步模式启用压缩，将所有表备份到 `/tmp` 目录：
 
-```sql
 BACKUP OPTION async = yes, compress = yes TO /tmp
+BACKUP TO /tmp OPTION async = yes, compress = yes
 ```
+
+### 异步备份行为
+使用 `async = 1`（或 `yes`、`on`、`true`）时，备份操作将在后台任务中运行：
+
+* 命令会立即返回备份路径
+* 备份进行时你可以继续运行其他查询
+* 备份任务在 Manticore Buddy 管理的单独线程中运行
+* 运行时，备份任务会出现在 `SHOW QUERIES` 输出中，完成后会自动移除
+
+**异步备份示例：**
+
+```sql
+BACKUP TO /tmp/mybackup OPTION async = 1
+```
+
+这将立即返回类似如下的输出：
+```
++----------------------------------+
+| 路径                             |
++----------------------------------+
+| /tmp/mybackup/backup-20221004... |
++----------------------------------+
+```
+
+你可以使用 `SHOW QUERIES` 检查备份是否仍在运行。完成后，该任务会从查询列表中消失，所有备份文件也会存在于指定目录中。
 
 ### 重要注意事项
 
 1. 路径中不应包含特殊符号或空格，因为不支持。
+1. 如果备份路径包含空格，需用单引号括起来，例如 `BACKUP TO '/path/with spaces'`
+2. 不包含空格的路径不需要引号：`BACKUP TO /tmp/backup`
+3. 支持 Windows 路径：`BACKUP TO 'C:\path'` 或 `BACKUP TO C:\windowsackup`
+4. 确保 Manticore Buddy 已启动（默认启动）
+5. 备份目录必须存在且 Manticore 进程有写权限
 2. 确保 Manticore Buddy 已启动（默认启动）。
 
 ### 备份如何保持表的一致性
@@ -261,6 +292,8 @@ Manticore config
 <!-- end -->
 
 ## 使用 mysqldump 备份和恢复
+Manticore 支持 MySQL 9.4 及以下版本的 `mysqldump` 工具和 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
+
 
 Manticore 支持来自 MySQL 9.4 及以下版本的 `mysqldump` 工具和来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
 
@@ -305,7 +338,6 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -
 
 注意，如果您在[普通模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除并重新创建表。因此，您应该：
 - 使用带有 `-t` 选项的 `mysqldump`，以排除备份中的 `CREATE TABLE` 语句。
-- 在继续恢复之前，手动[清空](../Emptying_a_table.md)表。
 
 <!-- request SQL -->
 ```bash

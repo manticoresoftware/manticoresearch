@@ -2,68 +2,67 @@
 
 <!-- example SHOW TABLE STATUS -->
 
-`SHOW TABLE STATUS` 是一个显示每个表各种统计信息的 SQL 语句。
+`SHOW TABLE STATUS` 是一个显示各表统计信息的 SQL 语句。
 
-语法为：
+语法如下：
 
 ```sql
 SHOW TABLE table_name STATUS
 ```
 
-根据索引类型，显示的统计信息包括不同的行集：
+根据索引类型，显示的统计信息包括不同的行集合：
 
 * **template**：`index_type`。
 * **distributed**：`index_type`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
-* **percolate**：`index_type`，`stored_queries`，`ram_bytes`，`disk_bytes`，`max_stack_need`，`average_stack_base`，
-  
-  `desired_thread_stack`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
-* **plain**：`index_type`，`indexed_documents`，`indexed_bytes`，可能包含一组 `field_tokens_*` 和 `total_tokens`，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
-
-* **rt**：`index_type`，`indexed_documents`，`indexed_bytes`，可能包含一组 `field_tokens_*` 和 `total_tokens`，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`ram_chunk`，`ram_chunk_segments_count`，`disk_chunks`，`mem_limit`，`mem_limit_rate`，`ram_bytes_retired`，`optimizing`，`locked`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
+* **percolate**：`index_type`，`stored_queries`，`ram_bytes`，`disk_bytes`，`max_stack_need`，`average_stack_base`，`
+  desired_thread_stack`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
+* **plain**：`index_type`，`indexed_documents`，`indexed_bytes`，可能还有 `field_tokens_*` 和 `total_tokens` 集合，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
+* **rt**：`index_type`，`indexed_documents`，`indexed_bytes`，可能还有 `field_tokens_*` 和 `total_tokens` 集合，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`ram_chunk`，`ram_chunk_segments_count`，`disk_chunks`，`mem_limit`，`mem_limit_rate`，`ram_bytes_retired`，`optimizing`，`locked`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
 
 以下是这些值的含义：
-* `index_type`：当前的类型之一，包含 `disk`，`rt`，`percolate`，`template`，和 `distributed`。
-* `indexed_documents`：已索引文档的数量。
-* `indexed_bytes`：已索引文本的总体大小。注意，此值不严格，因为在全文索引中，无法严格恢复回存储的文本以进行测量。
-* `stored_queries`：存储在表中的 percolate 查询数量。
-* `field_tokens_XXX`：可选，整张表内每个字段的总长度（以标记数计算）（用于 `BM25A` 和 `BM25F` 排名函数的内部处理）。仅适用于使用 `index_field_lengths=1` 构建的表。
-* `total_tokens`：可选，所有 `field_tokens_XXX` 的总和。
-* `ram_bytes`：表占用的总内存（RAM）字节数。
-* `disk_bytes`：表占用的总磁盘空间字节数。
-* `disk_mapped`：文件映射的总大小。
-* `disk_mapped_cached`：实际缓存在 RAM 中的文件映射总大小。
-* `disk_mapped_doclists` 和 `disk_mapped_cached_doclists`：属于文档列表的映射总量和缓存映射量。
-* `disk_mapped_hitlists` 和 `disk_mapped_cached_hitlists`：属于命中列表的映射总量和缓存映射量。文档列表和命中列表值单独显示，因为它们通常很大（例如，占整张表大小的约 90%）。
-* `killed_documents` 和 `killed_rate`：前者表示删除的文档数量，后者为删除的文档数与已索引文档数的比率。从技术角度来看，删除文档意味着在搜索结果中隐藏它，但它仍物理存在于表中，只有在合并/优化表后才会被清除。
-* `ram_chunk`：实时表或 percolate 表的内存块大小。
-* `ram_chunk_segments_count`：内存块内部由多个段组成，通常不超过 32。此行显示当前段计数。
-* `disk_chunks`：实时表中的磁盘块数量。
-* `mem_limit`：表的 `rt_mem_limit` 实际值。
-* `mem_limit_rate`：RAM 块作为磁盘块刷新比例，例如，如果 `rt_mem_limit` 是 128M，比例是 50%，则当 RAM 块超过 64M 时将保存为新的磁盘块。
-* `ram_bytes_retired`：表示 RAM 块中的垃圾大小（例如，已删除或替换但尚未永久删除的文档）。
-* `optimizing`：值大于 0 表明表当前正在进行优化（即正在合并某些磁盘块）。
-* `locked`：值大于 0 表示表当前被 [FREEZE](../../Securing_and_compacting_a_table/Freezing_a_table.md#Freezing-a-table) 锁定。数字表示表被冻结的次数。例如，一个表可能先被 `manticore-backup` 冻结，再由复制冻结。只有当没有其他进程需要冻结时，它才会完全解冻。
-* `max_stack_need`：计算已存储 percolate 查询中最复杂操作所需的堆栈空间。此值是动态的，依赖于构建细节，如编译器、优化选项、硬件等。
-* `average_stack_base`：通常在开始计算 percolate 查询时占用的堆栈空间。
-* `desired_thread_stack`：上述值之和，向上取整到 128 字节边界。如果此值大于 `thread_stack`，则可能无法对该表执行 `call pq`，因为某些存储的查询会失败。默认的 `thread_stack` 值是 1M（即 1048576）；其他值需要根据情况配置。
-* `tid` 和 `tid_saved`：表示保存表的状态。`tid` 随每次更改（事务）递增。`tid_saved` 显示保存在 `<table>.ram` 文件中的 RAM 块里状态的最大 `tid`。当数字不同时，说明某些更改只存在于 RAM 中，并且也由 binlog 支持（如果启用）。执行 `FLUSH TABLE` 或安排定期刷新即可保存这些更改。刷新后，binlog 会被清空，`tid_saved` 代表新的实际状态。
-* `query_time_*`，`exact_query_time_*`：表示查询执行时间统计，涵盖最近 1 分钟、5 分钟、15 分钟，以及服务器启动以来的总计；数据封装为 JSON 对象，包括查询次数和最小值、最大值、平均值、95 和 99 分位值。
-* `found_rows_*`：查询找到的行数统计，提供最近 1 分钟、5 分钟、15 分钟以及服务器启动以来的总计；数据封装为 JSON 对象，包括查询次数和最小值、最大值、平均值、95 和 99 分位值。
-* `command_*`：针对该表成功执行特定命令的总次数计数器。
-* `search_stats_ms_*`：搜索查询执行时间（毫秒）统计。* 表示时间窗口（例如 1min、5min、15min、total）。统计基于 1、5 和 15 分钟的滑动窗口，展示查询时间的平均值、最小值、最大值以及 95th/99th 分位值。
-* `insert_replace_stats_ms_*`：插入和替换查询执行时间（毫秒）统计。* 表示时间窗口（例如 1min、5min、15min、total）。统计基于 1、5 和 15 分钟的滑动窗口，展示查询时间的平均值、最小值、最大值以及 95th/99th 分位值。
 
-* `update_stats_ms_*`：更新查询执行时间（毫秒）统计。* 表示时间窗口（例如 1min、5min、15min、total）。统计基于 1、5 和 15 分钟的滑动窗口，展示查询时间的平均值、最小值、最大值以及 95th/99th 分位值。
+* `index_type`：当前取值之一为 `disk`，`rt`，`percolate`，`template`，和 `distributed`。
+* `indexed_documents`：已索引的文档数量。
+* `indexed_bytes`：已索引文本的总大小。注意，此值不是严格值，因为全文索引中无法严格恢复存储文本以测量其大小。
+* `stored_queries`：表中存储的 percolate 查询数量。
+* `field_tokens_XXX`：可选，整个表中每字段的令牌总长度（以令牌为单位）（内部用于 `BM25A` 和 `BM25F` 排名函数）。仅适用于构建时设置了 `index_field_lengths=1` 的表。
+* `total_tokens`：可选，所有 `field_tokens_XXX` 的总和。
+* `ram_bytes`：表占用的总 RAM 大小。
+* `disk_bytes`：表占用的总磁盘空间。
+* `disk_mapped`：文件映射的总大小。
+* `disk_mapped_cached`：实际上缓存在 RAM 中的映射大小。
+* `disk_mapped_doclists` 和 `disk_mapped_cached_doclists`：属于文档列表的总映射和缓存映射的大小部分。
+* `disk_mapped_hitlists` 和 `disk_mapped_cached_hitlists`：属于命中列表的总映射和缓存映射的大小部分。文档列表和命中列表单独显示，因为它们通常很大（例如约占整张表大小的 90%）。
+* `killed_documents` 和 `killed_rate`：前者表示被删除文档的数量，后者为删除数与索引数的比例。技术上，删除文档意味着在搜索输出中抑制它，但它仍物理存在于表中，仅在合并/优化表后才会被清除。
+* `ram_chunk`：实时或 percolate 表的 RAM 块大小。
+* `ram_chunk_segments_count`：RAM 块由内部段组成，通常不超过 32。此行显示当前段数。
+* `disk_chunks`：实时表中的磁盘块数量。
+* `mem_limit`：表的实际 `rt_mem_limit` 设置。
+* `mem_limit_rate`：RAM 块刷新为磁盘块的比例，例如，如果 `rt_mem_limit` 是 128M 且比例为 50%，当 RAM 块超出 64M 时将保存新的磁盘块。
+* `ram_bytes_retired`：表示 RAM 块中的垃圾大小（例如尚未永久删除的被删除或替换的文档）。
+* `optimizing`：大于 0 表示表当前正在执行优化（即正在合并某些磁盘块）。
+* `locked`：大于 0 表示表当前被 [FREEZE](../../Securing_and_compacting_a_table/Freezing_a_table.md#Freezing-a-table) 锁定。数字表示表被冻住的次数。例如，表可能先被 `manticore-backup` 冻结，然后又被复制动作冻结。仅当无其他进程需要时才完全解冻。
+* `max_stack_need`：从存储的 percolate 查询计算最复杂情况时所需的栈空间。该值是动态的，取决于构建细节如编译器、优化、硬件等。
+* `average_stack_base`：开始计算 percolate 查询时通常占用的栈空间。
+* `desired_thread_stack`：上述值之和，向上取整到 128 字节边界。如果此值大于 `thread_stack`，则不能对该表执行 `call pq`，因为部分存储的查询可能失败。默认的 `thread_stack` 值为 1M（即 1048576）；其他值应自行配置。
+* `tid` 和 `tid_saved`：表示表保存的状态。`tid` 随每次更改（事务）增加。`tid_saved` 显示在 `<table>.ram` 文件的 RAM 块中保存状态的最大 `tid`。当这两个数字不同，表示一些更改仅存在于 RAM 中，并且也通过 binlog 备份（如果启用的话）。执行 `FLUSH TABLE` 或安排周期性刷新操作会保存这些更改。刷新后，binlog 被清除，`tid_saved` 表示新的实际状态。
+* `query_time_*`，`exact_query_time_*`：查询执行时间统计，涵盖最近 1 分钟、5 分钟、15 分钟和服务器启动以来的总时间；数据封装为 JSON 对象，包括查询数量及最小、最大、平均、95 和 99 百分位值。
+* `found_rows_*`：查询找到的行数统计；提供最近 1 分钟、5 分钟、15 分钟和服务器启动以来的总数据；数据封装为 JSON 对象，包括查询数量及最小、最大、平均、95 和 99 百分位值。
+* `command_*`：针对该表成功执行特定命令的总次数计数器。
+* `search_stats_ms_*`：搜索查询执行时间的统计（以毫秒为单位）。`*` 指示时段窗口（例如 1min、5min、15min、total）。这些统计数据基于1、5和15分钟的滑动窗口计算，显示查询时间的平均值、最小值、最大值及95/99百分位值。
+* `insert_replace_stats_ms_*`：插入和替换查询执行时间的统计（以毫秒为单位）。`*` 指示时段窗口（例如 1min、5min、15min、total）。这些统计数据基于1、5和15分钟的滑动窗口计算，显示查询时间的平均值、最小值、最大值及95/99百分位值。
+* `update_stats_ms_*`：更新查询执行时间的统计（以毫秒为单位）。`*` 指示时段窗口（例如 1min、5min、15min、total）。这些统计数据基于1、5和15分钟的滑动窗口计算，显示查询时间的平均值、最小值、最大值及95/99百分位值。
+
 <!-- intro -->
 ##### SQL:
-
 <!-- request SQL -->
+
 ```sql
 mysql> SHOW TABLE statistic STATUS;
-
 ```
 
 <!-- response SQL -->
+
 ```sql
 +-------------------------------+--------------------------------------------------------------------------+
 | Variable_name                 | Value                                                                    |
@@ -128,18 +127,18 @@ mysql> SHOW TABLE statistic STATUS;
 | update_stats_ms_pct99         | 0.530 0.530 0.530                                                        |
 +-------------------------------+--------------------------------------------------------------------------+
 29 rows in set (0.00 sec)
-
 ```
+
 <!-- intro -->
 ##### PHP:
-
 <!-- request PHP -->
+
 ``` php
 $index->status();
-
 ```
 
 <!-- response PHP -->
+
 ```php
 Array(
     [index_type] => rt
@@ -192,15 +191,15 @@ Array(
 )
 ```
 <!-- intro -->
-
 ##### Python:
 
 <!-- request Python -->
+
 ```python
 utilsApi.sql('SHOW TABLE statistic STATUS')
 ```
-
 <!-- response Python -->
+
 ```python
 {u'columns': [{u'Key': {u'type': u'string'}},
               {u'Value': {u'type': u'string'}}],
@@ -255,18 +254,18 @@ utilsApi.sql('SHOW TABLE statistic STATUS')
  u'error': u'',
  u'total': 0,
  u'warning': u''}
-
 ```
-<!-- intro -->
 
+<!-- intro -->
 ##### Python-asyncio:
 
 <!-- request Python-asyncio -->
+
 ```python
 await utilsApi.sql('SHOW TABLE statistic STATUS')
 ```
-
 <!-- response Python-asyncio -->
+
 ```python
 {u'columns': [{u'Key': {u'type': u'string'}},
               {u'Value': {u'type': u'string'}}],
@@ -321,18 +320,18 @@ await utilsApi.sql('SHOW TABLE statistic STATUS')
  u'error': u'',
  u'total': 0,
  u'warning': u''}
-
 ```
-<!-- intro -->
 
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
+
 ```javascript
 res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 ```
-
 <!-- response Javascript -->
+
 ```javascript
 {"columns": [{"Key": {"type": "string"}},
               {"Value": {"type": "string"}}],
@@ -390,13 +389,13 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
  "warning": ""}
 ```
 <!-- intro -->
-
 ##### Java:
 
 <!-- request Java -->
-```java
 
+```java
 utilsApi.sql("SHOW TABLE statistic STATUS");
+
 ```
 <!-- response Java -->
 ```java
@@ -454,16 +453,16 @@ utilsApi.sql("SHOW TABLE statistic STATUS");
   error= ,
   total=0,
   warning= }
-
 ```
-<!-- intro -->
 
+<!-- intro -->
 ##### C#:
 
 <!-- request C# -->
-```clike
 
+```clike
 utilsApi.Sql("SHOW TABLE statistic STATUS");
+
 ```
 <!-- response C# -->
 ```clike
@@ -521,16 +520,16 @@ utilsApi.Sql("SHOW TABLE statistic STATUS");
   error="" ,
   total=0,
   warning="" }
-
 ```
-<!-- intro -->
 
+<!-- intro -->
 ##### Rust:
 
 <!-- request Rust -->
-```rust
 
+```rust
 utils_api.sql("SHOW TABLE statistic STATUS", Some(true)).await;
+
 ```
 <!-- response Rust -->
 ```rust
@@ -588,18 +587,18 @@ utils_api.sql("SHOW TABLE statistic STATUS", Some(true)).await;
   error="" ,
   total=0,
   warning="" }
-
 ```
-<!-- intro -->
 
+<!-- intro -->
 ##### TypeScript:
 
 <!-- request TypeScript -->
+
 ```typescript
 res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 ```
-
 <!-- response TypeScript -->
+
 ```typescript
 {
 	"columns":
@@ -663,18 +662,18 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 	"total": 0,
 	"warning": ""
 }
-
 ```
-<!-- intro -->
 
+<!-- intro -->
 ##### Go:
 
 <!-- request Go -->
+
 ```go
 apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS").Execute()
 ```
-
 <!-- response Go -->
+
 ```go
 {
 	"columns":
@@ -738,6 +737,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 	"total": 0,
 	"warning": ""
 }
-
 ```
+
+<!-- end -->
 

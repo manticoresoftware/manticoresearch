@@ -1,5 +1,7 @@
 # Введение
 
+Проверьте новую строку!!
+
 Тест новой строки
 
 Manticore Search — это высокопроизводительная многосхранилищная база данных, специально разработанная для поиска и аналитики, обеспечивающая молниеносный полнотекстовый поиск, индексирование в реальном времени и расширенные функции, такие как векторный поиск и колоночное хранение для эффективного анализа данных. Она предназначена для работы как с небольшими, так и с большими наборами данных, обеспечивая бесшовную масштабируемость и мощные аналитические возможности для современных приложений.
@@ -72,11 +74,11 @@ Manticore оснащен внешним инструментом [manticore-back
 
 #### Готовая синхронизация данных
 Инструмент `indexer` и обширный синтаксис конфигурации Manticore упрощают синхронизацию данных из источников, таких как MySQL, PostgreSQL, базы данных, совместимые с ODBC, XML и CSV.
-
 #### Варианты интеграции
 Вы можете интегрировать Manticore Search с сервером MySQL/MariaDB с помощью [движка FEDERATED](Extensions/FEDERATED.md) или через [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
 
 Для визуализации данных, хранящихся в Manticore, можно использовать [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana и [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/). Для интерактивной разработки запросов в Manticore можно применять различные MySQL-инструменты, такие как [HeidiSQL](https://www.heidisql.com/) и [DBForge](https://www.devart.com/dbforge/).
+Вы можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
 
 Вы можете использовать Manticore Search с [Kibana](Integration/Kibana.md).
 

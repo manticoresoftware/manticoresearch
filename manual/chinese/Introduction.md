@@ -1,5 +1,7 @@
 # 介绍
 
+测试新行！！
+
 测试新行
 
 Manticore Search 是一个高性能、多存储数据库，专为搜索和分析设计，提供极速的全文搜索、实时索引，以及向量搜索和列式存储等高级功能，便于高效数据分析。它既能处理小型数据集，也能应对大型数据集，支持无缝扩展并为现代应用提供强大洞察力。
@@ -72,11 +74,11 @@ Manticore 配备了外部工具 [manticore-backup](Securing_and_compacting_a_tab
 
 #### 开箱即用的数据同步
 `indexer` 工具和 Manticore 的全面配置语法使从 MySQL、PostgreSQL、兼容 ODBC 的数据库、XML 和 CSV 等来源同步数据变得轻松。
-
 #### 集成选项
 您可以通过 [FEDERATED 引擎](Extensions/FEDERATED.md) 或 [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/) 将 Manticore Search 集成到 MySQL/MariaDB 服务器。
 
 您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)、Kibana 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/) 可用于交互式开发 Manticore 查询。
+你可以在 [Kibana](Integration/Kibana.md) 中使用 Manticore Search。
 
 您可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
 

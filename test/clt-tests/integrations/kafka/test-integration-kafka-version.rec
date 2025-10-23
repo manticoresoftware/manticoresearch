@@ -1,6 +1,7 @@
 ––– block: ../../base/dind/init –––
 ––– comment –––
-Kafka Integration Version Test with Version Management (Verbose)
+Kafka Integration Version Test with Version Management
+VERSIONS=("3.7.0" "3.7.1" "3.8.0" "3.8.1" "4.0.0" "4.0.1" "4.1.0")
 ––– input –––
 # Install curl for Docker Hub checks
 apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1
@@ -10,14 +11,10 @@ apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1
 source ./test/clt-tests/integrations/kafka/script_versions_kafka.sh
 ––– output –––
 ––– input –––
-echo "════════════════════════════════════════════════════"
 echo "STEP 1: Version Management Check"
-echo "════════════════════════════════════════════════════"
 echo ""
 ––– output –––
-════════════════════════════════════════════════════
 STEP 1: Version Management Check
-════════════════════════════════════════════════════
 ––– input –––
 echo "1️⃣  Checking Docker Hub for new Kafka versions..."
 kafka_versions=$(curl -s "https://hub.docker.com/v2/repositories/apache/kafka/tags/?page_size=100" 2>/dev/null | \
@@ -28,7 +25,6 @@ echo ""
 ––– output –––
 1️⃣  Checking Docker Hub for new Kafka versions...
    ✅ Docker Hub check complete
-
 ––– input –––
 echo "2️⃣  Validating documentation..."
 DOC_FILE="/manual/english/Integration/Kafka.md"
@@ -65,18 +61,14 @@ VERSIONS=("3.7.0" "3.7.1" "3.8.0" "3.8.1" "4.0.0" "4.0.1" "4.1.0")
 PASSED=0
 FAILED=0
 
-echo "════════════════════════════════════════════════════"
 echo "STEP 2: Kafka Integration Tests"
-echo "════════════════════════════════════════════════════"
 echo "Testing versions:"
 for VERSION in "${VERSIONS[@]}"; do
     echo "  - $VERSION"
 done
 echo ""
 ––– output –––
-════════════════════════════════════════════════════
 STEP 2: Kafka Integration Tests
-════════════════════════════════════════════════════
 Testing versions:
   - 3.7.0
   - 3.7.1
@@ -215,9 +207,7 @@ done
   ✓ PASS (3 records)
 ––– input –––
 echo ""
-echo "════════════════════════════════════════════════════"
 echo "RESULTS"
-echo "════════════════════════════════════════════════════"
 echo "Versions tested: ${#VERSIONS[@]}"
 echo "Integration tests passed: $PASSED"
 echo "Integration tests failed: $FAILED"
@@ -228,9 +218,7 @@ else
     echo "❌ SOME INTEGRATION TESTS FAILED"
 fi
 ––– output –––
-════════════════════════════════════════════════════
 RESULTS
-════════════════════════════════════════════════════
 Versions tested: 7
 Integration tests passed: 7
 Integration tests failed: 0

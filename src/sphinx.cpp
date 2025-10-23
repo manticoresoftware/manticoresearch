@@ -10673,9 +10673,9 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 }
 
 
-bool sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs )
+bool sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs, CSphString & sWarning )
 {
-	if ( tArgs.m_bNeedPhraseTransform && !TransformPhraseBased ( ppNode, sError ) )
+	if ( tArgs.m_bNeedPhraseTransform && !TransformPhraseBased ( ppNode, sError, sWarning ) )
 		return false;
 
 	TransformQuorum ( ppNode );
@@ -10972,7 +10972,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
 	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
-	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs ) )
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
 		return false;
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
@@ -11068,7 +11068,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
-			if ( !sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs ) )
+			if ( !sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
 			{
 				tMeta.m_iMultiplier = -1;
 				continue;
@@ -11795,7 +11795,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 
 	// fixme! m.b. explain boolean-simplified?
 	TransformExtendedQueryArgs_t tTranformArgs { false, tParsed.m_bNeedPhraseTransform };
-	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, tParsed.m_sParseError, tTranformArgs ) )
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, tParsed.m_sParseError, tTranformArgs, tParsed.m_sParseWarning ) )
 	{
 		TlsMsg::Err ( tParsed.m_sParseError );
 		return EmptyBson ();

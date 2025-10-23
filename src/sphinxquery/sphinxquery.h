@@ -411,5 +411,5 @@ inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
 }
 
-bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError );
-void SetExpansionPhraseLimit ( int iMaxVariants );
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError, CSphString & sWarning );
+void SetExpansionPhraseLimit ( int iMaxVariants, bool bExpansionPhraseWarning );

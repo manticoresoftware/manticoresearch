@@ -4,7 +4,7 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) 是一个轻量级的转发器，用于转发和集中日志数据。它作为代理安装后，会监控您指定的日志文件或位置，收集日志事件，并将其转发进行索引，通常是发送到 Elasticsearch 或 Logstash。
 
-现在，Manticore 也支持将 Filebeat 用作处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前，所有版本至 9.0 都得到全面支持。
+现在，Manticore 也支持将 Filebeat 用作处理流程。这允许将收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前，所有版本直到 9.2 都完全支持。
 
 ## Filebeat 配置
 
@@ -19,7 +19,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -43,7 +43,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -59,7 +59,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Filebeat 8.11 - 8.18 的配置
+### Filebeat 8.11 - 8.19 的配置
 
 从 8.11 版本开始，默认启用了输出压缩，因此必须明确设置 `compression_level: 0` 以确保与 Manticore 的兼容性：
 
@@ -68,7 +68,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -84,7 +84,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Filebeat 9.0 的配置
+### Filebeat 9.0 - 9.1 的配置
 
 Filebeat 9.0 引入了重大架构变化，替换了日志输入类型为 filestream。以下是所需的配置：
 
@@ -94,7 +94,7 @@ filebeat.inputs:
   id: dpkg-log-input
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   close.on_eof: true
 
@@ -110,10 +110,38 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
+### Filebeat 9.2+ 的配置
+
+从 Filebeat 9.2 开始，指纹功能默认启用，要求文件至少有 1024 字节才能被摄取。对于较小的文件，您需要禁用指纹：
+
+```
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  enabled: true
+  paths:
+	- /var/log/dpkg.log
+  prospector.scanner.check_interval: 1s
+  prospector.scanner.fingerprint.enabled: false
+  close.on_state_change.inactive: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+**注意：** 设置 `prospector.scanner.fingerprint.enabled: false` 允许 Filebeat 处理任意大小的文件。如果您正在处理较大的文件（>1024 字节），可以省略此选项或调整 `prospector.scanner.fingerprint.length` 和 `prospector.scanner.fingerprint.offset` 以满足您的需求。
+
 ## Filebeat 结果
 
 运行此配置的 Filebeat 后，日志数据将被发送到 Manticore 并正确建立索引。以下是 Manticore 创建的表的结果模式以及插入文档的示例：
-
 ```
 mysql> DESCRIBE dpkg_log;
 +------------------+--------+--------------------+

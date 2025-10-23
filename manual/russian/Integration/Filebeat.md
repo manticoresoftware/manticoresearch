@@ -4,7 +4,7 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) — это легкий агент для пересылки и централизованного сбора данных журналов. После установки в виде агента он следит за указанными вами файлами журналов или местоположениями, собирает события из журналов и пересылает их для индексирования, обычно в Elasticsearch или Logstash.
 
-Теперь Manticore также поддерживает использование Filebeat в качестве обработчиков данных. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.0.
+Теперь Manticore также поддерживает использование Filebeat в качестве конвейеров обработки. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как и в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.2.
 
 ## Конфигурация Filebeat
 
@@ -19,7 +19,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -43,7 +43,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -59,7 +59,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Конфигурация для Filebeat 8.11 - 8.18
+### Конфигурация для Filebeat 8.11 - 8.19
 
 Начиная с версии 8.11, сжатие вывода включено по умолчанию, поэтому для совместимости с Manticore нужно явно установить `compression_level: 0`:
 
@@ -68,7 +68,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -84,7 +84,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Конфигурация для Filebeat 9.0
+### Конфигурация для Filebeat 9.0 - 9.1
 
 Filebeat 9.0 вводит значительные изменения в архитектуре, заменяя тип ввода log на filestream. Вот необходимая конфигурация:
 
@@ -94,7 +94,7 @@ filebeat.inputs:
   id: dpkg-log-input
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   close.on_eof: true
 
@@ -110,10 +110,38 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
+### Конфигурация для Filebeat 9.2+
+
+Начиная с Filebeat 9.2, функция fingerprint включена по умолчанию, что требует, чтобы файлы имели размер не менее 1024 байт для обработки. Для меньших файлов необходимо отключить fingerprinting:
+
+```
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  enabled: true
+  paths:
+	- /var/log/dpkg.log
+  prospector.scanner.check_interval: 1s
+  prospector.scanner.fingerprint.enabled: false
+  close.on_state_change.inactive: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+**Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` позволяет Filebeat обрабатывать файлы любого размера. Если вы работаете с файлами большего размера (>1024 байт), вы можете опустить эту опцию или настроить `prospector.scanner.fingerprint.length` и `prospector.scanner.fingerprint.offset` в соответствии с вашими требованиями.
+
 ## Результаты работы Filebeat
 
 После запуска Filebeat с этой конфигурацией данные журналов будут отправлены в Manticore и корректно индексированы. Ниже приведена итоговая схема таблицы, созданной Manticore, и пример вставленного документа:
-
 ```
 mysql> DESCRIBE dpkg_log;
 +------------------+--------+--------------------+

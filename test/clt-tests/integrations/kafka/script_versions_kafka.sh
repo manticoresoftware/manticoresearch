@@ -7,7 +7,7 @@ set -e
 LATEST_KAFKA="4.1.0"
 MIN_KAFKA="3.7.0"
 DOC_FILE="/manual/english/Integration/Kafka.md"
-MATRIX_TEST_FILE="/docker/test/clt-tests/integrations/kafka/test-integration-kafka-version.rec"
+MATRIX_TEST_FILE="./test/clt-tests/integrations/kafka/test-integration-kafka-version.rec"
 
 # ============================================
 # FUNCTIONS
@@ -146,7 +146,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             MATRIX_MIN=$(echo "$MATRIX_VERSIONS" | head -1)
             MATRIX_MAX=$(echo "$MATRIX_VERSIONS" | tail -1)
             MATRIX_COUNT=$(echo "$MATRIX_VERSIONS" | wc -l)
-            
+
             if [ "$MATRIX_MIN" = "$MIN_KAFKA" ] && [ "$MATRIX_MAX" = "$LATEST_KAFKA" ]; then
                 echo "   ✅ Coverage: $MATRIX_MIN - $MATRIX_MAX ($MATRIX_COUNT versions)"
             else

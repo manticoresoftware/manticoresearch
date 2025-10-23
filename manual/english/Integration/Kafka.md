@@ -2,7 +2,7 @@
 
 > NOTE: this functionality requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
-Manticore supports integration with [Apache Kafka](https://kafka.apache.org/) real-time data ingestion through Kafka sources and materialized views, allowing for real-time data indexing and search. Currently, **apache/kafka versions 3.7.0-4.0.0** are tested and supported.
+Manticore supports integration with [Apache Kafka](https://kafka.apache.org/) real-time data ingestion through Kafka sources and materialized views, allowing for real-time data indexing and search. Currently, **apache/kafka versions 3.7.0-4.1.0** are tested and supported.
 
 To get started, you need to:
 1. **Define the source:** Specify the Kafka topic from which Manticore Search will read messages. This setup includes details like the broker’s host, port, and topic name.

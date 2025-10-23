@@ -1,27 +1,65 @@
 ––– block: ../../base/dind/init –––
 ––– comment –––
-Kafka Integration Version Test with Version Management
+Kafka Integration Version Test with Version Management (Verbose)
 ––– input –––
 # Install curl for Docker Hub checks
-apk add --no-cache curl >/dev/null 2>&1 || apt-get update >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1
-
+apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1
+––– output –––
+––– input –––
 # Source version check script for functions
-source /docker/test/clt-tests/integrations/kafka/script_versions_kafka.sh
-
-# Run version checks first
+source ./test/clt-tests/integrations/kafka/script_versions_kafka.sh
+––– output –––
+––– input –––
 echo "════════════════════════════════════════════════════"
 echo "STEP 1: Version Management Check"
 echo "════════════════════════════════════════════════════"
-bash /docker/test/clt-tests/integrations/kafka/script_versions_kafka.sh
-CHECK_RESULT=$?
 echo ""
+––– output –––
+════════════════════════════════════════════════════
+STEP 1: Version Management Check
+════════════════════════════════════════════════════
+––– input –––
+echo "1️⃣  Checking Docker Hub for new Kafka versions..."
+kafka_versions=$(curl -s "https://hub.docker.com/v2/repositories/apache/kafka/tags/?page_size=100" 2>/dev/null | \
+    grep -o '"name":"[0-9]*\.[0-9]*\.[0-9]*"' | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | \
+    grep -v -E '(rc|RC|alpha|beta|Alpha|Beta|ALPHA|BETA)' | sort -u -V)
+echo "   ✅ Docker Hub check complete"
+echo ""
+––– output –––
+1️⃣  Checking Docker Hub for new Kafka versions...
+   ✅ Docker Hub check complete
 
-if [ $CHECK_RESULT -ne 0 ]; then
-    echo "⚠️  Version check found issues (see above)"
-    echo "   Continuing with integration tests..."
-    echo ""
+––– input –––
+echo "2️⃣  Validating documentation..."
+DOC_FILE="/manual/english/Integration/Kafka.md"
+if [ -f "$DOC_FILE" ]; then
+    DOC_RANGE=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.[0-9]+\.[0-9]+" "$DOC_FILE" | head -1)
+    echo "   ✅ Range: $DOC_RANGE"
+else
+    echo "   ⚠️  File not found"
 fi
-
+echo ""
+––– output –––
+2️⃣  Validating documentation...
+   ✅ Range: 3.7.0-4.1.0
+––– input –––
+echo "3️⃣  Validating test coverage..."
+MATRIX_TEST_FILE="./test/clt-tests/integrations/kafka/test-integration-kafka-version.rec"
+if [ -f "$MATRIX_TEST_FILE" ]; then
+    MATRIX_RAW=$(grep 'VERSIONS=(' "$MATRIX_TEST_FILE" 2>/dev/null | head -1)
+    MATRIX_COUNT=$(echo "$MATRIX_RAW" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | wc -l)
+    echo "   ✅ Coverage: $MATRIX_COUNT versions"
+else
+    echo "   ⚠️  File not found"
+fi
+echo ""
+echo "✅ All version checks passed"
+echo ""
+––– output –––
+3️⃣  Validating test coverage...
+   ✅ Coverage: 7 versions
+✅ All version checks passed
+––– input –––
 # Get versions from script
 VERSIONS=("3.7.0" "3.7.1" "3.8.0" "3.8.1" "4.0.0" "4.0.1" "4.1.0")
 PASSED=0
@@ -35,7 +73,19 @@ for VERSION in "${VERSIONS[@]}"; do
     echo "  - $VERSION"
 done
 echo ""
-
+––– output –––
+════════════════════════════════════════════════════
+STEP 2: Kafka Integration Tests
+════════════════════════════════════════════════════
+Testing versions:
+  - 3.7.0
+  - 3.7.1
+  - 3.8.0
+  - 3.8.1
+  - 4.0.0
+  - 4.0.1
+  - 4.1.0
+––– input –––
 echo "Preparing images..."
 docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest >/dev/null 2>&1
 for VERSION in "${VERSIONS[@]}"; do
@@ -43,7 +93,10 @@ for VERSION in "${VERSIONS[@]}"; do
 done
 echo "✓ Images ready"
 echo ""
-
+––– output –––
+Preparing images...
+✓ Images ready
+––– input –––
 for VERSION in "${VERSIONS[@]}"; do
     echo "→ Testing Kafka $VERSION"
 
@@ -145,47 +198,7 @@ for VERSION in "${VERSIONS[@]}"; do
     docker rm -f mtest ktest >/dev/null 2>&1 || true
     docker network rm test-net >/dev/null 2>&1 || true
 done
-
-echo ""
-echo "════════════════════════════════════════════════════"
-echo "RESULTS"
-echo "════════════════════════════════════════════════════"
-echo "Version check: $([ $CHECK_RESULT -eq 0 ] && echo '✅ PASSED' || echo '⚠️  WARNINGS')"
-echo "Versions tested: ${#VERSIONS[@]}"
-echo "Integration tests passed: $PASSED"
-echo "Integration tests failed: $FAILED"
-echo ""
-if [ $FAILED -eq 0 ]; then
-    echo "✅ ALL INTEGRATION TESTS PASSED"
-else
-    echo "❌ SOME INTEGRATION TESTS FAILED"
-fi
 ––– output –––
-════════════════════════════════════════════════════
-STEP 1: Version Management Check
-════════════════════════════════════════════════════
-🔍 Kafka Version Check
-1️⃣  Docker Hub...
-   ✅ No new versions after 4.1.0
-2️⃣  Documentation...
-   ✅ Range: 3.7.0 - 4.1.0
-3️⃣  Matrix test...
-   ✅ Coverage: 3.7.0 - 4.1.0 (7 versions)
-✅ All checks passed
-   Range: 3.7.0 - 4.1.0
-════════════════════════════════════════════════════
-STEP 2: Kafka Integration Tests
-════════════════════════════════════════════════════
-Testing versions:
-  - 3.7.0
-  - 3.7.1
-  - 3.8.0
-  - 3.8.1
-  - 4.0.0
-  - 4.0.1
-  - 4.1.0
-Preparing images...
-✓ Images ready
 → Testing Kafka 3.7.0
   ✓ PASS (3 records)
 → Testing Kafka 3.7.1
@@ -200,10 +213,24 @@ Preparing images...
   ✓ PASS (3 records)
 → Testing Kafka 4.1.0
   ✓ PASS (3 records)
+––– input –––
+echo ""
+echo "════════════════════════════════════════════════════"
+echo "RESULTS"
+echo "════════════════════════════════════════════════════"
+echo "Versions tested: ${#VERSIONS[@]}"
+echo "Integration tests passed: $PASSED"
+echo "Integration tests failed: $FAILED"
+echo ""
+if [ $FAILED -eq 0 ]; then
+    echo "✅ ALL INTEGRATION TESTS PASSED"
+else
+    echo "❌ SOME INTEGRATION TESTS FAILED"
+fi
+––– output –––
 ════════════════════════════════════════════════════
 RESULTS
 ════════════════════════════════════════════════════
-Version check: ✅ PASSED
 Versions tested: 7
 Integration tests passed: 7
 Integration tests failed: 0

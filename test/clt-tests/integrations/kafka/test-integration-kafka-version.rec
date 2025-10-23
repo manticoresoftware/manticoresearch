@@ -1,15 +1,38 @@
 ––– block: ../../base/dind/init –––
 ––– comment –––
-Kafka Integration Version Test
+Kafka Integration Version Test with Version Management
 ––– input –––
+# Install curl for Docker Hub checks
+apk add --no-cache curl >/dev/null 2>&1 || apt-get update >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1
+
+# Source version check script for functions
+source /docker/test/clt-tests/integrations/kafka/script_versions_kafka.sh
+
+# Run version checks first
+echo "════════════════════════════════════════════════════"
+echo "STEP 1: Version Management Check"
+echo "════════════════════════════════════════════════════"
+bash /docker/test/clt-tests/integrations/kafka/script_versions_kafka.sh
+CHECK_RESULT=$?
+echo ""
+
+if [ $CHECK_RESULT -ne 0 ]; then
+    echo "⚠️  Version check found issues (see above)"
+    echo "   Continuing with integration tests..."
+    echo ""
+fi
+
+# Get versions from script
 VERSIONS=("3.7.0" "3.7.1" "3.8.0" "3.8.1" "4.0.0" "4.0.1" "4.1.0")
 PASSED=0
 FAILED=0
 
-echo "Kafka Integration Version Test"
-echo "Testing:"
+echo "════════════════════════════════════════════════════"
+echo "STEP 2: Kafka Integration Tests"
+echo "════════════════════════════════════════════════════"
+echo "Testing versions:"
 for VERSION in "${VERSIONS[@]}"; do
-    echo "$VERSION"
+    echo "  - $VERSION"
 done
 echo ""
 
@@ -27,36 +50,23 @@ for VERSION in "${VERSIONS[@]}"; do
     # Cleanup
     docker rm -f mtest ktest >/dev/null 2>&1 || true
     docker network rm test-net >/dev/null 2>&1 || true
-
-    # Create network
     docker network create test-net --driver bridge >/dev/null 2>&1
 
-    # Start Manticore (suppress platform warning)
+    # Start Manticore
     docker run -d --network=test-net --name mtest \
         ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
         sleep infinity >/dev/null 2>&1
-
-    # Start searchd
     docker exec -d mtest searchd --logdebugvv >/dev/null 2>&1
     sleep 2
 
-    # Wait for Manticore
-    MANTICORE_READY=0
-    for i in $(seq 1 40); do
-        if docker exec mtest mysql -h0 -P9306 -e "SELECT 1" >/dev/null 2>&1; then
-            MANTICORE_READY=1
-            break
-        fi
-        sleep 1
-    done
-
-    if [ $MANTICORE_READY -eq 0 ]; then
+    # Wait Manticore using script function
+    if ! wait_manticore_ready mtest 40 1; then
         echo "  ✗ Manticore failed"
         FAILED=$((FAILED + 1))
         continue
     fi
 
-    # Start Kafka (suppress platform warning)
+    # Start Kafka
     docker run -d --network=test-net --name ktest \
         -e KAFKA_NODE_ID=1 \
         -e KAFKA_PROCESS_ROLES=broker,controller \
@@ -68,20 +78,10 @@ for VERSION in "${VERSIONS[@]}"; do
         -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
         -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
         apache/kafka:$VERSION >/dev/null 2>&1
-
-    # Wait for Kafka
     sleep 5
-    KAFKA_READY=0
-    for i in $(seq 1 60); do
-        if docker exec ktest /opt/kafka/bin/kafka-broker-api-versions.sh \
-           --bootstrap-server localhost:9092 >/dev/null 2>&1; then
-            KAFKA_READY=1
-            break
-        fi
-        sleep 3
-    done
 
-    if [ $KAFKA_READY -eq 0 ]; then
+    # Wait Kafka using script function
+    if ! wait_kafka_ready ktest 60 3; then
         echo "  ✗ Kafka failed"
         FAILED=$((FAILED + 1))
         docker rm -f mtest ktest >/dev/null 2>&1 || true
@@ -92,17 +92,14 @@ for VERSION in "${VERSIONS[@]}"; do
     sleep 3
     SQL_VERSION=$(echo $VERSION | tr '.' '_')
 
-    # Create topic
-    if ! docker exec ktest /opt/kafka/bin/kafka-topics.sh \
-        --create --topic test-$VERSION --bootstrap-server localhost:9092 \
-        --partitions 1 --replication-factor 1 >/dev/null 2>&1; then
+    # Create topic using script function
+    if ! create_kafka_topic ktest "test-$VERSION" 1; then
         echo "  ✗ Topic failed"
         FAILED=$((FAILED + 1))
         docker rm -f mtest ktest >/dev/null 2>&1 || true
         docker network rm test-net >/dev/null 2>&1 || true
         continue
     fi
-
     sleep 2
 
     # Create source
@@ -117,11 +114,9 @@ for VERSION in "${VERSIONS[@]}"; do
         continue
     fi
 
-    # Create table
+    # Create table & MV
     docker exec mtest mysql -h0 -P9306 -e \
         "CREATE TABLE d_$SQL_VERSION (id bigint, name text);" >/dev/null 2>&1
-
-    # Create MV
     docker exec mtest mysql -h0 -P9306 -e \
         "CREATE MATERIALIZED VIEW v_$SQL_VERSION TO d_$SQL_VERSION \
          AS SELECT id, term as name FROM s_$SQL_VERSION;" >/dev/null 2>&1
@@ -133,10 +128,8 @@ for VERSION in "${VERSIONS[@]}"; do
             --bootstrap-server localhost:9092 --topic test-$VERSION >/dev/null 2>&1
     done
 
-    # Wait and verify
+    # Verify
     sleep 15
-
-    # Use -N flag and extract only digits for clean number
     COUNT=$(docker exec mtest mysql -h0 -P9306 -N -e \
         "SELECT COUNT(*) FROM d_$SQL_VERSION" 2>/dev/null | tr -cd '0-9')
 
@@ -153,24 +146,44 @@ for VERSION in "${VERSIONS[@]}"; do
     docker network rm test-net >/dev/null 2>&1 || true
 done
 
-# Final results
 echo ""
-echo "Results: $PASSED passed, $FAILED failed"
+echo "════════════════════════════════════════════════════"
+echo "RESULTS"
+echo "════════════════════════════════════════════════════"
+echo "Version check: $([ $CHECK_RESULT -eq 0 ] && echo '✅ PASSED' || echo '⚠️  WARNINGS')"
+echo "Versions tested: ${#VERSIONS[@]}"
+echo "Integration tests passed: $PASSED"
+echo "Integration tests failed: $FAILED"
+echo ""
 if [ $FAILED -eq 0 ]; then
-    echo "✓ ALL TESTS PASSED"
+    echo "✅ ALL INTEGRATION TESTS PASSED"
 else
-    echo "✗ SOME TESTS FAILED"
+    echo "❌ SOME INTEGRATION TESTS FAILED"
 fi
 ––– output –––
-Kafka Integration Version Test
-Testing:
-3.7.0
-3.7.1
-3.8.0
-3.8.1
-4.0.0
-4.0.1
-4.1.0
+════════════════════════════════════════════════════
+STEP 1: Version Management Check
+════════════════════════════════════════════════════
+🔍 Kafka Version Check
+1️⃣  Docker Hub...
+   ✅ No new versions after 4.1.0
+2️⃣  Documentation...
+   ✅ Range: 3.7.0 - 4.1.0
+3️⃣  Matrix test...
+   ✅ Coverage: 3.7.0 - 4.1.0 (7 versions)
+✅ All checks passed
+   Range: 3.7.0 - 4.1.0
+════════════════════════════════════════════════════
+STEP 2: Kafka Integration Tests
+════════════════════════════════════════════════════
+Testing versions:
+  - 3.7.0
+  - 3.7.1
+  - 3.8.0
+  - 3.8.1
+  - 4.0.0
+  - 4.0.1
+  - 4.1.0
 Preparing images...
 ✓ Images ready
 → Testing Kafka 3.7.0
@@ -187,5 +200,11 @@ Preparing images...
   ✓ PASS (3 records)
 → Testing Kafka 4.1.0
   ✓ PASS (3 records)
-Results: 7 passed, 0 failed
-✓ ALL TESTS PASSED
+════════════════════════════════════════════════════
+RESULTS
+════════════════════════════════════════════════════
+Version check: ✅ PASSED
+Versions tested: 7
+Integration tests passed: 7
+Integration tests failed: 0
+✅ ALL INTEGRATION TESTS PASSED

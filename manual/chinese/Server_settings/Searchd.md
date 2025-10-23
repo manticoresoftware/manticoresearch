@@ -469,7 +469,12 @@ expansion_merge_threshold_hits = 512
 <!-- example conf expansion_phrase_limit -->
 该设置控制因 `PHRASE`、`PROXIMITY` 和 `QUORUM` 操作符内的 `OR` 运算符产生的替代短语变体的最大数量。该设置为可选，默认值为 1024。
 
-当在短语类操作符内使用 `|`（OR）运算符时，根据指定的替代项数量，扩展组合可能会呈指数增长。此设置通过限制查询处理中考虑的排列组合数量，帮助防止查询扩展过度。如果生成的变体数超过此限制，查询将失败并报错。
+当在短语类操作符中使用 `|`（OR）操作符时，根据指定的备选项数量，展开的组合总数可能呈指数增长。此设置通过限制查询处理期间考虑的排列数，帮助防止过度的查询展开。
+
+如果生成的变体数量超过此限制，查询将：
+
+- 失败并返回错误（默认行为）
+- 如果启用了 `expansion_phrase_warning`，则返回带有警告的部分结果
 
 <!-- intro -->
 ##### 示例：
@@ -478,6 +483,23 @@ expansion_merge_threshold_hits = 512
 
 ```ini
 expansion_phrase_limit = 4096
+```
+<!-- end -->
+
+### expansion_phrase_warning
+
+<!-- example conf expansion_phrase_warning -->
+此设置控制当超出由 `expansion_phrase_limit` 定义的查询展开限制时的行为。
+
+默认情况下，查询会因错误信息而失败。当 `expansion_phrase_warning` 设置为 1 时，搜索将继续使用短语的部分转换（直到配置的限制），服务器会将警告消息与结果集一起返回给用户。这允许对于完全展开过于复杂的查询，仍然返回部分结果而不完全失败。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Example -->
+
+```ini
+expansion_phrase_warning = 1
 ```
 <!-- end -->
 

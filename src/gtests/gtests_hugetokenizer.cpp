@@ -23,7 +23,7 @@ TEST_F ( QueryParser, huge_tokenizer )
 	CSphDummyIndex tIndex;
 
 	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs );
+	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning );
 
 	ASSERT_TRUE ( tQuery.m_pRoot!=nullptr );
 }

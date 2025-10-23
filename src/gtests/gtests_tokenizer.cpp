@@ -859,7 +859,7 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 	}
 	
 	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
-	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs ) );
+	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning ) );
 
 	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 	EXPECT_STREQ ( sReconst.cstr(), szReconst );

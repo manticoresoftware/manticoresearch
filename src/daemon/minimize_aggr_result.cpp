@@ -989,6 +989,18 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	CSphSchema tOldSchema = tRes.m_tSchema;
 	tFrontendBuilder.PopulateSchema ( tRes.m_tSchema );
 
+        // FIX(#3428): Adjust SHOW META -> total_found only when HAVING is present.
+        // After flattening/merging, m_dResults[0] holds the post-HAVING groups.
+        // Cap total_found to the number of survivors to reflect post-HAVING reality.
+        // Same HAVING presence condition as used in MergeAllMatches: pAggrFilter != nullptr.
+        const bool bHasHaving = ( pAggrFilter != nullptr );
+        if ( bHasHaving && !tRes.m_dResults.IsEmpty() )
+        {
+                const int iHavingSurvivors = tRes.m_dResults[0].m_dMatches.GetLength();
+                if ( iHavingSurvivors < tRes.m_iTotalMatches )
+                        tRes.m_iTotalMatches = iHavingSurvivors;
+        }
+
 	if ( tRes.m_iSuccesses==1 )
 		RemapNullMask ( tRes.m_dResults[0].m_dMatches, tOldSchema, tRes.m_tSchema );
 

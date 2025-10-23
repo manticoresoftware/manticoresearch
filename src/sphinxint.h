@@ -815,7 +815,7 @@ struct TransformExtendedQueryArgs_t
 	const ISphKeywordsStat * m_pKeywords = nullptr;
 };
 
-bool			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs );
+bool			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs, CSphString & sWarning );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );

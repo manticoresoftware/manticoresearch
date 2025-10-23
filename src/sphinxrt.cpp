@@ -7715,7 +7715,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 
 	// FIXME!!! provide segments list instead index
 	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, pThis };
-	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, tMeta.m_sError, tTranformArgs ) )
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
 		return 0;
 
 	int iExpandKw = ExpandKeywords ( iExpandKeywords, tQuery.m_eExpandKeywords, tSettings, bKeywordDict );

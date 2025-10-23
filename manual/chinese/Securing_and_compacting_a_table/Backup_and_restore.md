@@ -292,7 +292,7 @@ Manticore config
 
 ## 使用 mysqldump 进行备份和恢复
 
-Manticore 支持来自 MySQL 9.4 及以下版本的 `mysqldump` 工具和来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
+Manticore 支持来自 MySQL 9.5 及以下版本的 `mysqldump` 工具，以及来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
 
 <!-- example mysqldump_backup -->
 

@@ -15,7 +15,7 @@
   "Securing_and_compacting_a_table/Compacting_a_table.md": "ede50ebe2a15fd8732402a1661840936",
   "Securing_and_compacting_a_table/Flushing_attributes.md": "0fde3506aabd17888b590223da54b759",
   "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md": "ed0d6e81e9a38d016d8ff06230c80fe3",
-  "Securing_and_compacting_a_table/Backup_and_restore.md": "729d5c784c93f462b6af1d8492aeaa9a",
+  "Securing_and_compacting_a_table/Backup_and_restore.md": "0321bd8ba872ffc7a7180e5d21790ee2",
   "Securing_and_compacting_a_table/RT_table_structure.md": "d7fd63263f10dde8cd63736491c79944",
   "Creating_a_cluster/Creating_a_cluster.md": "fbd703f7e62c298216f8121d9d5194a9",
   "Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md": "aa9743d7ca774e0a490602a32d1e5cd3",

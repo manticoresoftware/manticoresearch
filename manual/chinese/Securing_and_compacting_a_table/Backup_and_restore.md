@@ -11,7 +11,7 @@
 逻辑备份的优缺点：
 - ➕ **可移植性：** 逻辑备份通常比物理备份更具可移植性，因为它们可以用于在不同硬件或操作系统上恢复数据库。
 - ➕ **灵活性：** 逻辑备份允许您选择性地恢复特定的表、索引或其他数据库对象。
-- ➕ **兼容性：** 逻辑备份可以用于在不同的数据库管理系统或版本之间迁移数据，前提是目标系统支持导出的格式或 SQL 语句。
+- ➕ **兼容性：** 逻辑备份可用于在不同的数据库管理系统或版本之间迁移数据，前提是目标系统支持导出的格式或 SQL 语句。
 - ➖ **备份和恢复速度较慢：** 逻辑备份可能比物理备份慢，因为它们需要数据库引擎将数据转换为 SQL 语句或其他导出格式。
 - ➖ **系统负载增加：** 创建逻辑备份可能导致更高的系统负载，因为该过程需要更多的 CPU 和内存资源来处理和导出数据。
 
@@ -93,7 +93,7 @@ Manticore versions:
 <!-- end -->
 
 <!-- example backup2 -->
-要仅备份特定表，请使用 `--tables` 标志，后跟以逗号分隔的表名列表，例如 `--tables=tbl1,tbl2`。这将只备份指定的表，忽略其余表。
+要仅备份特定表，请使用 `--tables` 标志，后跟以逗号分隔的表列表，例如 `--tables=tbl1,tbl2`。这将只备份指定的表，忽略其余表。
 
 <!-- request Example -->
 ```bash
@@ -133,13 +133,13 @@ Manticore versions:
 
 | 参数 | 描述 |
 |-|-|
-| `--backup-dir=path` | 这是备份目录的路径，备份将存储在该目录中。该目录必须已存在。此参数是必需的且没有默认值。每次备份运行时，manticore-backup 会在提供的目录中创建一个带有时间戳名称的子目录（`backup-[datetime]`），并将所有所需的表复制到该子目录中。因此，`--backup-dir` 是所有备份的容器，运行脚本多次是安全的。|
+| `--backup-dir=path` | 这是备份目录的路径，备份将存储在该目录中。该目录必须已存在。此参数是必需的且没有默认值。每次备份运行时，manticore-backup 会在提供的目录中创建一个带有时间戳的子目录（`backup-[datetime]`），并将所有所需的表复制到该子目录中。因此，`--backup-dir` 是所有备份的容器，运行脚本多次是安全的。|
 | `--restore[=backup]` | 从 `--backup-dir` 恢复。仅使用 --restore 会列出可用的备份。`--restore=backup` 会从 `<--backup-dir>/backup` 恢复。 |
 | `--force` | 在恢复时跳过版本检查并优雅地恢复备份。 |
 | `--disable-telemetry` | 如果您想禁用向 Manticore 发送匿名指标，请传递此标志。您也可以使用环境变量 TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Manticore 配置的路径。可选。如果未提供，将使用适合您操作系统的默认配置。用于确定与 Manticore 守护进程通信的主机和端口。`manticore-backup` 工具支持[动态配置](../Server_settings/Scripted_configuration.md)文件。如果您的配置分布在多个文件中，可以多次指定 `--config` 选项。 |
 | `--tables=tbl1,tbl2, ...` | 您想备份的表的分号分隔列表。要备份所有表，请省略此参数。所有提供的表必须存在于您备份的 Manticore 实例中，否则备份将失败。 |
-| `--compress` | 是否对备份的文件进行压缩。默认未启用。 | 可选 |
+| `--compress` | 是否对备份的文件进行压缩。默认未启用。| 可选 |
 | `--unlock` | 在极少数情况下，当出现问题时，表可能会处于锁定状态。使用此参数解锁它们。 |
 | `--version` | 显示当前版本。 |
 | `--help` | 显示此帮助信息。 |
@@ -157,11 +157,11 @@ Manticore versions:
 ```sql
 BACKUP
   [{TABLE | TABLES} a[, b]]
+  TO path_to_backup
   [{OPTION | OPTIONS}
     async = {on | off | 1 | 0 | true | false | yes | no}
     [, compress = {on | off | 1 | 0 | true | false | yes | no}]
   ]
-  TO path_to_backup
 ```
 
 例如，要将表 `a` 和 `b` 备份到 `/backup` 目录，运行以下命令：
@@ -172,26 +172,56 @@ BACKUP TABLES a, b TO /backup
 
 有一些选项可用于控制和调整备份过程，例如：
 
-* `async`：使备份非阻塞，允许您立即收到带有查询 ID 的响应，并在备份进行时运行其他查询。默认值为 `0`。
+* `async`：使备份非阻塞，允许您立即收到带有备份路径的响应，并在备份进行时运行其他查询。默认值为 `0`。
 * `compress`：启用使用 zstd 的文件压缩。默认值为 `0`。
-例如，要以异步模式启用压缩，将所有表备份到 `/tmp` 目录：
+
+例如，要以异步模式运行所有表的备份，并启用压缩到 `/tmp` 目录：
 
 ```sql
-BACKUP OPTION async = yes, compress = yes TO /tmp
+BACKUP TO /tmp OPTION async = yes, compress = yes
 ```
+
+### 异步备份行为
+
+使用 `async = 1`（或 `yes`、`on`、`true`）时，备份操作在后台任务中运行：
+
+* 命令立即返回备份路径
+* 您可以在备份进行时继续运行其他查询
+* 备份任务在由 Manticore Buddy 管理的单独线程中运行
+* 运行时，备份任务会出现在 `SHOW QUERIES` 输出中，完成后会自动移除
+
+**异步备份示例：**
+
+```sql
+BACKUP TO /tmp/mybackup OPTION async = 1
+```
+
+这将立即返回类似如下的输出：
+```
++----------------------------------+
+| Path                             |
++----------------------------------+
+| /tmp/mybackup/backup-20221004... |
++----------------------------------+
+```
+
+您可以使用 `SHOW QUERIES` 检查备份是否仍在运行。完成后，任务将从查询列表中消失，所有备份文件将存在于指定目录中。
 
 ### 重要注意事项
 
-1. 路径中不应包含特殊符号或空格，因为不支持。
-2. 确保 Manticore Buddy 已启动（默认启动）。
+1. 如果路径中包含空格，可以用单引号括起来，例如 `BACKUP TO '/path/with spaces'`
+2. 不含空格的路径不需要引号：`BACKUP TO /tmp/backup`
+3. 支持 Windows 路径：`BACKUP TO 'C:\path'` 或 `BACKUP TO C:\windows\backup`
+4. 确保 Manticore Buddy 已启动（默认启动）
+5. 备份目录必须存在且 Manticore 进程有写权限
 
 ### 备份如何保持表的一致性
 
-为了确保备份期间表的一致性，Manticore Search 的备份工具使用了创新的 [FREEZE 和 UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) 命令。与例如 MySQL 的传统锁表和解锁表功能不同，`FREEZE` 会停止将数据刷新到磁盘，同时仍允许写入（在某种程度上）和从表中选择更新的数据。
+为了确保备份期间表的一致性，Manticore Search 的备份工具使用了创新的 [FREEZE 和 UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) 命令。与例如 MySQL 的传统锁定和解锁表功能不同，`FREEZE` 会停止将数据刷新到磁盘，同时仍允许一定程度的写入和从表中选择更新的数据。
 
-然而，如果在涉及大量插入的长时间备份操作中，您的 RAM 块大小超过了 `rt_mem_limit` 阈值，数据可能会被刷新到磁盘，并且写操作将被阻塞，直到刷新完成。尽管如此，该工具在表冻结期间保持了表锁定、数据一致性和数据库写入可用性之间的平衡。
+然而，如果在涉及大量插入的长时间备份操作中，您的 RAM 块大小超过了 `rt_mem_limit` 阈值，数据可能会被刷新到磁盘，写操作将被阻塞直到刷新完成。尽管如此，该工具在表冻结期间保持了表锁定、数据一致性和数据库写入可用性之间的平衡。
 
-当您使用 `manticore-backup` 或 SQL `BACKUP` 命令时，`FREEZE` 命令会执行一次，并同时冻结所有您正在备份的表。备份过程随后逐个备份每个表，在成功备份每个表后释放冻结。
+当您使用 `manticore-backup` 或 SQL `BACKUP` 命令时，`FREEZE` 命令会执行一次，并同时冻结所有您正在备份的表。备份过程随后逐个备份每个表，成功备份后释放冻结。
 
 如果备份失败或中断，工具会尝试解冻所有表。
 
@@ -223,13 +253,13 @@ Available backups: 3
 
 <!-- example restore -->
 
-要开始恢复任务，运行带有标志 `--restore=backup name` 的 `manticore-backup`，其中 `backup name` 是 `--backup-dir` 中备份目录的名称。请注意：
-1. 不能有任何 Manticore 实例在与恢复目标相同的主机和端口上运行。
-2. 旧的 `manticore.json` 文件不得存在。
-3. 旧的配置文件不得存在。
+要开始恢复任务，运行带有 `--restore=backup name` 标志的 `manticore-backup`，其中 `backup name` 是 `--backup-dir` 中备份目录的名称。请注意：
+1. 恢复时，不能有任何 Manticore 实例在相同的主机和端口上运行。
+2. 旧的 `manticore.json` 文件必须不存在。
+3. 旧的配置文件必须不存在。
 4. 旧的数据目录必须存在且为空。
 
-如果满足所有条件，恢复将继续。工具会提供提示，因此您无需记忆。避免覆盖现有文件非常重要，因此如果它们仍然存在，请在恢复前删除它们。以上所有条件即为此目的。
+如果满足所有条件，恢复将继续。该工具会提供提示，因此您无需记住它们。避免覆盖现有文件至关重要，因此如果它们仍然存在，请确保在恢复之前将其删除。因此需要满足所有条件。
 
 <!-- request Example -->
 ```bash
@@ -260,15 +290,15 @@ Manticore config
 
 <!-- end -->
 
-## 使用 mysqldump 备份和恢复
+## 使用 mysqldump 进行备份和恢复
 
 Manticore 支持来自 MySQL 9.4 及以下版本的 `mysqldump` 工具和来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
 
 <!-- example mysqldump_backup -->
 
-> 注意：某些版本的 `mysqldump` / `mariadb-dump` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果转储无法工作，请确保 Buddy 已安装。
+> 注意：某些版本的 `mysqldump` / `mariadb-dump` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果转储无法工作，请确保已安装 Buddy。
 
-要创建 Manticore Search 数据库的备份，您可以使用 `mysqldump` 命令。示例中将使用默认端口和主机。
+要创建 Manticore Search 数据库的备份，可以使用 `mysqldump` 命令。示例中将使用默认端口和主机。
 
 注意，`mysqldump` 仅支持实时表。
 
@@ -278,14 +308,14 @@ mysqldump -h0 -P9306 manticore > manticore_backup.sql
 mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 ```
 
-执行此命令将生成一个名为 `manticore_backup.sql` 的备份文件。该文件将包含所有数据和表结构。
+执行此命令将生成名为 `manticore_backup.sql` 的备份文件。该文件将包含所有数据和表结构。
 
 <!-- request Replace mode -->
 ```bash
 mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.sql
 ```
 
-这将生成一个备份文件 `tbl.sql`，其中使用 `replace` 命令替代 `insert`，并在每个批次中保留列名。文档将被批量处理，最大大小为16兆字节。不会有 `drop`/`create table` 命令。这对于在更改分词设置后进行全文重新索引非常有用。
+这将生成一个备份文件 `tbl.sql`，其中使用 `replace` 命令替代 `insert`，并在每个批次中保留列名。文档将被批量处理，最大大小为16兆字节。不会有 `drop`/`create table` 命令。这对于更改分词设置后进行全文重新索引非常有用。
 
 <!-- request Replication mode -->
 ```bash
@@ -294,7 +324,7 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -
 ```
 
 在这种情况下，`mysqldump` 将生成类似 `REPLACE INTO cluster:table ...` 的命令，这些命令将直接发送到 Manticore 实例，从而重新插入文档。
-使用 `cluster` 用户和 `-t` 标志以启用复制模式。详情请参见下面的说明。
+使用 `cluster` 用户和 `-t` 标志以启用复制模式。详情请参见下面的注释。
 
 <!-- end -->
 
@@ -303,7 +333,7 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -
 
 如果您想从备份文件恢复 Manticore Search 数据库，mysql 客户端是您的首选工具。
 
-注意，如果您在[普通模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除并重新创建表。因此，您应该：
+注意，如果您在[纯模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除并重新创建表。因此，您应该：
 - 使用带有 `-t` 选项的 `mysqldump`，以排除备份中的 `CREATE TABLE` 语句。
 - 在继续恢复之前，手动[清空](../Emptying_a_table.md)表。
 
@@ -313,7 +343,7 @@ mysql -h0 -P9306 < manticore_backup.sql
 mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
-此命令允许您从 `manticore_backup.sql` 文件中恢复所有内容。
+此命令允许您从 `manticore_backup.sql` 文件恢复所有内容。
 <!-- end -->
 
 ### 其他选项
@@ -321,22 +351,22 @@ mariadb -h0 -P9306 < manticore_backup.sql
 以下是一些可与 mysqldump 一起使用以定制备份的更多设置：
 
 - `-t` 跳过 `drop`/`create` 表命令。适用于更改分词设置后对表进行全文重新索引。
-- `--no-data`：此设置会省略表数据，备份文件仅包含表结构。
-- `--ignore-table=[database_name].[table_name]`：此选项允许您在备份操作中跳过特定表。请注意，数据库名称必须是 `manticore`。
-- `--replace` 使用 `replace` 替代 `insert`。适用于更改分词设置后对表进行全文重新索引。
-- `--net-buffer-length=16M` 使批次最大为16兆字节，以加快恢复速度。
-- `-e` 批量处理文档。适用于更快的恢复。
+- `--no-data`：此设置会省略表数据，仅备份表结构。
+- `--ignore-table=[database_name].[table_name]`：此选项允许您在备份操作中跳过特定表。注意数据库名必须是 `manticore`。
+- `--replace` 执行 `replace` 替代 `insert`。适用于更改分词设置后对表进行全文重新索引。
+- `--net-buffer-length=16M` 使批处理最大为16兆字节，以加快恢复速度。
+- `-e` 批量处理文档。适用于更快恢复。
 - `-c` 保留列名。适用于更改表结构（例如更改字段顺序）后重新索引表。
 
-有关设置的完整列表及其详细说明，请参阅官方 [MySQL 文档](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 或 [MariaDB 文档](https://mariadb.com/kb/en/mariadb-dump/)。
+有关设置的完整列表及详细说明，请参阅官方 [MySQL 文档](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 或 [MariaDB 文档](https://mariadb.com/kb/en/mariadb-dump/)。
 
-### 说明
+### 注释
 
-* 要创建复制模式下的转储（转储包含 `INSERT/REPLACE INTO <cluster_name>:<table_name>`）：
+* 要创建复制模式的转储（转储包含 `INSERT/REPLACE INTO <cluster_name>:<table_name>`）：
   - 使用 `cluster` 用户。例如：`mysqldump -u cluster ...` 或 `mariadb-dump -u cluster ...`。您可以通过运行 `SET GLOBAL cluster_user = new_name` 来更改启用 mysqldump 复制模式的用户名。
   - 使用 `-t` 标志。
   - 在复制模式下指定表时，需要遵循 `cluster_name:table_name` 语法。例如：`mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`。
 * 建议在计划备份所有数据库时明确指定 `manticore` 数据库，而不是使用 `--all-databases` 选项。
-* 请注意，`mysqldump` 不支持备份分布式表，也无法备份包含非存储字段的表。对于这种情况，请考虑使用 `manticore-backup` 或 `BACKUP` SQL 命令。如果您有分布式表，建议始终指定要转储的表。
+* 注意，`mysqldump` 不支持备份分布式表，也无法备份包含非存储字段的表。对于这种情况，请考虑使用 `manticore-backup` 或 `BACKUP` SQL 命令。如果您有分布式表，建议始终指定要转储的表。
 
 <!-- proofread -->

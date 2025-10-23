@@ -31,6 +31,7 @@ indextool <command> [options]
 * `--dumpdocids TABLENAME` 按表名转储文档ID。
 * `--dumphitlist TABLENAME KEYWORD` 转储指定表中指定关键词（文本定义）的所有实例（出现位置）。
 * `--dumphitlist TABLENAME --wordid ID` 转储指定表中指定关键词（内部数值ID表示）的所有实例。
+* `--dumpkilllist TABLENAME` 转储指定表的kill列表内容，包括目标和标志。它也可以用作 `--dumpkilllist FILENAME.spk`。
 * `--docextract TBL DOCID` 执行对整个字典/文档/命中数据的标准表检查，并收集所请求文档关联的所有词和命中。随后，所有词按照字段和位置排序，并以字段分组打印结果。
 * `--fold TABLENAME OPTFILE` 此选项有助于理解分词器的输入处理。您可以向 indextool 提供来自文件的文本（如果指定文件），否则来自标准输入。输出会基于您的 `charset_table` 设置，将分隔符替换为空格，并将词中字母转换为小写。
 * `--htmlstrip TABLENAME` 应用指定表的HTML剥离设置过滤标准输入，并将过滤结果输出至标准输出。请注意，设置来自 manticore.conf，而非表头。

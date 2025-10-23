@@ -6,7 +6,7 @@
   "Server_settings/Special_suffixes.md": "e3bad5aac4f2ca0d7587e8c218b30a70",
   "Server_settings/Comments.md": "8a90a0952887aa394c1a92795bc1f846",
   "Server_settings/Scripted_configuration.md": "edfafe19daec7926fce9f7c40ba8088d",
-  "Miscellaneous_tools.md": "7898de89a81a38936135e2ce0d52506c",
+  "Miscellaneous_tools.md": "0598f5310d72921251e1ee40f953313a",
   "Security/SSL.md": "758c0b3c63e28f17ec68c5d5e15e59ab",
   "Security/Read_only.md": "080f28da0d84c2933145cdc7e5a54bbd",
   "Securing_and_compacting_a_table/Freezing_a_table.md": "b947093c1b85ba6aae36dbe9bbd89bcf",
@@ -15,7 +15,7 @@
   "Securing_and_compacting_a_table/Compacting_a_table.md": "ede50ebe2a15fd8732402a1661840936",
   "Securing_and_compacting_a_table/Flushing_attributes.md": "0fde3506aabd17888b590223da54b759",
   "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md": "ed0d6e81e9a38d016d8ff06230c80fe3",
-  "Securing_and_compacting_a_table/Backup_and_restore.md": "6f8763c6195e6c3f8c0be866120a0372",
+  "Securing_and_compacting_a_table/Backup_and_restore.md": "729d5c784c93f462b6af1d8492aeaa9a",
   "Securing_and_compacting_a_table/RT_table_structure.md": "d7fd63263f10dde8cd63736491c79944",
   "Creating_a_cluster/Creating_a_cluster.md": "fbd703f7e62c298216f8121d9d5194a9",
   "Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md": "aa9743d7ca774e0a490602a32d1e5cd3",
@@ -62,7 +62,7 @@
   "Integration/Apache_Superset.md": "e529ca944102df28077be69db5e828fe",
   "Connecting_to_the_server/HTTP.md": "0e5da23c36f8870e856e26fbf6400b9d",
   "Connecting_to_the_server/MySQL_protocol.md": "0b2af74e08a43f58c550a1d33b01eb54",
-  "Introduction.md": "cb0b273f7259199fd349ebe0c2fe1704",
+  "Introduction.md": "42eddfbe0248c460659a99112b9a64d7",
   "Installation/Windows.md": "0b16621215217121647308188d9cda1c",
   "Installation/MacOS.md": "f8829f76f40e4fa652aa5ef38d9f1ae1",
   "Installation/Debian_and_Ubuntu.md": "8e2c252c6d0b35c0a743f75881ed0d92",
@@ -161,7 +161,7 @@
   "Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md": "40bc01e20427ca60c03219faa37f52c1",
   "Data_creation_and_modification/Updating_documents/UPDATE.md": "cd2be32a59903de07f40f2eed6bc1628",
   "Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md": "7dd1833dc6a4d2cc7811453b5f626b43",
-  "Searching/Spell_correction.md": "d0006389fad94d1fa814c703d969e508",
+  "Searching/Spell_correction.md": "5f651cae962168c1da8365633a9ad9ca",
   "Installation/Compiling_from_sources.md": "4ca1372b94a832235042f6aab54ecdb0",
   "Node_info_and_management/SHOW_THREADS.md": "c5f1478f99f19f93f6a9bbe2bbfc69bd",
   "Creating_a_table/Data_types.md": "f9742fb729ccad2604dcd14573ce2554",
@@ -178,5 +178,5 @@
   "README.md": "eff1619e48f822a69605ff5e69ab79e6",
   "Searching/Options.md": "2fb7f43595ee0ce2fca0919a6b0b36bb",
   "Searching/Full_text_matching/Boolean_optimization.md": "ec69041e4f95354af0641401a37aad06",
-  "Server_settings/Searchd.md": "6866a5d4584268e2afcffabc2d56a5a5"
+  "Server_settings/Searchd.md": "9b41b07ac3b91e71e4695d80009fc545"
 }

@@ -469,7 +469,12 @@ expansion_merge_threshold_hits = 512
 <!-- example conf expansion_phrase_limit -->
 This setting controls the maximum number of alternative phrase variants generated due to `OR` operators inside `PHRASE`, `PROXIMITY`, and `QUORUM` operators. It is optional, with a default value of 1024.
 
-When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing. If the number of generated variants exceeds this limit, the query will fail with an error.
+При использовании оператора `|` (ИЛИ) внутри фраземного оператора общее количество развернутых комбинаций может расти экспоненциально в зависимости от количества указанных альтернатив. Этот параметр помогает предотвратить чрезмерное расширение запроса, ограничивая количество перестановок, учитываемых при обработке запроса.
+
+Если количество сгенерированных вариантов превышает этот предел, запрос может:
+
+- завершиться с ошибкой (поведение по умолчанию)
+- вернуть частичные результаты с предупреждением, если включен `expansion_phrase_warning`
 
 <!-- intro -->
 ##### Example:
@@ -478,6 +483,23 @@ When using the `|` (OR) operator inside phrase-like operator, the total number o
 
 ```ini
 expansion_phrase_limit = 4096
+```
+<!-- end -->
+
+### expansion_phrase_warning
+
+<!-- example conf expansion_phrase_warning -->
+Этот параметр управляет поведением, когда предел расширения запроса, определенный `expansion_phrase_limit`, превышен.
+
+По умолчанию запрос завершается с сообщением об ошибке. Когда для `expansion_phrase_warning` установлено значение 1, поиск продолжается с использованием частичного преобразования фразы (до установленного предела), и сервер возвращает пользователю предупреждающее сообщение вместе с набором результатов. Это позволяет запросам, которые слишком сложны для полного расширения, все же возвращать частичные результаты без полного прекращения.
+
+<!-- intro -->
+##### Пример:
+
+<!-- request Example -->
+
+```ini
+expansion_phrase_warning = 1
 ```
 <!-- end -->
 

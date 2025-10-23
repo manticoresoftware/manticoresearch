@@ -469,7 +469,12 @@ expansion_merge_threshold_hits = 512
 <!-- example conf expansion_phrase_limit -->
 This setting controls the maximum number of alternative phrase variants generated due to `OR` operators inside `PHRASE`, `PROXIMITY`, and `QUORUM` operators. It is optional, with a default value of 1024.
 
-When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing. If the number of generated variants exceeds this limit, the query will fail with an error.
+When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing.
+
+If the number of generated variants exceeds this limit, the query will either:
+
+- fail with an error (default behavior)
+- return partial results with a warning, if `expansion_phrase_warning` is enabled
 
 <!-- intro -->
 ##### Example:
@@ -478,6 +483,23 @@ When using the `|` (OR) operator inside phrase-like operator, the total number o
 
 ```ini
 expansion_phrase_limit = 4096
+```
+<!-- end -->
+
+### expansion_phrase_warning
+
+<!-- example conf expansion_phrase_warning -->
+This setting controls the behavior when the query expansion limit defined by `expansion_phrase_limit` is exceeded.
+
+By default, the query will fail with an error message. When `expansion_phrase_warning` is set to 1, the search continues using a partial transformation of the phrase (up to the configured limit), and the server returns a warning message to the user along with the result set. This allows queries that are too complex for full expansion to still return partial results without complete failure.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_phrase_warning = 1
 ```
 <!-- end -->
 

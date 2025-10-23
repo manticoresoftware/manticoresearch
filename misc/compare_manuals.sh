@@ -94,6 +94,16 @@ compare_files() {
         return 1
     fi
 
+    # Check HTML comments are identical (not translated)
+    local comments1 comments2
+    comments1=$(grep -o '<!--.*-->' "$file1" | sort)
+    comments2=$(grep -o '<!--.*-->' "$file2" | sort)
+    
+    if [[ "$comments1" != "$comments2" ]]; then
+        echo "comments:translated"
+        return 1
+    fi
+
     return 0
 }
 
@@ -222,7 +232,7 @@ compare_with_languages() {
                 if [[ "$file_info" == *"|"* ]]; then
                     local file="${file_info%|*}"
                     local error_info="${file_info#*|}"
-                    if [[ "$error_info" == *":"* ]] && [[ "$error_info" != "alignment:"* ]]; then
+                    if [[ "$error_info" == *":"* ]] && [[ "$error_info" != "alignment:"* ]] && [[ "$error_info" != "comments:"* ]]; then
                         # Line count mismatch
                         local eng_lines="${error_info%:*}"
                         local lang_lines="${error_info#*:}"
@@ -231,6 +241,9 @@ compare_with_languages() {
                         # Empty/non-empty line alignment issue
                         local misaligned_lines="${error_info#alignment:}"
                         printf '  %s (empty/non-empty line alignment mismatch at lines: %s)\n' "$file" "$misaligned_lines"
+                    elif [[ "$error_info" == "comments:"* ]]; then
+                        # HTML comments translated
+                        printf '  %s (HTML comments <!-- --> were translated, must remain in English)\n' "$file"
                     else
                         printf '  %s (%s)\n' "$file" "$error_info"
                     fi

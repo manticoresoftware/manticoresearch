@@ -1091,6 +1091,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "kibana_version_string",		0, NULL },
 	{ "expansion_phrase_limit",	0, NULL },
 	{ "secondary_index_block_cache", 0, nullptr },
+	{ "expansion_phrase_warning",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

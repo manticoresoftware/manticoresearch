@@ -170,6 +170,11 @@ explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | g
 explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"~5 ';
 explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"/3 ';
 
+<!-- the case with just OR terms at the phrase node that transformed to jsut the pure phrase -->
+insert into rt1 (id, content) values(1, 'abc'),(2, 'def');
+select * from rt1 where match('"(abc|def)"') order by id asc; show meta;
+explain query rt1 '"(abc|def)"';
+
 </sphinxql></queries>
 
 </test>

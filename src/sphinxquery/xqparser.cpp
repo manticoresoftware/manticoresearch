@@ -912,6 +912,24 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp 
 	assert ( eOp==SPH_QUERY_PHRASE || eOp==SPH_QUERY_PROXIMITY || eOp==SPH_QUERY_QUORUM );
 	assert ( !pNode->dWords().IsEmpty() || !pNode->dChildren().IsEmpty() );
 
+	// all terms with OR operator inside the phrase are just OR terms without the phrase
+	if ( pNode->GetOp()==SPH_QUERY_OR && !pNode->dChildren().IsEmpty() )
+	{
+		bool bAllOrTerms = true;
+		pNode->WithChildren ( [&bAllOrTerms] ( const auto & dChildren )
+		{
+			for ( auto & pChild : dChildren )
+			{
+				bAllOrTerms &= ( pChild->GetOp()==SPH_QUERY_AND && pChild->dWords().GetLength() );
+				if ( !bAllOrTerms )
+					break;
+			}
+		} );
+
+		if ( bAllOrTerms )
+			return;
+	}
+
 	if ( bSetExact )
 	{
 		pNode->WithWords ( [] ( auto& dWords ) {

@@ -135,7 +135,7 @@ paragraph:
 
 sp_item:
 	keyword								{ $$ = $1; }
-	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
+	| '"' phrase '"'					{ $$ = $2; if ( $$ ) pParser->CreateSpPhraseNode ( $$ ); }
 	;
 
 phrase:

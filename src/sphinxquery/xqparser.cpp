@@ -101,6 +101,7 @@ public:
 	void			SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
 	XQNode_t *		AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
+	void			CreateSpPhraseNode ( XQNode_t* pNode );
 
 	void	Cleanup () override;
 
@@ -996,6 +997,11 @@ XQNode_t * XQParser_t::AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 		return AddOp ( SPH_QUERY_PHRASE, pLeft, pRight );
 
 	return AddKeyword ( pLeft, pRight );
+}
+
+void XQParser_t::CreateSpPhraseNode ( XQNode_t* pNode )
+{
+	SetPhrase ( pNode, false, SPH_QUERY_PHRASE  );
 }
 
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )

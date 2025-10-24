@@ -19,24 +19,17 @@
 # - The test should complete successfully, with all data processing steps verified and no errors encountered.
 
 ––– block: ../../base/dind/init –––
+––– comment –––
+Set Kafka version
 ––– input –––
-docker network create app-network --driver bridge > /dev/null; echo $?
+KAFKA_VERSION="4.1.0"
+echo "Using Kafka version: $KAFKA_VERSION"
 ––– output –––
-0
+Using Kafka version: 4.1.0
+––– block: ../../base/basic-initialization-manticore-kafka –––
+––– block: ../../base/start-kafka-kraft –––
 ––– input –––
-docker run -it --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-docker exec manticore stdbuf -oL searchd --logdebugvv > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-docker run -it -d --network=app-network --name kafka -v ./test/clt-tests/integrations/kafka/import.sh:/import.sh -v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnamilegacy/kafka:3.7.0 > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-docker exec kafka kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
+docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
 ––– output –––
 Created topic my-data.
 ––– input –––
@@ -91,11 +84,7 @@ docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_table;"
 | view_table | CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, is_active FROM kafka | 0         |
 +------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
 ––– input –––
-docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -145,9 +134,8 @@ docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"; echo 
 docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_destination --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_destination"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, is_active bool) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_destination' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -161,11 +149,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_d
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -196,9 +180,8 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received
 |   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |        0 |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_metadata --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_metadata"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -212,11 +195,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_m
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_metadata" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_metadata" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -255,9 +234,8 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metad
 |   30 | Rome Wasn't Built In A Day                  | ISO 86420:97531 | %{DATETIME} | Extra data for item 30 | 20,25,30 |  3000 |
 +------+---------------------------------------------+-----------------+---------------------+------------------------+----------+-------+
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_tags --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_tags"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_tags (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, tags json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_tags' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -271,11 +249,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_t
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_tags" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_tags" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -314,9 +288,8 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags 
 |   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_alter --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_alter"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_alter (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_alter' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -330,11 +303,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_a
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_alter" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_alter" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -374,9 +343,8 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 |       57 |
 +----------+
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_ts --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_ts"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -390,11 +358,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_t
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_ts" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_ts" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -433,9 +397,8 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts OR
 |   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+----------+-----------------+
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_combined --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_combined"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -449,11 +412,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_c
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_combined" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_combined" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -465,21 +424,20 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 |        5 |
 +----------+
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined;"
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined ORDER BY id ASC;"
 ––– output –––
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 | id   | name                                          | short_name      | received_at         | info                   | size     | lat       | lon      | views | tags                    | timestamp_combined |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
-|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
 |   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | %{DATETIME} | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
 |   37 | Bite The Bullet                               | ISO 13579:86420 | %{DATETIME} | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
 |   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
 |   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
+|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_stop --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_stop"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_stop (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_stop' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -493,11 +451,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_s
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_stop" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_stop" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -538,9 +492,8 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigi
 ––– output –––
 ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50'
 ––– input –––
-docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_drop_source --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
-––– output –––
-0
+CONSUMER_GROUP="manticore_drop_source"
+––– block: ../../base/kafka-reset-consumer-offsets –––
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_drop_source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_drop_source' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -578,11 +531,7 @@ docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_sou
 ––– output –––
 0
 ––– input –––
-docker exec kafka ./import.sh; echo $?
-––– output –––
-0
-––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_drop_source" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_drop_source" > /dev/null' & GREP_PID=$!; sleep 2; docker exec kafka bash /import.sh; wait $GREP_PID && echo "Data processing completed." || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––

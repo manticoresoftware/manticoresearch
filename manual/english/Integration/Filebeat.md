@@ -4,7 +4,7 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) is a lightweight shipper for forwarding and centralizing log data. Once installed as an agent, it monitors the log files or locations you specify, collects log events, and forwards them for indexing, usually to Elasticsearch or Logstash.
 
-Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, All versions to 9.0 are fully supported.
+Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, all versions up to 9.2 are fully supported.
 
 ## Filebeat configuration
 
@@ -19,7 +19,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -43,7 +43,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -59,7 +59,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Configuration for Filebeat 8.11 - 8.18
+### Configuration for Filebeat 8.11 - 8.19
 
 From version 8.11, output compression is enabled by default, so you must explicitly set `compression_level: 0` for compatibility with Manticore:
 
@@ -68,7 +68,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -84,7 +84,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Configuration for Filebeat 9.0
+### Configuration for Filebeat 9.0 - 9.1
 
 Filebeat 9.0 introduces a major architecture change, replacing the log input type with filestream. Here's the required configuration:
 
@@ -94,7 +94,7 @@ filebeat.inputs:
   id: dpkg-log-input
   enabled: true
   paths:
-    - /var/log/dpkg.log
+	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   close.on_eof: true
 
@@ -109,6 +109,35 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+
+### Configuration for Filebeat 9.2+
+
+Starting from Filebeat 9.2, the fingerprint feature is enabled by default, which requires files to be at least 1024 bytes to be ingested. For smaller files, you need to disable fingerprinting:
+
+```
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  enabled: true
+  paths:
+	- /var/log/dpkg.log
+  prospector.scanner.check_interval: 1s
+  prospector.scanner.fingerprint.enabled: false
+  close.on_state_change.inactive: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+**Note:** The `prospector.scanner.fingerprint.enabled: false` setting allows Filebeat to process files of any size. If you're working with larger files (>1024 bytes), you can omit this option or adjust `prospector.scanner.fingerprint.length` and `prospector.scanner.fingerprint.offset` to meet your needs.
 
 ## Filebeat results
 
@@ -142,4 +171,3 @@ host: {"name":"logstash-db848f65f-lnlf9"}
 agent: {"ephemeral_id":"587c2ebc-e7e2-4e27-b772-19c611115996","id":"2e3d985b-3610-4b8b-aa3b-2e45804edd2c","name":"logstash-db848f65f-lnlf9","type":"filebeat","version":"7.10.0","hostname":"logstash-db848f65f-lnlf9"}
 log: {"offset":80,"file":{"path":"/var/log/dpkg.log"}}
 ```
-

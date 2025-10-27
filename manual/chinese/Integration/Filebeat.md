@@ -8,19 +8,18 @@
 
 ## Filebeat 配置
 
-配置会根据您使用的 Filebeat 版本略有不同。
+配置根据您使用的 Filebeat 版本而异。
 
 ### Filebeat 7.17 - 8.0 的配置
 
-请注意，8.10 版本以上的 Filebeat 默认启用了输出压缩功能。因此必须在配置文件中添加 `compression_level: 0` 选项以确保与 Manticore 的兼容性：
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
+    - /var/log/dpkg.log
   paths:
 	- /var/log/dpkg.log
-  close_eof: true
   scan_frequency: 1s
 
 output.elasticsearch:
@@ -33,23 +32,24 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+**注意：** `compression_level: 0` 设置确保数据以未压缩形式发送到 Manticore。
+
 
 ### Filebeat 8.1 - 8.10 的配置
-
+对于版本 8.1 到 8.10，添加 `allow_older_versions` 选项：
 对于 8.1 到 8.10 版本，您需要添加 allow_older_versions 选项：
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
-  paths:
+    - /var/log/dpkg.log
 	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
   compression_level: 0
   allow_older_versions: true
 
@@ -60,15 +60,15 @@ setup.template.pattern: "dpkg_log"
 ```
 
 ### Filebeat 8.11 - 8.19 的配置
+从 8.11 版本开始，默认启用输出压缩。为确保与 Manticore 兼容，您必须显式设置 `compression_level: 0`：
 
-从 8.11 版本开始，默认启用了输出压缩，因此必须明确设置 `compression_level: 0` 以确保与 Manticore 的兼容性：
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
+    - /var/log/dpkg.log
   paths:
-	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -93,8 +93,8 @@ filebeat.inputs:
 - type: filestream
   id: dpkg-log-input
   enabled: true
+    - /var/log/dpkg.log
   paths:
-	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   close.on_eof: true
 
@@ -111,15 +111,20 @@ setup.template.pattern: "dpkg_log"
 ```
 
 ### Filebeat 9.2+ 的配置
-
-从 Filebeat 9.2 开始，指纹功能默认启用，要求文件至少有 1024 字节才能被摄取。对于较小的文件，您需要禁用指纹：
+从 Filebeat 9.0 开始，默认的文件识别方法更改为指纹识别，这可能会导致文件处理问题（[参见 issue #44780](https://github.com/elastic/beats/issues/44780)）。为了兼容 Manticore，添加以下行以禁用指纹识别：
 
 ```
+prospector.scanner.fingerprint.enabled: false
+```
+
+以下是完整配置：
+
+
 filebeat.inputs:
 - type: filestream
   id: dpkg-log-input
-  enabled: true
   paths:
+    - /var/log/dpkg.log
 	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   prospector.scanner.fingerprint.enabled: false
@@ -132,11 +137,11 @@ output.elasticsearch:
   allow_older_versions: true
 
 setup.ilm.enabled: false
-setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
+**注意：** `prospector.scanner.fingerprint.enabled: false` 设置禁用了基于指纹的文件识别，以确保与 Manticore 的文件处理可靠。
 **注意：** 设置 `prospector.scanner.fingerprint.enabled: false` 允许 Filebeat 处理任意大小的文件。如果您正在处理较大的文件（>1024 字节），可以省略此选项或调整 `prospector.scanner.fingerprint.length` 和 `prospector.scanner.fingerprint.offset` 以满足您的需求。
 
 ## Filebeat 结果

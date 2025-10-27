@@ -8,19 +8,18 @@
 
 ## Конфигурация Filebeat
 
-Конфигурация немного различается в зависимости от версии Filebeat, которую вы используете.
+Конфигурация варьируется в зависимости от используемой версии Filebeat.
 
 ### Конфигурация для Filebeat 7.17 - 8.0
 
-Обратите внимание, что в версиях Filebeat выше 8.10 по умолчанию включена функция сжатия вывода. Вот почему в конфигурационный файл необходимо добавить опцию `compression_level: 0` для обеспечения совместимости с Manticore:
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
+    - /var/log/dpkg.log
   paths:
 	- /var/log/dpkg.log
-  close_eof: true
   scan_frequency: 1s
 
 output.elasticsearch:
@@ -33,23 +32,24 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+**Примечание:** Параметр `compression_level: 0` гарантирует, что данные отправляются в Manticore без сжатия.
+
 
 ### Конфигурация для Filebeat 8.1 - 8.10
-
+Для версий с 8.1 по 8.10 добавьте опцию `allow_older_versions`:
 Для версий с 8.1 по 8.10 необходимо добавить опцию allow_older_versions:
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
-  paths:
+    - /var/log/dpkg.log
 	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
   compression_level: 0
   allow_older_versions: true
 
@@ -60,15 +60,15 @@ setup.template.pattern: "dpkg_log"
 ```
 
 ### Конфигурация для Filebeat 8.11 - 8.19
+Начиная с версии 8.11, сжатие вывода включено по умолчанию. Для совместимости с Manticore необходимо явно установить `compression_level: 0`:
 
-Начиная с версии 8.11, сжатие вывода включено по умолчанию, поэтому для совместимости с Manticore нужно явно установить `compression_level: 0`:
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
+    - /var/log/dpkg.log
   paths:
-	- /var/log/dpkg.log
   close_eof: true
   scan_frequency: 1s
 
@@ -93,8 +93,8 @@ filebeat.inputs:
 - type: filestream
   id: dpkg-log-input
   enabled: true
+    - /var/log/dpkg.log
   paths:
-	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   close.on_eof: true
 
@@ -111,15 +111,20 @@ setup.template.pattern: "dpkg_log"
 ```
 
 ### Конфигурация для Filebeat 9.2+
-
-Начиная с Filebeat 9.2, функция fingerprint включена по умолчанию, что требует, чтобы файлы имели размер не менее 1024 байт для обработки. Для меньших файлов необходимо отключить fingerprinting:
+Начиная с Filebeat 9.0, метод идентификации файлов по умолчанию изменился на отпечаток, что может вызывать проблемы с обработкой файлов ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости с Manticore добавьте эту строку для отключения отпечатков:
 
 ```
+prospector.scanner.fingerprint.enabled: false
+```
+
+Вот полная конфигурация:
+
+
 filebeat.inputs:
 - type: filestream
   id: dpkg-log-input
-  enabled: true
   paths:
+    - /var/log/dpkg.log
 	- /var/log/dpkg.log
   prospector.scanner.check_interval: 1s
   prospector.scanner.fingerprint.enabled: false
@@ -132,11 +137,11 @@ output.elasticsearch:
   allow_older_versions: true
 
 setup.ilm.enabled: false
-setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
+**Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` отключает идентификацию файлов на основе отпечатков, чтобы обеспечить надежную обработку файлов с Manticore.
 **Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` позволяет Filebeat обрабатывать файлы любого размера. Если вы работаете с файлами большего размера (>1024 байт), вы можете опустить эту опцию или настроить `prospector.scanner.fingerprint.length` и `prospector.scanner.fingerprint.offset` в соответствии с вашими требованиями.
 
 ## Результаты работы Filebeat

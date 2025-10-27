@@ -231,7 +231,6 @@ filebeat.inputs:
   id: dpkg-filestream-input
   enabled: true
   paths: ["/var/log/dpkg.log"]
-  close.on_state_change.inactive: 1s
   prospector.scanner.check_interval: 1s
   prospector.scanner.fingerprint.enabled: false
 
@@ -247,9 +246,30 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 YML
-# For all other versions (7.17-8.x), use the standard log input
-elif [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
-  # For versions 8.1 and higher, add allow_older_versions option
+# For versions 8.1-8.10: allow_older_versions WITHOUT compression_level
+# (compression is OFF by default until 8.11)
+elif [[ "$major_version" -eq 8 ]] && [[ "$minor_version" -ge 1 ]] && [[ "$minor_version" -le 10 ]]; then
+  cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths: ["/var/log/dpkg.log"]
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  allow_older_versions: true
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+# For versions 8.11+: compression is ON by default since 8.11, so we need compression_level: 0
+elif [[ "$major_version" -eq 8 ]] && [[ "$minor_version" -ge 11 ]]; then
   cat > "${FB_DIR}/filebeat.yml" <<YML
 filebeat.inputs:
 - type: log

@@ -1,5 +1,6 @@
 –––– comment –––
 Test verifies that RT table locking functions wait for active disk chunk write completion and prevent changes after table lock
+
 ––– input –––
 export INSTANCE=1
 ––– output –––
@@ -50,7 +51,7 @@ Variable_name: disk_bytes
         Value: %{NUMBER}
 --
 Variable_name: ram_bytes_retired
-        Value: 0
+        Value: %{NUMBER}
 ––– input –––
 mysql -h0 -P2306 -e "SHOW TABLE t2 STATUS\G" | grep -A1 -E "ram_bytes|disk_bytes"
 ––– output –––

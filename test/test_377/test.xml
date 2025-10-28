@@ -123,6 +123,10 @@ insert into multiand (id, text) values(4, 'def');
 insert into multiand (id, text) values(5, 'def');
 SELECT * FROM multiand WHERE MATCH ('abc def' ) ORDER BY id DESC ;
 
+<!-- invalid queries but should not crash the daemon only provide the error message to user -->    
+select * from test1 where match (' "(0|0)"SENTENCE ' );
+select * from test1 where match (' "(0|0)"PARAGRAPH ' );
+
 </sphinxql></queries>
 
 </test>

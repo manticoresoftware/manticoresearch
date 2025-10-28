@@ -228,213 +228,76 @@ YML
     kill $FB_PID 2>/dev/null || true
     wait $FB_PID 2>/dev/null || true
     mysql -h0 -P9306 -e "TRUNCATE TABLE dpkg_log" 2>/dev/null || true
-    echo "⚠ Real Filebeat $version failed, falling back to simulation..."
+    echo "✗ Error: Filebeat $version failed to process logs" >&2
+    return 1 2>/dev/null || exit 1
   fi
 fi
 
-# For versions with compatibility issues that couldn't be fixed above, use simulation
-if [ "$skip_filebeat" -eq 0 ] && ([[ "$version" == "9.0" ]] || [[ "$version" == "9.1" ]] || [[ "$version" == "7.17" ]] || [[ "$version" == "8.0" ]] || [[ "$version" == "8.1" ]]); then
-  echo ">>> Using alternative approach for Filebeat $version..."
+# For all other versions (8.x), use the standard approach
+if [ "$skip_filebeat" -eq 0 ]; then
+  if [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
+    # For versions 8.1 and higher, add allow_older_versions option
+    ALLOW_OLDER="allow_older_versions: true"
+  else
+    ALLOW_OLDER=""
+  fi
 
-  # Instead of running Filebeat, simulate with direct data insertion via MySQL
-  mysql -h0 -P9306 -e "BEGIN"
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+  cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
 
-  # Insert each log line
-  line_count=0
-  while IFS= read -r line; do
-    line_count=$((line_count + 1))
-    id=$(($(date +%s) * 1000 + line_count))
-    escaped_line=$(echo "$line" | sed 's/"/\\"/g')
-    mysql -h0 -P9306 -e "INSERT INTO dpkg_log VALUES ($id, '$escaped_line', '{\"name\":\"testhost\"}', '{}', '{}', '{}', '{}', '$timestamp')"
-    echo "✓ Inserted log line $line_count"
-  done < /var/log/dpkg.log
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  ${ALLOW_OLDER}
 
-  mysql -h0 -P9306 -e "COMMIT"
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
 
-  # Check row count
-  row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" | grep -o '[0-9]\+')
-  if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -eq 5 ]; then
-    echo "✓ Filebeat $version simulation: inserted all logs"
+  echo ">>> Starting Filebeat..."
+  "${FB_DIR}/filebeat" run -c "${FB_DIR}/filebeat.yml" > /tmp/fb-log-${version}.txt 2>&1 &
+  FB_PID=$!
+
+  echo ">>> Waiting for Filebeat to publish events..."
+  for i in {1..30}; do
+    row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" 2>/dev/null | grep -o '[0-9]\+' || echo "0")
+    if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -ge 5 ]; then
+      echo "✓ Filebeat $version processed logs"
+      kill $FB_PID 2>/dev/null || true
+      wait $FB_PID 2>/dev/null || true
+      break
+    fi
+    sleep 1
+  done
+
+  # Final verification
+  row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" 2>/dev/null | grep -o '[0-9]\+' || echo "0")
+  if [ "$row_count" -eq 5 ]; then
     echo "✓ Row count check for $version: $row_count rows"
-
-    # Structure check
     structure=$(curl -s localhost:9308/cli_json -d 'DESCRIBE dpkg_log' | jq -c '[.[0].data[]] | sort_by(.Field)')
     has_timestamp=$(echo "$structure" | grep -q "\"Field\":\"@timestamp\"" && echo "1" || echo "0")
     has_message=$(echo "$structure" | grep -q "\"Field\":\"message\"" && echo "1" || echo "0")
-
     if [ "$has_timestamp" = "1" ] && [ "$has_message" = "1" ]; then
       echo "✓ Structure check for $version: passed"
       echo "✓ Filebeat version $version tested successfully"
-      skip_filebeat=1
     else
-      echo "✗ Structure check failed: missing required fields"
+      echo "✗ Structure check for $version: failed" >&2
       return 1 2>/dev/null || exit 1
     fi
   else
-    echo "✗ Error: Expected 5 rows, got $row_count"
+    echo "✗ Row count check for $version: expected 5, got $row_count" >&2
     return 1 2>/dev/null || exit 1
   fi
-fi
-
-# If we've already processed with alternative approach, skip standard Filebeat run
-if [ "$skip_filebeat" -eq 1 ]; then
-  return 0 2>/dev/null || exit 0
-fi
-# Determine major version to choose configuration type
-major_version=$(echo "$version" | cut -d'.' -f1)
-minor_version=$(echo "$version" | cut -d'.' -f2)
-
-# For version 9.2 and higher, use filestream input
-if [ "$major_version" -eq 9 ] && [ "$minor_version" -ge 2 ]; then
-  cat > "${FB_DIR}/filebeat.yml" <<YML
-filebeat.inputs:
-- type: filestream
-  id: dpkg-filestream-input
-  enabled: true
-  paths: ["/var/log/dpkg.log"]
-  prospector.scanner.check_interval: 1s
-  prospector.scanner.fingerprint.enabled: false
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
-  compression_level: 0
-  allow_older_versions: true
-
-path.data: /tmp/fb-data-${version}
-setup.ilm.enabled: false
-setup.template.enabled: false
-setup.template.name: "dpkg_log"
-setup.template.pattern: "dpkg_log"
-YML
-# For versions 8.1-8.10: allow_older_versions WITHOUT compression_level
-# (compression is OFF by default until 8.11)
-elif [[ "$major_version" -eq 8 ]] && [[ "$minor_version" -ge 1 ]] && [[ "$minor_version" -le 10 ]]; then
-  cat > "${FB_DIR}/filebeat.yml" <<YML
-filebeat.inputs:
-- type: log
-  enabled: true
-  paths: ["/var/log/dpkg.log"]
-  close_eof: true
-  scan_frequency: 1s
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
-  allow_older_versions: true
-
-path.data: /tmp/fb-data-${version}
-setup.ilm.enabled: false
-setup.template.enabled: false
-setup.template.name: "dpkg_log"
-setup.template.pattern: "dpkg_log"
-YML
-# For versions 8.11+: compression is ON by default since 8.11, so we need compression_level: 0
-elif [[ "$major_version" -eq 8 ]] && [[ "$minor_version" -ge 11 ]]; then
-  cat > "${FB_DIR}/filebeat.yml" <<YML
-filebeat.inputs:
-- type: log
-  enabled: true
-  paths: ["/var/log/dpkg.log"]
-  close_eof: true
-  scan_frequency: 1s
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
-  compression_level: 0
-  allow_older_versions: true
-
-path.data: /tmp/fb-data-${version}
-setup.ilm.enabled: false
-setup.template.enabled: false
-setup.template.name: "dpkg_log"
-setup.template.pattern: "dpkg_log"
-YML
-else
-  # For versions before 8.1
-  cat > "${FB_DIR}/filebeat.yml" <<YML
-filebeat.inputs:
-- type: log
-  enabled: true
-  paths: ["/var/log/dpkg.log"]
-  close_eof: true
-  scan_frequency: 1s
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
-  compression_level: 0
-
-path.data: /tmp/fb-data-${version}
-setup.ilm.enabled: false
-setup.template.enabled: false
-setup.template.name: "dpkg_log"
-setup.template.pattern: "dpkg_log"
-YML
-fi
-
-# Start Filebeat (only for non-problematic versions)
-echo ">>> Starting Filebeat..."
-
-if [[ "$version" =~ ^8\.1[7-9]$ || "$version" =~ ^8\.[2-9][0-9]$ || "$version" == "9.2" ]]; then
-  # For newer versions (8.17+ and 9.2), use the 'run' command
-  if "${FB_DIR}/filebeat" help 2>&1 | grep -q "run"; then
-    "${FB_DIR}/filebeat" run -e -c "${FB_DIR}/filebeat.yml" > "/tmp/fb-log-${version}.txt" 2>&1 &
-  else
-    "${FB_DIR}/filebeat" -e -c "${FB_DIR}/filebeat.yml" > "/tmp/fb-log-${version}.txt" 2>&1 &
-  fi
-else
-  # For older versions
-  "${FB_DIR}/filebeat" -e -c "${FB_DIR}/filebeat.yml" > "/tmp/fb-log-${version}.txt" 2>&1 &
-fi
-
-FB_PID=$!
-
-# Wait for Filebeat to start and logs to be published
-echo ">>> Waiting for Filebeat to publish events..."
-sleep 6
-
-# Wait for data to appear (max 30 seconds)
-max_wait=30
-elapsed=0
-while [ $elapsed -lt $max_wait ]; do
-  row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" 2>/dev/null | grep -o '[0-9]\+' || echo "0")
-  if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -ge 5 ]; then
-    break
-  fi
-  sleep 2
-  elapsed=$((elapsed + 2))
-done
-
-# Stop Filebeat gracefully
-kill "$FB_PID" 2>/dev/null || true
-sleep 2
-
-# Verify results
-row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" | grep -o '[0-9]\+')
-if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -eq 5 ]; then
-  echo "✓ Filebeat $version processed logs"
-  echo "✓ Row count check for $version: $row_count rows"
-
-  # Structure check
-  structure=$(curl -s localhost:9308/cli_json -d 'DESCRIBE dpkg_log' | jq -c '[.[0].data[]] | sort_by(.Field)')
-  has_timestamp=$(echo "$structure" | grep -q "\"Field\":\"@timestamp\"" && echo "1" || echo "0")
-  has_message=$(echo "$structure" | grep -q "\"Field\":\"message\"" && echo "1" || echo "0")
-
-  if [ "$has_timestamp" = "1" ] && [ "$has_message" = "1" ]; then
-    echo "✓ Structure check for $version: passed"
-    echo "✓ Filebeat version $version tested successfully"
-  else
-    echo "✗ Structure check failed for $version: missing required fields"
-    return 1 2>/dev/null || exit 1
-  fi
-else
-  echo "✗ Error for $version: Expected 5 rows, got $row_count"
-  echo "Filebeat log:"
-  cat "/tmp/fb-log-${version}.txt" | tail -50
-  return 1 2>/dev/null || exit 1
 fi
 EOF
 ––– output –––
@@ -447,13 +310,9 @@ timeout 60 bash /tmp/filebeat-single-test.sh 7.17
 >>> Testing Filebeat version: 7.17
 ✓ Log file has 5 lines
 ✓ Manticore Search available
->>> Using alternative approach for Filebeat 7.17...
-✓ Inserted log line 1
-✓ Inserted log line 2
-✓ Inserted log line 3
-✓ Inserted log line 4
-✓ Inserted log line 5
-✓ Filebeat 7.17 simulation: inserted all logs
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 7.17 processed logs
 ✓ Row count check for 7.17: 5 rows
 ✓ Structure check for 7.17: passed
 ✓ Filebeat version 7.17 tested successfully
@@ -463,13 +322,9 @@ timeout 60 bash /tmp/filebeat-single-test.sh 8.0
 >>> Testing Filebeat version: 8.0
 ✓ Log file has 5 lines
 ✓ Manticore Search available
->>> Using alternative approach for Filebeat 8.0...
-✓ Inserted log line 1
-✓ Inserted log line 2
-✓ Inserted log line 3
-✓ Inserted log line 4
-✓ Inserted log line 5
-✓ Filebeat 8.0 simulation: inserted all logs
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.0 processed logs
 ✓ Row count check for 8.0: 5 rows
 ✓ Structure check for 8.0: passed
 ✓ Filebeat version 8.0 tested successfully
@@ -479,13 +334,9 @@ timeout 60 bash /tmp/filebeat-single-test.sh 8.1
 >>> Testing Filebeat version: 8.1
 ✓ Log file has 5 lines
 ✓ Manticore Search available
->>> Using alternative approach for Filebeat 8.1...
-✓ Inserted log line 1
-✓ Inserted log line 2
-✓ Inserted log line 3
-✓ Inserted log line 4
-✓ Inserted log line 5
-✓ Filebeat 8.1 simulation: inserted all logs
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.1 processed logs
 ✓ Row count check for 8.1: 5 rows
 ✓ Structure check for 8.1: passed
 ✓ Filebeat version 8.1 tested successfully
@@ -711,32 +562,33 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.0
 >>> Testing Filebeat version: 9.0
 ✓ Log file has 5 lines
 ✓ Manticore Search available
->>> Testing Filebeat 9.0 with fingerprint disabled...
+>>> Testing Filebeat 9.0 with filestream input and fingerprint disabled...
 >>> Starting Filebeat...
 >>> Waiting for Filebeat to publish events...
 ✓ Filebeat 9.0 processed logs
 ✓ Row count check for 9.0: 5 rows
 ✓ Structure check for 9.0: passed
-✓ Filebeat version 9.0 tested successfully with fingerprint disabled
+✓ Filebeat version 9.0 tested successfully
 ––– input –––
 timeout 60 bash /tmp/filebeat-single-test.sh 9.1
 ––– output –––
 >>> Testing Filebeat version: 9.1
 ✓ Log file has 5 lines
 ✓ Manticore Search available
->>> Testing Filebeat 9.1 with fingerprint disabled...
+>>> Testing Filebeat 9.1 with filestream input and fingerprint disabled...
 >>> Starting Filebeat...
 >>> Waiting for Filebeat to publish events...
 ✓ Filebeat 9.1 processed logs
 ✓ Row count check for 9.1: 5 rows
 ✓ Structure check for 9.1: passed
-✓ Filebeat version 9.1 tested successfully with fingerprint disabled
+✓ Filebeat version 9.1 tested successfully
 ––– input –––
 timeout 60 bash /tmp/filebeat-single-test.sh 9.2
 ––– output –––
 >>> Testing Filebeat version: 9.2
 ✓ Log file has 5 lines
 ✓ Manticore Search available
+>>> Testing Filebeat 9.2 with filestream input and fingerprint disabled...
 >>> Starting Filebeat...
 >>> Waiting for Filebeat to publish events...
 ✓ Filebeat 9.2 processed logs

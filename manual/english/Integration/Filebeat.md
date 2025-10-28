@@ -4,7 +4,7 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) is a lightweight shipper for forwarding and centralizing log data. Once installed as an agent, it monitors the log files or locations you specify, collects log events, and forwards them for indexing, usually to Elasticsearch or Logstash.
 
-Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, all versions up to 9.2 are fully supported.
+Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, All versions to 9.0 are fully supported.
 
 ## Filebeat configuration
 
@@ -32,11 +32,10 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-**Note:** The `compression_level: 0` setting ensures that data is sent uncompressed to Manticore.
 
 ### Configuration for Filebeat 8.1 - 8.10
 
-For versions 8.1 through 8.10, add the `allow_older_versions` option:
+For versions 8.1 through 8.10, you need to add the `allow_older_versions` option:
 
 ```
 filebeat.inputs:
@@ -50,6 +49,7 @@ filebeat.inputs:
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
+  compression_level: 0
   allow_older_versions: true
 
 setup.ilm.enabled: false
@@ -60,7 +60,7 @@ setup.template.pattern: "dpkg_log"
 
 ### Configuration for Filebeat 8.11 - 8.19
 
-Starting from version 8.11, output compression is enabled by default. You must explicitly set `compression_level: 0` for compatibility with Manticore:
+From version 8.11, output compression is enabled by default, so you must explicitly set `compression_level: 0` for compatibility with Manticore:
 
 ```
 filebeat.inputs:
@@ -83,41 +83,11 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Configuration for Filebeat 9.0 - 9.1
+### Configuration for Filebeat 9.0+
 
-Filebeat 9.0 introduces a major architecture change, replacing the log input type with filestream. Here's the required configuration:
+Filebeat 9.0 introduces a major architecture change, replacing the `log` input type with `filestream`. Starting from version 9.0, the default file identification method also changed to fingerprint, which requires files to be at least 1024 bytes ([see issue #44780](https://github.com/elastic/beats/issues/44780)). For Manticore compatibility with files of any size, you must disable fingerprinting.
 
-```
-filebeat.inputs:
-- type: filestream
-  id: dpkg-log-input
-  enabled: true
-  paths:
-    - /var/log/dpkg.log
-  prospector.scanner.check_interval: 1s
-  close.on_eof: true
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
-  compression_level: 0
-  allow_older_versions: true
-
-setup.ilm.enabled: false
-setup.template.enabled: false
-setup.template.name: "dpkg_log"
-setup.template.pattern: "dpkg_log"
-```
-
-### Configuration for Filebeat 9.2+
-
-Starting from Filebeat 9.0, the default file identification method changed to fingerprint, which can cause issues with file processing ([see issue #44780](https://github.com/elastic/beats/issues/44780)). For Manticore compatibility, add this line to disable fingerprinting:
-
-```
-prospector.scanner.fingerprint.enabled: false
-```
-
-Here's the complete configuration:
+Here's the required configuration for Filebeat 9.0 and all later versions:
 
 ```
 filebeat.inputs:
@@ -141,7 +111,10 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-**Note:** The `prospector.scanner.fingerprint.enabled: false` setting disables the fingerprint-based file identification to ensure reliable file processing with Manticore.
+**Important notes for Filebeat 9.0+:**
+- The `type: filestream` input replaces the older `type: log`
+- The `prospector.scanner.fingerprint.enabled: false` setting is **required** to disable fingerprint-based file identification, ensuring reliable processing of files smaller than 1024 bytes
+- The `id` field is required for filestream inputs and must be unique
 
 ## Filebeat results
 

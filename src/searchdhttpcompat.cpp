@@ -1773,7 +1773,7 @@ void HttpCompatHandler_c::ProcessEmptyHead ()
     "build_hash" : "fc0eeb6e2c25915d63d871d344e3d0b45ea0ea1e",
     "build_date" : "2019-10-22T17:16:35.176724Z",
     "build_snapshot" : false,
-    "lucene_version" : "8.2.0",
+    "lucene_version" : "10.3.1",
     "minimum_wire_compatibility_version" : "6.8.0",
     "minimum_index_compatibility_version" : "6.0.0-beta1"
   },

@@ -4,7 +4,7 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) — это легкий агент для пересылки и централизованного сбора данных журналов. После установки в виде агента он следит за указанными вами файлами журналов или местоположениями, собирает события из журналов и пересылает их для индексирования, обычно в Elasticsearch или Logstash.
 
-Теперь Manticore также поддерживает использование Filebeat в качестве конвейеров обработки. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как и в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.2.
+Теперь Manticore поддерживает использование Filebeat в качестве конвейеров обработки. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как и в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.0.
 
 ## Конфигурация Filebeat
 
@@ -32,12 +32,11 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
-**Примечание:** Параметр `compression_level: 0` гарантирует, что данные отправляются в Manticore без сжатия.
 
 
 ### Конфигурация для Filebeat 8.1 - 8.10
+Для версий с 8.1 по 8.10 необходимо добавить опцию `allow_older_versions`:
 Для версий с 8.1 по 8.10 добавьте опцию `allow_older_versions`:
-Для версий с 8.1 по 8.10 необходимо добавить опцию allow_older_versions:
 
 ```
 filebeat.inputs:
@@ -51,6 +50,7 @@ filebeat.inputs:
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
   compression_level: 0
+  compression_level: 0
   allow_older_versions: true
 
 setup.ilm.enabled: false
@@ -60,7 +60,7 @@ setup.template.pattern: "dpkg_log"
 ```
 
 ### Конфигурация для Filebeat 8.11 - 8.19
-Начиная с версии 8.11, сжатие вывода включено по умолчанию. Для совместимости с Manticore необходимо явно установить `compression_level: 0`:
+Начиная с версии 8.11, сжатие вывода включено по умолчанию, поэтому для совместимости с Manticore необходимо явно указать `compression_level: 0`:
 
 
 ```
@@ -83,9 +83,11 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
-
+### Конфигурация для Filebeat 9.0+
 ### Конфигурация для Filebeat 9.0 - 9.1
+Filebeat 9.0 вводит важное изменение архитектуры, заменяя тип входных данных `log` на `filestream`. Начиная с версии 9.0, также изменился метод идентификации файлов по умолчанию на fingerprint, для которого файлы должны быть размером не менее 1024 байт ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости Manticore с файлами любого размера необходимо отключить fingerprinting.
 
+Вот необходимая конфигурация для Filebeat 9.0 и всех последующих версий:
 Filebeat 9.0 вводит значительные изменения в архитектуре, заменяя тип ввода log на filestream. Вот необходимая конфигурация:
 
 ```
@@ -97,7 +99,6 @@ filebeat.inputs:
   paths:
   prospector.scanner.check_interval: 1s
   close.on_eof: true
-
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
@@ -110,6 +111,10 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
+**Важные замечания для Filebeat 9.0+:**
+- Вход `type: filestream` заменяет бывший `type: log`
+- Настройка `prospector.scanner.fingerprint.enabled: false` **обязательна** для отключения идентификации файлов по отпечатку, что обеспечивает надежную обработку файлов размером менее 1024 байт
+- Поле `id` обязательно для входов filestream и должно быть уникальным
 ### Конфигурация для Filebeat 9.2+
 Начиная с Filebeat 9.0, метод идентификации файлов по умолчанию изменился на отпечаток, что может вызывать проблемы с обработкой файлов ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости с Manticore добавьте эту строку для отключения отпечатков:
 
@@ -117,7 +122,6 @@ setup.template.pattern: "dpkg_log"
 prospector.scanner.fingerprint.enabled: false
 ```
 
-Вот полная конфигурация:
 
 
 filebeat.inputs:
@@ -141,7 +145,6 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-**Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` отключает идентификацию файлов на основе отпечатков, чтобы обеспечить надежную обработку файлов с Manticore.
 **Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` позволяет Filebeat обрабатывать файлы любого размера. Если вы работаете с файлами большего размера (>1024 байт), вы можете опустить эту опцию или настроить `prospector.scanner.fingerprint.length` и `prospector.scanner.fingerprint.offset` в соответствии с вашими требованиями.
 
 ## Результаты работы Filebeat

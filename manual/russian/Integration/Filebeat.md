@@ -4,23 +4,22 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) — это легкий агент для пересылки и централизованного сбора данных журналов. После установки в виде агента он следит за указанными вами файлами журналов или местоположениями, собирает события из журналов и пересылает их для индексирования, обычно в Elasticsearch или Logstash.
 
-Теперь Manticore также поддерживает использование Filebeat в качестве обработчиков данных. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.0.
+Теперь Manticore поддерживает использование Filebeat в качестве конвейеров обработки. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как и в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.0.
 
 ## Конфигурация Filebeat
 
-Конфигурация немного различается в зависимости от версии Filebeat, которую вы используете.
+Конфигурация варьируется в зависимости от используемой версии Filebeat.
 
 ### Конфигурация для Filebeat 7.17 - 8.0
 
-Обратите внимание, что в версиях Filebeat выше 8.10 по умолчанию включена функция сжатия вывода. Вот почему в конфигурационный файл необходимо добавить опцию `compression_level: 0` для обеспечения совместимости с Manticore:
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
-  paths:
     - /var/log/dpkg.log
-  close_eof: true
+  paths:
+	- /var/log/dpkg.log
   scan_frequency: 1s
 
 output.elasticsearch:
@@ -33,17 +32,43 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+
 
 ### Конфигурация для Filebeat 8.1 - 8.10
-
-Для версий с 8.1 по 8.10 необходимо добавить опцию allow_older_versions:
+Для версий с 8.1 по 8.10 необходимо добавить опцию `allow_older_versions`:
+Для версий с 8.1 по 8.10 добавьте опцию `allow_older_versions`:
 
 ```
 filebeat.inputs:
 - type: log
   enabled: true
-  paths:
     - /var/log/dpkg.log
+	- /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  compression_level: 0
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+### Конфигурация для Filebeat 8.11 - 8.19
+Начиная с версии 8.11, сжатие вывода включено по умолчанию, поэтому для совместимости с Manticore необходимо явно указать `compression_level: 0`:
+
+
+```
+filebeat.inputs:
+- type: log
+  enabled: true
+    - /var/log/dpkg.log
+  paths:
   close_eof: true
   scan_frequency: 1s
 
@@ -58,34 +83,11 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+### Конфигурация для Filebeat 9.0+
+### Конфигурация для Filebeat 9.0 - 9.1
+Filebeat 9.0 вводит важное изменение архитектуры, заменяя тип входных данных `log` на `filestream`. Начиная с версии 9.0, также изменился метод идентификации файлов по умолчанию на fingerprint, для которого файлы должны быть размером не менее 1024 байт ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости Manticore с файлами любого размера необходимо отключить fingerprinting.
 
-### Конфигурация для Filebeat 8.11 - 8.18
-
-Начиная с версии 8.11, сжатие вывода включено по умолчанию, поэтому для совместимости с Manticore нужно явно установить `compression_level: 0`:
-
-```
-filebeat.inputs:
-- type: log
-  enabled: true
-  paths:
-    - /var/log/dpkg.log
-  close_eof: true
-  scan_frequency: 1s
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index: "dpkg_log"
-  compression_level: 0
-  allow_older_versions: true
-
-setup.ilm.enabled: false
-setup.template.enabled: false
-setup.template.name: "dpkg_log"
-setup.template.pattern: "dpkg_log"
-```
-
-### Конфигурация для Filebeat 9.0
-
+Вот необходимая конфигурация для Filebeat 9.0 и всех последующих версий:
 Filebeat 9.0 вводит значительные изменения в архитектуре, заменяя тип ввода log на filestream. Вот необходимая конфигурация:
 
 ```
@@ -93,11 +95,10 @@ filebeat.inputs:
 - type: filestream
   id: dpkg-log-input
   enabled: true
-  paths:
     - /var/log/dpkg.log
+  paths:
   prospector.scanner.check_interval: 1s
   close.on_eof: true
-
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
@@ -110,10 +111,45 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
+**Важные замечания для Filebeat 9.0+:**
+- Вход `type: filestream` заменяет бывший `type: log`
+- Настройка `prospector.scanner.fingerprint.enabled: false` **обязательна** для отключения идентификации файлов по отпечатку, что обеспечивает надежную обработку файлов размером менее 1024 байт
+- Поле `id` обязательно для входов filestream и должно быть уникальным
+### Конфигурация для Filebeat 9.2+
+Начиная с Filebeat 9.0, метод идентификации файлов по умолчанию изменился на отпечаток, что может вызывать проблемы с обработкой файлов ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости с Manticore добавьте эту строку для отключения отпечатков:
+
+```
+prospector.scanner.fingerprint.enabled: false
+```
+
+
+
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  paths:
+    - /var/log/dpkg.log
+	- /var/log/dpkg.log
+  prospector.scanner.check_interval: 1s
+  prospector.scanner.fingerprint.enabled: false
+  close.on_state_change.inactive: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+**Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` позволяет Filebeat обрабатывать файлы любого размера. Если вы работаете с файлами большего размера (>1024 байт), вы можете опустить эту опцию или настроить `prospector.scanner.fingerprint.length` и `prospector.scanner.fingerprint.offset` в соответствии с вашими требованиями.
+
 ## Результаты работы Filebeat
 
 После запуска Filebeat с этой конфигурацией данные журналов будут отправлены в Manticore и корректно индексированы. Ниже приведена итоговая схема таблицы, созданной Manticore, и пример вставленного документа:
-
 ```
 mysql> DESCRIBE dpkg_log;
 +------------------+--------+--------------------+

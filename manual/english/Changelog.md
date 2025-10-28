@@ -36,15 +36,15 @@ Since the configuration file was updated, **you might see a warning during the u
 ## Version 13.11.0
 **Released**: September 13th 2025
 
-The main highlight of this release is [Auto Embeddings](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) — a new feature that makes semantic search as easy as SQL.  
+The main highlight of this release is [Auto Embeddings](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) — a new feature that makes semantic search as easy as SQL.
 No need for external services or complex pipelines: just insert text and search with natural language.
 
 ### What Auto Embeddings Offer
 
-- **Automatic embedding generation** directly from your text  
-- **Natural language queries** that understand meaning, not just keywords  
-- **Support for multiple models** (OpenAI, Hugging Face, Voyage, Jina)  
-- **Seamless integration** with SQL and JSON APIs  
+- **Automatic embedding generation** directly from your text
+- **Natural language queries** that understand meaning, not just keywords
+- **Support for multiple models** (OpenAI, Hugging Face, Voyage, Jina)
+- **Seamless integration** with SQL and JSON APIs
 
 ### Recommended libraries
 - Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.3
@@ -81,8 +81,8 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 ## Version 13.6.7
 **Released**: August 8th 2025
 
-Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1  
-Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2  
+Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1
+Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2
 
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
 
@@ -115,6 +115,7 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 **Released**: July 8th 2025
 
 ### Breaking Changes
+* ⚠️ [PR #3586](https://github.com/manticoresoftware/manticoresearch/pull/3586) Support for Debian 10 (Buster) has been discontinued. Debian 10 reached end of life on June 30, 2024. Users are encouraged to upgrade to Debian 11 (Bullseye) or Debian 12 (Bookworm).
 * ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Updated the KNN library API to support empty [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) values. This update doesn't change the data format but does increase the Manticore Search / MCL API version.
 * ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Fixed a bug with incorrect source and destination row IDs during KNN index training and building. This update doesn't change the data format but increases the Manticore Search / MCL API version.
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0)  Added support for new KNN vector search features like quantization, rescoring, and oversampling. This version changes the KNN data format and the [KNN_DIST() SQL syntax](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search). The new version can read older data, but older versions won't be able to read the new format.
@@ -2491,4 +2492,3 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 
 ## Version 2.3.3, 06 July 2017
 * Manticore branding
-

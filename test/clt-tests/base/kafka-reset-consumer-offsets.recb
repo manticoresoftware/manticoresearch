@@ -1,0 +1,10 @@
+––– comment –––
+Reset Kafka consumer group offsets to latest for specified group and topic
+This allows consumer to start reading from the latest available offset, skipping old messages
+Variables:
+  - CONSUMER_GROUP (required) - name of the consumer group to reset
+  - TOPIC_NAME (optional, default: my-data) - Kafka topic name
+––– input –––
+docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group ${CONSUMER_GROUP} --reset-offsets --to-latest --topic ${TOPIC_NAME:-my-data} --execute > /dev/null; echo $?
+––– output –––
+0

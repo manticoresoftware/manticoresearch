@@ -170,7 +170,7 @@ rm -rf /tmp/fb-data-${version}/*
 skip_filebeat=0
 
 
-# Try real Filebeat for versions 9.0 and 9.1 with fingerprint disabled
+# Try Filebeat versions 9.0 and 9.1 with fingerprint disabled
 if [[ "$version" == "9.0" ]] || [[ "$version" == "9.1" ]]; then
   echo ">>> Testing Filebeat $version with fingerprint disabled..."
 

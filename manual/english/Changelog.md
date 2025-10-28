@@ -2492,4 +2492,3 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 
 ## Version 2.3.3, 06 July 2017
 * Manticore branding
-

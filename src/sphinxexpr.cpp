@@ -5574,6 +5574,7 @@ void MoveToArgList ( ISphExpr * pLeft, VecRefPtrs_t<ISphExpr*> &dArgs )
 using UdfInt_fn = sphinx_int64_t ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 using UdfDouble_fn = double ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 using UdfCharptr_fn = char * ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+using UdfMva_fn = ByteBlob_t ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 
 class Expr_Udf_c : public ISphExpr
 {
@@ -5880,6 +5881,186 @@ private:
 };
 
 
+class Expr_UdfMva32_c : public Expr_Udf_c
+{
+public:
+	explicit Expr_UdfMva32_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
+	{
+		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_UINT32SET_PTR );
+		m_pFn = (UdfMva_fn) m_pCall->m_pUdf->m_fnFunc;
+	}
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const final
+	{
+		if ( m_bError )
+			return {nullptr, 0};
+
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
+		FillArgs ( tMatch );
+		auto tRes = m_pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		FreeArgs();
+		return tRes;
+	}
+
+	float Eval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: mva32 udf evaluated as float" );
+		return 0.0f;
+	}
+
+	int IntEval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: mva32 udf evaluated as int" );
+		return 0;
+	}
+
+	int64_t Int64Eval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: mva32 udf evaluated as bigint" );
+		return 0;
+	}
+
+	bool IsDataPtrAttr() const final
+	{
+		return true;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_UdfMva32_c ( *this );
+	}
+
+private:
+	Expr_UdfMva32_c ( const Expr_UdfMva32_c& rhs )
+		: Expr_Udf_c ( rhs )
+		, m_pFn ( rhs.m_pFn )
+	{
+	}
+	UdfMva_fn m_pFn; // to avoid dereference on each MvaEval() call
+};
+
+
+class Expr_UdfMva64_c : public Expr_Udf_c
+{
+public:
+	explicit Expr_UdfMva64_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
+	{
+		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_INT64SET_PTR );
+		m_pFn = (UdfMva_fn) m_pCall->m_pUdf->m_fnFunc;
+	}
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const final
+	{
+		if ( m_bError )
+			return {nullptr, 0};
+
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
+		FillArgs ( tMatch );
+		auto tRes = m_pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		FreeArgs();
+		return tRes;
+	}
+
+	float Eval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: mva64 udf evaluated as float" );
+		return 0.0f;
+	}
+
+	int IntEval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: mva64 udf evaluated as int" );
+		return 0;
+	}
+
+	int64_t Int64Eval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: mva64 udf evaluated as bigint" );
+		return 0;
+	}
+
+	bool IsDataPtrAttr() const final
+	{
+		return true;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_UdfMva64_c ( *this );
+	}
+
+private:
+	Expr_UdfMva64_c ( const Expr_UdfMva64_c& rhs )
+		: Expr_Udf_c ( rhs )
+		, m_pFn ( rhs.m_pFn )
+	{
+	}
+	UdfMva_fn m_pFn; // to avoid dereference on each MvaEval() call
+};
+
+
+class Expr_UdfFloatVector_c : public Expr_Udf_c
+{
+public:
+	explicit Expr_UdfFloatVector_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
+	{
+		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT_VECTOR_PTR );
+		m_pFn = (UdfMva_fn) m_pCall->m_pUdf->m_fnFunc;
+	}
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const final
+	{
+		if ( m_bError )
+			return {nullptr, 0};
+
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
+		FillArgs ( tMatch );
+		auto tRes = m_pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		FreeArgs();
+		return tRes;
+	}
+
+	float Eval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: float_vector udf evaluated as float" );
+		return 0.0f;
+	}
+
+	int IntEval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: float_vector udf evaluated as int" );
+		return 0;
+	}
+
+	int64_t Int64Eval ( const CSphMatch & ) const final
+	{
+		assert ( 0 && "internal error: float_vector udf evaluated as bigint" );
+		return 0;
+	}
+
+	bool IsDataPtrAttr() const final
+	{
+		return true;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_UdfFloatVector_c ( *this );
+	}
+
+private:
+	Expr_UdfFloatVector_c ( const Expr_UdfFloatVector_c& rhs )
+		: Expr_Udf_c ( rhs )
+		, m_pFn ( rhs.m_pFn )
+	{
+	}
+	UdfMva_fn m_pFn; // to avoid dereference on each MvaEval() call
+};
+
+
 ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 {
 	if ( !CheckStoredArg(pLeft) )
@@ -5897,6 +6078,15 @@ ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 			break;
 		case SPH_ATTR_STRINGPTR:
 			pRes = new Expr_UdfStringptr_c ( m_dUdfCalls[iCall], m_pProfiler );
+			break;
+		case SPH_ATTR_UINT32SET_PTR:
+			pRes = new Expr_UdfMva32_c ( m_dUdfCalls[iCall], m_pProfiler );
+			break;
+		case SPH_ATTR_INT64SET_PTR:
+			pRes = new Expr_UdfMva64_c ( m_dUdfCalls[iCall], m_pProfiler );
+			break;
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+			pRes = new Expr_UdfFloatVector_c ( m_dUdfCalls[iCall], m_pProfiler );
 			break;
 		default:
 			m_sCreateError.SetSprintf ( "internal error: unhandled type %d in CreateUdfNode()", m_dUdfCalls[iCall]->m_pUdf->m_eRetType );
@@ -10269,6 +10459,10 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				case SPH_ATTR_JSON_FIELD:
 					eRes = SPH_UDF_TYPE_JSON;
 					break;
+				case SPH_ATTR_FLOAT_VECTOR:
+				case SPH_ATTR_FLOAT_VECTOR_PTR:
+					eRes = SPH_UDF_TYPE_FLOAT_VECTOR_RETURN;
+					break;
 				default:
 					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%u)", i, dArgTypes[i] );
 					return -1;
@@ -10300,6 +10494,8 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 	// deduce type
 	tNode.m_eArgType = ( iArg>=0 ) ? m_dNodes[iArg].m_eRetType : SPH_ATTR_INTEGER;
 	tNode.m_eRetType = pCall->m_pUdf->m_eRetType;
+	
+	
 	return m_dNodes.GetLength()-1;
 }
 

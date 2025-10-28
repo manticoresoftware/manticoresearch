@@ -170,11 +170,10 @@ rm -rf /tmp/fb-data-${version}/*
 skip_filebeat=0
 
 
-# Try real Filebeat for versions 9.0 and 9.1 with fingerprint disabled
-if [[ "$version" == "9.0" ]] || [[ "$version" == "9.1" ]]; then
-  echo ">>> Testing Filebeat $version with fingerprint disabled..."
+# For all 9.x versions, use filestream with fingerprint disabled
+if [[ "$version" =~ ^9\. ]]; then
+  echo ">>> Testing Filebeat $version with filestream input and fingerprint disabled..."
 
-  # Create config with fingerprint disabled (same as 9.2+)
   cat > "${FB_DIR}/filebeat.yml" <<YML
 filebeat.inputs:
 - type: filestream
@@ -197,7 +196,6 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 YML
 
-  # Try to run Filebeat
   echo ">>> Starting Filebeat..."
   "${FB_DIR}/filebeat" run -c "${FB_DIR}/filebeat.yml" > /tmp/fb-log-${version}.txt 2>&1 &
   FB_PID=$!
@@ -210,7 +208,6 @@ YML
       kill $FB_PID 2>/dev/null || true
       wait $FB_PID 2>/dev/null || true
 
-      # Verify results
       if [ "$row_count" -eq 5 ]; then
         echo "✓ Row count check for $version: $row_count rows"
         structure=$(curl -s localhost:9308/cli_json -d 'DESCRIBE dpkg_log' | jq -c '[.[0].data[]] | sort_by(.Field)')
@@ -218,7 +215,7 @@ YML
         has_message=$(echo "$structure" | grep -q "\"Field\":\"message\"" && echo "1" || echo "0")
         if [ "$has_timestamp" = "1" ] && [ "$has_message" = "1" ]; then
           echo "✓ Structure check for $version: passed"
-          echo "✓ Filebeat version $version tested successfully with fingerprint disabled"
+          echo "✓ Filebeat version $version tested successfully"
           skip_filebeat=1
         fi
       fi
@@ -227,7 +224,6 @@ YML
     sleep 1
   done
 
-  # If Filebeat didn't work, clean up and fall back to simulation
   if [ "$skip_filebeat" -eq 0 ]; then
     kill $FB_PID 2>/dev/null || true
     wait $FB_PID 2>/dev/null || true

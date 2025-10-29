@@ -85,7 +85,7 @@ If your SSL configuration is not valid for any reason (which the daemon detects 
 * You cannot connect to the dedicated `https` port. The HTTPS connections will be dropped
 * Connection to the `mysql` port via a MySQL client will not support SSL securing. If the client requires SSL, the connection will fail. If SSL is not required, it will use plain MySQL or compressed connections.
 
-###Caution:
+### Caution:
 
 * Binary API connections (such as connections from old clients or inter-daemons master-agent communication) are not secured.
 * SSL for replication needs to be set up separately. However, since the SST stage of the replication is done through the binary API connection, it is not secured either.

@@ -23,37 +23,6 @@
 * 🪲 [v13.11.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.4) [PR #3765](https://github.com/manticoresoftware/manticoresearch/pull/3765) 修复了别名连接属性的处理。
 * 🪲 [v13.11.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.3) [PR #3763](https://github.com/manticoresoftware/manticoresearch/pull/3763) 修复了字符串属性批量连接时可能发生的崩溃问题，并解决了过滤器有时无法与 LEFT JOIN 一起使用的问题。
 * 🪲 [v13.11.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.2) [问题 #3065](https://github.com/manticoresoftware/manticoresearch/issues/3065) 修复了在启用 index_field_lengths 的列式表中插入数据时的崩溃。
- 
-## 版本 13.13.0
-**发布时间**：2025年10月7日
-
-### 推荐库
-- 推荐 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.1.0
-- 推荐 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.35.1
-
-如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
-
-### ⚠️ 重要
-该版本的主要亮点是 [自动嵌入](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) — 一项让语义搜索像 SQL 一样简单的新功能。
-
-由于配置文件已更新，**升级过程中在 Linux 上可能会看到是否保留您当前版本或使用包中新版的警告**。如果您有自定义（非默认）配置，建议保留您现有版本，并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。不过，即使不更改路径，也应能正常工作。
-
-### 新功能和改进
-* 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) 增加了对带有 SI 块缓存的 MCL 8.1.0 的支持。
-- **直接从文本自动生成嵌入**
-- **理解含义而非仅仅关键词的自然语言查询**
-- **支持多种模型**（OpenAI、Hugging Face、Voyage、Jina）
-- **与 SQL 及 JSON API 的无缝集成**
-* 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) 实现了 [secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache) 选项，更新了二级索引 API，内联了排序访问器。
-
-### Bug 修复
-* 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [问题 #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) 修复了检测和调用已触发计时器之间的竞态条件。
-* 🪲 [v13.11.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.7) [问题 #1045](https://github.com/manticoresoftware/manticoresearch/issues/1045) 修复了 RHEL 8 在 systemd 更新期间 systemctl 警告问题，通过将配置中的过时路径 `/var/run/manticore` 替换为正确的 `/run/manticore`。由于配置文件已更新，升级时可能会看到保留当前版本或使用包中新版本的提示。若为自定义（非默认）配置，建议保留当前配置，并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。
-* 🪲 [v13.11.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.6) [PR #3766](https://github.com/manticoresoftware/manticoresearch/pull/3766) 新增对 MCL 版本 8.0.6 的支持。
-如果您遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
-* 🪲 [v13.11.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.5) [PR #3767](https://github.com/manticoresoftware/manticoresearch/pull/3767) 改进了中文文档翻译并更新了子模块。
-* 🪲 [v13.11.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.4) [PR #3765](https://github.com/manticoresoftware/manticoresearch/pull/3765) 修正了别名连接属性的处理。
-* 🪲 [v13.11.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.3) [PR #3763](https://github.com/manticoresoftware/manticoresearch/pull/3763) 修复了字符串属性批量连接时可能导致的崩溃，并解决了过滤器有时不生效于 LEFT JOIN 的问题。
 * 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [问题 #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) 修复了启用 embeddings 时删除文档导致的崩溃。
 
 ## 版本 13.11.1

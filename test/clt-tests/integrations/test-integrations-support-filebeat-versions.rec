@@ -233,16 +233,16 @@ YML
   fi
 fi
 
-# For all other versions (8.x), use the standard approach
+# For all other versions (7.17, 8.x), use the standard approach
 if [ "$skip_standard_test" -eq 0 ]; then
-  if [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
-    # For versions 8.1 and higher, add allow_older_versions option
-    ALLOW_OLDER="allow_older_versions: true"
-  else
-    ALLOW_OLDER=""
-  fi
+  # Versions 7.17.0, 8.0.0, 8.1.0 crash on glibc 2.35+ due to missing rseq syscall support
+  # Fixed in 7.17.2+ and 8.2.0+
+  # See: https://github.com/elastic/beats/issues/30576
+  # See: https://github.com/elastic/beats/pull/30620
+  if [[ "$version" =~ ^(7\.17|8\.0|8\.1)$ ]]; then
+    echo ">>> Using special configuration for Filebeat $version (glibc 2.35+ compatibility fix)..."
 
-  cat > "${FB_DIR}/filebeat.yml" <<YML
+    cat > "${FB_DIR}/filebeat.yml" <<YML
 filebeat.inputs:
 - type: log
   enabled: true
@@ -255,7 +255,15 @@ output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
   compression_level: 0
-  ${ALLOW_OLDER}
+  $(if [[ "$version" =~ ^8\.[1-9]$ ]]; then echo "allow_older_versions: true"; fi)
+
+# Fix for glibc 2.35+ rseq syscall issue
+seccomp:
+  default_action: allow
+  syscalls:
+    - action: allow
+      names:
+        - rseq
 
 path.data: /tmp/fb-data-${version}
 setup.ilm.enabled: false
@@ -263,6 +271,54 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 YML
+
+  elif [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
+    # For versions 8.1 and higher (except 8.0, 8.1 which are handled above), add allow_older_versions option
+    cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+
+  else
+    # For versions before 8.1
+    cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+  fi
 
   echo ">>> Starting Filebeat..."
   "${FB_DIR}/filebeat" run -c "${FB_DIR}/filebeat.yml" > /tmp/fb-log-${version}.txt 2>&1 &
@@ -310,6 +366,7 @@ timeout 60 bash /tmp/filebeat-single-test.sh 7.17
 >>> Testing Filebeat version: 7.17
 ✓ Log file has 5 lines
 ✓ Manticore Search available
+>>> Using special configuration for Filebeat 7.17 (glibc 2.35compatibility fix)...
 >>> Starting Filebeat...
 >>> Waiting for Filebeat to publish events...
 ✓ Filebeat 7.17 processed logs
@@ -322,6 +379,7 @@ timeout 60 bash /tmp/filebeat-single-test.sh 8.0
 >>> Testing Filebeat version: 8.0
 ✓ Log file has 5 lines
 ✓ Manticore Search available
+>>> Using special configuration for Filebeat 8.0 (glibc 2.35compatibility fix)...
 >>> Starting Filebeat...
 >>> Waiting for Filebeat to publish events...
 ✓ Filebeat 8.0 processed logs
@@ -334,6 +392,7 @@ timeout 60 bash /tmp/filebeat-single-test.sh 8.1
 >>> Testing Filebeat version: 8.1
 ✓ Log file has 5 lines
 ✓ Manticore Search available
+>>> Using special configuration for Filebeat 8.1 (glibc 2.35compatibility fix)...
 >>> Starting Filebeat...
 >>> Waiting for Filebeat to publish events...
 ✓ Filebeat 8.1 processed logs

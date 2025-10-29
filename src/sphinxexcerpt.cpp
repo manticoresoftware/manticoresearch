@@ -14,7 +14,7 @@
 #include "sphinxsearch.h"
 #include "sphinxquery/sphinxquery.h"
 #include "fileutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "coroutine.h"
 #include "memio.h"
 

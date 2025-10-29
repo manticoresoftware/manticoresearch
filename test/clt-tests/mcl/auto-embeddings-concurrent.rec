@@ -1,0 +1,136 @@
+––– comment –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create table with auto-embeddings
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_concurrent (
+    title TEXT,
+    status INTEGER,
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='title'
+)"; echo $?
+––– output –––
+0
+––– comment –––
+Insert initial data
+––– input –––
+for i in {1..20}; do
+    mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title, status) VALUES ($i, 'Document $i', 0)" 2>/dev/null
+done
+echo "Initial insert completed"
+––– output –––
+Initial insert completed
+––– comment –––
+Optimize table to move data to disk chunks
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_concurrent; OPTIMIZE TABLE test_concurrent OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– comment –––
+Concurrent INSERT/DELETE/REPLACE: 20 initial - 5 deleted + 10 new = 25 total
+––– input –––
+for i in {21..30}; do
+    mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title, status) VALUES ($i, 'New doc $i', 1)" 2>/dev/null &
+done
+for i in {1..5}; do
+    mysql -h0 -P9306 -e "DELETE FROM test_concurrent WHERE id = $i" 2>/dev/null &
+done
+for i in {6..10}; do
+    mysql -h0 -P9306 -e "REPLACE INTO test_concurrent (id, title, status) VALUES ($i, 'Replaced doc $i', 2)" 2>/dev/null &
+done
+wait
+mysql -h0 -P9306 -e "SELECT COUNT(*) as total FROM test_concurrent"
+––– output –––
++-------+
+| total |
++-------+
+|    25 |
++-------+
+––– comment –––
+Race condition test: multiple concurrent INSERTs with same id
+––– input –––
+rm -f /tmp/race_test.err
+for i in {1..10}; do
+    (mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title, status) VALUES (999, 'Race $i', $i)" 2>>/tmp/race_test.err) &
+done
+wait; echo $?
+––– output –––
+0
+––– comment –––
+Count total error lines (0-9 errors expected due to race)
+––– input –––
+wc -l /tmp/race_test.err | awk '{print $1 " error lines in file"}'
+––– output –––
+%{NUMBER} error lines in file
+––– comment –––
+Count duplicate id errors specifically
+––– input –––
+grep -c "duplicate id" /tmp/race_test.err
+––– output –––
+%{NUMBER}
+––– comment –––
+Verify only one record inserted despite race (first one wins)
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id = 999"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– comment –––
+Test concurrent REPLACE with auto-embeddings regeneration
+––– input –––
+for i in {11..15}; do
+    mysql -h0 -P9306 -e "REPLACE INTO test_concurrent (id, title, status) VALUES ($i, 'Updated doc $i', 3)" 2>/dev/null &
+done
+wait
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_concurrent; OPTIMIZE TABLE test_concurrent OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– comment –––
+Verify KNN distances after REPLACE (embeddings regenerated from new titles)
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, KNN_DIST() as dist FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') LIMIT 5"
+––– output –––
++------+------------+
+| id   | dist       |
++------+------------+
+|   13 | 0.318306#!/[0-9]{0,3}/!# |
+|   11 | 0.331902#!/[0-9]{0,3}/!# |
+|   12 | 0.333211#!/[0-9]{0,3}/!# |
+|   14 | 0.342856#!/[0-9]{0,3}/!# |
+|   15 | 0.351880#!/[0-9]{0,3}/!# |
++------+------------+
+––– comment –––
+KNN always sorts by distance - ORDER BY id is ignored
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') LIMIT 5"
+––– output –––
++------+
+| id   |
++------+
+|   13 |
+|   11 |
+|   12 |
+|   14 |
+|   15 |
++------+
+––– comment –––
+Verify race condition behavior is consistent across multiple tables
+––– input –––
+for test_num in {1..3}; do
+    rm -f /tmp/test${test_num}.err
+    mysql -h0 -P9306 -e "CREATE TABLE race$test_num (title TEXT)" 2>/dev/null
+    for i in {1..10}; do
+        (stdbuf -oL mysql -h0 -P9306 -e "INSERT INTO race$test_num (id, title) VALUES (888, 'test')" 2>>/tmp/test${test_num}.err) &
+    done
+    wait
+    echo "Test $test_num: $(wc -l /tmp/test${test_num}.err | awk '{print $1}') lines, $(grep -c 'duplicate' /tmp/test${test_num}.err) duplicate errors"
+done
+––– output –––
+Test 1: %{NUMBER} lines, %{NUMBER} duplicate errors
+Test 2: %{NUMBER} lines, %{NUMBER} duplicate errors
+Test 3: %{NUMBER} lines, %{NUMBER} duplicate errors

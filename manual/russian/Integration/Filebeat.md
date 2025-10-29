@@ -1,0 +1,181 @@
+# Интеграция с Filebeat
+
+> ПРИМЕЧАНИЕ: интеграция с Filebeat требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
+
+[Filebeat](https://www.elastic.co/beats/filebeat) — это легкий агент для пересылки и централизованного сбора данных журналов. После установки в виде агента он следит за указанными вами файлами журналов или местоположениями, собирает события из журналов и пересылает их для индексирования, обычно в Elasticsearch или Logstash.
+
+Теперь Manticore поддерживает использование Filebeat в качестве конвейеров обработки. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как и в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.0.
+
+## Конфигурация Filebeat
+
+Конфигурация варьируется в зависимости от используемой версии Filebeat.
+
+### Конфигурация для Filebeat 7.17 - 8.0
+
+
+```
+filebeat.inputs:
+- type: log
+  enabled: true
+    - /var/log/dpkg.log
+  paths:
+	- /var/log/dpkg.log
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+
+### Конфигурация для Filebeat 8.1 - 8.10
+Для версий с 8.1 по 8.10 необходимо добавить опцию `allow_older_versions`:
+Для версий с 8.1 по 8.10 добавьте опцию `allow_older_versions`:
+
+```
+filebeat.inputs:
+- type: log
+  enabled: true
+    - /var/log/dpkg.log
+	- /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  compression_level: 0
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+### Конфигурация для Filebeat 8.11 - 8.19
+Начиная с версии 8.11, сжатие вывода включено по умолчанию, поэтому для совместимости с Manticore необходимо явно указать `compression_level: 0`:
+
+
+```
+filebeat.inputs:
+- type: log
+  enabled: true
+    - /var/log/dpkg.log
+  paths:
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+### Конфигурация для Filebeat 9.0+
+### Конфигурация для Filebeat 9.0 - 9.1
+Filebeat 9.0 вводит важное изменение архитектуры, заменяя тип входных данных `log` на `filestream`. Начиная с версии 9.0, также изменился метод идентификации файлов по умолчанию на fingerprint, для которого файлы должны быть размером не менее 1024 байт ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости Manticore с файлами любого размера необходимо отключить fingerprinting.
+
+Вот необходимая конфигурация для Filebeat 9.0 и всех последующих версий:
+Filebeat 9.0 вводит значительные изменения в архитектуре, заменяя тип ввода log на filestream. Вот необходимая конфигурация:
+
+```
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  enabled: true
+    - /var/log/dpkg.log
+  paths:
+  prospector.scanner.check_interval: 1s
+  close.on_eof: true
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+**Важные замечания для Filebeat 9.0+:**
+- Вход `type: filestream` заменяет бывший `type: log`
+- Настройка `prospector.scanner.fingerprint.enabled: false` **обязательна** для отключения идентификации файлов по отпечатку, что обеспечивает надежную обработку файлов размером менее 1024 байт
+- Поле `id` обязательно для входов filestream и должно быть уникальным
+### Конфигурация для Filebeat 9.2+
+Начиная с Filebeat 9.0, метод идентификации файлов по умолчанию изменился на отпечаток, что может вызывать проблемы с обработкой файлов ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости с Manticore добавьте эту строку для отключения отпечатков:
+
+```
+prospector.scanner.fingerprint.enabled: false
+```
+
+
+
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  paths:
+    - /var/log/dpkg.log
+	- /var/log/dpkg.log
+  prospector.scanner.check_interval: 1s
+  prospector.scanner.fingerprint.enabled: false
+  close.on_state_change.inactive: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+**Примечание:** Параметр `prospector.scanner.fingerprint.enabled: false` позволяет Filebeat обрабатывать файлы любого размера. Если вы работаете с файлами большего размера (>1024 байт), вы можете опустить эту опцию или настроить `prospector.scanner.fingerprint.length` и `prospector.scanner.fingerprint.offset` в соответствии с вашими требованиями.
+
+## Результаты работы Filebeat
+
+После запуска Filebeat с этой конфигурацией данные журналов будут отправлены в Manticore и корректно индексированы. Ниже приведена итоговая схема таблицы, созданной Manticore, и пример вставленного документа:
+```
+mysql> DESCRIBE dpkg_log;
++------------------+--------+--------------------+
+| Field            | Type   | Properties         |
++------------------+--------+--------------------+
+| id               | bigint |                    |
+| @timestamp       | text   | indexed stored     |
+| message          | text   | indexed stored     |
+| log              | json   |                    |
+| input            | json   |                    |
+| ecs              | json   |                    |
+| host             | json   |                    |
+| agent            | json   |                    |
++------------------+--------+--------------------+
+```
+
+```
+mysql> SELECT * FROM dpkg_log LIMIT 1\G
+*************************** 1. row ***************************
+id: 7280000849080753116
+@timestamp: 2023-06-16T09:27:38.792Z
+message: 2023-04-12 02:06:08 status half-installed libhogweed5:amd64 3.5.1+really3.5.1-2
+input: {"type":"filestream"}
+ecs: {"version":"1.6.0"}
+host: {"name":"logstash-db848f65f-lnlf9"}
+agent: {"ephemeral_id":"587c2ebc-e7e2-4e27-b772-19c611115996","id":"2e3d985b-3610-4b8b-aa3b-2e45804edd2c","name":"logstash-db848f65f-lnlf9","type":"filebeat","version":"7.10.0","hostname":"logstash-db848f65f-lnlf9"}
+log: {"offset":80,"file":{"path":"/var/log/dpkg.log"}}
+```
+

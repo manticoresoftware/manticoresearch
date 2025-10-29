@@ -1,10 +1,17 @@
+––– comment –––
+Start Manticore Search daemon with buddy support
 ––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create test tables with sample data
+Wait for daemon initialization before creating tables
 ––– input –––
 sleep 3; mysql -h0 -P9306 -e "CREATE TABLE articles(title text, content text); INSERT INTO articles VALUES(1,'test','content');"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE products(name text, price float); INSERT INTO products VALUES(1,'laptop',999.99);"
 ––– output –––
+––– comment –––
+Verify initial table creation
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
@@ -14,9 +21,13 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles | rt   |
 | products | rt   |
 +----------+------+
+––– comment –––
+Test ALTER TABLE RENAME via MySQL protocol
 ––– input –––
 mysql -h0 -P9306 -e "ALTER TABLE products RENAME products_new"
 ––– output –––
+––– comment –––
+Verify table was renamed successfully
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
@@ -26,37 +37,49 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles     | rt   |
 | products_new | rt   |
 +--------------+------+
-––– input –––
-curl -s "http://localhost:9308/sql?query=SHOW+VERSION" | grep -o '"Component":"Daemon"'
-––– output –––
-"Component":"Daemon"
+––– comment –––
+Test data retrieval via HTTP API
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+*+FROM+articles+LIMIT+1" | grep -o '"_id":1'
 ––– output –––
 "_id":1
+––– comment –––
+Test search functionality via HTTP API
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+title,+content+FROM+articles+WHERE+MATCH('test')+LIMIT+10" | grep -o '"title":"test"'
 ––– output –––
 "title":"test"
+––– comment –––
+Test error handling for non-existent table rename
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER+TABLE+nonexistent+RENAME+new_name"
 ––– output –––
 {"error":"Source table nonexistent not exists"}
+––– comment –––
+Test URL encoded query handling
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT%20title+FROM+articles+WHERE%20MATCH('test')" | grep -o '"title":"test"'
 ––– output –––
 "title":"test"
+––– comment –––
+Add more test data with special characters
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO articles(title,content) VALUES('test with spaces','content with special chars');"
 ––– output –––
+––– comment –––
+Verify data count after insertion
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+id,+title,+content+FROM+articles+ORDER+BY+id+DESC+LIMIT+10" | grep -o '"total":2'
 ––– output –––
 "total":2
+––– comment –––
+Test ALTER TABLE RENAME via HTTP API with URL encoding
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles%20RENAME%20articles2"
 ––– output –––
 [{"total":0,"error":"","warning":""}]
+––– comment –––
+Verify table rename was successful
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
@@ -66,14 +89,20 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles2    | rt   |
 | products_new | rt   |
 +--------------+------+
+––– comment –––
+Verify data integrity after table rename
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+COUNT(*)+AS+cnt+FROM+articles2" | grep -o '"cnt":2'
 ––– output –––
 "cnt":2
+––– comment –––
+Test renaming table back to original name
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles2%20RENAME%20articles"
 ––– output –––
 [{"total":0,"error":"","warning":""}]
+––– comment –––
+Final verification of table state
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––

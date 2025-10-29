@@ -11,6 +11,27 @@
 //
 
 #include "transformation.h"
+#include "std/openhash.h"
+
+using BigramHash_t = OpenHashTable_T<uint64_t, CSphVector<XQNode_t *>, IdentityHash_fn>;
+
+struct BigramPair_t
+{
+	uint64_t m_uHash;
+	XQNode_t * m_pNode;
+};
+
+bool operator < (BigramPair_t const & a, BigramPair_t const & b) noexcept
+{
+	return a.m_uHash < b.m_uHash;
+}
+
+bool operator == (BigramPair_t const & a, BigramPair_t const & b) noexcept
+{
+	return a.m_uHash == b.m_uHash;
+}
+
+using BigramVec_t = CSphFixedVector<BigramPair_t>;
 
 // common keywords
 // (A | "A B"~N) -> A
@@ -50,7 +71,7 @@ struct CommonDupElimination_fn
 		if ( a.m_pCommon->m_iCommonLen!=b.m_pCommon->m_iCommonLen )
 			return a.m_pCommon->m_iCommonLen>b.m_pCommon->m_iCommonLen;
 
-		return a.m_pCommon->m_bHead;
+		return a.m_pCommon->m_bHead && a.m_pCommon->m_bHead!=b.m_pCommon->m_bHead;
 	}
 };
 
@@ -67,20 +88,20 @@ struct XQNodeAtomPos_fn
 uint64_t sphHashPhrase ( const XQNode_t * pNode )
 {
 	assert ( pNode );
-	uint64_t uHash = SPH_FNV64_SEED;
+	uint64_t uHash = 0;
 
 	auto iWords = pNode->dWords().GetLength();
 	if ( !iWords )
 		return uHash;
 
-	uHash = sphFNV64cont ( pNode->dWord(0).m_sWord.cstr(), uHash );
+	uHash = fnHornerHash ( pNode->dWord(0).m_sWord.cstr(), uHash );
 	if ( iWords==1 )
 		return uHash;
 
 	for ( int i=1; i<iWords; ++i )
 	{
-		uHash = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHash );
-		uHash = sphFNV64cont ( pNode->dWord(i).m_sWord.cstr(), uHash );
+		uHash = fnHornerHash ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHash );
+		uHash = fnHornerHash ( pNode->dWord(i).m_sWord.cstr(), uHash );
 	}
 	return uHash;
 }
@@ -107,7 +128,7 @@ bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode_t *> &
 {
 	assert ( pNode );
 	const XQOperator_e eNode = pNode->GetOp();
-	int iWords = pNode->dWords().GetLength();
+	const int iWords = pNode->dWords().GetLength();
 
 	for ( const XQNode_t * pSim : dSimilar )
 	{
@@ -116,7 +137,7 @@ bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode_t *> &
 		if ( const int iSimilarWords = pSim->dWords().GetLength(); eNode == SPH_QUERY_PROXIMITY && eSimilar == SPH_QUERY_PROXIMITY && iWords > iSimilarWords )
 			return false;
 
-		if ( (eNode == SPH_QUERY_PHRASE || eNode == SPH_QUERY_AND) && (eSimilar == SPH_QUERY_PROXIMITY && (iWords > 1 || pNode->dChildren().GetLength())) )
+		if ( (eNode == SPH_QUERY_PHRASE || eNode == SPH_QUERY_AND) && eSimilar == SPH_QUERY_PROXIMITY && (iWords > 1 || !pNode->dChildren().IsEmpty()))
 			return false;
 
 		const bool bSimilar = (eNode == SPH_QUERY_PHRASE && eSimilar == SPH_QUERY_PHRASE)
@@ -131,14 +152,47 @@ bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode_t *> &
 	return true;
 }
 
-int sphBigramAddNode ( XQNode_t * pNode, int64_t uHash, BigramHash_t & hBirgam )
+// the way how to collect bigrams
+// either into preallocated vec, either into hash (openhash).
+// that is - insert values into vec, then sort them
+// or insert values into hash.
+// Vec storage is compact (8bytes hash + 8bytes pointer)
+// openhash of vecs is 8bytes hash + 24 bytes stored vec, + 8 bytes pointer stored in the vec.
+// variant with vec finally works faster, despite the fact it sorts all the collection.
+#define BIGRAM_VEC true
+
+#if BIGRAM_VEC
+void sphBigramVecAddNode ( XQNode_t * pNode, uint64_t uHash, BigramPair_t * & tBigrams )
 {
-	CSphVector<XQNode_t *> * ppNodes = hBirgam ( uHash );
+	if (!tBigrams)
+		return;
+	*tBigrams = {uHash,pNode};
+	++tBigrams;
+}
+#else
+void sphBigramVecAddNode ( XQNode_t * pNode, uint64_t uHash, BigramHash_t & hBirgam )
+{
+	CSphVector<XQNode_t *> * ppNodes = hBirgam.Find ( uHash );
 	if ( !ppNodes )
 	{
 		const CSphVector<XQNode_t *> dNode ( 1 );
 		dNode[0] = pNode;
-		hBirgam.Add ( dNode, uHash );
+		hBirgam.Add ( uHash, dNode );
+		return;
+	}
+
+	ppNodes->Add ( pNode );
+}
+#endif
+
+int sphBigramAddNode ( XQNode_t * pNode, uint64_t uHash, BigramHash_t & hBirgam )
+{
+	CSphVector<XQNode_t *> * ppNodes = hBirgam.Find ( uHash );
+	if ( !ppNodes )
+	{
+		const CSphVector<XQNode_t *> dNode ( 1 );
+		dNode[0] = pNode;
+		hBirgam.Add ( uHash, dNode );
 		return 1;
 	}
 
@@ -146,9 +200,17 @@ int sphBigramAddNode ( XQNode_t * pNode, int64_t uHash, BigramHash_t & hBirgam )
 	return ppNodes->GetLength();
 }
 
-
-void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
+void sphHashSubphrases ( XQNode_t * pNode,
+#if BIGRAM_VEC
+	BigramPair_t *
+#else
+	BigramHash_t
+#endif
+                         &tBigrams, const VecTraits_T<int>& dLengths )
 {
+	if ( dLengths.GetLength()<=1 )
+		return;
+
 	assert ( pNode );
 	// skip whole phrase
 	if ( pNode->dWords().GetLength()<=1 )
@@ -158,22 +220,88 @@ void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 	const int iLen = dWords.GetLength();
 	for ( int i=0; i<iLen; ++i )
 	{
-		uint64_t uSubPhrase = sphFNV64cont ( dWords[i].m_sWord.cstr(), SPH_FNV64_SEED );
-		sphBigramAddNode ( pNode, uSubPhrase, hBirgam );
+		uint64_t uSubPhrase = fnHornerHash ( dWords[i].m_sWord.cstr() );
 
 		// skip whole phrase
 		const int iSubLen = i ? iLen : (iLen-1);
-		for ( int j=i+1; j<iSubLen; ++j )
+		int j = 1;
+		for ( int iBigramLen: dLengths )
 		{
-			uSubPhrase = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uSubPhrase );
-			uSubPhrase = sphFNV64cont ( dWords[j].m_sWord.cstr(), uSubPhrase );
-			sphBigramAddNode ( pNode, uSubPhrase, hBirgam );
+			if ( iBigramLen == 1 )
+			{
+				sphBigramVecAddNode ( pNode, uSubPhrase, tBigrams );
+				continue;
+			}
+			assert ( iBigramLen > 1 );
+			if ( i + iBigramLen > iSubLen )
+				break;
+			for ( ; j<iBigramLen; ++j )
+			{
+				uSubPhrase = fnHornerHash ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uSubPhrase );
+				uSubPhrase = fnHornerHash ( dWords[i+j].m_sWord.cstr(), uSubPhrase );
+			}
+			sphBigramVecAddNode ( pNode, uSubPhrase, tBigrams );
 		}
 	}
 
 	// loop all children
+	for ( XQNode_t * pChild: pNode->dChildren() )
+		sphHashSubphrases ( pChild, tBigrams, dLengths );
+}
+
+DWORD CalcBigramsAmount ( VecTraits_T<int>& dLengths )
+{
+	if ( dLengths.IsEmpty() )
+		return 0;
+
+	CSphVector<std::pair<int,int>> dPairs;
+	std::pair tPair {0, 0};
+	for ( int iLen : dLengths )
+	{
+		if ( !tPair.first )
+			tPair.first = iLen;
+
+		if ( tPair.first == iLen )
+		{
+			++tPair.second;
+			continue;
+		}
+
+		dPairs.Add ( std::exchange (tPair, {iLen,1} ));
+	}
+	if ( tPair.first )
+		dPairs.Add ( tPair );
+
+	// all phrases have same length - no need to add subphrases, bail.
+	if ( dPairs.GetLength()<=1 )
+		return 0;
+
+	DWORD uRes = 0;
+	ARRAY_CONSTFOREACH ( i, dPairs )
+	{
+		const int iShortest = dPairs[i].first;
+		for ( int j=i+1; j<_bound; ++j )
+		{
+			const int iCurrent = dPairs[j].first;
+			const DWORD uBigrams = 1 + iCurrent - iShortest;
+			uRes += uBigrams * dPairs[j].second;
+		}
+	}
+	return uRes;
+}
+
+void CollectLengths ( const XQNode_t * pNode, IntVec_t& dLengths )
+{
+	assert ( pNode );
+
+	// loop all children
 	for ( XQNode_t * pChild : pNode->dChildren() )
-		sphHashSubphrases ( pChild, hBirgam );
+		CollectLengths ( pChild, dLengths );
+
+	if ( pNode->dWords().IsEmpty() )
+		return;
+
+	dLengths.Add ( pNode->dWords().GetLength() );
 }
 } // namespace
 
@@ -197,30 +325,73 @@ bool CSphTransformation::TransformCommonKeywords () const noexcept
 	CSphVector<XQNode_t *> dPendingDel;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
 	{
-		BigramHash_t hBigrams;
-		for ( auto& [_, dPhrases] : hSimGroup.tHash )
+		IntVec_t dCommonLengths;
+		for ( const auto& [_, dPhrases] : hSimGroup.tHash )
+		{
+			// Nodes with the same iFuzzyHash
+			if ( dPhrases.GetLength()<2 )
+				continue;
+
+			for ( const XQNode_t * pNode : dPhrases )
+				CollectLengths ( pNode, dCommonLengths);
+		}
+		dCommonLengths.Sort();
+		DWORD uTotalBigrams = CalcBigramsAmount (dCommonLengths);
+		dCommonLengths.Uniq(false);
+#if BIGRAM_VEC
+		BigramVec_t dBigrams { uTotalBigrams };
+		BigramPair_t * tBigrams = dBigrams.begin();
+#else
+		BigramHash_t tBigrams;
+		tBigrams.Reset ( uTotalBigrams/0.9 );
+#endif
+
+		for ( auto & [_, dPhrases]: hSimGroup.tHash )
 		{
 			// Nodes with the same iFuzzyHash
 			if ( dPhrases.GetLength()<2 )
 				continue;
 
 			for ( XQNode_t * pNode : dPhrases )
-				sphHashSubphrases ( pNode, hBigrams );
+				sphHashSubphrases ( pNode, tBigrams, dCommonLengths );
 
+#if BIGRAM_VEC
+			if ( dBigrams.IsEmpty() )
+				continue;
+			dBigrams.Sort();
 			for ( const XQNode_t * pNode : dPhrases )
 			{
 				uint64_t uPhraseHash = sphHashPhrase ( pNode );
-				if ( const CSphVector<XQNode_t *> * ppCommon = hBigrams ( uPhraseHash ); ppCommon && sphIsNodeStrongest ( pNode, *ppCommon ) )
+				auto iFound = sphBinarySearchFirst ( dBigrams.begin(), 0, dBigrams.GetLength()-1, []( const BigramPair_t & i ){ return i.m_uHash; }, uPhraseHash );
+				if ( iFound<0 )
+					continue;
+				CSphVector<XQNode_t *> dCommon;
+				const auto uHash = dBigrams[iFound].m_uHash;
+				for (;iFound < dBigrams.GetLength() && dBigrams[iFound].m_uHash == uHash;++iFound)
+					dCommon.Add ( dBigrams[iFound].m_pNode );
+				if ( sphIsNodeStrongest ( pNode, dCommon ) )
+				{
+					for ( const auto pCommon: dCommon )
+						dPendingDel.Add ( pCommon );
+				}
+			}
+#else
+			for ( const XQNode_t * pNode : dPhrases )
+			{
+				uint64_t uPhraseHash = sphHashPhrase ( pNode );
+				if ( const CSphVector<XQNode_t *> * ppCommon = tBigrams.Find ( uPhraseHash ); ppCommon && sphIsNodeStrongest ( pNode, *ppCommon ) )
 				{
 					for ( const auto pCommon : *ppCommon )
 						dPendingDel.Add ( pCommon );
 				}
 			}
+#endif
+#undef BIGRAM_VEC
 		}
 	}
 
 	const bool bTransformed = ( dPendingDel.GetLength()>0 );
-	dPendingDel.Sort();
+	dPendingDel.Sort(Lesser ( [] ( XQNode_t * a, XQNode_t * b ) { return a < b; } ));
 	// Delete stronger terms
 	XQNode_t * pLast = nullptr;
 	for ( XQNode_t * pPending : dPendingDel ) // by value, as later that pointer will be compared
@@ -306,26 +477,26 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 
 			// 2nd step find minimum for each phrase group
 			CSphVector<CommonInfo_t> dCommon;
-			for ( auto& [_, dBigrams] : tBigramHead )
+			for ( auto& [_, pBigrams] : tBigramHead )
 			{
 				// only phrases that share same words at head
-				if ( dBigrams.GetLength()<2 )
+				if ( pBigrams->GetLength()<2 )
 					continue;
 
 				CommonInfo_t & tElem = dCommon.Add();
-				tElem.m_pPhrases = &dBigrams;
+				tElem.m_pPhrases = pBigrams;
 				tElem.m_iCommonLen = 2;
 				tElem.m_bHead = true;
 				tElem.m_bHasBetter = false;
 			}
-			for ( auto& [_, dBigrams] : tBigramTail )
+			for ( auto& [_, pBigrams] : tBigramTail )
 			{
 				// only phrases that share same words at tail
-				if ( dBigrams.GetLength()<2 )
+				if ( pBigrams->GetLength()<2 )
 					continue;
 
 				CommonInfo_t & tElem = dCommon.Add();
-				tElem.m_pPhrases = &dBigrams;
+				tElem.m_pPhrases = pBigrams;
 				tElem.m_iCommonLen = 2;
 				tElem.m_bHead = false;
 				tElem.m_bHasBetter = false;
@@ -406,6 +577,7 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 				tElem.m_pPhrases->Sort ( XQNodeAtomPos_fn() );
 				MakeTransformCommonPhrase ( *tElem.m_pPhrases, tElem.m_iCommonLen, tElem.m_bHead );
 				iActiveDeep = hSimGroup.iDeep;
+				break;
 			}
 		}
 
@@ -450,8 +622,8 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 		});
 	}
 
-	auto * pNewOr = new XQNode_t ( XQLimitSpec_t() );
-	pNewOr->SetOp ( SPH_QUERY_OR );
+
+	std::optional<XQNode_t*> pMaybeNewOr;
 
 	for ( XQNode_t * pPhrase : dCommonNodes )
 	{
@@ -462,6 +634,15 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 			SafeDelete ( pPhrase );
 			continue;
 		}
+
+		if (!pMaybeNewOr)
+		{
+			pMaybeNewOr.emplace ( new XQNode_t ( XQLimitSpec_t() ) );
+			(*pMaybeNewOr)->SetOp ( SPH_QUERY_OR );
+		}
+
+		assert ( pMaybeNewOr.has_value() );
+		auto* pNewOr = *pMaybeNewOr;
 
 		// move phrase to new OR
 		pNewOr->AddNewChild ( pPhrase );
@@ -492,22 +673,23 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 			pPhrase->SetOp ( SPH_QUERY_AND );
 	}
 
-	if ( pNewOr->dChildren().GetLength() )
-	{
-		// parent phrase need valid atom position of children
-		pNewOr->m_iAtomPos = pNewOr->dChild(0)->dWord(0).m_iAtomPos;
-
-		auto * pNewPhrase = new XQNode_t ( XQLimitSpec_t() );
-		if ( bHeadIsCommon )
-			pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pCommonPhrase, pNewOr );
-		else
-			pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pNewOr, pCommonPhrase );
-
-		pGrandOr->AddNewChild ( pNewPhrase );
-	} else
+	if ( !pMaybeNewOr )
 	{
 		// common phrases with same words elimination
-		pGrandOr->AddNewChild ( pCommonPhrase );
-		SafeDelete ( pNewOr );
+		AddOrReplaceNode ( pGrandOr, pCommonPhrase );
+		return;
 	}
+
+	auto * pNewOr = *pMaybeNewOr;
+
+	// parent phrase need valid atom position of children
+	pNewOr->m_iAtomPos = pNewOr->dChild(0)->dWord(0).m_iAtomPos;
+
+	auto * pNewPhrase = new XQNode_t ( XQLimitSpec_t() );
+	if ( bHeadIsCommon )
+		pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pCommonPhrase, pNewOr );
+	else
+		pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pNewOr, pCommonPhrase );
+
+	AddOrReplaceNode ( pGrandOr, pNewPhrase );
 }

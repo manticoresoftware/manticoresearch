@@ -356,6 +356,9 @@ static JsonObj_c FindFullTextQueryNode ( const JsonObj_c & tRoot )
 
 static bool HasFulltext ( const XQNode_t * pRoot )
 {
+	if ( !pRoot )
+		return false;
+
 	CSphVector<const XQNode_t *> dNodes;
 	dNodes.Add ( pRoot );
 
@@ -1143,7 +1146,10 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 					return false;
 				}
 
-				dNamed.Add( { .m_sKey = tNamed.Name(), .m_iValue = tNamed.IntVal(), .m_eType = VariantType_e::BIGINT } );
+				auto& dNewNamed = dNamed.Add();
+				dNewNamed.m_sKey = tNamed.Name();
+				dNewNamed.m_iValue = tNamed.IntVal();
+				dNewNamed.m_eType = VariantType_e::BIGINT;
 			}
 
 			eAdd = ::AddOption ( tQuery, sOpt, dNamed, STMT_SELECT, sError );
@@ -1207,6 +1213,23 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 }
 
 
+static bool FillQueryVec ( KnnSearchSettings_t & tKNN, const JsonObj_c & tQueryVec, CSphString & sError )
+{
+	for ( const auto & tArrayItem : tQueryVec )
+		{
+			if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+			{
+				sError = "\"query_vector\" items should be integer of float";
+				return false;
+			}
+
+			tKNN.m_dVec.Add ( tArrayItem.FltVal() );
+		}
+
+	return true;
+}
+
+
 static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
 {
 	if ( !tJson )
@@ -1221,23 +1244,50 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 	auto & tKNN = tQuery.m_tKnnSettings;
 	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError ) )	return false;
 	if ( !tJson.FetchIntItem ( tKNN.m_iK, "k", sError ) )			return false;
+	if ( tKNN.m_iK <= 0 )
+	{
+		sError = "k parameter must be positive";
+		return false;
+	}
 	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
+	if ( tKNN.m_iEf < 0 )
+	{
+		sError = "ef parameter must be non-negative";
+		return false;
+	}
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
-
-	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
-	if ( !tQueryVec )
-		return false;
-
-	for ( const auto & tArrayItem : tQueryVec )
+	if ( tKNN.m_fOversampling < 1.0f )
 	{
-		if ( !tArrayItem.IsInt() && !tArrayItem.IsDbl() )
+		sError = "oversampling parameter must be >= 1.0";
+		return false;
+	}
+
+	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError, true );
+	if ( tQueryVec )
+	{
+		if ( !FillQueryVec ( tKNN, tQueryVec, sError ) )
+			return false;
+	}
+	else
+	{
+		// mayber a "query" is present?
+		JsonObj_c tQuery = tJson.GetItem("query");
+		if ( !tQuery )
+			return false;
+
+		if ( tQuery.IsArray() )
 		{
-			sError = "\"query_vector\" items should be integer of float";
+			if ( !FillQueryVec ( tKNN, tQuery, sError ) )
+				return false;
+		}
+		else if ( tQuery.IsStr() )
+			tKNN.m_sEmbStr = tQuery.StrVal();
+		else
+		{
+			sError = "\"query\" property value should be string or a vector";
 			return false;
 		}
-
-		tKNN.m_dVec.Add ( tArrayItem.FltVal() );
 	}
 
 	return true;
@@ -1340,7 +1390,17 @@ static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString 
 
 		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
 		if ( tMatchQuery )
+		{
+			CSphQuery tStubQuery;
+			CSphString sStubError, sStubWarning;
+			if ( !ParseJsonQueryFilters ( tMatchQuery, tStubQuery, sStubError, sStubWarning ) || tStubQuery.m_dFilters.GetLength() )
+			{
+				sError = "only fulltext is allowed in joined queries; place filters in the main query";
+				return false;
+			}
+			
 			tQuery.m_sJoinQuery = tMatchQuery.AsString();
+		}
 		
 		JsonObj_c tOn = tJoinItem.GetArrayItem ( "on", sError );
 		if ( !tOn )
@@ -2928,7 +2988,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError,
 }
 
 
-bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate )
+bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError )
 {
 	JsonObj_c tJsonRoot ( szResult );
 	if ( !tJsonRoot )
@@ -2937,15 +2997,25 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	// no warnings in json results for now
 	iWarnings = 0;
 
+	CSphString sParseError;
 	if ( tJsonRoot.HasItem("error") )
 	{
+		JsonObj_c tReplyError = tJsonRoot.GetItem ( "error" );
+		if ( tReplyError.IsObj() )
+		{
+			JsonObj_c tReason = tReplyError.GetItem ( "reason" );
+			if ( tReason && tReason.IsStr() )
+				sError = tReason.StrVal();
+		}
+		if ( sError.IsEmpty() )
+			sError = tReplyError.AsString();
+
 		iAffected = 0;
-		return true;
+		return false;
 	}
 
 	// its either update or delete
-	CSphString sError;
-	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sError );
+	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sParseError );
 	if ( tAffected )
 	{
 		iAffected = (int)tAffected.IntVal();
@@ -2953,7 +3023,7 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	}
 
 	// it was probably a query with an "id"
-	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sError );
+	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sParseError );
 	if ( tId )
 	{
 		iAffected = 1;

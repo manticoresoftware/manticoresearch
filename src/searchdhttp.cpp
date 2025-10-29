@@ -899,9 +899,11 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint )
-			: m_sEndpoint ( std::move ( sEndpoint ) )
-			, m_tQuery ( szQuery )
+	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl )
+		: m_sEndpoint ( std::move ( sEndpoint ) )
+		, m_tQuery ( szQuery )
+		, m_sRawQuery ( sRawQuery )
+		, m_sFullUrl ( sFullUrl )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
@@ -917,23 +919,28 @@ public:
 		auto tWr = APIHeader ( tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON ); // API header
 		tOut.SendString ( m_sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
+		tOut.SendString ( m_sRawQuery.cstr() );
+		tOut.SendString ( m_sFullUrl.cstr() );
 	}
 
 private:
 	CSphString			m_sEndpoint;
 	mutable JsonObj_c	m_tQuery;
+	const CSphString & m_sRawQuery;
+	const CSphString & m_sFullUrl;
 };
 
 
 class JsonReplyParser_c : public ReplyParser_i
 {
 public:
-	JsonReplyParser_c ( int & iAffected, int & iWarnings )
+	JsonReplyParser_c ( int & iAffected, int & iWarnings, SearchFailuresLog_c & tFails )
 		: m_iAffected ( iAffected )
 		, m_iWarnings ( iWarnings )
+		, m_tFails  ( tFails )
 	{}
 
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		CSphString sEndpoint = tReq.GetString();
 		EHTTP_ENDPOINT eEndpoint = StrToHttpEndpoint ( sEndpoint );
@@ -945,12 +952,18 @@ public:
 		tReq.GetBytes ( dResult.Begin(), (int)uLength );
 		dResult[uLength] = '\0';
 
-		return sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE );
+		CSphString sError;
+		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		if ( !sError.IsEmpty() )
+			m_tFails.Submit ( tAgent.m_tDesc.m_sIndexes, nullptr, sError.cstr() );
+
+		return bOk;
 	}
 
 protected:
 	int &	m_iAffected;
 	int &	m_iWarnings;
+	SearchFailuresLog_c & m_tFails;
 };
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept
@@ -963,17 +976,17 @@ std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const Sql
 	if ( tStmt.m_bJson )
 	{
 		assert ( !tStmt.m_sEndpoint.IsEmpty() );
-		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint );
+		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl );
 	} else
 	{
 		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt );
 	}
 }
 
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings )
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails )
 {
 	if ( bJson )
-		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings );
+		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings, tFails );
 	else
 		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings );
 }
@@ -1815,15 +1828,28 @@ protected:
 	const ResultSetFormat_e m_eFormat = ResultSetFormat_e::MntSearch;
 };
 
+static void SetQueryOptions ( const OptionsHash_t & hOpts, SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_eStmt==STMT_UPDATE || tStmt.m_eStmt==STMT_DELETE )
+	{
+		const CSphString * pRawQuery = hOpts ( "raw_query" );
+		if ( pRawQuery )
+			tStmt.m_sRawQuery = *pRawQuery;
+		const CSphString * pFullUrl = hOpts  ( "full_url" );
+		if ( pFullUrl )
+			tStmt.m_sFullUrl = *pFullUrl;
+	}
+}
 
-class HttpHandler_JsonUpdate_c : public HttpHandler_c, HttpJsonUpdateTraits_c
+class HttpHandler_JsonUpdate_c : public HttpHandler_c, HttpJsonUpdateTraits_c, HttpOptionTrait_t
 {
 protected:
 	Str_t m_sQuery;
 
 public:
-	explicit HttpHandler_JsonUpdate_c ( Str_t sQuery )
-		: m_sQuery ( sQuery )
+	explicit HttpHandler_JsonUpdate_c ( Str_t sQuery, const OptionsHash_t & tOptions )
+		: HttpOptionTrait_t ( tOptions )
+		, m_sQuery ( sQuery )
 	{}
 
 	bool Process () final
@@ -1833,6 +1859,7 @@ public:
 		tStmt.m_bJson = true;
 		tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
 		tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_UPDATE );
+		tStmt.m_eStmt = STMT_UPDATE;
 
 		DocID_t tDocId = 0;
 		if ( !ParseQuery ( tStmt, tDocId ) )
@@ -1840,6 +1867,8 @@ public:
 			ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400, tStmt.m_sIndex.cstr() );
 			return false;
 		}
+
+		SetQueryOptions ( m_tOptions, tStmt );
 
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
@@ -1868,14 +1897,15 @@ protected:
 class HttpHandler_JsonDelete_c final : public HttpHandler_JsonUpdate_c
 {
 public:
-	explicit HttpHandler_JsonDelete_c ( Str_t sQuery )
-		: HttpHandler_JsonUpdate_c ( sQuery )
+	explicit HttpHandler_JsonDelete_c ( Str_t sQuery, const OptionsHash_t & tOptions )
+		: HttpHandler_JsonUpdate_c ( sQuery, tOptions )
 	{}
 
 protected:
 	bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId ) final
 	{
 		tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
+		tStmt.m_eStmt = STMT_DELETE;
 		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, m_sError );
 	}
 
@@ -2089,6 +2119,8 @@ public:
 				ProcessBegin ( sTxnIdx );
 				iLastTxStartLine = iCurLine;
 			}
+
+			SetQueryOptions ( m_tOptions, tStmt );
 
 			switch ( tStmt.m_eStmt )
 			{
@@ -2309,14 +2341,14 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 		if ( tSource.GetError() )
 			return nullptr;
 		else
-			return std::make_unique<HttpHandler_JsonUpdate_c> ( sQuery ); // json
+			return std::make_unique<HttpHandler_JsonUpdate_c> ( sQuery, tOptions ); // json
 
 	case EHTTP_ENDPOINT::JSON_DELETE:
 		SetQuery ( tSource.ReadAll() );
 		if ( tSource.GetError() )
 			return nullptr;
 		else
-			return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery ); // json
+			return std::make_unique<HttpHandler_JsonDelete_c> ( sQuery, tOptions ); // json
 
 	case EHTTP_ENDPOINT::JSON_BULK:
 		return std::make_unique<HttpHandler_JsonBulk_c> ( tSource, tOptions ); // json
@@ -2394,15 +2426,14 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	return tRes;
 }
 
-void sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphString & sQuery, CSphVector<BYTE> & dResult )
+void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult )
 {
-	OptionsHash_t hOptions;
-	hOptions.Add ( sEndpoint, "endpoint" );
+	http_method eReqType = HTTP_POST;
 
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
-	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, HTTP_GET );
-	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, HTTP_GET );
+	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType );
+	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, eReqType );
 }
 
 static bool IsCompressed ( const OptionsHash_t & hOptions )
@@ -3282,6 +3313,8 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			bool bAction = false;
 			JsonObj_c tResult = JsonNull;
 
+			SetQueryOptions ( m_hOpts, tStmt );
+
 			switch ( tStmt.m_eStmt )
 			{
 			case STMT_INSERT:
@@ -3344,9 +3377,17 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 		} else
 		{
+			bOk = false;
 			for ( int i=0; i<tTnx.m_iCount; i++ )
 			{
-				AddEsError ( -1, tResult.GetStrItem ( "error", m_sError, false ).StrVal(), "mapper_parsing_exception", dDocs[tTnx.m_iFrom+i], tItems );
+				const BulkDoc_t & tErrDoc = dDocs[tTnx.m_iFrom+i];
+				JsonObj_c tErr = tResult.GetItem ( "error" );
+				if ( tErr && tErr.IsStr() )
+					AddEsError ( -1, tErr.StrVal(), "mapper_parsing_exception", tErrDoc, tItems );
+				else if ( tErr && tErr.IsObj() && tErr.HasItem ( "type" ) && tErr.GetItem ( "type" ).IsStr() )
+					AddEsError ( -1, tErr.GetItem ( "type" ).StrVal(), "mapper_parsing_exception", tErrDoc, tItems );
+				else
+					AddEsError ( -1, m_sError.cstr(), "mapper_parsing_exception", tErrDoc, tItems );
 			}
 		}
 

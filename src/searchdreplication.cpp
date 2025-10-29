@@ -613,18 +613,69 @@ DEFINE_RENDER ( RPLRep_t )
 	dDst.m_sChain << "RPL ";
 }
 
+struct KeysTraits_t
+{
+	int m_iOff;
+	int m_iCount;
+	bool m_bShared;
+};
+
+struct ReplicateKeys_t
+{
+	CSphVector<KeysTraits_t> m_dKeys;
+	CSphVector<uint64_t> m_dHashes;
+
+	VecTraits_T<uint64_t> AddKeys ( int iCount, bool bShared )
+	{
+		if ( !iCount )
+			return VecTraits_T<uint64_t>();
+
+		int iOff = m_dHashes.GetLength();
+
+		auto & tItem = m_dKeys.Add();
+		tItem.m_bShared = bShared;
+		tItem.m_iOff = iOff;
+		tItem.m_iCount = iCount;
+
+		m_dHashes.AddN ( iCount );
+		return m_dHashes.Slice ( iOff, iCount );
+	}
+};
+
+static StringBuilder_c & operator << ( StringBuilder_c & tBuilder, const ReplicateKeys_t & tKeys )
+{
+	tBuilder.StartBlock ( "," );
+	for ( const auto & tItem : tKeys.m_dKeys )
+	{
+		const auto & dKeys = tKeys.m_dHashes.Slice ( tItem.m_iOff, tItem.m_iCount );
+		const char * sExclusive = ( tItem.m_bShared ? "" : "(e)" );
+		for ( uint64_t uDocid : dKeys )
+			tBuilder.Appendf ( "0x%lx%s", uDocid, sExclusive );
+	}
+	
+	tBuilder.FinishBlock();
+	return tBuilder;
+}
+
 // repl version
 // replicate serialized data into cluster and call commit monitor along
-static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BYTE>& tQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c&& tMonitor, bool bUpdate, bool bSharedKeys )
+static bool Replicate ( const ReplicateKeys_t & tKeys, const VecTraits_T<BYTE>& dQueries, Wsrep::Writeset_i& tWriteSet, CommitMonitor_c&& tMonitor, bool bUpdate, bool bSharedKeys )
 {
 	TRACE_CONN ( "conn", "Replicate" );
 
 	// just displays 'RPL' flag.
 	auto RPL = PublishTaskInfo ( new RPLRep_t );
 
-	bool bOk = tWriteSet.AppendKeys ( dKeys, bSharedKeys ) && tWriteSet.AppendData ( tQueries );
+	RPL_TNX << "replicating, data: " << dQueries.GetLength() << ", keys: " << tKeys.m_dKeys.GetLength() << " [" << tKeys << "]";
 
-	if ( !bOk )
+	for ( const auto & tItem : tKeys.m_dKeys )
+	{
+		const auto & dKeys = tKeys.m_dHashes.Slice ( tItem.m_iOff, tItem.m_iCount );
+		if ( !tWriteSet.AppendKeys ( dKeys, tItem.m_bShared ) )
+			return false;
+	}
+
+	if ( !tWriteSet.AppendData ( dQueries ) )
 		return false;
 
 	auto dFinalReport = AtScopeExit ( [&tWriteSet] {
@@ -634,13 +685,14 @@ static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BY
 	TRACE_CONN ( "conn", "pProvider->replicate" );
 	if ( !tWriteSet.Replicate() )
 	{
-		RPL_TNX << "replicating " << (int)bOk << ", seq " << tWriteSet.LastSeqno() << ", commands " << dKeys.GetLength();
+		RPL_TNX << "replicating seq " << tWriteSet.LastSeqno() << ", commands " << tKeys.m_dKeys.GetLength();
 		return false;
 	}
 
 	if ( !tWriteSet.PreCommit() )
 		return false;
 
+	bool bOk = false;
 	// in case only commit failed
 	// need to abort running transaction prior to rollback
 	if ( !bUpdate )
@@ -660,9 +712,9 @@ static bool Replicate ( const VecTraits_T<uint64_t>& dKeys, const VecTraits_T<BY
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( const VecTraits_T<uint64_t> & dKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c && tMonitor )
+static bool ReplicateTOI ( const ReplicateKeys_t & tKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c && tMonitor )
 {
-	bool bOk = tWriteSet.ToExecuteStart ( dKeys, tQueries );
+	bool bOk = tWriteSet.ToExecuteStart ( tKeys.m_dHashes, tQueries );
 	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, tWriteSet.LastSeqno() );
 	if ( !bOk )
 		return false;
@@ -988,6 +1040,110 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	return bOk;
 }
 
+static void AddSharedKeys ( const uint64_t uIndex, const VecTraits_T<DocID_t> & dDocids, ReplicateKeys_t & tKeys )
+{
+	assert ( dDocids.GetLength() );
+
+	tKeys.AddKeys ( 1, true )[0] = uIndex;
+
+	const auto & dKeys = tKeys.AddKeys ( dDocids.GetLength(), false );
+	ARRAY_FOREACH ( i, dKeys )
+	{
+		DocID_t iDocid = dDocids[i];
+		dKeys[i] = sphFNV64 ( &iDocid, sizeof ( iDocid ), uIndex );
+	}
+}
+
+static void StoreCommandPqAdd ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+{
+	assert ( tCmd.m_pStored );
+	SaveStoredQuery ( *tCmd.m_pStored, tWriter );
+
+	// store index as shared key
+	tKeys.AddKeys ( 1, true )[0] = uIndex;
+
+	// store index and uid as exclusive key
+	uint64_t uTableQuid = sphFNV64 ( &tCmd.m_pStored->m_iQUID, sizeof(tCmd.m_pStored->m_iQUID), uIndex );
+	tKeys.AddKeys ( 1, false )[0] = uTableQuid;
+}
+
+static void StoreCommandPqDelete ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+{
+	assert ( tCmd.m_dDeleteQueries.GetLength() || !tCmd.m_sDeleteTags.IsEmpty() );
+	SaveDeleteQuery ( tCmd.m_dDeleteQueries, tCmd.m_sDeleteTags.cstr(), tWriter );
+
+	// if delete by only docids - table is the shared key and table with QUID is the exclusive key
+	if ( tCmd.m_sDeleteTags.IsEmpty() && tCmd.m_dDeleteQueries.GetLength() )
+	{
+		AddSharedKeys ( uIndex, tCmd.m_dDeleteQueries, tKeys );
+
+	} else
+	{
+		// otherwise the table is the exclusive key
+		tKeys.AddKeys ( 1, false )[0] = uIndex;
+	}
+}
+
+static void StoreCommandRtTnx ( MemoryWriter_c & tWriter, const RtAccum_t & tAcc, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+{
+	tAcc.SaveRtTrx ( tWriter );
+
+	// table is the shared key and table with ID is the exclusive key
+	AddSharedKeys ( uIndex, tAcc.m_dAccumKlist, tKeys );
+}
+
+static void StoreCommandUpdateApi ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+{
+	assert ( tCmd.m_pUpdateAPI );
+	const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
+
+	SaveAttrUpdate ( *pUpd, tWriter );
+
+	if ( pUpd->m_dDocids.IsEmpty() )
+	{
+		// the table is the exclusive key
+		tKeys.AddKeys ( 1, false )[0] = uIndex;
+
+	} else
+	{
+		// the table is the shared key and table with ID is the exclusive key
+		AddSharedKeys ( uIndex, pUpd->m_dDocids, tKeys );
+	}
+}
+
+static void StoreCommandUpdateCond ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter, const uint64_t uIndex, ReplicateKeys_t & tKeys )
+{
+	assert ( tCmd.m_pUpdateAPI );
+	assert ( tCmd.m_pUpdateCond );
+	const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
+
+	SaveAttrUpdate ( *pUpd, tWriter );
+	SaveUpdate ( *tCmd.m_pUpdateCond, tWriter );
+
+	const CSphQuery * pQuery = tCmd.m_pUpdateCond;
+	const CSphFilterSettings * pFilter = nullptr;
+
+	if ( pQuery && pQuery->m_sQuery.IsEmpty() && pQuery->m_dFilterTree.IsEmpty() && pQuery->m_dFilters.GetLength()==1 )
+		pFilter = pQuery->m_dFilters.Begin();
+
+	if ( pFilter && ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType==SPH_FILTER_VALUES && ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" ) && !pFilter->m_bExclude ) )
+	{
+		// the table is the shared key and table with ID is the exclusive key
+		const auto & dDocids = pFilter->GetValues();
+		AddSharedKeys ( uIndex, dDocids, tKeys );
+
+	} else if ( !pUpd->m_dDocids.IsEmpty() )
+	{
+		// the table is the shared key and table with ID is the exclusive key
+		AddSharedKeys ( uIndex, pUpd->m_dDocids, tKeys );
+	} else
+	{
+		// the table is the exclusive key
+		tKeys.AddKeys ( 1, false )[0] = uIndex;
+	}
+}
+
+
 // single point there all commands passed these might be replicated to cluster
 static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonitor ) EXCLUDES ( g_tClustersLock )
 {
@@ -1031,17 +1187,14 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 	bool bTOI = false;
 
 	// replicator check CRC of data - no need to check that at our side
-	int iKeysCount = tAcc.m_dCmd.GetLength() + tAcc.m_dAccumKlist.GetLength();
 	CSphVector<BYTE> dBufQueries;
-	CSphVector<uint64_t> dBufKeys;
-	dBufKeys.Reserve ( iKeysCount );
+	ReplicateKeys_t tKeys;
 
 	BEGIN_CONN ( "conn", "HandleCmdReplicate.serialize", "commands", tAcc.m_dCmd.GetLength() );
 	for ( auto& pCmd : tAcc.m_dCmd )
 	{
 		const ReplicationCommand_t & tCmd = *pCmd;
-		uint64_t uQueryHash = sphFNV64 ( tCmdCluster.m_sIndex.cstr() );
-		uQueryHash = sphFNV64 ( &tCmd.m_eCommand, sizeof(tCmd.m_eCommand), uQueryHash );
+		uint64_t uIndex = sphFNV64 ( tCmdCluster.m_sIndex.cstr() );
 
 		MemoryWriter_c tWriter ( dBufQueries );
 		SaveCmdHeader ( tCmd, tWriter );
@@ -1053,75 +1206,41 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 		switch ( tCmd.m_eCommand )
 		{
 		case ReplCmd_e::PQUERY_ADD:
-			assert ( tCmd.m_pStored );
-			SaveStoredQuery ( *tCmd.m_pStored, tWriter );
-
-			uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_iQUID, sizeof(tCmd.m_pStored->m_iQUID), uQueryHash );
+			StoreCommandPqAdd ( tCmd, tWriter, uIndex, tKeys );
 			break;
 
 		case ReplCmd_e::PQUERY_DELETE:
-			assert ( tCmd.m_dDeleteQueries.GetLength() || !tCmd.m_sDeleteTags.IsEmpty() );
-			SaveDeleteQuery ( tCmd.m_dDeleteQueries, tCmd.m_sDeleteTags.cstr(), tWriter );
-
-			for ( const auto& dQuery : tCmd.m_dDeleteQueries )
-				uQueryHash = sphFNV64 ( &dQuery, sizeof ( dQuery ), uQueryHash );
-
-			uQueryHash = sphFNV64cont ( tCmd.m_sDeleteTags.cstr(), uQueryHash );
+			StoreCommandPqDelete ( tCmd, tWriter, uIndex, tKeys );
 			break;
 
 		case ReplCmd_e::TRUNCATE:
 			// FIXME!!! add reconfigure option here
+			tKeys.AddKeys ( 1, false )[0] = uIndex;
 			break;
 
 		case ReplCmd_e::CLUSTER_ALTER_ADD:
 		case ReplCmd_e::CLUSTER_ALTER_DROP:
 			bTOI = true;
+			tKeys.AddKeys ( 1, false )[0] = uIndex;
 			break;
 
 		case ReplCmd_e::RT_TRX:
-		{
-			auto iStartPos = dBufQueries.GetLengthBytes();
-			tAcc.SaveRtTrx ( tWriter );
-			uQueryHash = sphFNV64cont( { dBufQueries.begin() + iStartPos, (int64_t)(dBufQueries.GetLengthBytes() - iStartPos) }, uQueryHash);
-		}
-		break;
+			StoreCommandRtTnx ( tWriter, tAcc, uIndex, tKeys );
+			break;
 
 		case ReplCmd_e::UPDATE_API:
-		{
-			assert ( tCmd.m_pUpdateAPI );
-			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
-
-			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
-			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), (int) pUpd->m_dPool.GetLengthBytes(), uQueryHash );
-
-			SaveAttrUpdate ( *pUpd, tWriter );
-		}
-		break;
+			StoreCommandUpdateApi ( tCmd, tWriter, uIndex, tKeys );
+			break;
 
 		case ReplCmd_e::UPDATE_QL:
 		case ReplCmd_e::UPDATE_JSON:
-		{
-			assert ( tCmd.m_pUpdateAPI );
-			assert ( tCmd.m_pUpdateCond );
-			const CSphAttrUpdate * pUpd = tCmd.m_pUpdateAPI;
-
-			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
-			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), (int) pUpd->m_dPool.GetLengthBytes(), uQueryHash );
-
-			SaveAttrUpdate ( *pUpd, tWriter );
-			SaveUpdate ( *tCmd.m_pUpdateCond, tWriter );
-		}
-		break;
+			StoreCommandUpdateCond ( tCmd, tWriter, uIndex, tKeys );
+			break;
 
 		default:
 			return TlsMsg::Err ( "unknown command '%d'", (int)tCmd.m_eCommand );
 		}
 
-		// store query hash as key
-		dBufKeys.Add (uQueryHash);
-
-		if ( tCmd.m_eCommand == ReplCmd_e::RT_TRX )
-			dBufKeys.Append ( tAcc.m_dAccumKlist );
 		// store request length
 		sphUnalignedWrite ( &dBufQueries[iLenPos], dBufQueries.GetLength() - iLenOff );
 	}
@@ -1137,10 +1256,10 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 	bool bReplicated = false;
 	if ( bTOI )
 	{
-		bReplicated = ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ) );
+		bReplicated = ReplicateTOI ( tKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ) );
 	} else
 	{
-		bReplicated = Replicate ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), bUpdate, tAcc.IsReplace () );
+		bReplicated = Replicate ( tKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), bUpdate, tAcc.IsReplace () );
 	}
 	if ( bReplicated )
 		pCluster->OnSeqnoCommited ( tAcc.m_tCmdReplicated, pWriteSet->LastSeqno() );

@@ -1,0 +1,19 @@
+––– input –––
+cosine_similarity() {
+    local file1="$1" file2="$2"
+
+    awk '
+    NR==FNR { a[NR]=$1; suma2+=$1*$1; next }
+    {
+        dot += a[FNR]*$1
+        sumb2 += $1*$1
+    }
+    END {
+        print dot / (sqrt(suma2) * sqrt(sumb2))
+    }' "$file1" "$file2"
+}
+––– output –––
+––– input –––
+export -f cosine_similarity
+––– output –––
+

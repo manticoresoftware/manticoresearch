@@ -24,6 +24,7 @@ class XQParser_t;
 #include "bissphinxquery.h"
 
 static bool g_bOnlyNotAllowed = false;
+static std::optional<bool> g_bBooleanSimplify;
 
 void AllowOnlyNot ( bool bAllowed )
 {
@@ -33,6 +34,22 @@ void AllowOnlyNot ( bool bAllowed )
 bool IsAllowOnlyNot ()
 {
 	return g_bOnlyNotAllowed;
+}
+
+void SetBooleanSimplify ( bool bSimplify )
+{
+	g_bBooleanSimplify = bSimplify;
+}
+
+bool GetBooleanSimplify ( const CSphQuery & tQuery )
+{
+	if ( tQuery.m_bSimplify.has_value() )
+		return tQuery.m_bSimplify.value();
+
+	if ( g_bBooleanSimplify.has_value() )
+		return g_bBooleanSimplify.value();
+
+	return CSphQuery::m_bDefaultSimplify;
 }
 
 namespace {
@@ -49,7 +66,9 @@ int GetZoneIndex ( XQQuery_t * pQuery, const CSphString & sZone )
 
 bool HasMissedField ( const XQLimitSpec_t & tSpec )
 {
-	return (tSpec.m_dFieldMask.TestAll ( false ) && tSpec.m_iFieldMaxPos == 0 && !tSpec.m_bZoneSpan && tSpec.m_dZones.GetLength() == 0);
+	return (tSpec.m_bFieldSpec
+		&& tSpec.m_dFieldMask.TestAll ( false )
+		);
 }
 }
 
@@ -79,8 +98,10 @@ public:
 	XQNode_t *		AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken=0 );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
-	void			SetPhrase ( XQNode_t * pNode, bool bSetExact );
+	void			SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
+	XQNode_t *		AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
+	void			CreateSpPhraseNode ( XQNode_t* pNode );
 
 	void	Cleanup () override;
 
@@ -404,7 +425,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( !m_iPendingType )
 		while (true)
 	{
-		assert ( m_iPendingNulls==0 );
+//		assert ( m_iPendingNulls==0 );
 
 		bool bWasKeyword = m_bWasKeyword;
 		m_bWasKeyword = false;
@@ -639,8 +660,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				if ( bWasKeyword )
 					continue;
-				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
-					continue;
+//				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) ) // crashes with fuzzy on single "$"
+//					continue;
 
 				// right after overshort
 				if ( m_pTokenizer->GetOvershortCount()==1 )
@@ -828,9 +849,9 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 		return pLeft ? pLeft : pRight;
 
 	assert ( pLeft->dWords().GetLength()>0 );
-	assert ( pRight->dWords().GetLength()==1 );
+//	assert ( pRight->dWords().GetLength()==1 );
 
-	pLeft->AddDirtyWord ( pRight->dWord(0) );
+	pRight->WithWords ( [pLeft] ( auto& dWords ) { for ( const auto & dWord : dWords ) pLeft->AddDirtyWord ( dWord ); });
 	pLeft->Rehash();
 	DeleteSpawned ( pRight );
 	return pLeft;
@@ -845,7 +866,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	if ( eOp==SPH_QUERY_NOT )
 	{
-		XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
+		XQNode_t * pNode = SpawnNode ( pLeft ? pLeft->m_dSpec : *m_dStateSpec.Last() );
 		pNode->SetOp ( SPH_QUERY_NOT, pLeft );
 		return pNode;
 	}
@@ -863,12 +884,15 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	{
 		pLeft->AddNewChild ( pRight );
 		pResult = pLeft;
+		if ( HasMissedField ( pResult->m_dSpec ) )
+			pResult->m_dSpec = pRight->m_dSpec;
 	} else
 	{
 		// however-2, beside all however below, [@@relaxed ((@title hello) | (@missed world)) @body other terms]
 		// we should use valid (left) field mask for complex (OR) node
 		// as right node in this case has m_bFieldSpec==true but m_dFieldMask==0
-		const XQLimitSpec_t & tSpec = HasMissedField ( pRight->m_dSpec ) ? pLeft->m_dSpec : pRight->m_dSpec;
+		const bool bHasMissedField = HasMissedField ( pRight->m_dSpec );
+		const XQLimitSpec_t & tSpec = bHasMissedField ? pLeft->m_dSpec : pRight->m_dSpec;
 
 		// however, it's right (!) spec which is chosen for the resulting node,
 		// eg. '@title hello' + 'world @body program'
@@ -881,24 +905,47 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 }
 
 
-void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
+void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp )
 {
 	if ( !pNode )
 		return;
 
-	assert ( !pNode->dWords().IsEmpty() );
+	assert ( eOp==SPH_QUERY_PHRASE || eOp==SPH_QUERY_PROXIMITY || eOp==SPH_QUERY_QUORUM );
+	assert ( !pNode->dWords().IsEmpty() || !pNode->dChildren().IsEmpty() );
+
+	// all terms with OR operator inside the phrase are just OR terms without the phrase
+	if ( pNode->GetOp()==SPH_QUERY_OR && !pNode->dChildren().IsEmpty() )
+	{
+		bool bAllOrTerms = true;
+		pNode->WithChildren ( [&bAllOrTerms] ( const auto & dChildren )
+		{
+			for ( auto & pChild : dChildren )
+			{
+				bAllOrTerms &= ( pChild->GetOp()==SPH_QUERY_AND && pChild->dWords().GetLength() );
+				if ( !bAllOrTerms )
+					break;
+			}
+		} );
+
+		if ( bAllOrTerms )
+			return;
+	}
+
 	if ( bSetExact )
 	{
 		pNode->WithWords ( [] ( auto& dWords ) {
-			dWords.for_each ([] ( XQKeyword_t& dWord ) {
+			dWords.for_each ([] ( XQKeyword_t & dWord ) {
 				if ( !dWord.m_sWord.IsEmpty() )
 					dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );
 			});
 		});
 	}
-	pNode->SetOp ( SPH_QUERY_PHRASE );
+	pNode->SetOp ( eOp );
+	if ( eOp==SPH_QUERY_PROXIMITY && !pNode->dWords().IsEmpty() )
+		m_iAtomPos = pNode->FixupAtomPos();
 
 	PhraseShiftQpos ( pNode );
+	m_pParsed->m_bNeedPhraseTransform |= ( pNode->dChildren().GetLength()>0 );
 }
 
 
@@ -944,6 +991,18 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 	});
 }
 
+XQNode_t * XQParser_t::AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
+{
+	if ( ( pLeft && pLeft->dChildren().GetLength() ) || ( pRight && pRight->dChildren().GetLength() ) )
+		return AddOp ( SPH_QUERY_PHRASE, pLeft, pRight );
+
+	return AddKeyword ( pLeft, pRight );
+}
+
+void XQParser_t::CreateSpPhraseNode ( XQNode_t* pNode )
+{
+	SetPhrase ( pNode, false, SPH_QUERY_PHRASE  );
+}
 
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {

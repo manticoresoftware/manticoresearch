@@ -82,3 +82,7 @@
 /test/clt-tests/*repo.noarch.deb.*
 /src/perfetto/perfetto.cc
 /src/perfetto/perfetto.h
+
+# dist
+/dist/docker
+/.env

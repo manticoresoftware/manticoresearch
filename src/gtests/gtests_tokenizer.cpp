@@ -661,6 +661,11 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ASSERT_STREQ ( dTerms.Last ()->m_sWord.cstr (), "off" );
 }
 
+struct CKeywordHits
+{
+	const char * m_szKeyword;
+	int m_iHits;
+};
 
 class QueryParser : public TokenizerGtest
 {
@@ -701,6 +706,7 @@ protected:
 	DictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
+	static constexpr CKeywordHits dFuzzerPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 }, { 0, 0 } };
 };
 
 void QueryParser::TestMany (const char* szQuery, const char* szReconst)
@@ -748,6 +754,32 @@ TEST_F ( QueryParser, NEAR_with_NOT )
 {
 	XQQuery_t tQuery;
 	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
+	ASSERT_FALSE ( tQuery.m_pRoot );
+}
+
+TEST_F ( QueryParser, long_token )
+{
+	// edge case token: 41 codepoint, 129 bytes.
+	XQQuery_t tQuery;
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery,
+		"00000000\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa"
+		"\xf3\xaa\xb5\xaa\x30\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa\xf6\xaa\xb5"
+		"\xaa\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa\xf6\xaa\xb5\xaa\xf6\xaa\xaa"
+		"\xaa\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa\x30\xf6\xaa\xaa\xaa\xf6\xaa"
+		"\xaa\xaa\xf6\xb5\xaa\xaa\xf6\xaa\xaa\xab\xf6\xaa\xaa\xaa\xf6\xaa"
+		"\xaa\xaa\x30\x30\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa\xf6\xb5\xaa\xaa"
+		"\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa\xf6\xaa\xb5\xaa\xf6\xaa\xaa\xaa"
+		"\xf6\xaa\xaa\xaa\xf6\xaa\xaa\xaa\xf3\xaa\xaa\xaa\x30\xf6\xaa\xaa\xaa"
+		, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
+	ASSERT_TRUE ( tQuery.m_pRoot );
+}
+
+TEST_F ( QueryParser, fuzzer_long_token )
+{
+	XQQuery_t tQuery;
+	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery,
+		"aaa NOTNEAR/1 (-bbb)"
+		, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	ASSERT_FALSE ( tQuery.m_pRoot );
 }
 
@@ -810,17 +842,12 @@ bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) c
 	return true;
 }
 
-struct CKeywordHits
-{
-	const char * m_szKeyword;
-	int m_iHits;
-};
-
 void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed, const CKeywordHits * pKeywordHits ) const
 {
 	CSphIndexSettings tTmpSettings;
 	XQQuery_t tQuery;
-	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+	if (!sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ))
+		return;
 
 	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 
@@ -830,13 +857,42 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 		for ( const CKeywordHits * pHits = pKeywordHits; pHits->m_szKeyword; ++pHits )
 			EXPECT_TRUE ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_szKeyword ) );
 	}
-
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+	
+	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
+	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning ) );
 
 	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 	EXPECT_STREQ ( sReconst.cstr(), szReconst );
 	ASSERT_STREQ ( sReconstTransformed.cstr(), szReconstTransformed );
 }
+
+TEST_F ( QueryParser, query_transforms_different_order )
+{
+	Transform (
+		"( aaa bbb !xxx ) | ( bbb aaa !yyy )",
+		"( ( ( aaa   bbb ) AND NOT xxx ) | ( ( bbb   aaa ) AND NOT yyy ) )",
+		"( ( aaa   bbb ) AND NOT ( xxx   yyy ) )"
+	);
+}
+
+TEST_F ( QueryParser, query_transforms_different_phrases )
+{
+	Transform (
+		"( \"aaa bbb\" !xxx ) | ( \"aaa bbb\" !yyy )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"aaa bbb\" AND NOT yyy ) )",
+		"( \"aaa bbb\" AND NOT ( xxx   yyy ) )"
+	);
+}
+
+TEST_F ( QueryParser, query_transforms_inverted_phrases )
+{
+	Transform (
+		"( \"aaa bbb\" !xxx ) | ( \"bbb aaa\" !yyy )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"bbb aaa\" AND NOT yyy ) )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"bbb aaa\" AND NOT yyy ) )"
+	);
+}
+
 
 TEST_F ( QueryParser, transform_common_not_1 )
 {
@@ -846,6 +902,7 @@ TEST_F ( QueryParser, transform_common_not_1 )
 		"( ( aaa | bbb ) AND NOT ccc )"
 	);
 }
+
 
 TEST_F ( QueryParser, transform_common_not_2 )
 {
@@ -870,7 +927,7 @@ TEST_F ( QueryParser, transform_common_not_4 )
 	Transform (
 		"(aaa !bbb) | (ccc !bbb) | (ccc !eee) | (ddd !eee)",
 		"( ( aaa AND NOT bbb ) | ( ccc AND NOT bbb ) | ( ccc AND NOT eee ) | ( ddd AND NOT eee ) )",
-		"( ( ( aaa | ccc ) AND NOT bbb ) | ( ( ccc | ddd ) AND NOT eee ) )"
+		"( ( aaa AND NOT bbb ) | ( ccc AND NOT ( bbb   eee ) ) | ( ddd AND NOT eee ) )"
 	);
 }
 
@@ -919,12 +976,55 @@ TEST_F ( QueryParser, transform_common_compound_not_1 )
 TEST_F ( QueryParser, transform_common_compound_not_2 )
 {
 	Transform (
+		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
+		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( aaa | bbb ) AND NOT nnn ) )",
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_compound_not_3 )
+{
+	Transform (
 		"(aaa !(ccc nnn)) | (bbb !(nnn ddd)) | (ccc !nnn)",
 		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) | ( ccc AND NOT nnn ) )",
 		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT nnn ) )",
 		dPseudoHits0
 	);
 }
+
+TEST_F ( QueryParser, transform_common_compound_not_4 )
+{
+	Transform (
+		"((aaa bbb) !(nnn ccc)) | ((mmm bbb) !(nnn ddd))",
+		"( ( ( aaa   bbb ) AND NOT ( nnn   ccc ) ) | ( ( mmm   bbb ) AND NOT ( nnn   ddd ) ) )",
+		"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( mmm   bbb ) AND NOT ddd ) | ( ( ( aaa   bbb ) | ( mmm   bbb ) ) AND NOT nnn ) )",
+		//
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_compound_not_5 )
+{
+	Transform (
+		R"a((-"00 000"|"00 000"(0f))|("00"-f0|"00 000"(0)))a",
+		R"a(( ( 0f AND NOT ( "00 000" | "00 000" ) ) | ( 00 AND NOT ( f0 | "00 000" ) ) ))a",
+		R"a(( ( 0f AND NOT "00 000" ) | ( 00 AND NOT ( f0 | "00 000" ) ) ))a",
+		dPseudoHits0
+	);
+}
+
+
+TEST_F ( QueryParser, transform_common_compound_not_6 )
+{
+	Transform (
+		"((0)(@*00 -000000)|(@*-000000((0)(-(00 -000)|(00 -000000)|(00 -000)(*))|(-(00 -000)|(00 -000000)|(00 -000)00((0))))))",
+		"( ( 00 AND NOT 000000 ) | ( ( ( * AND NOT ( ( 00 AND NOT 000 ) | ( 00 AND NOT 000000 ) | ( 00 AND NOT 000 ) ) ) | ( 00 AND NOT ( ( 00 AND NOT 000 ) | ( 00 AND NOT 000000 ) | ( 00 AND NOT 000 ) ) ) ) AND NOT 000000 ) )",
+		"( ( 00 | ( ( * | 00 ) AND NOT ( 00 AND NOT ( 000   000000   000 ) ) ) ) AND NOT 000000 )",
+		dPseudoHits0
+	);
+}
+
 
 // COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
@@ -958,16 +1058,6 @@ TEST_F ( QueryParser, transform_common_subterm_2 )
 }
 
 constexpr CKeywordHits dPseudoHits1[] = { { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } };
-TEST_F ( QueryParser, transform_common_compound_not_3 )
-{
-	Transform (
-		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
-		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-		dPseudoHits1
-	);
-}
-
 TEST_F ( QueryParser, transform_common_subterm_3 )
 {
 	Transform (
@@ -1014,9 +1104,9 @@ TEST_F ( QueryParser, transform_common_keywords_1 )
 TEST_F ( QueryParser, transform_common_keywords_2 )
 {
 	Transform (
-		"bbb | \"aaa bbb ccc\"",
-		"( bbb | \"aaa bbb ccc\" )",
-		"bbb"
+		"bbb | \"aaa bbb ccc ddd eee fff ggg\" | bbb  | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" |\"hhh iii jjj\"| \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\"| bbb |\"aaa bbb ccc ddd eee fff ggg hhh iii jjj\"| \"aaa bbb ccc ddd eee fff ggg\" | bbb",
+		"( bbb | \"aaa bbb ccc ddd eee fff ggg\" | bbb | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | \"hhh iii jjj\" | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | bbb | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | \"aaa bbb ccc ddd eee fff ggg\" | bbb )",
+		"( bbb | bbb | \"hhh iii jjj\" | bbb | bbb )"
 	);
 }
 
@@ -1037,6 +1127,52 @@ TEST_F ( QueryParser, transform_common_keywords_4 )
 		"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )"
 	);
 }
+
+TEST_F ( QueryParser, relaxed_missed_field_with_pos )
+{
+	Transform (
+		"@@relaxed aaa ( bbb @missed[1] ccc )",
+		"( aaa   bbb )",
+		"( aaa   bbb )"
+	);
+}
+
+TEST_F ( QueryParser, different_zones )
+{
+	Transform (
+		"(( ZONE:(h1) ACCEL !aaa)|( ACCEL !bbb))",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+	);
+}
+
+TEST_F ( QueryParser, different_zonespan )
+{
+	Transform (
+		"(( ZONESPAN:(h1) ACCEL !aaa)|( ACCEL !bbb))",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+	);
+}
+
+TEST_F ( QueryParser, memleak_in_transform_phrase )
+{
+	Transform (
+		"\"(aaa|bbb)ccc\"",
+		"( \"( aaa | bbb ) ccc\" )",
+		"( \"aaa ccc\" | \"bbb ccc\" )"
+	);
+}
+
+TEST_F ( QueryParser, lost_tail_tokens_from_brackets )
+{
+	Transform (
+		"\"aaa(bbb ccc ddd eee)\"",
+		"\"aaa bbb ccc ddd eee\"",
+		"\"aaa bbb ccc ddd eee\""
+	);
+}
+
 
 TEST_F ( QueryParser, transform_common_keywords_5 )
 {
@@ -1274,6 +1410,48 @@ TEST_F ( QueryParser, transform_excess_and_not )
 	);
 }
 
+
+TEST_F ( QueryParser, transform_common_andnotfactor_root_1 )
+{
+	Transform (
+		"(((0)""(0)(00 -000))|((0))|(-00\"00\")(0))",
+		"( ( 00 AND NOT 000 ) | ( 00 AND NOT 00 ) )",
+		"( 00 AND NOT ( 000   00 ) )"
+	);
+}
+
+TEST_F ( QueryParser, fuzz_transform_common_andnotfactor_root_1 )
+{
+	Transform (
+		"(((0)-00(00 -000))|((0))|(-00|\"00 00\"\"00\"))",
+		"( ( ( 00 AND NOT 000 ) AND NOT 00 ) | ( 00 AND NOT ( 00 | \"00 00\" ) ) )",
+		"( 00 AND NOT ( ( 000 | 00 )   00 ) )"
+	);
+}
+
+
+TEST_F ( QueryParser, fuzz_non_executed_common_subterm )
+{
+	Transform (
+		"aaa|(bbb(ccc|eee)(ddd|eee))",
+//		"*|((!00(!(00!00|ccc!00)*)(0((!00|ccc!00)*)!00)|00(0(*!00)(00!00))*)|00\"\"*|00#*|00#*|00#*|00 *|00)",
+		"( aaa | ( bbb   ( ccc | eee )   ( ddd | eee ) ) )",
+		"( aaa | ( bbb   ( ccc | eee )   ( ddd | eee ) ) )",
+		dFuzzerPseudoHits
+	);
+}
+
+TEST_F ( QueryParser, fuzz_common_compound_not )
+{
+	Transform (
+		"aaa|(bbb!(ccc ccc))",
+		"( aaa | ( bbb AND NOT ( ccc   ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc   ccc ) ) )",
+		dFuzzerPseudoHits
+	);
+}
+
+
 // COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 {
@@ -1283,6 +1461,79 @@ TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 		"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )"
 	);
 }
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_1 )
+{
+	Transform (
+		"@@relaxed ZONESPAN:aaa bbb | @missed ddd | fff eee",
+		"bbb",
+		"bbb"
+	);
+}
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_2 )
+{
+	Transform (
+		"@@relaxed aaa!bbb | @zzz c",
+		"( aaa AND NOT bbb )",
+		"( aaa AND NOT bbb )"
+	);
+}
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_3 )
+{
+	Transform (
+		"@@relaxed @t r ( ?-?  | y @*xxx  | yyy )",
+		"( xxx | yyy )",
+		"( xxx | yyy )"
+	);
+}
+
+TEST_F ( QueryParser, query_assert_from_fuzzer )
+{
+	CSphIndexSettings tTmpSettings;
+	XQQuery_t tQuery;
+	sphParseExtendedQuery ( tQuery, "aaa << !bbb ccc:x << !ddd | eee", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+}
+
+TEST_F ( QueryParser, query_common_or_not_1 )
+{
+	Transform (
+		"( aaa | ( bbb !( ccc | ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )" );
+}
+
+TEST_F ( QueryParser, query_common_or_not_2 )
+{
+	Transform (
+		"( ( aaa bbb ) ! ( ccc | ddd ) ) | ( ( eee ( fff ( aaa ! ccc ) ) ) ! ( ddd | ggg ) )"
+		,"( ( ( aaa   bbb ) AND NOT ( ccc | ddd ) ) | ( ( eee   ( fff   ( aaa AND NOT ccc ) ) ) AND NOT ( ddd | ggg ) ) )"
+		,"( ( ( ( aaa   bbb ) AND NOT ddd ) | ( ( eee   fff   aaa ) AND NOT ( ddd | ggg ) ) ) AND NOT ccc )"
+	);
+}
+
+
+TEST_F ( QueryParser, query_common_or_not_3 )
+{
+	Transform (
+		"((bod !bbb) |(a !bbb)llo !bab)|(aaa( hell ( bod !bbb) !bab) !bbq)"
+		, "( ( ( ( bod AND NOT bbb )   llo ) AND NOT bab ) | ( ( aaa   ( ( hell   ( bod AND NOT bbb ) ) AND NOT bab ) ) AND NOT bbq ) )"
+		, "( ( ( ( bod   llo ) AND NOT bbb ) | ( ( aaa   hell   bod ) AND NOT ( bbb | bbq ) ) ) AND NOT bab )"
+	);
+}
+
+
+TEST_F ( QueryParser, multi_query_common_compoundnot )
+{
+	Transform (
+		"aaa | ( ddag ! ( bbb ccc ccc ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
+		dFuzzerPseudoHits
+	);
+}
+
 
 TEST_F ( QueryParser, test_NOT )
 {

@@ -1,0 +1,16 @@
+––– comment –––
+Start Manticore Search daemon with Buddy support
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Execute debug sleep command via HTTP CLI interface in background
+This creates a long-running query that will be visible in query list
+––– input –––
+curl -s localhost:9308/cli -d 'debug sleep 30' &
+––– output –––
+––– comment –––
+Verify that the debug sleep command appears in active queries list
+Check if 'debug' keyword is present in show queries output
+––– input –––
+curl -s localhost:9308/cli -d 'show queries' | grep -q debug && echo "Success" || echo "Failure"
+––– output –––
+Success

@@ -4,7 +4,6 @@ cmake_minimum_required ( VERSION 3.17 )
 set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "/run")
 set ( CMAKE_INSTALL_RUNSTATEDIR "run")
 
-
 if (NOT installed)
 	# start with short route - set all paths
 	set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
@@ -86,7 +85,7 @@ set ( CPACK_RPM_ICUDATA_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_META_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
 
-set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/;/tmp;/usr/share/man;/var;/var/lib" )
+set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/;/tmp;/usr/share/man;/var;/var/lib;/run" )
 list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/share/man/man1;/var/log" )
 list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/systemd;/usr/lib/systemd/system-generators;/usr/lib/tmpfiles.d" )
 
@@ -96,6 +95,18 @@ list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/systemd;/u
 #	message ( STATUS "set src prefix to /tmp/m due to too long path" )
 #	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp" )
 #endif ()
+
+# SRPM (Source RPM) configuration
+# Note: CPack's RPM generator cannot generate SRPMs with component-based packaging
+# When SRPM generation is requested, we provide instructions for manual SRPM creation
+if (CPACK_RPM_PACKAGE_SOURCES)
+	message ( WARNING "SRPM generation with component-based packaging is not supported by CPack." )
+	message ( STATUS "To build SRPMs, use the separate source configuration:" )
+	message ( STATUS "  cpack -G RPM --config ./CPackSourceConfig.cmake" )
+	message ( STATUS "The CPackSourceConfig.cmake file is generated during cmake configuration." )
+	message ( STATUS "Disabling CPACK_RPM_PACKAGE_SOURCES to allow binary RPM generation." )
+	unset ( CPACK_RPM_PACKAGE_SOURCES )
+endif ()
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_COMMON_USER_FILELIST
@@ -161,7 +172,6 @@ install ( FILES ${dirtools}/manticore-indexer_global DESTINATION ${CMAKE_INSTALL
 # stuff going to /var
 # CMAKE_INSTALL_LOCALSTATEDIR				var 					/var
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT common )
-install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT server )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT searchd )
 
 # stuff that should go to /lib -> actually to /usr/lib
@@ -199,6 +209,10 @@ install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticor
 
 # stuff going to /usr/local/
 install ( DIRECTORY DESTINATION /usr/local/lib/manticore COMPONENT common )
+
+# Install sysctl configuration for Manticore Search
+install ( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT common )
+
 
 if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 	install_icudata ( ${FULL_SHARE_DIR}/icu )

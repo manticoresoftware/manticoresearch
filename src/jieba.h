@@ -33,8 +33,13 @@ inline bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sErro
 	return true;
 }
 
+inline bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString & sError )
+{
+	return true;
+}
+
 inline bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &,
-		const char *, CSphString & )
+	const char *, FilenameBuilder_i *, CSphString & )
 {
 	return true;
 }

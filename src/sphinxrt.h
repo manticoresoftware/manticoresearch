@@ -14,7 +14,7 @@
 #define _sphinxrt_
 
 #include "sphinxutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxint.h"
 #include "killlist.h"
 #include "attribute.h"
@@ -294,7 +294,7 @@ public:
 	DWORD					GetMergeFactor() const;
 	int						GetStride() const;
 
-	const CSphRowitem * 	FindAliveRow ( DocID_t tDocid ) const;
+	bool					IsAlive ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t					GetAliveRowidByDocid ( DocID_t tDocid ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;

@@ -48,6 +48,7 @@
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
+#include "dict/stem/sphinxstem.h"
 
 // services
 #include "taskping.h"
@@ -5601,7 +5602,7 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 		return false;
 	}
 
-	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence ) )
+	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs.m_bForceBigrams ) )
 		pIdx->GetSuggest ( tArgs, tRes );
 
 	return true;
@@ -5876,6 +5877,9 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else if ( sOpt=="sentence" )
 		{
 			tArgs.m_bSentence = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
+		} else if ( sOpt=="force_bigrams" )
+		{
+			tArgs.m_bForceBigrams = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -7248,7 +7252,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			// connect to remote agents and query them
 			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns );
+			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails );
 			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 		}
 	}
@@ -7994,7 +7998,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			// connect to remote agents and query them
 			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns );
+			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors );
 			PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 
 			// FIXME!!! report error & warnings from agents
@@ -10039,7 +10043,8 @@ enum class Alter_e
 	DropColumn,
 	ModifyColumn,
 	RebuildSI,
-	RebuildKNN
+	RebuildKNN,
+	ApiKey
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10093,23 +10098,34 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			continue;
 		}
 
-		CSphString sAddError;
+		CSphString sAlterError;
 
-		if ( eAction==Alter_e::AddColumn || eAction == Alter_e::ModifyColumn )
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAddError, eAction == Alter_e::ModifyColumn );
-		else if ( eAction==Alter_e::DropColumn )
-			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAddError );
-		else if ( eAction==Alter_e::RebuildSI )
+		switch ( eAction )
 		{
-			WIdx_c ( pServed )->AlterSI ( sAddError );
+		case Alter_e::AddColumn:
+		case Alter_e::ModifyColumn:
+			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+			break;
 
-		} else if ( eAction==Alter_e::RebuildKNN )
-		{
-			WIdx_c ( pServed )->AlterKNN ( sAddError );
+		case Alter_e::DropColumn:
+			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
+			break;
+
+		case Alter_e::RebuildSI:
+			WIdx_c(pServed)->AlterSI(sAlterError);
+			break;
+
+		case Alter_e::RebuildKNN:
+			WIdx_c(pServed)->AlterKNN(sAlterError);
+			break;
+
+		case Alter_e::ApiKey:
+			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
 		}
 
-		if ( !sAddError.IsEmpty() )
-			dErrors.Submit ( sName, nullptr, sAddError.cstr() );
+		if ( !sAlterError.IsEmpty() )
+			dErrors.Submit ( sName, nullptr, sAlterError.cstr() );
 	}
 
 	if ( !dErrors.IsEmpty() )
@@ -10445,6 +10461,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	else
 		tOut.Error ( sError.cstr() );
 }
+
 
 // STMT_SHOW_PLAN: SHOW PLAN
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot )
@@ -11238,6 +11255,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
 		return true;
 
+	case STMT_ALTER_EMBEDDINGS_API_KEY:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey );
+		return true;
+
 	case STMT_SHOW_PLAN:
 		HandleMysqlShowPlan ( tOut, m_tLastProfile, false, ::IsDot ( *pStmt ) );
 		return false; // do not profile this call, keep last query profile
@@ -11507,9 +11528,17 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 	// parse request
 	CSphString sEndpoint = tReq.GetString ();
 	CSphString sCommand = tReq.GetString ();
+
+	OptionsHash_t hOptions;
+	hOptions.AddUnique ( "endpoint" ) = sEndpoint;
+	if ( uVer>=0x102 )
+	{
+		hOptions.AddUnique ( "raw_query" ) = tReq.GetString ();
+		hOptions.AddUnique ( "full_url" ) = tReq.GetString ();
+	}
 	
 	CSphVector<BYTE> dResult;
-	sphProcessHttpQueryNoResponce ( sEndpoint, sCommand, dResult );
+	ProcessHttpJsonQuery ( sCommand, hOptions, dResult );
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_JSON );
 	tOut.SendString ( sEndpoint.cstr() );
@@ -13697,6 +13726,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
+	if ( hSearchd ( "boolean_simplify" ) )
+		SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", CSphQuery::m_bDefaultSimplify )!=0 );
+
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
@@ -13705,6 +13737,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );
+	SetSIBlockCacheSize ( hSearchd.GetSize64 ( "secondary_index_block_cache", GetSIBlockCacheSize() ) );
 
 	CSphString sWarning;
 	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
@@ -13724,6 +13757,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
 	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", bTestMode ? -1 : 1 ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", 30 ) );
+
+	int iExpansionPhraseLimit = hSearchd.GetInt ( "expansion_phrase_limit", 1024 );
+	bool bExpansionPhraseWarning = hSearchd.GetBool ( "expansion_phrase_warning", false );
+	SetExpansionPhraseLimit ( iExpansionPhraseLimit, bExpansionPhraseWarning );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

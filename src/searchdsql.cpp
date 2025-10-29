@@ -379,7 +379,7 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
-	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -1393,12 +1393,18 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		if ( tOpt.m_eType!=VariantType_e::BIGINT )
 			return false;
 
+		if ( tOpt.m_iValue < 0 )
+			return false;
+
 		tKNN.m_iEf = (int)tOpt.m_iValue;
 		return true;
 	}
 	else if ( sName=="oversampling" )
 	{
 		if ( tOpt.m_eType!=VariantType_e::FLOAT )
+			return false;
+
+		if ( tOpt.m_fValue < 1.0f )
 			return false;
 
 		tKNN.m_fOversampling = tOpt.m_fValue;
@@ -1417,12 +1423,17 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 }
 
 
-bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts )
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
 {
 	auto & tKNN = m_pQuery->m_tKnnSettings;
 
 	ToString ( tKNN.m_sAttr, tAttr );
 	tKNN.m_iK = tK.GetValueInt();
+	if ( tKNN.m_iK <= 0 )
+	{
+		yyerror ( this, "k parameter must be positive" );
+		return false;
+	}
 	if ( pOpts )
 		for ( auto & i : *pOpts )
 			if ( !ParseKNNOption ( i, tKNN ) )
@@ -1433,12 +1444,21 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 				return false;
 			}
 
-	if ( tValues.m_iValues>=0 )
+	if ( bAutoEmb )
 	{
-		const auto & dValues = GetMvaVec ( tValues.m_iValues );
-		tKNN.m_dVec.Reserve ( dValues.GetLength() );
-		for ( const auto & i : dValues )
-			tKNN.m_dVec.Add( i.m_fValue );
+		CSphString sEmb;
+		ToString ( sEmb, tValues ).Unquote();
+		tKNN.m_sEmbStr = sEmb;
+	}
+	else
+	{
+		if ( tValues.m_iValues>=0 )
+		{
+			const auto & dValues = GetMvaVec ( tValues.m_iValues );
+			tKNN.m_dVec.Reserve ( dValues.GetLength() );
+			for ( const auto & i : dValues )
+				tKNN.m_dVec.Add( i.m_fValue );
+		}
 	}
 	
 	return true;

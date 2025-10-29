@@ -14,6 +14,7 @@
 
 #include "sphinxquery.h"
 #include "xqdebug.h"
+#include "std/openhash.h"
 
 CSphTransformation::CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 	: m_pKeywords ( pKeywords )
@@ -53,44 +54,45 @@ bool CSphTransformation::CollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker )
 	return ( m_hSimilar.GetLength()>0 );
 }
 
-
-void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept
+void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept
 {
 	assert ( pNode || dNodes.GetLength() );
 
 	if ( !m_pKeywords )
 		return;
 
-	CSphVector<XQNode_t*> dChildren ( dNodes.GetLength() + 1 );
-	dChildren[dNodes.GetLength()] = pNode;
+	CSphVector<XQNode_t*> dAllNodes ( dNodes.GetLength() + 1 );
 	ARRAY_FOREACH ( i, dNodes )
-	{
-		dChildren[i] = dNodes[i];
-		dChildren[i]->m_iUser = 0;
-	}
+		dAllNodes[i] = dNodes[i];
+	dAllNodes[dNodes.GetLength()] = pNode;
 
 	// collect unknown keywords from all children
 	CSphVector<CSphKeywordInfo> dKeywords;
-	SmallStringHash_T<int> hCosts;
-	ARRAY_FOREACH ( i, dChildren ) // don't use 'ranged for' here, as dChildren modified during the loop
+	ARRAY_FOREACH ( i, dAllNodes ) // don't use 'ranged for' here, as dChildren modified during the loop
 	{
-		const XQNode_t * pChild = dChildren[i];
-		for ( XQNode_t* pGrandChild : pChild->dChildren() )
+		XQNode_t * pNode = dAllNodes[i];
+
+		// always rehash nodes with children; only leaf nodes are persistent
+		if ( !pNode->dChildren().IsEmpty() )
+			pNode->m_iUser = -1;
+
+		for ( XQNode_t* pChild : pNode->dChildren() )
 		{
-			dChildren.Add ( pGrandChild );
-			dChildren.Last()->m_iUser = 0;
-			assert ( dChildren.Last()->m_pParent==pChild );
+			dAllNodes.Add ( pChild );
+			assert ( dAllNodes.Last()->m_pParent==pNode );
 		}
-		for ( const auto& dWord : pChild->dWords() )
+		// this node was already hashed
+		if ( pNode->m_iUser != -1 )
+			continue;
+
+		for ( const auto& dWord : pNode->dWords() )
 		{
-			if ( dWord.m_bRegex )
-				continue;
 			const CSphString & sWord = dWord.m_sWord;
-			int * pCost = hCosts ( sWord );
+			int * pCost = m_hCosts.Find ( &sWord );
 			if ( pCost )
 				continue;
 
-			Verify ( hCosts.Add ( 0, sWord ) );
+			Verify ( m_hCosts.Add ( &sWord, 0 ) );
 			dKeywords.Add();
 			dKeywords.Last().m_sTokenized = sWord;
 			dKeywords.Last().m_iDocs = 0;
@@ -98,22 +100,31 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	}
 
 	// get keywords info from index dictionary
-	if ( dKeywords.GetLength() )
+	if ( !dKeywords.IsEmpty() )
 	{
 		m_pKeywords->FillKeywords ( dKeywords );
-		for_each ( dKeywords, [&hCosts] (const auto& tKeyword) { hCosts[tKeyword.m_sTokenized] = tKeyword.m_iDocs; } );
+		for_each ( dKeywords, [this] (const auto& tKeyword) { *m_hCosts.Find ( &tKeyword.m_sTokenized) = tKeyword.m_iDocs; } );
 	}
 
 	// propagate cost bottom-up (from children to parents)
-	for ( int i=dChildren.GetLength()-1; i>=0; --i )
+	for ( int i=dAllNodes.GetLength()-1; i>=0; --i )
 	{
-		XQNode_t * pChild = dChildren[i];
-		int iCost = 0;
-		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { if (!dWord.m_bRegex) iCost += hCosts[dWord.m_sWord]; } );
-		pChild->m_iUser += iCost;
-		if ( pChild->m_pParent )
-			pChild->m_pParent->m_iUser += pChild->m_iUser;
+		XQNode_t * pNode = dAllNodes[i];
+		if ( pNode->m_iUser == -1 ) // virgin node, apply the cost
+		{
+			int iCost = 0;
+			for_each ( pNode->dWords(), [&iCost,this] ( const auto & dWord ) { iCost += *m_hCosts.Find ( &dWord.m_sWord ); } );
+			pNode->m_iUser = iCost;
+		}
+
+		if ( pNode->m_pParent )
+		   pNode->m_pParent->m_iUser += pNode->m_iUser + ( pNode->m_pParent->m_iUser==-1 ? 1 : 0);
 	}
+}
+
+void CSphTransformation::ResetCostsHash () noexcept
+{
+	m_hCosts.Clear();
 }
 
 void CSphTransformation::DumpSimilar () const noexcept
@@ -126,7 +137,7 @@ void CSphTransformation::DumpSimilar () const noexcept
 			printf ( "\t%p %d\n", (void*)hKey2, hSimGroup.iDeep );
 			for ( const XQNode_t * pLeaf : dleaves )
 			{
-				const uint64_t uParentHash = pLeaf->GetHash();
+				const uint64_t uParentHash = pLeaf->GetFuzzyHash();
 				printf ( "\t\t%p, leaf %p\n", (void*)uParentHash, pLeaf );
 			}
 		}
@@ -135,112 +146,238 @@ void CSphTransformation::DumpSimilar () const noexcept
 #endif
 }
 
+#if XQDEBUG
+#define DUMP(NameID) do {StringBuilder_c foo; foo << "\n" << m_uTotalSuccess << " After transformation " << (int)NameID+1 << ", " << NameOfTransformation(NameID); Dump ( bDump ? *m_ppRoot : nullptr, foo.cstr() ); } while (false)
+#else
+#define DUMP(NameID)
+#endif
+
+#define TRANSFORM(Group,Subgroup,fhChecker,fnTransformer,NameID) if ( CollectInfo <Group, Subgroup> ( *m_ppRoot, &fhChecker ) ) \
+{ \
+	const bool bDump = fnTransformer (); \
+	Tick (NameID, bDump); \
+	if ( bDump ) { bRecollect = true; } \
+	DUMP ( NameID );\
+}
+
+void CSphTransformation::Tick ( eTransformations eOp, bool bResult) noexcept
+{
+#if XQDEBUG_STAT
+	const auto uTimestamp = sphMicroTimer();
+	const auto uTime = uTimestamp - std::exchange (m_tmStartTime, uTimestamp);
+	auto& tStats = m_dTransStats[size_t ( eOp )];
+	if ( bResult )
+	{
+		++tStats.m_uSuccess;
+		tStats.m_uTimeSuccess += uTime;
+		++m_uTotalSuccess;
+	} else
+	{
+		++tStats.m_uFailed;
+		tStats.m_uTimeFailed += uTime;
+		++m_uTotalFailed;
+	}
+#endif
+}
+
 void CSphTransformation::Transform ()
 {
 	// (A | "A B"~N) -> A
 	// ("A B" | "A B C") -> "A B"
 	// ("A B"~N | "A B C"~N) -> ("A B"~N)
-	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonKeywords ) )
+	if ( CollectInfo<ParentNode, NullNode> ( *m_ppRoot, &CheckCommonKeywords ) )
 	{
 		const bool bDump = TransformCommonKeywords ();
-		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON KEYWORDS'" );
+		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation of 'COMMON KEYWORDS'" );
 	}
 
 	// ("X A B" | "Y A B") -> (("X|Y") "A B")
 	// ("A B X" | "A B Y") -> (("X|Y") "A B")
 	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonPhrase ) )
 	{
+//		DumpSimilar();
 		const bool bDump = TransformCommonPhrase ();
-		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON PHRASES'" );
+		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation of 'COMMON PHRASES'" );
 	}
 
 	bool bRecollect = false;
+	m_tmStartTime = sphMicroTimer();
 	do
 	{
 		bRecollect = false;
 
-		// ((A !N) | (B !N)) -> ((A|B) !N)
-		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonNot ) )
-		{
-			const bool bDump = TransformCommonNot ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON NOT'" );
-		}
-
-		// ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]
-		if ( CollectInfo <Grand3Node, CurrentNode> ( *m_ppRoot, &CheckCommonCompoundNot ) )
-		{
-			const bool bDump = TransformCommonCompoundNot ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON COMPOUND NOT'" );
-		}
-
-		// ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
-		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonSubTerm ) )
-		{
-			// DumpSimilar();
-			const bool bDump = TransformCommonSubTerm ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON SUBTERM'" );
-		}
-
-		// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
-		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonAndNotFactor ) )
-		{
-			bool bDump = TransformCommonAndNotFactor ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON ANDNOT FACTOR'" );
-		}
-
-		// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
-		if ( CollectInfo <Grand3Node, CurrentNode> ( *m_ppRoot, &CheckCommonOrNot ) )
-		{
-			const bool bDump = TransformCommonOrNot ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON OR NOT'" );
-		}
-
 		// AND(OR) node with only 1 child
-		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckHungOperand ) )
-		{
-			const bool bDump = TransformHungOperand ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'HUNG OPERAND'" );
-		}
+		TRANSFORM ( NullNode, NullNode, CheckHungOperand, TransformHungOperand, eTransformations::eHung );
 
 		// ((A | B) | C) -> ( A | B | C )
 		// ((A B) C) -> ( A B C )
-		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckExcessBrackets ) )
-		{
-			const bool bDump = TransformExcessBrackets ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'EXCESS BRACKETS'" );
-		}
+		TRANSFORM ( NullNode, NullNode, CheckExcessBrackets, TransformExcessBrackets, eTransformations::eExcessBrackets );
+
+		// (foo -- bar) -> (foo bar)
+		TRANSFORM ( NullNode, NullNode, CheckAndNotNotOperand, TransformAndNotNotOperand, eTransformations::eAndNotNot );
 
 		// ((A !N1) !N2) -> (A !(N1 | N2))
-		if ( CollectInfo <ParentNode, CurrentNode> ( *m_ppRoot, &CheckExcessAndNot ) )
-		{
-			const bool bDump = TransformExcessAndNot ();
-			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'EXCESS AND NOT'" );
-		}
+		TRANSFORM ( ParentNode, CurrentNode, CheckExcessAndNot, TransformExcessAndNot, eTransformations::eExcessAndNot );
+
+		// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
+		TRANSFORM ( GrandNode, CurrentNode, CheckCommonAndNotFactor, TransformCommonAndNotFactor, eTransformations::eCommonAndNotFactor );
+
+		// ((A !N) | (B !N)) -> ((A|B) !N)
+		TRANSFORM ( Grand2Node, CurrentNode, CheckCommonNot, TransformCommonNot, eTransformations::eCommonNot );
+
+		// ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
+		TRANSFORM ( Grand2Node, CurrentNode, CheckCommonSubTerm, TransformCommonSubTerm, eTransformations::eCommonSubterm );
+
+		// ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]
+		TRANSFORM ( Grand3Node, CurrentNode, CheckCommonCompoundNot, TransformCommonCompoundNot, eTransformations::eCommonCompoundNot);
+
+		// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
+		TRANSFORM ( Grand3Node, CurrentNode, CheckCommonOrNot, TransformCommonOrNot, eTransformations::eCommonOrNot );
+
+		++m_uTurns;
 	} while ( bRecollect );
 
 	( *m_ppRoot )->Check ( true );
 }
 
+#undef DUMP
+#undef TRANSFORM
+
+bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
+{
+	OpenHashSet_T<uintptr_t, IdentityHash_fn> hDupes {32};
+	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( (uintptr_t) pX->m_pParent ); } );
+}
+
+bool HasSameGrand ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
+{
+	OpenHashSet_T<uintptr_t, IdentityHash_fn> hDupes {32};
+	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( (uintptr_t) pX->m_pParent->m_pParent ); } );
+}
+
+bool CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode ) noexcept
+{
+	XQNode_t * pParent = pOldNode->m_pParent;
+	if ( !pParent )
+		return false;
+
+	assert ( pParent->dChildren().Contains ( pOldNode ) );
+	for ( XQNode_t *& pChild: pParent->dChildren() )
+	{
+		if ( pChild != pOldNode )
+			continue;
+
+		pChild = pNewNode;
+		pNewNode->m_pParent = pParent;
+		pParent->Rehash();
+		break;
+	}
+	return true;
+}
+
+void CSphTransformation::AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChild ) noexcept
+{
+	if ( pParent->dChildren().IsEmpty() && pParent->m_pParent )
+	{
+		ReplaceNode ( pParent, pChild );
+		pParent->ResetChildren();
+		SafeDelete ( pParent );
+		return;
+	}
+	pParent->AddNewChild ( pChild );
+}
+
+// remove nodes without children up the tree
+bool SubtreeRemoveEmpty ( XQNode_t * pNode )
+{
+	if ( !pNode->IsEmpty() )
+		return false;
+
+	// climb up
+	XQNode_t * pParent = pNode->m_pParent;
+	while ( pParent && pParent->dChildren().GetLength()<=1 && pParent->dWords().IsEmpty() )
+		pNode = std::exchange ( pParent, pParent->m_pParent );
+
+	if ( pParent )
+		pParent->RemoveChild ( pNode );
+
+	// free subtree
+	SafeDelete ( pNode );
+	return true;
+}
+
+// eliminate composite ( AND / OR ) nodes with only one child
+void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
+{
+	assert ( pNode );
+	if ( !pNode->dWords().IsEmpty() || pNode->dChildren().GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
+		return;
+
+	XQNode_t * pChild = pNode->dChildren()[0];
+	pChild->m_pParent = nullptr;
+	pNode->WithChildren ( [] ( auto & dChildren ) { dChildren.Resize ( 0 ); } );
+
+	// climb up
+	XQNode_t * pParent = pNode->m_pParent;
+	while ( pParent && pParent->dChildren().GetLength()==1 && pParent->dWords().IsEmpty() &&
+		( pParent->GetOp()==SPH_QUERY_OR || pParent->GetOp()==SPH_QUERY_AND ) )
+	{
+		pNode = std::exchange (pParent, pParent->m_pParent);
+	}
+
+	if ( pParent )
+	{
+		for ( auto& dChild : pParent->dChildren() )
+		{
+			if ( dChild!=pNode )
+				continue;
+
+			dChild = pChild;
+			pChild->m_pParent = pParent;
+			pParent->Rehash();
+			break;
+		}
+	} else
+	{
+		*ppRoot = pChild;
+	}
+
+	// free subtree
+	SafeDelete ( pNode );
+}
+
+void CleanupSubtree ( XQNode_t * pNode, XQNode_t ** ppRoot )
+{
+	if ( SubtreeRemoveEmpty ( pNode ) )
+		return;
+
+	CompositeFixup ( pNode, ppRoot );
+}
+
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {
-#if XQDEBUG
+#if XQDEBUG_STAT
 	int64_t tmDelta = sphMicroTimer();
 #endif
 
 	CSphTransformation qInfo ( ppRoot, pKeywords );
 	qInfo.Transform ();
 
-#if XQDEBUG
+#if XQDEBUG_STAT
 	tmDelta = sphMicroTimer() - tmDelta;
-	if ( tmDelta>10 )
-		printf ( "optimized boolean in %d.%03d msec\n", (int)(tmDelta/1000), (int)(tmDelta%1000) );
+	if ( tmDelta<11 )
+		return;
+	StringBuilder_c tFormat;
+	tFormat.Sprintf ( "optimized boolean in %.3t, %d loop(s), %d success, %d failed", tmDelta, qInfo.m_uTurns, qInfo.m_uTotalSuccess, qInfo.m_uTotalFailed );
+	printf ( "%s\n", tFormat.cstr() );
+	tFormat.Clear ();
+	for (int i=0; i<std::size(qInfo.m_dTransStats); ++i)
+	{
+		const auto& tStats = qInfo.m_dTransStats[i];
+		if ( 0==(tStats.m_uSuccess+tStats.m_uFailed )) continue;
+		tFormat.Sprintf ( "%d/%d\t%.3Fs/%.3Fs\t%s", tStats.m_uSuccess, tStats.m_uFailed, tStats.m_uTimeSuccess/1000, tStats.m_uTimeFailed/1000, NameOfTransformation (static_cast<eTransformations> (i)));
+		printf ( "%s\n", tFormat.cstr() );
+		tFormat.Clear ();
+	}
 #endif
 }

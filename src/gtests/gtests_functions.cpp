@@ -20,6 +20,7 @@
 #include "histogram.h"
 #include "conversion.h"
 #include "digest_sha1.h"
+#include "std/openhash.h"
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
@@ -2240,4 +2241,28 @@ TEST ( functions, mutate_via_ref )
 	ASSERT_EQ ( ( *refData )[3], 42 );
 	ASSERT_EQ ( refData->GetRefcount (), 1 );
 
+}
+
+TEST ( functions, openhash_iterations )
+{
+	OpenHashTable_T<uint64_t, int, IdentityHash_fn> hHash;
+	hHash.Add ( 1, 10 );
+	hHash.Add ( 2, 20 );
+	hHash.Add ( 3, 30 );
+	auto I = hHash.begin();
+	ASSERT_EQ(I->first,1);
+	ASSERT_TRUE (I->second!=nullptr);
+	ASSERT_EQ(*I->second,10);
+	++I;
+	ASSERT_EQ(I->first,2);
+	ASSERT_TRUE (I->second!=nullptr);
+	ASSERT_EQ(*I->second,20);
+	++I;
+	ASSERT_EQ(I->first,3);
+	ASSERT_TRUE (I->second!=nullptr);
+	ASSERT_EQ(*I->second,30);
+	++I;
+	ASSERT_EQ(I->first,0);
+	ASSERT_TRUE (I->second==nullptr);
+	ASSERT_EQ(I, hHash.end());
 }

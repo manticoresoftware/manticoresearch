@@ -807,7 +807,15 @@ void			SetExtNodeStackSize ( int iDelta, int iExtra );
 // other positive: necessary free size of stack
 int				ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError );
 int				ConsiderStackAbsolute ( const struct XQNode_t* pRoot );
-void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization = true, const ISphKeywordsStat * pKeywords = nullptr);
+
+struct TransformExtendedQueryArgs_t
+{
+	bool m_bHasBooleanOptimization = CSphQuery::m_bDefaultSimplify;
+	bool m_bNeedPhraseTransform = false;
+	const ISphKeywordsStat * m_pKeywords = nullptr;
+};
+
+bool			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs, CSphString & sWarning );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );
@@ -1030,6 +1038,7 @@ struct SuggestArgs_t
 	bool			m_bResultStats		{ true };
 	bool			m_bNonCharAllowed	{ false };
 	bool			m_bSentence			{ false };
+	bool			m_bForceBigrams		{ false };	// force bigrams even for words >= 6 characters
 };
 
 struct SuggestResultSet_t
@@ -1068,7 +1077,7 @@ struct SuggestResult_t : public SuggestResultSet_t
 		assert ( !m_pSegments );
 	}
 
-	bool SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence );
+	bool SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence, bool bForceBigrams );
 
 	void Flattern ( int iLimit );
 };

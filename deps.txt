@@ -1,9 +1,9 @@
 backup 1.9.6+25070510-5247d066
-buddy 3.32.0+25070311-52cd2f76-dev
-mcl 8.0.0+25070113-1f686815-dev
+buddy 3.36.0+25102120-cdfb9546-dev
+mcl 8.1.0+25100220-e1522a23-dev
 executor 1.3.6+25102902-defbddd7-dev
-tzdata 1.0.1 240904 3ba592a
-load 1.18.2+25050118-8537968a-dev
+tzdata 1.0.1 250714 7eebffa
+load 1.19.0+25063014-1ff59652
 ---
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.

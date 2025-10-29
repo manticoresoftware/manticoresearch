@@ -11,7 +11,7 @@
 //
 
 #include "sphinx.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxquery/xqparser.h"
 #include "sphinxutils.h"
@@ -1364,7 +1364,7 @@ private:
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
-	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
+	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
@@ -8099,7 +8099,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 }
 
 
-std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
+std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
 	if ( !dFilters.GetLength() )
 	{
@@ -8131,7 +8131,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 		return { nullptr, true };
 
 	// secondary index iterators
-	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff );
+	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
 	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), RowID_t(m_iDocinfo) );
@@ -8368,7 +8368,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		tCtx.m_pFilter.reset();
 	else
 	{
-		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, nullptr );
+		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
 			return false;
@@ -9453,25 +9453,21 @@ bool CSphIndex_VLN::PreallocKNN()
 	bool bVrongVer = ( sErrorSTL.rfind ( "Unable to load KNN index:", 0 )==0 );
 	if ( bVrongVer )
 	{
-		sphWarning ( "Rebuilding knn due to error: %s", sErrorSTL.c_str() );
+		sphWarning ( "Rebuilding KNN due to error: %s", sErrorSTL.c_str() );
 		CSphString sRebuildError;
 		if ( !AlterKNN ( sRebuildError ) )
 		{
 			m_pKNN.reset();
-			sErrorSTL.append ( "; rebuild knn error: " );
+			sErrorSTL.append ( "; rebuild KNN error: " );
 			sErrorSTL.append ( sRebuildError.cstr() );
 		}
-		sphInfo ( "rebuilded knn" );
+		sphInfo ( "rebuilded KNN" );
 	}
 
 	if ( !m_pKNN )
-	{
-		m_sLastError = sErrorSTL.c_str();
-		return false;
-	} else
-	{
-		return true;
-	}
+		sphWarning ( "%s, KNN disabled", sErrorSTL.c_str() );
+
+	return true;
 }
 
 
@@ -9775,7 +9771,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		ARRAY_FOREACH ( i, dKeywords )
 		{
 			CSphKeywordInfo &tInfo = dKeywords[i];
-			int iLen = tInfo.m_sTokenized.Length ();
+			int iLen = Min ( MAX_KEYWORD_BYTES, tInfo.m_sTokenized.Length() );
 			memcpy ( sWord, tInfo.m_sTokenized.cstr (), iLen );
 			sWord[iLen] = '\0';
 
@@ -10150,6 +10146,7 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	}
 
 	pNode->ResetWords();
+	assert ( pNode->dChildren().IsEmpty());
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 
@@ -10676,8 +10673,11 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 }
 
 
-void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords )
+bool sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs, CSphString & sWarning )
 {
+	if ( tArgs.m_bNeedPhraseTransform && !TransformPhraseBased ( ppNode, sError, sWarning ) )
+		return false;
+
 	TransformQuorum ( ppNode );
 	( *ppNode )->Check ( true );
 	TransformNear ( ppNode );
@@ -10688,8 +10688,10 @@ void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 	( *ppNode )->Check ( true );
 
 	// boolean optimization
-	if ( bHasBooleanOptimization )
-		sphOptimizeBoolean ( ppNode, pKeywords );
+	if ( tArgs.m_bHasBooleanOptimization )
+		sphOptimizeBoolean ( ppNode, tArgs.m_pKeywords );
+
+	return true;
 }
 
 
@@ -10917,16 +10919,13 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( pQueryParser->IsFullscan ( tQuery ) )
 	{
 		if ( tArgs.m_iThreads>1 )
-		{
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
 				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-		} else
-		{
-			return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
-		}
+
+		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
 	}
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
@@ -10958,16 +10957,13 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( pQueryParser->IsFullscan ( tParsed ) )
 	{
 		if ( tArgs.m_iThreads>1 )
-		{
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
 				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-		} else
-		{
-			return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
-		}
+
+		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
 	}
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
@@ -10975,7 +10971,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tQuery.m_bSimplify, this );
+	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
+		return false;
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
@@ -11002,16 +11000,13 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		return false;
 
 	if ( tArgs.m_iThreads>1 )
-	{
 		return SplitQuery (
 			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
 			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-	} else
-	{
-		return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
-	}
+
+	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
 }
 
 
@@ -11072,7 +11067,12 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tCurQuery.m_bSimplify, this );
+			TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tCurQuery ), dXQ[i].m_bNeedPhraseTransform, this };
+			if ( !sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs, tMeta.m_sWarning ) )
+			{
+				tMeta.m_iMultiplier = -1;
+				continue;
+			}
 
 			int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tCurQuery.m_eExpandKeywords, m_tSettings, bWordDict );
 			if ( iExpandKeywords!=KWE_DISABLED )
@@ -11384,7 +11384,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, pRanker.get() );
+	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
 	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 	if ( tSpawned.second )
 		return false;
@@ -11793,7 +11793,13 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false ); // fixme! m.b. explain boolean-simplified?
+	// fixme! m.b. explain boolean-simplified?
+	TransformExtendedQueryArgs_t tTranformArgs { false, tParsed.m_bNeedPhraseTransform };
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, tParsed.m_sParseError, tTranformArgs, tParsed.m_sParseWarning ) )
+	{
+		TlsMsg::Err ( tParsed.m_sParseError );
+		return EmptyBson ();
+	}
 
 	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );
@@ -11960,6 +11966,11 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 	if ( !PreallocKNN() )
 	{
 		sError = m_sLastError;
+		return false;
+	}
+	if ( !m_pKNN && sError.IsEmpty() )
+	{
+		sError = "failed to rebuild KNN";
 		return false;
 	}
 	return true;
@@ -12607,7 +12618,7 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 }
 
 
-bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence )
+bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence, bool bForceBigrams )
 {
 	assert ( pTok->IsQueryTok() );
 	TokenizerRefPtr_c pTokenizer = pTok->Clone ( SPH_CLONE );
@@ -12651,7 +12662,8 @@ bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pT
 	if ( bValidWord )
 	{
 		// lets generate bigrams for short words as trigrams for 5char word could all contain the same wrong symbol
-		if ( m_iCodepoints<6 )
+		// or force bigrams if the option is set
+		if ( m_iCodepoints<6 || bForceBigrams )
 			m_iNGramLen = 2;
 
 		sphBuildNGrams ( m_sWord.cstr(), m_iLen, m_iNGramLen, m_dTrigrams );

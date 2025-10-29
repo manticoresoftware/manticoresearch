@@ -15,7 +15,7 @@
 #include "sphinxstd.h"
 #include "sphinxint.h"
 #include "fileutils.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "icu.h"
 #include "jieba.h"
 #include "attribute.h"
@@ -876,12 +876,12 @@ bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex
 		m_eCompression = Compression_e::LZ4HC;
 	else
 	{
-		sError.SetSprintf ( "unknown compression specified in 'docstore_compression': '%s'\n", sCompression.cstr() ); 
+		sError.SetSprintf ( "unknown compression specified in 'docstore_compression': '%s'\n", sCompression.cstr() );
 		return false;
 	}
 
 	if ( hIndex.Exists("docstore_compression_level") && m_eCompression!=Compression_e::LZ4HC )
-		sWarning.SetSprintf ( "docstore_compression_level works only with LZ4HC compression" ); 
+		sWarning.SetSprintf ( "docstore_compression_level works only with LZ4HC compression" );
 
 	return true;
 }
@@ -1577,7 +1577,7 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 	if ( !Contains("type") )
 		Add ( "type", "rt" );
 
-	if ( !Contains("engine_default") && GetDefaultAttrEngine()==AttrEngine_e::COLUMNAR )	
+	if ( !Contains("engine_default") && GetDefaultAttrEngine()==AttrEngine_e::COLUMNAR )
 		Add ( "engine_default", "columnar" );
 
 	bool bDistributed = Get("type")=="distributed";
@@ -1633,7 +1633,7 @@ StrVec_t IndexSettingsContainer_c::GetFiles()
 		StrVec_t dFilesFound = FindFiles ( i.cstr() );
 		for ( const auto & j : dFilesFound )
 			dFiles.Add(j);
-		
+
 		// missed wordforms for file without wildcard should fail create table
 		if ( dFilesFound.IsEmpty() && !HasWildcards ( i.cstr() ) )
 		{
@@ -2252,7 +2252,7 @@ static void AddSISettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr
 
 static bool IsDDLToken ( const CSphString & sTok )
 {
-	static const CSphString dTokens[] = 
+	static const CSphString dTokens[] =
 	{
 		"ADD",
 		"ALTER",
@@ -2271,11 +2271,11 @@ static bool IsDDLToken ( const CSphString & sTok )
 		"ENGINE",
 		"EXISTS",
 		"FAST_FETCH",
-		"FLOAT", 
-		"FROM", 
+		"FLOAT",
+		"FROM",
 		"FUNCTION",
-		"HASH", 
-		"IMPORT", 
+		"HASH",
+		"IMPORT",
 		"INDEXED",
 		"INTEGER",
 		"INT",
@@ -2385,7 +2385,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			dExcludeAttrs.Add(&tAttr);
 	}
 
-	dExcludeAttrs.Uniq();
+	dExcludeAttrs.Uniq(sph::unstable);
 
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);
@@ -2495,7 +2495,7 @@ int ParseKeywordExpansion ( const char * sValue )
 
 const char * GetMutableName ( MutableName_e eName )
 {
-	switch ( eName ) 
+	switch ( eName )
 	{
 		case MutableName_e::EXPAND_KEYWORDS: return "expand_keywords";
 		case MutableName_e::RT_MEM_LIMIT: return "rt_mem_limit";
@@ -2710,7 +2710,7 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		m_iFlushSearch = tFlushSearch.IntVal();
 		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT );
 	}
-	
+
 	if ( !sError.IsEmpty() )
 		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 
@@ -2848,14 +2848,14 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 		return false;
 
 	JsonObj_c tRoot;
-	
+
 	if ( m_dLoaded.BitGet ( (int)MutableName_e::EXPAND_KEYWORDS ) )
 		tRoot.AddStr ( "expand_keywords", GetExpandKwName ( m_iExpandKeywords ) );
 
 	AddInt ( m_dLoaded, MutableName_e::RT_MEM_LIMIT, tRoot, m_iMemLimit );
 	if ( m_dLoaded.BitGet ( (int)MutableName_e::PREOPEN ) )
 		tRoot.AddBool ( "preopen", m_bPreopen );
-	
+
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eAttr ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eBlob ) );
 	AddStr ( m_dLoaded, MutableName_e::ACCESS_DOCLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eDoclist ) );

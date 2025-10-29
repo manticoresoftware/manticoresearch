@@ -16,7 +16,7 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
-#include "sphinxstem.h"
+#include "dict/stem/sphinxstem.h"
 #include "fileutils.h"
 #include "threadutils.h"
 #include "indexfiles.h"
@@ -1058,6 +1058,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "threads",				0, nullptr },
 	{ "jobs_queue_size",		0, nullptr },
 	{ "not_terms_only_allowed",	0, nullptr },
+	{ "boolean_simplify",		0, nullptr },
 	{ "query_log_commands",		0, nullptr },
 	{ "auto_optimize",			0, nullptr },
 	{ "pseudo_sharding",		0, nullptr },
@@ -1088,6 +1089,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "diskchunk_flush_write_timeout",		0, nullptr },
 	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ "kibana_version_string",		0, NULL },
+	{ "expansion_phrase_limit",	0, NULL },
+	{ "secondary_index_block_cache", 0, nullptr },
+	{ "expansion_phrase_warning",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

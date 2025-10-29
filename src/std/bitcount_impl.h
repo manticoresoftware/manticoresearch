@@ -34,7 +34,7 @@ inline int sphBitCount ( DWORD n ) noexcept
 {
 	n -= ( n >> 1 ) & 0x55555555;
 	const auto tmp = n & 0x33333333;
-	n = ( n >> 2 ) & 0x33333333 + tmp;
+	n = ( ( n >> 2 ) & 0x33333333 ) + tmp;
 	n = ( n + ( n >> 4 ) ) & 0x0F0F0F0F;
     n = n * 0x01010101;
     return n >> 24;
@@ -45,7 +45,7 @@ inline int sphBitCount ( uint64_t n ) noexcept
 {
 	n -= ( n >> 1 ) & 0x5555555555555555UL;
 	const auto tmp = n & 0x3333333333333333UL;
-	n = ( n >> 2 ) & 0x3333333333333333UL + tmp;
+	n = ( ( n >> 2 ) & 0x3333333333333333UL ) + tmp;
 	n = ( n + ( n >> 4 ) ) & 0x0F0F0F0F0F0F0F0FUL;
     n = n * 0x0101010101010101UL;
     return n >> 56;

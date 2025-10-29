@@ -1824,8 +1824,16 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 		return nullptr;
 	}
 
+	CSphString sWarning;
 	// FIXME!!! provide segments list instead index
-	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings );
+	TransformExtendedQueryArgs_t tTranformArgs;
+	tTranformArgs.m_bNeedPhraseTransform = tParsed->m_bNeedPhraseTransform;
+	if ( !sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, sError, tTranformArgs, sWarning ) )
+		return nullptr;
+
+	// FIXME!!! pop up to user instead of log it
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "%s", sWarning.cstr() );
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	if ( m_tMutableSettings.m_iExpandKeywords!=KWE_DISABLED )

@@ -358,7 +358,7 @@ void XQParseHelper_c::Warning ( const char * sTemplate, ... )
 
 void XQParseHelper_c::Cleanup()
 {
-	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
+	m_dSpawned.Uniq(sph::unstable); // FIXME! should eliminate this by testing
 
 	for ( auto& pSpawned : m_dSpawned )
 	{
@@ -391,30 +391,41 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
+	constexpr bool bDump = false;
+	if constexpr ( bDump ) Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
+	if constexpr ( bDump ) Dump ( pRoot, "FixupDestForms" );
 	DeleteNodesWOFields ( pRoot );
+	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
+	if constexpr ( bDump ) Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupDegenerates" );
 	FixupMorphOnlyFields ( pRoot, pMorphFields );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupMorphOnlyFields" );
 	FixupNulls ( pRoot );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupNulls" );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
 	{
 		Cleanup ();
 		return nullptr;
 	}
+	if constexpr ( bDump ) Dump ( pRoot, "FixupNots" );
 
 	if ( !CheckQuorumProximity ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;
 	}
+	if constexpr ( bDump ) Dump ( pRoot, "CheckQuorumProximity" );
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
 	{
 		if ( bOnlyNotAllowed  )
 		{
 			pRoot = FixupNot ( pRoot, m_dSpawned );
+			if constexpr ( bDump ) Dump ( pRoot, "FixupNot" );
 		} else if ( !pRoot->m_iOpArg )
 		{
 			Cleanup();
@@ -580,11 +591,13 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		return Error ( "query is non-computable (node consists of NOT operators only)" );
 
 	// NOT within OR or MAYBE? we can't compute that
-	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE || pNode->GetOp()==SPH_QUERY_NEAR )
+	switch ( pNode->GetOp() )
 	{
-		XQOperator_e eOp = pNode->GetOp();
-		const char * sOp = ( eOp==SPH_QUERY_OR ? "OR" : ( eOp==SPH_QUERY_MAYBE ? "MAYBE" : "NEAR" ) );
-		return Error ( "query is non-computable (NOT is not allowed within %s)", sOp );
+	case SPH_QUERY_OR: return Error ("query is non-computable (NOT is not allowed within OR)");
+	case SPH_QUERY_MAYBE: return Error ("query is non-computable (NOT is not allowed within MAYBE)");
+	case SPH_QUERY_NEAR: return Error ("query is non-computable (NOT is not allowed within NEAR)");
+	case SPH_QUERY_NOTNEAR: return Error ("query is non-computable (NOT is not allowed within NOTNEAR)");
+	default: break;
 	}
 
 	// NOT used in before operator
@@ -603,6 +616,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 
 		if ( !pNode->m_pParent )
 		{
+			pNode->ResetChildren (true);
 			pNode->SetOp ( SPH_QUERY_OR, dNots );
 			*ppRoot = TransformOnlyNot ( pNode, m_dSpawned );
 			return true;
@@ -611,6 +625,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		if ( /*pNode->m_pParent && */pNode->m_pParent->GetOp()==SPH_QUERY_AND && pNode->m_pParent->dChildren().GetLength()==2 )
 		{
 			pNode->m_pParent->SetOp ( SPH_QUERY_ANDNOT );
+			pNode->ResetChildren (true);
 			pNode->SetOp ( SPH_QUERY_OR, dNots );
 			return true;
 		}
@@ -631,6 +646,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		pNot->SetOp ( SPH_QUERY_OR, dNots );
 	}
 
+	pNode->ResetChildren();
 	pNode->SetOp ( SPH_QUERY_ANDNOT, pAnd, pNot );
 	return true;
 }
@@ -639,6 +655,8 @@ void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 {
 	if ( !pNode )
 		return;
+
+//	Dump ( pNode, "DeleteNodesWOFields" );
 
 	pNode->WithChildren([this](auto& dChildren) {
 	for ( int i = 0; i < dChildren.GetLength (); ) // no ++i
@@ -712,6 +730,7 @@ void XQParseHelper_c::FixupDestForms ()
 		dForms[0]->dWord(0).m_bFieldStart = bFieldStart;
 		dForms.Last()->dWord(0).m_bFieldEnd = bFieldEnd;
 
+		assert ( pMultiParent->dChildren().IsEmpty() );
 		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );
 		dForms.Resize ( 0 );
 	}
@@ -739,5 +758,10 @@ XQNode_t * XQParseHelper_c::SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept
 void XQParseHelper_c::DeleteSpawned ( XQNode_t * pNode ) noexcept
 {
 	m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+	pNode->WithChildren([this] ( auto & dChildren ) {
+		for ( auto* pChild : dChildren )
+			DeleteSpawned ( pChild );
+	});
+	pNode->ResetChildren();
 	SafeDelete ( pNode );
 }

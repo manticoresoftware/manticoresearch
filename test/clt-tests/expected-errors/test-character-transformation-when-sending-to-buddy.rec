@@ -1,0 +1,66 @@
+––– comment –––
+Configure buddy path with custom executor in manticore.conf
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php' /etc/manticoresearch/manticore.conf
+––– output –––
+––– comment –––
+Enable debug verbose logging to capture request data
+––– input –––
+export SEARCHD_FLAGS="--logdebugv"
+––– output –––
+––– comment –––
+Start Manticore Search daemon with buddy support and debug logging
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create test table with text fields for search testing
+Wait for daemon initialization before creating table
+––– input –––
+sleep 5; mysql -h0 -P9306 -e "CREATE TABLE test (id BIGINT, a TEXT, b TEXT);"
+––– output –––
+––– comment –––
+Insert test data for fulltext search
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test (id, a, b) VALUES (1, 'hello', 'world'), (2, 'hello', 'universe'), (3, 'goodbye', 'world');"
+––– output –––
+––– comment –––
+Test query with unknown options 'key1' and 'key2' - should generate error
+––– input –––
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1, key2 = 2;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– comment –––
+Test same query with different column order - should generate same error
+––– input –––
+mysql -h0 -P9306 -e "select b, a from test where match('hello world') option key1 = 1, key2 = 2;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– comment –––
+Test query with single unknown option 'key1'
+––– input –––
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– comment –––
+Test query with different unknown option 'key2'
+––– comment –––
+––– input –––
+mysql -h0 -P9306 -e "select b, a from test where match('hello world') option key2 = 2"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key2'
+––– comment –––
+Test query with multiple unknown options 'key1', 'key2', 'key3'
+––– input –––
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1, key2 = 2, key3 = 3;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– comment –––
+Verify that all unknown option errors are logged with detailed request data
+Check debug log for 'request data' entries containing error information
+––– input –––
+sleep 0.2; cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
+––– output –––
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key2'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2, key3 = 3","http_method":""}}

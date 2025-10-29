@@ -320,7 +320,7 @@ static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
 	return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
 }
 
-SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
+SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const char * szJoinedParent, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
 	auto& tSess = session::Info();
 
@@ -337,18 +337,19 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_bForceSingleThread = bForceSingleThread;
 	tQS.m_dCreateSchema = GetDefaultSchema ( pIndex );
 	if ( pJoinedIndex )
-		tQS.m_pJoinArgs = std::make_unique<JoinArgs_t> ( pJoinedIndex->GetMatchSchema(), pIndex->GetName(), pJoinedIndex->GetName() );
+		tQS.m_pJoinArgs = std::make_unique<JoinArgs_t> ( pJoinedIndex->GetMatchSchema(), pIndex->GetName(), szJoinedParent ? szJoinedParent : pJoinedIndex->GetName() );
 
 	return tQS;
 }
 
 
-int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, CSphVector<JoinedIndexes_t> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook, const char * szParent ) const
 {
 	int iValidSorters = 0;
 
-	auto tQueueSettings = MakeQueueSettings ( pIndex, dJoinedIndexes[0], m_dNQueries.First ().m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
-	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra, m_pProfile );
+	const CSphIndex * pJoinedIndex = dJoinedIndexes[0].m_dIndexes.GetLength() ? dJoinedIndexes[0].m_dIndexes[0] : nullptr;
+	auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, m_dNQueries.First ().m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
+	sphCreateMultiQueue ( tQueueSettings, m_dNQueries, dSorters, dErrors, tQueueRes, pExtra, m_pProfile, szParent );
 
 	m_dNQueries.First().m_bZSlist = tQueueRes.m_bZonespanlist;
 	dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) {
@@ -362,7 +363,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 	}
 
 	int iBatchSize = m_dNQueries[0].m_iJoinBatchSize==-1 ? GetJoinBatchSize() : m_dNQueries[0].m_iJoinBatchSize;
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, iBatchSize, dErrors[0] ) )
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0].m_dIndexes, tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, iBatchSize, szParent, dJoinedIndexes[0].m_szParent, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -372,7 +373,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 }
 
 
-int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<JoinedIndexes_t> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook, const char * szParent ) const
 {
 	int iValidSorters = 0;
 	tQueueRes.m_bAlowMulti = false;
@@ -380,16 +381,17 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 	for ( int iQuery = 0; iQuery<iQueries; ++iQuery )
 	{
 		CSphQuery & tQuery = m_dNQueries[iQuery];
+		const CSphIndex * pJoinedIndex = dJoinedIndexes[iQuery].m_dIndexes.GetLength() ? dJoinedIndexes[iQuery].m_dIndexes[0] : nullptr;
 
 		// create queue
-		auto tQueueSettings = MakeQueueSettings ( pIndex, dJoinedIndexes[iQuery], tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
-		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile );
+		auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, tQuery.m_iMaxMatches, m_dPSInfo.First().m_bForceSingleThread, pHook );
+		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery], tQueueRes, pExtra, m_pProfile, szParent );
 		if ( !pSorter )
 			continue;
 
 		// possibly create a wrapper (if we have JOIN)
 		int iBatchSize = tQuery.m_iJoinBatchSize==-1 ? GetJoinBatchSize() : tQuery.m_iJoinBatchSize;
-		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, iBatchSize, dErrors[iQuery] );
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery].m_dIndexes, tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, iBatchSize, szParent, dJoinedIndexes[iQuery].m_szParent, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -401,12 +403,12 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 }
 
 
-int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const
+int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, CSphVector<JoinedIndexes_t> & dJoinedIndexes, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook, const char * szParent ) const
 {
 	if ( m_bMultiQueue || m_bFacetQueue )
-		return CreateMultiQueryOrFacetSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook );
+		return CreateMultiQueryOrFacetSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook, szParent );
 
-	return CreateSingleSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook );
+	return CreateSingleSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook, szParent );
 }
 
 static int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
@@ -552,7 +554,41 @@ cServedIndexRefPtr_c SearchHandler_c::CheckIndexSelectable ( const CSphString & 
 }
 
 
-bool SearchHandler_c::PopulateJoinedIndexes ( CSphVector<JoinedServedIndex_t> & dJoinedServed, VecTraits_T<SearchFailuresLog_c> & dFailuresSet ) const
+bool SearchHandler_c::AddJoinedIndex ( const CSphString & sIdx, CSphVector<JoinedServedIndex_t> & dJoinedServed, CSphVector<CSphVector<JoinedServedIndex_t>> & dAllJoinedServed, const CSphString & sParent, VecTraits_T<SearchFailuresLog_c> & dFailuresSet ) const
+{
+	const auto & pServed = m_dAcquired.Get ( sIdx );
+	if ( !pServed )
+	{
+		for ( auto & tFailureSet : dFailuresSet )
+			tFailureSet.SubmitEx ( sIdx, nullptr, "%s", "table not found" );
+
+		return false;
+	}
+
+	if ( !ServedDesc_t::IsSelectable ( pServed ) )
+	{
+		for ( auto & tFailureSet : dFailuresSet )
+			tFailureSet.SubmitEx ( sIdx, nullptr, "%s", "table is not suitable for select" );
+
+		return false;
+	}
+
+	bool bDupe = false;
+	ARRAY_FOREACH ( i, dAllJoinedServed )
+		ARRAY_FOREACH ( j, dAllJoinedServed[i] )
+			if ( dAllJoinedServed[i][j].m_pServed==pServed )
+			{
+				bDupe = true;
+				break;
+			}
+
+	dJoinedServed.Add ( { pServed, sParent, bDupe } );
+
+	return true;
+}
+
+
+bool SearchHandler_c::PopulateJoinedIndexes ( CSphVector<CSphVector<JoinedServedIndex_t>> & dJoinedServed, VecTraits_T<SearchFailuresLog_c> & dFailuresSet ) const
 {
 	dJoinedServed.Resize ( m_dNQueries.GetLength() );
 	ARRAY_FOREACH ( i, m_dNQueries )
@@ -561,41 +597,24 @@ bool SearchHandler_c::PopulateJoinedIndexes ( CSphVector<JoinedServedIndex_t> & 
 		if ( tQuery.m_sJoinIdx.IsEmpty() )
 			continue;
 
-		const auto & pServed = m_dAcquired.Get ( tQuery.m_sJoinIdx );
-		if ( !pServed )
+		// check for distributed right index
+		auto pServedDistIndex = GetDistr ( tQuery.m_sJoinIdx );
+		if ( pServedDistIndex )
 		{
-			for ( auto & dFailureSet : dFailuresSet )
-				dFailureSet.SubmitEx ( tQuery.m_sJoinIdx, nullptr, "%s", "table not found" );
-
-			return false;
+			for ( auto & sIdx : pServedDistIndex->m_dLocal )
+				if ( !AddJoinedIndex ( sIdx, dJoinedServed[i], dJoinedServed, tQuery.m_sJoinIdx, dFailuresSet ) )
+					return false;			
 		}
-
-		if ( !ServedDesc_t::IsSelectable ( pServed ) )
-		{
-			for ( auto & dFailureSet : dFailuresSet )
-				dFailureSet.SubmitEx ( tQuery.m_sJoinIdx, nullptr, "%s", "table is not suitable for select" );
-
-			return false;
-		}
-
-		dJoinedServed[i] = { pServed, -1 };
-	}
-
-	ARRAY_FOREACH ( i, dJoinedServed )
-	{
-		for ( int j = i+1; j < dJoinedServed.GetLength(); j++ )
-			if ( dJoinedServed[j].m_pServed == dJoinedServed[i].m_pServed )
-			{
-				dJoinedServed[j].m_iDupeId = i;
-				break;
-			}
+		else
+			if ( !AddJoinedIndex ( tQuery.m_sJoinIdx, dJoinedServed[i], dJoinedServed, "", dFailuresSet ) )
+				return false;
 	}
 
 	return true;
 }
 
 
-bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
+bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex * pIndex, CSphVector<JoinedIndexes_t> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook )
 {
 	auto iQueries = dSrt.GetLength();
 	#if PARANOID
@@ -604,7 +623,7 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 	#endif
 
 	CSphFixedVector<CSphString> dErrors ( iQueries );
-	int iValidSorters = CreateSorters ( pIndex, dJoinedIndexes, dSrt, dErrors, pExtra, *pQueueRes, pHook );
+	int iValidSorters = CreateSorters ( pIndex, dJoinedIndexes, dSrt, dErrors, pExtra, *pQueueRes, pHook, szParent );
 	if ( iValidSorters<dSrt.GetLength() )
 	{
 		ARRAY_FOREACH ( i, dErrors )
@@ -862,23 +881,35 @@ private:
 };
 
 
-CSphVector<const CSphIndex*> SearchHandler_c::GetRlockedJoinedIndexes ( const CSphVector<JoinedServedIndex_t> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const
+CSphVector<JoinedIndexes_t> SearchHandler_c::GetRlockedJoinedIndexes ( const CSphVector<CSphVector<JoinedServedIndex_t>> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const
 {
-	CSphVector<const CSphIndex*> dJoinedIndexes;
+	CSphVector<JoinedIndexes_t> dJoinedIndexes;
+	int iTotal = 0;
+	for ( auto & i : dJoinedServed )
+		iTotal += i.GetLength();
+
+	dRLockedJoined.reserve(iTotal);
+
 	for ( auto & i : dJoinedServed )
 	{
-		if ( !i.m_pServed )
+		auto & tJoinedVec = dJoinedIndexes.Add();
+		for ( auto & j : i )
 		{
-			dJoinedIndexes.Add(nullptr);
-			continue;
-		}
+			tJoinedVec.m_szParent = j.m_sParent.IsEmpty() ? nullptr : j.m_sParent.cstr();
 
-		if ( i.m_iDupeId!=-1 )
-			dJoinedIndexes.Add ( dJoinedIndexes[i.m_iDupeId] );
-		else
-		{
-			dRLockedJoined.emplace_back ( i.m_pServed );
-			dJoinedIndexes.Add ( dRLockedJoined.back() );
+			if ( !j.m_pServed )
+			{
+				tJoinedVec.m_dIndexes.Add( nullptr );
+				continue;
+			}
+
+			if ( j.m_bDupe )
+				tJoinedVec.m_dIndexes.Add ( RIdx_c(j.m_pServed) );
+			else
+			{
+				dRLockedJoined.emplace_back ( j.m_pServed );
+				tJoinedVec.m_dIndexes.Add ( dRLockedJoined.back() );
+			}
 		}
 	}
 
@@ -1057,7 +1088,7 @@ void SearchHandler_c::RunLocalSearches()
 			if ( !pServed )
 				continue;
 
-			CSphVector<JoinedServedIndex_t> dJoinedServed;
+			CSphVector<CSphVector<JoinedServedIndex_t>> dJoinedServed;
 			if ( !PopulateJoinedIndexes ( dJoinedServed, dNFailuresSet ) )
 				continue;
 
@@ -1073,7 +1104,7 @@ void SearchHandler_c::RunLocalSearches()
 				tCtx.m_tHook.SetQueryType ( m_eQueryType );
 
 				std::vector<RIdx_c> dRLockedJoined;
-				CSphVector<const CSphIndex*> dJoinedIndexes = GetRlockedJoinedIndexes ( dJoinedServed, dRLockedJoined );
+				CSphVector<JoinedIndexes_t> dJoinedIndexes = GetRlockedJoinedIndexes ( dJoinedServed, dRLockedJoined );
 
 				// create sorters
 				SphQueueRes_t tQueueRes;
@@ -1437,8 +1468,26 @@ bool SearchHandler_c::AcquireInvokedIndexes()
 	{
 		StringBuilder_c sFailed (", ");
 		for ( const auto & tQuery : m_dNQueries )
-			if ( !tQuery.m_sJoinIdx.IsEmpty() && !m_dAcquired.AddUniqIndex ( tQuery.m_sJoinIdx ) )
+		{
+			if ( tQuery.m_sJoinIdx.IsEmpty() )
+				continue;
+
+			auto pServedDistIndex = GetDistr ( tQuery.m_sJoinIdx );
+			if ( pServedDistIndex )
+			{
+				if ( pServedDistIndex->m_dAgents.GetLength() )
+				{
+					m_sError << "join not allowed on distributed table containing remote agents '" << tQuery.m_sJoinIdx << "'";
+					return false;
+				}
+
+				for ( const auto & i : pServedDistIndex->m_dLocal )
+					if ( !m_dAcquired.AddUniqIndex(i) )
+						sFailed << i;
+			}
+			else if ( !m_dAcquired.AddUniqIndex ( tQuery.m_sJoinIdx ) )
 				sFailed << tQuery.m_sJoinIdx;
+		}
 
 		if ( !sFailed.IsEmpty() )
 		{

@@ -9,6 +9,7 @@
  
 如果您遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
  
+### ⚠️ Important
  
 由于配置文件已更新，**您可能会在 Linux 升级期间看到一个警告，询问是否保留您的版本或使用来自软件包的新版本**。如果您有自定义（非默认）配置，建议保留您的版本并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。不过，即使您不更改路径，也应能正常工作。
  

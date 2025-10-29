@@ -389,8 +389,6 @@ int CSphUrl::Connect()
 			if ( tmp_errno!=0 || !hp || !hp->ai_addr )
 			{
 				bError = true;
-				if ( hp )
-					freeaddrinfo ( hp );
 			}
 #else
 			struct hostent tmp_hostent, *hp;

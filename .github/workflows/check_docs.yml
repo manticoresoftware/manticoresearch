@@ -101,10 +101,10 @@ jobs:
           docs_errors=$(php "/Deploy/check_docs_validity.php"  "${{ steps.doc-filepathes.outputs.filepathes }}" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
           echo $docs_errors
           echo "errors=$docs_errors" >> $GITHUB_OUTPUT
-      #- name: Check docs translations
-      #  run: |
-      #    set -e
-      #    ./misc/compare_manuals.sh
+      - name: Check docs translations
+        run: |
+          set -e
+          ./misc/compare_manuals.sh
       - name: Upload artifact
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:

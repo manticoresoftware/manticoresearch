@@ -167,7 +167,7 @@ FB_DIR="/usr/share/filebeat/filebeat-${full_version}-linux-x86_64"
 # Clean previous registry data
 rm -rf /tmp/fb-data-${version}/*
 
-skip_filebeat=0
+skip_standard_test=0
 
 
 # For all 9.x versions, use filestream with fingerprint disabled
@@ -216,7 +216,7 @@ YML
         if [ "$has_timestamp" = "1" ] && [ "$has_message" = "1" ]; then
           echo "✓ Structure check for $version: passed"
           echo "✓ Filebeat version $version tested successfully"
-          skip_filebeat=1
+          skip_standard_test=1
         fi
       fi
       break
@@ -224,7 +224,7 @@ YML
     sleep 1
   done
 
-  if [ "$skip_filebeat" -eq 0 ]; then
+  if [ "$skip_standard_test" -eq 0 ]; then
     kill $FB_PID 2>/dev/null || true
     wait $FB_PID 2>/dev/null || true
     mysql -h0 -P9306 -e "TRUNCATE TABLE dpkg_log" 2>/dev/null || true
@@ -234,7 +234,7 @@ YML
 fi
 
 # For all other versions (8.x), use the standard approach
-if [ "$skip_filebeat" -eq 0 ]; then
+if [ "$skip_standard_test" -eq 0 ]; then
   if [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
     # For versions 8.1 and higher, add allow_older_versions option
     ALLOW_OLDER="allow_older_versions: true"

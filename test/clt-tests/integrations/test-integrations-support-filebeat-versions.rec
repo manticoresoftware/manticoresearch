@@ -568,7 +568,7 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.0
 ✓ Filebeat 9.0 processed logs
 ✓ Row count check for 9.0: 5 rows
 ✓ Structure check for 9.0: passed
-✓ Filebeat version 9.0 tested successfully with fingerprint disabled
+✓ Filebeat version 9.0 tested successfully
 ––– input –––
 timeout 60 bash /tmp/filebeat-single-test.sh 9.1
 ––– output –––
@@ -581,19 +581,7 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.1
 ✓ Filebeat 9.1 processed logs
 ✓ Row count check for 9.1: 5 rows
 ✓ Structure check for 9.1: passed
-✓ Filebeat version 9.1 tested successfully with fingerprint disabled
-––– input –––
-timeout 60 bash /tmp/filebeat-single-test.sh 9.2
-––– output –––
->>> Testing Filebeat version: 9.2
-✓ Log file has 5 lines
-✓ Manticore Search available
->>> Starting Filebeat...
->>> Waiting for Filebeat to publish events...
-✓ Filebeat 9.2 processed logs
-✓ Row count check for 9.2: 5 rows
-✓ Structure check for 9.2: passed
-✓ Filebeat version 9.2 tested successfully
+✓ Filebeat version 9.1 tested successfully
 ––– input –––
 timeout 60 bash /tmp/filebeat-single-test.sh 9.2
 ––– output –––

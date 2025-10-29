@@ -126,8 +126,7 @@ jobs:
         continue-on-error: true
         uses: manticoresoftware/publish-unit-test-result-action@v2
         with:
-          check_name: ${{ inputs.results_name }}
+          check_name: "${{ inputs.results_name }}"
           files: build/junit*.xml
           compare_to_earlier_commit: false
           comment_mode: failures
-  

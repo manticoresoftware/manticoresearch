@@ -10,9 +10,11 @@
 
 配置根据您使用的 Filebeat 版本而异。
 
-### Filebeat 7.17 - 8.0 的配置
+### Filebeat 7.17、8.0、8.1 的配置
 
+> **重要**：Filebeat 版本 7.17.0、8.0.0 和 8.1.0 存在一个已知问题，与 glibc 2.35+ 相关（在 Ubuntu 22.04 和更新的发行版中使用）。这些版本可能会出现崩溃，提示“致命的 glibc 错误：rseq 注册失败”。要解决此问题，请添加如下所示的 `seccomp` 配置。
 
+```yaml
 ```
 filebeat.inputs:
 - type: log
@@ -25,6 +27,15 @@ filebeat.inputs:
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
+  allow_older_versions: true  # 适用于 8.1 的要求
+
+# 修复 glibc 2.35+ 兼容性（Ubuntu 22.04+）
+seccomp:
+  default_action: allow
+  syscalls:
+    - action: allow
+      names:
+        - rseq
   compression_level: 0
 
 setup.ilm.enabled: false
@@ -32,6 +43,8 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+**参考文献**： [问题 #30576](https://github.com/elastic/beats/issues/30576)，[PR #30620](https://github.com/elastic/beats/pull/30620)
+
 
 
 ### Filebeat 8.1 - 8.10 的配置

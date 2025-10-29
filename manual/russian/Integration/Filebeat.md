@@ -10,9 +10,11 @@
 
 Конфигурация варьируется в зависимости от используемой версии Filebeat.
 
-### Конфигурация для Filebeat 7.17 - 8.0
+### Конфигурация для Filebeat 7.17, 8.0, 8.1
 
+> **Важно**: В версиях Filebeat 7.17.0, 8.0.0 и 8.1.0 есть известная проблема с glibc 2.35+ (используется в Ubuntu 22.04 и более новых дистрибутивах). Эти версии могут завершиться сбоем с сообщением "Критическая ошибка glibc: регистрация rseq не удалась". Чтобы это исправить, добавьте конфигурацию `seccomp`, как показано ниже.
 
+```yaml
 ```
 filebeat.inputs:
 - type: log
@@ -25,6 +27,15 @@ filebeat.inputs:
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
+  allow_older_versions: true  # Требуется для 8.1
+
+# Исправление для совместимости с glibc 2.35+ (Ubuntu 22.04+)
+seccomp:
+  default_action: allow
+  syscalls:
+    - action: allow
+      names:
+        - rseq
   compression_level: 0
 
 setup.ilm.enabled: false
@@ -32,6 +43,8 @@ setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+**Ссылки**: [Проблема #30576](https://github.com/elastic/beats/issues/30576), [PR #30620](https://github.com/elastic/beats/pull/30620)
+
 
 
 ### Конфигурация для Filebeat 8.1 - 8.10

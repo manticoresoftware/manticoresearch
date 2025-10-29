@@ -55,6 +55,9 @@
 Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.0.1
 Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2
 
+Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.0.1
+Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2
+
 ### Новые возможности и улучшения
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) Добавлена поддержка "query" в JSON-запросах для генерации эмбеддингов.
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.

@@ -55,6 +55,9 @@
 推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1
 推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2
 
+推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1
+推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2
+
 ### 新功能和改进
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) 在 JSON 查询中新增了用于嵌入生成的 “query” 支持。
 如果您遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。

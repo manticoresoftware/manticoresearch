@@ -9,11 +9,13 @@
 
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
 
+### ⚠️ Важно
 
 Поскольку файл конфигурации был обновлен, **во время обновления в Linux вы можете увидеть предупреждение с вопросом, оставить ли вашу версию или использовать новую** из пакета. Если у вас кастомная (не по умолчанию) конфигурация, рекомендуется сохранить вашу версию и обновить путь `pid_file` на `/run/manticore/searchd.pid`. Однако, даже если вы не измените путь, всё должно работать нормально.
 
 ### Новые возможности и улучшения
 * 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) Добавлена поддержка MCL 8.1.0 с кэшем блоков SI.
+* 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) Implemented the [secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache) option, updated the secondary index API, and inlined sort accessors.
 
 ### Исправления ошибок
 * 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [ Issue #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) Исправлена гонка состояния между проверкой и вызовом сработавшего таймера.
@@ -26,6 +28,7 @@
 * 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) Исправлен сбой, который происходил при удалении документа с включёнными эмбеддингами.
 
 ## Версия 13.11.1
+**Релиз**: 13 сентября 2025
 
 ### Исправления ошибок
 * 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [Issue #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) Исправлен сбой при удалении документа с включёнными эмбеддингами.
@@ -51,6 +54,7 @@
 
 Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.0.1
 Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2
+
 ### Новые возможности и улучшения
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) Добавлена поддержка "query" в JSON-запросах для генерации эмбеддингов.
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
@@ -84,9 +88,6 @@ Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1
 Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2  
 
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
-* ⚠️ [PR #3586](https://github.com/manticoresoftware/manticoresearch/pull/3586) Поддержка Debian 10 (Buster) прекращена. Debian 10 достиг конца жизненного цикла 30 июня 2024 года. Пользователям рекомендуется обновиться на Debian 11 (Bullseye) или Debian 12 (Bookworm).
-* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) Обновлено API библиотеки KNN для поддержки пустых значений [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector). Это обновление не изменяет формат данных, но увеличивает версию API Manticore Search / MCL.
-* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Исправлена ошибка с некорректными идентификаторами строк источника и назначения при обучении и построении KNN-индекса. Это обновление не изменяет формат данных, но увеличивает версию API Manticore Search / MCL.
 
 ### New Features and Improvements
 * 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) Поддержка явного '|' (ИЛИ) в операторах PHRASE, PROXIMITY и QUОРUM.
@@ -117,6 +118,7 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 **Released**: July 8th 2025
 
 ### Breaking Changes
+* ⚠️ [PR #3586](https://github.com/manticoresoftware/manticoresearch/pull/3586) Support for Debian 10 (Buster) has been discontinued. Debian 10 reached end of life on June 30, 2024. Users are encouraged to upgrade to Debian 11 (Bullseye) or Debian 12 (Bookworm).
 * ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Обновлено API библиотеки KNN для поддержки пустых значений [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector). Это обновление не меняет формат данных, но увеличивает версию API Manticore Search / MCL.
 * ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Исправлена ошибка с некорректными исходными и целевыми ID строк при обучении и построении KNN индекса. Это обновление не меняет формат данных, но увеличивает версию API Manticore Search / MCL.
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0)  Добавлена поддержка новых функций векторного поиска KNN, таких как квантизация, пересчёт и увеличение выборки. Эта версия меняет формат данных KNN и синтаксис SQL [KNN_DIST()](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search). Новая версия может читать старые данные, но старые версии не смогут читать новый формат.

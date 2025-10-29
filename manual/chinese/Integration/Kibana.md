@@ -14,7 +14,14 @@
    ```
 3. 启动 Kibana，并在浏览器中访问 `http://localhost:5601`。如有必要，将 `localhost` 替换为服务器的 IP 或主机名。
 
-> 注意：Manticore 与 Kibana 配合使用时无需配置身份验证。
+> 注意：Manticore 在与 Kibana 配合使用时无需进行身份验证设置。另请注意，Manticore 必须以[实时模式](../Read_this_first#Real-time-mode-vs-plain-mode)工作，才能与 Kibana 集成。
+
+### Manticore 配置示例
+```searchd {
+    listen = 127.0.0.1:9308:http
+    pid_file = /var/run/manticore/searchd.pid
+    data_dir = /var/lib/manticore
+ }
 
 ## 支持的功能
 ### 发现（Discover）
@@ -31,7 +38,6 @@
 ### 仪表板（Dashboards）
 - 访问 **仪表板**，创建或查看交互式仪表板：
   - 添加可视化、过滤器或控件，实现个性化体验。
-  - 直接在仪表板中与数据交互。
   - 保存仪表板以便将来使用。
 
 ### 管理（Management）
@@ -39,6 +45,9 @@
 
 ## 限制
 - 目前仅测试推荐使用 Kibana 7.6.0 版本。其他 7.x 版本可能能用但可能引发问题。8.x 版本不支持。
+- 目前，推荐使用并测试过的是 Kibana 版本 7.6.0。其他 7.x 版本可能可用，但可能会 
+
+导致问题。8.x 版本不受支持。
 - 下列 Elasticsearch 特定字段类型不受支持：
   - [空间数据类型](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
   - [结构化数据类型](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)

@@ -9,11 +9,13 @@
  
 如果您遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
  
+### ⚠️ Important
  
 由于配置文件已更新，**您可能会在 Linux 升级期间看到一个警告，询问是否保留您的版本或使用来自软件包的新版本**。如果您有自定义（非默认）配置，建议保留您的版本并将 `pid_file` 路径更新为 `/run/manticore/searchd.pid`。不过，即使您不更改路径，也应能正常工作。
  
 ### 新功能和改进
 * 🆕 [v13.13.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.0) 添加了对带有 SI 块缓存的 MCL 8.1.0 的支持。
+* 🆕 [v13.12.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.12.0) Implemented the [secondary_index_block_cache](../Server_settings/Searchd.md#secondary_index_block_cache) option, updated the secondary index API, and inlined sort accessors.
  
 ### Bug 修复
 * 🪲 [v13.11.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.8) [问题 #3791](https://github.com/manticoresoftware/manticoresearch/issues/3791) 修复了检查和调用已触发计时器之间的竞态条件。
@@ -26,6 +28,7 @@
 * 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [问题 #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) 修复了启用 embeddings 时删除文档导致的崩溃。
 
 ## 版本 13.11.1
+**发布时间**：2025年9月13日
 
 ### Bug 修复
 * 🪲 [v13.11.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.1) [问题 #3751](https://github.com/manticoresoftware/manticoresearch/issues/3751) 修复了启用 embeddings 时删除文档导致的崩溃。
@@ -51,6 +54,7 @@
 
 推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1
 推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2
+
 ### 新功能和改进
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) 在 JSON 查询中新增了用于嵌入生成的 “query” 支持。
 如果您遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
@@ -84,9 +88,6 @@ Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1
 Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2  
 
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
-* ⚠️ [PR #3586](https://github.com/manticoresoftware/manticoresearch/pull/3586) 停止支持 Debian 10 (Buster)。Debian 10 已于 2024 年 6 月 30 日停止生命周期。建议用户升级到 Debian 11 (Bullseye) 或 Debian 12 (Bookworm)。
-* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) 更新了 KNN 库 API，支持空的 [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) 值。此更新不更改数据格式，但提高了 Manticore Search / MCL API 版本。
-* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) 修复了 KNN 索引训练和构建过程中源和目标行 ID 错误的 Bug。此更新不更改数据格式，但提高了 Manticore Search / MCL API 版本。
 
 ### New Features and Improvements
 * 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) 支持在 PHRASE、PROXIMITY 和 QUORUM 操作符中显式使用“|”（或）。
@@ -117,6 +118,7 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 **Released**: 2025年7月8日
 
 ### 重大变更
+* ⚠️ [PR #3586](https://github.com/manticoresoftware/manticoresearch/pull/3586) Support for Debian 10 (Buster) has been discontinued. Debian 10 reached end of life on June 30, 2024. Users are encouraged to upgrade to Debian 11 (Bullseye) or Debian 12 (Bookworm).
 * ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0) 更新了 KNN 库 API，支持空的 [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) 值。此更新不更改数据格式，但提高了 Manticore Search / MCL API 版本。
 * ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) 修复了 KNN 索引训练和构建过程中源和目标行 ID 不正确的 bug。此更新不更改数据格式，但提高了 Manticore Search / MCL API 版本。
 * ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0) 新增支持 KNN 向量搜索的新特性，如量化、重新评分和过采样。此版本更改了 KNN 数据格式和 [KNN_DIST() SQL 语法](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search)。新版本可读取旧数据，而旧版本无法读取新格式。

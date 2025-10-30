@@ -271,6 +271,40 @@ idf=0.259532)
 一个**非常重要**的注意事项是，让 Manticore 处理结果集的排序、过滤和切片要**高效得多**，而不是增加最大匹配数并在 MySQL 端使用 `WHERE`、`ORDER BY` 和 `LIMIT` 子句。这有两个原因。首先，Manticore 采用各种优化并比 MySQL 做得更好。其次，searchd 需要打包的数据量更少，传输和 SphinxSE 解包的负担也更小。
 
 
+### 关于使用 SphinxSE 时存储字段的重要说明
+
+从版本 5.0.0 起，Manticore 默认存储所有字段。当 Manticore 与 MySQL 或 MariaDB 通过 SphinxSE 一起使用时，通常不需要存储所有字段，因为原始数据已经存储在 MySQL/MariaDB 中。在这种设置中，建议通过设置显式禁用相关 Manticore 表的存储字段：
+
+```
+stored_fields =
+```
+
+参见设置参考：[stored_fields](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields)。
+
+如果保持默认（存储所有字段），然后通过 SphinxSE 一次选择大量文档，可能会超过引擎的内部限制，并收到类似以下错误：
+
+"bad searchd response length"
+
+设置 `stored_fields =` 可以避免将大量存储的负载发送回 MySQL/MariaDB，从而防止在典型的 SphinxSE 集成中出现此错误。
+
+
+### 关于使用 SphinxSE 时存储字段的重要说明
+
+从版本 5.0.0 起，Manticore 默认存储所有字段。当 Manticore 与 MySQL 或 MariaDB 通过 SphinxSE 一起使用时，通常不需要存储所有字段，因为原始数据已经存储在 MySQL/MariaDB 中。在这种设置中，建议通过设置显式禁用相关 Manticore 表的存储字段：
+
+```
+stored_fields =
+```
+
+参见设置参考：[stored_fields](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields)。
+
+如果保持默认（存储所有字段），然后通过 SphinxSE 一次选择大量文档，可能会超过引擎的内部限制，并收到类似以下错误：
+
+"bad searchd response length"
+
+设置 `stored_fields =` 可以避免向 MySQL/MariaDB 发送大量存储的负载，并防止在典型的 SphinxSE 集成中出现此错误。
+
+
 <!-- example Example_3 -->
 
 您可以使用 `SHOW ENGINE SPHINX STATUS` 语句获取与查询结果相关的额外信息：

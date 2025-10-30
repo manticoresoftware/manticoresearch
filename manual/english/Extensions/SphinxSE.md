@@ -271,6 +271,23 @@ idf=0.259532)
 One **very important** note is that it is **much** more efficient to let Manticore handle sorting, filtering, and slicing the result set, rather than increasing the max matches count and using `WHERE`, `ORDER BY`, and `LIMIT` clauses on the MySQL side. This is due to two reasons. First, Manticore employs a variety of optimizations and performs these tasks better than MySQL. Second, less data would need to be packed by searchd, transferred, and unpacked by SphinxSE.
 
 
+### Important note about stored fields when using SphinxSE
+
+Since version 5.0.0, Manticore stores all fields by default. When Manticore is used together with MySQL or MariaDB via SphinxSE, storing all fields usually does not make sense because the originals are already stored in MySQL/MariaDB. In such setups it is recommended to explicitly disable stored fields for the involved Manticore table by setting:
+
+```
+stored_fields =
+```
+
+See the setting reference: [stored_fields](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields).
+
+If you keep the default (all fields stored) and then select a lot of documents at once through SphinxSE, an internal limit in the engine may be exceeded and you may receive an error like:
+
+"bad searchd response length"
+
+Setting `stored_fields =` avoids sending large stored payloads back to MySQL/MariaDB and prevents this error in typical SphinxSE integrations.
+
+
 <!-- example Example_3 -->
 
 You can obtain additional information related to the query results using the `SHOW ENGINE SPHINX STATUS` statement:

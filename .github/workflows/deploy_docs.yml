@@ -35,6 +35,7 @@ jobs:
     container:
       image: manticoresearch/docs_autodeploy:latest
       env:
+        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/
         DOCKER_DRIVER: overlay2
@@ -79,5 +80,3 @@ jobs:
         with:
           name: Docs error artifact
           path: $DOCS_ERRORS_DIR
-
-

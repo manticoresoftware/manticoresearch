@@ -14,7 +14,7 @@
    ```
 3. 启动 Kibana 并在浏览器中打开 `http://localhost:5601`。如有必要，将 `localhost` 替换为您的服务器 IP 或主机名。
 
-> 注意：Manticore 在与 Kibana 配合使用时不需要设置认证。同时请注意，Manticore 必须以[实时模式](../Read_this_first#Real-time-mode-vs-plain-mode)运行，才能与 Kibana 集成。
+> 注意：Manticore 在与 Kibana 配合使用时不需要设置认证。同时请注意，Manticore 必须以[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)运行，才能与 Kibana 集成。
 
 ### Manticore 配置示例
 ```searchd {

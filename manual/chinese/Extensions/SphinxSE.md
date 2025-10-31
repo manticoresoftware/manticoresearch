@@ -288,6 +288,8 @@ stored_fields =
 设置 `stored_fields =` 可以避免将大量存储的负载发送回 MySQL/MariaDB，并防止在典型的 SphinxSE 集成中出现此错误。
 
 
+### SHOW ENGINE SPHINX 状态
+
 <!-- example Example_3 -->
 
 您可以使用 `SHOW ENGINE SPHINX STATUS` 语句获取与查询结果相关的更多信息：

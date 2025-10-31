@@ -48,7 +48,7 @@ jobs:
         shell: bash
     #    timeout-minutes: 30
     container:
-      image: manticoresearch/docs_autodeploy_multi:latest
+      image: manticoresearch/docs_autodeploy_multi_test:latest
       env:
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/
@@ -60,6 +60,7 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
         DOCS_AUTOCOMMIT_TITLE: ${{ env.DOCS_AUTOCOMMIT_TITLE }}
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
+        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
         CI_PROJECT_TITLE: dev
         CI_PROJECT_PATH: manticoresoftware/manticoresearch

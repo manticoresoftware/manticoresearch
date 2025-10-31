@@ -52,6 +52,9 @@ No need for external services or complex pipelines: just insert text and search 
 
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
 
+Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1
+Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2
+
 ### New Features and Improvements
 * 🆕 [v13.11.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.11.0) [ PR #3746](https://github.com/manticoresoftware/manticoresearch/pull/3746) Added "query" support in JSON queries for embeddings generation.
 * 🆕 [v13.10.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.10.0) [ Issue #3709](https://github.com/manticoresoftware/manticoresearch/issues/3709) The manticore-server RPM package no longer owns `/run`.
@@ -2492,3 +2495,4 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 
 ## Version 2.3.3, 06 July 2017
 * Manticore branding
+

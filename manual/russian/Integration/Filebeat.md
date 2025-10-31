@@ -1,20 +1,18 @@
 # Интеграция с Filebeat
 
-> ПРИМЕЧАНИЕ: интеграция с Filebeat требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Интеграция с Filebeat требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
 
-[Filebeat](https://www.elastic.co/beats/filebeat) — это легковесный шиппер для пересылки и централизации логов. После установки в виде агента он отслеживает указанные вами лог-файлы или местоположения, собирает события логов и отправляет их для индексации, обычно в Elasticsearch или Logstash.
+[Filebeat](https://www.elastic.co/beats/filebeat) — это легковесный агент для пересылки и централизации логов. После установки в качестве агента он отслеживает указанные вами файлы логов или расположения, собирает события логов и пересылает их для индексирования, обычно в Elasticsearch или Logstash.
 
 Теперь Manticore также поддерживает использование Filebeat в качестве конвейеров обработки. Это позволяет отправлять собранные и преобразованные данные в Manticore так же, как в Elasticsearch. В настоящее время полностью поддерживаются все версии до 9.0.
 
 ## Конфигурация Filebeat
 
-Конфигурация зависит от версии Filebeat, которую вы используете.
+Конфигурация зависит от используемой версии Filebeat.
 
-### Конфигурация для Filebeat 7.17, 8.0, 8.1
+### Конфигурация для Filebeat 7.17 - 8.0
 
-> **Важно**: версии Filebeat 7.17.0, 8.0.0 и 8.1.0 имеют известную проблему с glibc 2.35+ (используется в Ubuntu 22.04 и новее). Эти версии могут аварийно завершаться с ошибкой "Fatal glibc error: rseq registration failed". Чтобы исправить это, добавьте конфигурацию `seccomp`, как показано ниже.
-
-```yaml
+```
 filebeat.inputs:
 - type: log
   enabled: true
@@ -27,23 +25,12 @@ output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
   compression_level: 0
-  allow_older_versions: true  # Required for 8.1
-
-# Fix for glibc 2.35+ compatibility (Ubuntu 22.04+)
-seccomp:
-  default_action: allow
-  syscalls:
-    - action: allow
-      names:
-        - rseq
 
 setup.ilm.enabled: false
 setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
-
-**Ссылки**: [Issue #30576](https://github.com/elastic/beats/issues/30576), [PR #30620](https://github.com/elastic/beats/pull/30620)
 
 
 ### Конфигурация для Filebeat 8.1 - 8.10
@@ -98,9 +85,9 @@ setup.template.pattern: "dpkg_log"
 
 ### Конфигурация для Filebeat 9.0+
 
-Filebeat 9.0 вводит серьёзные изменения в архитектуре, заменяя тип входных данных `log` на `filestream`. Начиная с версии 9.0, также изменился метод идентификации файлов по умолчанию на fingerprint, который требует, чтобы файлы были не меньше 1024 байт ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости с Manticore с файлами любого размера необходимо отключить fingerprint.
+Filebeat 9.0 вводит значительные изменения в архитектуре, заменяя тип входных данных `log` на `filestream`. Начиная с версии 9.0, также изменился метод идентификации файлов по умолчанию на fingerprint, который требует, чтобы файлы были не менее 1024 байт ([см. issue #44780](https://github.com/elastic/beats/issues/44780)). Для совместимости Manticore с файлами любого размера необходимо отключить fingerprint.
 
-Вот требуемая конфигурация для Filebeat 9.0 и всех последующих версий:
+Вот необходимая конфигурация для Filebeat 9.0 и всех последующих версий:
 
 ```
 filebeat.inputs:
@@ -126,12 +113,12 @@ setup.template.pattern: "dpkg_log"
 
 **Важные замечания для Filebeat 9.0+:**
 - Вход `type: filestream` заменяет старый `type: log`
-- Настройка `prospector.scanner.fingerprint.enabled: false` **обязательна** для отключения идентификации файлов по fingerprint, что гарантирует корректную обработку файлов размером меньше 1024 байт
+- Настройка `prospector.scanner.fingerprint.enabled: false` **обязательна** для отключения идентификации файлов по fingerprint, что обеспечивает корректную обработку файлов размером менее 1024 байт
 - Поле `id` обязательно для входов filestream и должно быть уникальным
 
-## Результаты работы Filebeat
+## Результаты Filebeat
 
-После запуска Filebeat с данной конфигурацией, лог-данные будут отправлены в Manticore и корректно проиндексированы. Ниже приведена итоговая схема таблицы, созданной Manticore, и пример вставленного документа:
+После запуска Filebeat с этой конфигурацией данные логов будут отправлены в Manticore и корректно проиндексированы. Ниже приведена итоговая схема таблицы, созданной Manticore, и пример вставленного документа:
 
 ```
 mysql> DESCRIBE dpkg_log;

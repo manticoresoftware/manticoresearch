@@ -10,11 +10,9 @@ Now, Manticore also supports the use of Filebeat as processing pipelines. This a
 
 Configuration varies depending on which version of Filebeat you're using.
 
-### Configuration for Filebeat 7.17, 8.0, 8.1
+### Configuration for Filebeat 7.17 - 8.0
 
-> **Important**: Filebeat versions 7.17.0, 8.0.0, and 8.1.0 have a known issue with glibc 2.35+ (used in Ubuntu 22.04 and newer distributions). These versions may crash with "Fatal glibc error: rseq registration failed". To fix this, add the `seccomp` configuration as shown below.
-
-```yaml
+```
 filebeat.inputs:
 - type: log
   enabled: true
@@ -27,23 +25,12 @@ output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
   compression_level: 0
-  allow_older_versions: true  # Required for 8.1
-
-# Fix for glibc 2.35+ compatibility (Ubuntu 22.04+)
-seccomp:
-  default_action: allow
-  syscalls:
-    - action: allow
-      names:
-        - rseq
 
 setup.ilm.enabled: false
 setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
-
-**References**: [Issue #30576](https://github.com/elastic/beats/issues/30576), [PR #30620](https://github.com/elastic/beats/pull/30620)
 
 
 ### Configuration for Filebeat 8.1 - 8.10

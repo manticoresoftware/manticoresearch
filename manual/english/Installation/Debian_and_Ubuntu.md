@@ -19,6 +19,46 @@
   * 20
   * 21
 
+### Test 
+
+This is a test section
+
+<!-- example installation expanded -->
+
+<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+
+``` bash
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install manticore manticore-extra
+```
+
+If you are upgrading from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
+```bash
+sudo yum --setopt=tsflags=noscripts remove manticore*
+```
+It won't remove your data. If you made changes to the configuration file, it will be saved to `/etc/manticoresearch/manticore.conf.rpmsave`.
+
+If you are looking for separate packages, please find them [here](https://manticoresearch.com/install/#separate-packages).
+
+For more details on the installation, see [below](../Installation/RHEL_and_Centos.md).
+
+<!-- request Debian, Ubuntu, Mint -->
+
+``` bash
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt update
+sudo apt install manticore manticore-extra
+```
+
+If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
+```bash
+sudo apt remove manticore*
+```
+It won't remove your data or configuration file.
+
+<!-- end -->
+
 ### APT repository
 The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository.
 
@@ -108,7 +148,7 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 If you aren't going to use the `indexer` tool at all, you don't need to find and install any libraries.
 
-To enable CJK tokenization support, the official packages contain binaries with embedded ICU library and include ICU data file. They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
+To enable CJK tokenization support, the official packages contain binaries with embedded ICU library and include ICU data file (or not include). They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
 
 #### Ukrainian lemmatizer
 The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**

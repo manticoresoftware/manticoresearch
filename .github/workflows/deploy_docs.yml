@@ -61,8 +61,7 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
         DOCS_AUTOCOMMIT_TITLE: ${{ env.DOCS_AUTOCOMMIT_TITLE }}
         DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'
-        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
-
+        
         CI_PROJECT_TITLE: dev
         CI_PROJECT_PATH: manticoresoftware/manticoresearch
         CI_PROJECT_DIR: /__w/manticoresearch/manticoresearch

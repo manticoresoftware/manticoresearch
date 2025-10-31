@@ -28,7 +28,6 @@ jobs:
         DOCKER_DRIVER: overlay2
         COMMIT_DIR: manual
         DOCS_ERRORS_DIR: build/docs/
-        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
     steps:
       - name: Checkout

@@ -19,6 +19,46 @@
   * 20
   * 21
 
+### Test 
+
+This is a test section
+
+<!-- example installation expanded -->
+
+<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+
+``` bash
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install manticore manticore-extra
+```
+
+If you are upgrading from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
+```bash
+sudo yum --setopt=tsflags=noscripts remove manticore*
+```
+It won't remove your data. If you made changes to the configuration file, it will be saved to `/etc/manticoresearch/manticore.conf.rpmsave`.
+
+If you are looking for separate packages, please find them [here](https://manticoresearch.com/install/#separate-packages).
+
+For more details on the installation, see [below](../Installation/RHEL_and_Centos.md).
+
+<!-- request Debian, Ubuntu, Mint -->
+
+``` bash
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt update
+sudo apt install manticore manticore-extra
+```
+
+If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
+```bash
+sudo apt remove manticore*
+```
+It won't remove your data or configuration file.
+
+<!-- end -->
+
 ### APT 仓库
 在 Ubuntu/Debian/Mint 中安装 Manticore 最简单的方法是使用我们的 APT 仓库。
 
@@ -68,7 +108,6 @@ Copyright (c) 2017-2020, Manticore Software LTD (https://manticoresearch.com)
 
 Built by gcc/clang v 5.4.0,
 
-Built on Linux runner-0277ea0f-project-3858465-concurrent-0 4.19.78-coreos #1 SMP Mon Oct 14 22:56:39 -00 2019 x86_64 x86_64 x86_64 GNU/Linux
 
 Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=xenial -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmysqlclient.so.20 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_POSTGRESQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 ```
@@ -109,6 +148,7 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 如果你根本不打算使用 `indexer` 工具，则无需查找和安装任何库。
 
 为了启用 CJK 分词支持，官方软件包包含嵌入 ICU 库的二进制文件，并包含 ICU 数据文件。它们独立于系统上可能存在的任何 ICU 运行时库，且无法升级。
+To enable CJK tokenization support, the official packages contain binaries with embedded ICU library and include ICU data file (or not include). They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
 
 #### 乌克兰语词形还原器
 词形还原器需要 Python 3.9 及以上版本。**确保你已安装并且已使用 `--enable-shared` 配置。**

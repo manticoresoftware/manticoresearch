@@ -288,6 +288,8 @@ If you keep the default (all fields stored) and then select a lot of documents a
 Setting `stored_fields =` avoids sending large stored payloads back to MySQL/MariaDB and prevents this error in typical SphinxSE integrations.
 
 
+### SHOW ENGINE SPHINX STATUS
+
 <!-- example Example_3 -->
 
 You can obtain additional information related to the query results using the `SHOW ENGINE SPHINX STATUS` statement:

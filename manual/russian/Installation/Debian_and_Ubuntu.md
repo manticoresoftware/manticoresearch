@@ -19,6 +19,46 @@
   * 20
   * 21
 
+### Тест
+
+Это тестовый раздел
+
+<!-- example installation expanded -->
+
+<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+
+``` bash
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install manticore manticore-extra
+```
+
+Если вы обновляетесь с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+```bash
+sudo yum --setopt=tsflags=noscripts remove manticore*
+```
+Это не удалит ваши данные. Если вы вносили изменения в файл конфигурации, они будут сохранены в `/etc/manticoresearch/manticore.conf.rpmsave`.
+
+Если вы ищете отдельные пакеты, их можно найти [здесь](https://manticoresearch.com/install/#separate-packages).
+
+Для получения дополнительной информации об установке смотрите [ниже](../Installation/RHEL_and_Centos.md).
+
+<!-- request Debian, Ubuntu, Mint -->
+
+``` bash
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt update
+sudo apt install manticore manticore-extra
+```
+
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+```bash
+sudo apt remove manticore*
+```
+Это не удалит ваши данные или файл конфигурации.
+
+<!-- end -->
+
 ### Репозиторий APT
 Самый простой способ установить Manticore в Ubuntu/Debian/Mint — использовать наш репозиторий APT.
 
@@ -108,7 +148,7 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 Если вы вообще не собираетесь использовать инструмент `indexer`, искать и устанавливать библиотеки не нужно.
 
-Для поддержки токенизации CJK официальные пакеты содержат бинарные файлы с встроенной библиотекой ICU и включают в себя файл данных ICU. Они не зависят от какой-либо ICU runtime-библиотеки, которая может быть установлена в вашей системе, и не подлежат обновлению.
+Чтобы включить поддержку токенизации CJK, официальные пакеты содержат бинарные файлы с встроенной библиотекой ICU и включают файл данных ICU (или не включают). Они независимы от любой ICU runtime библиотеки, которая может быть доступна на вашей системе, и не могут быть обновлены.
 
 #### Украинский лемматизатор
 Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и с опцией `--enable-shared`.**

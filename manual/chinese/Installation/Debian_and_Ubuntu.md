@@ -19,6 +19,46 @@
   * 20
   * 21
 
+### 测试
+
+这是一个测试部分
+
+<!-- example installation expanded -->
+
+<!-- request RHEL, Centos, Alma, Amazon, Oracle -->
+
+``` bash
+sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+sudo yum install manticore manticore-extra
+```
+
+如果您是从较旧版本升级，建议先删除旧软件包，以避免因更新的软件包结构而导致的冲突：
+```bash
+sudo yum --setopt=tsflags=noscripts remove manticore*
+```
+这不会删除您的数据。如果您对配置文件进行了更改，它将被保存到 `/etc/manticoresearch/manticore.conf.rpmsave`。
+
+如果您寻找单独的软件包，请在[这里](https://manticoresearch.com/install/#separate-packages)查找。
+
+有关安装的更多详细信息，请参阅[下文](../Installation/RHEL_and_Centos.md)。
+
+<!-- request Debian, Ubuntu, Mint -->
+
+``` bash
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+sudo dpkg -i manticore-repo.noarch.deb
+sudo apt update
+sudo apt install manticore manticore-extra
+```
+
+如果您是从较旧版本升级到 Manticore 6，建议先删除旧软件包，以避免因更新的软件包结构而导致的冲突：
+```bash
+sudo apt remove manticore*
+```
+这不会删除您的数据或配置文件。
+
+<!-- end -->
+
 ### APT 仓库
 在 Ubuntu/Debian/Mint 中安装 Manticore 最简单的方法是使用我们的 APT 仓库。
 
@@ -108,7 +148,7 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 如果你根本不打算使用 `indexer` 工具，则无需查找和安装任何库。
 
-为了启用 CJK 分词支持，官方软件包包含嵌入 ICU 库的二进制文件，并包含 ICU 数据文件。它们独立于系统上可能存在的任何 ICU 运行时库，且无法升级。
+要启用 CJK 分词支持，官方软件包包含嵌入了 ICU 库的二进制文件，并包含 ICU 数据文件（或者不包含）。它们独立于系统上可能存在的任何 ICU 运行时库，且无法升级。
 
 #### 乌克兰语词形还原器
 词形还原器需要 Python 3.9 及以上版本。**确保你已安装并且已使用 `--enable-shared` 配置。**

@@ -21,6 +21,7 @@ jobs:
     container:
       image: manticoresearch/docs_autodeploy_multi:latest
       env:
+        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/
         DOCKER_DRIVER: overlay2

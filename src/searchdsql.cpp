@@ -1806,8 +1806,25 @@ bool SqlParser_c::AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull )
 
 void SqlParser_c::AddHaving ()
 {
-	assert ( m_pQuery->m_dFilters.GetLength() );
-	m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
+     assert ( m_pQuery->m_dFilters.GetLength() );
+
+     // The filter we are about to move to HAVING has index (length-1).
+     // After Pop(), GetLength() equals that index.
+     const int iExpectHavingIdx = m_pQuery->m_dFilters.GetLength() - 1;
+     m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
+
+     // FIX(#887): The filter tree still contains a leaf for the just-moved HAVING filter.
+     // That leaf must be the *last* tree item and must reference the same filter index.
+     if ( m_dFilterTree.GetLength() > 0 )
+     {
+         const int iLastFilterItem = m_dFilterTree.Last().m_iFilterItem;
+         // Assert the tree's last leaf matches the moved filter.
+         assert ( iLastFilterItem == iExpectHavingIdx && "HAVING leaf must be the last filter-tree item" );
+
+         // Remove that dangling leaf so WHERE's CreateFilterTree() won't see an empty-name filter.
+         if ( iLastFilterItem == iExpectHavingIdx )
+             m_dFilterTree.Pop();
+     }
 }
 
 

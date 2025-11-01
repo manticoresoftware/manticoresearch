@@ -6,18 +6,34 @@
 // CREATE FUNCTION sequence RETURNS INT SONAME 'udfexample.so';
 // CREATE FUNCTION strtoint RETURNS INT SONAME 'udfexample.so';
 // CREATE FUNCTION avgmva RETURNS FLOAT SONAME 'udfexample.so';
+// CREATE FUNCTION makemva RETURNS MULTI SONAME 'udfexample.so';
+// CREATE FUNCTION makemva64 RETURNS MULTI64 SONAME 'udfexample.so';
+// CREATE FUNCTION makefloatvec RETURNS FLOAT_VECTOR SONAME 'udfexample.so';
 //
 // Windows
 // cl /MTd /LD udfexample.c
 // CREATE FUNCTION sequence RETURNS INT SONAME 'udfexample.dll';
 // CREATE FUNCTION strtoint RETURNS INT SONAME 'udfexample.dll';
 // CREATE FUNCTION avgmva RETURNS FLOAT SONAME 'udfexample.dll';
+// CREATE FUNCTION makemva RETURNS MULTI SONAME 'udfexample.dll';
+// CREATE FUNCTION makemva64 RETURNS MULTI64 SONAME 'udfexample.dll';
+// CREATE FUNCTION makefloatvec RETURNS FLOAT_VECTOR SONAME 'udfexample.dll';
 //
 
 #include "sphinxudf.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+
+// ByteBlob_t typedef for MVA return values
+typedef unsigned char BYTE;
+typedef struct { const BYTE * first; int64_t second; } ByteBlob_t;
+
+#ifndef nullptr
+#define nullptr NULL
+#endif
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -48,6 +64,8 @@ void UdfLog ( char * szMsg )
 DLLEXPORT int udfexample_ver ()
 {
 	UdfLog ( "Called udfexample_ver" );
+	// Initialize random seed based on current time
+	srand((unsigned int)time(NULL));
 	return SPH_UDF_VERSION;
 }
 
@@ -293,6 +311,109 @@ DLLEXPORT void hideemail_deinit ( void * userdata )
 	}
 }
 
+
+//////////////////////////////////////////////////////////////////////////
+// MVA return example - returns a random MVA with 1-20 random values
+
+DLLEXPORT int makemva_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
+{
+	UdfLog ( "Called makemva_init" );
+	if ( args->arg_count!=0 )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEMVA() takes no arguments" );
+		return 1;
+	}
+	return 0;
+}
+
+DLLEXPORT ByteBlob_t makemva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_flag )
+{
+	// Generate random array length from 1 to 20
+	int count = (rand() % 20) + 1;
+	
+	// Allocate memory for random number of uint32 values using the provided malloc function
+	uint32_t * pValues = (uint32_t *) args->fn_malloc ( count * sizeof(uint32_t) );
+	if ( !pValues )
+	{
+		*error_flag = 1;
+		return (ByteBlob_t){nullptr, 0};
+	}
+	
+	// Fill with random values
+	for ( int i = 0; i < count; i++ )
+		pValues[i] = (uint32_t)(rand() % 1000) + 1; // Random values from 1 to 1000
+	
+	// Return as ByteBlob_t
+	return (ByteBlob_t){(const BYTE*)pValues, count * sizeof(uint32_t)};
+}
+
+//////////////////////////////////////////////////////////////////////////
+// MVA64 return example - returns a random MVA64 with 1-20 random values
+
+DLLEXPORT int makemva64_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
+{
+	if ( args->arg_count!=0 )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEMVA64() takes no arguments" );
+		return 1;
+	}
+	return 0;
+}
+
+DLLEXPORT ByteBlob_t makemva64 ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_flag )
+{
+	// Generate random array length from 1 to 20
+	int count = (rand() % 20) + 1;
+	
+	// Allocate memory for random number of int64 values using the provided malloc function
+	int64_t * pValues = (int64_t *) args->fn_malloc ( count * sizeof(int64_t) );
+	if ( !pValues )
+	{
+		*error_flag = 1;
+		return (ByteBlob_t){nullptr, 0};
+	}
+	
+	// Fill with random values
+	for ( int i = 0; i < count; i++ )
+		pValues[i] = (int64_t)(rand() % 10000) + 1; // Random values from 1 to 10000
+	
+	// Return as ByteBlob_t
+	return (ByteBlob_t){(const BYTE*)pValues, count * sizeof(int64_t)};
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Float vector return example - returns a random float vector with 128 values
+
+DLLEXPORT int makefloatvec_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
+{
+	if ( args->arg_count!=0 )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEFLOATVEC() takes no arguments" );
+		return 1;
+	}
+	return 0;
+}
+
+DLLEXPORT ByteBlob_t makefloatvec ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_flag )
+{
+	// Constant array length of 128 for float vector
+	const int count = 128;
+	
+	// Allocate memory for 128 float values using the provided malloc function
+	float * pValues = (float *) args->fn_malloc ( count * sizeof(float) );
+	if ( !pValues )
+	{
+		*error_flag = 1;
+		return (ByteBlob_t){nullptr, 0};
+	}
+	
+	// Fill with random values
+	for ( int i = 0; i < count; i++ )
+		pValues[i] = (float)(rand() % 1000) / 10.0f; // Random values from 0.0 to 99.9
+	
+	// Return as ByteBlob_t
+	return (ByteBlob_t){(const BYTE*)pValues, count * sizeof(float)};
+}
 
 // FIXME! add a string function example?
 // FIXME! add a ranker plugin example?

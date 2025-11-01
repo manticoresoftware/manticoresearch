@@ -9,10 +9,20 @@ SELECT id, attr1, myudf (attr2, attr3+attr4) ...
 您可以动态加载和卸载 `searchd` 中的 UDF，而无需重启服务器，并且可以在搜索、排序等操作时在表达式中使用它们。UDF 功能的简要总结如下：
 
 * UDF 可以接受整型（32 位和 64 位）、浮点型、字符串、多值属性（MVA）或 `PACKEDFACTORS()` 参数。
-* UDF 可以返回整型、浮点型或字符串值。
+* UDF可以返回整数、浮点数、字符串或MVA值（MULTI、MULTI64、FLOAT_VECTOR）。
 * UDF 可以在查询设置阶段检查参数的数量、类型和名称，并且可以抛出错误。
 
 我们还不支持聚合函数。换句话说，您的 UDF 将一次只为单个文档调用，且应返回该文档的某个值。目前还无法编写能够计算整个共享相同 GROUP BY 键的文档组上的聚合值（如 AVG()）的函数。不过，您可以在内置聚合函数中使用 UDF：即使不支持 MYCUSTOMAVG()，使用 AVG(MYCUSTOMFUNC()) 应该可以正常工作！
+
+## MVA返回类型
+
+除了标量值外，UDF还可以返回多值属性（MVA）。支持的MVA返回类型包括：
+
+* **MULTI**：32位无符号整数数组
+* **MULTI64**：64位有符号整数数组
+* **FLOAT_VECTOR**：浮点数数组
+
+MVA UDF使用相同的`CREATE FUNCTION`语法创建，并指定适当的返回类型，可以像标量UDF一样在SELECT语句中使用。
 
 UDF 具有广泛的应用，包括：
 

@@ -42,7 +42,10 @@ jobs:
         id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          git fetch origin master:master 
+          # Update local master only if we're not currently on it
+          if [ "${{ github.ref_name }}" != "master" ]; then
+            git fetch origin master:master
+          fi
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
 
       - name: Get changed doc filepathes

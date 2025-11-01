@@ -7250,10 +7250,33 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			VecRefPtrs_t<AgentConn_t *> dAgents;
 			pDist->GetAllHosts ( dAgents );
 
+			// validate update before sending to remote agents
+			VecRefPtrs_t<AgentConn_t *> dValidAgents;
+			for ( AgentConn_t * pAgent : dAgents )
+			{
+				const CSphString & sRemoteIndex = pAgent->m_tDesc.m_sIndexes;
+				auto pRemoteServed = GetServed ( sRemoteIndex );
+				if ( pRemoteServed )
+				{
+					const ISphSchema& tSchema = RIdx_c ( pRemoteServed )->GetMatchSchema();
+					CSphString sError;
+					if ( !Update_CheckAttributes ( *tStmt.AttrUpdatePtr(), tSchema, sError ) )
+					{
+						dFails.Submit ( sRemoteIndex, sReqIndex, sError.cstr() );
+						continue; // skip this agent
+					}
+				}
+				dValidAgents.Add ( pAgent );
+			}
+			dAgents = std::move ( dValidAgents );
+
 			// connect to remote agents and query them
-			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails );
-			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+			if ( !dAgents.IsEmpty() )
+			{
+				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails );
+				iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+			}
 		}
 	}
 
@@ -7272,6 +7295,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
 
+	iWarns = sWarning.IsEmpty() ? 0 : 1;
 	tOut.Ok ( iUpdated, iWarns );
 }
 

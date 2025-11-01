@@ -1360,7 +1360,9 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd )
 
 	assert ( tCmd.m_pUpdateAPI );
 	CSphString sError;
-	return Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) || TlsMsg::Err ( sError );
+	if ( !Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) )
+		return TlsMsg::Err ( sError );
+	return true;
 }
 
 // load indexes received from another node or existed already into daemon

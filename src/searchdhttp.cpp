@@ -983,12 +983,12 @@ std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const Sql
 	}
 }
 
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails )
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails, CSphString * pWarning )
 {
 	if ( bJson )
 		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings, tFails );
 	else
-		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings );
+		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings, pWarning );
 }
 
 //////////////////////////////////////////////////////////////////////////

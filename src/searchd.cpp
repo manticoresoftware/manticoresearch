@@ -3108,7 +3108,7 @@ public:
 
 	void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) final
 	{
-		m_tRowBuffer.Ok ( iAffectedRows, ( sWarning.IsEmpty() ? 0 : 1 ), nullptr, false, iLastInsertId );
+		m_tRowBuffer.Ok ( iAffectedRows, ( sWarning.IsEmpty() ? 0 : 1 ), sWarning.IsEmpty() ? nullptr : sWarning.cstr(), false, iLastInsertId );
 	}
 
 	void Ok ( int iAffectedRows, int nWarnings ) final
@@ -7010,10 +7010,17 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 SphinxqlReplyParser_c::SphinxqlReplyParser_c ( int * pUpd, int * pWarns )
 	: m_pUpdated ( pUpd )
 	, m_pWarns ( pWarns )
+	, m_pWarning ( nullptr )
+{}
+
+SphinxqlReplyParser_c::SphinxqlReplyParser_c ( int * pUpd, int * pWarns, CSphString * pWarning )
+	: m_pUpdated ( pUpd )
+	, m_pWarns ( pWarns )
+	, m_pWarning ( pWarning )
 {}
 
 // fixme! reuse code from sphinxql, leave only refs here
-bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
 	DWORD uSize = ( tReq.GetLSBDword() & 0x00ffffff ) - 1;
 	BYTE uCommand = tReq.GetByte();
@@ -7023,10 +7030,26 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 		*m_pUpdated += MysqlUnpack ( tReq, &uSize );
 		MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
 		auto uWarnStatus = tReq.GetLSBDword ();
-		*m_pWarns += ( uWarnStatus >> 16 ) & 0xFFFF; ///< num of warnings
+		int iWarnings = ( uWarnStatus >> 16 ) & 0xFFFF;
+		*m_pWarns += iWarnings;
 		uSize -= 4;
-		if ( uSize )
-			tReq.GetRawString ( uSize );
+		if ( uSize > 0 )
+		{
+			// extract info string (contains warning message if warnings present)
+			// info string is length-encoded in MySQL protocol
+			int iInfoLen = MysqlUnpack ( tReq, &uSize );
+			if ( iInfoLen > 0 && iInfoLen <= (int)uSize )
+			{
+				CSphString sInfo = tReq.GetRawString ( iInfoLen );
+				if ( iWarnings > 0 && m_pWarning && !sInfo.IsEmpty() )
+				{
+					if ( !m_pWarning->IsEmpty() )
+						m_pWarning->SetSprintf ( "%s; %s", m_pWarning->cstr(), sInfo.cstr() );
+					else
+						*m_pWarning = sInfo;
+				}
+			}
+		}
 		return true;
 	}
 	if ( uCommand==0xff ) // error packet
@@ -7035,7 +7058,16 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 		tReq.GetByte(); ///< num of errors (2 bytes), we don't use it for now.
 		uSize -= 2;
 		if ( uSize )
-			tReq.GetRawString ( uSize );
+		{
+			// MySQL error packet format: 6-byte SQLSTATE prefix (e.g., "#42000") followed by error message
+			// Skip the SQLSTATE prefix if present
+			if ( uSize > 6 )
+			{
+				tReq.GetRawString ( 6 ); // skip SQLSTATE
+				uSize -= 6;
+			}
+			tAgent.m_sFailure = tReq.GetRawString ( uSize );
+		}
 	}
 
 	return false;
@@ -7251,9 +7283,30 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			pDist->GetAllHosts ( dAgents );
 
 			// connect to remote agents and query them
-			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails );
-			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+			// validation happens on remote side; errors will be returned via dFails
+			if ( !dAgents.IsEmpty() )
+			{
+				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails, &sWarning );
+				iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+
+				// collect errors from failed agents
+				for ( const AgentConn_t * pAgent : dAgents )
+					if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
+					{
+						// remote error may already include "table X: " prefix, strip it to avoid duplication
+						const char * sError = pAgent->m_sFailure.cstr();
+						const char * sPrefix = "table ";
+						if ( pAgent->m_sFailure.Begins ( sPrefix ) )
+						{
+							const char * pAfterPrefix = sError + strlen ( sPrefix );
+							const char * pColon = strchr ( pAfterPrefix, ':' );
+							if ( pColon && ( pColon[1] == ' ' || pColon[1] == '\0' ) )
+								sError = pColon[1] == ' ' ? ( pColon + 2 ) : ( pColon + 1 );
+						}
+						dFails.Submit ( pAgent->m_tDesc.m_sIndexes, sReqIndex, sError );
+					}
+			}
 		}
 	}
 
@@ -7272,7 +7325,8 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
 
-	tOut.Ok ( iUpdated, iWarns );
+	iWarns = sWarning.IsEmpty() ? 0 : 1;
+	tOut.Ok ( iUpdated, sWarning, 0 );
 }
 
 bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
@@ -7998,7 +8052,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			// connect to remote agents and query them
 			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors );
+			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors, nullptr );
 			PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 
 			// FIXME!!! report error & warnings from agents

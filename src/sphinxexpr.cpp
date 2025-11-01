@@ -6931,7 +6931,16 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
 	case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
 	case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
-	case FUNC_KNN_DIST:	return new Expr_GetFloat_c ( m_pSchema->GetAttr ( GetKnnDistAttrName() )->m_tLocator, GetKnnDistAttrName() );
+	case FUNC_KNN_DIST:
+	{
+		const CSphColumnInfo * pAttr = m_pSchema->GetAttr ( GetKnnDistAttrName() );
+		if ( !pAttr )
+		{
+			m_sCreateError = "KNN_DIST() attribute not available in this context";
+			return nullptr;
+		}
+		return new Expr_GetFloat_c ( pAttr->m_tLocator, GetKnnDistAttrName() );
+	}
 
 	case FUNC_DAY:			return CreateExprDay ( dArgs[0] );
 	case FUNC_WEEK:			return CreateExprWeek ( dArgs[0], dArgs.GetLength()>1 ? dArgs[1] : nullptr );
@@ -10828,7 +10837,11 @@ static void CheckDescendingNodes ( const CSphVector<ExprNode_t> & dNodes )
 ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 {
 	if ( GetError () )
+	{
+		if ( !m_sCreateError.IsEmpty() )
+			sError = m_sCreateError;
 		return nullptr;
+	}
 
 #ifndef NDEBUG
 	CheckDescendingNodes ( m_dNodes );

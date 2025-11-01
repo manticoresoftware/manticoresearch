@@ -842,6 +842,19 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 	if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE && tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 		return Err ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", sExpr.cstr() );
 
+	// validate that MAX/MIN/SUM/AVG cannot be used on string/text columns
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX || tExprCol.m_eAggrFunc==SPH_AGGR_MIN 
+		|| tExprCol.m_eAggrFunc==SPH_AGGR_SUM || tExprCol.m_eAggrFunc==SPH_AGGR_AVG )
+	{
+		if ( tExprCol.m_eAttrType==SPH_ATTR_STRING || tExprCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+		{
+			const char * sFunc = ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX ) ? "MAX" 
+				: ( tExprCol.m_eAggrFunc==SPH_AGGR_MIN ) ? "MIN"
+				: ( tExprCol.m_eAggrFunc==SPH_AGGR_SUM ) ? "SUM" : "AVG";
+			return Err ( "%s() cannot be used on text/string column '%s'", sFunc, sExpr.cstr() );
+		}
+	}
+
 	if ( uQueryPackedFactorFlags & SPH_FACTOR_JSON_OUT )
 		tExprCol.m_eAttrType = SPH_ATTR_FACTORS_JSON;
 

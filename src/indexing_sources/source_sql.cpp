@@ -1570,6 +1570,47 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 		if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
 			m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last().m_uWordPos );
 
+		// set end marker for joined fields when processing is complete
+		// this is needed for exact_hit factor calculation
+		// note: we only set it when we're done with the current joined field value,
+		// but we need to mark the last position across all accumulated hits for this field
+		if ( !m_tState.m_bProcessingHits && m_tHits.GetLength() )
+		{
+			// find the maximum hit position for the current joined field
+			// this handles both single and multiple joined field values for the same doc/field
+			Hitpos_t uMaxPos = 0;
+			for ( int i = m_tHits.GetLength() - 1; i >= 0; i-- )
+			{
+				if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField )
+				{
+					Hitpos_t uPos = HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos );
+					if ( uPos > uMaxPos )
+						uMaxPos = uPos;
+				}
+			}
+			// set end marker on all hits at the maximum position in this field
+			// clear end marker from hits at other positions (in case max position changed)
+			if ( uMaxPos > 0 )
+			{
+				for ( int i = 0; i < m_tHits.GetLength(); i++ )
+				{
+					if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField )
+					{
+						Hitpos_t uPos = HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos );
+						if ( uPos == uMaxPos && !HITMAN::IsEnd ( m_tHits[i].m_uWordPos ) )
+						{
+							HITMAN::SetEndMarker ( &m_tHits[i].m_uWordPos );
+						}
+						else if ( uPos < uMaxPos && HITMAN::IsEnd ( m_tHits[i].m_uWordPos ) )
+						{
+							// clear end marker from positions that are no longer the maximum
+							m_tHits[i].m_uWordPos = HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos );
+						}
+					}
+				}
+			}
+		}
+
 		if ( m_tState.m_bProcessingHits )
 			break;
 	}

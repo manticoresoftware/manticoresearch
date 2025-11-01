@@ -664,11 +664,12 @@ UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tS
 
 //////////////////////////////////////////////////////////////////////////
 
-bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError )
+bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError, CSphString* pWarning )
 {
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
 		const CSphString & sUpdAttrName = tUpdAttr.m_sName;
+		bool bIsField = ( tSchema.GetField ( sUpdAttrName.cstr() ) != nullptr );
 		int iUpdAttrId = tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
 		// try to find JSON attribute with a field
@@ -676,13 +677,29 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		{
 			CSphString sJsonCol;
 			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), nullptr, &sJsonCol ) )
+			{
+				bool bJsonColIsField = ( tSchema.GetField ( sJsonCol.cstr() ) != nullptr );
 				iUpdAttrId = tSchema.GetAttrIndex ( sJsonCol.cstr() );
+				// if JSON column is a field but not an attribute, reject
+				if ( bJsonColIsField && iUpdAttrId<0 )
+				{
+					sError.SetSprintf ( "attribute '%s' can not be updated (full-text field)", sUpdAttrName.cstr() );
+					return false;
+				}
+			}
 		}
 
 		if ( iUpdAttrId<0 )
 		{
 			if ( tUpd.m_bIgnoreNonexistent )
 				continue;
+
+			// if it's a field but not an attribute, reject
+			if ( bIsField )
+			{
+				sError.SetSprintf ( "attribute '%s' can not be updated (full-text field)", sUpdAttrName.cstr() );
+				return false;
+			}
 
 			sError.SetSprintf ( "attribute '%s' not found", sUpdAttrName.cstr() );
 			return false;
@@ -702,6 +719,16 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		case SPH_ATTR_BIGINT:
 		case SPH_ATTR_FLOAT:
 		case SPH_ATTR_JSON:
+		// if attribute is also a full-text field, allow update but warn
+		if ( bIsField && pWarning )
+		{
+			CSphString sMsg;
+			sMsg.SetSprintf ( "attribute '%s' is updated, but full-text field is not (recommended to use REPLACE instead)", sUpdAttrName.cstr() );
+			if ( pWarning->IsEmpty() )
+				*pWarning = sMsg;
+			else
+				pWarning->SetSprintf ( "%s; %s", pWarning->cstr(), sMsg.cstr() );
+		}
 			break;
 		default:
 			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, string, MVA or JSON)", sUpdAttrName.cstr() );
@@ -2468,7 +2495,7 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	if ( dRows.IsEmpty() )
 		return true;
 
-	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
+	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError, nullptr ) )
 		return false;
 
 	tCtx.m_pHistograms = m_pHistograms;
@@ -2564,9 +2591,11 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	if ( !m_iDocinfo || tUpd.m_pUpdate->m_dDocids.IsEmpty() )
 		return 0;
 
-	UpdateContext_t tCtx ( tUpd, m_tSchema );
 	int iUpdated = tUpd.m_uAffected;
+	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError, &sWarning ) )
+		return -1;
 
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
 
 	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))

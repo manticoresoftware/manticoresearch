@@ -38,7 +38,7 @@ cat /var/log/dpkg.log | wc -l
 echo -e "[sources.test_file]\ntype = \"file\"\ninclude = [ \"/var/log/dpkg.log\" ]\n\n[transforms.modify_test_file]\ntype = \"remap\"\ninputs = [ \"test_file\" ]\nsource = \"\"\".vec_timestamp = del(.timestamp)\"\"\"\n\n[sinks.manticore]\ntype = \"elasticsearch\"\ninputs = [ \"modify_test_file\" ]\nendpoints = [\"http://127.0.0.1:9308\"]\nbulk.index = \"dpkg_log\"" | tee /usr/share/vector/vector.toml > /dev/null 2>&1; echo $?
 ––– output –––
 0
-––– block: ../base/start-searchd –––
+––– block: ../../base/start-searchd –––
 ––– input –––
 vector -c vector.toml > /var/log/vector.log 2>&1 &
 ––– output –––

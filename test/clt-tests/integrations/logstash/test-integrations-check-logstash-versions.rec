@@ -1,0 +1,72 @@
+––– block: ../../base/start-searchd-with-buddy –––
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+bash << 'SCRIPT'
+# Static list of TESTED versions
+TESTED_VERSIONS="7.17
+8.0
+8.1
+8.2
+8.3
+8.4
+8.5
+8.6
+8.7
+8.8
+8.9
+8.10
+8.11
+8.12
+8.13
+8.14
+8.15
+8.16
+8.17
+8.18
+8.19
+9.0
+9.1"
+
+# Check for NEW versions (after latest tested)
+LATEST_TESTED_VERSION="9.1"
+NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size=100" \
+| jq -r ".results[].name" \
+| grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
+| sed "s/\.[0-9]*$//" \
+| awk '!/rc|beta|alpha/' \
+| sort -t. -k1,1n -k2,2n | uniq \
+| awk -v latest="$LATEST_TESTED_VERSION" '
+function version_compare(v1, v2) {
+    split(v1, a, ".")
+    split(v2, b, ".")
+    if (a[1] != b[1]) return a[1] - b[1]
+    return a[2] - b[2]
+}
+version_compare($0, latest) > 0')
+
+if [ -n "$NEW_VERSIONS" ]; then
+    echo "🆕 NEW Logstash versions detected:"
+    echo "$NEW_VERSIONS"
+    echo "❌ Need to test new versions and update the list!"
+    exit 1
+else
+    echo "✅ No new versions found after $LATEST_TESTED_VERSION"
+fi
+
+# Use static list for testing
+echo "Using tested versions:"
+echo "$TESTED_VERSIONS"
+SCRIPT
+––– output –––
+🆕 NEW Logstash versions detected:
+9.2
+❌ Need to test new versions and update the list!

@@ -1,0 +1,1 @@
+drop table if exists t; create table t(i int); insert into t values(1, 123); drop table if exists d; create table d type='distributed' agent='127.0.0.1:9312:t'; update d set i='345' where id = 1;

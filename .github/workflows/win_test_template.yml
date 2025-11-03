@@ -32,7 +32,7 @@ jobs:
       CTEST_START: ${{ inputs.CTEST_START }}
       CTEST_END: ${{ inputs.CTEST_END }}
       # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
-      # CTEST_REGEX: test_234
+      CTEST_REGEX: test_411
       NO_BUILD: 1
       COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:

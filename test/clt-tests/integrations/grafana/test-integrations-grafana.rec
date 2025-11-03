@@ -1,4 +1,4 @@
-––– block: ../base/dind/init –––
+––– block: ../../base/dind/init –––
 ––– comment –––
 Create Docker network
 ––– input –––

@@ -28,7 +28,7 @@ cd /usr/local/src
 ––– input –––
 ln -s /usr/share/logstash/logstash-7.10.0/bin/logstash /usr/bin/logstash
 ––– output –––
-––– block: ../base/start-searchd –––
+––– block: ../../base/start-searchd –––
 ––– input –––
 echo 'input { file { path => ["/var/log/dpkg.log"] start_position => "beginning" sincedb_path => "/dev/null" mode => "read" exit_after_read => true file_completed_action => "log" file_completed_log_path => "/dev/null" } } output { elasticsearch { index => "dpkg_log" hosts => ["http://localhost:9308"] ilm_enabled => false manage_template => false } }' > logstash.conf
 ––– output –––

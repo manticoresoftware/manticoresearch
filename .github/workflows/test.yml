@@ -152,7 +152,7 @@ jobs:
         name: [651_and_on]
         include:
           - name: 651_and_on
-            start: 651
+            start: 1
             end: 999999
     with:
       CTEST_START: ${{ matrix.start }}

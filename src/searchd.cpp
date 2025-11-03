@@ -4767,6 +4767,17 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
+		return;
+
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		tOut.Error ( "table is locked" );
+		return;
+	}
+
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
 	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
@@ -4776,7 +4787,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	auto tmStart = sphMicroTimer ();
 
-	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		bool bDistTable = false;
@@ -7082,6 +7092,13 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		dFails.Submit ( sIndex, szDistributed, "table is locked" );
+		return;
+	}
+
 	RtAccum_t tAcc;
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
@@ -7853,6 +7870,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		return 0;
 	}
 
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+		return err ( "table is locked" );
 
 	RtAccum_t* pAccum = nullptr;
 
@@ -8919,6 +8939,16 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 	CSphString sError;
 	StrVec_t dWarnings;
 	const CSphString & sIndex = tStmt.m_sIndex;
+	auto pIndex = GetServed ( sIndex );
+	if ( !pIndex )
+		return;
+
+	Threads::Coro::ScopedWriteTable_c tWriting { pIndex->Locker() };
+	if ( !tWriting.CanWrite () )
+	{
+		tOut.Error ( "table is locked" );
+		return;
+	}
 
 	if ( bReconfigure )
 	{
@@ -8935,7 +8965,6 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 	// get an exclusive lock for operation
 	// but only read lock for check
 	{
-		auto pIndex = GetServed ( sIndex );
 		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			tOut.Error ( "TRUNCATE RTINDEX requires an existing RT table" );
@@ -10103,12 +10132,28 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		{
 		case Alter_e::AddColumn:
 		case Alter_e::ModifyColumn:
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
-			break;
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+				break;
+			}
 
 		case Alter_e::DropColumn:
-			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
-			break;
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+				RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
+				break;
+			}
 
 		case Alter_e::RebuildSI:
 			WIdx_c(pServed)->AlterSI(sAlterError);
@@ -10832,6 +10877,80 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 	tOut.Eof ( false );
 }
 
+void UnlockTables(ClientSession_c* pSess)
+{
+	assert (pSess);
+	for ( const auto& sIndex : pSess->m_dLockedTables )
+	{
+		auto pLocal = GetServed ( sIndex );
+		if ( pLocal && pLocal->UnlockRead() )
+			sphLogDebug ( "Unlocked %s", sIndex.cstr() );
+	}
+	pSess->m_dLockedTables.Reset();
+}
+
+void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	StrVec_t dIndexes;
+	bool bHasWrite = false;
+	tStmt.m_dInsertValues.for_each ( [&] (const SqlInsert_t& tVal) {
+		bHasWrite |= tVal.m_iType>10;
+		dIndexes.Add(tVal.m_sVal);
+	});
+
+	if (bHasWrite)
+	{
+		tOut.Error ( "Write lock is not implemented." );
+		return;
+	}
+
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+	{
+		tOut.Error ( "Locking works only for mysql session." );
+		return;
+	}
+
+	auto* pSess = session::GetClientSession();
+	assert (pSess);
+
+	// by spec, any lock first unlock all the tables.
+	UnlockTables(pSess);
+
+	for ( const auto& sIndex : dIndexes )
+	{
+		auto pLocal = GetServed ( sIndex );
+		if ( !(pLocal && ServedDesc_t::IsLocal ( pLocal ) ) )
+		{
+			tOut.ErrorEx ( "Table %s absent, or not suitable for lock", sIndex.cstr() );
+			return;
+		}
+		if ( ServedDesc_t::IsCluster ( pLocal ) )
+		{
+			tOut.ErrorEx ( "Table %s is member of a cluster; not suitable for lock", sIndex.cstr() );
+			return;
+		}
+
+		pLocal->LockRead();
+		pSess->m_dLockedTables.Add(sIndex);
+		sphLogDebug ( "Locked %s", sIndex.cstr() );
+	}
+
+	tOut.Ok ( 0 );
+}
+
+void HandleMysqlUnlockTables ( RowBuffer_i & tOut )
+{
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+	{
+		tOut.Error ( "Locking works only for mysql session." );
+		return;
+	}
+
+	UnlockTables(session::GetClientSession());
+
+	tOut.Ok ( 0 );
+}
+
 
 RtAccum_t* CSphSessionAccum::GetAcc ( RtIndex_i* pIndex, CSphString& sError )
 {
@@ -10866,6 +10985,11 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta = CSphQueryResultMeta();
 	m_tLastMeta.m_sError = m_sError;
 	m_tLastMeta.m_sWarning = "";
+}
+
+ClientSession_c::~ClientSession_c ()
+{
+	UnlockTables(this);
 }
 
 static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut );
@@ -11394,6 +11518,13 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowTableIndexes ( tOut, *pStmt );
 		return true;
 
+	case STMT_LOCK_TABLES:
+		HandleMysqlLockTables ( tOut, *pStmt );
+		return true;
+
+	case STMT_UNLOCK_TABLES:
+		HandleMysqlUnlockTables ( tOut );
+		return true;
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

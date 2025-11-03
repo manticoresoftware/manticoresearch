@@ -27,6 +27,7 @@ jobs:
         DOCKER_DRIVER: overlay2
         COMMIT_DIR: manual
         DOCS_ERRORS_DIR: build/docs/
+        GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
     steps:
       - name: Checkout
@@ -41,7 +42,7 @@ jobs:
         id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          # Only fetch master if we're not already on it (avoid "Refusing to fetch into current branch" error)
+          # Update local master only if we're not currently on it
           if [ "${{ github.ref_name }}" != "master" ]; then
             git fetch origin master:master
           fi

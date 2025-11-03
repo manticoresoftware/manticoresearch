@@ -1500,6 +1500,37 @@ bool CSphSource_SQL::FetchJoinedFields ( CSphAutofile & tFile, CSphVector<std::u
 }
 
 
+int CSphSource_SQL::FindBlendedHitsStart ( int iHitsBegin ) const
+{
+	// find iBlendedHitsStart by searching for the last blended sequence
+	// blended hits are consecutive hits that share the same position
+	// we look for the first hit in the last blended sequence (closest to the end)
+	int iBlendedHitsStart = -1;
+	if ( m_tHits.GetLength() > iHitsBegin + 1 )
+	{
+		for ( int i = m_tHits.GetLength() - 1; i > iHitsBegin; i-- )
+		{
+			if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField &&
+				 HITMAN::GetField ( m_tHits[i-1].m_uWordPos ) == m_iJoinedHitField &&
+				 HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos ) == HITMAN::GetPosWithField ( m_tHits[i-1].m_uWordPos ) )
+			{
+				// found consecutive hits with same position - this is part of a blended sequence
+				iBlendedHitsStart = i - 1;
+				// continue searching backwards to find the start of this blended sequence
+				while ( iBlendedHitsStart > iHitsBegin &&
+						HITMAN::GetField ( m_tHits[iBlendedHitsStart-1].m_uWordPos ) == m_iJoinedHitField &&
+						HITMAN::GetPosWithField ( m_tHits[iBlendedHitsStart].m_uWordPos ) == HITMAN::GetPosWithField ( m_tHits[iBlendedHitsStart-1].m_uWordPos ) )
+				{
+					iBlendedHitsStart--;
+				}
+				break; // found the last blended sequence, stop searching
+			}
+		}
+	}
+	return iBlendedHitsStart;
+}
+
+
 ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString & sError )
 {
 	// iterating of joined hits happens after iterating hits from main query
@@ -1576,33 +1607,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 		// this is needed for exact_hit factor calculation and handles blended hits correctly
 		if ( !m_tState.m_bProcessingHits && m_tHits.GetLength() > iHitsBegin )
 		{
-			// find iBlendedHitsStart by searching for the last blended sequence
-			// blended hits are consecutive hits that share the same position
-			// we look for the first hit in the last blended sequence (closest to the end)
-			int iBlendedHitsStart = -1;
-			if ( m_tHits.GetLength() > iHitsBegin + 1 )
-			{
-				for ( int i = m_tHits.GetLength() - 1; i > iHitsBegin; i-- )
-				{
-					if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField &&
-						 HITMAN::GetField ( m_tHits[i-1].m_uWordPos ) == m_iJoinedHitField &&
-						 HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos ) == HITMAN::GetPosWithField ( m_tHits[i-1].m_uWordPos ) )
-					{
-						// found consecutive hits with same position - this is part of a blended sequence
-						iBlendedHitsStart = i - 1;
-						// continue searching backwards to find the start of this blended sequence
-						while ( iBlendedHitsStart > iHitsBegin &&
-								HITMAN::GetField ( m_tHits[iBlendedHitsStart-1].m_uWordPos ) == m_iJoinedHitField &&
-								HITMAN::GetPosWithField ( m_tHits[iBlendedHitsStart].m_uWordPos ) == HITMAN::GetPosWithField ( m_tHits[iBlendedHitsStart-1].m_uWordPos ) )
-						{
-							iBlendedHitsStart--;
-						}
-						break; // found the last blended sequence, stop searching
-					}
-				}
-			}
-
-			// use ProcessCollectedHits to set end markers properly (handles blended hits)
+			int iBlendedHitsStart = FindBlendedHitsStart ( iHitsBegin );
 			ProcessCollectedHits ( iHitsBegin, true, iBlendedHitsStart );
 		}
 

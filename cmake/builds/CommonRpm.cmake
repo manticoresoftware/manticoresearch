@@ -20,6 +20,33 @@ if (only_set_paths)
 	return ()
 endif ()
 
+# Ensure source directory path is long enough for debuginfo packaging
+# When version numbers increase (e.g., 13.15.9 -> 13.15.10), the debuginfo path
+# can become longer than the source dir path, causing CPack RPM to fail.
+# Create a symlink to make the source path longer if needed.
+set ( LONG_SOURCE_PATH "/builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0" )
+if (NOT EXISTS "${LONG_SOURCE_PATH}")
+	message ( STATUS "Creating symlink ${LONG_SOURCE_PATH} -> ${CMAKE_SOURCE_DIR} for RPM debuginfo packaging" )
+	execute_process (
+		COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_SOURCE_DIR}" "${LONG_SOURCE_PATH}"
+		RESULT_VARIABLE SYMLINK_RESULT
+		ERROR_QUIET
+		OUTPUT_QUIET
+	)
+	if (SYMLINK_RESULT EQUAL 0)
+		message ( STATUS "Symlink created successfully" )
+	else ()
+		message ( WARNING "Failed to create symlink ${LONG_SOURCE_PATH}. You may need to create it manually with: ln -s $(pwd) ${LONG_SOURCE_PATH}" )
+	endif ()
+else ()
+	# Check if existing path is a symlink pointing to our source dir
+	get_filename_component ( ACTUAL_SOURCE_DIR "${CMAKE_SOURCE_DIR}" REALPATH )
+	get_filename_component ( SYMLINK_TARGET "${LONG_SOURCE_PATH}" REALPATH )
+	if (NOT ACTUAL_SOURCE_DIR STREQUAL SYMLINK_TARGET)
+		message ( STATUS "Symlink ${LONG_SOURCE_PATH} exists but points elsewhere" )
+	endif ()
+endif ()
+
 # Common rpm-specific build variables
 set ( CPACK_GENERATOR RPM )
 

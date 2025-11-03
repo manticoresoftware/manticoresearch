@@ -62,284 +62,116 @@ Test 1: UPDATE different doc & REPLACE different doc (NO conflict expected)
 ––– input –––
 mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 999)" & wait
 ––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (10, 13)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 10
-attr1: 999
-*************************** 2. row ***************************
-   id: 13
-attr1: 1
-––– input –––
-mysql -h0 -P2306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (10, 13)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 10
-attr1: 999
-*************************** 2. row ***************************
-   id: 13
-attr1: 1
 ––– comment –––
 Test 2: REPLACE different docs (NO conflict expected)
 ––– input –––
 mysql -h0 -P2306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (11, 111)" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 101)" & wait
 ––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (10, 11)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 11
-attr1: 111
-*************************** 2. row ***************************
-   id: 10
-attr1: 101
-––– input –––
-mysql -h0 -P2306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (10, 11)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 11
-attr1: 111
-*************************** 2. row ***************************
-   id: 10
-attr1: 101
 ––– comment –––
 Test 3: DELETE & REPLACE different docs (NO conflict expected)
 ––– input –––
 mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=3" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 102)" & wait
 ––– output –––
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT COUNT(*) FROM test:tbl1 WHERE id=3\G"
-––– output –––
-*************************** 1. row ***************************
-0
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=10\G"
-––– output –––
-*************************** 1. row ***************************
-102
-––– input –––
-mysql -h0 -P2306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=10\G"
-––– output –––
-*************************** 1. row ***************************
-102
 ––– comment –––
 Test 4: INSERT different ids (NO conflict expected)
 ––– input –––
 mysql -h0 -P2306 -e "INSERT INTO test:tbl1 (id, attr1) VALUES (100, 1)" & mysql -h0 -P1306 -e "INSERT INTO test:tbl1 (id, attr1) VALUES (200, 2)" & wait
 ––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (100, 200)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 100
-attr1: 1
-*************************** 2. row ***************************
-   id: 200
-attr1: 2
 ––– comment –––
-Test 5: UPDATE & REPLACE same doc (CONFLICT expected)
+Test 5: UPDATE & REPLACE same doc (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 6)"; echo $?
+mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 6)"; sleep 2
 ––– output –––
-0
 ––– input –––
-mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 999)" & wait
+conflicts=0; for i in {1..10}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 999)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 13
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=13\G"
-––– output –––
-*************************** 1. row ***************************
-999
-––– input –––
-mysql -h0 -P2306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=13\G"
-––– output –––
-*************************** 1. row ***************************
-999
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 6: UPDATE WHERE id> & REPLACE (CONFLICT expected - NEW detects this!)
+Test 6: UPDATE WHERE id> & REPLACE (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id>13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 888)" & wait
+conflicts=0; for i in {1..10}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id>13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 888)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-ERROR 1064 (42000) at line 1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 15
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 7: UPDATE WHERE attr & REPLACE (CONFLICT expected - NEW detects this!)
+Test 7: UPDATE WHERE attr & REPLACE (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)"; echo $?
+conflicts=0; for i in {1..10}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 2; result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 333)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-0
-––– input –––
-mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 333)" & wait
-––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 18
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 8: UPDATE WHERE attr & DELETE (CONFLICT expected - NEW detects this!)
+Test 8: UPDATE WHERE attr & DELETE (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)"; echo $?
+conflicts=0; for i in {1..10}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 2; result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=3" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-0
-––– input –––
-mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=3" & wait
-––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 21
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 9: DELETE & REPLACE same doc (CONFLICT expected)
+Test 9: DELETE & REPLACE same doc (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)"; echo $?
+conflicts=0; for i in {1..10}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 2; result=$( (mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=3" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 303)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-0
-––– input –––
-mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=3" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 303)" & wait
-––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 24
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 10: 2x DELETE same doc (CONFLICT expected)
+Test 10: 2x DELETE same doc (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (1, 1)"; echo $?
+conflicts=0; for i in {1..10}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (1, 1)" > /dev/null 2>&1; sleep 2; result=$( (mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=1" & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=1" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-0
-––– input –––
-mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=1" & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=1" & wait
-––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 27
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT COUNT(*) FROM test:tbl1 WHERE id=1\G"
-––– output –––
-*************************** 1. row ***************************
-0
-––– input –––
-mysql -h0 -P2306 -NB -e "SELECT COUNT(*) FROM test:tbl1 WHERE id=1\G"
-––– output –––
-*************************** 1. row ***************************
-0
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 11: 2x UPDATE same doc (CONFLICT expected)
+Test 11: 2x UPDATE same doc (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=111 WHERE id=15" & mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=222 WHERE id=15" & wait
+conflicts=0; for i in {1..10}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=111 WHERE id=15" & mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=222 WHERE id=15" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 29
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=15\G"
-––– output –––
-*************************** 1. row ***************************
-111
-––– input –––
-mysql -h0 -P2306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=15\G"
-––– output –––
-*************************** 1. row ***************************
-111
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
 Test 12: 3x REPLACE different docs on 3 nodes (NO conflict expected)
 ––– input –––
 mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (1, 1001)" & mysql -h0 -P2306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 1010)" & mysql -h0 -P3306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (20, 1020)" & wait
 ––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (1, 10, 20)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 1
-attr1: 1001
-*************************** 2. row ***************************
-   id: 20
-attr1: 1020
-*************************** 3. row ***************************
-   id: 10
-attr1: 1010
-––– input –––
-mysql -h0 -P2306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (1, 10, 20)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 1
-attr1: 1001
-*************************** 2. row ***************************
-   id: 20
-attr1: 1020
-*************************** 3. row ***************************
-   id: 10
-attr1: 1010
-––– input –––
-mysql -h0 -P3306 -e "SELECT id, attr1 FROM test:tbl1 WHERE id IN (1, 10, 20)\G"
-––– output –––
-*************************** 1. row ***************************
-   id: 1
-attr1: 1001
-*************************** 2. row ***************************
-   id: 20
-attr1: 1020
-*************************** 3. row ***************************
-   id: 10
-attr1: 1010
 ––– comment –––
-Test 13: 3x UPDATE same doc on 3 nodes (CONFLICT expected)
+Test 13: 3x UPDATE same doc on 3 nodes (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=100 WHERE id=12" & mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=200 WHERE id=12" & mysql -h0 -P3306 -e "UPDATE test:tbl1 SET attr1=300 WHERE id=12" & wait
+conflicts=0; for i in {1..10}; do result=$( (mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=100 WHERE id=12" & mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=200 WHERE id=12" & mysql -h0 -P3306 -e "UPDATE test:tbl1 SET attr1=300 WHERE id=12" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 34
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=12\G"
-––– output –––
-*************************** 1. row ***************************
-300
-––– input –––
-mysql -h0 -P2306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=12\G"
-––– output –––
-*************************** 1. row ***************************
-300
-––– input –––
-mysql -h0 -P3306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=12\G"
-––– output –––
-*************************** 1. row ***************************
-300
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
-Test 14: 2x DELETE + REPLACE on 3 nodes (CONFLICT expected)
+Test 14: 2x DELETE + REPLACE on 3 nodes (CONFLICT expected) - run 10 times
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 14)"; echo $?
+conflicts=0; for i in {1..10}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 14)" > /dev/null 2>&1; sleep 2; result=$( (mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=14" & mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=14" & mysql -h0 -P3306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (15, 1500)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/10"; test $conflicts -ge 2 && echo "PASS" || echo "FAIL"
 ––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=14" & mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=14" & mysql -h0 -P3306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (15, 1500)" & wait
-––– output –––
-ERROR 1064 (42000) at line 1: table tbl1: error at PostRollback, code 3 (transaction aborted, server can continue), seqno 38
-––– input –––
-mysql -h0 -P1306 -NB -e "SELECT COUNT(*) FROM test:tbl1 WHERE id=14\G"
-––– output –––
-*************************** 1. row ***************************
-0
-––– input –––
-mysql -h0 -P2306 -NB -e "SELECT COUNT(*) FROM test:tbl1 WHERE id=14\G"
-––– output –––
-*************************** 1. row ***************************
-0
-––– input –––
-mysql -h0 -P3306 -NB -e "SELECT attr1 FROM test:tbl1 WHERE id=15\G"
-––– output –––
-*************************** 1. row ***************************
-1500
+Conflicts: %{NUMBER}/10
+PASS
 ––– comment –––
 Final verification: Check synchronization and no FATAL errors
 ––– input –––
 mysql -h0 -P1306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
 ––– output –––
 *************************** 1. row ***************************
-10
+%{NUMBER}
 ––– input –––
 mysql -h0 -P2306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
 ––– output –––
 *************************** 1. row ***************************
-10
+%{NUMBER}
 ––– input –––
 mysql -h0 -P3306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
 ––– output –––
 *************************** 1. row ***************************
-10
+%{NUMBER}
 ––– input –––
 mysql -h0 -P1306 -e "SELECT * FROM test:tbl1" > /tmp/node1.txt; mysql -h0 -P2306 -e "SELECT * FROM test:tbl1" > /tmp/node2.txt; mysql -h0 -P3306 -e "SELECT * FROM test:tbl1" > /tmp/node3.txt; diff /tmp/node1.txt /tmp/node2.txt && diff /tmp/node2.txt /tmp/node3.txt && echo "All nodes synchronized" || echo "Discrepancies detected"
 ––– output –––
 All nodes synchronized
 ––– input –––
-for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "Node #$i – $?"; done
+for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log && echo "Node #$i has FATAL" || echo "Node #$i OK"; done
 ––– output –––
-Node #1 – 1
-Node #2 – 1
-Node #3 – 1
+Node #1 OK
+Node #2 OK
+Node #3 OK

@@ -1564,51 +1564,46 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 			m_tDocInfo.m_tRowID = pIdPair->m_tRowID;
 		}
 				
+		// track where hits for this field begin
+		int iHitsBegin = m_tHits.GetLength();
 		BuildHits ( sError, true );
 
 		// update current position
 		if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
 			m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last().m_uWordPos );
 
-		// set end marker for joined fields when processing is complete
-		// this is needed for exact_hit factor calculation
-		// note: we only set it when we're done with the current joined field value,
-		// but we need to mark the last position across all accumulated hits for this field
-		if ( !m_tState.m_bProcessingHits && m_tHits.GetLength() )
+		// process collected hits to set end marker for joined fields
+		// this is needed for exact_hit factor calculation and handles blended hits correctly
+		if ( !m_tState.m_bProcessingHits && m_tHits.GetLength() > iHitsBegin )
 		{
-			// find the maximum hit position for the current joined field
-			// this handles both single and multiple joined field values for the same doc/field
-			Hitpos_t uMaxPos = 0;
-			for ( int i = m_tHits.GetLength() - 1; i >= 0; i-- )
+			// find iBlendedHitsStart by searching for the last blended sequence
+			// blended hits are consecutive hits that share the same position
+			// we look for the first hit in the last blended sequence (closest to the end)
+			int iBlendedHitsStart = -1;
+			if ( m_tHits.GetLength() > iHitsBegin + 1 )
 			{
-				if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField )
+				for ( int i = m_tHits.GetLength() - 1; i > iHitsBegin; i-- )
 				{
-					Hitpos_t uPos = HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos );
-					if ( uPos > uMaxPos )
-						uMaxPos = uPos;
-				}
-			}
-			// set end marker on all hits at the maximum position in this field
-			// clear end marker from hits at other positions (in case max position changed)
-			if ( uMaxPos > 0 )
-			{
-				for ( int i = 0; i < m_tHits.GetLength(); i++ )
-				{
-					if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField )
+					if ( HITMAN::GetField ( m_tHits[i].m_uWordPos ) == m_iJoinedHitField &&
+						 HITMAN::GetField ( m_tHits[i-1].m_uWordPos ) == m_iJoinedHitField &&
+						 HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos ) == HITMAN::GetPosWithField ( m_tHits[i-1].m_uWordPos ) )
 					{
-						Hitpos_t uPos = HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos );
-						if ( uPos == uMaxPos && !HITMAN::IsEnd ( m_tHits[i].m_uWordPos ) )
+						// found consecutive hits with same position - this is part of a blended sequence
+						iBlendedHitsStart = i - 1;
+						// continue searching backwards to find the start of this blended sequence
+						while ( iBlendedHitsStart > iHitsBegin &&
+								HITMAN::GetField ( m_tHits[iBlendedHitsStart-1].m_uWordPos ) == m_iJoinedHitField &&
+								HITMAN::GetPosWithField ( m_tHits[iBlendedHitsStart].m_uWordPos ) == HITMAN::GetPosWithField ( m_tHits[iBlendedHitsStart-1].m_uWordPos ) )
 						{
-							HITMAN::SetEndMarker ( &m_tHits[i].m_uWordPos );
+							iBlendedHitsStart--;
 						}
-						else if ( uPos < uMaxPos && HITMAN::IsEnd ( m_tHits[i].m_uWordPos ) )
-						{
-							// clear end marker from positions that are no longer the maximum
-							m_tHits[i].m_uWordPos = HITMAN::GetPosWithField ( m_tHits[i].m_uWordPos );
-						}
+						break; // found the last blended sequence, stop searching
 					}
 				}
 			}
+
+			// use ProcessCollectedHits to set end markers properly (handles blended hits)
+			ProcessCollectedHits ( iHitsBegin, true, iBlendedHitsStart );
 		}
 
 		if ( m_tState.m_bProcessingHits )

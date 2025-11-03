@@ -257,4 +257,12 @@ protected:
 
 	CSphHTMLStripper *				m_pStripper = nullptr;	///< my HTML stripper
 	CSphBitvec						m_tMorphFields;
+
+protected:
+	/// Process collected hits: mark tail (end marker) and compute field lengths
+	/// Uses member variables: m_tHits, m_pDict, m_pFieldLengthAttrs
+	/// @param iHitsBegin starting index of hits to process
+	/// @param bMarkTail whether to mark tail with end marker
+	/// @param iBlendedHitsStart index of first blended hit (or -1 if none)
+	void ProcessCollectedHits ( int iHitsBegin, bool bMarkTail, int iBlendedHitsStart );
 };

@@ -22,7 +22,7 @@ apt-get -y install gnupg2 openjdk-8-jre-headless curl jq filebeat > /dev/null 2>
 ––– input –––
 echo -e "filebeat.inputs:\n- type: filestream\n  id: example\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: [\"http://localhost:9308\"]\n  index: \"dpkg_log\"\n  allow_older_versions: true\n  compression_level: 0\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: \"dpkg_log\"\n  pattern: \"dpkg_log\"" > /filebeat.yml
 ––– output –––
-––– block: ../base/start-searchd –––
+––– block: ../../base/start-searchd –––
 ––– input –––
 echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
 ––– output –––

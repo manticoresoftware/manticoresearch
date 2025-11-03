@@ -37,7 +37,7 @@ echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20
 cat /var/log/dpkg.log | wc -l
 ––– output –––
 5
-––– block: ../base/start-searchd –––
+––– block: ../../base/start-searchd –––
 ––– input –––
 fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit.conf > /dev/null 2>&1; echo $?
 ––– output –––

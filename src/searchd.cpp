@@ -7265,12 +7265,11 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		tOut.Error ( "%s", sReport.cstr() );
 		return;
-	} else
-	{
-		int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
-		if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
-			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
+
+	int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
+	if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
+		LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 
 	tOut.Ok ( iUpdated, iWarns );
 }

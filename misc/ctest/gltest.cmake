@@ -20,7 +20,7 @@ set ( CTEST_RESOURCE "$ENV{CTEST_RESOURCE}" )
 set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
 
 # how may times try the test before it is considered failed
-set (RETRIES 5)
+set (RETRIES 1)
 
 include ( ProcessorCount )
 ProcessorCount ( N )

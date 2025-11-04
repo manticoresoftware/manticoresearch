@@ -207,9 +207,10 @@ public:
 /// stack of a thread (that is NOT stack of the coroutine!)
 /// On Windows, use larger stack size to handle deep query parsing recursion
 /// (bison parser with many OR clauses can exhaust smaller stacks)
+/// With 1519 OR clauses, bison's internal stack requires significant depth
 /// Note: Increasing too much can cause address space issues on 32-bit or fragmentation
 #if _WIN32
-static const DWORD STACK_SIZE = 1200 * 1024; // 512KB for Windows - moderate increase to handle bison recursion
+static const DWORD STACK_SIZE = 3 * 1024 * 1024; // 3MB for Windows - needed for very long OR chains (1500+ clauses)
 #else
 static const DWORD STACK_SIZE = 128 * 1024; // 128KB default for Linux/Unix
 #endif

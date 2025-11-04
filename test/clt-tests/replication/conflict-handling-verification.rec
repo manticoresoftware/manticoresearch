@@ -60,7 +60,7 @@ mysql -h0 -P3306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
 ––– comment –––
 Start background load to increase conflict probability
 ––– input –––
-manticore-load --host=127.0.0.1 --port=1306 --query="REPLACE INTO test:tbl1 (id, attr1) VALUES (%RAND, %RAND)" --host=127.0.0.1 --port=2306 --together > /dev/null 2>&1 & LOAD_PID=$!; sleep 1; echo "Load started: $LOAD_PID"
+manticore-load --host=127.0.0.1 --threads=4 --port=1306 --query="REPLACE INTO test:tbl1 (id, attr1) VALUES (%RAND, %RAND)" --host=127.0.0.1 --port=2306 --together > /dev/null 2>&1 & LOAD_PID=$!; sleep 1; echo "Load started: $LOAD_PID"
 ––– output –––
 Load started: %{NUMBER}
 ––– comment –––

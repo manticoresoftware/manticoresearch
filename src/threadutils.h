@@ -208,7 +208,7 @@ public:
 /// On Windows, use larger stack size to handle deep query parsing recursion
 /// (bison parser with many OR clauses can exhaust smaller stacks)
 #if _WIN32
-static const DWORD STACK_SIZE = 2 * 1024 * 1024; // 2MB for Windows to handle deep bison recursion
+static const DWORD STACK_SIZE = 128 * 1024; // 2MB for Windows to handle deep bison recursion
 #else
 static const DWORD STACK_SIZE = 128 * 1024; // 128KB default for Linux/Unix
 #endif

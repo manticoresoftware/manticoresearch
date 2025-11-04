@@ -38,7 +38,7 @@ jobs:
   clt:
     name: CLT
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     continue-on-error: ${{ inputs.continue_on_error }}
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

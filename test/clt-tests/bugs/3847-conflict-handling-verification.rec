@@ -96,7 +96,7 @@ mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 6)"; sleep 2
 ––– input –––
 conflicts=0; for i in {1..30}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 999)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
 ––– output –––
-≈
+Conflicts: %{NUMBER}/30
 PASS
 ––– comment –––
 Test 6: UPDATE WHERE id> & REPLACE (CONFLICT expected) - run 30 times

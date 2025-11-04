@@ -209,7 +209,7 @@ public:
 /// (bison parser with many OR clauses can exhaust smaller stacks)
 /// Note: Increasing too much can cause address space issues on 32-bit or fragmentation
 #if _WIN32
-static const DWORD STACK_SIZE = 512 * 1024; // 512KB for Windows - moderate increase to handle bison recursion
+static const DWORD STACK_SIZE = 1200 * 1024; // 512KB for Windows - moderate increase to handle bison recursion
 #else
 static const DWORD STACK_SIZE = 128 * 1024; // 128KB default for Linux/Unix
 #endif

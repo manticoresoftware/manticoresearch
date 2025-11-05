@@ -2463,12 +2463,22 @@ void ExprCaseTrival_c<false>::DoCase ( char * pString ) const
 
 void UTF8ToLower( std::vector<char> & dBuf, std::basic_string_view<char> source )
 {
+#ifdef __FreeBSD__
+	std::string result = una::cases::to_lowercase_utf8( source );
+	dBuf.assign( result.begin(), result.end() );
+#else
 	return una::detail::t_map<std::vector<char>, std::basic_string_view<char>, una::detail::impl_x_case_map_utf8, una::detail::impl_case_map_loc_utf8> ( dBuf, source, una::detail::impl_case_map_mode_lowercase );
+#endif
 }
 
 void UTF8ToUpper( std::vector<char> & dBuf, std::basic_string_view<char> source )
 {
+#ifdef __FreeBSD__
+	std::string result = una::cases::to_uppercase_utf8( source );
+	dBuf.assign( result.begin(), result.end() );
+#else
 	return una::detail::t_map<std::vector<char>, std::basic_string_view<char>, una::detail::impl_x_case_map_utf8, una::detail::impl_case_map_loc_utf8> ( dBuf, source, una::detail::impl_case_map_mode_uppercase );
+#endif
 }
 
 template<bool UPPER>

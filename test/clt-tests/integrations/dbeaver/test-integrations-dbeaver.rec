@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE products (id INT, name TEXT, price FLOAT, category_id INT)"
 ––– output –––
@@ -513,7 +513,11 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM information_schema.tables"
 ––– output –––
-ERROR 1064 (42000) at line 1: Undefined array key "TABLE_NAME"
++----------+
+| COUNT(*) |
++----------+
+| 5        |
++----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@isolation"
 ––– output –––

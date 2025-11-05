@@ -9,6 +9,8 @@
 // CREATE FUNCTION makemva RETURNS MULTI SONAME 'udfexample.so';
 // CREATE FUNCTION makemva64 RETURNS MULTI64 SONAME 'udfexample.so';
 // CREATE FUNCTION makefloatvec RETURNS FLOAT_VECTOR SONAME 'udfexample.so';
+// Note: makemva, makemva64, and makefloatvec accept an optional integer seed parameter
+// for deterministic results: makemva(seed), makemva64(seed), makefloatvec(seed)
 //
 // Windows
 // cl /MTd /LD udfexample.c
@@ -18,6 +20,8 @@
 // CREATE FUNCTION makemva RETURNS MULTI SONAME 'udfexample.dll';
 // CREATE FUNCTION makemva64 RETURNS MULTI64 SONAME 'udfexample.dll';
 // CREATE FUNCTION makefloatvec RETURNS FLOAT_VECTOR SONAME 'udfexample.dll';
+// Note: makemva, makemva64, and makefloatvec accept an optional integer seed parameter
+// for deterministic results: makemva(seed), makemva64(seed), makefloatvec(seed)
 //
 
 #include "sphinxudf.h"
@@ -314,22 +318,86 @@ DLLEXPORT void hideemail_deinit ( void * userdata )
 
 //////////////////////////////////////////////////////////////////////////
 // MVA return example - returns a random MVA with 1-20 random values
+// Optional seed parameter for deterministic results
+
+// Simple Linear Congruential Generator for deterministic random numbers
+static uint32_t lcg_next ( uint32_t * state )
+{
+	*state = *state * 1103515245U + 12345U;
+	return *state;
+}
+
+typedef struct { uint32_t seed; uint32_t counter; } SeedData_t;
 
 DLLEXPORT int makemva_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
 {
 	UdfLog ( "Called makemva_init" );
-	if ( args->arg_count!=0 )
+	if ( args->arg_count > 1 )
 	{
-		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEMVA() takes no arguments" );
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEMVA() takes 0 or 1 argument (optional seed)" );
 		return 1;
 	}
+	
+	// Allocate storage for seed value and call counter
+	SeedData_t * pData = (SeedData_t *) malloc ( sizeof(SeedData_t) );
+	if ( !pData )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "malloc() failed" );
+		return 1;
+	}
+	
+	// Initialize: seed=0 means not set, counter starts at 0
+	pData->seed = 0;
+	pData->counter = 0;
+	
+	init->func_data = pData;
 	return 0;
+}
+
+DLLEXPORT void makemva_deinit ( SPH_UDF_INIT * init )
+{
+	if ( init->func_data )
+	{
+		free ( init->func_data );
+		init->func_data = NULL;
+	}
 }
 
 DLLEXPORT ByteBlob_t makemva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_flag )
 {
+	SeedData_t * pData = (SeedData_t *)init->func_data;
+	uint32_t state;
+	
+	// Check if seed was explicitly provided (arg_values not available during _init)
+	if ( args->arg_count == 1 && args->arg_values && args->arg_values[0] )
+	{
+		// Seed was provided - use it deterministically for all rows
+		if ( pData->seed == 0 )
+		{
+			// First call with seed - initialize it
+			if ( args->arg_types[0] == SPH_UDF_TYPE_UINT32 )
+				pData->seed = *(uint32_t*)args->arg_values[0];
+			else if ( args->arg_types[0] == SPH_UDF_TYPE_INT64 )
+				pData->seed = (uint32_t)(*(sphinx_int64_t*)args->arg_values[0]);
+			else
+				pData->seed = (uint32_t)time(NULL);
+			// Ensure seed is non-zero (0 is our "not initialized" marker)
+			if ( pData->seed == 0 )
+				pData->seed = 1;
+		}
+		// Use the stored seed for deterministic results
+		state = pData->seed;
+	}
+	else
+	{
+		// No seed provided - generate new random seed for each row
+		// Use time + counter + pointer address for variation
+		pData->counter++;
+		state = (uint32_t)time(NULL) ^ (uint32_t)((uintptr_t)init->func_data) ^ pData->counter;
+	}
+	
 	// Generate random array length from 1 to 20
-	int count = (rand() % 20) + 1;
+	int count = (lcg_next(&state) % 20) + 1;
 	
 	// Allocate memory for random number of uint32 values using the provided malloc function
 	uint32_t * pValues = (uint32_t *) args->fn_malloc ( count * sizeof(uint32_t) );
@@ -341,7 +409,22 @@ DLLEXPORT ByteBlob_t makemva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * 
 	
 	// Fill with random values
 	for ( int i = 0; i < count; i++ )
-		pValues[i] = (uint32_t)(rand() % 1000) + 1; // Random values from 1 to 1000
+		pValues[i] = (lcg_next(&state) % 1000) + 1; // Random values from 1 to 1000
+	
+	// Sort values (required for any() function to work with binary search)
+	// Simple bubble sort for small arrays (typically 1-20 elements)
+	for ( int i = 0; i < count - 1; i++ )
+	{
+		for ( int j = 0; j < count - i - 1; j++ )
+		{
+			if ( pValues[j] > pValues[j+1] )
+			{
+				uint32_t temp = pValues[j];
+				pValues[j] = pValues[j+1];
+				pValues[j+1] = temp;
+			}
+		}
+	}
 	
 	// Return as ByteBlob_t
 	return (ByteBlob_t){(const BYTE*)pValues, count * sizeof(uint32_t)};
@@ -349,21 +432,75 @@ DLLEXPORT ByteBlob_t makemva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * 
 
 //////////////////////////////////////////////////////////////////////////
 // MVA64 return example - returns a random MVA64 with 1-20 random values
+// Optional seed parameter for deterministic results
 
 DLLEXPORT int makemva64_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
 {
-	if ( args->arg_count!=0 )
+	if ( args->arg_count > 1 )
 	{
-		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEMVA64() takes no arguments" );
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEMVA64() takes 0 or 1 argument (optional seed)" );
 		return 1;
 	}
+	
+	// Allocate storage for seed value and call counter
+	SeedData_t * pData = (SeedData_t *) malloc ( sizeof(SeedData_t) );
+	if ( !pData )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "malloc() failed" );
+		return 1;
+	}
+	
+	// Initialize: seed=0 means not set, counter starts at 0
+	pData->seed = 0;
+	pData->counter = 0;
+	
+	init->func_data = pData;
 	return 0;
+}
+
+DLLEXPORT void makemva64_deinit ( SPH_UDF_INIT * init )
+{
+	if ( init->func_data )
+	{
+		free ( init->func_data );
+		init->func_data = NULL;
+	}
 }
 
 DLLEXPORT ByteBlob_t makemva64 ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_flag )
 {
+	SeedData_t * pData = (SeedData_t *)init->func_data;
+	uint32_t state;
+	
+	// Check if seed was explicitly provided (arg_values not available during _init)
+	if ( args->arg_count == 1 && args->arg_values && args->arg_values[0] )
+	{
+		// Seed was provided - use it deterministically for all rows
+		if ( pData->seed == 0 )
+		{
+			// First call with seed - initialize it
+			if ( args->arg_types[0] == SPH_UDF_TYPE_UINT32 )
+				pData->seed = *(uint32_t*)args->arg_values[0];
+			else if ( args->arg_types[0] == SPH_UDF_TYPE_INT64 )
+				pData->seed = (uint32_t)(*(sphinx_int64_t*)args->arg_values[0]);
+			else
+				pData->seed = (uint32_t)time(NULL);
+			// Ensure seed is non-zero (0 is our "not initialized" marker)
+			if ( pData->seed == 0 )
+				pData->seed = 1;
+		}
+		// Use the stored seed for deterministic results
+		state = pData->seed;
+	}
+	else
+	{
+		// No seed provided - generate new random seed for each row
+		pData->counter++;
+		state = (uint32_t)time(NULL) ^ (uint32_t)((uintptr_t)init->func_data) ^ pData->counter;
+	}
+	
 	// Generate random array length from 1 to 20
-	int count = (rand() % 20) + 1;
+	int count = (lcg_next(&state) % 20) + 1;
 	
 	// Allocate memory for random number of int64 values using the provided malloc function
 	int64_t * pValues = (int64_t *) args->fn_malloc ( count * sizeof(int64_t) );
@@ -375,7 +512,22 @@ DLLEXPORT ByteBlob_t makemva64 ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char 
 	
 	// Fill with random values
 	for ( int i = 0; i < count; i++ )
-		pValues[i] = (int64_t)(rand() % 10000) + 1; // Random values from 1 to 10000
+		pValues[i] = (int64_t)(lcg_next(&state) % 10000) + 1; // Random values from 1 to 10000
+	
+	// Sort values (required for any() function to work with binary search)
+	// Simple bubble sort for small arrays (typically 1-20 elements)
+	for ( int i = 0; i < count - 1; i++ )
+	{
+		for ( int j = 0; j < count - i - 1; j++ )
+		{
+			if ( pValues[j] > pValues[j+1] )
+			{
+				int64_t temp = pValues[j];
+				pValues[j] = pValues[j+1];
+				pValues[j+1] = temp;
+			}
+		}
+	}
 	
 	// Return as ByteBlob_t
 	return (ByteBlob_t){(const BYTE*)pValues, count * sizeof(int64_t)};
@@ -383,19 +535,73 @@ DLLEXPORT ByteBlob_t makemva64 ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char 
 
 //////////////////////////////////////////////////////////////////////////
 // Float vector return example - returns a random float vector with 128 values
+// Optional seed parameter for deterministic results
 
 DLLEXPORT int makefloatvec_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
 {
-	if ( args->arg_count!=0 )
+	if ( args->arg_count > 1 )
 	{
-		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEFLOATVEC() takes no arguments" );
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "MAKEFLOATVEC() takes 0 or 1 argument (optional seed)" );
 		return 1;
 	}
+	
+	// Allocate storage for seed value and call counter
+	SeedData_t * pData = (SeedData_t *) malloc ( sizeof(SeedData_t) );
+	if ( !pData )
+	{
+		snprintf ( error_message, SPH_UDF_ERROR_LEN, "malloc() failed" );
+		return 1;
+	}
+	
+	// Initialize: seed=0 means not set, counter starts at 0
+	pData->seed = 0;
+	pData->counter = 0;
+	
+	init->func_data = pData;
 	return 0;
+}
+
+DLLEXPORT void makefloatvec_deinit ( SPH_UDF_INIT * init )
+{
+	if ( init->func_data )
+	{
+		free ( init->func_data );
+		init->func_data = NULL;
+	}
 }
 
 DLLEXPORT ByteBlob_t makefloatvec ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_flag )
 {
+	SeedData_t * pData = (SeedData_t *)init->func_data;
+	uint32_t state;
+	
+	// Check if seed was explicitly provided (arg_values not available during _init)
+	if ( args->arg_count == 1 && args->arg_values && args->arg_values[0] )
+	{
+		// Seed was provided - use it deterministically for all rows
+		if ( pData->seed == 0 )
+		{
+			// First call with seed - initialize it
+			if ( args->arg_types[0] == SPH_UDF_TYPE_UINT32 )
+				pData->seed = *(uint32_t*)args->arg_values[0];
+			else if ( args->arg_types[0] == SPH_UDF_TYPE_INT64 )
+				pData->seed = (uint32_t)(*(sphinx_int64_t*)args->arg_values[0]);
+			else
+				pData->seed = (uint32_t)time(NULL);
+			// Ensure seed is non-zero (0 is our "not initialized" marker)
+			if ( pData->seed == 0 )
+				pData->seed = 1;
+		}
+		// Use the stored seed for deterministic results
+		state = pData->seed;
+	}
+	else
+	{
+		// No seed provided - generate new random seed for each row
+		pData->counter++;
+		state = (uint32_t)time(NULL) ^ (uint32_t)((uintptr_t)init->func_data) ^ pData->counter;
+	}
+	
 	// Constant array length of 128 for float vector
 	const int count = 128;
 	
@@ -409,7 +615,7 @@ DLLEXPORT ByteBlob_t makefloatvec ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, ch
 	
 	// Fill with random values
 	for ( int i = 0; i < count; i++ )
-		pValues[i] = (float)(rand() % 1000) / 10.0f; // Random values from 0.0 to 99.9
+		pValues[i] = (float)(lcg_next(&state) % 1000) / 10.0f; // Random values from 0.0 to 99.9
 	
 	// Return as ByteBlob_t
 	return (ByteBlob_t){(const BYTE*)pValues, count * sizeof(float)};

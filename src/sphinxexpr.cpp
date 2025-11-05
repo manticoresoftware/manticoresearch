@@ -7898,9 +7898,10 @@ template < typename T >
 class Expr_MVAAggr_c : public Expr_WithLocator_c
 {
 public:
-	Expr_MVAAggr_c ( const CSphAttrLocator & tLoc, const CSphString & sAttr, ESphAggrFunc eFunc )
+	Expr_MVAAggr_c ( const CSphAttrLocator & tLoc, const CSphString & sAttr, ESphAggrFunc eFunc, bool bIsSorted = true )
 		: Expr_WithLocator_c ( tLoc, sAttr )
 		, m_eFunc ( eFunc )
+		, m_bIsSorted ( bIsSorted )
 	{}
 
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
@@ -7910,16 +7911,51 @@ public:
 			return 0;
 
 		int nValues = dMva.second / sizeof(T);
+		if ( nValues==0 )
+			return 0;
 
-		const T * L = (const T *)dMva.first;
-		const T * R = L+nValues-1;
+		const T * pValues = (const T *)dMva.first;
 
+		// Fast path for single value
+		if ( nValues==1 )
+			return (int64_t)pValues[0];
+
+		// For sorted MVAs (stored attributes), use O(1) path.
+		// For unsorted MVAs (computed expressions), scan all values.
+		if ( m_bIsSorted )
+		{
+			const T * pFirst = pValues;
+			const T * pLast = pValues + nValues - 1;
+			switch ( m_eFunc )
+			{
+				case SPH_AGGR_MIN:	return (int64_t)*pFirst;
+				case SPH_AGGR_MAX:	return (int64_t)*pLast;
+				default:			return 0;
+			}
+		}
+
+		// Unsorted: iterate through all values to find min/max
+		T tResult = pValues[0];
 		switch ( m_eFunc )
 		{
-			case SPH_AGGR_MIN:	return *L;
-			case SPH_AGGR_MAX:	return *R;
-			default:			return 0;
+			case SPH_AGGR_MIN:
+				for ( int i = 1; i < nValues; ++i )
+				{
+					if ( pValues[i] < tResult )
+						tResult = pValues[i];
+				}
+				break;
+			case SPH_AGGR_MAX:
+				for ( int i = 1; i < nValues; ++i )
+				{
+					if ( pValues[i] > tResult )
+						tResult = pValues[i];
+				}
+				break;
+			default:
+				return 0;
 		}
+		return (int64_t)tResult;
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -7948,11 +7984,13 @@ public:
 protected:
 	const BYTE *	m_pBlobPool {nullptr};
 	ESphAggrFunc	m_eFunc {SPH_AGGR_NONE};
+	bool			m_bIsSorted {true};	///< true if MVA is from storage (sorted), false if computed (unsorted)
 
 private:
 	Expr_MVAAggr_c ( const Expr_MVAAggr_c& rhs )
 		: Expr_WithLocator_c ( rhs )
 		, m_eFunc ( rhs.m_eFunc )
+		, m_bIsSorted ( rhs.m_bIsSorted )
 	{}
 };
 
@@ -9349,11 +9387,42 @@ ISphExpr * ExprParser_t::CreateAggregateNode ( const ExprNode_t & tNode, ESphAgg
 	switch ( tLeft.m_iToken )
 	{
 		case TOK_ATTR_JSON:			return new Expr_JsonFieldAggr_c ( pLeft, eFunc );
-		case TOK_ATTR_MVA32:		return new Expr_MVAAggr_c<DWORD> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc );
-		case TOK_ATTR_MVA64:		return new Expr_MVAAggr_c<int64_t> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc );
+		case TOK_ATTR_MVA32:
+		{
+			// Check if attribute is from storage (sorted) or computed expression (unsorted)
+			bool bIsSorted = true;
+			if ( m_pSchema )
+			{
+				int iAttr = m_pSchema->GetAttrIndex ( GetNameByLocator(tLeft).cstr() );
+				if ( iAttr >= 0 )
+				{
+					const CSphColumnInfo & tAttr = m_pSchema->GetAttr ( iAttr );
+					// If attribute has an expression, it's likely computed (unsorted)
+					bIsSorted = !tAttr.m_pExpr.Ptr();
+				}
+			}
+			return new Expr_MVAAggr_c<DWORD> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc, bIsSorted );
+		}
+		case TOK_ATTR_MVA64:
+		{
+			// Check if attribute is from storage (sorted) or computed expression (unsorted)
+			bool bIsSorted = true;
+			if ( m_pSchema )
+			{
+				int iAttr = m_pSchema->GetAttrIndex ( GetNameByLocator(tLeft).cstr() );
+				if ( iAttr >= 0 )
+				{
+					const CSphColumnInfo & tAttr = m_pSchema->GetAttr ( iAttr );
+					// If attribute has an expression, it's likely computed (unsorted)
+					bIsSorted = !tAttr.m_pExpr.Ptr();
+				}
+			}
+			return new Expr_MVAAggr_c<int64_t> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc, bIsSorted );
+		}
 		case TOK_COLUMNAR_UINT32SET:return CreateExpr_ColumnarMva32Aggr ( pLeft, eFunc );
 		case TOK_COLUMNAR_INT64SET:	return CreateExpr_ColumnarMva64Aggr ( pLeft, eFunc );
-		default:					return nullptr;
+		default:
+			return nullptr;
 	}
 }
 

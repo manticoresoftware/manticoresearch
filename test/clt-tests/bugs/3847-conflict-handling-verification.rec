@@ -1,0 +1,194 @@
+––– input –––
+set -b +m
+––– output –––
+––– comment –––
+Limit searchd to 4 threads for consistent conflict detection (add only if not present)
+––– input –––
+grep -q 'threads = 4' test/clt-tests/base/searchd-with-flexible-ports.conf || sed -i '/searchd {/a\	threads = 4' test/clt-tests/base/searchd-with-flexible-ports.conf
+––– output –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Create 3-node cluster and add test table
+––– input –––
+mkdir /var/{lib,log}/manticore-{1,2,3}/test
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER test 'test' as path"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "JOIN CLUSTER test at '127.0.0.1:1312' 'test' as path"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P3306 -e "JOIN CLUSTER test at '127.0.0.1:1312' 'test' as path"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl1 (id bigint, attr1 int)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER test ADD tbl1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO test:tbl1 (id, attr1) VALUES (1,1), (3,2), (10,3), (11,4), (12,5), (13,6), (14,7), (15,8), (20,9)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
+––– output –––
+*************************** 1. row ***************************
+9
+––– input –––
+mysql -h0 -P2306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
+––– output –––
+*************************** 1. row ***************************
+9
+––– input –––
+mysql -h0 -P3306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
+––– output –––
+*************************** 1. row ***************************
+9
+––– comment –––
+Start background load to increase conflict probability
+––– input –––
+manticore-load --host=127.0.0.1 --threads=4 --port=1306 --query="REPLACE INTO test:tbl1 (id, attr1) VALUES (%RAND, %RAND)" --host=127.0.0.1 --port=2306 --together > /dev/null 2>&1 & LOAD_PID=$!; sleep 1; echo "Load started: $LOAD_PID"
+––– output –––
+Load started: %{NUMBER}
+––– comment –––
+Test 1: UPDATE different doc & REPLACE different doc (NO conflict expected)
+––– input –––
+mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 999)" & wait
+––– output –––
+––– comment –––
+Test 2: REPLACE different docs (NO conflict expected)
+––– input –––
+mysql -h0 -P2306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (11, 111)" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 101)" & wait
+––– output –––
+––– comment –––
+Test 3: DELETE & REPLACE different docs (NO conflict expected)
+––– input –––
+mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=3" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 102)" & wait
+––– output –––
+––– comment –––
+Test 4: INSERT different ids (NO conflict expected)
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO test:tbl1 (id, attr1) VALUES (100, 1)" & mysql -h0 -P1306 -e "INSERT INTO test:tbl1 (id, attr1) VALUES (200, 2)" & wait
+––– output –––
+––– comment –––
+Test 5: UPDATE & REPLACE same doc (CONFLICT expected) - run 30 times
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 6)"; sleep 2
+––– output –––
+––– input –––
+conflicts=0; for i in {1..30}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (13, 999)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 6: UPDATE WHERE id> & REPLACE (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id>13" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 888)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 7: UPDATE WHERE attr & REPLACE (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 3; result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 333)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 8: UPDATE WHERE attr & DELETE (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 3; result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=3" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 9: DELETE & REPLACE same doc (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 3; result=$( (mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=3" & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 303)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 10: 2x DELETE same doc (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (1, 1)" > /dev/null 2>&1; sleep 3; result=$( (mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=1" & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=1" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 11: 2x UPDATE same doc (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=111 WHERE id=15" & mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=222 WHERE id=15" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 12: 3x REPLACE different docs on 3 nodes (NO conflict expected)
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (1, 1001)" & mysql -h0 -P2306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (10, 1010)" & mysql -h0 -P3306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (20, 1020)" & wait
+––– output –––
+––– comment –––
+Test 13: 3x UPDATE same doc on 3 nodes (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do result=$( (mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=100 WHERE id=12" & mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=200 WHERE id=12" & mysql -h0 -P3306 -e "UPDATE test:tbl1 SET attr1=300 WHERE id=12" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Test 14: 2x DELETE + REPLACE on 3 nodes (CONFLICT expected) - run 30 times
+––– input –––
+conflicts=0; for i in {1..30}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 14)" > /dev/null 2>&1; sleep 3; result=$( (mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=14" & mysql -h0 -P2306 -e "DELETE FROM test:tbl1 WHERE id=14" & mysql -h0 -P3306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (15, 1500)" & wait) 2>&1 ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/30"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+––– output –––
+Conflicts: %{NUMBER}/30
+PASS
+––– comment –––
+Stop background load
+––– input –––
+kill $LOAD_PID 2>/dev/null; wait $LOAD_PID 2>/dev/null; echo "Load stopped"
+––– output –––
+Load stopped
+––– comment –––
+Final verification: Check synchronization and no FATAL errors
+––– input –––
+mysql -h0 -P1306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
+––– output –––
+*************************** 1. row ***************************
+%{NUMBER}
+––– input –––
+mysql -h0 -P2306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
+––– output –––
+*************************** 1. row ***************************
+%{NUMBER}
+––– input –––
+mysql -h0 -P3306 -NB -e "SELECT COUNT(*) FROM test:tbl1\G"
+––– output –––
+*************************** 1. row ***************************
+%{NUMBER}
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM test:tbl1" > /tmp/node1.txt; mysql -h0 -P2306 -e "SELECT * FROM test:tbl1" > /tmp/node2.txt; mysql -h0 -P3306 -e "SELECT * FROM test:tbl1" > /tmp/node3.txt; diff /tmp/node1.txt /tmp/node2.txt && diff /tmp/node2.txt /tmp/node3.txt && echo "All nodes synchronized" || echo "Discrepancies detected"
+––– output –––
+All nodes synchronized
+––– input –––
+for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log && echo "Node #$i has FATAL" || echo "Node #$i OK"; done
+––– output –––
+Node #1 OK
+Node #2 OK
+Node #3 OK

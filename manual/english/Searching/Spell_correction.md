@@ -331,6 +331,8 @@ CALL QSUGGEST('bag with tasel', 'products', 1 as sentence);
 <!-- end -->
 
 ##### Different display mode
+
+<!-- example display -->
 The `1 as result_line` option changes the way the suggestions are displayed in the output. Instead of showing each suggestion in a separate row, it displays all suggestions, distances, and docs in a single row. Here's an example to demonstrate this:
 
 <!-- intro -->
@@ -355,6 +357,8 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 <!-- end -->
 
 ##### Using force_bigrams for better transposition handling
+
+<!-- example force_bigrams -->
 The `force_bigrams` option can help with words that have transposition errors, such as "ipohne" vs "iphone". By using bigrams instead of trigrams, the algorithm can better handle character transpositions.
 
 <!-- intro -->
@@ -381,7 +385,3 @@ CALL SUGGEST('ipohne', 'products', 1 as force_bigrams);
 * [This interactive course](https://play.manticoresearch.com/didyoumean/) shows how `CALL SUGGEST` works in a little web app.
 
 ![CALL SUGGEST example](didyoumean.png){.scale-0.5}
-
-
-<!-- proofread -->
-

@@ -705,6 +705,7 @@ using RunningIndexRefPtr_t = CSphRefcountedPtr<RunningIndex_c>;
 class ServedIndex_c : public ServedDesc_t
 {
 	mutable int64_t			m_iMass = 0;	// relative weight (by access speed) of the index
+	mutable Threads::Coro::ReadTableLock_c  m_tTableLock;
 
 	ServedIndex_c() = default;
 	friend CSphRefcountedPtr<ServedIndex_c> MakeServedIndex();
@@ -737,6 +738,10 @@ public:
 	void SetIdxAndStatsFrom ( const ServedIndex_c& tIndex );
 	void SetStatsFrom ( const ServedIndex_c& tIndex );
 	void SetUnlink ( CSphString sUnlink ) const;
+
+	void LockRead() const noexcept;
+	[[nodiscard]] bool UnlockRead() const noexcept;
+	[[nodiscard]] Threads::Coro::ReadTableLock_c& Locker() const noexcept;
 };
 
 using cServedIndexRefPtr_c = CSphRefcountedPtr<const ServedIndex_c>;

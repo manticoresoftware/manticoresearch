@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>table lock</name>
+
+<requires>
+<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table a(iid int);
+	create table b(iid int);
+	insert into a values (1, 1);
+	insert into b values (1, 2);
+	select * from a order by id asc;
+	select * from b order by id asc;
+</sphinxql>
+<sphinxql conn="1">lock tables a read</sphinxql>
+<sphinxql>
+	insert into a values (2, 1);
+	insert into b values (2, 2);
+	update a set iid=2 where id=1;
+	update b set iid=2 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+</sphinxql>
+<sphinxql conn="1">unlock tables</sphinxql>
+<sphinxql>
+	insert into a values (8, 1);
+	insert into b values (8, 2);
+	update a set iid=8 where id=1;
+	update b set iid=8 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+	lock tables a read;
+	insert into a values (3, 1);
+	insert into b values (3, 2);
+	update a set iid=3 where id=1;
+	update b set iid=3 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+	unlock tables;
+	insert into a values (4, 1);
+	insert into b values (4, 2);
+	update a set iid=4 where id=1;
+	update b set iid=4 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+</sphinxql>
+<sphinxql conn="1">lock tables a read</sphinxql>
+<sphinxql>
+	insert into a values (9, 1);
+	insert into b values (9, 2);
+	update a set iid=9 where id=1;
+	update b set iid=9 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+</sphinxql>
+<sphinxql conn="1">RECONNECT</sphinxql>
+<sphinxql>
+	insert into a values (5, 1);
+	insert into b values (5, 2);
+	update a set iid=5 where id=1;
+	update b set iid=5 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+	lock tables a read, b write;
+	lock tables a read, b read;
+	insert into a values (6, 1);
+	insert into b values (6, 2);
+	update a set iid=6 where id=1;
+	update b set iid=6 where id=1;
+	RECONNECT;
+	insert into a values (7, 1);
+	insert into b values (7, 2);
+	update a set iid=7 where id=1;
+	update b set iid=7 where id=1;
+	select * from a order by id asc;
+	select * from b order by id asc;
+	drop table a;
+	drop table b;
+</sphinxql>
+</queries>
+
+</test>

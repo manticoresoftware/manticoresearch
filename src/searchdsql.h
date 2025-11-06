@@ -165,6 +165,9 @@ enum SqlStmt_e : BYTE
 	STMT_SHOW_SCROLL,
 	STMT_SHOW_TABLE_INDEXES,
 	STMT_ALTER_REBUILD_KNN,
+	STMT_PREPARE,
+	STMT_EXECUTE,
+	STMT_DEALLOCATE,
 
 	STMT_TOTAL
 };
@@ -184,7 +187,8 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "alter_embeddings_api_key", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", 
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn",
+	"prepare", "execute", "deallocate", 
 	};
 	return dNames[eStmt];
 }
@@ -197,7 +201,8 @@ enum SqlSet_e
 	SET_GLOBAL_SVAR,
 	SET_INDEX_UVAR,
 	SET_CLUSTER_UVAR,
-	SET_EXTRA
+	SET_EXTRA,
+	SET_SESSION_UVAR
 };
 
 

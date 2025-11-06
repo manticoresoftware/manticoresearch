@@ -28,6 +28,23 @@ namespace { // c++ way of 'static'
 
 /// proto details are here: https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_packets.html
 
+// Structure to hold binary prepared statement information
+struct BinaryPreparedStmt_t
+{
+	DWORD m_uStmtID;				// Statement ID 
+	CSphString m_sQuery;			// Original SQL query with ? placeholders
+	CSphVector<BYTE> m_dParamTypes; // Parameter types (MYSQL_TYPE_*)
+	int m_iParamCount = 0;			// Number of parameters
+	int m_iColumnCount = 0;			// Number of columns in result set
+	bool m_bParsed = false;			// Whether we successfully parsed the statement
+	int64_t m_iCreateTime;			// Creation timestamp
+};
+
+// Global storage for binary prepared statements 
+static CSphOrderedHash<BinaryPreparedStmt_t, DWORD, IdentityHash_fn, 256> g_hBinaryPreparedStmts;
+static CSphMutex g_tBinaryPreparedStmtsMutex;
+static volatile DWORD g_uNextStmtID = 1;
+
 bool OmitEof() noexcept
 {
 	return bSendOkInsteadofEOF && session::GetDeprecatedEOF();
@@ -155,6 +172,7 @@ CSphString MysqlReadVlStr ( InputBuffer_c& tIn )
 	return tIn.GetRawString ( iLen );
 }
 
+
 // RAII Mysql API block: in ctr reserve place for size, in dtr write LSB with size and packet ID
 class SQLPacketHeader_c
 {
@@ -274,7 +292,13 @@ enum
 	MYSQL_COM_FIELD_LIST = 4,
 	MYSQL_COM_STATISTICS = 9,
 	MYSQL_COM_PING		= 14,
-	MYSQL_COM_SET_OPTION	= 27
+	MYSQL_COM_STMT_PREPARE = 22,
+	MYSQL_COM_STMT_EXECUTE = 23,
+	MYSQL_COM_STMT_SEND_LONG_DATA = 24,
+	MYSQL_COM_STMT_CLOSE = 25,
+	MYSQL_COM_STMT_RESET = 26,
+	MYSQL_COM_SET_OPTION	= 27,
+	MYSQL_COM_STMT_FETCH = 28
 };
 
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
@@ -981,6 +1005,306 @@ bool ValidateDBName ( const std::optional<CSphString>& tSrcQueryReference )
 	return ValidateDBName ( FromStr ( tSrcQueryReference.value_or ( szManticore ) ) );
 }
 
+// Count the number of ? placeholders in a query
+int CountQueryParameters ( const char* sQuery )
+{
+	int iCount = 0;
+	const char* p = sQuery;
+	while ( *p )
+	{
+		if ( *p == '?' )
+			iCount++;
+		p++;
+	}
+	return iCount;
+}
+
+// Send prepared statement OK response
+void SendPreparedStmtOK ( ISphOutputBuffer& tOut, BYTE uPacketID, DWORD uStmtID, int iColumnCount, int iParamCount )
+{
+	SQLPacketHeader_c tHdr { tOut, uPacketID };
+	tOut.SendByte ( 0 ); // OK packet
+	tOut.SendLSBDword ( uStmtID ); // statement_id
+	tOut.SendLSBWord ( iColumnCount ); // num_columns  
+	tOut.SendLSBWord ( iParamCount ); // num_params
+	tOut.SendByte ( 0 ); // reserved filler
+	tOut.SendLSBWord ( 0 ); // warning_count
+}
+
+// Handle COM_STMT_PREPARE
+void HandleComStmtPrepare ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen )
+{
+	// Read the SQL query from the packet
+	CSphString sQuery = tIn.GetRawString ( iPacketLen - 1 ); // -1 for command byte
+
+	CSphScopedLock<CSphMutex> tLock ( g_tBinaryPreparedStmtsMutex );
+
+	// Create new prepared statement
+	BinaryPreparedStmt_t tStmt;
+	tStmt.m_uStmtID = g_uNextStmtID++;
+	tStmt.m_sQuery = sQuery;
+	tStmt.m_iParamCount = CountQueryParameters ( sQuery.cstr() );
+	tStmt.m_iColumnCount = 0; // We'll determine this during execute for now
+	tStmt.m_iCreateTime = sphMicroTimer();
+
+	// Store the prepared statement
+	g_hBinaryPreparedStmts.Add ( tStmt, tStmt.m_uStmtID );
+
+	// Send OK response
+	SendPreparedStmtOK ( tOut, uPacketID, tStmt.m_uStmtID, tStmt.m_iColumnCount, tStmt.m_iParamCount );
+
+	// If there are parameters, send parameter definitions
+	if ( tStmt.m_iParamCount > 0 )
+	{
+		for ( int i = 0; i < tStmt.m_iParamCount; i++ )
+		{
+			SQLPacketHeader_c tParamHdr { tOut, ++uPacketID };
+			// Column definition packet format for parameters
+			MysqlSendInt ( tOut, 3 ); // catalog length
+			tOut.SendBytes ( "def", 3 ); // catalog = "def"
+			MysqlSendInt ( tOut, 0 ); // schema length
+			MysqlSendInt ( tOut, 0 ); // table length  
+			MysqlSendInt ( tOut, 0 ); // org_table length
+			MysqlSendInt ( tOut, 1 ); // name length
+			tOut.SendBytes ( "?", 1 ); // name = "?"
+			MysqlSendInt ( tOut, 0 ); // org_name length
+			tOut.SendByte ( 0x0c ); // length of fixed fields
+			tOut.SendLSBWord ( 0x21 ); // character set (utf8)
+			tOut.SendLSBDword ( 65535 ); // column length
+			tOut.SendByte ( 253 ); // type = MYSQL_TYPE_VAR_STRING
+			tOut.SendLSBWord ( 0 ); // flags
+			tOut.SendByte ( 0 ); // decimals
+			tOut.SendLSBWord ( 0 ); // filler
+		}
+		
+		// Send EOF packet after parameters (if not using DEPRECATE_EOF)
+		if ( !OmitEof() )
+		{
+			SendMysqlEofPacket ( tOut, ++uPacketID, 0, false, session::IsAutoCommit(), session::IsInTrans() );
+		}
+	}
+	
+	// If there are result columns, send column definitions
+	// For now, we don't parse the query to determine columns, so we send 0 columns
+	// This is valid for INSERT/UPDATE/DELETE statements
+	if ( tStmt.m_iColumnCount > 0 )
+	{
+		// Would send column definitions here
+		// ...
+		
+		// Send EOF packet after columns (if not using DEPRECATE_EOF)
+		if ( !OmitEof() )
+		{
+			SendMysqlEofPacket ( tOut, ++uPacketID, 0, false, session::IsAutoCommit(), session::IsInTrans() );
+		}
+	}
+}
+
+// Parse binary parameter values from COM_STMT_EXECUTE packet
+bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tStmt, CSphVector<CSphString>& dValues )
+{
+	if ( tStmt.m_iParamCount == 0 )
+		return true;
+
+	// Read null bitmap (1 byte per 8 parameters)
+	int iNullBitmapLen = ( tStmt.m_iParamCount + 7 ) / 8;
+	if ( tIn.HasBytes() < iNullBitmapLen )
+		return false;
+	
+	const BYTE* pNullBitmap = tIn.GetBufferPtr();
+	tIn.SetBufferPos ( tIn.GetBufferPos() + iNullBitmapLen );
+
+	// Read new_params_bound_flag
+	if ( tIn.HasBytes() < 1 )
+		return false;
+	BYTE uNewParamsBound = tIn.GetByte();
+
+	// Read parameter types
+	CSphVector<BYTE> dParamTypes;
+	if ( uNewParamsBound )
+	{
+		// Check if we have enough bytes for parameter types (2 bytes per parameter)
+		if ( tIn.HasBytes() < tStmt.m_iParamCount * 2 )
+			return false;
+		
+		dParamTypes.Resize ( tStmt.m_iParamCount );
+		for ( int i = 0; i < tStmt.m_iParamCount; i++ )
+		{
+			BYTE uType = tIn.GetByte();
+			dParamTypes[i] = uType;
+		}
+	}
+	else
+	{
+		// Use default types (assume string for simplicity)
+		dParamTypes.Resize ( tStmt.m_iParamCount );
+		dParamTypes.Fill ( 253 ); // MYSQL_TYPE_VAR_STRING
+	}
+
+	// Read parameter values
+	dValues.Resize ( tStmt.m_iParamCount );
+	for ( int i = 0; i < tStmt.m_iParamCount; i++ )
+	{
+		// Check if parameter is NULL
+		if ( pNullBitmap[i / 8] & ( 1 << ( i % 8 ) ) )
+		{
+			dValues[i] = "NULL";
+			continue;
+		}
+
+		// Parse value based on type
+		BYTE uType = dParamTypes[i];
+		switch ( uType )
+		{
+			case 0: // MYSQL_TYPE_DECIMAL
+			{
+				auto iLen = MysqlReadPackedInt ( tIn );
+				if ( iLen > tIn.HasBytes() )
+					return false;
+				CSphString sValue = tIn.GetRawString ( iLen );
+				dValues[i].SetSprintf ( "'%s'", sValue.cstr() );
+				break;
+			}
+			case 1: // MYSQL_TYPE_TINY
+			{
+				BYTE uVal = tIn.GetByte();
+				dValues[i].SetSprintf ( "%u", (unsigned)uVal );
+				break;
+			}
+			case 2: // MYSQL_TYPE_SHORT
+			{
+				WORD uVal = tIn.GetWord();
+				dValues[i].SetSprintf ( "%u", (unsigned)uVal );
+				break;
+			}
+			case 3: // MYSQL_TYPE_LONG
+			{
+				DWORD uVal = tIn.GetLSBDword();
+				dValues[i].SetSprintf ( "%u", uVal );
+				break;
+			}
+			case 8: // MYSQL_TYPE_LONGLONG
+			{
+				uint64_t uVal = tIn.GetUint64();
+				dValues[i].SetSprintf ( UINT64_FMT, uVal );
+				break;
+			}
+			case 4: // MYSQL_TYPE_FLOAT
+			{
+				float fVal;
+				tIn.GetBytes ( &fVal, sizeof(fVal) );
+				dValues[i].SetSprintf ( "%g", fVal );
+				break;
+			}
+			case 5: // MYSQL_TYPE_DOUBLE
+			{
+				double fVal;
+				tIn.GetBytes ( &fVal, sizeof(fVal) );
+				dValues[i].SetSprintf ( "%g", fVal );
+				break;
+			}
+			case 253: // MYSQL_TYPE_VAR_STRING
+			case 254: // MYSQL_TYPE_STRING
+			default:
+			{
+				auto iLen = MysqlReadPackedInt ( tIn );
+				if ( iLen > tIn.HasBytes() )
+					return false;
+				
+				CSphString sValue = tIn.GetRawString ( iLen );
+				
+				// Escape single quotes in the string
+				StringBuilder_c sEscaped;
+				for ( int j = 0; j < sValue.Length(); j++ )
+				{
+					if ( sValue.cstr()[j] == '\'' )
+						sEscaped << "''";
+					else
+						sEscaped << sValue.cstr()[j];
+				}
+				dValues[i].SetSprintf ( "'%s'", sEscaped.cstr() );
+				break;
+			}
+		}
+	}
+
+	return true;
+}
+
+// Handle COM_STMT_EXECUTE 
+void HandleComStmtExecute ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen )
+{
+	// Need at least 9 bytes: stmt_id (4) + flags (1) + iteration_count (4)
+	if ( iPacketLen < 10 || tIn.HasBytes() < 9 )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FROMS("Invalid COM_STMT_EXECUTE packet"), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return;
+	}
+
+	DWORD uStmtID = tIn.GetLSBDword();
+
+	CSphScopedLock<CSphMutex> tLock ( g_tBinaryPreparedStmtsMutex );
+
+	// Find the prepared statement
+	BinaryPreparedStmt_t* pStmt = g_hBinaryPreparedStmts ( uStmtID );
+	if ( !pStmt )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "Unknown prepared statement handler (%u)", uStmtID );
+		SendMysqlErrorPacket ( tOut, uPacketID, FromStr(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return;
+	}
+
+	// Parse parameter values 
+	CSphVector<CSphString> dParamValues;
+	if ( !ParseBinaryParameters ( tIn, *pStmt, dParamValues ) )
+	{
+		SendMysqlErrorPacket ( tOut, uPacketID, FROMS("Failed to parse parameters"), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+		return;
+	}
+
+	// Build the actual query by substituting parameters
+	CSphString sExecuteQuery = pStmt->m_sQuery;
+	for ( int i = 0; i < dParamValues.GetLength(); i++ )
+	{
+		// Find and replace the first occurrence of ?
+		const char* pFound = strchr ( sExecuteQuery.cstr(), '?' );
+		if ( pFound )
+		{
+			CSphString sNewQuery;
+			int iPos = pFound - sExecuteQuery.cstr();
+			sNewQuery.SetSprintf ( "%.*s%s%s", iPos, sExecuteQuery.cstr(), dParamValues[i].cstr(),
+				sExecuteQuery.cstr() + iPos + 1 ); // +1 to skip the ?
+			sExecuteQuery = sNewQuery;
+		}
+	}
+
+
+	// Release the lock before executing query
+	tLock.Unlock();
+
+	// Execute the query using the same mechanism as COM_QUERY
+	SqlRowBuffer_c tRows ( &uPacketID, (GenericOutputBuffer_c*)&tOut );
+	auto& tSess = session::Info();
+	tSess.m_pSqlRowBuffer = &tRows;
+	session::Execute ( FromStr ( sExecuteQuery ), tRows );
+}
+
+// Handle COM_STMT_CLOSE
+void HandleComStmtClose ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer_c& tIn )
+{
+	if ( tIn.HasBytes() < 4 )
+		return; // COM_STMT_CLOSE doesn't send error responses
+
+	DWORD uStmtID = tIn.GetLSBDword();
+
+	CSphScopedLock<CSphMutex> tLock ( g_tBinaryPreparedStmtsMutex );
+
+	g_hBinaryPreparedStmts.Delete ( uStmtID ); // Ignore if statement doesn't exist
+
+	// COM_STMT_CLOSE doesn't send a response packet
+}
+
 
 bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
@@ -1082,6 +1406,36 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			tSess.m_pSqlRowBuffer = &tRows;
 			SendTableSchema ( tRows, sTable );
 			SendMysqlEofPacket ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
+			break;
+		}
+
+		case MYSQL_COM_STMT_PREPARE:
+		{
+			HandleComStmtPrepare ( tOut, uPacketID, tIn, iPacketLen );
+			break;
+		}
+
+		case MYSQL_COM_STMT_EXECUTE:
+		{
+			HandleComStmtExecute ( tOut, uPacketID, tIn, iPacketLen );
+			break;
+		}
+
+		case MYSQL_COM_STMT_CLOSE:
+		{
+			HandleComStmtClose ( tOut, uPacketID, tIn );
+			break;
+		}
+
+		case MYSQL_COM_STMT_SEND_LONG_DATA:
+		case MYSQL_COM_STMT_RESET:
+		case MYSQL_COM_STMT_FETCH:
+		{
+			// These are not yet implemented
+			sphLogDebugv ( "LoopClientMySQL command %d (COM_STMT_*) - not implemented", uMysqlCmd );
+			CSphString sError = "MySQL binary protocol command not supported";
+			LogSphinxqlError ( "", FromStr ( sError ) );
+			SendMysqlErrorPacket ( tOut, uPacketID, FromStr(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 			break;
 		}
 

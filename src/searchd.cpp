@@ -4767,17 +4767,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
-	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !pServed )
-		return;
-
-	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
-	if ( !tWriting.CanWrite() )
-	{
-		tOut.Error ( "table is locked" );
-		return;
-	}
-
 	auto* pSession = session::GetClientSession();
 	pSession->FreezeLastMeta();
 	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
@@ -4787,6 +4776,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	auto tmStart = sphMicroTimer ();
 
+	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		bool bDistTable = false;
@@ -4800,6 +4790,14 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
 
+		return;
+	}
+
+	assert ( pServed );
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		tOut.Error ( "table '%s' is locked", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
@@ -8939,16 +8937,6 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 	CSphString sError;
 	StrVec_t dWarnings;
 	const CSphString & sIndex = tStmt.m_sIndex;
-	auto pIndex = GetServed ( sIndex );
-	if ( !pIndex )
-		return;
-
-	Threads::Coro::ScopedWriteTable_c tWriting { pIndex->Locker() };
-	if ( !tWriting.CanWrite () )
-	{
-		tOut.Error ( "table is locked" );
-		return;
-	}
 
 	if ( bReconfigure )
 	{
@@ -8964,6 +8952,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	// get an exclusive lock for operation
 	// but only read lock for check
+	auto pIndex = GetServed ( sIndex );
 	{
 		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
@@ -8976,6 +8965,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 			tOut.Error ( TlsMsg::szError() );
 			return;
 		}
+	}
+
+	assert ( pIndex );
+	Threads::Coro::ScopedWriteTable_c tWriting { pIndex->Locker() };
+	if ( !tWriting.CanWrite () )
+	{
+		tOut.Error ( "table is locked" );
+		return;
 	}
 
 	auto* pSession = session::GetClientSession();

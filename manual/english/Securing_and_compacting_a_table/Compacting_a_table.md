@@ -21,6 +21,16 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt;"
+```
+
 <!-- end -->
 
 ### Number of optimized disk chunks
@@ -45,6 +55,16 @@ Additional options include:
 ```sql
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4;"
+```
+
 <!-- end -->
 
 ### Running in foreground
@@ -61,6 +81,16 @@ When using `OPTION sync=1` (0 by default), the command will wait for the optimiz
 ```sql
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1;"
+```
+
 <!-- end -->
 
 ### Throttling the IO impact
@@ -82,6 +112,10 @@ On one of the nodes, drop the table from the cluster:
 ```sql
 ALTER CLUSTER mycluster DROP myindex;
 ```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex;"
+```
 <!-- end -->
 <!-- example cluster_manual_optimize -->
 Optimize the table:
@@ -89,12 +123,20 @@ Optimize the table:
 ```sql
 OPTIMIZE TABLE myindex;
 ```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex;"
+```
 <!-- end -->
 <!-- example cluster_manual_add -->
 Add back the table to the cluster:
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
+```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex;"
 ```
 <!-- end -->
 When the table is added back, the new files created by the optimization process will be replicated to the other nodes in the cluster.

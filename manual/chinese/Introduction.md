@@ -1,6 +1,5 @@
 # 介绍
 
-Manticore Search 是一个高性能、多存储的数据库，专为搜索和分析而设计，提供极速的全文搜索、实时索引以及先进功能，如向量搜索和列式存储，提升数据分析效率。它既能处理小型数据集，也能应对大型数据集，提供无缝的可扩展性和强大的洞察力，满足现代应用的需求。
 
 作为一个开源数据库（可在 [GitHub](https://github.com/manticoresoftware/manticoresearch/) 获取），Manticore Search 于 2017 年创建，作为 [Sphinx Search](https://sphinxsearch.com/) 引擎的继承项目。我们的开发团队采纳了 Sphinx 的所有最佳功能，并显著提升了其功能性，同时修复了数百个漏洞（详见我们的[更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代化、快速且轻量级的数据库，具备卓越的全文搜索能力，基于对其前身几乎完全重写的代码构建。
 
@@ -8,6 +7,7 @@ Manticore Search 是一个高性能、多存储的数据库，专为搜索和分
 #### 强大且快速的全文搜索，适用于小型和大型数据集
 
   * [查询自动完成](Searching/Autocomplete.md)
+
   * [模糊搜索](Searching/Spell_correction.md#Fuzzy-Search)
   * 超过 20 种 [全文操作符](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> 和 20 多种排序因子
   * [自定义排序](Searching/Sorting_and_ranking.md#Ranking-overview)
@@ -75,10 +75,10 @@ Manticore 配备了外部工具 [manticore-backup](Securing_and_compacting_a_tab
 您可以通过 [FEDERATED 引擎](Extensions/FEDERATED.md) 或 [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/) 将 Manticore Search 集成到 MySQL/MariaDB 服务器。
 
 您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具可用于交互式开发 Manticore 查询，例如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
+您可以使用 [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) 和 [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) 来可视化存储在 Manticore 中的数据。各种 MySQL 工具可用于交互式开发 Manticore 查询，比如 [HeidiSQL](https://www.heidisql.com/) 和 [DBForge](https://www.devart.com/dbforge/)。
 
-您还可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
+您也可以将 Manticore Search 与 [Kibana](Integration/Kibana.md) 一起使用。
 
-#### 流过滤轻松实现
 Manticore 提供一种特殊类型的表，“[percolate](Creating_a_table/Local_tables/Percolate_table.md)”表，允许您搜索查询而非数据，使其成为过滤全文数据流的高效工具。只需将查询存储在表中，通过向 Manticore Search 发送每批文档处理数据流，并接收仅匹配存储查询的结果。
 
 #### 可能的应用场景

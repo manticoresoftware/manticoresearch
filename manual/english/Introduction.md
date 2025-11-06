@@ -7,6 +7,7 @@ As an open-source database (available on [GitHub](https://github.com/manticoreso
 ## Manticore's key features are:
 #### Powerful and fast full-text searching that works well for small and large datasets
 
+
   * [Query autocomplete](Searching/Autocomplete.md)
   * [Fuzzy search](Searching/Spell_correction.md#Fuzzy-Search)
   * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> and over 20 ranking factors

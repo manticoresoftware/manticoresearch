@@ -12,6 +12,12 @@ The output format for the cluster status variables is as follows:  `cluster_name
 * `indexes` - a list of table names managed by the cluster
 * `nodes_set` - the list of nodes in the cluster defined using the `CREATE`, `JOIN` or `ALTER UPDATE` commands
 * `nodes_view` - the actual list of nodes in the cluster that the current node can see.
+* `state_uuid` - UUID state of the cluster. If it matches the value in local_state_uuid, the local and cluster nodes are in sync.
+* `conf_id` - total number of cluster membership changes that have taken place.
+* `status` - cluster component status. Possible values are primary (primary group configuration, quorum present), non_primary (non-primary group configuration, quorum lost), or disconnected (not connected to group, retrying).
+* `size` - number of nodes currently in the cluster.
+* `local_index` - the node's index in the cluster.
+* `last_error` - the last recorded error message related to a cluster operation. The message provides a high-level summary of the problem. For more detailed context, you should consult the `searchd.log` file.
 
 ### SST Progress Variables
 

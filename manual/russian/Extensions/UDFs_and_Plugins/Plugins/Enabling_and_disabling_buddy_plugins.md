@@ -16,12 +16,20 @@ ENABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 Эта команда повторно активирует ранее отключенный плагин Buddy, позволяя ему снова обрабатывать ваши запросы.
 
 <!-- intro -->
-### Пример
+### Пример SQL
 
 <!-- request SQL -->
 ```sql
 ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
+<!-- intro -->
+### Пример JSON
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
 <!-- end -->
 
 <!-- example disable_buddy_plugin -->
@@ -34,13 +42,21 @@ DISABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 Эта команда деактивирует активный плагин Buddy, предотвращая его обработку новых запросов.
 
 <!-- intro -->
-### Пример
 
+### Пример SQL
 <!-- request SQL -->
 ```sql
 DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
 
 После отключения, если вы попробуете выполнить команду `SHOW QUERIES`, возникнет ошибка, так как плагин отключен.
+<!-- intro -->
+### Пример JSON
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
 <!-- end -->
 

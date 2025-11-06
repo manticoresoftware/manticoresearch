@@ -381,6 +381,75 @@ SELECT * FROM pq;
 | 2810855531667783689 | @title shoes | Louis Vuitton |         |
 +---------------------+--------------+---------------+---------+
 ```
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', '', '');"
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', 'Louis Vuitton', '');"
+POST /sql?mode=raw -d "SELECT * FROM pq;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "query": "@title shoes",
+        "tags": "Louis Vuitton",
+        "filters": ""
+      },
+      {
+        "id": 724024784404348900,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": ""
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example replace -->

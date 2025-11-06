@@ -64,5 +64,223 @@ SHOW TABLE test INDEXES;
 +------------------------------+--------+---------+---------+
 29 rows in set (0.00 sec)
 ```
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE test INDEXES;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Enabled": {
+          "type": "string"
+        }
+      },
+      {
+        "Percent": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Name": "j['addresses']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['factor']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['int_arr']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "id",
+        "Type": "int64",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['price']",
+        "Type": "float",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['arr']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['str']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['1']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['2']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['3']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      }
+    ],
+    "total": 29,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 

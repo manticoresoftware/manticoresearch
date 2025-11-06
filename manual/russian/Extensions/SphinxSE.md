@@ -84,6 +84,65 @@ mysql> show engines;
 13 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "show engines;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Engine": {
+          "type": "string"
+        }
+      },
+      {
+        "Support": {
+          "type": "string"
+        }
+      },
+      {
+        "Comment": {
+          "type": "string"
+        }
+      },
+      {
+        "Transactions": {
+          "type": "string"
+        }
+      },
+      {
+        "XA": {
+          "type": "string"
+        }
+      },
+      {
+        "Savepoints": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Engine": "MyISAM",
+        "Support": "DEFAULT",
+        "Comment": "MyISAM storage engine",
+        "Transactions": "NO",
+        "XA": "NO",
+        "Savepoints": "NO"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 ## Использование SphinxSE
@@ -261,6 +320,80 @@ min_best_span_pos=36, exact_hit=0, max_window_hits=1), word1=(tf=3,
 idf=0.259532)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT *, WEIGHT(), RANKFACTORS() FROM myindex WHERE MATCH('dog') OPTION ranker=export('100*bm25');"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "published": {
+          "type": "long long"
+        }
+      },
+      {
+        "channel_id": {
+          "type": "long long"
+        }
+      },
+      {
+        "title": {
+          "type": "long long"
+        }
+      },
+      {
+        "content": {
+          "type": "long long"
+        }
+      },
+      {
+        "weight()": {
+          "type": "long long"
+        }
+      },
+      {
+        "rankfactors()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 555617,
+        "published": 1110067331,
+        "channel_id": 1059819,
+        "title": 7,
+        "content": 428,
+        "weight()": 69900,
+        "rankfactors()": "bm25=699, bm25a=0.666478, field_mask=2, doc_word_count=1, field1=(lcs=1, hit_count=4, word_count=1, tf_idf=1.038127, min_idf=0.259532, max_idf=0.259532, sum_idf=0.259532, min_hit_pos=120, min_best_span_pos=120, exact_hit=0, max_window_hits=1), word1=(tf=4, idf=0.259532)"
+      },
+      {
+        "id": 555313,
+        "published": 1108438365,
+        "channel_id": 1058561,
+        "title": 8,
+        "content": 249,
+        "weight()": 68500,
+        "rankfactors()": "bm25=685, bm25a=0.675213, field_mask=3, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.259532, min_idf=0.259532, max_idf=0.259532, sum_idf=0.259532, min_hit_pos=8, min_best_span_pos=8, exact_hit=0, max_window_hits=1), field1=(lcs=1, hit_count=2, word_count=1, tf_idf=0.519063, min_idf=0.259532, max_idf=0.259532, sum_idf=0.259532, min_hit_pos=36, min_best_span_pos=36, exact_hit=0, max_window_hits=1), word1=(tf=3, idf=0.259532)"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 * geoanchor - якорь геодистанции. Подробнее о геопоиске [в этом разделе](../Searching/Geo_search.md). Принимает 4 параметра: имена атрибутов широты и долготы, а также координаты якорной точки соответственно:
@@ -312,6 +445,52 @@ mysql> SHOW ENGINE SPHINX STATUS;
 2 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW ENGINE SPHINX STATUS;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Status": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Type": "SPHINX",
+        "Name": "stats",
+        "Status": "total: 25, total found: 25, time: 126, words: 2"
+      },
+      {
+        "Type": "SPHINX",
+        "Name": "words",
+        "Status": "sphinx:591:1256 soft:11076:15945"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 
@@ -337,6 +516,57 @@ mysql> SHOW STATUS LIKE 'sphinx_%';
 | sphinx_words       | sphinx:591:1256 soft:11076:15945 |
 +--------------------+----------------------------------+
 5 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw - d "SHOW STATUS LIKE 'sphinx_%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 5,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "sphinx_total",
+        "Value": "25"
+      },
+      {
+        "Variable_name": "sphinx_total_found",
+        "Value": "25"
+      },
+      {
+        "Variable_name": "sphinx_time",
+        "Value": "126"
+      },
+      {
+        "Variable_name": "sphinx_word_count",
+        "Value": "2"
+      },
+      {
+        "Variable_name": "sphinx_words",
+        "Value": "sphinx:591:1256 soft:11076:15945"
+      }
+    ]
+  }
+]
 ```
 
 <!-- end -->
@@ -374,6 +604,85 @@ mysql> SHOW ENGINE SPHINX STATUS;
 | SPHINX | words | one:1:2 document:2:2                        |
 +--------+-------+---------------------------------------------+
 2 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT content, date_added FROM test.documents docs JOIN t1 ON (docs.id=t1.id) WHERE query="one document;mode=any";"
+
+POST /sql?mode=raw -d "SHOW ENGINE SPHINX STATUS;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "content": {
+          "type": "string"
+        }
+      },
+      {
+        "docdate": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "content": "this is my test document number two",
+        "docdate": "2006-06-17 14:04:28"
+      },
+            {
+        "content": "this is my test document number one",
+        "docdate": "2006-06-17 14:04:28"
+      }
+    ]
+  }
+]
+
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Status": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Type": "SPHINX",
+        "Name": "stats",
+        "Status": "total: 2, total found: 2, time: 0, words: 2"
+      },
+      {
+        "Type": "SPHINX",
+        "Name": "words",
+        "Status": "one:1:2 document:2:2"
+      }
+    ]
+  }
+]
 ```
 
 <!-- end -->

@@ -32,6 +32,66 @@ mysql> SHOW QUERIES;
 2 rows in set (0.61 sec)
 ```
 
+<!-- 请求 JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW QUERIES;"
+```
+
+<!-- 响应 JSON -->
+```
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 111,
+        "query": "select",
+        "time": "5ms ago",
+        "protocol": "http",
+        "host": "127.0.0.1:58986"
+      },
+      {
+        "id": 96,
+        "query": "SHOW QUERIES",
+        "time": "255us",
+        "protocol": "mysql",
+        "host": "127.0.0.1:33616"
+      }
+    ]
+  }
+]
+
+```
+
 <!-- end -->
 
 如果您想从线程本身的角度获取信息，请参考 [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md)。

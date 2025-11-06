@@ -26,6 +26,16 @@ SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; S
 ```
 <!-- end -->
 
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC"
+```
+<!-- end -->
+
 ## Оптимизации мультизапросов
 
 Существует две основные оптимизации: оптимизация общих запросов и оптимизация общих поддеревьев.

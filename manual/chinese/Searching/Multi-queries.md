@@ -26,6 +26,16 @@ SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; S
 ```
 <!-- end -->
 
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC"
+```
+<!-- end -->
+
 ## 多查询优化
 
 有两个主要的优化需要注意：公共查询优化和公共子树优化。

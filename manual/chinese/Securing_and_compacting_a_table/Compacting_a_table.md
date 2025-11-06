@@ -21,6 +21,15 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt;"
+```
+
 <!-- end -->
 
 ### 优化后的磁盘块数量
@@ -46,6 +55,15 @@ OPTIMIZE TABLE rt;
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
 <!-- end -->
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4;"
+```
+
 
 ### 前台运行
 
@@ -62,6 +80,15 @@ OPTIMIZE TABLE rt OPTION cutoff=4;
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
 <!-- end -->
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1;"
+```
 
 ### 限制 I/O 影响
 
@@ -85,6 +112,10 @@ ALTER CLUSTER mycluster DROP myindex;
 <!-- end -->
 <!-- example cluster_manual_optimize -->
 优化该表：
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex;"
+```
 <!-- request SQL -->
 ```sql
 OPTIMIZE TABLE myindex;
@@ -92,6 +123,10 @@ OPTIMIZE TABLE myindex;
 <!-- end -->
 <!-- example cluster_manual_add -->
 将表重新添加到集群：
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex;"
+```
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
@@ -99,6 +134,10 @@ ALTER CLUSTER mycluster ADD myindex;
 <!-- end -->
 表被重新添加后，优化过程中产生的新文件会被复制到集群中的其他节点。
 其他节点上的任何本地更改都将丢失。
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex;"
+```
 
 表数据的修改（插入、替换、删除、更新）应当：
 

@@ -1201,6 +1201,42 @@ Variable: transformed_tree
             AND(fields=(title), KEYWORD(running, querypos=1, morphed))))
   AND(fields=(body), KEYWORD(dog, querypos=2, morphed)))
 ```
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY t '@title a'"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "AND(fields=(title), KEYWORD(a, querypos=1))"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+ 
+```
+
 <!-- end -->
 
 <!-- Example Explain_query_dot -->
@@ -1237,6 +1273,41 @@ Variable: transformed_tree
 }
 ```
 <!-- end -->
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY tbl '@title a' option format=dot"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "digraph \"transformed_tree\" {\n\n0 [shape=record,style=filled label=\"AND | { fields=(title) }\"]\n0 -> 1\n1 [shape=record label=\"a | { qp=1 }\"]\n}"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 
 ## Просмотр значений факторов совпадений
 <!-- example factors -->
@@ -1273,4 +1344,38 @@ packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
 ```
 <!-- end -->
 <!-- proofread -->
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT id, PACKEDFACTORS() FROM test1 WHERE MATCH('test one') OPTION ranker=expr('1')"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "packedfactors()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "packedfactors()": "bm25=500, bm25a=0.500000, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.000000, min_idf=0.000000, max_idf=0.000000, sum_idf=0.000000, min_hit_pos=1, min_best_span_pos=1, exact_hit=1, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.000000, atc=0.000000), word0=(tf=1, idf=0.000000)"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 

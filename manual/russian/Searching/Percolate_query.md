@@ -2305,6 +2305,69 @@ CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"
 | 1657852401006149666 | 123       | @title shoes |      | color IN ('blue, 'green') |
 +---------------------+-----------+--------------+------+---------------------------+
 ```
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "documents": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149664,
+        "documents": 456,
+        "query": "@title bag",
+        "tags": "",
+        "filters": ""
+      },
+      {
+        "id": 1657852401006149666,
+        "documents": 123,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": "color IN ('blue, 'green')"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example invalid_json -->
@@ -2343,6 +2406,68 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 ```
 
 <!-- end -->
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));"
+
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));"
+
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149635
+      },
+      {
+        "id": 1657852401006149637
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+
+{
+  "error": "Bad JSON objects in strings: 1"
+}
+
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149635
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 
 ##### Я хочу повысить производительность percolate-запроса
 Percolate-запросы разработаны с учетом высокой пропускной способности и больших объемов данных. Для оптимизации производительности с целью снижения задержки и увеличения пропускной способности рассмотрите следующее.
@@ -3245,6 +3370,61 @@ CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue
 ```
 
 <!-- end -->
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149639,
+        "query": "@title bag",
+        "tags": "",
+        "filters": ""
+      },
+      {
+        "id": 1657852401006149643,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": "color IN ('blue, 'green')"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 
 Обратите внимание, что синтаксис зеркал агентов в конфигурации (когда несколько хостов назначены на одну строку `agent`, разделённые `|`) не имеет отношения к режиму запроса `CALL PQ`. Каждый `agent` всегда представляет **один** узел, независимо от количества указанных зеркал HA для этого агента.
 

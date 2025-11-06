@@ -38,6 +38,24 @@ create table test ( title text, image_vector float_vector knn_type='hnsw' knn_di
 Query OK, 0 rows affected (0.01 sec)
 ```
 
+<!-- request JSON -->
+```json
+POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );"
+```
+
+<!-- response JSON -->
+
+```json
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+
 <!-- intro -->
 ##### Plain mode (использование конфигурационного файла):
 
@@ -110,6 +128,26 @@ CREATE TABLE products_all (
 );
 ```
 
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+Использование sentence-transformers (ключ API не требуется)
+```json
+POST /sql?mode=raw -d "CREATE TABLE products ( title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title');"
+```
+
+Использование OpenAI (требуется параметр API_KEY)
+```json
+POST /sql?mode=raw -d "CREATE TABLE products_openai ( title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...');"
+```
+
+Использование всех текстовых полей для эмбеддингов (FROM пуст)
+```json
+POST /sql?mode=raw -d "CREATE TABLE products_all ( title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='');"
+```
+
 <!-- end -->
 
 ##### Вставка данных с автоматическими эмбеддингами
@@ -141,6 +179,26 @@ INSERT INTO products_openai (title, description) VALUES
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES 
 ('no embedding item', ());
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+Вставка только текстовых данных - векторные представления генерируются автоматически
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow');"
+```
+
+Вставка нескольких полей - оба используются для создания векторных представлений, если FROM='title,description'  
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming');"
+```
+
+Вставка пустого вектора (документ исключается из поиска по векторам)
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('no embedding item', ());"
 ```
 
 <!-- end -->
@@ -441,6 +499,26 @@ create table test ( title text, image_vector float_vector knn_type='hnsw' knn_di
 ```sql
 Query OK, 0 rows affected (0.01 sec)
 ```
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```json
+POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');"
+```
+
+<!-- response JSON -->
+
+```json
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- Example knn_similar_docs -->

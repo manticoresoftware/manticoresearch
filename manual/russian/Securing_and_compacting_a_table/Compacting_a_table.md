@@ -21,6 +21,15 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt;"
+```
+
 <!-- end -->
 
 ### Количество оптимизируемых блоков на диске
@@ -46,6 +55,15 @@ OPTIMIZE TABLE rt;
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
 <!-- end -->
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4;"
+```
+
 
 ### Запуск в первом плане
 
@@ -62,6 +80,15 @@ OPTIMIZE TABLE rt OPTION cutoff=4;
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
 <!-- end -->
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1;"
+```
 
 ### Ограничение влияния на ввод-вывод
 
@@ -85,6 +112,10 @@ ALTER CLUSTER mycluster DROP myindex;
 <!-- end -->
 <!-- example cluster_manual_optimize -->
 Оптимизируйте таблицу:
+<!-- запрос JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex;"
+```
 <!-- request SQL -->
 ```sql
 OPTIMIZE TABLE myindex;
@@ -92,6 +123,10 @@ OPTIMIZE TABLE myindex;
 <!-- end -->
 <!-- example cluster_manual_add -->
 Добавьте таблицу обратно в кластер:
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex;"
+```
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
@@ -99,6 +134,10 @@ ALTER CLUSTER mycluster ADD myindex;
 <!-- end -->
 Когда таблица добавляется обратно, новые файлы, созданные в процессе оптимизации, будут реплицированы на другие узлы кластера.
 Любые локальные изменения, сделанные в таблице на других узлах, будут потеряны.
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex;"
+```
 
 Модификации данных таблицы (вставки, замены, удаления, обновления) должны либо:
 

@@ -266,6 +266,19 @@ create table products LIKE old_products;
 create table products LIKE old_products WITH DATA;
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "create table products LIKE old_products;"
+```
+
+<!-- intro -->
+##### Пример JSON (С ДАННЫМИ):
+<!-- request JSON example (WITH DATA) -->
+```JSON
+POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA;"
+```
+
 <!-- end -->
 
 ### 👍 Что вы можете делать с таблицей реального времени:

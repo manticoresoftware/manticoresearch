@@ -52,6 +52,52 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 2 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT * FROM myindex WHERE MATCH('"find me fast"/2');"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "gid": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1,
+        "gid": 11,
+        "title": "first find me"
+      },
+      {
+        "id": 1,
+        "gid": 12,
+        "title": "second find me"
+      },
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- request MATCH with filters -->
 Пример более сложного запроса с использованием MATCH и фильтров WHERE.
 

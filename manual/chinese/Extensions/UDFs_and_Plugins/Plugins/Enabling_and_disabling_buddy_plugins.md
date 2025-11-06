@@ -16,12 +16,20 @@ ENABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 此命令重新激活先前已禁用的 Buddy 插件，使其能够再次处理您的请求。
 
 <!-- intro -->
-### 示例
+### SQL 示例
 
 <!-- request SQL -->
 ```sql
 ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
+<!-- intro -->
+### JSON 示例
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
 <!-- end -->
 
 <!-- example disable_buddy_plugin -->
@@ -34,13 +42,21 @@ DISABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 此命令停用正在运行的 Buddy 插件，阻止其处理任何后续请求。
 
 <!-- intro -->
-### 示例
 
+### SQL 示例
 <!-- request SQL -->
 ```sql
 DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
 
 禁用后，如果尝试运行 `SHOW QUERIES` 命令，将会遇到错误，因为该插件已被禁用。
+<!-- intro -->
+### JSON 示例
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
 <!-- end -->
 

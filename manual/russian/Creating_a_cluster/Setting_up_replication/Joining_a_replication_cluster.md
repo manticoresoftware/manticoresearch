@@ -112,6 +112,10 @@ utils_api.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'", Some(true)).await;
 ```sql
 JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path
 ```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path"
+```
 <!-- end -->
 
 Узел присоединяется к кластеру, получая данные от указанного узла и, в случае успеха, обновляет списки узлов на всех остальных узлах кластера так же, как если бы это было сделано вручную через [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md). Этот список используется для повторного присоединения узлов к кластеру при перезапуске.

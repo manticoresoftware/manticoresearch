@@ -112,6 +112,10 @@ utils_api.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'", Some(true)).await;
 ```sql
 JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path
 ```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path"
+```
 <!-- end -->
 
 节点通过从指定节点获取数据来加入集群，如果成功，则以与通过 [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) 手动完成相同的方式更新所有其他集群节点的节点列表。此列表用于在重启时重新加入集群。

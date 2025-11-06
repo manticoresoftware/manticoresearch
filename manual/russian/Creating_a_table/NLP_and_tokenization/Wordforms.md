@@ -182,6 +182,12 @@ create table tbl1 ... wordforms='/tmp/wf*'
 create table tbl2 ... wordforms='/tmp/wf, /tmp/wf2'
 ```
 
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "create table tbl1 ... wordforms='/tmp/wf*'"
+POST /sql?mode=raw -d "create table tbl2 ... wordforms='/tmp/wf, /tmp/wf2'"
+```
+
 <!-- request Config -->
 ```ini
 wordforms=/tmp/wf

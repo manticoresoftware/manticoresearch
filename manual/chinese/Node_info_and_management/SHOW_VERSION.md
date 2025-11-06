@@ -19,8 +19,70 @@ mysql> SHOW VERSION;
 ```
 
 <!-- response SQL -->
+```sql
++------------+-------------------------------------+
+| Component  | Version                             |
++------------+-------------------------------------+
+| Daemon     | 13.13.4 0bc5a9641@25101507 dev      |
+| Columnar   | columnar 8.1.0 e1522a2@25100213     |
+| Secondary  | secondary 8.1.0 e1522a2@25100213    |
+| Knn        | knn 8.1.0 e1522a2@25100213          |
+| Embeddings | embeddings 1.0.1                    |
+| Buddy      | buddy v3.35.1+25090418-41d9811f-dev |
++------------+-------------------------------------+
 ```
-+------------+--------------------------------+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW VERSION"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 6,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Component": {
+          "type": "string"
+        }
+      },
+      {
+        "Version": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Component": "Daemon",
+        "Version": "13.13.4 0bc5a9641@25101507 dev"
+      },
+      {
+        "Component": "Columnar",
+        "Version": "columnar 8.1.0 e1522a2@25100213"
+      },
+      {
+        "Component": "Secondary",
+        "Version": "secondary 8.1.0 e1522a2@25100213"
+      },
+      {
+        "Component": "Knn",
+        "Version": "knn 8.1.0 e1522a2@25100213"
+      },
+      {
+        "Component": "Embeddings",
+        "Version": "embeddings 1.0.1"
+      },
+      {
+        "Component": "Buddy",
+        "Version": "buddy v3.35.1+25090418-41d9811f-dev"
+      }
+    ]
+  }
+]
 | Component  | Version                        |
 +------------+--------------------------------+
 | Daemon     | 6.2.13 61cfe38d2@24011520 dev  |

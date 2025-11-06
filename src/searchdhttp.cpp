@@ -1294,8 +1294,6 @@ protected:
 	}
 };
 
-typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
-
 static const char * GetMysqlTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
@@ -1460,12 +1458,11 @@ public:
 	{
 		JsonEscapedBuilder sEscapedName;
 		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
-		ColumnNameType_t tCol { (CSphString)sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
-		m_dBuf.AppendName ( tCol.first.cstr(), false );
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
-		m_dColumns.Add ( tCol );
+		m_dColumns.Add ( (CSphString)sEscapedName );
 	}
 
 	void Add ( BYTE ) override {}
@@ -1478,13 +1475,13 @@ public:
 
 private:
 	JsonEscapedBuilder m_dBuf;
-	CSphVector<ColumnNameType_t> m_dColumns;
+	StrVec_t m_dColumns;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
 
 	void AddDataColumn()
 	{
-		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr(), false );
+		m_dBuf.AppendName ( m_dColumns[m_iCol].cstr(), false );
 		++m_iCol;
 	}
 

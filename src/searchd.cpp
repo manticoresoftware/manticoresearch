@@ -7705,7 +7705,7 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 			continue;
 
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-		dRows.HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumn ( tCol.m_eAttrType ) );
+		dRows.HeadColumnRaw ( tCol.m_sName.cstr(), tCol.m_eAttrType );
 	}
 
 	if ( bAddQueryColumn )

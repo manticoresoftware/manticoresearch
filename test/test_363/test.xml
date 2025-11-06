@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>data types in cli_json</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+	<sphinxql>
+		create table t(i int, f float, s string, t text, b bigint, j json, m multi, m64 multi64, bl bool);
+		desc t;
+	</sphinxql>
+	<query endpoint="cli_json" method="post">select * from t</query>
+	<sphinxql>
+		drop table t;
+	</sphinxql>
+</queries>
+
+</test>

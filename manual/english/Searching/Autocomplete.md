@@ -51,6 +51,7 @@ POST /autocomplete
 - `prepend`: Boolean (0/1 in SQL). If true(1), adds an asterisk before the last word for prefix expansion (e.g., `*word`)
 - `append`: Boolean (0/1 in SQL). If true(1), adds an asterisk after the last word for suffix expansion (e.g., `word*`)
 - `expansion_len`: Number of characters to expand in the last word. Default: `10`
+- `force_bigrams`: Boolean (0/1 in SQL). Forces the use of bigrams (2-character n-grams) instead of trigrams for all word lengths, which can improve matching for words with transposition errors. Default: `0` (use trigrams for words ≥6 characters)
 
 <!-- request SQL -->
 
@@ -188,6 +189,61 @@ POST /autocomplete
 
 <!-- end -->
 
+<!-- example force_bigrams option -->
+##### Using force_bigrams for better transposition handling
+The `force_bigrams` option can help with words that have transposition errors, such as "ipohne" vs "iphone". By using bigrams instead of trigrams, the algorithm can better handle character transpositions.
+
+<!-- request SQL -->
+```sql
+mysql> CALL AUTOCOMPLETE('ipohne', 'products', 1 as force_bigrams);
+```
+
+<!-- response SQL -->
+```
++--------+
+| query  |
++--------+
+| iphone |
++--------+
+```
+
+<!-- request JSON -->
+```json
+POST /autocomplete
+{
+	"table":"products",
+	"query":"ipohne",
+	"options": {
+		"force_bigrams": 1
+	}
+}
+```
+
+<!-- response JSON -->
+```json
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "iphone"
+      }
+    ]
+  }
+]
+```
+
+<!-- end -->
+
 #### Links
 * [This demo](https://github.manticoresearch.com/manticoresoftware/manticoresearch) demonstrates the autocomplete functionality:
   ![Autocomplete example](autocomplete_github_demo.png){.scale-0.7}
@@ -286,6 +342,7 @@ MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+------------+------+------+
 ```
 <!-- end -->
+
 <!-- example bigram -->
 There is a nice trick how you can improve the above algorithm - use [bigram_index](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index). When you have it enabled for the table what you get in it is not just a single word, but each pair of words standing one after another indexed as a separate token.
 

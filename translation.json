@@ -171,12 +171,13 @@
   "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md": "054329432471757df9fc181db74bc1df",
   "Emptying_a_table.md": "a54f1b988ae6045637cca819474efd70",
   "References.md": "924278a25485e2981087a272aed6e5b8",
-  "Changelog.md": "876ebfbd86334d09364127e1c07331a3",
+  "Changelog.md": "63be405b09c886a59769333005d19d47",
   "Searching/Full_text_matching/Operators.md": "3d381c07770897772da85df6dda98305",
   "Updating_table_schema_and_settings.md": "39fe1c80063e98752083b24bb132016a",
   "Searching/KNN.md": "de6055f46bdad897aa94fe39a13b2e1f",
   "README.md": "eff1619e48f822a69605ff5e69ab79e6",
   "Searching/Options.md": "2fb7f43595ee0ce2fca0919a6b0b36bb",
   "Searching/Full_text_matching/Boolean_optimization.md": "ec69041e4f95354af0641401a37aad06",
-  "Server_settings/Searchd.md": "9b41b07ac3b91e71e4695d80009fc545"
+  "Server_settings/Searchd.md": "9b41b07ac3b91e71e4695d80009fc545",
+  "Changelog-new.md": "d44f1f48f708aa8ed14a24eec8d0792d"
 }

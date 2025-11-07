@@ -19,9 +19,9 @@
 * `local_index` - индекс узла в кластере.
 * `last_error` - последнее зарегистрированное сообщение об ошибке, связанной с операцией кластера. Сообщение предоставляет общий обзор проблемы. Для более подробного контекста следует обратиться к файлу `searchd.log`.
 
-### Переменные прогресса SST
+### Метрики прогресса SST
 
-Во время передачи снимка состояния (State Snapshot Transfer, SST) один узел обеспечивает другой, передавая полную копию данных. Это происходит, когда новый узел присоединяется к кластеру [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) или когда добавляются новые таблицы [`ALTER CLUSTER ADD`](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). Пока SST активен, на узлах-доноре и присоединяющемся будут доступны следующие дополнительные переменные статуса, прогресс которых синхронизирован.
+Во время передачи снимка состояния (State Snapshot Transfer, SST) один узел обеспечивает другой, передавая полную копию данных. Это происходит, когда новый узел присоединяется к кластеру [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) или когда добавляются новые таблицы [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). Пока SST активен, на обоих узлах — доноре и присоединяющемся — будут доступны следующие дополнительные переменные состояния, прогресс которых синхронизируется.
 
 * `cluster_name_sst_total` - общий прогресс всей операции SST, от 0 до 100. Это основной счетчик для отслеживания.
 * `cluster_name_sst_stage` - название текущей фазы работы. Процесс проходит через эти этапы для каждой передаваемой таблицы:

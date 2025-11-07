@@ -19,9 +19,9 @@
 * `local_index` - 节点在集群中的索引。
 * `last_error` - 与集群操作相关的最后记录的错误消息。该消息提供问题的高级摘要。有关更详细的上下文，应查阅 `searchd.log` 文件。
 
-### SST 进度变量
+### SST 进度指标
 
-在状态快照传输（SST）期间，节点通过传输完整数据副本为另一个节点提供数据。当新节点加入集群 [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) 或添加新表 [`ALTER CLUSTER ADD`](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster) 时会发生此情况。在 SST 活动期间，以下额外的状态变量将在捐赠节点和加入节点上可用，其进度保持同步。
+在状态快照传输（SST）期间，一个节点通过传输完整的数据副本来为另一个节点提供数据。这发生在新节点加入集群时 [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) 或者添加新表时 [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster)。当 SST 正在进行时，以下额外的状态变量将在捐赠节点和加入节点上都可用，并且它们的进度保持同步。
 
 * `cluster_name_sst_total` - 整个 SST 操作的总体进度，范围从 0 到 100。这是主要的计数器。
 * `cluster_name_sst_stage` - 当前工作阶段的名称。该过程针对每个正在传输的表循环经过以下阶段：

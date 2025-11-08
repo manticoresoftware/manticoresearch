@@ -340,6 +340,35 @@ public:
 	bool TestNextWlock() const noexcept;
 };
 
+class ReadTableLock_c final
+{
+	mutable sph::Spinlock_c m_tInternalMutex {};
+	WaitQueue_c m_tWaitRQueue {};
+	DWORD m_uReads = 0;
+	DWORD m_uWrites = 0;
+
+public:
+	NONCOPYMOVABLE ( ReadTableLock_c );
+	ReadTableLock_c() = default;
+	~ReadTableLock_c() = default;
+	bool TryWrite() noexcept;
+	void WaitRead() noexcept;
+	void FinishWrite() noexcept;
+	[[nodiscard]] bool UnlockRead() noexcept;
+};
+
+class ScopedWriteTable_c final
+{
+	ReadTableLock_c& m_tTableLock;
+	bool m_bCanWrite;
+
+public:
+	NONCOPYMOVABLE ( ScopedWriteTable_c );
+	explicit ScopedWriteTable_c ( ReadTableLock_c& tTableLock );
+	~ScopedWriteTable_c();
+	[[nodiscard]] bool CanWrite() const noexcept;
+};
+
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable
 {
 	sph::Spinlock_c m_tWaitQueueSpinlock {};

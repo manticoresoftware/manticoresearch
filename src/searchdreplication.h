@@ -21,6 +21,9 @@
 // return path to given cluster, or empty and error
 std::optional<CSphString> GetClusterPath ( const CSphString& sCluster );
 
+class SstProgress_i;
+CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluster );
+
 // collect all available into an array
 CSphVector<ClusterDesc_t> ReplicationCollectClusters ();
 

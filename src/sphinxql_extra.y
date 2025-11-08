@@ -179,7 +179,7 @@ optional_with_read_lock:
 unlock_tables:
 	TOK_UNLOCK TOK_TABLES
 		{
-			pParser->DefaultOk();
+			pParser->UnlockStatement ();
 		}
 	;
 
@@ -188,7 +188,7 @@ unlock_tables:
 lock_tables:
 	TOK_LOCK TOK_TABLES list_locked
 		{
-			pParser->DefaultOk();
+			pParser->LockStatement ();
 		}
 	;
 
@@ -198,11 +198,20 @@ list_locked:
 
 lock_table:
 	table_ident read_or_write opt_comment
+		{
+			pParser->AddStrval ( pParser->m_pStmt->m_dInsertValues, $1 );
+		}
 	;
 
 read_or_write:
 	TOK_READ
+		{
+			pParser->LockType(false);
+		}
 	| TOK_WRITE
+		{
+			pParser->LockType(true);
+		}
 	;
 
 opt_comment:

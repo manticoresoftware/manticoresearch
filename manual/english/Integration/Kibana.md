@@ -45,9 +45,7 @@
 - Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
 
 ## Limitations
-- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could 
-
-cause issues. Versions 8.x are not supported.
+- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could cause issues. Versions 8.x are not supported.
 - The following Elasticsearch-specific field types are not supported:
   - [Spatial data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
   - [Structured data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)

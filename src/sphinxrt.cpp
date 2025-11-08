@@ -11306,7 +11306,7 @@ bool RtIndex_c::AlterApiKey ( const CSphString & sAttr, const CSphString & sKey,
 {
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
+//	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
 
 	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
 	if ( !pAttr )

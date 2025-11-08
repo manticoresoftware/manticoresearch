@@ -17,6 +17,7 @@
 #include "common.h"
 #include "searchdha.h"
 #include "cluster_commands.h"
+#include "cluster_sst_progress.h"
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterRequest_t& tReq )
 {
@@ -162,6 +163,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveClusterGetVer ( true, tOut );
 		break;
 
+	case E_CLUSTER::UPDATE_SST_PROGRESS:
+		ReceiveSstProgress ( tOut, tBuf, sCluster );
+		break;
+
 	default:
 		TlsMsg::Err ( "INTERNAL ERROR: unhandled command %d", (int) eClusterCmd );
 		break;
@@ -234,4 +239,66 @@ int ReplicationFileRetryCount ()
 int ReplicationFileRetryDelay ()
 {
 	return Max ( g_iReplRetryDelayMs, g_iNodeRetryWaitMs );
+}
+
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry, FnOnSuccess fnOnSuccess )
+{
+	if ( dNodes.IsEmpty() )
+		return true;
+
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
+	int iQueryRetry = ( bRetry ? ReplicationRetryCount() : -1 );
+	int iQueryDelay = ( bRetry ? ReplicationRetryDelay() : -1 );
+
+	ScheduleDistrJobs ( dNodes, &tReq, &tReply, tReporter, iQueryRetry, iQueryDelay );
+
+	CSphBitvec dFinished ( dNodes.GetLength() );
+
+	bool bDone = false;
+	while ( !bDone )
+	{
+		bDone = tReporter->IsDone();
+		if ( !bDone )
+			tReporter->WaitChanges();
+
+		ARRAY_FOREACH ( iNode, dNodes )
+		{
+			if ( dNodes[iNode]->m_bSuccess && !dFinished.BitGet ( iNode ) )
+			{
+				if ( fnOnSuccess )
+					fnOnSuccess ( dNodes[iNode] );
+				
+				dFinished.BitSet ( iNode );
+			}
+		}
+	}
+
+	int iFinished = dNodes.count_of ( [] ( const AgentConn_t * pAgent ) { return ( pAgent->m_bSuccess ); } );
+	bool bOk = ( iFinished==dNodes.GetLength() );
+	if ( !bOk || TlsMsg::HasErr() )
+		sphLogDebugRpl ( "%d(%d) nodes finished well, tls msg: %s", iFinished, dNodes.GetLength(), TlsMsg::szError() );
+	if ( bOk && TlsMsg::HasErr() )
+		TlsMsg::ResetErr();
+
+	ARRAY_FOREACH ( iNode, dNodes )
+	{
+		const AgentConn_t * pAgent = dNodes[iNode];
+		if ( pAgent->m_bSuccess && !dFinished.BitGet(iNode) )
+		{
+			if ( fnOnSuccess )
+				fnOnSuccess ( pAgent );
+			
+			dFinished.BitSet ( iNode );
+		}
+
+		if ( !pAgent->m_sFailure.IsEmpty() )
+		{
+			sphWarning ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+			if ( !bOk )
+				TlsMsg::Err().Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+		}
+
+	}
+
+	return ( bOk && !TlsMsg::HasErr() );
 }

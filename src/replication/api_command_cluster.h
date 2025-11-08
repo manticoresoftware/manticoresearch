@@ -35,6 +35,7 @@ enum class E_CLUSTER : WORD
 	GET_NODE_STATE		= 9,
 	GET_NODE_VER		= 10,
 	GET_NODE_VER_ID		= 11,
+	UPDATE_SST_PROGRESS	= 12,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -52,6 +53,7 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::GET_NODE_STATE: return "get_node_state";
 	case E_CLUSTER::GET_NODE_VER: return "get_node_ver";
 	case E_CLUSTER::GET_NODE_VER_ID: return "get_node_ver_id";
+	case E_CLUSTER::UPDATE_SST_PROGRESS: return "update_sst_progress";
 	default: return "unknown";
 	}
 }
@@ -191,6 +193,9 @@ public:
 };
 
 bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry );
+
+using FnOnSuccess = std::function < void ( const AgentConn_t * ) >;
+bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, bool bRetry, FnOnSuccess fnOnSuccess );
 
 // handle all API incoming.
 void HandleAPICommandCluster ( ISphOutputBuffer& tOut, WORD uCommandVer, InputBuffer_c& tBuf, const char* szClient );

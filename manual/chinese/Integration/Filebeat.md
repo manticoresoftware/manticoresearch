@@ -2,17 +2,17 @@
 
 > 注意：与 Filebeat 的集成需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法正常工作，请确保已安装 Buddy。
 
-[Filebeat](https://www.elastic.co/beats/filebeat) 是一个轻量级的日志转发和集中器。安装为代理后，它会监控您指定的日志文件或位置，收集日志事件，并将其转发进行索引，通常是发送到 Elasticsearch 或 Logstash。
+[Filebeat](https://www.elastic.co/beats/filebeat) 是一个轻量级的日志数据转发和集中器。安装为代理后，它会监控您指定的日志文件或位置，收集日志事件，并将其转发以进行索引，通常是发送到 Elasticsearch 或 Logstash。
 
-现在，Manticore 也支持将 Filebeat 用作处理管道。这允许收集和转换的数据像发送到 Elasticsearch 一样发送到 Manticore。目前，所有版本直到 9.0 都完全支持。
+现在，Manticore 也支持将 Filebeat 用作处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前，所有版本到 9.0 都完全支持。
 
 ## Filebeat 配置
 
-配置根据您使用的 Filebeat 版本而异。
+配置因您使用的 Filebeat 版本而异。
 
 ### Filebeat 7.17、8.0、8.1 的配置
 
-> **重要**：Filebeat 版本 7.17.0、8.0.0 和 8.1.0 在 glibc 2.35+（用于 Ubuntu 22.04 及更高版本）中存在已知问题。这些版本可能会崩溃，显示“Fatal glibc error: rseq registration failed”。为修复此问题，请添加如下所示的 `seccomp` 配置。
+> **重要**：Filebeat 版本 7.17.0、8.0.0 和 8.1.0 在使用 glibc 2.35+（Ubuntu 22.04 及更新发行版中使用）时存在已知问题。这些版本可能会因“Fatal glibc error: rseq registration failed”而崩溃。为解决此问题，请添加如下所示的 `seccomp` 配置。
 
 ```yaml
 filebeat.inputs:
@@ -43,12 +43,12 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-**参考资料**：[Issue #30576](https://github.com/elastic/beats/issues/30576)，[PR #30620](https://github.com/elastic/beats/pull/30620)
+**参考**：[Issue #30576](https://github.com/elastic/beats/issues/30576), [PR #30620](https://github.com/elastic/beats/pull/30620)
 
 
 ### Filebeat 8.1 - 8.10 的配置
 
-对于 8.1 到 8.10 版本，您需要添加选项 `allow_older_versions`：
+对于 8.1 到 8.10 版本，您需要添加 `allow_older_versions` 选项：
 
 ```
 filebeat.inputs:
@@ -73,7 +73,7 @@ setup.template.pattern: "dpkg_log"
 
 ### Filebeat 8.11 - 8.19 的配置
 
-从 8.11 版本开始，默认启用了输出压缩，因此您必须显式设置 `compression_level: 0` 以兼容 Manticore：
+从 8.11 版本开始，输出压缩默认启用，因此您必须显式设置 `compression_level: 0` 以兼容 Manticore：
 
 ```
 filebeat.inputs:
@@ -96,9 +96,9 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Filebeat 9.0 及以上的配置
+### Filebeat 9.0+ 的配置
 
-Filebeat 9.0 引入了重大架构变更，用 `filestream` 替代了 `log` 输入类型。从 9.0 版本起，默认的文件识别方式也改为指纹（fingerprint），这要求文件至少为 1024 字节（[详见 issue #44780](https://github.com/elastic/beats/issues/44780)）。为兼容任意大小文件，必须禁用指纹识别。
+Filebeat 9.0 引入了重大架构变更，用 `filestream` 替代了 `log` 输入类型。从 9.0 版本开始，默认的文件识别方法也改为指纹识别，这要求文件至少为 1024 字节（[参见 issue #44780](https://github.com/elastic/beats/issues/44780)）。为了使 Manticore 兼容任意大小的文件，必须禁用指纹识别。
 
 以下是 Filebeat 9.0 及以后版本所需的配置：
 
@@ -124,14 +124,14 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-**Filebeat 9.0+ 重要说明：**
-- 输入类型 `type: filestream` 取代了旧的 `type: log`
-- 必须设置 `prospector.scanner.fingerprint.enabled: false` 禁用基于指纹的文件识别，以确保可靠处理小于 1024 字节的文件
-- 对于 filestream 输入，`id` 字段是必需的且必须唯一
+**Filebeat 9.0+ 的重要说明：**
+- `type: filestream` 输入替代了旧的 `type: log`
+- `prospector.scanner.fingerprint.enabled: false` 设置是**必需的**，用于禁用基于指纹的文件识别，确保可靠处理小于 1024 字节的文件
+- filestream 输入需要 `id` 字段，且必须唯一
 
 ## Filebeat 结果
 
-运行带有此配置的 Filebeat 后，日志数据将发送到 Manticore 并正确索引。以下是 Manticore 创建的表的结果模式和插入文档的示例：
+一旦使用此配置运行 Filebeat，日志数据将发送到 Manticore 并正确索引。以下是 Manticore 创建的表的结果模式及插入文档示例：
 
 ```
 mysql> DESCRIBE dpkg_log;

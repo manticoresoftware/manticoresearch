@@ -1,0 +1,176 @@
+Test for issue #3844: MAX()/AVG()/MIN()/SUM() on text field leads to crash
+https://github.com/manticoresoftware/manticoresearch/issues/3844
+
+Bug: Using MAX(), AVG(), MIN(), or SUM() on a text/string column previously caused a crash or freeze.
+Fix: Now returns proper error message instead of crashing.
+
+This test verifies:
+1. Aggregation functions (MAX, MIN, SUM, AVG) properly error on full-text text fields instead of crashing
+2. Aggregation functions (MAX, MIN, SUM, AVG) properly error on string attributes instead of crashing (row-wise storage)
+3. Aggregation functions (MAX, MIN, SUM, AVG) properly error on string attributes instead of crashing (columnar storage)
+4. COUNT(DISTINCT) on string attributes correctly identifies unique values with duplicates
+5. Aggregation functions work on numeric fields when grouping BY string attributes
+
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+=== Test 1: Aggregations on full-text text field (should fail) ===
+––– comment –––
+Drop table if exists and create table with text field
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(s text);"
+––– output –––
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P9306 -e "insert into t values(1, 'a');"
+––– output –––
+––– comment –––
+Test MAX() on text field - should return error instead of crashing
+––– input –––
+mysql -h0 -P9306 -e "select max(s) from t;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t: MAX() cannot be used on text/string column 's'
+––– comment –––
+Test AVG() on text field - should return error instead of crashing
+––– input –––
+mysql -h0 -P9306 -e "select avg(s) from t;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t: AVG() cannot be used on text/string column 's'
+––– comment –––
+Test MIN() on text field - should return error instead of crashing
+––– input –––
+mysql -h0 -P9306 -e "select min(s) from t;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t: MIN() cannot be used on text/string column 's'
+––– comment –––
+Test SUM() on text field - should return error instead of crashing
+––– input –––
+mysql -h0 -P9306 -e "select sum(s) from t;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t: SUM() cannot be used on text/string column 's'
+––– comment –––
+=== Test 2: MAX/MIN on string attributes when grouping BY numeric fields (row-wise storage) ===
+––– comment –––
+Create table with string attribute, numeric category, and numeric attributes (row-wise storage)
+Test that MAX/MIN work on string attributes when grouping BY numeric fields
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t_str_rowwise; create table t_str_rowwise(category_id int, name string, price int);"
+––– output –––
+––– comment –––
+Insert test data with categories and duplicate strings
+––– input –––
+mysql -h0 -P9306 -e "insert into t_str_rowwise(id, category_id, name, price) values(1, 1, 'apple', 10), (2, 1, 'banana', 15), (3, 2, 'apple', 20), (4, 2, 'cherry', 25), (5, 1, 'date', 30);"
+––– output –––
+––– comment –––
+Test MAX on string attribute without GROUP BY - should return error (but not crash)
+String attributes cannot be aggregated without GROUP BY context
+––– input –––
+mysql -h0 -P9306 -e "select max(name) from t_str_rowwise;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_rowwise: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test MIN on string attribute without GROUP BY - should return error (but not crash)
+––– input –––
+mysql -h0 -P9306 -e "select min(name) from t_str_rowwise;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_rowwise: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test AVG on string attribute without GROUP BY - should return error (but not crash)
+––– input –––
+mysql -h0 -P9306 -e "select avg(name) from t_str_rowwise;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_rowwise: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test SUM on string attribute without GROUP BY - should return error (but not crash)
+––– input –––
+mysql -h0 -P9306 -e "select sum(name) from t_str_rowwise;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_rowwise: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test GROUP BY string attribute with aggregations on numeric field (price) - should work
+Group BY string attribute and aggregate numeric values within each string group
+––– input –––
+mysql -h0 -P9306 -e "select name, count(*), sum(price), max(price), min(price), avg(price) from t_str_rowwise group by name order by count(*) desc;"
+––– output –––
++--------+----------+------------+------------+------------+------------+
+| name   | count(*) | sum(price) | max(price) | min(price) | avg(price) |
++--------+----------+------------+------------+------------+------------+
+| apple  |        2 |         30 |         20 |         10 |  15.000000 |
+| banana |        1 |         15 |         15 |         15 |  15.000000 |
+| cherry |        1 |         25 |         25 |         25 |  25.000000 |
+| date   |        1 |         30 |         30 |         30 |  30.000000 |
++--------+----------+------------+------------+------------+------------+
+––– comment –––
+Test COUNT(DISTINCT) on string attribute with duplicates - should show unique count
+––– input –––
+mysql -h0 -P9306 -e "select count(distinct name) from t_str_rowwise;"
+––– output –––
++----------------------+
+| count(distinct name) |
++----------------------+
+|                    4 |
++----------------------+
+––– comment –––
+=== Test 3: MAX/MIN on string attributes when grouping BY numeric fields (columnar storage) ===
+––– comment –––
+Create table with string attribute, numeric category, and numeric attributes using columnar storage
+Test that MAX/MIN work on string attributes when grouping BY numeric fields
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t_str_columnar; create table t_str_columnar(category_id int, name string, price int) engine='columnar';"
+––– output –––
+––– comment –––
+Insert test data with categories and duplicate strings
+––– input –––
+mysql -h0 -P9306 -e "insert into t_str_columnar(id, category_id, name, price) values(1, 1, 'apple', 10), (2, 1, 'banana', 15), (3, 2, 'apple', 20), (4, 2, 'cherry', 25), (5, 1, 'date', 30);"
+––– output –––
+––– comment –––
+Test MAX on string attribute without GROUP BY in columnar storage - should return error (but not crash)
+String attributes cannot be aggregated without GROUP BY context
+––– input –––
+mysql -h0 -P9306 -e "select max(name) from t_str_columnar;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_columnar: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test MIN on string attribute without GROUP BY in columnar storage - should return error (but not crash)
+––– input –––
+mysql -h0 -P9306 -e "select min(name) from t_str_columnar;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_columnar: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test AVG on string attribute without GROUP BY in columnar storage - should return error (but not crash)
+––– input –––
+mysql -h0 -P9306 -e "select avg(name) from t_str_columnar;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_columnar: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test SUM on string attribute without GROUP BY in columnar storage - should return error (but not crash)
+––– input –––
+mysql -h0 -P9306 -e "select sum(name) from t_str_columnar;"
+––– output –––
+ERROR 1064 (42000) at line 1: table t_str_columnar: can not aggregate non-scalar attribute 'name'
+––– comment –––
+Test GROUP BY string attribute with aggregations on numeric field (price) in columnar storage - should work
+Group BY string attribute and aggregate numeric values within each string group
+––– input –––
+mysql -h0 -P9306 -e "select name, count(*), sum(price), max(price), min(price), avg(price) from t_str_columnar group by name order by count(*) desc;"
+––– output –––
++--------+----------+------------+------------+------------+------------+
+| name   | count(*) | sum(price) | max(price) | min(price) | avg(price) |
++--------+----------+------------+------------+------------+------------+
+| apple  |        2 |         30 |         20 |         10 |  15.000000 |
+| banana |        1 |         15 |         15 |         15 |  15.000000 |
+| cherry |        1 |         25 |         25 |         25 |  25.000000 |
+| date   |        1 |         30 |         30 |         30 |  30.000000 |
++--------+----------+------------+------------+------------+------------+
+––– comment –––
+Test COUNT(DISTINCT) on string attribute with duplicates in columnar storage - should show unique count
+––– input –––
+mysql -h0 -P9306 -e "select count(distinct name) from t_str_columnar;"
+––– output –––
++----------------------+
+| count(distinct name) |
++----------------------+
+|                    4 |
++----------------------+

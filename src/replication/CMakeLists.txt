@@ -24,6 +24,7 @@ ADD_LIBRARY ( repli_stuff STATIC wsrep_cxx.cpp wsrep_cxx.h wsrep_cxx_int.h
 		wsrep_v25.cpp
 		wsrep_v31.cpp
 		cluster_binlog.h cluster_binlog.cpp
+		cluster_sst_progress.h cluster_sst_progress.cpp
 )
 
 target_include_directories ( repli_stuff PRIVATE "${MANTICORE_SOURCE_DIR}/src" )

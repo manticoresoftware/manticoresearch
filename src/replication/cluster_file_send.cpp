@@ -12,6 +12,7 @@
 
 #include "nodes.h"
 #include "recv_state.h"
+#include "cluster_sst_progress.h"
 
 class SendBuf_c
 {
@@ -406,7 +407,7 @@ void FileReader_t::RetryFile ( int iRemoteFile, bool bNetError, WriteResult_e eR
 }
 
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
-bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex )
+bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, SstProgress_i & tProgress )
 {
 	StringBuilder_c tErrors ( ";" );
 
@@ -473,6 +474,9 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 			pAgent->m_sFailure = "";
 			if ( !tReply.m_sWarning.IsEmpty() )
 				ReportErrorSendFile ( tErrors, "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, tReply.m_sWarning.cstr() );
+
+			if ( bFileWritten )
+				tProgress.AddComplete ( tReader.m_tFileSendRequest.m_tSendBuf.Consumed() );
 
 			if ( !bFileWritten )
 			{

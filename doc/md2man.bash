@@ -17,7 +17,7 @@ END
 
 # indexer
 
-srcFile="../manual/Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md"
+srcFile="../manual/english/Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md"
 destFile="indexer.1"
 
 cp $srcFile tmp.md
@@ -84,7 +84,7 @@ rm tmp.*
 
 # searchd
 
-srcFile="../manual/Starting_the_server/Manually.md"
+srcFile="../manual/english/Starting_the_server/Manually.md"
 destFile="searchd.1"
 
 cp $srcFile tmp.md
@@ -141,7 +141,7 @@ EOF
 
 rm tmp.*
 
-srcFile="../manual/Miscellaneous_tools.md"
+srcFile="../manual/english/Miscellaneous_tools.md"
 destFile="indextool.1"
 
 cp $srcFile tmp.md

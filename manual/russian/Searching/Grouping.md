@@ -767,7 +767,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
-Обратите внимание, что `HAVING` не влияет на `total_found` в [метаинформации запроса поиска](../Node_info_and_management/SHOW_META.md#SHOW-META).
+**Примечание:** Начиная с версии 13.15.3, `HAVING` корректно влияет на `total_found` в [мета-информации поискового запроса](../Node_info_and_management/SHOW_META.md#SHOW-META). Значение `total_found` теперь отражает количество групп **после** применения фильтра `HAVING`, а не до. Это обеспечивает правильную постраничную навигацию при использовании `HAVING` с `GROUP BY`.
 
 <!-- example group7 -->
 ##### GROUPBY()

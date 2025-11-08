@@ -767,7 +767,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
-注意，`HAVING` 不会影响[搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的 `total_found`。
+**注意：** 从版本 13.15.3 开始，`HAVING` 正确地影响了[搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的 `total_found`。`total_found` 的值现在反映的是应用 `HAVING` 过滤器**之后**的组数，而不是之前的。这样在使用带有 `GROUP BY` 的 `HAVING` 子句时，可以实现正确的分页。
 
 <!-- example group7 -->
 ##### GROUPBY()

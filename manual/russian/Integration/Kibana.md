@@ -45,7 +45,9 @@
 - Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
 
 ## Limitations
-- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could 
+- В настоящее время тестируется и рекомендуется версия Kibana 7.6.0. Другие версии 7.x могут работать, но могут 
+
+вызывать проблемы. Версии 8.x не поддерживаются.
 
 cause issues. Versions 8.x are not supported.
 - The following Elasticsearch-specific field types are not supported:

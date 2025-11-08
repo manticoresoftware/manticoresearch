@@ -1,0 +1,160 @@
+––– comment –––
+Test for expansion_phrase_limit and expansion_phrase_warning functionality
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/3817
+––– comment –––
+Part 1: Test default behavior (expansion_phrase_warning = 0) - should return ERROR
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_expansion (title text);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_expansion (title) VALUES ('test content with some words');"
+––– output –––
+––– comment –––
+Simple query that doesn't exceed default limit (1024) - should work
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b) (c|d)\"');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE test_expansion;"
+––– output –––
+––– input –––
+searchd --stopwait > /dev/null
+––– output –––
+––– comment –––
+Configure low limit and error mode (expansion_phrase_warning = 0)
+––– input –––
+sed -i '/^searchd {/a\    expansion_phrase_limit = 8\n    expansion_phrase_warning = 0' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+    expansion_phrase_limit = 8
+    expansion_phrase_warning = 0
+    listen = %{FANY}
+    listen = %{FANY}
+    listen = %{FANY}
+    log = %{FANY}
+    query_log = %{FANY}
+    pid_file = %{FANY}
+    data_dir = %{FANY}
+}
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_expansion (title text);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_expansion (title) VALUES ('test content');"
+––– output –––
+––– comment –––
+Query at the limit (2*2*2 = 8) - should work
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b) (c|d) (e|f)\"');"
+––– output –––
+––– comment –––
+Query exceeding limit (3*3 = 9 > 8) - should ERROR
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f)\"');" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: %{FANY}query too complex, exceeds max variants limit%{FANY}expansion_phrase_limit 8%{FANY}
+––– comment –––
+Complex query (3*3*3 = 27 > 8) - should ERROR
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"');" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: %{FANY}query too complex, exceeds max variants limit%{FANY}expansion_phrase_limit 8%{FANY}
+––– comment –––
+Test with PROXIMITY operator (should also ERROR)
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"~10');" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: %{FANY}query too complex, exceeds max variants limit%{FANY}expansion_phrase_limit 8%{FANY}
+––– comment –––
+Test with QUORUM operator (should also ERROR)
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"/2');" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: %{FANY}query too complex, exceeds max variants limit%{FANY}expansion_phrase_limit 8%{FANY}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE test_expansion;"
+––– output –––
+––– input –––
+searchd --stopwait > /dev/null
+––– output –––
+––– comment –––
+Part 2: Test warning mode (expansion_phrase_warning = 1) - should return WARNING, not ERROR
+––– input –––
+sed -i 's/expansion_phrase_warning = 0/expansion_phrase_warning = 1/' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+    expansion_phrase_limit = 8
+    expansion_phrase_warning = 1
+    listen = %{FANY}
+    listen = %{FANY}
+    listen = %{FANY}
+    log = %{FANY}
+    query_log = %{FANY}
+    pid_file = %{FANY}
+    data_dir = %{FANY}
+}
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_expansion (title text);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_expansion (title) VALUES ('test content');"
+––– output –––
+––– comment –––
+Query within limit - should work without warning
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b) (c|d)\"'); SHOW META LIKE 'warning';" | grep -c "query is too complex"
+––– output –––
+0
+––– comment –––
+Query exceeding limit - should return WARNING instead of ERROR
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"'); SHOW META LIKE 'warning';" | grep "query is too complex, partial results generated (limited to 8 variants)"
+––– output –––
+%{FANY}query is too complex, partial results generated (limited to 8 variants)%{FANY}
+––– comment –––
+Verify query executed successfully without ERROR
+––– input –––
+ERROR_COUNT=$(mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"');" 2>&1 | grep -c "ERROR"); echo "Error count: $ERROR_COUNT (expected: 0)"
+––– output –––
+Error count: 0 (expected: 0)
+––– comment –––
+Another complex query should show warning
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c|d|e) (f|g|h|j)\"'); SHOW META LIKE 'warning';" | grep "query is too complex, partial results generated (limited to 8 variants)"
+––– output –––
+%{FANY}query is too complex, partial results generated (limited to 8 variants)%{FANY}
+––– comment –––
+Test with PROXIMITY operator - should show warning
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"~10'); SHOW META LIKE 'warning';" | grep "query is too complex, partial results generated (limited to 8 variants)"
+––– output –––
+%{FANY}query is too complex, partial results generated (limited to 8 variants)%{FANY}
+––– comment –––
+Test with QUORUM operator - should show warning
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"/2'); SHOW META LIKE 'warning';" | grep "query is too complex, partial results generated (limited to 8 variants)"
+––– output –––
+%{FANY}query is too complex, partial results generated (limited to 8 variants)%{FANY}
+––– comment –––
+Verify multiple queries work without errors
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as cnt FROM test_expansion WHERE MATCH('\"(a|b|c) (d|e|f) (g|h|i)\"'); SELECT COUNT(*) as cnt FROM test_expansion WHERE MATCH('\"(a|b|c|d) (e|f|g|h)\"');" 2>&1 | grep -c "ERROR"
+––– output –––
+0
+––– input –––
+searchd --stopwait > /dev/null
+––– output –––
+––– comment –––
+Restore original config
+––– input –––
+sed -i '/expansion_phrase_limit/d; /expansion_phrase_warning/d' /etc/manticoresearch/manticore.conf
+––– output –––

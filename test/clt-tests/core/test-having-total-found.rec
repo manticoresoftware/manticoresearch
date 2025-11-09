@@ -1,3 +1,14 @@
+––– comment –––
+Test for issue #3428: total_found with HAVING clause
+https://github.com/manticoresoftware/manticoresearch/issues/3428
+
+Issue: total_found was returning count of all groups, not filtered groups after HAVING.
+This broke pagination as total_found didn't reflect actual result count.
+
+Test validates:
+1. HAVING filters groups correctly (total_found < all groups)
+2. total_found stable across paginated queries
+3. Edge cases (empty results, stricter filters)
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Create table with 10K rows across ~200 categories (uneven distribution for HAVING testing)

@@ -3,6 +3,7 @@
 <!-- example install -->
 ## Установка и запуск Manticore
 
+
 Вы можете легко установить и запустить Manticore на различных операционных системах, включая Ubuntu, Centos, Debian, Windows и MacOS. Кроме того, вы также можете использовать Manticore в виде Docker-контейнера.
 
 <!-- intro -->
@@ -78,7 +79,6 @@ docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresear
   * порт 9306 для клиентов MySQL
   * порт 9308 для HTTP/HTTPS соединений
   * порт 9312 для соединений с другими узлами Manticore и клиентами, использующими бинарный API Manticore
-
 Более подробную информацию о поддержке HTTPS можно найти в нашем обучающем курсе [здесь](https://play.manticoresearch.com/https/).
 
 <!-- intro -->
@@ -91,6 +91,7 @@ mysql -h0 -P9306
 
 <!-- intro -->
 ##### Подключение через JSON по HTTP
+
 
 <!-- request HTTP -->
 HTTP — это безсостояний протокол, поэтому он не требует специальной фазы подключения. Вы можете просто отправить HTTP-запрос на сервер и получить ответ. Для общения с Manticore через JSON-интерфейс вы можете использовать любую HTTP клиентскую библиотеку на выбранном вами языке программирования для отправки GET или POST запросов на сервер и парсинга JSON ответов:
@@ -264,7 +265,6 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 * price - типа "float"
 
 Обратите внимание, что можно не создавать таблицу явно с помощью оператора create. Для дополнительной информации смотрите [Автоматическая схема](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
-
 Больше информации о различных способах создания таблиц можно найти в наших обучающих курсах:
 * [Создание таблицы RealTime](https://play.manticoresearch.com/rtmode/)
 * [Создание таблицы из источника MySQL](https://play.manticoresearch.com/mysql/)

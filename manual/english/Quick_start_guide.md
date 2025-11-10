@@ -3,6 +3,7 @@
 <!-- example install -->
 ## Install and start Manticore
 
+
 You can install and start Manticore easily on various operating systems, including Ubuntu, Centos, Debian, Windows, and MacOS. Additionally, you can also use Manticore as a Docker container.
 
 <!-- intro -->
@@ -74,7 +75,6 @@ For persisting your data directory, read [how to use Manticore docker in product
 ## Connect to Manticore
 
 By default Manticore is waiting for your connections on:
-
   * port 9306 for MySQL clients
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for connections from other Manticore nodes and clients based on Manticore binary API
@@ -93,6 +93,7 @@ mysql -h0 -P9306
 ##### Connect via JSON over HTTP
 
 <!-- request HTTP -->
+
 HTTP is a stateless protocol, so it doesn't require any special connection phase. You can simply send an HTTP request to the server and receive the response. To communicate with Manticore using the JSON interface, you can use any HTTP client library in your programming language of choice to send GET or POST requests to the server and parse the JSON responses:
 
 ```bash
@@ -264,7 +265,6 @@ Let's now create a table called "products" with 2 fields:
 * price - of type "float"
 
 Note that it is possible to omit creating a table with an explicit create statement. For more information, see [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
-
 More information about different ways to create a table can be found in our learning courses:
 * [Creating a RealTime table](https://play.manticoresearch.com/rtmode/)
 * [Creating a table from the MySQL source](https://play.manticoresearch.com/mysql/)

@@ -1845,7 +1845,10 @@ bool SqlParser_c::SetJoin ( const SqlNode_t & tIdx )
 bool SqlParser_c::AddOnFilter ( const SqlNode_t & tAttr1, const SqlNode_t & tAttr2, int iTypeCast )
 {
 	if ( !m_bJoinParseMode )
+	{
+		*m_pParseError = "Unable to parse join filter outside of JOIN ON clause";
 		return false;
+	}
 
 	CSphString sAttr1, sAttr2;
 	auto & tOn = m_pQuery->m_dOnFilters.Add();

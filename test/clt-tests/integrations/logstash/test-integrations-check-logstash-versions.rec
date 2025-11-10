@@ -34,10 +34,11 @@ TESTED_VERSIONS="7.17
 8.18
 8.19
 9.0
-9.1"
+9.1
+9.2"
 
 # Check for NEW versions (after latest tested)
-LATEST_TESTED_VERSION="9.1"
+LATEST_TESTED_VERSION="9.2"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size=100" \
 | jq -r ".results[].name" \
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
@@ -67,6 +68,29 @@ echo "Using tested versions:"
 echo "$TESTED_VERSIONS"
 SCRIPT
 ––– output –––
-🆕 NEW Logstash versions detected:
+✅ No new versions found after 9.2
+Using tested versions:
+7.17
+8.0
+8.1
+8.2
+8.3
+8.4
+8.5
+8.6
+8.7
+8.8
+8.9
+8.10
+8.11
+8.12
+8.13
+8.14
+8.15
+8.16
+8.17
+8.18
+8.19
+9.0
+9.1
 9.2
-❌ Need to test new versions and update the list!

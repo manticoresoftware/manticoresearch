@@ -18,6 +18,7 @@ join_condition: {
 	left_table.attr = right_table.attr
 	| left_table.json_attr.string_id = string(right_table.json_attr.string_id)
 	| left_table.json_attr.int_id = int(right_table.json_attr.int_id)
+	| [..右表属性上的过滤器]
 }
 ```
 

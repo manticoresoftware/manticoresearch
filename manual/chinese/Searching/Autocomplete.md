@@ -21,7 +21,7 @@ Manticore 的自动完成可以根据不同需求和设置进行定制，是许�
 > 注意：`CALL AUTOCOMPLETE` 和 `/autocomplete` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法使用，请确保已安装 Buddy。
 
 <!-- example call_autocomplete -->
-要在 Manticore 中使用自动完成，请使用 `CALL AUTOCOMPLETE` SQL 语句或其 JSON 等价物 `/autocomplete`。此功能基于你的索引数据提供词语补全建议。
+要在 Manticore 中使用自动完成，请使用 `CALL AUTOCOMPLETE` SQL 语句或其 JSON 等价的 `/autocomplete`。此功能基于你的索引数据提供词语补全建议。
 
 在继续之前，请确保你打算用于自动完成的表已启用 [infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)。
 
@@ -51,7 +51,7 @@ POST /autocomplete
 - `prepend`：布尔值（SQL 中为 0/1）。若为 true(1)，在最后一个词前添加星号以进行前缀扩展（例如，`*word`）
 - `append`：布尔值（SQL 中为 0/1）。若为 true(1)，在最后一个词后添加星号以进行后缀扩展（例如，`word*`）
 - `expansion_len`：最后一个词扩展的字符数。默认：`10`
-- `force_bigrams`：布尔值（SQL 中为 0/1）。强制对所有词长使用二元组（2 字符 n-gram）而非三元组，这可以改善对字符调换错误词的匹配。默认：`0`（对长度≥6的词使用三元组）
+- `force_bigrams`：布尔值（SQL 中为 0/1）。强制对所有词长使用二元组（2 字符 n-gram）而非三元组，这可以改善对字符调换错误的匹配。默认：`0`（对长度≥6的词使用三元组）
 
 <!-- request SQL -->
 
@@ -190,7 +190,7 @@ POST /autocomplete
 <!-- end -->
 
 <!-- example force_bigrams option -->
-##### 使用 force_bigrams 改善调换错误处理
+##### 使用 force_bigrams 改善字符调换处理
 `force_bigrams` 选项可以帮助处理字符调换错误的词，例如“ipohne”与“iphone”。通过使用二元组而非三元组，算法能更好地处理字符调换。
 
 <!-- request SQL -->
@@ -263,13 +263,13 @@ POST /autocomplete
 我们的博客中有一篇[相关文章](https://manticoresearch.com/blog/simple-autocomplete-with-manticore/)，还有一个[互动课程](https://play.manticoresearch.com/simpleautocomplete/)。一个快速示例如下：
 * 假设你有一篇文档：`My cat loves my dog. The cat (Felis catus) is a domestic species of small carnivorous mammal.`
 * 然后你可以使用 `^`、`""` 和 `*`，当用户输入时，你可以发起类似这样的查询：`^"m*"`、`^"my *"`、`^"my c*"`、`^"my ca*"` 等等
-* 它会找到该文档，如果你还使用了[高亮显示](../Searching/Highlighting.md)，你将得到类似这样的结果：`<b>My cat</b> loves my dog. The cat ( ...`
+* 它会找到该文档，如果你还使用了[高亮](../Searching/Highlighting.md)，你将得到类似这样的结果：`<b>My cat</b> loves my dog. The cat ( ...`
 
 ##### 自动补全一个单词
 在某些情况下，你只需要自动补全一个单词或几个单词。这时，你可以使用 `CALL KEYWORDS`。
 
 ### CALL KEYWORDS
-`CALL KEYWORDS` 可通过 SQL 接口使用，提供了一种检查关键词如何被分词或获取特定关键词的分词形式的方法。如果表启用了[infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)，它允许你快速找到给定关键词的可能结尾，非常适合自动补全功能。
+`CALL KEYWORDS` 通过 SQL 接口提供，可以用来检查关键词是如何被分词的，或者获取特定关键词的分词形式。如果表启用了[infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)，它允许你快速找到给定关键词的可能结尾，非常适合自动补全功能。
 
 这是通用中缀搜索的一个很好的替代方案，因为它性能更高，只需要表的字典，而不需要文档本身。
 
@@ -282,7 +282,7 @@ CALL KEYWORDS(text, table [, options])
 
 | 参数 | 描述 |
 | - | - |
-| text | 要拆分为关键词的文本 |
+| text | 要拆分成关键词的文本 |
 | table | 用于获取文本处理设置的表名 |
 | 0/1 as stats | 是否显示关键词统计，默认是 0 |
 | 0/1 as fold_wildcards | 是否折叠通配符，默认是 0 |
@@ -292,7 +292,7 @@ CALL KEYWORDS(text, table [, options])
 | docs/hits as sort_mode | 按 'docs' 或 'hits' 对输出结果排序。默认不排序。 |
 | jieba_mode | 查询的结巴分词模式。详情见[jieba_mode](../Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode) |
 
-示例展示了如果假设用户试图获取“my cat ...”的自动补全时的工作方式。因此，在应用端，你只需为每个新词从“normalized”列建议用户可能的结尾。通常使用 `'hits' as sort_mode` 或 `'docs' as sort_mode` 按点击数或文档数排序是有意义的。
+示例展示了如果假设用户想要获取“my cat ...”的自动补全结果时的工作方式。因此，在应用端你只需要为每个新词从“normalized”列建议用户可能的结尾。通常使用 `'hits' as sort_mode` 或 `'docs' as sort_mode` 按点击数或文档数排序是有意义的。
 
 <!-- intro -->
 ##### 示例：

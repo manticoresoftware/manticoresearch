@@ -30,15 +30,15 @@ Buddy 插件可以扩展 Manticore Search 的功能，并启用某些原生不�
 CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VERSION <package version>
 ```
 
-> 注意：`CREATE BUDDY PLUGIN` 需要 [Manticore Buddy](../../../Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+> 注意：`CREATE BUDDY PLUGIN` 需要 [Manticore Buddy](../../../Installation/Manticore_Buddy.md)。如果无法使用，请确保已安装 Buddy。
 
-您还可以使用专门为 Buddy 插件创建的别名命令，这个命令更容易记住：
+您还可以使用专门为 Buddy 插件创建的别名命令，这更容易记住：
 
 ```sql
 CREATE BUDDY PLUGIN <username/package name on https://packagist.org/> VERSION <package version>
 ```
 
-此命令将把 `show-hostname` 插件安装到 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 并启用它，无需重启服务器。
+此命令将安装 `show-hostname` 插件到 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 并启用它，无需重启服务器。
 
 <!-- intro -->
 ### 示例

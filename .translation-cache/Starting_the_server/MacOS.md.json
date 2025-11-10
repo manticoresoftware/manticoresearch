@@ -1,0 +1,10 @@
+{
+  "0076a86951e1b2994ac6f07412f5f03add3e80e8a604025ea9648b89e865336e": {
+    "original": "# Starting Manticore in MacOS\n\n## Starting Manticore via HomeBrew package manager\n\nIf Manticore is installed using HomeBrew, you can run it as a Brew service.\n\nTo start Manticore, run the following command:\n\nCODE_BLOCK_0\n\nTo stop Manticore, run the following command:\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 在 MacOS 上启动 Manticore\n\n## 通过 HomeBrew 包管理器启动 Manticore\n\n如果使用 HomeBrew 安装了 Manticore，可以将其作为 Brew 服务运行。\n\n要启动 Manticore，请运行以下命令：\n\nCODE_BLOCK_0\n\n要停止 Manticore，请运行以下命令：\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+      "russian": "# Запуск Manticore в MacOS\n\n## Запуск Manticore через менеджер пакетов HomeBrew\n\nЕсли Manticore установлен с помощью HomeBrew, вы можете запустить его как сервис Brew.\n\nЧтобы запустить Manticore, выполните следующую команду:\n\nCODE_BLOCK_0\n\nЧтобы остановить Manticore, выполните следующую команду:\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

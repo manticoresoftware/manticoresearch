@@ -98,7 +98,7 @@ setup.template.pattern: "dpkg_log"
 
 ### Filebeat 9.0+ 的配置
 
-Filebeat 9.0 引入了重大架构变更，用 `filestream` 替代了 `log` 输入类型。从 9.0 版本开始，默认的文件识别方法也改为指纹识别，这要求文件至少为 1024 字节（[参见 issue #44780](https://github.com/elastic/beats/issues/44780)）。为了使 Manticore 兼容任意大小的文件，必须禁用指纹识别。
+Filebeat 9.0 引入了重大架构变更，用 `filestream` 替代了 `log` 输入类型。从 9.0 版本开始，默认的文件识别方法也改为指纹识别，这要求文件至少为 1024 字节（[参见 issue #44780](https://github.com/elastic/beats/issues/44780)）。为了使 Manticore 兼容任意大小的文件，您必须禁用指纹识别。
 
 以下是 Filebeat 9.0 及以后版本所需的配置：
 
@@ -131,7 +131,7 @@ setup.template.pattern: "dpkg_log"
 
 ## Filebeat 结果
 
-一旦使用此配置运行 Filebeat，日志数据将发送到 Manticore 并正确索引。以下是 Manticore 创建的表的结果模式及插入文档示例：
+一旦使用此配置运行 Filebeat，日志数据将发送到 Manticore 并正确索引。以下是 Manticore 创建的表的结果模式和插入文档的示例：
 
 ```
 mysql> DESCRIBE dpkg_log;

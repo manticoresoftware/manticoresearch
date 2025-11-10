@@ -1,6 +1,6 @@
 # SHOW WARNINGS
 
-`SHOW WARNINGS` 语句可用于检索最近一次查询产生的警告。错误信息将与查询本身一起返回：
+`SHOW WARNINGS` 语句可用于检索最新查询产生的警告。错误信息将与查询本身一起返回：
 
 ```sql
 mysql> SELECT * FROM test1 WHERE MATCH('@@title hello') \G

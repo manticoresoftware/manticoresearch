@@ -1,0 +1,10 @@
+{
+  "1579f47c615b41cf5f981a138da1476b1f0c77d561da10f98893d80cd7636d6b": {
+    "original": "# Adding a new node\n\nTo add a new node to a cluster, simply start another instance of Manticore and ensure that it is accessible by the other nodes in the cluster. Connect the new node to the rest of the cluster using a [distributed table](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) and ensure data safety with [replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md).\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 添加新节点\n\n要向集群添加新节点，只需启动另一个 Manticore 实例，并确保其他节点可以访问该实例。使用[分布式表](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)将新节点连接到集群的其余部分，并通过[复制](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)确保数据安全。\n\n<!-- proofread -->",
+      "russian": "# Добавление нового узла\n\nЧтобы добавить новый узел в кластер, просто запустите еще один экземпляр Manticore и убедитесь, что он доступен для других узлов в кластере. Подключите новый узел к остальной части кластера с помощью [распределенной таблицы](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) и обеспечьте безопасность данных с помощью [репликации](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md).\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

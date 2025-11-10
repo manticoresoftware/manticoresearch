@@ -1,4 +1,4 @@
-# Сброс фрагмента ОЗУ на диск
+# Сброс чанка RAM на диск
 
 ## FLUSH TABLE
 
@@ -8,11 +8,11 @@
 FLUSH TABLE rt_table
 ```
 
-`FLUSH TABLE` принудительно сбрасывает содержимое фрагмента ОЗУ RT таблицы на диск.
+`FLUSH TABLE` принудительно сбрасывает содержимое RAM чанка RT таблицы на диск.
 
-Фрагмент ОЗУ таблицы реального времени [RAM chunk](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) автоматически сбрасывается на диск при корректном завершении работы или периодически каждые [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) секунд.
+Чанк RAM реального времени таблицы [RT table](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) автоматически сбрасывается на диск при корректном завершении работы или периодически каждые [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) секунд.
 
-Выполнение команды `FLUSH TABLE` не только принудительно записывает содержимое фрагмента ОЗУ на диск, но и запускает очистку файлов бинарного лога.
+Выполнение команды `FLUSH TABLE` не только принудительно записывает содержимое RAM чанка на диск, но и запускает очистку бинарных лог-файлов.
 
 <!-- intro -->
 ##### SQL:

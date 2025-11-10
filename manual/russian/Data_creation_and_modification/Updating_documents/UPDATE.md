@@ -2,13 +2,13 @@
 
 <!-- example update -->
 
-Команда `UPDATE` изменяет поколоночные ([row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)) значения атрибутов существующих документов в указанной таблице на новые значения. Обратите внимание, что содержимое поля полнотекстового поиска или колоннарного атрибута обновить нельзя. Если это необходимо, используйте [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+Команда `UPDATE` изменяет [построчно](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) значения атрибутов существующих документов в указанной таблице на новые значения. Обратите внимание, что нельзя обновлять содержимое поля полнотекстового поиска или колонного атрибута. Если возникает такая необходимость, используйте [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Обновление атрибутов поддерживается для RT, PQ и обычных таблиц. Все типы атрибутов можно обновлять, если они хранятся в [поколоночном формате](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
+Обновление атрибутов поддерживается для RT, PQ и обычных таблиц. Все типы атрибутов могут быть обновлены, если они хранятся в [построчном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 Обратите внимание, что идентификатор документа обновить нельзя.
 
-Важно знать, что обновление атрибута отключает его [вторичный индекс](../../Server_settings/Searchd.md#secondary_indexes). Если критично сохранить непрерывность вторичного индекса, рассмотрите возможность полного или [частичного замещения](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) документа.
+Важно понимать, что обновление атрибута отключает его [вторичный индекс](../../Server_settings/Searchd.md#secondary_indexes). Если критично поддерживать непрерывность вторичного индекса, рассмотрите возможность полного или [частичного замещения](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) документа.
 
 Подробнее о `UPDATE` и частичном `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
@@ -223,7 +223,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- example update multiple attributes -->
 
-В одном запросе можно обновить несколько атрибутов. Пример:
+В одном операторе можно обновить несколько атрибутов. Пример:
 
 <!-- intro -->
 ##### SQL:
@@ -474,11 +474,11 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- end -->
 
-При присвоении значения вне диапазона для 32-битных атрибутов они будут обрезаны до младших 32 бит без предупреждения. Например, если попытаться обновить 32-битное беззнаковое целое значением 4294967297, будет сохранено значение 1, поскольку младшие 32 бита 4294967297 (0x100000001 в шестнадцатеричном формате) равны 1 (0x00000001 в шестнадцатеричном формате).
+При присвоении выходящих за диапазон значений 32-битным атрибутам они будут усечены до младших 32 бит без предупреждения. Например, если попытаться обновить 32-битное беззнаковое целое значением 4294967297, фактически будет сохранено значение 1, так как младшие 32 бита числа 4294967297 (0x100000001 в шестнадцатеричном виде) равны 1 (0x00000001 в шестнадцатеричном виде).
 
 <!-- example partial JSON update -->
 
-Команда `UPDATE` может использоваться для частичного обновления JSON, если работают с числовыми типами данных или массивами чисел. Просто следите, чтобы целочисленное значение не обновлялось на число с плавающей точкой, так как оно будет округлено.
+`UPDATE` можно использовать для частичного обновления JSON с числовыми типами данных или массивами числовых типов. Главное — не обновлять целочисленное значение числом с плавающей точкой, так как оно будет округлено.
 
 <!-- intro -->
 ##### SQL:
@@ -1076,7 +1076,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- example cluster update -->
 
-При использовании репликации имя таблицы должно предваряться `cluster_name:` (в SQL), чтобы обновления распространялись на все узлы кластера. Для запросов через HTTP следует установить свойство `cluster`. Дополнительную информацию см. в разделе [настройки репликации](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md).
+When using replication, the table name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP, you should set a `cluster` property. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more information.
 
 ```json
 {
@@ -1214,20 +1214,20 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- end -->
 
 
-## Обновления через SQL
+## Updates via SQL
 
-Вот синтаксис оператора SQL `UPDATE`:
+Here is the syntax for the SQL `UPDATE` statement:
 
 ```sql
 UPDATE table SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]] [FORCE|IGNORE INDEX(id)]
 ```
 
 
-`where_condition` имеет тот же синтаксис, что и в операторах [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL).
+`where_condition` has the same syntax as in the [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement.
 
 <!-- example MVA empty update -->
 
-Наборы значений атрибутов с множественными значениями должны указываться как списки через запятую в скобках. Чтобы удалить все значения из атрибута с множественными значениями, просто присвойте ему `()`.
+Multi-value attribute value sets must be specified as comma-separated lists in parentheses. To remove all values from a multi-value attribute, just assign `()` to it.
 
 <!-- intro -->
 ##### SQL:
@@ -1441,27 +1441,27 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- end -->
 
 
-Клауза `OPTION` — это специфичное для Manticore расширение, позволяющее управлять рядом опций обновления. Синтаксис:
+`OPTION` clause is a Manticore-specific extension that lets you control a number of per-update options. The syntax is:
 
 ```sql
 OPTION <optionname>=<value> [ , ... ]
 ```
 
-Опции такие же, как для оператора [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL). В частности, для оператора `UPDATE` доступны следующие опции:
+The options are the same as for the [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for the `UPDATE` statement, you can use these options:
 
-*   'ignore_nonexistent_columns' — если установлено в **1**, обновление будет игнорировать предупреждения о попытках обновить колонку, которой нет в текущей схеме таблицы. Значение по умолчанию — **0**.
-*   'strict' — используется при частичных обновлениях JSON-атрибутов. По умолчанию (strict=1) `UPDATE` вызывает ошибку, если запрос пытается обновить нечисловые свойства. При strict=0, если обновляется несколько свойств, а некоторые недопустимы, ошибка не возникнет, и обновление применится только к допустимым свойствам (остальные будут игнорироваться). Если ни одно из изменений `SET` не разрешено, команда завершится ошибкой даже при strict=0.
+*   'ignore_nonexistent_columns' - If set to **1**, it indicates that the update will silently ignore any warnings about trying to update a column which does not exist in the current table schema. The default value is **0**.
+*   'strict' - This option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will result in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0, if multiple properties are updated and some are not allowed, the `UPDATE` will not result in an error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` re permitted, the command will result in an error even with strict=0.
 
-### Подсказки оптимизатору запросов
+### Query optimizer hints
 
-В редких случаях встроенный анализатор запросов Manticore может неправильно интерпретировать запрос и определить, следует ли использовать таблицу по ID. Это может привести к плохой производительности для запросов типа `UPDATE ... WHERE id = 123`.
-Информацию о том, как принудительно заставить оптимизатор использовать индекс docid, см. в разделе [Подсказки оптимизатору запросов](../../Searching/Options.md#Query optimizer hints).
+In rare cases, Manticore's built-in query analyzer may be incorrect in understanding a query and determining whether a table by ID should be used. This can result in poor performance for queries like `UPDATE ... WHERE id = 123`.
+For information on how to force the optimizer to use a docid index, see [Query optimizer hints](../../Searching/Options.md#Query optimizer hints).
 
-## Обновления через HTTP JSON
+## Updates via HTTP JSON
 
-Обновления через протокол HTTP JSON выполняются через endpoint `/update`. Синтаксис похож на [endpoint для /insert](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но свойство `doc` теперь обязательно.
+Updates using HTTP JSON protocol are performed via the `/update` endpoint. The syntax is similar to the [/insert endpoint](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but this time the `doc` property is mandatory.
 
-Сервер ответит JSON-объектом, указывающим, была ли операция успешной.
+The server will respond with a JSON object stating if the operation was successful or not.
 
 <!-- example JSON update -->
 
@@ -1496,7 +1496,7 @@ POST /update
 
 <!-- example JSON Example_2 -->
 
-ID документа, который нужно обновить, можно задать напрямую через свойство `id`, как показано в предыдущем примере, или же обновлять документы по запросу, применяя обновление ко всем документам, соответствующим запросу:
+The ID of the document that needs to be updated can be set directly using the `id` property, as shown in the previous example, or you can update documents by query and apply the update to all the documents that match the query:
 
 <!-- intro -->
 ##### JSON:
@@ -1530,7 +1530,7 @@ POST /update
 
 <!-- end -->
 
-Синтаксис запроса такой же, как в [/search endpoint](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). Обратите внимание, что нельзя одновременно указывать `id` и `query`.
+Синтаксис запроса такой же, как в [/search endpoint](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). Обратите внимание, что нельзя указывать `id` и `query` одновременно.
 
 ## Сброс атрибутов
 
@@ -1538,7 +1538,7 @@ POST /update
 FLUSH ATTRIBUTES
 ```
 
-Команда FLUSH ATTRIBUTES гарантирует, что все обновления атрибутов в памяти во всех активных таблицах будут сброшены на диск. Она возвращает тег, который идентифицирует состояние результата на диске, представляющий количество фактических сохранений атрибутов на диск, выполненных с момента запуска сервера.
+Команда FLUSH ATTRIBUTES гарантирует, что все обновления атрибутов в памяти во всех активных таблицах будут сброшены на диск. Она возвращает тег, который идентифицирует состояние результата на диске, представляющее количество фактических сохранений атрибутов на диск, выполненных с момента запуска сервера.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1559,7 +1559,7 @@ mysql> FLUSH ATTRIBUTES;
 
 <!-- example bulk update -->
 
-Вы можете выполнить несколько операций обновления в одном запросе, используя endpoint `/bulk`. Этот endpoint работает только с данными, у которых `Content-Type` установлен в `application/x-ndjson`. Данные должны быть отформатированы как JSON с разделением строками (NDJSON). По сути, это означает, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться символом новой строки `\n` и, возможно, `\r`.
+Вы можете выполнить несколько операций обновления в одном вызове, используя endpoint `/bulk`. Этот endpoint работает только с данными, у которых `Content-Type` установлен в `application/x-ndjson`. Данные должны быть отформатированы как JSON, разделённый переводами строк (NDJSON). По сути, это означает, что каждая строка должна содержать ровно одно JSON-выражение и заканчиваться переводом строки `\n` и, возможно, `\r`.
 
 
 <!-- intro -->
@@ -1606,9 +1606,9 @@ POST /bulk
 Endpoint `/bulk` поддерживает вставки, замены и удаления. Каждое выражение начинается с типа действия (в данном случае `update`). Вот список поддерживаемых действий:
 
 * `insert`: Вставляет документ. Синтаксис такой же, как в [/insert endpoint](../../Quick_start_guide.md#Add-documents).
-* `create`: синоним `insert`
+* `create`: синоним для `insert`
 * `replace`: Заменяет документ. Синтаксис такой же, как в [/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
-* `index`: синоним `replace`
+* `index`: синоним для `replace`
 * `update`: Обновляет документ. Синтаксис такой же, как в [/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON).
 * `delete`: Удаляет документ. Синтаксис такой же, как в [/delete endpoint](../../Data_creation_and_modification/Deleting_documents.md).
 
@@ -1904,7 +1904,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 
 
 
-Имейте в виду, что массовая операция останавливается при первой ошибке в запросе.
+Имейте в виду, что массовая операция останавливается при первом запросе, который приводит к ошибке.
 
 ## Настройки, связанные с обновлениями
 
@@ -1915,11 +1915,11 @@ attr_update_reserve=size
 ```
 
 <!-- example attr_update_reserve -->
-`attr_update_reserve` — это настройка на уровне таблицы, которая определяет пространство, зарезервированное для обновлений блоб-атрибутов. Эта настройка необязательная, значение по умолчанию — 128k.
+`attr_update_reserve` — это настройка на таблицу, которая определяет пространство, зарезервированное для обновлений блоб-атрибутов. Эта настройка необязательна, значение по умолчанию — 128k.
 
-Когда блоб-атрибуты (MVAs, строки, JSON) обновляются, их длина может измениться. Если обновленная строка (или MVA, или JSON) короче старой, она перезаписывает старую в файле `.spb`. Однако если обновленная строка длиннее, обновления записываются в конец файла `.spb`. Этот файл отображается в память, что означает, что изменение его размера может быть довольно медленным процессом в зависимости от реализации отображения файлов в память в ОС.
+Когда блоб-атрибуты (MVAs, строки, JSON) обновляются, их длина может измениться. Если обновлённая строка (или MVA, или JSON) короче старой, она перезаписывает старую в файле `.spb`. Однако, если обновлённая строка длиннее, обновления записываются в конец файла `.spb`. Этот файл отображается в память, что означает, что изменение его размера может быть довольно медленным процессом, в зависимости от реализации отображения файлов в память в ОС.
 
-Чтобы избежать частых изменений размера, вы можете указать дополнительное пространство для резервирования в конце файла `.spb` с помощью этой опции.
+Чтобы избежать частых изменений размера, вы можете указать дополнительное пространство, которое будет зарезервировано в конце файла `.spb` с помощью этой опции.
 
 
 <!-- intro -->
@@ -2042,7 +2042,7 @@ table products {
 attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 
-При обновлении атрибутов изменения сначала записываются в копию атрибутов в памяти. Эта настройка позволяет установить интервал между сбросом обновлений на диск. По умолчанию установлено значение 0, что отключает периодический сброс, но сброс все равно происходит при нормальном завершении работы.
+При обновлении атрибутов изменения сначала записываются в копию атрибутов в памяти. Эта настройка позволяет задать интервал между сбросами обновлений на диск. По умолчанию установлено 0, что отключает периодический сброс, но сброс всё равно происходит при нормальном завершении работы.
 
 <!-- proofread -->
 

@@ -8,29 +8,29 @@
 
 ## SQL REPLACE
 
-Синтаксис SQL-запроса `REPLACE` выглядит следующим образом:
+Синтаксис SQL оператора `REPLACE` следующий:
 
-**Чтобы заменить весь документ:**
+**Для замены всего документа:**
 ```sql
 REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-Столбцы, не указанные явно в SQL-запросе, устанавливаются в значения по умолчанию, например 0 или пустую строку, в зависимости от их типа данных.
+Столбцы, явно не включённые в SQL-запрос, устанавливаются в значения по умолчанию, такие как 0 или пустая строка, в зависимости от их типа данных.
 
-**Чтобы заменить только выбранные поля:**
+**Для замены только выбранных полей:**
 ```sql
 REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-Обратите внимание, что в этом режиме вы можете фильтровать только по id.
+Обратите внимание, что в этом режиме фильтровать можно только по id.
 
 > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Подробнее о `UPDATE` против частичной замены `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
+Подробнее о `UPDATE` и частичной замене `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
-Смотрите примеры для получения более подробной информации.
+Смотрите примеры для более подробной информации.
 
 ## JSON REPLACE
 
@@ -48,8 +48,8 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` — это псевдоним, работает так же.
-* Elasticsearch-подобный эндпоинт `<table>/_doc/<id>`:
+  `/index` — это псевдоним эндпоинта и работает так же.
+* Эндпоинт в стиле Elasticsearch `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -58,7 +58,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  > ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+  > ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 * Частичная замена:
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -68,11 +68,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть либо просто именем таблицы, либо в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру, если нужно.
+  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру при необходимости.
 
   > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Смотрите примеры для получения более подробной информации.
+Смотрите примеры для более подробной информации.
 
 <!-- intro -->
 ##### SQL:
@@ -140,7 +140,7 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
-> ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 ```json
 PUT /products/_doc/2
@@ -435,15 +435,15 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` доступен для таблиц реального времени и percolate. Вы не можете заменить данные в обычной таблице.
+`REPLACE` доступен для real-time и percolate таблиц. Нельзя заменять данные в plain таблице.
 
-Когда вы выполняете `REPLACE`, предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+При выполнении `REPLACE` предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-## Массовая замена
+## Bulk replace
 
 <!-- example bulk_replace -->
 
-Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [массовое добавление документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
+Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
 
 <!-- intro -->
 ##### HTTP:

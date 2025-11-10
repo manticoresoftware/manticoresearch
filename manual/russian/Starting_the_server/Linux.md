@@ -2,7 +2,7 @@
 
 ### Запуск и остановка с использованием systemd
 
-После установки служба Manticore Search не запускается автоматически. Чтобы запустить Manticore, выполните следующую команду:
+После установки сервис Manticore Search не запускается автоматически. Чтобы запустить Manticore, выполните следующую команду:
 
 ```shell
 sudo systemctl start manticore
@@ -14,7 +14,7 @@ sudo systemctl start manticore
 sudo systemctl stop manticore
 ```
 
-Служба Manticore настроена на запуск при загрузке. Вы можете проверить это, выполнив:
+Сервис Manticore настроен на запуск при загрузке. Вы можете проверить это, выполнив:
 
 ```shell
 sudo systemctl is-enabled manticore
@@ -32,7 +32,7 @@ sudo systemctl disable manticore
 sudo systemctl enable manticore
 ```
 
-Процесс `searchd` записывает информацию о запуске в журнал `systemd`. Если ведение журналов systemd включено, вы можете просмотреть записанную информацию с помощью следующей команды:
+Процесс `searchd` записывает информацию о запуске в журнал `systemd`. Если ведение журнала systemd включено, вы можете просмотреть записанную информацию с помощью следующей команды:
 
 ```shell
 sudo journalctl -u manticore
@@ -42,7 +42,7 @@ sudo journalctl -u manticore
 
 `systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS` позволяет указать пользовательские флаги запуска, с которыми должен запускаться демон Manticore Search. Полный список смотрите [здесь](../Starting_the_server/Manually.md#searchd-command-line-options).
 
-Например, чтобы запустить Manticore с уровнем журналирования debug, выполните:
+Например, чтобы запустить Manticore с уровнем логирования debug, вы можете выполнить:
 ```bash
 systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='--logdebug'
 systemctl restart manticore
@@ -65,19 +65,19 @@ sudo service manticore start
 sudo service manticore stop
 ```
 
-Чтобы включить sysV службу при загрузке на системах RedHat, выполните:
+Чтобы включить sysV сервис при загрузке на системах RedHat, выполните:
 
 ```shell
 chkconfig manticore on
 ```
 
-Чтобы включить sysV службу при загрузке на системах Debian (включая Ubuntu), выполните:
+Чтобы включить sysV сервис при загрузке на системах Debian (включая Ubuntu), выполните:
 
 ```shell
 update-rc.d manticore defaults
 ```
 
-Обратите внимание, что `searchd` запускается системой инициализации от имени пользователя `manticore`, и все файлы, созданные сервером, будут принадлежать этому пользователю. Если `searchd` запускается, например, от имени пользователя root, права доступа к файлам изменятся, что может привести к проблемам при повторном запуске `searchd` в виде службы.
+Обратите внимание, что `searchd` запускается системой инициализации от имени пользователя `manticore`, и все файлы, созданные сервером, будут принадлежать этому пользователю. Если `searchd` запущен, например, от имени пользователя root, права на файлы изменятся, что может привести к проблемам при повторном запуске `searchd` как сервиса.
 
 <!-- proofread -->
 

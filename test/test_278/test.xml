@@ -910,6 +910,36 @@ select id, title, join2.title, join2.tag as sort from join1 inner join join2 on 
 drop table join1;
 drop table join2;
 
+<!-- arbitrary filters in JOIN ON clause -->
+create table join1 ( id bigint, title text, string_id integer );
+insert into join1 values ( 1, 'doc1', 1 );
+insert into join1 values ( 2, 'doc2', 1 );
+insert into join1 values ( 3, 'doc3', 2 );
+insert into join1 values ( 4, 'doc4', 2 );
+insert into join1 values ( 5, 'doc5', 3 );
+insert into join1 values ( 6, 'doc6', 3 );
+insert into join1 values ( 7, 'doc7', 4 );
+insert into join1 values ( 8, 'doc8', 4 );
+insert into join1 values ( 9, 'doc9', 5 );
+insert into join1 values ( 10, 'doc10', 5 );
+
+create table join2 ( id bigint, title text, tag integer );
+insert into join2 values ( 1, 'str1', 10 );
+insert into join2 values ( 2, 'str2', 1 );
+insert into join2 values ( 3, 'str3', 560 );
+insert into join2 values ( 4, 'str4', 2 );
+
+select * from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+select * from join1 inner join join2 on join1.string_id=join2.id and join2.id in (2,3) order by id asc;
+select * from join1 inner join join2 on join1.string_id=join2.id and join2.id in (2,3) and join2.tag&lt;10 order by id asc;
+
+select * from join1 left join join2 on join1.string_id=join2.id order by id asc;
+select * from join1 left join join2 on join1.string_id=join2.id and join2.id in (2,3) order by id asc;
+select * from join1 left join join2 on join1.string_id=join2.id and join2.id in (2,3) and join2.tag&lt;10 order by id asc;
+
+drop table join1;
+drop table join2;
+
 </sphinxql>
 </queries>
 

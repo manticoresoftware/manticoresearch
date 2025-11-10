@@ -7,7 +7,7 @@
 2. **验证 Manticore**：确保您的 Manticore 实例正在运行且其 HTTP API 可访问（默认地址：`http://localhost:9308`）。
 
 ## 配置
-1. 打开 [Kibana 配置文件](https://www.elastic.co/guide/en/kibana/current/settings.html)（`kibana.yml`）。
+1. 打开 [Kibana 配置文件](https://www.elastic.co/guide/en/kibana/current/settings.html) (`kibana.yml`)。
 2. 设置您的 Manticore 实例的 URL：
    ```yaml
    elasticsearch.hosts: ["http://localhost:9308"]

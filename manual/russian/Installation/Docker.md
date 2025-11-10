@@ -1,8 +1,8 @@
 # Установка Manticore Search в виде Docker-образа
 
-Docker-образы Manticore Search публично доступны на [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/), собраны из [репозитория Manticore Search docker на GitHub](https://github.com/manticoresoftware/docker).
+Docker-образы Manticore Search общедоступны на [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/), собраны из [репозитория Manticore Search docker на GitHub](https://github.com/manticoresoftware/docker).
 
-Чтобы загрузить образ Manticore, выполните следующую команду:
+Чтобы получить образ Manticore, выполните следующую команду:
 
 ```bash
 docker pull manticoresearch/manticore

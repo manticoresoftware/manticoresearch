@@ -21,6 +21,7 @@
 #include "searchdha.h"
 #include "jieba.h"
 #include "sorterscroll.h"
+#include "joinsorter.h"
 #include "std/base64.h"
 
 // uncomment to see everything came to parser.
@@ -402,8 +403,9 @@ public:
 
 	bool			SetJoin ( const SqlNode_t & tIdx );
 	void			SetJoinType ( JoinType_e eType );
-	bool			AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2, int iTypeCast );
-	void			SetJoinOnCast ( ESphAttr eType ) { m_eJoinTypeCast = eType; }
+	bool			AddOnFilter ( const SqlNode_t & tAttr1, const SqlNode_t & tAttr2, int iTypeCast );
+	void			SetJoinOnCast ( ESphAttr eType )	{ m_eJoinTypeCast = eType; }
+	void			SetJoinParse ( bool bJoin )			{ m_bJoinParseMode = bJoin; }
 
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddDistinct ( SqlNode_t * pNewExpr );
@@ -450,6 +452,7 @@ private:
 	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
+	bool						m_bJoinParseMode = false;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
@@ -1611,7 +1614,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter
 	FilterTreeItem_t & tElem = m_dFilterTree.Add();
 	tElem.m_iFilterItem = m_pQuery->m_dFilters.GetLength();
 
-	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
+	CSphFilterSettings * pFilter = m_bJoinParseMode ? &m_pQuery->m_dOnValueFilters.Add() : &m_pQuery->m_dFilters.Add();
 	pFilter->m_sAttrName = sCol;
 	pFilter->m_eType = eType;
 	sphColumnToLowercase ( const_cast<char *>( pFilter->m_sAttrName.cstr() ) );
@@ -1839,19 +1842,24 @@ bool SqlParser_c::SetJoin ( const SqlNode_t & tIdx )
 }
 
 
-bool SqlParser_c::AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2, int iTypeCast )
+bool SqlParser_c::AddOnFilter ( const SqlNode_t & tAttr1, const SqlNode_t & tAttr2, int iTypeCast )
 {
+	if ( !m_bJoinParseMode )
+	{
+		*m_pParseError = "Unable to parse join filter outside of JOIN ON clause";
+		return false;
+	}
+
+	CSphString sAttr1, sAttr2;
 	auto & tOn = m_pQuery->m_dOnFilters.Add();
-	ToString ( tOn.m_sIdx1, tIdx1 );
-	ToString ( tOn.m_sIdx2, tIdx2 );
-	ToString ( tOn.m_sAttr1, tAttr1 );
-	ToString ( tOn.m_sAttr2, tAttr2 );
+	ToString ( sAttr1, tAttr1 );
+	ToString ( sAttr2, tAttr2 );
 
-	if ( tOn.m_sAttr1.Begins(".") )
-		tOn.m_sAttr1 = tOn.m_sAttr1.SubString( 1, tOn.m_sAttr1.Length()-1 );
+	if ( !SplitJoinedAttrName ( sAttr1, tOn.m_sIdx1, tOn.m_sAttr1, m_pParseError ) )
+		return false;
 
-	if ( tOn.m_sAttr2.Begins(".") )
-		tOn.m_sAttr2 = tOn.m_sAttr2.SubString( 1, tOn.m_sAttr2.Length()-1 );
+	if ( !SplitJoinedAttrName ( sAttr2, tOn.m_sIdx2, tOn.m_sAttr2, m_pParseError ) )
+		return false;
 
 	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr1.cstr() ) );
 	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr2.cstr() ) );

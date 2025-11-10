@@ -1,0 +1,10 @@
+{
+  "b2b86d02596de8262ab5999d8869d561f0958c7ee119e817fcdb9d75f9cd8500": {
+    "original": "# Server logging\n\nBy default, Manticore search daemon logs all runtime events in a `searchd.log` file in the directory where searchd was started. In Linux by default, you can find the log at `/var/log/manticore/searchd.log`.\n\nThe log file path/name can be overridden by setting `log` in the `searchd` section of the configuration file.\n\nCODE_BLOCK_0\n\n* You can also use `syslog` as the file name. In this case, events will be sent to your server's syslog daemon.\n\n* In some cases, you might want to use `/dev/stdout` as the file name. In this case, on Linux, Manticore will simply output the events. This can be useful in Docker/Kubernetes environments.\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 服务器日志\n\n默认情况下，Manticore 搜索守护进程会将所有运行时事件记录在启动 searchd 的目录中的 `searchd.log` 文件中。在 Linux 中，默认情况下，您可以在 `/var/log/manticore/searchd.log` 找到该日志。\n\n日志文件路径/名称可以通过在配置文件的 `searchd` 部分设置 `log` 来覆盖。\n\nCODE_BLOCK_0\n\n* 您也可以使用 `syslog` 作为文件名。在这种情况下，事件将发送到服务器的 syslog 守护进程。\n\n* 在某些情况下，您可能希望使用 `/dev/stdout` 作为文件名。在这种情况下，在 Linux 上，Manticore 将简单地输出事件。这在 Docker/Kubernetes 环境中非常有用。\n\n<!-- proofread -->",
+      "russian": "# Логирование сервера\n\nПо умолчанию демон поиска Manticore записывает все события выполнения в файл `searchd.log` в директории, где был запущен searchd. В Linux по умолчанию лог можно найти по пути `/var/log/manticore/searchd.log`.\n\nПуть/имя файла лога можно переопределить, установив параметр `log` в секции `searchd` конфигурационного файла.\n\nCODE_BLOCK_0\n\n* Также можно использовать `syslog` в качестве имени файла. В этом случае события будут отправляться демону syslog вашего сервера.\n\n* В некоторых случаях может понадобиться использовать `/dev/stdout` в качестве имени файла. В этом случае, в Linux, Manticore просто выведет события. Это может быть полезно в средах Docker/Kubernetes.\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

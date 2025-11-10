@@ -7,7 +7,7 @@
 SHOW PLUGINS
 ```
 
-显示所有已加载的插件（不包括 Buddy 插件，见下文）和 UDFs。“Type” 列应为 `udf`、`ranker`、`index_token_filter` 或 `query_token_filter` 之一。“Users” 列表示当前正在查询中使用该插件的线程数。“Extra” 列用于显示各种特定插件类型的附加信息；目前，它显示 UDFs 的返回类型，其他插件类型则为空。
+显示所有已加载的插件（不包括 Buddy 插件，见下文）和 UDF。 “Type” 列应为 `udf`、`ranker`、`index_token_filter` 或 `query_token_filter` 之一。 “Users” 列表示当前在查询中使用该插件的线程数。 “Extra” 列用于显示各种额外的插件类型特定信息；目前，它显示 UDF 的返回类型，其他所有插件类型则为空。
 
 
 <!-- intro -->
@@ -43,7 +43,7 @@ SHOW BUDDY PLUGINS
 > 注意：`SHOW BUDDY PLUGINS` 需要 [Manticore Buddy](../../Installation/Manticore_Buddy.md)。如果无法使用，请确保 Buddy 已安装。
 
 这将显示所有可用的插件，包括核心和本地插件。
-要移除插件，请确保使用 Package 列中列出的名称。
+要删除插件，请确保使用 Package 列中列出的名称。
 
 <!-- request Example -->
 

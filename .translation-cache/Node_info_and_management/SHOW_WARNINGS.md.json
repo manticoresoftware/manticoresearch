@@ -1,0 +1,10 @@
+{
+  "980163563f9f8c84156acbc14906a60fd2b463d76552881ee26e6ec887f00863": {
+    "original": "# SHOW WARNINGS\n\n`SHOW WARNINGS` statement can be used to retrieve the warning produced by the latest query. The error message will be returned along with the query itself:\n\nCODE_BLOCK_0\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# SHOW WARNINGS\n\n`SHOW WARNINGS` 语句可用于检索最新查询产生的警告。错误信息将与查询本身一起返回：\n\nCODE_BLOCK_0\n\n<!-- proofread -->",
+      "russian": "# SHOW WARNINGS\n\nОператор `SHOW WARNINGS` можно использовать для получения предупреждений, вызванных последним запросом. Сообщение об ошибке будет возвращено вместе с самим запросом:\n\nCODE_BLOCK_0\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

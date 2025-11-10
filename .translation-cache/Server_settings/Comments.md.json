@@ -1,0 +1,10 @@
+{
+  "acc9f3a9556fbec87443066ce395916a6c4646efd7d5155f2a522c9adeb798f0": {
+    "original": "# Comments\n\nManticore Search's configuration file supports comments, which help provide explanations or notes within the configuration file. The `#` character is used to start a comment section. You can place the comment character either at the beginning of a line or inline within a line.\n\nWhen using comments, be cautious when incorporating the `#` character in character tokenization settings, as everything following it will be ignored. To prevent this, use the `#` UTF-8 code, which is U+23.\n\nIf you need to use the `#` character within your configuration file, such as within database credentials in source declarations, you can escape it using a backslash `\\`. This allows you to include the `#` character in your settings without it being interpreted as the start of a comment.\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 注释\n\nManticore Search 的配置文件支持注释，这有助于在配置文件中提供说明或备注。`#` 字符用于开始注释部分。您可以将注释字符放在行首或行内。\n\n使用注释时，在字符分词设置中使用 `#` 字符时要小心，因为其后的所有内容都会被忽略。为避免这种情况，请使用 `#` 的 UTF-8 代码，即 U+23。\n\n如果需要在配置文件中使用 `#` 字符，例如在源声明中的数据库凭据中，可以使用反斜杠 `\\` 转义它。这样可以在设置中包含 `#` 字符，而不会被解释为注释的开始。\n\n<!-- proofread -->",
+      "russian": "# Комментарии\n\nФайл конфигурации Manticore Search поддерживает комментарии, которые помогают предоставлять пояснения или заметки внутри файла конфигурации. Символ `#` используется для начала секции комментария. Вы можете разместить символ комментария либо в начале строки, либо внутри строки.\n\nПри использовании комментариев будьте осторожны при включении символа `#` в настройки токенизации символов, так как всё, что следует за ним, будет проигнорировано. Чтобы этого избежать, используйте UTF-8 код `#`, который равен U+23.\n\nЕсли вам нужно использовать символ `#` внутри файла конфигурации, например, в учетных данных базы данных в объявлениях источников, вы можете экранировать его с помощью обратного слэша `\\`. Это позволяет включать символ `#` в ваши настройки без его интерпретации как начала комментария.\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

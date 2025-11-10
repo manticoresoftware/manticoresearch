@@ -21,20 +21,20 @@
 
 ### Метрики прогресса SST
 
-Во время передачи снимка состояния (State Snapshot Transfer, SST) один узел обеспечивает другой, передавая полную копию данных. Это происходит, когда новый узел присоединяется к кластеру [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) или когда добавляются новые таблицы [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). Пока SST активен, на обоих узлах — доноре и присоединяющемся — будут доступны следующие дополнительные переменные состояния, прогресс которых синхронизируется.
+Во время передачи снимка состояния (SST) один узел обеспечивает другой, передавая полную копию данных. Это происходит, когда новый узел присоединяется к кластеру [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) или когда добавляются новые таблицы [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). Пока SST активен, на узлах-доноре и присоединяющемся будут доступны следующие дополнительные переменные статуса, прогресс которых синхронизирован.
 
 * `cluster_name_sst_total` - общий прогресс всей операции SST, от 0 до 100. Это основной счетчик для отслеживания.
-* `cluster_name_sst_stage` - название текущей фазы работы. Процесс проходит через эти этапы для каждой передаваемой таблицы:
+* `cluster_name_sst_stage` - название текущей фазы работы. Процесс проходит через эти стадии для каждой передаваемой таблицы:
     * `await nodes sync`
     * `block checksum calculate`
     * `analyze remote`
     * `send files`
     * `activate tables`
-* `cluster_name_sst_stage_total` - прогресс текущего этапа, от 0 до 100.
+* `cluster_name_sst_stage_total` - прогресс текущей стадии, от 0 до 100.
 * `cluster_name_sst_tables` - общее количество таблиц, передаваемых в SST.
 * `cluster_name_sst_table` - имя и индекс таблицы, которая в данный момент обрабатывается (например, `3 (products)`).
 
-Для большинства случаев использования достаточно `cluster_name_sst_total`. Однако другие счетчики могут быть полезны для расследования зависаний или проблем с производительностью на конкретном этапе SST или с определенной таблицей.
+Для большинства случаев использования достаточно `cluster_name_sst_total`. Однако другие счетчики могут быть полезны для расследования зависаний или проблем с производительностью на конкретной стадии SST или с определенной таблицей.
 
 <!-- intro -->
 ##### SQL:

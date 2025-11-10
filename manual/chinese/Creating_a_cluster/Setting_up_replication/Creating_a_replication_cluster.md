@@ -1,9 +1,9 @@
 # 创建复制集群
 
 <!-- example creating a replication cluster 1 -->
-要创建复制集群，至少必须设置其[名称](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name)。
+要创建复制集群，至少必须设置其 [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name)。
 
-如果您正在创建单个集群或第一个集群，可以省略[path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path)选项。在这种情况下，将使用[data_dir](../../Server_settings/Searchd.md#data_dir)选项作为集群路径。但是，对于所有后续集群，必须指定[path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path)，且路径必须可用。也可以设置[nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes)选项来列出集群中的所有节点。
+如果您正在创建单个集群或第一个集群，可以省略 [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path) 选项。在这种情况下，将使用 [data_dir](../../Server_settings/Searchd.md#data_dir) 选项作为集群路径。但是，对于所有后续集群，必须指定 [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path)，且该路径必须可用。还可以设置 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) 选项以列出集群中的所有节点。
 
 
 <!-- intro -->
@@ -127,7 +127,7 @@ utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'cli
 
 <!-- end -->
 
-如果在创建集群时未指定[nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes)选项，第一个加入集群的节点将被保存为[nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes)选项。
+如果在创建集群时未指定 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) 选项，则第一个加入集群的节点将被保存为 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) 选项。
 
 <!-- proofread -->
 

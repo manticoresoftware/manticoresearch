@@ -1,12 +1,12 @@
 # 忽略停用词
 
-停用词是在索引和搜索过程中被忽略的词，通常由于其高频率和对搜索结果的低价值。
+停用词是在索引和搜索过程中被忽略的词，通常由于其高频率且对搜索结果价值较低。
 
 Manticore Search 默认对停用词应用[词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以通过使用[stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)来关闭此功能。
 
-小型停用词文件存储在表头中，且嵌入文件的大小有限制，如[embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)选项所定义。
+小型停用词文件存储在表头中，嵌入文件的大小有限制，该限制由[embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)选项定义。
 
-停用词不会被索引，但会影响关键字位置。例如，如果“the”是一个停用词，且文档1包含短语“in office”，文档2包含短语“in the office”，精确短语搜索“in office”只会返回第一个文档，虽然“the”作为第二个文档中的停用词被跳过。此行为可以通过[stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)指令进行修改。
+停用词不被索引，但会影响关键词的位置。例如，如果“the”是停用词，文档1包含短语“in office”，而文档2包含短语“in the office”，搜索“in office”作为精确短语时只会返回第一个文档，尽管第二个文档中的“the”作为停用词被跳过。此行为可以通过[stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)指令进行修改。
 
 ## stopwords
 
@@ -15,11 +15,11 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 ```
 
 <!-- example stopwords -->
-stopwords 设置是可选的，默认为空。它允许指定一个或多个停用词文件的路径，路径之间用空格分隔。所有文件都会被加载。在实时模式下，只允许使用绝对路径。
+stopwords 设置是可选的，默认为空。它允许你指定一个或多个停用词文件的路径，路径之间用空格分隔。所有文件都会被加载。在实时模式下，只允许使用绝对路径。
 
-停用词文件格式为简单的 UTF-8 编码纯文本。文件数据将根据[charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)设置进行分词，因此您可以使用与索引数据相同的分隔符。
+停用词文件格式为简单的 UTF-8 编码纯文本。文件数据将根据[charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)设置进行分词，因此你可以使用与索引数据相同的分隔符。
 
-停用词文件可以手动或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供一个模式，可生成表的词频字典，并按关键字频率排序。通常可以将该字典中的高频关键字用作停用词。详情见[--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)和[--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)开关。通常可以将该字典中的高频关键字用作停用词。
+停用词文件可以手动或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供了一个模式，可以创建按关键词频率排序的表频率字典。该字典中的热门关键词通常可以用作停用词。详情请参见[--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)和[--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)开关。该字典中的热门关键词通常可以用作停用词。
 
 
 <!-- intro -->
@@ -115,14 +115,14 @@ table products {
 ```
 <!-- end -->
 
-另外，您也可以使用 Manticore 附带的默认停用词文件。目前可用的停用词涉及50种语言。以下是它们的别名完整列表：
+或者你可以使用 Manticore 自带的默认停用词文件。目前提供了50种语言的停用词。以下是它们的完整别名列表：
 
 * af - 南非荷兰语
 * ar - 阿拉伯语
 * bg - 保加利亚语
 * bn - 孟加拉语
 * ca - 加泰罗尼亚语
-* ckb - 库尔德语
+* ckb- 库尔德语
 * cz - 捷克语
 * da - 丹麦语
 * de - 德语
@@ -159,7 +159,7 @@ table products {
 * sk - 斯洛伐克语
 * sl - 斯洛文尼亚语
 * so - 索马里语
-* st - 南索托语
+* st - 索托语
 * sv - 瑞典语
 * sw - 斯瓦希里语
 * th - 泰语
@@ -169,7 +169,7 @@ table products {
 * zu - 祖鲁语
 
 <!-- example stopwords 1 -->
-例如，要使用意大利语停用词，只需在配置文件中添加以下行：
+例如，要使用意大利语的停用词，只需在配置文件中添加以下行：
 
 
 <!-- intro -->
@@ -265,7 +265,7 @@ table products {
 <!-- end -->
 
 <!-- example stopwords 2 -->
-如果需要使用多种语言的停用词，您应列出它们所有的别名，实时模式用逗号分隔，普通模式用空格分隔：
+如果你需要使用多种语言的停用词，应列出所有别名，RT模式下用逗号分隔，普通模式下用空格分隔：
 
 
 <!-- intro -->
@@ -471,11 +471,11 @@ stopwords_unstemmed={0|1}
 ```
 
 <!-- example stopwords_unstemmed -->
-是否在词干提取之前或之后应用停用词。可选，默认值为0（在词干提取之后应用停用词过滤器）。
+Whether to apply stop words before or after stemming. Optional, default is 0 (apply stop word filter after stemming).
 
-默认情况下，停用词本身会被进行词干提取，然后应用于词干提取（或任何其他形态学处理）之后的词元。这意味着当 stem(token) 等于 stem(stopword) 时，该词元会被过滤掉。此默认行为可能导致意外结果，例如当一个词元被错误地词干提取成一个被停止的词根时。例如，“Andes”可能会被词干提取成“and”，因此当“and”是停用词时，“Andes”也会被跳过。
+By default, stop words are stemmed themselves, and then applied to tokens *after* stemming (or any other morphology processing). This means that a token is stopped when stem(token) is equal to stem(stopword). This default behavior can lead to unexpected results when a token is erroneously stemmed to a stopped root. For example, "Andes" might get stemmed to "and", so when "and" is a stopword, "Andes" is also skipped.
 
-不过，你可以通过启用 `stopwords_unstemmed` 指令来改变此行为。启用后，停用词会在词干提取之前应用（因此应用于原始词形），当词元等于停用词时，词元才会被跳过。
+However, you can change this behavior by enabling the `stopwords_unstemmed` directive. When this is enabled, stop words are applied before stemming (and therefore to the original word forms), and the tokens are skipped when the token is equal to the stopword.
 
 <!-- intro -->
 ##### SQL:

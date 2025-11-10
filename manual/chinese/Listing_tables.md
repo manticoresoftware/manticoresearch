@@ -2,7 +2,7 @@
 
 Manticore Search 对表只有单层层级结构。
 
-与其他 DBMS 不同，Manticore 中没有将表分组到数据库中的概念。然而，为了与 SQL 方言的互操作性，Manticore 接受 `SHOW DATABASES` 语句，但该语句不会返回任何结果。
+与其他数据库管理系统不同，Manticore 中没有将表分组到数据库中的概念。然而，为了与 SQL 方言的互操作性，Manticore 接受 `SHOW DATABASES` 语句，但该语句不会返回任何结果。
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -13,7 +13,7 @@ Manticore Search 对表只有单层层级结构。
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` 语句列出所有当前活动的表及其类型。现有表类型包括 `local`、`distributed`、`rt`、`percolate` 和 `template`。
+`SHOW TABLES` 语句列出所有当前活动的表及其类型。现有的表类型有 `local`、`distributed`、`rt`、`percolate` 和 `template`。
 
 
 <!-- intro -->
@@ -302,7 +302,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表的列及其关联类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句所期望字段和属性的顺序相匹配。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列类型为 `bigint`。示例：
+`DESCRIBE` 语句列出表的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句中字段和属性的预期顺序相匹配。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列的类型为 `bigint`。示例：
 
 ```sql
 mysql> DESC rt;
@@ -323,7 +323,7 @@ mysql> DESC rt;
 ### SELECT FROM name.@table
 
 <!-- example name_table -->
-您也可以通过执行查询 `select * from <table_name>.@table` 来查看表架构。这种方法的好处是可以使用 `WHERE` 子句进行过滤：
+你也可以通过执行查询 `select * from <table_name>.@table` 来查看表结构。此方法的好处是可以使用 `WHERE` 子句进行过滤：
 
 <!-- request SQL -->
 ```sql
@@ -344,7 +344,7 @@ select * from tbl.@table where type='text';
 
 <!-- example name_table2 -->
 
-您还可以对 `<your_table_name>.@table` 执行许多其他操作，将其视为一个常规 Manticore 表，列由整型和字符串属性组成。
+你还可以对 `<your_table_name>.@table` 执行许多其他操作，将其视为具有整数和字符串属性列的常规 Manticore 表。
 
 <!-- request SQL -->
 
@@ -383,9 +383,9 @@ f text indexed stored
 ```
 <!-- end -->
 
-### Percolate 表架构
+### Percolate 表结构
 
-如果对 percolate 表使用 `DESC` 语句，它将显示外层表架构，即存储查询的架构。该架构是静态的，并且对所有本地 percolate 表都是相同的：
+如果你对 percolate 表使用 `DESC` 语句，它将显示外部表结构，即存储查询的结构。此结构是静态的，所有本地 percolate 表相同：
 
 ```sql
 mysql> DESC pq;
@@ -400,7 +400,7 @@ mysql> DESC pq;
 4 rows in set (0.00 sec)
 ```
 
-如果您想查看预期的文档架构，请使用以下命令：
+如果你想查看预期的文档结构，请使用以下命令：
 `DESC <pq table name> table`：
 
 ```sql
@@ -415,7 +415,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-同时支持 `desc pq table like ...`，其工作如下：
+同时支持 `desc pq table like ...`，其工作方式如下：
 
 ```sql
 mysql> desc pq table like '%title%';

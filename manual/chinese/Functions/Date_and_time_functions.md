@@ -1,6 +1,6 @@
 # 日期和时间函数
 
-注意，`CURTIME()`、`UTC_TIME()`、`UTC_TIMESTAMP()` 和 `TIMEDIFF()` 可以使用诸如 `BIGINT()`、`DOUBLE()` 等任意转换函数提升为数值类型。
+注意，`CURTIME()`、`UTC_TIME()`、`UTC_TIMESTAMP()` 和 `TIMEDIFF()` 可以通过任意转换函数如 `BIGINT()`、`DOUBLE()` 等提升为数值类型。
 
 ### NOW()
 <!-- example NOW -->
@@ -94,7 +94,7 @@ select UTC_TIMESTAMP();
 
 ### SECOND()
 <!-- example SECOND -->
-返回时间戳参数中当前时区对应的秒数，整数，范围为 0..59。
+根据当前时区，从时间戳参数中返回整数秒（范围 0..59）。
 
 <!-- request SQL -->
 ```sql
@@ -112,7 +112,7 @@ select second(now());
 
 ### MINUTE()
 <!-- example MINUTE -->
-返回时间戳参数中当前时区对应的分钟数，整数，范围为 0..59。
+根据当前时区，从时间戳参数中返回整数分钟（范围 0..59）。
 
 <!-- request SQL -->
 ```sql
@@ -130,7 +130,7 @@ select minute(now());
 
 ### HOUR()
 <!-- example HOUR -->
-返回时间戳参数中当前时区对应的小时数，整数，范围为 0..23。
+根据当前时区，从时间戳参数中返回整数小时（范围 0..23）。
 
 <!-- request SQL -->
 ```sql
@@ -148,7 +148,7 @@ select hour(now());
 
 ### DAY()
 <!-- example DAY -->
-返回时间戳参数中当前时区对应的月份中的天数，整数，范围为 1..31。
+根据当前时区，从时间戳参数中返回整数月份中的天数（范围 1..31）。
 
 <!-- request SQL -->
 ```sql
@@ -166,7 +166,7 @@ select day(now());
 
 ### MONTH()
 <!-- example MONTH -->
-返回时间戳参数中当前时区对应的月份，整数，范围为 1..12。
+根据当前时区，从时间戳参数中返回整数月份（范围 1..12）。
 
 <!-- request SQL -->
 ```sql
@@ -184,7 +184,7 @@ select month(now());
 
 ### QUARTER()
 <!-- example QUARTER -->
-返回时间戳参数中当前时区对应的季度，整数，范围为 1..4。
+根据当前时区，从时间戳参数中返回整数季度（范围 1..4）。
 
 <!-- request SQL -->
 ```sql
@@ -202,7 +202,7 @@ select quarter(now());
 
 ### YEAR()
 <!-- example YEAR -->
-返回时间戳参数中当前时区对应的年份，整数，范围为 1969..2038。
+根据当前时区，从时间戳参数中返回整数年份（范围 1969..2038）。
 
 <!-- request SQL -->
 ```sql
@@ -220,7 +220,7 @@ select year(now());
 
 ### DAYNAME()
 <!-- example DAYNAME -->
-返回时间戳参数中当前时区对应的星期几的名称。
+根据当前时区，返回给定时间戳参数的星期名称。
 
 <!-- request SQL -->
 ```sql
@@ -238,7 +238,7 @@ select dayname(now());
 
 ### MONTHNAME()
 <!-- example MONTHNAME -->
-返回时间戳参数中当前时区对应月份的名称。
+根据当前时区，返回给定时间戳参数的月份名称。
 
 <!-- request SQL -->
 ```sql
@@ -256,8 +256,8 @@ select monthname(now());
 
 ### DAYOFWEEK()
 <!-- example DAYOFWEEK -->
-返回时间戳参数中当前时区对应的星期序号，整数，范围为 1..7。
-注意，星期的开始为星期日。
+根据当前时区，返回给定时间戳参数的整数星期索引（范围 1..7）。
+注意，星期从星期日开始。
 
 <!-- request SQL -->
 ```sql
@@ -275,7 +275,7 @@ select dayofweek(now());
 
 ### DAYOFYEAR()
 <!-- example DAYOFYEAR -->
-返回时间戳参数中当前时区对应的年份中的天数，整数，范围为 1..366。
+根据当前时区，返回给定时间戳参数的整数年份中的天数（范围 1..366）。
 
 <!-- request SQL -->
 ```sql
@@ -293,7 +293,7 @@ select dayofyear(now());
 
 ### YEARWEEK()
 <!-- example YEARWEEK -->
-返回时间戳参数中当前时区对应的当前周的年份和第一天的日期码，整数，范围为 1969001..2038366。
+根据当前时区，返回给定时间戳参数的当前周第一天的整数年份和日期代码（范围 1969001..2038366）。
 
 <!-- request SQL -->
 ```sql
@@ -311,7 +311,7 @@ select yearweek(now());
 
 ### YEARMONTH()
 <!-- example YEARMONTH -->
-返回时间戳参数中当前时区对应的年份和月份码，整数，范围为 196912..203801。
+根据当前时区，从时间戳参数返回整数年份和月份代码（范围 196912..203801）。
 
 <!-- request SQL -->
 ```sql
@@ -329,7 +329,7 @@ select yearmonth(now());
 
 ### YEARMONTHDAY()
 <!-- example YEARMONTHDAY -->
-根据当前时区返回时间戳参数中的年份、月份和日期码，范围从 19691231 到 20380119。
+根据当前时区，返回整数年份、月份和日期代码（范围 19691231 到 20380119）。
 
 <!-- request SQL -->
 ```sql
@@ -365,7 +365,7 @@ select timediff(1615787586, 1613787583);
 
 ### DATEDIFF()
 <!-- example DATEDIFF -->
-计算两个给定时间戳之间的天数差。
+计算两个给定时间戳之间的天数。
 
 <!-- request SQL -->
 ```sql
@@ -383,7 +383,7 @@ select datediff(1615787586, 1613787583);
 
 ### DATE()
 <!-- example DATE -->
-将时间戳参数的日期部分格式化为 `YYYY-MM-DD` 字符串。
+将时间戳参数的日期部分格式化为字符串，格式为 `YYYY-MM-DD`。
 
 <!-- request SQL -->
 ```sql
@@ -401,7 +401,7 @@ select date(now());
 
 ### TIME()
 <!-- example TIME -->
-将时间戳参数的时间部分格式化为 `HH:MM:SS` 字符串。
+将时间戳参数的时间部分格式化为字符串，格式为 `HH:MM:SS`。
 
 <!-- request SQL -->
 ```sql
@@ -419,17 +419,17 @@ select time(now());
 
 ### DATE_FORMAT()
 <!-- example DATE_FORMAT -->
-根据提供的日期和格式参数返回格式化的字符串。格式参数使用与 [strftime](https://man7.org/linux/man-pages/man3/strftime.3.html) 函数相同的格式说明符。方便起见，这里列出一些常用的格式说明符：
+根据提供的日期和格式参数返回格式化字符串。格式参数使用与 [strftime](https://man7.org/linux/man-pages/man3/strftime.3.html) 函数相同的格式说明符。为方便起见，以下是一些常用格式说明符：
 
-- `%Y` - 四位数的年份
-- `%m` - 两位数的月份（01-12）
-- `%d` - 两位数的月份中的天数（01-31）
-- `%H` - 两位数的小时（00-23）
-- `%M` - 两位数的分钟（00-59）
-- `%S` - 两位数的秒数（00-59）
-- `%T` - 24小时制时间格式（`%H:%M:%S`）
+- `%Y` - 四位数年份
+- `%m` - 两位数月份（01-12）
+- `%d` - 两位数月份中的天数（01-31）
+- `%H` - 两位数小时（00-23）
+- `%M` - 两位数分钟（00-59）
+- `%S` - 两位数秒（00-59）
+- `%T` - 24 小时制时间（`%H:%M:%S`）
 
-请注意，这不是格式说明符的完整列表。请参考您的操作系统的 `strftime()` 文档以获取完整列表。
+请注意，这不是完整的格式说明符列表。请查阅您操作系统中 `strftime()` 的文档以获取完整列表。
 
 <!-- request SQL -->
 ```sql
@@ -449,20 +449,20 @@ SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
 
 ### DATE_HISTOGRAM()
 <!-- example DATE_HISTOGRAM -->
-`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` 接受一个以单位名称表示的桶大小，并返回该值对应的桶号。数值将被四舍五入到最接近的桶。关键函数为：
+`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` 接受一个作为单位名称的桶大小，并返回该值的桶编号。值会被四舍五入到最接近的桶。关键函数是：
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
-时间间隔可以使用单位名称指定，如 `week`，或作为单个单位，例如 `1M`。但是，多个单位如 `2d` 不支持 `calendar_interval`，但允许使用 `fixed_interval`。
+间隔可以使用单位名称指定，如 `week`，或作为单个单位，如 `1M`。但是，多个单位，如 `2d`，不支持 `calendar_interval`，但允许使用 `fixed_interval`。
 
 `calendar_interval` 的有效间隔为：
 
 - `minute`，`1m`
 - `hour`，`1h`
 - `day`，`1d`
-- `week`，`1w`（一周是指从周的开始日期、小时、分钟、秒，到下一周同一周的日期和时间的间隔）
+- `week`，`1w`（一周是从周的起始日、小时、分钟、秒到下一周同一天同一时间的间隔）
 - `month`，`1M`
-- `year`，`1y`（一年是指从月的开始日期和时间，到下一年同一月日和时间的间隔）
+- `year`，`1y`（一年是从月的起始日、时间到下一年同一天同一时间的间隔）
 
 `fixed_interval` 的有效间隔为：
 
@@ -483,9 +483,9 @@ GROUP BY months ORDER BY months ASC;
 
 ### DATE_RANGE()
 <!-- example DATE_RANGE -->
-`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` 接受一组范围，并返回该值对应的桶号。
-表达式包含每个范围的 `range_from` 值，但不包含 `range_to` 值。范围可以是开放范围，仅包含 `range_from` 或仅包含 `range_to`。
-此函数与 [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) 函数的区别在于，`range_from` 和 `range_to` 值可以以 [日期数学](../Functions/Date_and_time_functions.md#Date-math) 表达式表示。
+`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` 接受一组范围，并返回该值的桶编号。
+表达式包括每个范围的 `range_from` 值，但不包括 `range_to` 值。范围可以是开放的——只有 `range_from` 或只有 `range_to`。
+此函数与 [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) 函数的区别在于，`range_from` 和 `range_to` 的值可以用 [日期数学](../Functions/Date_and_time_functions.md#Date-math) 表达式表示。
 
 用于聚合、`FACET` 和分组。
 
@@ -500,16 +500,16 @@ GROUP BY points ORDER BY points ASC;
 
 ##### 日期数学
 
-日期数学让您可以在搜索中直接处理日期和时间。它对于处理随时间变化的数据尤为有用。使用日期数学，您可以轻松完成如下任务：查找某一时间段的条目、分析数据趋势、管理信息何时应被删除。它通过允许您从给定日期中添加或减去时间、将日期舍入到最近的时间单位等，简化了日期处理，所有操作均在搜索查询内完成。
+日期数学让您可以直接在搜索中处理日期和时间。它特别适用于处理随时间变化的数据。通过日期数学，您可以轻松完成诸如查找某一时期的条目、分析数据趋势或管理信息何时应被删除等操作。它简化了日期处理，允许您在搜索查询中对给定日期加减时间、将日期四舍五入到最近的时间单位等。
 
-使用日期数学时，首先选择一个基准日期，它可以是：
-- 表示当前日期和时间的 `now`，
+使用日期数学时，您从一个基准日期开始，该日期可以是：
+- `now` 表示当前日期和时间，
 - 或以 `||` 结尾的特定日期字符串。
 
-然后，您可以通过以下操作修改该日期：
+然后，您可以用以下操作修改此日期：
 - `+1y` 表示加一年，
 - `-1h` 表示减一小时，
-- `/m` 表示向最近的月份舍入。
+- `/m` 表示四舍五入到最近的月份。
 
 您可以在操作中使用以下单位：
 - `s` 表示秒，
@@ -520,10 +520,10 @@ GROUP BY points ORDER BY points ASC;
 - `M` 表示月，
 - `y` 表示年。
 
-以下是一些日期数学的使用示例：
+以下是一些日期数学的示例用法：
 - `now+4h` 表示从现在起四小时。
-- `now-2d/d` 表示两天前的时间，舍入到最近的一天。
-- `2010-04-20||+2M/d` 表示2010年6月20日，舍入到最近的一天。
+- `now-2d/d` 表示两天前的时间，四舍五入到最近的一天。
+- `2010-04-20||+2M/d` 表示2010年6月20日，四舍五入到最近的一天。
 
 <!-- proofread -->
 

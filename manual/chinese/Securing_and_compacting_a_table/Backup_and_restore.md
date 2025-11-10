@@ -47,13 +47,13 @@ Manticore Search 提供了用于物理备份的 [manticore-backup](../Securing_a
 
 首先，确保您在运行要备份的 Manticore 实例的同一服务器上运行 `manticore-backup`。
 
-其次，建议以 `root` 用户身份运行该工具，以便工具可以转移您备份文件的所有权。否则，备份仍会创建，但不会转移所有权。无论哪种情况，您都应确保 `manticore-backup` 有权访问 Manticore 实例的数据目录。
+其次，建议以 `root` 用户身份运行该工具，以便工具可以转移您备份文件的所有权。否则，备份仍会完成，但不会转移所有权。无论哪种情况，您都应确保 `manticore-backup` 有权访问 Manticore 实例的数据目录。
 
 <!-- example backup1 -->
 
 `manticore-backup` 唯一必需的参数是 `--backup-dir`，它指定备份的目标位置。如果您不提供任何其他参数，`manticore-backup` 将：
 - 定位使用默认配置运行的 Manticore 实例
-- 在 `--backup-dir` 目录中创建一个带时间戳的子目录
+- 在 `--backup-dir` 目录下创建一个带时间戳的子目录
 - 备份实例中找到的所有表
 
 <!-- request Example -->
@@ -93,7 +93,7 @@ Manticore versions:
 <!-- end -->
 
 <!-- example backup2 -->
-要仅备份特定表，请使用 `--tables` 标志，后跟以逗号分隔的表列表，例如 `--tables=tbl1,tbl2`。这将只备份指定的表，忽略其余表。
+要仅备份特定表，请使用 `--tables` 标志，后跟以逗号分隔的表名列表，例如 `--tables=tbl1,tbl2`。这将只备份指定的表，忽略其余表。
 
 <!-- request Example -->
 ```bash
@@ -134,7 +134,7 @@ Manticore versions:
 | 参数 | 描述 |
 |-|-|
 | `--backup-dir=path` | 这是备份目录的路径，备份将存储在该目录中。该目录必须已存在。此参数是必需的且没有默认值。每次备份运行时，manticore-backup 会在提供的目录中创建一个带有时间戳的子目录（`backup-[datetime]`），并将所有所需的表复制到该子目录中。因此，`--backup-dir` 是所有备份的容器，运行脚本多次是安全的。|
-| `--restore[=backup]` | 从 `--backup-dir` 恢复。仅使用 --restore 会列出可用的备份。`--restore=backup` 会从 `<--backup-dir>/backup` 恢复。 |
+| `--restore[=backup]` | 从 `--backup-dir` 恢复。仅使用 --restore 会列出可用的备份。`--restore=backup` 将从 `<--backup-dir>/backup` 恢复。 |
 | `--force` | 在恢复时跳过版本检查并优雅地恢复备份。 |
 | `--disable-telemetry` | 如果您想禁用向 Manticore 发送匿名指标，请传递此标志。您也可以使用环境变量 TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Manticore 配置的路径。可选。如果未提供，将使用适合您操作系统的默认配置。用于确定与 Manticore 守护进程通信的主机和端口。`manticore-backup` 工具支持[动态配置](../Server_settings/Scripted_configuration.md)文件。如果您的配置分布在多个文件中，可以多次指定 `--config` 选项。 |
@@ -210,9 +210,9 @@ BACKUP TO /tmp/mybackup OPTION async = 1
 ### 重要注意事项
 
 1. 如果路径中包含空格，可以用单引号括起来，例如 `BACKUP TO '/path/with spaces'`
-2. 不含空格的路径不需要引号：`BACKUP TO /tmp/backup`
+2. 不含空格的路径无需引号：`BACKUP TO /tmp/backup`
 3. 支持 Windows 路径：`BACKUP TO 'C:\path'` 或 `BACKUP TO C:\windows\backup`
-4. 确保 Manticore Buddy 已启动（默认启动）
+4. 确保已启动 Manticore Buddy（默认启动）
 5. 备份目录必须存在且 Manticore 进程有写权限
 
 ### 备份如何保持表的一致性
@@ -292,7 +292,7 @@ Manticore config
 
 ## 使用 mysqldump 进行备份和恢复
 
-Manticore 支持来自 MySQL 9.5 及以下版本的 `mysqldump` 工具，以及来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
+Manticore 支持来自 MySQL 9.5 及以下版本的 `mysqldump` 工具和来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
 
 <!-- example mysqldump_backup -->
 
@@ -315,7 +315,7 @@ mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.sql
 ```
 
-这将生成一个备份文件 `tbl.sql`，其中使用 `replace` 命令替代 `insert`，并在每个批次中保留列名。文档将被批量处理，最大大小为16兆字节。不会有 `drop`/`create table` 命令。这对于更改分词设置后进行全文重新索引非常有用。
+这将生成一个备份文件 `tbl.sql`，其中使用 `replace` 命令替代 `insert`，每批次保留列名。文档将批量处理，最大大小为16兆字节。不会有 `drop`/`create table` 命令。这对于更改分词设置后进行全文重新索引非常有用。
 
 <!-- request Replication mode -->
 ```bash
@@ -324,7 +324,7 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -
 ```
 
 在这种情况下，`mysqldump` 将生成类似 `REPLACE INTO cluster:table ...` 的命令，这些命令将直接发送到 Manticore 实例，从而重新插入文档。
-使用 `cluster` 用户和 `-t` 标志以启用复制模式。详情请参见下面的注释。
+使用 `cluster` 用户和 `-t` 标志启用复制模式。详情见下方说明。
 
 <!-- end -->
 
@@ -333,7 +333,7 @@ mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -
 
 如果您想从备份文件恢复 Manticore Search 数据库，mysql 客户端是您的首选工具。
 
-注意，如果您在[纯模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除并重新创建表。因此，您应该：
+注意，如果您在[纯模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除并重建表。因此，您应当：
 - 使用带有 `-t` 选项的 `mysqldump`，以排除备份中的 `CREATE TABLE` 语句。
 - 在继续恢复之前，手动[清空](../Emptying_a_table.md)表。
 
@@ -348,19 +348,19 @@ mariadb -h0 -P9306 < manticore_backup.sql
 
 ### 其他选项
 
-以下是一些可与 mysqldump 一起使用以定制备份的更多设置：
+以下是一些可与 mysqldump 一起使用以定制备份的设置：
 
 - `-t` 跳过 `drop`/`create` 表命令。适用于更改分词设置后对表进行全文重新索引。
-- `--no-data`：此设置会省略表数据，仅备份表结构。
+- `--no-data`：此设置省略表数据，仅备份表结构。
 - `--ignore-table=[database_name].[table_name]`：此选项允许您在备份操作中跳过特定表。注意数据库名必须是 `manticore`。
-- `--replace` 执行 `replace` 替代 `insert`。适用于更改分词设置后对表进行全文重新索引。
+- `--replace` 使用 `replace` 替代 `insert`。适用于更改分词设置后对表进行全文重新索引。
 - `--net-buffer-length=16M` 使批处理最大为16兆字节，以加快恢复速度。
 - `-e` 批量处理文档。适用于更快恢复。
 - `-c` 保留列名。适用于更改表结构（例如更改字段顺序）后重新索引表。
 
 有关设置的完整列表及详细说明，请参阅官方 [MySQL 文档](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 或 [MariaDB 文档](https://mariadb.com/kb/en/mariadb-dump/)。
 
-### 注释
+### 说明
 
 * 要创建复制模式的转储（转储包含 `INSERT/REPLACE INTO <cluster_name>:<table_name>`）：
   - 使用 `cluster` 用户。例如：`mysqldump -u cluster ...` 或 `mariadb-dump -u cluster ...`。您可以通过运行 `SET GLOBAL cluster_user = new_name` 来更改启用 mysqldump 复制模式的用户名。

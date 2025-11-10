@@ -3,6 +3,7 @@
 <!-- example install -->
 ## 安装并启动 Manticore
 
+
 您可以轻松地在各种操作系统上安装和启动 Manticore，包括 Ubuntu、Centos、Debian、Windows 和 MacOS。此外，您还可以将 Manticore 作为 Docker 容器使用。
 
 <!-- intro -->
@@ -74,7 +75,6 @@ docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresear
 ## 连接到 Manticore
 
 默认情况下，Manticore 等待您的连接端口为：
-
   * 端口 9306 用于 MySQL 客户端
   * 端口 9308 用于 HTTP/HTTPS 连接
   * 端口 9312 用于来自其他 Manticore 节点和基于 Manticore 二进制 API 的客户端的连接
@@ -93,6 +93,7 @@ mysql -h0 -P9306
 ##### 通过 HTTP 上的 JSON 连接
 
 <!-- request HTTP -->
+
 HTTP 是无状态协议，因此不需要任何特殊的连接阶段。您可以简单地向服务器发送 HTTP 请求并接收响应。要使用 JSON 接口与 Manticore 通信，您可以使用您所选编程语言中的任何 HTTP 客户端库发送 GET 或 POST 请求到服务器并解析 JSON 响应：
 
 ```bash
@@ -264,7 +265,6 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 * price - 类型为 "float"
 
 请注意，可以省略使用显式创建语句创建表。更多信息请参见[自动模式](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
-
 有关创建表的不同方式的更多信息，请参阅我们的学习课程：
 * [创建实时表](https://play.manticoresearch.com/rtmode/)
 * [从 MySQL 源创建表](https://play.manticoresearch.com/mysql/)

@@ -13,7 +13,7 @@ Test validates:
 ––– comment –––
 Create table with 10K rows across ~200 categories (uneven distribution for HAVING testing)
 ––– input –––
-manticore-load --quiet --json --seed=42 --init="CREATE TABLE test_having (id bigint, category int, price float, quantity int)" --load="INSERT INTO test_having (id, category, price, quantity) VALUES (<increment>, <int/1/200>, <float/10.0/100.0>, <int/1/50>)" --batch-size=1000 --threads=4 --total=10000 > /dev/null; echo $?
+manticore-load --quiet --json --init="CREATE TABLE test_having (id bigint, category int, price float, quantity int)" --load="INSERT INTO test_having (id, category, price, quantity) VALUES (<increment>, <int/1/200>, <float/10.0/100.0>, <int/1/50>)" --batch-size=1000 --threads=4 --total=10000 > /dev/null; echo $?
 ––– output –––
 0
 ––– comment –––

@@ -1,0 +1,10 @@
+{
+  "082430cd9323e2964b629862ea0dc08c1e5084498bd3e0134c66751d29db5d64": {
+    "original": "# OpenAPI specification\n\nThe Manticore Search API is documented using the OpenAPI specification, which can be used to generate client SDKs. The machine-readable YAML file is available at https://raw.githubusercontent.com/manticoresoftware/openapi/master/manticore.yml\n\nYou can also view the specification visualized with the online Swagger Editor [here](https://editor.swagger.io).\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# OpenAPI 规范\n\nManticore Search API 使用 OpenAPI 规范进行文档编写，可用于生成客户端 SDK。机器可读的 YAML 文件可在 https://raw.githubusercontent.com/manticoresoftware/openapi/master/manticore.yml 获取\n\n您也可以在在线 Swagger 编辑器中查看该规范的可视化版本，[点击这里](https://editor.swagger.io)。\n\n<!-- proofread -->",
+      "russian": "# Спецификация OpenAPI\n\nAPI Manticore Search документируется с использованием спецификации OpenAPI, которая может быть использована для генерации клиентских SDK. Машиночитаемый YAML-файл доступен по адресу https://raw.githubusercontent.com/manticoresoftware/openapi/master/manticore.yml\n\nВы также можете просмотреть спецификацию в визуализированном виде с помощью онлайн-редактора Swagger [здесь](https://editor.swagger.io).\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

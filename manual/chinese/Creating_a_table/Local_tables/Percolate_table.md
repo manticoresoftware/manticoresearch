@@ -1,27 +1,27 @@
-# 反向查询表
+# Percolate 表
 
 <!-- example pq -->
-反向查询表是一种特殊的表，存储的是查询，而不是文档。它用于前瞻搜索，或称为“反向搜索”。
+Percolate 表是一种特殊的表，用于存储查询而非文档。它用于前瞻性搜索，或称为“反向搜索”。
 
-* 若想了解如何针对反向查询表执行搜索查询，请参阅章节 [反向查询](../../Searching/Percolate_query.md)。
-* 若想了解如何准备表以进行搜索，请参阅章节 [向反向查询表添加规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)。
+* 要了解如何针对 percolate 表执行搜索查询，请参见章节 [Percolate query](../../Searching/Percolate_query.md)。
+* 要了解如何准备表以进行搜索，请参见章节 [Adding rules to a percolate table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)。
 
-反向查询表的模式是固定的，包含以下字段：
+Percolate 表的模式是固定的，包含以下字段：
 
-| 字段 | 说明 |
+| 字段 | 描述 |
 | - | - |
-| ID| 无符号 64 位整数，带有自动递增功能。添加 PQ 规则时可以省略，如 [添加 PQ 规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 所述 |
-| Query | 规则的[全文查询](../../Searching/Full_text_matching/Basic_usage.md)，可以理解为 [MATCH 子句](../../Searching/Full_text_matching/Basic_usage.md) 或 [JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 的值。如果在查询内使用了[按字段操作符](../../Searching/Full_text_matching/Operators.md)，则需要在反向查询表配置中声明全文字段。如果存储的查询仅用于属性过滤（不含全文查询），则查询值可以为空或省略。此字段的值应与创建反向查询表时指定的预期文档模式相对应。 |
-| Filters | 可选。Filters 是包含属性过滤条件和/或表达式的可选字符串，定义方式与[WHERE 子句](../../Searching/Filters.md#WHERE)或[JSON 过滤](../../Searching/Filters.md#HTTP-JSON)相同。此字段的值应与创建反向查询表时指定的预期文档模式相对应。 |
-| Tags | 可选。Tags 表示由逗号分隔的字符串标签列表，可用于过滤/删除 PQ 规则。执行[反向查询](../../Searching/Percolate_query.md)时，标签也可以与匹配的文档一起返回。 |
+| ID| 一个带有自动递增功能的无符号 64 位整数。添加 PQ 规则时可以省略，如 [add a PQ rule](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 中所述 |
+| Query | 规则的[全文查询](../../Searching/Full_text_matching/Basic_usage.md)，可以视为 [MATCH 子句](../../Searching/Full_text_matching/Basic_usage.md) 或 [JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 的值。如果查询中使用了[按字段操作符](../../Searching/Full_text_matching/Operators.md)，则需要在 percolate 表配置中声明全文字段。如果存储的查询仅用于属性过滤（无全文查询），则查询值可以为空或省略。该字段的值应对应预期的文档模式，该模式在创建 percolate 表时指定。 |
+| Filters | 可选。Filters 是一个可选字符串，包含属性过滤器和/或表达式，定义方式与 [WHERE 子句](../../Searching/Filters.md#WHERE) 或 [JSON 过滤](../../Searching/Filters.md#HTTP-JSON) 相同。该字段的值应对应预期的文档模式，该模式在创建 percolate 表时指定。 |
+| Tags | 可选。Tags 表示由逗号分隔的字符串标签列表，可用于过滤/删除 PQ 规则。执行 [Percolate query](../../Searching/Percolate_query.md) 时，标签也可以与匹配的文档一起返回。 |
 
-请注意，创建反向查询表时无需添加上述字段。
+请注意，创建 percolate 表时无需添加上述字段。
 
-创建新反向查询表时需注意，需指定预期文档的模式，此模式将用来校验稍后添加的规则。此操作方式与[任何其他本地表](../../Creating_a_table/Local_tables.md)相同。
+创建新的 percolate 表时需要记住的是，必须指定文档的预期模式，该模式将用于检查您稍后添加的规则。此操作与[任何其他本地表](../../Creating_a_table/Local_tables.md)的方式相同。
 
 
 <!-- intro -->
-##### 通过 SQL 创建反向查询表：
+##### 通过 SQL 创建 percolate 表：
 
 <!-- request SQL -->
 
@@ -35,7 +35,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### 通过 JSON over HTTP 创建反向查询表：
+##### 通过 HTTP 的 JSON 创建 percolate 表：
 
 <!-- request JSON -->
 
@@ -54,7 +54,7 @@ POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
 ```
 
 <!-- intro -->
-##### 通过 PHP 客户端创建反向查询表：
+##### 通过 PHP 客户端创建 percolate 表：
 
 <!-- request PHP -->
 
@@ -154,7 +154,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title t
 ```
 
 <!-- intro -->
-##### 通过配置创建反向查询表：
+##### 通过配置创建 percolate 表：
 
 <!-- request CONFIG -->
 

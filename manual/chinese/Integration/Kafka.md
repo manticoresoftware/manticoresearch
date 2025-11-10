@@ -25,7 +25,7 @@ CREATE SOURCE <source name> [(column type, ...)] [source_options]
 
 所有架构键不区分大小写，意味着 `Products`、`products` 和 `PrOdUcTs` 被视为相同。它们都会被转换为小写。
 
-如果您的字段名不符合 Manticore Search 允许的 [字段名语法](../Creating_a_table/Data_types.md#Field-name-syntax)（例如，包含特殊字符或以数字开头），则必须定义架构映射。例如，`$keyName` 或 `123field` 在 JSON 中是有效键，但在 Manticore Search 中不是有效字段名。如果尝试使用无效字段名且未正确映射，Manticore 会返回错误，且源创建失败。
+如果您的字段名不符合 Manticore Search 允许的 [字段名语法](../Creating_a_table/Data_types.md#Field-name-syntax)（例如，包含特殊字符或以数字开头），则必须定义架构映射。例如，`$keyName` 或 `123field` 在 JSON 中是有效键，但在 Manticore Search 中不是有效字段名。如果尝试使用无效字段名且未正确映射，Manticore 会返回错误，且源创建将失败。
 
 为处理此类情况，请使用以下架构语法将无效字段名映射为有效字段名：
 
@@ -72,8 +72,8 @@ Query OK, 2 rows affected (0.02 sec)
 | `topic_list`    | `string [, ...]`    | 列出要消费的 Kafka 主题                                                                                              |
 | `consumer_group`| `string`           | 定义 Kafka 消费者组，默认为 `manticore`。                                                                             |
 | `num_consumers` | `int`              | 处理消息的消费者数量。                                                                                                |
-| `partition_list`| `int [, ...]`      | 读取的分区列表，[更多](../Integration/Kafka.md#Sharding-with-Kafka)。                                                |
-| `batch`         | `int`              | 处理消息的批次数量。默认是 `100`；超时则处理剩余消息。                                                                |
+| `partition_list`| `int [, ...]`      | 读取的分区列表，[更多信息](../Integration/Kafka.md#Sharding-with-Kafka)。                                             |
+| `batch`         | `int`              | 处理多少条消息后继续。默认是 `100`；超时则处理剩余消息。                                                               |
 
 ### 目标表
 
@@ -136,7 +136,7 @@ Query OK, 2 rows affected (0.02 sec)
 
 <!-- end -->
 
-数据以批次方式从 Kafka 传输到 Manticore Search，每次运行后批次被清空。对于跨批次的计算，如 AVG，请谨慎使用，因为批次处理可能导致结果不符合预期。
+数据以批次方式从 Kafka 传输到 Manticore Search，每次运行后批次被清空。对于跨批次的计算（如 AVG），请谨慎使用，因为批次处理可能导致结果不符合预期。
 
 
 ### 字段映射
@@ -270,9 +270,9 @@ SHOW MV view_table
 
 您可以通过修改物化视图来暂停数据消费。
 
-如果您移除 `source` 而不删除物化视图，它会自动暂停。重新创建 source 后，需手动使用 `ALTER` 命令取消暂停物化视图。
+如果您移除 `source` 而不删除物化视图，它会自动暂停。重新创建源后，需手动使用 `ALTER` 命令取消暂停物化视图。
 
-目前，仅支持修改物化视图。若要更改 `source` 参数，请删除并重新创建 source。
+目前，仅支持修改物化视图。要更改 `source` 参数，请删除并重新创建源。
 
 <!-- intro -->
 
@@ -296,9 +296,9 @@ Query OK (0.02 sec)
 
 您还可以为每个 Kafka 主题指定 `partition_list`。
 这种方法的主要优点之一是能够通过 Kafka 实现表的 `sharding`（分片）。
-为此，您应为每个分片创建一条独立的链路：`source` → `物化视图` → `目标表`：
+为此，您应为每个分片创建一条独立的链：`source` → `materialized view` → `destination table`：
 
-**Sources:**
+**源：**
 ```sql
 CREATE SOURCE kafka_p1 (id bigint, term text)
   type='kafka' broker_list='kafka:9092' topic_list='my-data'
@@ -309,14 +309,14 @@ CREATE SOURCE kafka_p2 (id bigint, term text)
   consumer_group='manticore' num_consumers='1' partition_list='1' batch=50;
 ```
 
-**目标表:**
+**目标表：**
 
 ```sql
 CREATE TABLE destination_shard_1 (id bigint, name text);
 CREATE TABLE destination_shard_2 (id bigint, name text);
 ```
 
-**物化视图:**
+**物化视图：**
 
 ```sql
 CREATE MATERIALIZED VIEW mv_1 TO destination_shard_1 AS SELECT id, term AS name FROM kafka_p1;
@@ -337,16 +337,16 @@ CREATE MATERIALIZED VIEW mv_2 TO destination_shard_2 AS SELECT id, term AS name 
 
 #### 重复条目
 
-Kafka 在每个批次后或处理超时后提交偏移量。如果物化视图查询过程中进程意外停止，可能会出现重复条目。为避免此情况，请在您的 schema 中包含 `id` 字段，使 Manticore Search 能防止表中出现重复数据。
+Kafka 在每个批次后或处理超时后提交偏移量。如果物化视图查询过程中进程意外停止，可能会出现重复条目。为避免此情况，请在您的模式中包含 `id` 字段，使 Manticore Search 能防止表中出现重复。
 
 ### 内部工作原理
 
-- **工作线程初始化：** 配置 source 和物化视图后，Manticore Search 会设置专用工作线程处理来自 Kafka 的数据摄取。
-- **消息映射：** 根据 source 配置的 schema 映射消息，将其转换为结构化格式。
+- **工作线程初始化：** 配置源和物化视图后，Manticore Search 会设置专用工作线程处理来自 Kafka 的数据摄取。
+- **消息映射：** 根据源配置的模式映射消息，将其转换为结构化格式。
 - **批处理：** 将消息分组为批次以提高处理效率。批次大小可根据性能和延迟需求调整。
 - **缓冲：** 映射后的数据批次存储在缓冲表中，以便高效批量操作。
-- **物化视图处理：** 对缓冲表中的数据应用视图逻辑，执行转换或过滤。
-- **数据传输：** 处理后的数据传输到目标实时表。
+- **物化视图处理：** 对缓冲表中的数据应用视图逻辑，执行任何转换或过滤。
+- **数据传输：** 处理后的数据随后传输到目标实时表。
 - **清理：** 每个批次处理后清空缓冲表，确保为下一批数据做好准备。
 
 <!-- proofread -->

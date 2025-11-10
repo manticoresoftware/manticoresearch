@@ -1,14 +1,14 @@
 # 支持的语言
 
-Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`（默认值）启用基本支持。`non_cjk` 选项是 `non_cont` 的别名，也可以使用：`charset_table = non_cjk`。
+Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`（默认值）启用基本支持。也可以使用 `non_cjk` 选项，它是 `non_cont` 的别名：`charset_table = non_cjk`。
 
-对于许多语言，Manticore 提供了一个[停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)文件，可用于提高搜索的相关性。
+对于许多语言，Manticore 提供了一个[停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)文件，可用于提高搜索相关性。
 
-此外，少数语言提供了高级形态学支持，通过使用基于字典的词形还原或词干提取算法来实现更好的分词和规范化，从而显著提升搜索的相关性。
+此外，部分语言提供了高级形态学功能，通过基于词典的词形还原或词干提取算法，实现更好的分词和规范化，从而显著提升搜索相关性。
 
-下表列出了所有支持的语言，并说明如何启用：
+下表列出了所有支持的语言，并指明如何启用：
 * 基本支持（“Supported”列）
-* 停用词（“Stopwords file name”列）
+* 停用词文件（“Stopwords file name”列）
 * 高级形态学（“Advanced morphology”列）
 
 | Language | Supported | Stopwords file name | Advanced morphology | Notes |
@@ -25,7 +25,7 @@ Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`�
 | Catalan | charset_table=non_cont | ca | morphology=libstemmer_ca | |
 | Chinese using [ICU](https://icu.unicode.org/) | charset_table=chinese | zh | morphology=icu_chinese | 比使用 ngrams 更准确 |
 | Chinese using [Jieba](https://github.com/fxsjy/jieba) | charset_table=chinese | zh | morphology=jieba_chinese, requires package `manticore-language-packs` | 比使用 ngrams 更准确 |
-| Chinese using ngrams| ngram_chars=chinese | zh | ngram_chars=1 | 索引更快，但搜索性能可能不如前两者 |
+| Chinese using ngrams| ngram_chars=chinese | zh | ngram_chars=1 | 索引速度更快，但搜索性能可能不如前两者 |
 | Croatian | charset_table=non_cont | hr | - | |
 | Kurdish | charset_table=non_cont | ckb | - | |
 | Czech | charset_table=non_cont | cz | morphology=stem_cz (捷克语词干提取器) | |
@@ -84,7 +84,7 @@ Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`�
 | Tamil | specify charset_table manually | - | morphology=libstemmer_ta | |
 | Thai | charset_table=thai | th | - | |
 | Turkish | charset_table=non_cont | tr | morphology=libstemmer_tr | |
-| Ukrainian | charset_table=non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | 需要安装 [installation](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) 的乌克兰词形还原器 |
+| Ukrainian | charset_table=non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | 需要[安装](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer)乌克兰词形还原器 |
 | Yoruba | charset_table=non_cont | yo | - | |
 | Zulu | charset_table=non_cont | zu | - |  |
 <!-- proofread -->

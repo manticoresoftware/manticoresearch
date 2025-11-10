@@ -1,12 +1,12 @@
 # 与 Logstash 的集成
 
-> 注意：与 Logstash 的集成需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法正常工作，请确保已安装 Buddy。
+> 注意：与 Logstash 的集成需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果不工作，请确保已安装 Buddy。
 
-[Logstash](https://www.elastic.co/logstash) 是一个日志管理工具，可以从各种来源收集数据，实时转换数据，并将其发送到您期望的目标。它通常用作 Elasticsearch（一个开源的分析和搜索引擎）的数据管道。
+[Logstash](https://www.elastic.co/logstash) 是一款日志管理工具，它从各种来源收集数据，实时转换数据，并将其发送到您期望的目标。它通常用作 Elasticsearch 的数据管道，Elasticsearch 是一个开源的分析和搜索引擎。
 
-现在，Manticore 支持将 Logstash 用作处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前支持版本为 7.6-9.2。
+现在，Manticore 支持使用 Logstash 作为处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前支持 7.6-9.2 版本。
 
-让我们来看一个用于索引 `dpkg.log` 的简单 Logstash 配置文件示例，`dpkg.log` 是 Debian 包管理器的标准日志文件。该日志本身结构简单，如下所示：
+让我们看一个用于索引 `dpkg.log` 的简单 Logstash 配置文件示例，`dpkg.log` 是 Debian 包管理器的标准日志文件。日志本身结构简单，示例如下：
 
 ```
 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
@@ -47,9 +47,9 @@ output {
 
 ## Logstash 结果
 
-按照上述描述调整配置后，您可以运行 Logstash，dpkg 日志中的数据将传递给 Manticore 并正确索引。
+按上述方法调整配置后，您可以运行 Logstash，dpkg 日志中的数据将传递到 Manticore 并正确索引。
 
-以下是创建的表的结果模式和插入文档的示例：
+以下是创建的表的结果架构和插入文档的示例：
 
 ```
 mysql> DESCRIBE dpkg_log;

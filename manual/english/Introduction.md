@@ -109,7 +109,6 @@ Manticore Search is versatile and can be applied in various scenarios, including
 - **Data Stream Filtering**:
   - Use percolate tables to filter and process real-time data streams, such as social media feeds or log data, efficiently.
 
-
 ## Requirements
 
 * Architecture: arm64 or x86_64

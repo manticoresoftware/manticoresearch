@@ -25,9 +25,9 @@ apt-get install -y iproute2 procps > /dev/null; echo $?
 ––– comment –––
 Add watchdog = 0 to base config if not already present
 ––– input –––
-grep -q "watchdog" test/clt-tests/base/searchd-with-flexible-ports.conf && echo "watchdog already exists" || sed -i '/^searchd {/,/^}/ s/^\([[:space:]]*\)}$/\1\twatchdog = 0\n\1}/' test/clt-tests/base/searchd-with-flexible-ports.conf; echo $?
+grep -q "watchdog" test/clt-tests/base/searchd-with-flexible-ports.conf && echo "watchdog already exists" || { sed -i '/^searchd {/,/^}/ s/^\([[:space:]]*\)}$/\1\twatchdog = 0\n\1}/' test/clt-tests/base/searchd-with-flexible-ports.conf && echo "watchdog added"; }
 ––– output –––
-#!/watchdog already exists|0/!#
+#!/watchdog already exists|watchdog added/!#
 ––– comment –––
 Start node 1
 ––– input –––
@@ -157,3 +157,9 @@ mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G"
 *************************** 1. row ***************************
 Counter: cluster_sst_test_indexes
   Value: test_table
+––– comment –––
+Cleanup: Remove watchdog from base config to avoid affecting other tests
+––– input –––
+sed -i '/watchdog = 0/d' test/clt-tests/base/searchd-with-flexible-ports.conf; echo $?
+––– output –––
+0

@@ -12,6 +12,7 @@ SHOW META [ LIKE pattern ]
 * `total_found`：
   - 索引中查询的估计匹配总数。如果需要精确的匹配数，请使用 `SELECT COUNT(*)`，而不是依赖此值。
   - 对于带有 `GROUP BY` 的查询，`total_found` 表示组的数量，而非单个匹配数。
+  - 当使用 `HAVING` 与 `GROUP BY` 时，`total_found` 反映**应用** `HAVING` 过滤器**后**的组数。这使得使用 `HAVING` 子句进行正确的分页成为可能。
   - 对于 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 查询，`total_found` 仍表示组的数量，无论 `N` 的值是多少。
 * `total_relation`：指示 `total_found` 值是精确的还是估计的。
   - 如果 Manticore 无法确定精确的 `total_found` 值，此字段将显示 `total_relation: gte`，表示实际匹配数**大于或等于**报告的 `total_found`。

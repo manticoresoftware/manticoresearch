@@ -7,9 +7,10 @@ Manticore Search — это высокопроизводительная мно�
 ## Ключевые особенности Manticore:
 #### Мощный и быстрый полнотекстовый поиск, хорошо работающий как с малыми, так и с большими наборами данных
 
+
   * [Автозаполнение запросов](Searching/Autocomplete.md)
   * [Нечеткий поиск](Searching/Spell_correction.md#Fuzzy-Search)
-  * Более 20 [операторов полнотекстового поиска](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> и более 20 факторов ранжирования
+  * Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> and over 20 ranking factors
   * [Пользовательское ранжирование](Searching/Sorting_and_ranking.md#Ranking-overview)
   * [Стемминг](Creating_a_table/NLP_and_tokenization/Morphology.md)
   * [Лемматизация](Creating_a_table/NLP_and_tokenization/Morphology.md)

@@ -7,6 +7,7 @@ Manticore Search 是一个高性能、多存储数据库，专为搜索和分析
 ## Manticore 的主要特性包括：
 #### 强大且快速的全文搜索，适用于小型和大型数据集
 
+
   * [查询自动补全](Searching/Autocomplete.md)
   * [模糊搜索](Searching/Spell_correction.md#Fuzzy-Search)
   * 超过 20 种 [全文操作符](https://play.manticoresearch.com/fulltextintro/)<!--{target="_blank"}--> 和超过 20 种排名因素

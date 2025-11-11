@@ -285,20 +285,20 @@ IDF 标志可以组合使用；`plain` 和 `normalized` 互斥；`tfidf_unnormal
 
 请注意，如果该阈值设置过高，会导致内存消耗增加和整体性能下降。
 
-您还可以使用[accurate_aggregation](../Searching/Options.md#accurate_aggregation)选项强制执行保证的groupby/聚合准确模式。
+您还可以使用[accurate_aggregation](../Searching/Options.md#accurate_aggregation) 选项强制保证 groupby/聚合的准确模式。
 
 ### max_query_time
-设置最大搜索查询时间，单位为毫秒。必须是非负整数。默认值为0，表示“不限制”。本地搜索查询将在指定时间到达后停止。请注意，如果您执行的是查询多个本地表的搜索，则此限制分别适用于每个表。请注意，由于不断跟踪是否该停止查询，这可能会略微增加查询的响应时间。
+设置最大搜索查询时间，单位为毫秒。必须为非负整数。默认值为 0，表示“不限制”。本地搜索查询将在达到指定时间后停止。请注意，如果您执行的是查询多个本地表的搜索，此限制对每个表分别适用。请注意，由于需要不断跟踪是否到达停止查询时间，这可能会略微增加查询的响应时间。
 
 ### max_predicted_time
 整数。最大预测搜索时间；参见[predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs)。
 
 ### morphology
-`none`允许将所有查询词替换为其精确形式，前提是表是在启用[index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)的情况下构建的。这对于防止查询词的词干提取或词形还原非常有用。
+`none` 允许在表使用了 [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) 时，将所有查询词替换为其精确形式。这对于防止查询词的词干化或词形还原非常有用。
 
 ### not_terms_only_allowed
 <!-- example not_terms_only_allowed -->
-`0`或`1`允许查询中独立的[否定](../Searching/Full_text_matching/Operators.md#Negation-operator)。默认值为0。另请参见相应的[全局设置](../Server_settings/Searchd.md#not_terms_only_allowed)。
+`0` 或 `1` 允许查询中独立的[否定](../Searching/Full_text_matching/Operators.md#Negation-operator)。默认值为0。另请参见对应的[全局设置](../Server_settings/Searchd.md#not_terms_only_allowed)。
 
 <!-- request SQL -->
 ```sql
@@ -311,10 +311,62 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select * from tbl where match('-d');"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+
+POST /sql?mode=raw -d "select * from t where match('-d')  option not_terms_only_allowed=1;"
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "f1": {
+          "type": "string"
+        }
+      },
+      {
+        "f2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      },
+      {
+        "id": 724024784404348900,
+        "f1": "c",
+        "f2": 3
+      },
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ### ranker
-可从以下选项中选择：
+可选以下排名器：
 * `proximity_bm25`
 * `bm25`
 * `none`
@@ -326,10 +378,10 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 * `expr`
 * `export`
 
-有关每个排序器的更多详细信息，请参阅[搜索结果排名](../Searching/Sorting_and_ranking.md#Available-built-in-rankers)。
+关于每个排名器的详细信息，请参考[搜索结果排名](../Searching/Sorting_and_ranking.md#Available-built-in-rankers)。
 
 ### rand_seed
-允许您为`ORDER BY RAND()`查询指定特定的整数种子值，例如：`... OPTION rand_seed=1234`。默认情况下，每个查询都会自动生成一个新的不同的种子值。
+允许您为 `ORDER BY RAND()` 查询指定特定的整数种子值，例如：`... OPTION rand_seed=1234`。默认情况下，每个查询都会自动生成一个新的不同的种子值。
 
 ### retry_count
 整数。分布式重试次数。
@@ -343,32 +395,32 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 
 ### sort_method
 * `pq` - 优先队列，默认设置
-* `kbuffer` - 为已预排序数据提供更快的排序，例如按id排序的表数据
-两种情况下的结果集相同；选择其中一个选项可能仅仅是提高（或降低）性能。
+* `kbuffer` - 为已经预排序的数据提供更快的排序，例如按 id 排序的表数据
+两种方式结果集相同；选择其中一个选项可能仅影响性能的提升或降低。
 
 ### threads
-限制当前查询处理使用的最大线程数。默认 - 无限制（查询可以占用全局定义的所有[线程](../Server_settings/Searchd.md#threads)）。
-对于一批查询，该选项必须附加到批次中的第一个查询，然后在创建工作队列时应用，并对整个批次生效。此选项与选项[max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query)含义相同，但仅应用于当前查询或查询批次。
+限制当前查询处理使用的最大线程数。默认不限制（查询可占用全局定义的所有[线程](../Server_settings/Searchd.md#threads)）。
+对于一批查询，该选项必须附加在批次中的第一个查询上，并在创建工作队列时生效，对整个批次有效。该选项与选项[max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query)含义相同，但仅应用于当前查询或查询批次。
 
 ### token_filter
-带引号的、用冒号分隔的字符串，格式为`library name:plugin name:optional string of settings`。每当涉及的每个表调用全文搜索时，都会为每次搜索创建一个查询时令牌过滤器，允许您实现根据自定义规则生成令牌的自定义分词器。
+引号包围的，并用冒号分隔的字符串格式为 `库名:插件名:可选的设置字符串`。查询时的令牌过滤器在每个涉及的表调用全文索引时创建，允许您实现根据自定义规则生成令牌的自定义分词器。
 ```sql
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
 ### expansion_limit
-限制单个通配符展开的最大关键字数，默认值为0表示无限制。更多详情请参阅[expansion_limit](../Server_settings/Searchd.md#expansion_limit)。
+限制单个通配符所展开的最大关键词数，默认值为0表示不限制。有关详细信息，请参阅[expansion_limit](../Server_settings/Searchd.md#expansion_limit)。
 
 ## 查询优化器提示
 
 <!-- example options_force -->
 
-在极少数情况下，Manticore内置的查询分析器可能无法正确理解查询并确定应使用docid索引、二级索引还是列扫描。要覆盖查询优化器的决策，您可以在查询中使用以下提示：
+在极少数情况下，Manticore 内置的查询分析器可能无法正确理解查询，也可能无法正确决定应使用 docid 索引、二级索引还是列式扫描。要覆盖查询优化器的决定，可以在查询中使用以下提示：
 
-* `/*+ DocidIndex(id) */` 强制使用docid索引，`/*+ NO_DocidIndex(id) */` 告诉优化器忽略它
+* `/*+ DocidIndex(id) */` 强制使用 docid 索引，`/*+ NO_DocidIndex(id) */` 告诉优化器忽略它
 * `/*+ SecondaryIndex(<attr_name1>[, <attr_nameN>]) */` 强制使用二级索引（如果可用），`/*+ NO_SecondaryIndex(id) */` 告诉优化器忽略它
-* `/*+ ColumnarScan(<attr_name1>[, <attr_nameN>]) */` 强制使用列扫描（如果属性是列式的），`/*+ NO_ColumnarScan(id) */` 告诉优化器忽略它
+* `/*+ ColumnarScan(<attr_name1>[, <attr_nameN>]) */` 强制使用列式扫描（如果属性是列式的），`/*+ NO_ColumnarScan(id) */` 告诉优化器忽略它
 
-请注意，在执行带过滤器的全文查询时，查询优化器会决定是将全文树结果与过滤器结果相交，还是使用标准的先匹配后过滤方法。指定*任何*提示都会强制守护进程使用执行全文树结果与过滤器结果相交的代码路径。
+请注意，在执行带过滤器的全文查询时，查询优化器会决定是将全文树结果与过滤结果求交叉还是使用标准的匹配后过滤方法。指定*任何*提示都会强制守护进程使用执行全文树结果与过滤结果交集的代码路径。
 
 有关查询优化器工作原理的更多信息，请参阅[基于成本的优化器](../Searching/Cost_based_optimizer.md)页面。
 
@@ -378,10 +430,16 @@ SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@
 SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+```
+
 <!-- end -->
 
 <!-- example comments -->
-使用MySQL/MariaDB客户端时，请确保包含`--comments`标志以启用查询中的提示。
+使用 MySQL/MariaDB 客户端时，确保包含 `--comments` 标志以启用查询中的提示。
 
 <!-- request mysql -->
 ```bash

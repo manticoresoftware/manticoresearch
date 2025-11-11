@@ -1,4 +1,4 @@
-# Сброс чанка RAM на диск
+# Сброс чанка ОЗУ в файл
 
 ## FLUSH TABLE
 
@@ -8,11 +8,11 @@
 FLUSH TABLE rt_table
 ```
 
-`FLUSH TABLE` принудительно сбрасывает содержимое RAM чанка RT таблицы на диск.
+`FLUSH TABLE` принудительно сбрасывает содержимое чанка ОЗУ RT-таблицы на диск.
 
-Чанк RAM реального времени таблицы [RT table](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) автоматически сбрасывается на диск при корректном завершении работы или периодически каждые [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) секунд.
+Чанк ОЗУ таблицы реального времени [RAM chunk](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) автоматически сбрасывается на диск при корректном завершении работы или периодически каждые [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) секунд.
 
-Выполнение команды `FLUSH TABLE` не только принудительно записывает содержимое RAM чанка на диск, но и запускает очистку бинарных лог-файлов.
+Выполнение команды `FLUSH TABLE` не только принудительно записывает содержимое чанка ОЗУ на диск, но и запускает очистку бинарных логов.
 
 <!-- intro -->
 ##### SQL:
@@ -25,6 +25,25 @@ FLUSH TABLE rt;
 <!-- response mysql -->
 ```sql
 Query OK, 0 rows affected (0.05 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "FLUSH TABLE rt;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 

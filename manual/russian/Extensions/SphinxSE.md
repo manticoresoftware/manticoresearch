@@ -1,13 +1,13 @@
 # SphinxSE
 
-SphinxSE — это движок хранения MySQL, который можно скомпилировать в серверы MySQL/MariaDB, используя их модульную архитектуру.
+SphinxSE — это движок хранения MySQL, который можно скомпилировать в серверы MySQL/MariaDB с использованием их архитектуры с плагинами.
 
-Несмотря на своё название, SphinxSE *не* хранит данные самостоятельно. Вместо этого он служит встроенным клиентом, который позволяет серверу MySQL взаимодействовать с `searchd`, выполнять поисковые запросы и получать результаты поиска. Вся индексация и поиск происходят вне MySQL.
+Несмотря на своё название, SphinxSE *не* хранит данные самостоятельно. Вместо этого он служит встроенным клиентом, позволяющим серверу MySQL взаимодействовать с `searchd`, выполнять поисковые запросы и получать результаты поиска. Всё индексирование и поиск происходят вне MySQL.
 
-Некоторые распространённые применения SphinxSE включают:
+Некоторые типичные применения SphinxSE включают:
 * Упрощение переноса приложений MySQL Full-Text Search (FTS) на Manticore;
-* Обеспечение использования Manticore с языками программирования, для которых нативные API ещё не доступны;
-* Предоставление оптимизаций, когда требуется дополнительная обработка результатов Manticore на стороне MySQL (например, JOIN с оригинальными таблицами документов или дополнительная фильтрация на стороне MySQL).
+* Возможность использования Manticore с языками программирования, для которых нативные API ещё не доступны;
+* Предоставление оптимизаций при необходимости дополнительной обработки результатов Manticore на стороне MySQL (например, JOIN с таблицами оригинальных документов или дополнительная фильтрация на стороне MySQL).
 
 ## Установка SphinxSE
 
@@ -15,16 +15,16 @@ SphinxSE — это движок хранения MySQL, который можн
 
 ### Компиляция MySQL 5.0.x с SphinxSE
 
-1.  скопируйте патч-файл `sphinx.5.0.yy.diff` в директорию с исходниками MySQL и выполните
+1.  скопируйте патч `sphinx.5.0.yy.diff` в директорию с исходниками MySQL и выполните
 ```bash
 $ patch -p1 < sphinx.5.0.yy.diff
 ```
-Если нет .diff файла именно для нужной версии:   сборки, попробуйте применить .diff с ближайшими номерами версий. Важно, чтобы патч применился без конфликтов.
-2.  в директории с исходниками MySQL выполните
+Если нет .diff файла именно для версии, которую нужно собрать, попробуйте применить .diff для самой близкой версии. Важно, чтобы патч применился без отклонённых изменений.
+2.  в директории с исходниками MySQL запустите
 ```bash
 $ sh BUILD/autorun.sh
 ```
-3.  в директории с исходниками MySQL создайте каталог `sql/sphinx` и скопируйте туда все файлы из каталога `mysqlse` исходников Manticore. Пример:
+3.  в директории с исходниками MySQL создайте папку `sql/sphinx` и скопируйте туда все файлы из папки `mysqlse` из исходников Manticore. Пример:
 ```bash
 $ cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.0.24/sql/sphinx
 ```
@@ -40,7 +40,7 @@ $ make install
 
 ### Компиляция MySQL 5.1.x с SphinxSE
 
-1. В директории с исходниками MySQL создайте каталог `storage/sphinx` и скопируйте все файлы из каталога `mysqlse` исходников Manticore в это новое место. Например:
+1. В директории с исходниками MySQL создайте каталог `storage/sphinx` и скопируйте туда все файлы из каталога `mysqlse` исходников Manticore. Например:
 ```bash
 $ cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.1.14/storage/sphinx
 ```
@@ -63,7 +63,7 @@ $ make install
 
 <!-- example Example_1 -->
 
-Чтобы убедиться, что SphinxSE успешно скомпилирован в MySQL, запустите вновь собранный сервер, выполните клиент MySQL и выполните запрос `SHOW ENGINES`. Вы должны увидеть список всех доступных движков. Manticore должен присутствовать, а в столбце "Support" должно быть "YES":
+Чтобы убедиться, что SphinxSE успешно собран в MySQL, запустите недавно собранный сервер, выполните клиент MySQL и выполните запрос `SHOW ENGINES`. Вы увидите список всех доступных движков. В списке должен присутствовать Manticore с указанным "Support" значением "YES":
 
 <!-- request -->
 
@@ -84,13 +84,72 @@ mysql> show engines;
 13 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "show engines;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Engine": {
+          "type": "string"
+        }
+      },
+      {
+        "Support": {
+          "type": "string"
+        }
+      },
+      {
+        "Comment": {
+          "type": "string"
+        }
+      },
+      {
+        "Transactions": {
+          "type": "string"
+        }
+      },
+      {
+        "XA": {
+          "type": "string"
+        }
+      },
+      {
+        "Savepoints": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Engine": "MyISAM",
+        "Support": "DEFAULT",
+        "Comment": "MyISAM storage engine",
+        "Transactions": "NO",
+        "XA": "NO",
+        "Savepoints": "NO"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 ## Использование SphinxSE
 
-Для поиска с помощью SphinxSE необходимо создать специальную "поисковую таблицу" с ENGINE=SPHINX, а затем использовать оператор `SELECT` с полнотекстовым запросом, помещённым в условие `WHERE` для колонки запроса.
+Для поиска с помощью SphinxSE необходимо создать специальную "таблицу поиска" с ENGINE=SPHINX, а затем выполнить `SELECT` с полным текстовым запросом, размещённым в условии `WHERE` для колонки запроса.
 
-Вот пример оператора создания и поискового запроса:
+Пример CREATE-запроса и поискового запроса:
 
 ```sql
 CREATE TABLE t1
@@ -105,77 +164,77 @@ CREATE TABLE t1
 SELECT * FROM t1 WHERE query='test it;mode=any';
 ```
 
-В поисковой таблице первые три колонки *должны* иметь следующие типы: `INTEGER UNSIGNED` или `BIGINT` для первой колонки (ID документа), `INTEGER` или `BIGINT` для второй колонки (вес совпадения) и `VARCHAR` или `TEXT` для третьей колонки (ваш запрос). Это сопоставление фиксировано; нельзя пропускать какие-либо из этих трёх обязательных колонок, менять их порядок или типы. Кроме того, колонка запроса должна быть индексирована, а все остальные — не индексированы. Имена колонок игнорируются, поэтому можно использовать любые произвольные имена.
+В таблице поиска первые три столбца *должны* иметь следующие типы: `INTEGER UNSIGNED` или `BIGINT` для первого столбца (id документа), `INTEGER` или `BIGINT` для второго (вес совпадения), и `VARCHAR` или `TEXT` для третьего (текст запроса). Это сопоставление фиксированное; вы не можете пропустить ни один из этих трёх обязательных столбцов, изменять их порядок или типы. Кроме того, колонка с запросом должна быть проиндексирована, а остальные — без индекса. Имена столбцов игнорируются, можно использовать любые имена.
 
-Дополнительные колонки должны быть одного из типов: `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR` или `FLOAT`. Они будут связаны с атрибутами, предоставленными в наборе результатов Manticore по имени, поэтому их имена должны совпадать с именами атрибутов, указанными в `sphinx.conf`. Если в результатах поиска Manticore нет соответствующего имени атрибута, в колонке будут значения `NULL`.
+Дополнительные столбцы должны иметь типы `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR` или `FLOAT`. Они будут соответствовать атрибутам из результата Manticore по имени, поэтому их имена должны совпадать с именами атрибутов, указанными в `sphinx.conf`. Если для конкретного столбца нет подходящего атрибута в результатах поиска Manticore, в этом столбце будут `NULL` значения.
 
-Специальные "виртуальные" имена атрибутов также могут быть связаны с колонками SphinxSE. Для этого используйте `_sph_` вместо `@`. Например, чтобы получить значения виртуальных атрибутов `@groupby`, `@count` или `@distinct`, используйте имена колонок `_sph_groupby`, `_sph_count` или `_sph_distinct` соответственно.
+Специальные "виртуальные" имена атрибутов также могут быть связаны с колонками SphinxSE. Для этого используйте вместо `@` префикс `_sph_`. Например, чтобы получить значения виртуальных атрибутов `@groupby`, `@count` или `@distinct`, используйте названия колонок `_sph_groupby`, `_sph_count` и `_sph_distinct` соответственно.
 
-Параметр строки `CONNECTION` используется для указания хоста, порта и таблицы Manticore. Если в `CREATE TABLE` не указана строка подключения, предполагается имя таблицы `*` (т.е. поиск по всем таблицам) и `localhost:9312`. Синтаксис строки подключения следующий:
+Параметр строки `CONNECTION` используется для указания хоста, порта и таблицы Manticore. Если в `CREATE TABLE` параметр соединения не задан, используется имя таблицы `*` (т.е. поиск по всем таблицам) и `localhost:9312`. Синтаксис строки соединения следующий:
 
 ```
 CONNECTION="sphinx://HOST:PORT/TABLENAME"
 ```
 
-Вы можете изменить строку подключения по умолчанию позже:
+Позже строку соединения можно изменить:
 
 ```sql
 mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWTABLENAME";
 ```
 
-Также эти параметры можно переопределить для каждого запроса.
+Также эти параметры можно переопределять в каждом конкретном запросе.
 
-Как показано в примере, и текст запроса, и параметры поиска должны быть помещены в условие `WHERE` для колонки поискового запроса (т.е. третьей колонки). Опции разделяются точкой с запятой, а имена опций отделяются от значений знаком равенства. Можно указать любое количество опций. Доступные опции:
+Как показано в примере, и текст запроса, и опции поиска должны располагаться в условии `WHERE` по колонке запроса (т.е. третьей колонке). Опции разделяются точкой с запятой, а имя опции и её значение — знаком равенства. Можно указать любое количество опций. Доступные опции:
 
 * query - текст запроса;
-* mode - режим сопоставления. Должен быть одним из "all", "any", "phrase", "boolean" или "extended". По умолчанию "all";
-* sort - режим сортировки совпадений. Должен быть одним из "relevance", "attr_desc", "attr_asc", "time_segments" или "extended". Во всех режимах, кроме "relevance", после двоеточия требуется имя атрибута (или сортировочное выражение для "extended"):
+* mode - режим сопоставления. Должен быть одним из: "all", "any", "phrase", "boolean", или "extended". По умолчанию "all";
+* sort - режим сортировки совпадений. Должен быть одним из: "relevance", "attr_desc", "attr_asc", "time_segments" или "extended". Во всех режимах кроме "relevance" после двоеточия нужно указать имя атрибута (или выражение сортировки для "extended"):
 ```
 ... WHERE query='test;sort=attr_asc:group_id';
 ... WHERE query='test;sort=extended:@weight desc, group_id asc';
 ```
 * offset - смещение в наборе результатов; по умолчанию 0;
-* limit - количество совпадений для извлечения из набора результатов; по умолчанию 20;
+* limit - число совпадений для извлечения из набора; по умолчанию 20;
 * index - имена таблиц для поиска:
 ```sql
 ... WHERE query='test;index=test1;';
 ... WHERE query='test;index=test1,test2,test3;';
 ```
-* minid, maxid - минимальный и максимальный ID документа для совпадения;
-* weights - список весов, разделённых запятыми, которые будут назначены полнотекстовым полям Manticore:
+* minid, maxid - минимальный и максимальный id документа для поиска;
+* weights - список весов через запятую для полей полнотекстового анализа Manticore:
 ```sql
 ... WHERE query='test;weights=1,2,3;';
 ```
-* filter, !filter - имя атрибута и набор значений для фильтрации, разделённые запятыми:
+* filter, !filter - имя атрибута и набор значений для фильтрации через запятую:
 ```sql
 # only include groups 1, 5 and 19
 ... WHERE query='test;filter=group_id,1,5,19;';
 # exclude groups 3 and 11
 ... WHERE query='test;!filter=group_id,3,11;';
 ```
-* range, !range - имя атрибута Manticore (integer или bigint) и минимальное и максимальное значения для фильтрации, разделённые запятыми:
+* range, !range - имя атрибута (integer или bigint) и минимальное и максимальное значения для диапазона:
 ```sql
 # include groups from 3 to 7, inclusive
 ... WHERE query='test;range=group_id,3,7;';
 # exclude groups from 5 to 25
 ... WHERE query='test;!range=group_id,5,25;';
 ```
-* floatrange, !floatrange - имя атрибута Manticore (с плавающей точкой) и минимальное и максимальное значения для фильтрации, разделённые запятыми:
+* floatrange, !floatrange - имя атрибута с плавающей точкой и минимальное и максимальное значения для диапазона:
 ```sql
 # filter by a float size
 ... WHERE query='test;floatrange=size,2,3;';
 # pick all results within 1000 meter from geoanchor
 ... WHERE query='test;floatrange=@geodist,0,1000;';
 ```
-* maxmatches - максимальное количество совпадений для запроса, как в [опции поиска max_matches](../Searching/Options.md#max_matches):
+* maxmatches - максимальное число совпадений на запрос, как в [max_matches опции поиска](../Searching/Options.md#max_matches):
 ```sql
 ... WHERE query='test;maxmatches=2000;';
 ```
-* cutoff - максимальное допустимое количество совпадений, как в [опции поиска cutoff](../Searching/Options.md#cutoff):
+* cutoff - максимальное допустимое число совпадений, как в [cutoff опции поиска](../Searching/Options.md#cutoff):
 ```sql
 ... WHERE query='test;cutoff=10000;';
 ```
-* maxquerytime - максимальное допустимое время выполнения запроса (в миллисекундах), как в [опции поиска max_query_time](../Searching/Options.md#max_query_time):
+* maxquerytime - максимально допустимое время выполнения запроса (в миллисекундах), как в [опции поиска max_query_time](../Searching/Options.md#max_query_time):
 ```sql
 ... WHERE query='test;maxquerytime=1000;';
 ```
@@ -184,23 +243,23 @@ mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWTABLENAME";
 ... WHERE query='test;groupby=day:published_ts;';
 ... WHERE query='test;groupby=attr:group_id;';
 ```
-* groupsort - условие сортировки групп:
+* groupsort - параметр сортировки при группировке:
 ```sql
 ... WHERE query='test;groupsort=@count desc;';
 ```
-* distinct - атрибут для вычисления [COUNT(DISTINCT)](../Searching/Grouping.md#COUNT%28DISTINCT-field%29) при выполнении группировки:
+* distinct - атрибут для вычисления [COUNT(DISTINCT)](../Searching/Grouping.md#COUNT%28DISTINCT-field%29) при группировке:
 ```sql
 ... WHERE query='test;groupby=attr:country_id;distinct=site_id';
 ```
-* indexweights - список через запятую имён таблиц и весов, используемых при поиске по нескольким таблицам:
+* indexweights - список имён таблиц и весов через запятую для использования при поиске по нескольким таблицам:
 ```sql
 ... WHERE query='test;indexweights=tbl_exact,2,tbl_stemmed,1;';
 ```
-* fieldweights - список через запятую весов для каждого поля, которые могут использоваться ранжировщиком:
+* fieldweights - список весов по полям через запятую, которые может использовать ранкер:
 ```sql
 ... WHERE query='test;fieldweights=title,10,abstract,3,content,1;';
 ```
-* comment - строка для пометки этого запроса в журнале запросов, как в [опции поиска comment](../Searching/Options.md#comment):
+* comment - строка для пометки запроса в журнале запросов, как в [опции поиска comment](../Searching/Options.md#comment):
 ```sql
 ... WHERE query='test;comment=marker001;';
 ```
@@ -212,12 +271,12 @@ mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWTABLENAME";
 ```sql
 ... WHERE query='test;host=sphinx-test.loc;port=7312;';
 ```
-* ranker - функция ранжирования для использования с режимом "extended" сопоставления, как в [ranker](../Searching/Options.md#ranker). Известные значения: "proximity_bm25", "bm25", "none", "wordcount", "proximity", "matchany", "fieldmask", "sph04", синтаксис "expr:EXPRESSION" для поддержки ранжировщика на основе выражений (где EXPRESSION следует заменить вашей конкретной формулой ранжирования), и "export:EXPRESSION":
+* ranker - функция ранжирования для использования в режиме "extended" соответствия, как в [ranker](../Searching/Options.md#ranker). Известные значения: "proximity_bm25", "bm25", "none", "wordcount", "proximity", "matchany", "fieldmask", "sph04", синтаксис "expr:EXPRESSION" для поддержки ранжирования на основе выражений (где EXPRESSION заменяется вашей конкретной формулой ранжирования), и "export:EXPRESSION":
 ```sql
 ... WHERE query='test;mode=extended;ranker=bm25;';
 ... WHERE query='test;mode=extended;ranker=expr:sum(lcs);';
 ```
-Ранжировщик "export" работает аналогично ranker=expr, но сохраняет значения факторов для каждого документа, в то время как ranker=expr отбрасывает их после вычисления итогового значения `WEIGHT()`. Имейте в виду, что ranker=export предназначен для редкого использования, например, для обучения функции машинного обучения (ML) или ручного определения собственной функции ранжирования, и не должен использоваться в реальной эксплуатации. При использовании этого ранжировщика, скорее всего, вам захочется изучить вывод функции `RANKFACTORS()`, которая генерирует строку, содержащую все факторы на уровне полей для каждого документа.
+Ранкер "export" работает аналогично ranker=expr, но сохраняет значения факторов для каждого документа, тогда как ranker=expr отбрасывает их после вычисления итогового значения `WEIGHT()`. Имейте в виду, что ranker=export предназначен для случайного использования, например, для обучения функции машинного обучения (ML) или ручного определения собственной функции ранжирования, и не должен применяться в продакшене. При использовании этого ранкера обычно полезно изучать вывод функции `RANKFACTORS()`, которая генерирует строку со всеми значениями факторов по полям для каждого документа.
 
 <!-- example SQL Example_2 -->
 <!-- request -->
@@ -261,38 +320,112 @@ min_best_span_pos=36, exact_hit=0, max_window_hits=1), word1=(tf=3,
 idf=0.259532)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT *, WEIGHT(), RANKFACTORS() FROM myindex WHERE MATCH('dog') OPTION ranker=export('100*bm25');"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "published": {
+          "type": "long long"
+        }
+      },
+      {
+        "channel_id": {
+          "type": "long long"
+        }
+      },
+      {
+        "title": {
+          "type": "long long"
+        }
+      },
+      {
+        "content": {
+          "type": "long long"
+        }
+      },
+      {
+        "weight()": {
+          "type": "long long"
+        }
+      },
+      {
+        "rankfactors()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 555617,
+        "published": 1110067331,
+        "channel_id": 1059819,
+        "title": 7,
+        "content": 428,
+        "weight()": 69900,
+        "rankfactors()": "bm25=699, bm25a=0.666478, field_mask=2, doc_word_count=1, field1=(lcs=1, hit_count=4, word_count=1, tf_idf=1.038127, min_idf=0.259532, max_idf=0.259532, sum_idf=0.259532, min_hit_pos=120, min_best_span_pos=120, exact_hit=0, max_window_hits=1), word1=(tf=4, idf=0.259532)"
+      },
+      {
+        "id": 555313,
+        "published": 1108438365,
+        "channel_id": 1058561,
+        "title": 8,
+        "content": 249,
+        "weight()": 68500,
+        "rankfactors()": "bm25=685, bm25a=0.675213, field_mask=3, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.259532, min_idf=0.259532, max_idf=0.259532, sum_idf=0.259532, min_hit_pos=8, min_best_span_pos=8, exact_hit=0, max_window_hits=1), field1=(lcs=1, hit_count=2, word_count=1, tf_idf=0.519063, min_idf=0.259532, max_idf=0.259532, sum_idf=0.259532, min_hit_pos=36, min_best_span_pos=36, exact_hit=0, max_window_hits=1), word1=(tf=3, idf=0.259532)"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
-* geoanchor - якорь геодистанции. Подробнее о геопоиске [в этом разделе](../Searching/Geo_search.md). Принимает 4 параметра: имена атрибутов широты и долготы, а также координаты якорной точки соответственно:
+* geoanchor - якорь для георасстояния. Подробнее о геопоиске [в этом разделе](../Searching/Geo_search.md). Принимает 4 параметра: имена атрибутов широты и долготы, и координаты якорной точки соответственно:
 ```sql
 ... WHERE query='test;geoanchor=latattr,lonattr,0.123,0.456';
 ```
 
-Очень **важное** замечание: **гораздо** эффективнее позволить Manticore выполнять сортировку, фильтрацию и нарезку набора результатов, чем увеличивать максимальное количество совпадений и использовать `WHERE`, `ORDER BY` и `LIMIT` на стороне MySQL. Это связано с двумя причинами. Во-первых, Manticore применяет различные оптимизации и выполняет эти задачи лучше, чем MySQL. Во-вторых, меньше данных нужно упаковывать searchd, передавать и распаковывать SphinxSE.
+Очень **важное** замечание: гораздо эффективнее позволить Manticore выполнять сортировку, фильтрацию и нарезку результата, чем увеличивать количество максимальных совпадений и использовать в MySQL `WHERE`, `ORDER BY` и `LIMIT`. Это связано с двумя причинами. Во-первых, Manticore применяет множество оптимизаций и выполняет эти операции эффективнее, чем MySQL. Во-вторых, меньше данных нужно упаковывать searchd, передавать и распаковывать SphinxSE.
 
 
 ### Важное замечание о сохранённых полях при использовании SphinxSE
 
-Начиная с версии 5.0.0, Manticore по умолчанию сохраняет все поля. При использовании Manticore вместе с MySQL или MariaDB через SphinxSE обычно нет смысла сохранять все поля, так как оригиналы уже хранятся в MySQL/MariaDB. В таких конфигурациях рекомендуется явно отключить сохранение полей для соответствующей таблицы Manticore, установив:
+Начиная с версии 5.0.0, Manticore по умолчанию сохраняет все поля. Когда Manticore используется вместе с MySQL или MariaDB через SphinxSE, обычно сохранение всех полей не имеет смысла, потому что оригиналы уже хранятся в MySQL/MariaDB. В таких конфигурациях рекомендуется явно отключить сохранение полей для соответствующей таблицы Manticore, задав:
 
 ```
 stored_fields =
 ```
 
-См. справочник по настройке: [stored_fields](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields).
+Смотрите справочник по настройке: [stored_fields](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields).
 
-Если оставить значение по умолчанию (все поля сохранены) и затем выбрать много документов одновременно через SphinxSE, может быть превышен внутренний лимит движка, и вы получите ошибку вида:
+Если вы оставите настройку по умолчанию (сохранять все поля) и выберете много документов через SphinxSE, в движке может быть превышен внутренний лимит, и вы получите ошибку вида:
 
 "bad searchd response length"
 
-Установка `stored_fields =` предотвращает отправку больших сохранённых данных обратно в MySQL/MariaDB и предотвращает эту ошибку в типичных интеграциях SphinxSE.
+Установка `stored_fields =` позволяет избежать передачи больших хранимых данных обратно в MySQL/MariaDB и предотвращает эту ошибку в типичных интеграциях SphinxSE.
 
 
 ### SHOW ENGINE SPHINX STATUS
 
 <!-- example Example_3 -->
 
-Вы можете получить дополнительную информацию, связанную с результатами запроса, используя оператор `SHOW ENGINE SPHINX STATUS`:
+Вы можете получить дополнительную информацию по результатам запроса с помощью оператора `SHOW ENGINE SPHINX STATUS`:
 
 <!-- request -->
 
@@ -312,12 +445,58 @@ mysql> SHOW ENGINE SPHINX STATUS;
 2 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW ENGINE SPHINX STATUS;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Status": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Type": "SPHINX",
+        "Name": "stats",
+        "Status": "total: 25, total found: 25, time: 126, words: 2"
+      },
+      {
+        "Type": "SPHINX",
+        "Name": "words",
+        "Status": "sphinx:591:1256 soft:11076:15945"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 
 <!-- example Example_4 -->
 
-Также эту информацию можно получить через переменные состояния. Учтите, что для этого способа не требуются права суперпользователя.
+Также эти данные можно получить через переменные статуса. Учтите, что этот способ не требует привилегий суперпользователя.
 
 <!-- request -->
 
@@ -339,12 +518,63 @@ mysql> SHOW STATUS LIKE 'sphinx_%';
 5 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw - d "SHOW STATUS LIKE 'sphinx_%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 5,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "sphinx_total",
+        "Value": "25"
+      },
+      {
+        "Variable_name": "sphinx_total_found",
+        "Value": "25"
+      },
+      {
+        "Variable_name": "sphinx_time",
+        "Value": "126"
+      },
+      {
+        "Variable_name": "sphinx_word_count",
+        "Value": "2"
+      },
+      {
+        "Variable_name": "sphinx_words",
+        "Value": "sphinx:591:1256 soft:11076:15945"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 
 <!-- example SQL Example_5 -->
 
-Таблицы поиска SphinxSE можно объединять с таблицами, использующими другие движки. Вот пример с таблицей "documents" из example.sql:
+Таблицы поиска SphinxSE могут объединяться с таблицами, использующими другие движки. Вот пример с таблицей "documents" из example.sql:
 
 <!-- request -->
 
@@ -376,24 +606,103 @@ mysql> SHOW ENGINE SPHINX STATUS;
 2 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT content, date_added FROM test.documents docs JOIN t1 ON (docs.id=t1.id) WHERE query="one document;mode=any";"
+
+POST /sql?mode=raw -d "SHOW ENGINE SPHINX STATUS;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "content": {
+          "type": "string"
+        }
+      },
+      {
+        "docdate": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "content": "this is my test document number two",
+        "docdate": "2006-06-17 14:04:28"
+      },
+            {
+        "content": "this is my test document number one",
+        "docdate": "2006-06-17 14:04:28"
+      }
+    ]
+  }
+]
+
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Status": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Type": "SPHINX",
+        "Name": "stats",
+        "Status": "total: 2, total found: 2, time: 0, words: 2"
+      },
+      {
+        "Type": "SPHINX",
+        "Name": "words",
+        "Status": "one:1:2 document:2:2"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 ## Создание сниппетов через MySQL
 
 
-SphinxSE также содержит функцию UDF, которая позволяет создавать сниппеты с помощью MySQL. Эта функциональность похожа на [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting), но доступна через MySQL+SphinxSE.
+SphinxSE также поддерживает UDF-функцию, которая позволяет создавать сниппеты через MySQL. Эта функциональность похожа на [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting), но доступна через связку MySQL+SphinxSE.
 
-Бинарный файл, предоставляющий UDF, называется `sphinx.so` и должен автоматически собираться и устанавливаться в нужное место вместе с SphinxSE. Если по какой-то причине он не устанавливается автоматически, найдите `sphinx.so` в каталоге сборки и скопируйте его в каталог плагинов вашей MySQL. После этого зарегистрируйте UDF следующей командой:
+Бинарный файл UDF называется `sphinx.so` и должен автоматически собираться и устанавливаться в соответствующем месте вместе с SphinxSE. Если по какой-то причине он не установился автоматически, найдите `sphinx.so` в каталоге сборки и скопируйте его в директорию плагинов вашего MySQL. Затем зарегистрируйте UDF следующей командой:
 
 ```sql
 CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'sphinx.so';
 ```
 
-Имя функции *должно* быть sphinx_snippets; нельзя использовать произвольное имя. Аргументы функции следующие:
+Имя функции *должно* быть sphinx_snippets; нельзя использовать произвольное имя. Аргументы функции:
 
 **Прототип:** function sphinx_snippets ( document, table, words [, options] );
 
-Аргументы document и words могут быть строками или столбцами таблицы. Опции должны задаваться так: `'value' AS option_name`. Для списка поддерживаемых опций смотрите раздел [Highlighting](../Searching/Highlighting.md). Единственная дополнительная опция, специфичная для UDF, называется `sphinx` и позволяет указать расположение searchd (хост и порт).
+Аргументы document и words могут быть строками или столбцами таблицы. Опции задаются так: `'value' AS option_name`. Список поддерживаемых опций смотрите в [разделе Highlighting](../Searching/Highlighting.md). Единственная дополнительная опция, специфичная для UDF, называется `sphinx` и позволяет указать расположение searchd (хост и порт).
 
 Примеры использования:
 

@@ -1070,17 +1070,14 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	// ideally, we would instead pass ownership of the expression to G_C() implementation
 	// and also the original expression type, and let the string conversion happen in G_C() itself
 	// but that ideal route seems somewhat more complicated in the current architecture
-	// For columnar attributes, use the index schema to create proper columnar expressions.
-	// For computed expressions (like UDFs), use the sorter schema.
-	const ISphSchema * pSchemaToUse = bColumnar ? &m_tSettings.m_tSchema : m_pSorterSchema.get();
 	if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
 	{
 		CSphString sExpr2;
 		sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *pSchemaToUse, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
+		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
 	}
 	else
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *pSchemaToUse, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
 
 	m_uPackedFactorFlags |= uQueryPackedFactorFlags;
 	m_bZonespanlist |= bHasZonespanlist;

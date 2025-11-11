@@ -34,6 +34,7 @@
 #include "replication/replicate_index.h"
 #include "replication/grastate.h"
 #include "replication/cluster_binlog.h"
+#include "replication/cluster_sst_progress.h"
 
 #if !_WIN32
 // MAC-specific header
@@ -87,6 +88,8 @@ public:
 	CSphMutex				m_tErrorLock;
 	StringBuilder_c			m_sError GUARDED_BY ( m_tErrorLock ) { ";" };
 
+	CSphRefcountedPtr<SstProgress_i> m_pSstProgress;
+
 private:
 	~ReplicationCluster_t() final; // private since ref-counted
 
@@ -98,6 +101,7 @@ public:
 		m_sPath = std::move ( tDesc.m_sPath );
 		m_dClusterNodes = std::move ( tDesc.m_dClusterNodes );
 		m_tOptions = std::move ( tDesc.m_tOptions );
+		m_pSstProgress = CreateProgress();
 	}
 
 	// state of node
@@ -293,7 +297,7 @@ static bool CheckClusterIndex ( const CSphString & sIndex, ReplicationClusterRef
 /////////////////////////////////////////////////////////////////////////////
 
 // send local indexes to remote nodes via API
-static bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID );
+static bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID );
 
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd );
 
@@ -784,6 +788,48 @@ void ReplicationCluster_t::ShowStatus ( VectorLike& dOut )
 			dOut.Addf ( "cluster_%s_last_error", sName );
 			dOut.Add ( m_sError.cstr() );
 		}
+	}
+
+	// SST progress
+	ClusterState_e eState = GetState();
+	bool bHasSst = ( eState==ClusterState_e::DONOR || eState==ClusterState_e::JOINING );
+	SstProgressStatus_t tProgressStatus;
+	if ( bHasSst )
+		m_pSstProgress->GetStatus ( tProgressStatus );
+	if ( dOut.MatchAddf ( "cluster_%s_sst_total", sName ) )
+	{
+		if ( bHasSst )
+			dOut.Add().SetSprintf ( "%d", (int)( tProgressStatus.m_fTotal * 100 ) );
+		else
+			dOut.Add ( "-" );
+	}
+	if ( dOut.MatchAddf ( "cluster_%s_sst_stage", sName ) )
+	{
+		if ( bHasSst )
+			dOut.Add( SstGetStageName ( tProgressStatus.m_eCurrentStage ) );
+		else
+			dOut.Add ( "-" );
+	}
+	if ( dOut.MatchAddf ( "cluster_%s_sst_stage_total", sName ) )
+	{
+		if ( bHasSst )
+			dOut.Add().SetSprintf ( "%d", (int)( tProgressStatus.m_fCurrentStageTotal * 100 ) );
+		else
+			dOut.Add ( "-" );
+	}
+	if ( dOut.MatchAddf ( "cluster_%s_sst_table", sName ) )
+	{
+		if ( bHasSst )
+			dOut.Add().SetSprintf( "%d (%s)", tProgressStatus.m_iTable, tProgressStatus.m_sTable.cstr() );
+		else
+			dOut.Add( "-" );
+	}
+	if ( dOut.MatchAddf ( "cluster_%s_sst_tables", sName ) )
+	{
+		if ( bHasSst )
+			dOut.Add().SetSprintf( "%d", tProgressStatus.m_iTablesCount );
+		else
+			dOut.Add( "-" );
 	}
 
 	// cluster status
@@ -1790,6 +1836,8 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 	pCluster->m_bUserRequest = true;
 
+	pCluster->m_pSstProgress->Init ( SstProgress_i::Role_e::JOINER );
+
 	if ( !pCluster->Connect ( BOOTSTRAP_E::NO ) )
 		return false;
 
@@ -2009,6 +2057,8 @@ static bool SendIndex ( const CSphString & sIndex, ReplicationClusterRefPtr_c pC
 	if ( !bMutable && !bDist )
 		return TlsMsg::Err ( "unknown or wrong table '%s'", sIndex.cstr() );
 
+	pCluster->m_pSstProgress->SetTable ( sIndex );
+
 	int iAttempt = 0;
 	// should wait a bit longer during join
 	// FIXME!!! fetch progress delta time and continue to wait while there is a progress
@@ -2017,6 +2067,7 @@ static bool SendIndex ( const CSphString & sIndex, ReplicationClusterRefPtr_c pC
 	int64_t tmStart = sphMicroTimer();
 	while ( true )
 	{
+		pCluster->m_pSstProgress->StageBegin ( SstStage_e::WAIT_NODES );
 		if ( HasNotReadyNodes ( pCluster ) )
 		{
 			iAttempt++;
@@ -2046,7 +2097,7 @@ static bool SendIndex ( const CSphString & sIndex, ReplicationClusterRefPtr_c pC
 
 			if ( dDesc.GetLength() )
 			{
-				bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( pCluster->m_sName, sIndex, dDesc, pServed ) : ReplicateDistIndexToNodes ( pCluster->m_sName, sIndex, dDesc ) );
+				bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( pCluster->m_sName, sIndex, dDesc, pServed, *pCluster->m_pSstProgress ) : ReplicateDistIndexToNodes ( pCluster->m_sName, sIndex, dDesc ) );
 				if ( !bReplicated )
 				{
 					if ( TlsMsg::HasErr() )
@@ -2106,6 +2157,21 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const VecTraits_T<CSp
 
 	if ( !pCluster->IsHealthy() )
 		return false;
+
+	// resolve nodes ONCE before indexes loop
+	auto dNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+	VecAgentDesc_t dDesc = GetDescAPINodes ( dNodes, Resolve_e::SLOW );
+	if ( TlsMsg::HasErr() )
+		return false;
+
+	AT_SCOPE_EXIT ([&pCluster] { pCluster->m_pSstProgress->Finish(); } );
+	pCluster->m_pSstProgress->Init ( SstProgress_i::Role_e::DONOR );
+
+	// collect stats for all tables to get correct overall weights
+	pCluster->m_pSstProgress->CollectFilesStats ( dIndexes, 0, dDesc.GetLength() );
+	
+	// start pushing updates to the all other nodes
+	SstProgress_i::StartPushUpdates ( pCluster->m_sName, dDesc, pCluster->m_pSstProgress );
 
 	for ( const CSphString & sIndex : dIndexes )
 	{
@@ -2256,7 +2322,7 @@ bool AddLoadedIndexIntoCluster ( const CSphString & sCluster, const CSphString &
 }
 
 // send local indexes to remote nodes via API
-bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID )
+bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const Wsrep::GlobalTid_t & tStateID )
 {
 	auto dDesc = GetDescAPINodes ( ParseNodesFromString ( sNode ), Resolve_e::SLOW );
 	if ( dDesc.IsEmpty() )
@@ -2278,10 +2344,17 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	if ( bBypass )
 		return SendClusterSynced ( dDesc, tSyncedRequest );
 
+	AT_SCOPE_EXIT ([&pCluster] { pCluster->m_pSstProgress->Finish(); } );
+	pCluster->m_pSstProgress->Init ( SstProgress_i::Role_e::DONOR );
+	SstProgress_i::StartPushUpdates ( pCluster->m_sName, dDesc, pCluster->m_pSstProgress );
+
 	bool bSentOk = true;
+	int iAttempt = 0;
 	while ( true )
 	{
 		sphLogDebugRpl ( "sending cluster '%s' indexes %d '%s'...'%s'", pCluster->m_sName.cstr(), dIndexes.GetLength(), ( dIndexes.GetLength() ? dIndexes.First().cstr() : "" ), ( dIndexes.GetLength() ? dIndexes.Last().cstr() : "" ) );
+
+		pCluster->m_pSstProgress->CollectFilesStats ( dIndexes, iAttempt, dDesc.GetLength() );
 
 		for ( const CSphString & sIndex : dIndexes )
 		{
@@ -2295,7 +2368,9 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 				continue;
 			}
 
-			bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( pCluster->m_sName, sIndex, dDesc, pServed ) : ReplicateDistIndexToNodes ( pCluster->m_sName, sIndex, dDesc ) );
+			pCluster->m_pSstProgress->SetTable ( sIndex );
+
+			bool bReplicated = ( bMutable ? ReplicateIndexToNodes ( pCluster->m_sName, sIndex, dDesc, pServed, *pCluster->m_pSstProgress ) : ReplicateDistIndexToNodes ( pCluster->m_sName, sIndex, dDesc ) );
 			if ( !bReplicated )
 			{
 				sphWarning ( "%s", TlsMsg::szError() );
@@ -2318,6 +2393,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 		sphLogDebugRpl ( "index list changed during donate '%s' to '%s'", pCluster->m_sName.cstr(), sNode.cstr() );
 		// FIXME!!! send only new indexes but loads all cluster indexes
 		dIndexes = dNewIndexes;
+		iAttempt++;
 	}
 
 	tSyncedRequest.m_dIndexes = dIndexes;
@@ -2494,3 +2570,10 @@ void ReplicationCluster_t::OnSeqnoCommited ( const ReplicatedCommand_t & tCmd, i
 	RplBinlog()->ClusterTnx ( *this );
 }
 
+CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluster )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( pCluster )
+		return pCluster->m_pSstProgress;
+	return nullptr;
+}

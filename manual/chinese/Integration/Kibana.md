@@ -7,14 +7,14 @@
 2. **验证 Manticore**：确保您的 Manticore 实例正在运行且其 HTTP API 可访问（默认地址：`http://localhost:9308`）。
 
 ## 配置
-1. 打开 [Kibana 配置文件](https://www.elastic.co/guide/en/kibana/current/settings.html)（`kibana.yml`）。
+1. 打开 [Kibana 配置文件](https://www.elastic.co/guide/en/kibana/current/settings.html) (`kibana.yml`)。
 2. 设置您的 Manticore 实例的 URL：
    ```yaml
    elasticsearch.hosts: ["http://localhost:9308"]
    ```
 3. 启动 Kibana 并在浏览器中打开 `http://localhost:5601`。如有必要，将 `localhost` 替换为您的服务器 IP 或主机名。
 
-> 注意：Manticore 在与 Kibana 配合使用时不需要进行身份验证设置。还请注意，Manticore 必须以[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)运行，才能与 Kibana 集成。
+> 注意：Manticore 在与 Kibana 配合使用时不需要设置认证。同时请注意，Manticore 必须以[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)运行，才能与 Kibana 集成。
 
 ### Manticore 配置示例
 ```searchd {
@@ -45,9 +45,7 @@
 - Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
 
 ## Limitations
-- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could 
-
-cause issues. Versions 8.x are not supported.
+- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could cause issues. Versions 8.x are not supported.
 - The following Elasticsearch-specific field types are not supported:
   - [Spatial data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
   - [Structured data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)

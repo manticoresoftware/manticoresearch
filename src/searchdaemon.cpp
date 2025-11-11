@@ -1275,6 +1275,21 @@ void ServedIndex_c::SetUnlink ( CSphString sUnlink ) const
 		m_pIndex->m_sUnlink = std::move ( sUnlink );
 }
 
+void ServedIndex_c::LockRead() const noexcept
+{
+	m_tTableLock.WaitRead();
+}
+
+[[nodiscard]] bool ServedIndex_c::UnlockRead() const noexcept
+{
+	return m_tTableLock.UnlockRead();
+}
+
+[[nodiscard]] Threads::Coro::ReadTableLock_c& ServedIndex_c::Locker() const noexcept
+{
+	return m_tTableLock;
+}
+
 void LightClone ( ServedIndexRefPtr_c& pTarget, const cServedIndexRefPtr_c& pSource )
 {
 	assert ( pTarget );

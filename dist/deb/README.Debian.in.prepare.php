@@ -1,6 +1,6 @@
 <?php
 
-$text = file_get_contents('../../manual/Introduction.md');
+$text = file_get_contents('../../manual/english/Introduction.md');
 
 // Remove all HTML comments
 $text = preg_replace('/<!--.*?-->/is', '', $text);

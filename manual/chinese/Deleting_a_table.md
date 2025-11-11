@@ -2,11 +2,11 @@
 
 <!-- example drop -->
 
-删除表内部执行两个步骤：
-1. 清空表（类似于[TRUNCATE](Emptying_a_table.md)）
-2. 删除表文件夹中的所有表文件。所有表使用的外部表文件（如词形、扩展或停用词）也会被删除。请注意，这些外部文件在使用 `CREATE TABLE` 时会被复制到表文件夹中，因此 `CREATE TABLE` 中指定的原始文件不会被删除。
+删除表在内部执行两个步骤：
+1. 清空表（类似于 [TRUNCATE](Emptying_a_table.md)）
+2. 从表文件夹中删除所有表文件。所有被表使用的外部表文件（如词形变化、扩展或停用词）也会被删除。请注意，这些外部文件在使用 `CREATE TABLE` 时会被复制到表文件夹中，因此 `CREATE TABLE` 中指定的原始文件不会被删除。
 
-仅当服务器以 RT 模式运行时，才可以删除表。可以删除 RT 表、PQ 表和分布式表。
+只有当服务器以 RT 模式运行时，才可以删除表。可以删除 RT 表、PQ 表和分布式表。
 
 <!-- intro -->
 ##### SQL:
@@ -153,9 +153,9 @@ DROP TABLE [IF EXISTS] table_name
 
 <!-- example drop-if-exists -->
 
-通过 SQL 删除表时，添加 `IF EXISTS` 可以仅在表存在时删除。如果使用 `IF EXISTS` 选项尝试删除不存在的表，则不会发生任何操作。
+通过 SQL 删除表时，可以添加 `IF EXISTS`，仅在表存在时删除该表。如果尝试使用 `IF EXISTS` 选项删除不存在的表，则不会发生任何操作。
 
-通过 PHP 删除表时，可以添加可选的 `silent` 参数，其功能与 `IF EXISTS` 相同。
+通过 PHP 删除表时，可以添加可选的 `silent` 参数，其作用与 `IF EXISTS` 相同。
 
 <!-- intro -->
 ##### SQL:

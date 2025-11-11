@@ -10838,7 +10838,11 @@ ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 {
 	if ( GetError () )
 	{
-		if ( !m_sCreateError.IsEmpty() )
+		if ( !m_sLexerError.IsEmpty() )
+			sError = m_sLexerError;
+		else if ( !m_sParserError.IsEmpty() )
+			sError = m_sParserError;
+		else if ( !m_sCreateError.IsEmpty() )
 			sError = m_sCreateError;
 		return nullptr;
 	}

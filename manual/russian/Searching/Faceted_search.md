@@ -1,28 +1,28 @@
-# Фасетный поиск
+# Многофакторный поиск
 
-Фасетный поиск так же важен для современного поискового приложения, как [автозаполнение](../Searching/Autocomplete.md), [исправление опечаток](../Searching/Spell_correction.md) и подсветка поисковых ключевых слов [highlighting](../Searching/Highlighting.md), особенно в продуктах электронной коммерции.
+Многофакторный поиск так же важен для современного поискового приложения, как [автодополнение](../Searching/Autocomplete.md), [исправление орфографии](../Searching/Spell_correction.md) и подсветка поисковых ключевых слов [highlighting](../Searching/Highlighting.md), особенно в продуктах электронной коммерции.
 
-![Faceted search](faceted.png)
+![Многофакторный поиск](faceted.png)
 
-Фасетный поиск полезен при работе с большими объемами данных и различными взаимосвязанными свойствами, такими как размер, цвет, производитель или другие факторы. При запросе больших объемов данных результаты поиска часто включают множество записей, которые не соответствуют ожиданиям пользователя. Фасетный поиск позволяет конечному пользователю явно определить критерии, которым должны удовлетворять результаты поиска.
+Многофакторный поиск полезен при работе с большим объемом данных и различными взаимосвязанными свойствами, такими как размер, цвет, производитель или другие факторы. При запросе больших объемов данных результаты поиска часто содержат множество записей, которые не соответствуют ожиданиям пользователя. Многофакторный поиск позволяет конечному пользователю явно определить критерии, которым должны удовлетворять результаты его поиска.
 
-В Manticore Search есть оптимизация, которая сохраняет набор результатов исходного запроса и повторно использует его для каждого вычисления фасета. Поскольку агрегации применяются к уже вычисленному подмножеству документов, они выполняются быстро, и общее время выполнения часто может быть лишь немного дольше, чем у первоначального запроса. Фасеты можно добавлять к любому запросу, и фасет может быть любым атрибутом или выражением. Результат фасета включает значения фасета и количество по фасету. К фасетам можно получить доступ с помощью SQL-запроса `SELECT`, объявляя их в самом конце запроса.
+В Manticore Search есть оптимизация, которая сохраняет результат исходного запроса и повторно использует его для каждого расчета фактора. Поскольку агрегации применяются к уже вычисленному подмножеству документов, они работают быстро, и общее время выполнения часто бывает лишь немного больше времени первичного запроса. Факторы можно добавлять к любому запросу, и фактором может быть любой атрибут или выражение. Результат фактора включает значения фактора и количество по фактору. К факторам можно получить доступ, используя SQL-оператор `SELECT`, объявляя их в самом конце запроса.
 
 ## Агрегации
 
 <!-- example Aggregations -->
 ### SQL
-Значения фасета могут исходить из атрибута, свойства JSON внутри JSON-атрибута или выражения. Значения фасета также могут иметь псевдонимы, но **псевдоним должен быть уникальным** во всех наборах результатов (основной набор результатов запроса и другие наборы результатов фасетов). Значение фасета выводится из агрегированного атрибута/выражения, но также может исходить из другого атрибута/выражения.
+Значения фактора могут исходить из атрибута, свойства JSON внутри JSON-атрибута или выражения. Значения фактора также могут иметь псевдонимы, но **псевдоним должен быть уникальным** во всех наборах результатов (основной набор результатов запроса и другие наборы результатов факторов). Значение фактора получается из агрегированного атрибута/выражения, но также может браться из другого атрибута/выражения.
 
 ```sql
 FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
-Несколько объявлений фасетов должны разделяться пробелом.
+Несколько объявлений факторов должны быть разделены пробелом.
 
 ### HTTP JSON
 
-Фасеты можно определить в узле `aggs`:
+Факторы могут быть определены в узле `aggs`:
 
 ``` json
      "aggs" :
@@ -40,12 +40,12 @@ FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FA
 ```
 
 где:
-* `group name` — это псевдоним, присвоенный агрегации
-* значение `field` должно содержать имя атрибута или выражения, по которому выполняется фасетирование
-* необязательный параметр `size` указывает максимальное количество бакетов, включаемых в результат. Если не указан, наследует лимит основного запроса. Подробнее см. в разделе [Размер результата фасета](../Searching/Faceted_search.md#Size-of-facet-result).
-* необязательный параметр `sort` задает массив атрибутов и/или дополнительных свойств с использованием того же синтаксиса, что и ["параметр sort в основном запросе"](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
+* `group name` — псевдоним, присвоенный агрегации
+* значение `field` должно содержать имя атрибута или выражения, по которому происходит факторинг
+* необязательный `size` указывает максимальное количество корзин, включаемых в результат. Если не указано, наследует лимит основного запроса. Подробнее см. в разделе [Размер результата фактора](../Searching/Faceted_search.md#Size-of-facet-result).
+* необязательный `sort` задает массив атрибутов и/или дополнительных свойств, используя такой же синтаксис, как параметр ["sort" в основном запросе](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
 
-Набор результатов будет содержать узел `aggregations` с возвращенными фасетами, где `key` — агрегированное значение, а `doc_count` — количество в агрегации.
+Набор результатов будет содержать узел `aggregations` с возвращаемыми факторами, где `key` — агрегированное значение, а `doc_count` — количество в агрегации.
 
 ``` json
     "aggregations": {
@@ -759,9 +759,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example Another_attribute -->
 
-### Фасетирование по агрегации другого атрибута
+### Факторинг по агрегации другого атрибута
 
-Данные можно фасетировать, агрегируя другой атрибут или выражение. Например, если документы содержат как идентификатор бренда, так и его название, можно вернуть в фасете названия брендов, но агрегировать идентификаторы брендов. Это можно сделать с помощью `FACET {expr1} BY {expr2}`
+Данные могут быть факторированы путем агрегации другого атрибута или выражения. Например, если в документах содержатся и id бренда, и название, мы можем вернуть в факторе названия брендов, но агрегировать id брендов. Это можно сделать с помощью конструкции `FACET {expr1} BY {expr2}`
 
 
 <!-- intro -->
@@ -803,17 +803,101 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 10 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "brand_id": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "brand_id": 1
+      },
+      {
+        "brand_name": "Brand Ten",
+        "brand_id": 10
+      },
+      ...
+      {
+        "brand_name": "Brand One",
+        "brand_id": 1
+      },
+      {
+        "brand_name": "Brand Nine",
+        "brand_id": 9
+      }
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "count(*)": 1013
+      },
+      {
+        "brand_name": "Brand Ten",
+        "count(*)": 998
+      },
+      {
+        "brand_name": "Brand Eight",
+        "count(*)": 1033
+      },
+      {
+        "brand_name": "Brand Seven",
+        "count(*)": 965
+      }
+    ],
+    "total": 10,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example Distinct -->
 
-### Фасетирование без дубликатов
+### Факторинг без дубликатов
 
-Если нужно удалить дубликаты из бакетов, возвращаемых FACET, можно использовать `DISTINCT field_name`, где `field_name` — поле, по которому нужно выполнить дедупликацию. Это также может быть `id` (что является значением по умолчанию), если вы выполняете FACET-запрос к распределенной таблице и не уверены, что у вас уникальные идентификаторы в таблицах (таблицы должны быть локальными и иметь одинаковую схему).
+Если необходимо удалить дубликаты из корзин, возвращаемых FACET, можно использовать `DISTINCT field_name`, где `field_name` — поле, по которому требуется выполнить дедупликацию. Это также может быть `id` (который является значением по умолчанию), если выполняется FACET-запрос к распределенной таблице и не уверены, есть ли уникальные идентификаторы в таблицах (таблицы должны быть локальными и иметь одинаковую схему).
 
-Если в вашем запросе несколько объявлений FACET, `field_name` должен быть одинаковым во всех них.
+Если в вашем запросе несколько объявлений FACET, `field_name` должен быть одинаковым во всех из них.
 
-`DISTINCT` возвращает дополнительный столбец `count(distinct ...)` перед столбцом `count(*)`, что позволяет получить оба результата без необходимости делать дополнительный запрос.
+`DISTINCT` возвращает дополнительный столбец `count(distinct ...)` перед столбцом `count(*)`, что позволяет получить оба результата без необходимости делать еще один запрос.
 
 <!-- intro -->
 ##### SQL:
@@ -949,9 +1033,9 @@ POST /sql -d 'SELECT brand_name, property FROM facetdemo FACET brand_name distin
 <!-- end -->
 
 <!-- example Expressions -->
-### Фасет по выражениям
+### Факторинг по выражениям
 
-Фасеты могут агрегировать по выражениям. Классический пример — сегментация цен по определенным диапазонам:
+Факторы могут агрегировать по выражениям. Классический пример — сегментация цен по определенным диапазонам:
 
 <!-- request SQL -->
 
@@ -1525,9 +1609,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example Multi-level -->
 
-### Facet over multi-level grouping
+### Фасет по многоуровневой группировке
 
-Facets can aggregate over multi-level grouping, with the result set being the same as if the query performed a multi-level grouping:
+Фасеты могут агрегировать по многоуровневой группировке, при этом результирующий набор будет таким же, как если бы запрос выполнял многоуровневую группировку:
 
 <!-- request SQL -->
 
@@ -1563,20 +1647,104 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            1 | Brand Four  |      195 |
 ...
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo
+FACET price_range AS price_range,brand_name ORDER BY brand_name asc;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "price_range": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "price_range": 1
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "fprice_range": {
+          "type": "long"
+        }
+      },
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Eight",
+        "count(*)": 197
+      },
+      {
+        "fprice_range": 4,
+        "brand_name": "Brand Eight",
+        "count(*)": 235
+      },
+      ...
+      {
+        "fprice_range": 0,
+        "brand_name": "Brand Five",
+        "count(*)": 183
+      },
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Four",
+        "count(*)": 195
+      }
+    ],
+    "total": 10,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example histogram -->
 
-### Facet over histogram values
+### Фасет по значениям гистограммы
 
-Facets can aggregate over histogram values by constructing fixed-size buckets over the values.
-The key function is:
+Фасеты могут агрегировать по значениям гистограммы, создавая фиксированные интервалы (баки) по значениям.
+Ключевая функция:
 
 ```sql
 key_of_the_bucket = interval + offset * floor ( ( value - offset ) / interval )
 ```
 
-The histogram argument `interval` must be positive, and the histogram argument `offset` must be positive and less than `interval`. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+Аргумент `interval` гистограммы должен быть положительным, а аргумент `offset` должен быть положительным и меньше `interval`. По умолчанию баки возвращаются в виде массива. Аргумент гистограммы `keyed` делает ответ словарём с ключами баков.
 
 <!-- request SQL -->
 
@@ -1708,17 +1876,17 @@ POST /search -d '
 
 <!-- example histogram_date -->
 
-### Facet over histogram date values
+### Фасет по значениям гистограммы даты
 
-Facets can aggregate over histogram date values, which is similar to the normal histogram. The difference is that the interval is specified using a date or time expression. Such expressions require special support because the intervals are not always of fixed length. Values are rounded to the closest bucket using the following key function:
+Фасеты могут агрегировать по значениям гистограммы даты, что похоже на обычную гистограмму. Разница в том, что интервал указывается с помощью выражения даты или времени. Такие выражения требуют специальной поддержки, так как интервалы не всегда имеют фиксированную длину. Значения округляются до ближайшего бака с помощью следующей ключевой функции:
 
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
 
-The histogram parameter `calendar_interval` understands months to have different amounts of days.
-Unlike `calendar_interval`, the `fixed_interval` parameter uses a fixed number of units and does not deviate, regardless of where it falls on the calendar. However `fixed_interval` cannot process units such as months because a month is not a fixed quantity. Attempting to specify units like weeks or months for `fixed_interval` will result in an error.
-The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+Параметр гистограммы `calendar_interval` учитывает, что в месяцах разное количество дней.
+В отличие от `calendar_interval`, параметр `fixed_interval` использует фиксированное количество единиц и не отклоняется, независимо от положения в календаре. Однако `fixed_interval` не может обрабатывать такие единицы, как месяцы, поскольку месяц — это не фиксированный период. Попытка указать такие единицы, как недели или месяцы для `fixed_interval`, приведёт к ошибке.
+Допустимые интервалы описаны в выражении [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29). По умолчанию баки возвращаются в виде массива. Аргумент гистограммы `keyed` делает ответ словарём с ключами баков.
 
 <!-- request SQL -->
 
@@ -1799,10 +1967,10 @@ POST /search -d '
 
 <!-- example facet range -->
 
-### Facet over set of ranges
+### Фасет по набору диапазонов
 
-Facets can aggregate over a set of ranges. The values are checked against the bucket range, where each bucket includes the `from` value and excludes the `to` value from the range.
-Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+Фасеты могут агрегировать по набору диапазонов. Значения проверяются на принадлежность диапазону бака, при этом каждый бак включает значение `from` и исключает значение `to` из диапазона.
+Установка свойства `keyed` в `true` делает ответ словарём с ключами баков вместо массива.
 
 <!-- request SQL -->
 
@@ -1942,9 +2110,9 @@ POST /search -d '
 
 <!-- example facet range_date -->
 
-### Facet over set of date ranges
+### Фасет по набору диапазонов дат
 
-Facets can aggregate over a set of date ranges, which is similar to the normal range. The difference is that the `from` and `to` values can be expressed in [Date math](../Functions/Date_and_time_functions.md#Date-math) expressions. This aggregation includes the `from` value and excludes the `to` value for each range. Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+Фасеты могут агрегировать по набору диапазонов дат, что похоже на обычный диапазон. Разница в том, что значения `from` и `to` могут быть выражены с помощью выражений [Date math](../Functions/Date_and_time_functions.md#Date-math). Эта агрегация включает значение `from` и исключает значение `to` для каждого диапазона. Установка свойства `keyed` в `true` делает ответ словарём с ключами баков вместо массива.
 
 <!-- request SQL -->
 
@@ -2035,9 +2203,9 @@ POST /search -d '
 <!-- end -->
 
 <!-- example Ordering -->
-### Ordering in facet result
+### Сортировка в результате фасета
 
-Facets support the `ORDER BY` clause just like a standard query. Each facet can have its own ordering, and the facet ordering doesn't affect the main result set's ordering, which is determined by the main query's `ORDER BY`. Sorting can be done on attribute name, count (using `COUNT(*)`, `COUNT(DISTINCT attribute_name)`), or the special `FACET()` function, which provides the aggregated data values. By default, a query with `ORDER BY COUNT(*)` will sort in descending order.
+Фасеты поддерживают предложение `ORDER BY`, как и стандартный запрос. Каждый фасет может иметь свою собственную сортировку, и сортировка фасета не влияет на сортировку основного набора результатов, которая определяется `ORDER BY` основного запроса. Сортировка может осуществляться по имени атрибута, количеству (с помощью `COUNT(*)`, `COUNT(DISTINCT attribute_name)`) или специальной функции `FACET()`, которая предоставляет агрегированные значения. По умолчанию запрос с `ORDER BY COUNT(*)` сортирует результаты по убыванию.
 
 
 <!-- intro -->
@@ -2220,11 +2388,11 @@ POST /search -d '
 
 
 <!-- example Size -->
-### Size of facet result
+### Размер результата фасета
 
-By default, each facet result set is limited to 20 values. The number of facet values can be controlled with the `LIMIT` clause individually for each facet by providing either a number of values to return in the format `LIMIT count` or with an offset as `LIMIT offset, count`.
+По умолчанию каждый результат фасета ограничен 20 значениями. Количество значений фасета можно контролировать с помощью предложения `LIMIT` отдельно для каждого фасета, указав либо количество возвращаемых значений в формате `LIMIT count`, либо с оффсетом в формате `LIMIT offset, count`.
 
-The maximum facet values that can be returned is limited by the query's `max_matches` setting. If you want to implement dynamic `max_matches` (limiting `max_matches` to offset + per page for better performance), it must be taken into account that a too low `max_matches` value can affect the number of facet values. In this case, a minimum `max_matches` value should be used that is sufficient to cover the number of facet values.
+Максимальное количество значений фасета ограничено настройкой `max_matches` запроса. Если вы хотите реализовать динамическое управление `max_matches` (ограничение `max_matches` значением offset + количество на страницу для лучшей производительности), необходимо учитывать, что слишком маленькое `max_matches` может повлиять на количество значений фасета. В этом случае следует использовать минимальное значение `max_matches`, достаточное для покрытия количества значений фасета.
 
 <!-- intro -->
 ##### SQL:
@@ -2816,17 +2984,17 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 
 <!-- end -->
-### Возвращаемый набор результатов
+### Returned result set
 
-При использовании SQL поиск с фасетами возвращает несколько наборов результатов. Клиент/библиотека/коннектор MySQL, используемый **должен** поддерживать несколько наборов результатов, чтобы получить доступ к наборам результатов фасетов.
+When using SQL, a search with facets returns multiple result sets. The MySQL client/library/connector used **must** support multiple result sets in order to access the facet result sets.
 
 <!-- example Performance -->
-### Производительность
+### Performance
 
-Внутренне `FACET` является сокращением для выполнения мультизапроса, где первый запрос содержит основной поисковый запрос, а остальные запросы в пакете имеют каждый свою кластеризацию. Как и в случае мультизапроса, общая оптимизация запросов может сработать для фасетного поиска, что означает, что поисковый запрос выполняется только один раз, а фасеты работают с результатом поискового запроса, при этом каждый фасет добавляет лишь часть времени к общему времени запроса.
+Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick in for a faceted search, meaning the search query is executed only once, and the facets operate on the search query result, with each facet adding only a fraction of time to the total query time.
 
 
-Чтобы проверить, был ли фасетный поиск выполнен в оптимизированном режиме, вы можете посмотреть в [журнал запросов](../Logging/Query_logging.md), где все записанные запросы будут содержать строку `xN`, где `N` — количество запросов, выполненных в оптимизированной группе. Кроме того, вы можете проверить вывод оператора [SHOW META](../Node_info_and_management/SHOW_META.md), который отобразит метрику `multiplier`:
+To check if the faceted search ran in an optimized mode, you can look in the [query log](../Logging/Query_logging.md), where all logged queries will contain an `xN` string, where `N` is the number of queries that ran in the optimized group. Alternatively, you can check the output of the [SHOW META](../Node_info_and_management/SHOW_META.md) statement, which will display a `multiplier` metric:
 
 <!-- request SQL -->
 
@@ -2868,6 +3036,132 @@ SHOW META LIKE 'multiplier';
 | multiplier    | 4     |
 +---------------+-------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier';"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One"
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_id": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_id": 1,
+        "count(*)": 1013
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "price": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "price": 306,
+        "count(*)": 7
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "categories": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "categories": "10,11",
+        "count(*)": 2436
+      },
+      ...
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "multiplier",
+        "Value": "4"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

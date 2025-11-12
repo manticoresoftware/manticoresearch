@@ -2,7 +2,7 @@
 
 Manticore Search имеет один уровень иерархии для таблиц.
 
-В отличие от других СУБД, в Manticore нет концепции группировки таблиц в базы данных. Однако, для совместимости с диалектами SQL, Manticore принимает операторы `SHOW DATABASES` для совместимости с диалектом SQL, но оператор не возвращает никаких результатов.
+В отличие от других СУБД, в Manticore отсутствует концепция группировки таблиц в базы данных. Тем не менее, для совместимости с диалектами SQL, Manticore принимает операторы `SHOW DATABASES`, но оператор не возвращает никаких результатов.
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -13,7 +13,7 @@ Manticore Search имеет один уровень иерархии для та
 SHOW TABLES [ LIKE pattern ]
 ```
 
-Оператор `SHOW TABLES` выводит список всех активных в данный момент таблиц вместе с их типами. Существующие типы таблиц: `local`, `distributed`, `rt`, `percolate` и `template`.
+Оператор `SHOW TABLES` выводит все текущие активные таблицы вместе с их типами. Существующие типы таблиц: `local`, `distributed`, `rt`, `percolate` и `template`.
 
 
 <!-- intro -->
@@ -39,6 +39,56 @@ SHOW TABLES;
 +----------+-------------+
 5 rows in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW TABLES"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "dist",
+        "Type": "distributed"
+      },
+      {
+        "Table": "plain",
+        "Type": "local"
+      },
+      {
+        "Table": "pq",
+        "Type": "percolate"
+      },{
+        "Table": "rt",
+        "Type": "rt"
+      },{
+        "Table": "template",
+        "Type": "template"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+
+```
+
 
 <!-- request PHP -->
 
@@ -158,7 +208,7 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 <!-- end -->
 
 <!-- example Example_2 -->
-Поддерживается необязательный оператор LIKE для фильтрации таблиц по имени.
+Опциональное условие LIKE поддерживается для фильтрации таблиц по имени.
 
 
 <!-- intro -->
@@ -179,6 +229,41 @@ SHOW TABLES LIKE 'pro%';
 | products | distributed |
 +----------+-------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request SQL -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLES LIKE 'pro%';"
+```
+
+<!-- response SQL -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "products",
+        "Type": "distributed"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request PHP -->
@@ -302,7 +387,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-Оператор `DESCRIBE` выводит столбцы таблицы и их соответствующие типы. Столбцы включают ID документа, полнотекстовые поля и атрибуты. Порядок соответствует порядку, в котором поля и атрибуты ожидаются в операторах `INSERT` и `REPLACE`. Типы столбцов включают `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string` и `mva`. Столбец ID будет иметь тип `bigint`. Пример:
+Оператор `DESCRIBE` выводит столбцы таблицы и их сопутствующие типы. Столбцы — это идентификатор документа, полнотекстовые поля и атрибуты. Порядок совпадает с порядком, в котором поля и атрибуты ожидаются в операторах `INSERT` и `REPLACE`. Типы столбцов включают `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string` и `mva`. Столбец ID будет иметь тип `bigint`. Пример:
 
 ```sql
 mysql> DESC rt;
@@ -317,13 +402,13 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-Поддерживается необязательный оператор LIKE. Обратитесь к
+Опциональное условие LIKE поддерживается. Обратитесь к
 [SHOW META](Node_info_and_management/SHOW_META.md) для деталей синтаксиса.
 
 ### SELECT FROM name.@table
 
 <!-- example name_table -->
-Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать оператор `WHERE` для фильтрации:
+Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать условие `WHERE` для фильтрации:
 
 <!-- request SQL -->
 ```sql
@@ -340,11 +425,29 @@ select * from tbl.@table where type='text';
 1 row in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+```sql
+POST /sql?mode=raw -d "select * from tbl.@table where type='text';"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"id":{"type":"long long"}},{"field":{"type":"string"}},{"type":{"type":"string"}},{"properties":{"type":"string"}}],
+"data":[
+{"id":2,"field":"title","type":"text","properties":"indexed stored"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 <!-- example name_table2 -->
 
-Вы также можете выполнять многие другие действия с `<your_table_name>.@table`, рассматривая её как обычную таблицу Manticore с колонками, состоящими из целочисленных и строковых атрибутов.
+Вы также можете выполнять многие другие действия с `<your_table_name>.@table`, рассматривая его как обычную таблицу Manticore с колонками, состоящими из целочисленных и строковых атрибутов.
 
 <!-- request SQL -->
 
@@ -352,6 +455,14 @@ select * from tbl.@table where type='text';
 select field from tbl.@table;
 select field, properties from tbl.@table where type in ('text', 'uint');
 select * from tbl.@table where properties any ('stored');
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "select field from tbl.@table;"
+POST /sql?mode=raw -d "select field, properties from tbl.@table where type in ('text', 'uint');"
+POST /sql?mode=raw -d "select * from tbl.@table where properties any ('stored');"
 ```
 
 <!-- end -->
@@ -381,11 +492,33 @@ f text indexed stored
 ) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl;"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"Table":{"type":"string"}},{"Create Table":{"type":"string"}}],
+"data":[
+{"Table":"tbl","Create Table":"CREATE TABLE tbl (\nf text)"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 ### Схемы таблиц Percolate
 
-Если вы используете оператор `DESC` для таблицы percolate, он отобразит схему внешней таблицы, которая является схемой сохранённых запросов. Эта схема статична и одинакова для всех локальных таблиц percolate:
+Если использовать оператор `DESC` для percolate-таблицы, будет показана схема внешней таблицы, которая представляет собой схему сохранённых запросов. Эта схема статична и одинакова для всех локальных percolate-таблиц:
 
 ```sql
 mysql> DESC pq;
@@ -400,7 +533,7 @@ mysql> DESC pq;
 4 rows in set (0.00 sec)
 ```
 
-Если вы хотите просмотреть ожидаемую схему документа, используйте следующую команду:
+Если вы хотите посмотреть ожидаемую схему документа, используйте следующую команду:
 `DESC <pq table name> table`:
 
 ```sql

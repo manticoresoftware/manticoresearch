@@ -5,20 +5,20 @@ SHOW META [ LIKE pattern ]
 ```
 
 <!-- example show meta -->
-`SHOW META` — это SQL-запрос, который отображает дополнительную метаинформацию о выполненном запросе, включая время выполнения запроса, статистику по ключевым словам и информацию о используемых вторичных индексах. Синтаксис:
+`SHOW META` — это SQL-оператор, который отображает дополнительную мета-информацию о выполненном запросе, включая время выполнения запроса, статистику по ключевым словам и информацию о вторичных индексах, использованных в запросе. Синтаксис:
 
 Включённые элементы:
-* `total`: Количество совпадений, которые фактически были извлечены и отправлены клиенту. Это значение обычно ограничивается опцией поиска [LIMIT/size](../Searching/Pagination.md#Pagination-of-search-results).
+* `total`: Количество совпадений, которые были фактически извлечены и отправлены клиенту. Обычно это значение ограничивается опцией поиска [LIMIT/size](../Searching/Pagination.md#Pagination-of-search-results).
 * `total_found`:
-  - Оценочное общее количество совпадений для запроса в индексе. Если вам нужно точное количество совпадений, используйте `SELECT COUNT(*)` вместо опоры на это значение.
-  - Для запросов с `GROUP BY` `total_found` представляет количество групп, а не отдельных совпадений.
-  - Для запросов [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) `total_found` по-прежнему представляет количество групп, независимо от значения `N`.
-* `total_relation`: Указывает, является ли значение `total_found` точным или оценочным.
+  - Оценочное общее количество совпадений для запроса в индексе. Если требуется точное количество совпадений, используйте `SELECT COUNT(*)`, вместо того чтобы полагаться на это значение.
+  - Для запросов с `GROUP BY`, `total_found` представляет количество групп, а не отдельных совпадений.
+  - Для запросов типа [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) `total_found` всё равно представляет количество групп, независимо от значения `N`.
+* `total_relation`: Показывает, является ли значение `total_found` точным или оценочным.
   - Если Manticore не может определить точное значение `total_found`, в этом поле будет отображено `total_relation: gte`, что означает, что фактическое количество совпадений **больше или равно** указанному `total_found`.
-  - Если значение `total_found` точное, будет отображено `total_relation: eq`.
+  - Если значение `total_found` точно, будет отображено `total_relation: eq`.
 * `time`: Время (в секундах), затраченное на обработку поискового запроса.
-* `keyword[N]`: n-й ключевой запрос, использованный в поисковом запросе. Обратите внимание, что ключевое слово может быть представлено с использованием подстановочного знака, например, `abc*`.
-* `docs[N]`: Общее количество документов (или записей), содержащих n-й ключевой запрос из поискового запроса. Если ключевое слово представлено с подстановочным знаком, это значение представляет сумму документов для всех расширенных подзапросов, что может превышать фактическое количество совпавших документов.
+* `keyword[N]`: n-й ключевой запрос, использованный в поиске. Обратите внимание, что ключевое слово может быть представлено с использованием подстановочного знака, например, `abc*`.
+* `docs[N]`: Общее количество документов (или записей), содержащих n-ое ключевое слово из поискового запроса. Если ключевое слово представлено подстановочным знаком, это значение представляет сумму документов для всех расширенных подключей, что может превышать фактическое количество совпадающих документов.
 * `hits[N]`: Общее количество вхождений (или попаданий) n-го ключевого слова во всех документах.
 * `index`: Информация об используемом индексе (например, вторичном индексе).
 
@@ -66,10 +66,140 @@ show meta;
 14 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+SELECT id, story_author FROM hn_small WHERE MATCH('one|two|three') and comment_ranking > 2 limit 5;
+show meta;
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 151171,
+        "story_author": "anewkid"
+      },
+      {
+        "id": 302758,
+        "story_author": "bks"
+      },
+      {
+        "id": 805806,
+        "story_author": "drRoflol"
+      },
+      {
+        "id": 1099245,
+        "story_author": "tnorthcutt"
+      },
+      {
+        "id": 303252,
+        "story_author": "whiten"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "2308"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.001"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      },
+      {
+        "Variable_name": "index",
+        "Value": "comment_ranking:SecondaryIndex (100%)"
+      }
+    ],
+    "total": 14,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example show meta iostats cpustats -->
-`SHOW META` может отображать счётчики ввода-вывода и CPU, но они будут доступны только если searchd был запущен с переключателями `--iostats` и `--cpustats` соответственно.
+`SHOW META` может показывать счётчики ввода/вывода и процессора, но они будут доступны только, если searchd был запущен с переключателями `--iostats` и `--cpustats` соответственно.
 
 <!-- intro -->
 ##### SQL:
@@ -129,10 +259,191 @@ SHOW META;
 27 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id,channel_id FROM records WHERE MATCH('one|two|three') limit 5; SHOW META;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 300263,
+        "story_author": "throwaway37"
+      },
+      {
+        "id": 713503,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 716804,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 776906,
+        "story_author": "jimbokun"
+      },
+      {
+        "id": 753332,
+        "story_author": "foxhop"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.001"
+      },
+      {
+        "Variable_name": "cpu_time",
+        "Value": "18.004"
+      },
+      {
+        "Variable_name": "agents_cpu_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "io_read_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "io_read_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "io_read_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "io_write_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "io_write_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "io_write_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "agent_io_read_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "agent_io_read_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "agent_io_read_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "agent_io_write_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "agent_io_write_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "agent_io_write_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      }
+    ],
+    "total": 27,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example show meta predicted_time -->
-Дополнительные значения, такие как `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips` и их соответствующие аналоги `dist_fetched_*`, будут доступны только если `searchd` был настроен с [предсказанными затратами времени](../Server_settings/Searchd.md#predicted_time_costs) и запрос включал `predicted_time` в опции `OPTION`.
+Дополнительные значения, такие как `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips` и соответствующие им `dist_fetched_*` значения будут доступны только если `searchd` был сконфигурирован с [предсказанными временными затратами](../Server_settings/Searchd.md#predicted_time_costs) и запрос включал `predicted_time` в разделе `OPTION`.
 
 <!-- intro -->
 ##### SQL:
@@ -183,11 +494,152 @@ mysql> show meta;
 17 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100; SHOW META;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 300263,
+        "story_author": "throwaway37"
+      },
+      {
+        "id": 713503,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 716804,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 776906,
+        "story_author": "jimbokun"
+      },
+      {
+        "id": 753332,
+        "story_author": "foxhop"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.012"
+      },
+      {
+        "Variable_name": "local_fetched_docs",
+        "Value": "307212"
+      },
+      {
+        "Variable_name": "local_fetched_hits",
+        "Value": "407390"
+      },
+      {
+        "Variable_name": "local_fetched_skips",
+        "Value": "24"
+      },
+      {
+        "Variable_name": "predicted_time",
+        "Value": "56"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      }
+    ],
+    "total": 17,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example show meta single statement -->
 
-`SHOW META` должен выполняться сразу после запроса в **той же** сессии. Поскольку некоторые MySQL-коннекторы/библиотеки используют пулы соединений, выполнение `SHOW META` в отдельном запросе может привести к неожиданным результатам, например, получению метаданных другого запроса. В таких случаях (и в общем случае рекомендуется) выполняйте множественный запрос, содержащий и сам запрос, и `SHOW META`. Некоторые коннекторы/библиотеки поддерживают мультизапросы в одном методе для одного запроса, в то время как другие могут требовать использования специального метода для мультизапросов или установки определённых опций при настройке соединения.
+`SHOW META` должен выполняться сразу после запроса в **той же** сессии. Поскольку некоторые MySQL-коннекторы/библиотеки используют пулы соединений, выполнение `SHOW META` в отдельном операторе может привести к непредвиденным результатам, таким как получение метаданных другого запроса. В таких случаях (и вообще рекомендуется) выполняйте многооператорный запрос, содержащий и запрос, и `SHOW META`. Некоторые коннекторы/библиотеки поддерживают мультизапросы в пределах одного вызова метода, в то время как другим может потребоваться использовать специализированный метод для мультизапросов или настроить определённые параметры при установке соединения.
 
 <!-- intro -->
 ##### SQL:
@@ -231,11 +683,136 @@ SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW 
 13 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW META;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 300263,
+        "story_author": "throwaway37"
+      },
+      {
+        "id": 713503,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 716804,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 776906,
+        "story_author": "jimbokun"
+      },
+      {
+        "id": 753332,
+        "story_author": "foxhop"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.011"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      }
+    ],
+    "total": 13,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example SHOW META LIKE -->
 
-Вы также можете использовать необязательное выражение LIKE, которое позволяет выбрать только переменные, соответствующие определённому шаблону. Синтаксис шаблона соответствует стандартным SQL-подстановочным знакам, где `%` обозначает любое количество любых символов, а `_` — один символ.
+Вы также можете использовать необязательный оператор LIKE, который позволяет выбирать только переменные, соответствующие определённому шаблону. Синтаксис шаблона выполняется по стандартным SQL-подстановочным знакам, где `%` означает любое количество любых символов, а `_` соответствует одному символу.
 
 <!-- intro -->
 ##### SQL:
@@ -258,13 +835,59 @@ SHOW META LIKE 'total%';
 3 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW META LIKE 'total%';"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## SHOW META и фасеты
 
 <!-- example show meta facets -->
 
-При использовании [фасетного поиска](../Searching/Faceted_search.md) вы можете проверить поле `multiplier` в выводе `SHOW META`, чтобы определить, сколько запросов было выполнено в оптимизированной группе.
+При использовании [фасетного поиска](../Searching/Faceted_search.md) в выводе `SHOW META` вы можете посмотреть поле `multiplier`, чтобы узнать, сколько запросов было выполнено в оптимизированной группе.
 
 <!-- intro -->
 ##### SQL:
@@ -310,15 +933,143 @@ SHOW META LIKE 'multiplier';
 1 row in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier';"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One"
+      }
+      ...
+    ],
+    "total": 1013,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_id": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_id": 1,
+        "count(*)": 1013
+      }
+      ...
+    ],
+    "total": 1013,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "price": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "price": 1,
+        "count(*)": 7
+      }
+      ...
+    ],
+    "total": 658,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "categories": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "categories": 10,
+        "count(*)": 2436
+      }
+      ...
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "multiplier",
+        "Value": "4"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## SHOW META и оптимизатор запросов
 
 <!-- example of show meta vs query optimizer -->
 
-Когда [оптимизатор запросов на основе стоимости](../Searching/Cost_based_optimizer.md) выбирает использование `DocidIndex`, `ColumnarScan` или `SecondaryIndex` вместо простого фильтра, это отражается в команде `SHOW META`.
+Когда [оптимизатор запросов на основе стоимости](../Searching/Cost_based_optimizer.md) выбирает использовать `DocidIndex`, `ColumnarScan` или `SecondaryIndex` вместо простого фильтра, это отображается в команде `SHOW META`.
 
-Переменная `index` отображает имена и типы вторичных индексов, использованных во время выполнения запроса. Процент указывает, сколько дисковых чанков (в случае RT-таблицы) или псевдо-шард (в случае простой таблицы) использовали вторичный индекс.
+Переменная `index` показывает имена и типы вторичных индексов, использованных при выполнении запроса. Процент указывает, сколько дисковых чанков (для RT-таблицы) или псевдо-шард (для простой таблицы) использовали вторичный индекс.
 
 <!-- intro -->
 ##### SQL:
@@ -344,21 +1095,92 @@ SHOW META;
 5 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT count(*) FROM taxi1 WHERE tip_amount = 5; SHOW META;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "count(*)": 1
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.016"
+      },
+      {
+        "Variable_name": "index",
+        "Value": "tip_amount:SecondaryIndex (100%)"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## SHOW META для PQ таблиц
 
 <!-- example show meta PQ -->
 
-`SHOW META` можно использовать после выполнения [CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ), в этом случае он выдаёт другой вывод.
+`SHOW META` может использоваться после выполнения оператора [CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ), при этом он выводит другую информацию.
 
-`SHOW META` после выполнения `CALL PQ` включает:
+`SHOW META` после оператора `CALL PQ` включает:
 
-* `total` — Общее время, затраченное на сопоставление документа(ов)
-* `queries_matched` — Количество сохранённых запросов, которые совпали с документом(ами)
-* `document_matches` — Количество документов, которые совпали с запросами, сохранёнными в таблице
-* `total_queries_stored` — Общее количество запросов, сохранённых в таблице
-* `term_only_queries` — Количество запросов в таблице, которые содержат термы; остальные запросы используют расширенный синтаксис запросов.
+* `total` - Общее время, затраченное на сопоставление документа(ов)
+* `queries_matched` - Количество сохранённых запросов, которые совпали с документом(ами)
+* `document_matches` - Количество документов, которые совпали с запросами, сохранёнными в таблице
+* `total_queries_stored` - Общее количество запросов, сохранённых в таблице
+* `term_only_queries` - Количество запросов в таблице, которые содержат термы; остальные запросы используют расширенный синтаксис запросов.
 
 <!-- intro -->
 ##### SQL:
@@ -396,13 +1218,13 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); SHOW META;
 
 <!-- example call pq verbose meta  -->
 
-Использование `CALL PQ` с опцией `verbose` предоставляет более подробный вывод.
+Использование `CALL PQ` с опцией `verbose` даёт более подробный вывод.
 
-Он включает следующие дополнительные записи:
+Он включает следующие дополнительные поля:
 
 * `Setup` - Время, затраченное на начальную настройку процесса сопоставления, например, разбор документов и установку параметров
-* `Queries failed` - Количество запросов, которые завершились с ошибкой
-* `Fast rejected queries` - Количество запросов, которые не были полностью оценены, но быстро сопоставлены и отклонены с использованием фильтров или других условий
+* `Queries failed` - Количество запросов, которые завершились ошибкой
+* `Fast rejected queries` - Количество запросов, которые не были полностью оценены, но быстро сопоставлены и отброшены с использованием фильтров или других условий
 * `Time per query` - Подробное время для каждого запроса
 * `Time of matched queries` - Общее время, затраченное на запросы, которые совпали с любыми документами
 

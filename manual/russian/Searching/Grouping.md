@@ -1,7 +1,7 @@
 # Группировка результатов поиска
 
 <!-- example general -->
-Группировка результатов поиска часто полезна для получения количества совпадений по группам или других агрегатов. Например, это удобно для построения графика, иллюстрирующего количество совпадающих публикаций в блогах по месяцам, или для группировки результатов веб-поиска по сайту, сообщений форума по автору и т.д.
+Группировка результатов поиска часто полезна для получения количества совпадений по каждой группе или других агрегатов. Например, это удобно для создания графика с количеством подходящих блог-постов по месяцам или группировки результатов веб-поиска по сайтам, форумных сообщений по авторам и т.д.
 
 Manticore поддерживает группировку результатов поиска по одному или нескольким столбцам и вычисляемым выражениям. Результаты могут:
 
@@ -9,7 +9,7 @@ Manticore поддерживает группировку результатов
 * Возвращать более одной строки на группу
 * Фильтровать группы
 * Сортировать группы
-* Агрегироваться с помощью [функций агрегации](../Searching/Grouping.md#Aggregation-functions)
+* Агрегироваться с использованием [функций агрегации](../Searching/Grouping.md#Aggregation-functions)
 
 <!-- intro -->
 Общий синтаксис:
@@ -29,7 +29,7 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 <!-- request JSON -->
-Формат JSON-запроса в настоящее время поддерживает базовую группировку, которая может получать агрегатные значения и их count(*).
+Формат JSON-запроса на данный момент поддерживает базовую группировку, которая может извлекать агрегированные значения и их count(*).
 
 ```json
 {
@@ -46,19 +46,19 @@ where_condition: {aggregation expression alias | COUNT(*)}
 }
 ```
 
-Стандартный вывод запроса возвращает набор результатов без группировки, который можно скрыть с помощью `limit` (или `size`).
-Для агрегации необходимо установить `size` для размера результирующего набора групп.
+Стандартный результат запроса возвращает набор без группировки, который можно скрыть с помощью `limit` (или `size`).
+Для агрегации необходимо задать `size` в размере набора результатов для группы.
 
 <!-- end -->
 
 <!-- example group1 -->
 ### Просто группировка
-Группировка довольно проста — просто добавьте "GROUP BY smth" в конец вашего `SELECT` запроса. Что-то может быть:
+Группировка достаточно проста - просто добавьте "GROUP BY smth" в конец вашего `SELECT` запроса. Что-то может быть:
 
-* Любым нефулл-текстовым полем из таблицы: integer, float, string, MVA (атрибут с множественным значением)
-* Или, если вы использовали псевдоним в списке `SELECT`, вы также можете использовать GROUP BY по нему
+* Любым не полнотекстовым полем из таблицы: integer, float, string, MVA (мульти-значение атрибута)
+* Или, если вы использовали псевдоним в списке `SELECT`, вы также можете группировать по нему
 
-Вы можете опустить любые [функции агрегации](../Searching/Grouping.md#Aggregation-functions) в списке `SELECT`, и это все равно будет работать:
+Вы можете опустить любые [функции агрегации](../Searching/Grouping.md#Aggregation-functions) в списке `SELECT`, и это продолжит работать:
 
 <!-- intro -->
 ##### Пример:
@@ -79,14 +79,54 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 |         2000 |
 +--------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year FROM films GROUP BY release_year LIMIT 5;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2004
+      },
+            {
+        "release_year": 2002
+      },
+            {
+        "release_year": 2001
+      },
+            {
+        "release_year": 2005
+      },
+            {
+        "release_year": 2000
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example group2 -->
-В большинстве случаев, однако, вы захотите получить некоторую агрегированную информацию для каждой группы, например:
+В большинстве случаев, однако, вы захотите получить некоторые агрегированные данные для каждой группы, такие как:
 
-* `COUNT(*)` просто чтобы получить количество элементов в каждой группе
+* `COUNT(*)`, чтобы просто получить количество элементов в каждой группе
 * или `AVG(field)`, чтобы вычислить среднее значение поля внутри группы
 
-Для HTTP JSON-запросов использование одного бакета `aggs` с `limit=0` на уровне основного запроса работает аналогично SQL-запросу с `GROUP BY` и `COUNT(*)`, обеспечивая эквивалентное поведение и производительность.
+Для HTTP JSON-запросов использование одного `aggs` bucket с `limit=0` на основном уровне запроса работает аналогично SQL запросу с `GROUP BY` и `COUNT(*)`, обеспечивая эквивалентное поведение и производительность.
 
 <!-- intro -->
 ##### Пример:
@@ -502,7 +542,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example sort1 -->
 ##### Сортировка групп
-По умолчанию группы не сортируются, и следующим обычно желаемым действием является их упорядочивание по чему-то, например, по полю, по которому происходит группировка:
+По умолчанию группы не сортируются, и следующая типичная операция — отсортировать их по чему-либо, например, по полю, по которому ведется группировка:
 
 <!-- intro -->
 ##### Пример:
@@ -523,12 +563,62 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 |         2004 |      108 |
 +--------------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2000,
+        "count(*)": 97
+      },
+      {
+        "release_year": 2001,
+        "count(*)": 91
+      },
+      {
+        "release_year": 2002,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2003,
+        "count(*)": 106
+      },
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example sort2 -->
-В качестве альтернативы, вы можете сортировать по агрегату:
+Или же можно сортировать по агрегату:
 
-* по `count(*)`, чтобы сначала показать группы с наибольшим количеством элементов
-* по `avg(rental_rate)`, чтобы сначала показать фильмы с наивысшим рейтингом. Обратите внимание, что в примере это делается через псевдоним: `avg(rental_rate)` сначала сопоставлен с `avg` в списке `SELECT`, а затем мы просто делаем `ORDER BY avg`
+* по `count(*)`, чтобы показывать группы с наибольшим количеством элементов первыми
+* по `avg(rental_rate)`, чтобы показывать фильмы с самым высоким рейтингом первыми. Обратите внимание, что в примере это сделано через псевдоним: `avg(rental_rate)` сначала отображается в `avg` в списке `SELECT`, а потом мы просто делаем `ORDER BY avg`
 
 
 <!-- intro -->
@@ -567,11 +657,61 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 |         2008 | 2.99000049 |
 +--------------+------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2003,
+        "count(*)": 106
+      },
+      {
+        "release_year": 2006,
+        "count(*)": 103
+      },
+      {
+        "release_year": 2008,
+        "count(*)": 102
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group3 -->
 ##### GROUP BY по нескольким полям одновременно
-В некоторых случаях вы можете захотеть группировать не только по одному полю, но по нескольким сразу, например, по категории фильма и году:
+В некоторых случаях вы можете захотеть группировать не только по одному полю, но и по нескольким сразу, например, по категории фильма и году:
 
 <!-- intro -->
 ##### Пример:
@@ -688,7 +828,7 @@ POST /search -d '
 
 <!-- example group4 -->
 ##### Дайте мне N строк
-Иногда полезно видеть не только один элемент на группу, но и несколько. Это легко достигается с помощью `GROUP N BY`. Например, в следующем случае мы получаем два фильма для каждого года вместо одного, который вернул бы простой `GROUP BY release_year`.
+Иногда полезно видеть не только один элемент на группу, а несколько. Это легко достигается с помощью `GROUP N BY`. Например, в следующем случае мы получаем два фильма для каждого года вместо одного, что вернул бы простой `GROUP BY release_year`.
 
 <!-- intro -->
 ##### Пример:
@@ -710,14 +850,68 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 |         2007 | ARACHNOPHOBIA ROLLERCOASTER |
 +--------------+-----------------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2009,
+        "title": "ALICE FANTASIA"
+      },
+      {
+        "release_year": 2009,
+        "title": "ALIEN CENTER"
+      },
+      {
+        "release_year": 2008,
+        "title": "AMADEUS HOLY"
+      },
+      {
+        "release_year": 2008,
+        "title": "ANACONDA CONFESSIONS"
+      },
+      {
+        "release_year": 2007,
+        "title": "ANGELS LIFE"
+      },
+      {
+        "release_year": 2007,
+        "title": "ARACHNOPHOBIA ROLLERCOASTER"
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group5 -->
 ##### Сортировка внутри группы
-Еще одно важное требование для аналитики — сортировка элементов внутри группы. Для этого используйте конструкцию `WITHIN GROUP ORDER BY ... {ASC|DESC}`. Например, получим фильм с наивысшим рейтингом для каждого года. Обратите внимание, что это работает параллельно с обычным `ORDER BY`:
+Еще одно важное требование аналитики — сортировать элементы внутри группы. Для этого используйте конструкцию `WITHIN GROUP ORDER BY ... {ASC|DESC}`. Например, получим фильм с наивысшим рейтингом за каждый год. Обратите внимание, что это работает параллельно с обычным `ORDER BY`:
 
 * `WITHIN GROUP ORDER BY` сортирует результаты **внутри группы**
-* а простой `GROUP BY` **сортирует сами группы**
+* в то время как просто `GROUP BY` **сортирует сами группы**
 
 Эти два работают полностью независимо.
 
@@ -741,11 +935,71 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 |         2005 | AIRPLANE SIERRA  |    4.990000 |
 +--------------+------------------+-------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      },
+      {
+        "rental_rate": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2009,
+        "title": "AMERICAN CIRCUS",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2009,
+        "title": "ANTHEM LUKE",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2008,
+        "title": "ATTACKS HATE",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2008,
+        "title": "ALADDIN CALENDAR",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2007,
+        "title": "AIRPLANE SIERRA",
+        "rental_rate": 4.990000
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group6 -->
 ##### Фильтрация групп
-`HAVING expression` — полезная конструкция для фильтрации групп. В то время как `WHERE` применяется до группировки, `HAVING` работает с уже сгруппированными данными. Например, оставим только те года, когда средний рейтинг аренды фильмов за этот год был выше 3. В итоге мы получаем только четыре года:
+`HAVING expression` — полезный оператор для фильтрации групп. В то время как `WHERE` применяется до группировки, `HAVING` работает с группами. Например, оставим только те годы, когда средняя арендная ставка фильмов за этот год была выше 3. Мы получим только четыре года:
 
 <!-- intro -->
 ##### Пример:
@@ -765,15 +1019,60 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 |         2006 | 3.26184368 |
 +--------------+------------+
 ```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "avg": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2002,
+        "avg": 3.08259249
+      },
+      {
+        "release_year": 2001,
+        "avg": 3.09989142
+      },
+      {
+        "release_year": 2000,
+        "avg": 3.17556739
+      },
+      {
+        "release_year": 2006,
+        "avg": 3.26184368
+      }
+    ],
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group7 -->
 ##### GROUPBY()
-Есть функция `GROUPBY()`, которая возвращает ключ текущей группы. Она полезна во многих случаях, особенно когда вы [GROUP BY по MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) или по [JSON значению](../Searching/Grouping.md#Grouping-by-a-JSON-node).
+Существует функция `GROUPBY()`, которая возвращает ключ текущей группы. Она полезна во многих случаях, особенно когда вы [GROUP BY по MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) или по [JSON значению](../Searching/Grouping.md#Grouping-by-a-JSON-node).
 
 Её также можно использовать в `HAVING`, например, чтобы оставить только годы 2000 и 2002.
 
-Обратите внимание, что `GROUPBY()` не рекомендуется использовать, когда вы GROUP BY по нескольким полям одновременно. Она всё равно будет работать, но поскольку ключ группы в этом случае является составным из значений полей, он может не отображаться так, как вы ожидаете.
+Обратите внимание, что `GROUPBY()` не рекомендуется использовать, когда вы группируете по нескольким полям одновременно. Она всё ещё будет работать, но поскольку ключ группы в этом случае является составным из значений полей, он может не отображаться так, как вы ожидаете.
 
 <!-- intro -->
 ##### Пример:
@@ -791,15 +1090,53 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 |         2000 |       97 |
 +--------------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002);"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2002,
+        "count": 108
+      },
+      {
+        "release_year": 2000,
+        "count": 97
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example mva -->
-##### Группировка по MVA (мультизначным атрибутам)
-Manticore поддерживает группировку по [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). Чтобы показать, как это работает, давайте создадим таблицу "shoes" с MVA "sizes" и вставим в неё несколько документов:
+##### Группировка по MVA (многозначные атрибуты)
+Manticore поддерживает группировку по [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). Чтобы показать, как это работает, создадим таблицу "shoes" с MVA "sizes" и вставим в неё несколько документов:
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
 ```
-так что у нас есть:
+таким образом у нас есть:
 ```sql
 SELECT * FROM shoes;
 +---------------------+----------+---------+
@@ -810,7 +1147,7 @@ SELECT * FROM shoes;
 | 1657851069130080267 | 42,43    | reebook |
 +---------------------+----------+---------+
 ```
-Если теперь мы сделаем GROUP BY по "sizes", он обработает все наши мультизначные атрибуты и вернёт агрегацию для каждого, в данном случае просто количество:
+Если теперь мы сделаем GROUP BY по "sizes", будут обработаны все наши многозначные атрибуты и возвращена агрегация для каждого, в данном случае просто количество:
 
 <!-- intro -->
 ##### Пример:
@@ -1492,17 +1829,17 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-## Aggregation functions
-Besides `COUNT(*)`, which returns the number of elements in each group, you can use various other aggregation functions:
+## Функции агрегации
+Кроме `COUNT(*)`, который возвращает количество элементов в каждой группе, вы можете использовать различные другие функции агрегации:
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
-While `COUNT(*)` returns the number of all elements in the group, `COUNT(DISTINCT field)` returns the number of unique values of the field in the group, which may be completely different from the total count. For instance, you can have 100 elements in the group, but all with the same value for a certain field. `COUNT(DISTINCT field)` helps to determine that. To demonstrate this, let's create a table "students" with the student's name, age, and major:
+В то время как `COUNT(*)` возвращает количество всех элементов в группе, `COUNT(DISTINCT field)` возвращает количество уникальных значений поля в группе, что может существенно отличаться от общего количества. Например, в группе может быть 100 элементов, но все с одинаковым значением определённого поля. `COUNT(DISTINCT field)` помогает это определить. Для демонстрации создадим таблицу "students" с именем студента, возрастом и специальностью:
 ```sql
 CREATE TABLE students(name text, age int, major string);
 INSERT INTO students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
 ```
 
-so we have:
+так что у нас есть:
 
 ```sql
 MySQL [(none)]> SELECT * from students;
@@ -1517,24 +1854,24 @@ MySQL [(none)]> SELECT * from students;
 +---------------------+------+----------+---------+
 ```
 
-In the example, you can see that if we GROUP BY major and display both `COUNT(*)` and `COUNT(DISTINCT age)`, it becomes clear that there are two students who chose the major "cs" with two unique ages, but for the major "arts", there are also two students, yet only one unique age.
+В примере видно, что если мы делаем GROUP BY по major и показываем одновременно `COUNT(*)` и `COUNT(DISTINCT age)`, становится ясно, что среди студентов, выбравших специальность "cs", двое и у них два уникальных возраста, а для специальности "arts" также двое студентов, но только один уникальный возраст.
 
-There can be at most one `COUNT(DISTINCT)` per query.
+В одном запросе может быть не более одного `COUNT(DISTINCT)`.
 
-** By default, counts are approximate **
+**По умолчанию подсчёты приблизительные**
 
-Actually, some of them are exact, while others are approximate. More on that below.
+На самом деле, некоторые из них точные, а другие — приблизительные. Подробнее об этом ниже.
 
-Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain table. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
+Manticore поддерживает два алгоритма подсчёта количества уникальных значений. Один — устаревший алгоритм, который использует много памяти и обычно медленный. Он собирает пары `{group; value}`, сортирует их и периодически удаляет дубликаты. Преимущество этого подхода в том, что он гарантирует точный подсчёт для простой таблицы. Его можно включить, установив опцию [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) в значение `0`.
 
-The other algorithm (enabled by default) loads counts into a hash table and returns its size. If the hash table becomes too large, its contents are moved into a `HyperLogLog`. This is where the counts become approximate since `HyperLogLog` is a probabilistic algorithm. The advantage is that the maximum memory usage per group is fixed and depends on the accuracy of the `HyperLogLog`. The overall memory usage also depends on the [max_matches](../Searching/Options.md#max_matches) setting, which reflects the number of groups.
+Другой алгоритм (включён по умолчанию) загружает подсчёты в хеш-таблицу и возвращает её размер. Если хеш-таблица становится слишком большой, её содержимое переносится в `HyperLogLog`. Здесь подсчёты становятся приблизительными, поскольку `HyperLogLog` — вероятностный алгоритм. Преимущество в том, что максимальное использование памяти на группу фиксировано и зависит от точности `HyperLogLog`. Общее потребление памяти также зависит от настройки [max_matches](../Searching/Options.md#max_matches), отражающей количество групп.
 
-The [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option sets the threshold below which counts are guaranteed to be exact. The `HyperLogLog` accuracy setting and the threshold for the "hash table to HyperLogLog" conversion are derived from this setting. It's important to use this option with caution because doubling it will double the maximum memory required for count calculations. The maximum memory usage can be roughly estimated using this formula: `64 * max_matches * distinct_precision_threshold`. Note that this is the worst-case scenario, and in most cases, count calculations will use significantly less RAM.
+Опция [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) задаёт порог, ниже которого подсчёты гарантированно точные. Настройки точности `HyperLogLog` и порог конверсии "хеш-таблица в HyperLogLog" выводятся из этой настройки. Важно с осторожностью использовать эту опцию, поскольку её удвоение приведёт к удвоению максимального объёма памяти, требуемой для подсчётов. Максимальное использование памяти примерно можно оценить формулой: `64 * max_matches * distinct_precision_threshold`. Учтите, что это наихудший сценарий, в большинстве случаев подсчёты используют существенно меньше оперативной памяти.
 
-**`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may have different tokenization settings).
+**`COUNT(DISTINCT)` для распределённой таблицы или таблицы реального времени, состоящей из нескольких дисковых чанк, может возвращать неточные результаты**, но результат должен быть точным для распределённой таблицы, состоящей из локальных простых или таблиц реального времени с одинаковой схемой (идентичный набор/порядок полей, но настройки токенизации могут отличаться).
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1550,17 +1887,67 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 | cs       |        2 |                   2 |
 +----------+----------+---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw - d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "major": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(distinct age)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "major": "arts",
+        "count(*)": 2,
+        "count(distinct age)": 1
+      },
+      {
+        "major": "business",
+        "count(*)": 1,
+        "count(distinct age)": 1
+      },
+      {
+        "major": "cs",
+        "count(*)": 2,
+        "count(distinct age)": 2
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-Often, you want to better understand the contents of each group. You can use [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) for that, but it would return additional rows you might not want in the output. `GROUP_CONCAT()` enriches your grouping by concatenating values of a specific field in the group. Let's take the previous example and improve it by displaying all the ages in each group.
+Часто хочется лучше понять содержимое каждой группы. Для этого можно использовать [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows), но он вернёт дополнительные строки, которых может не быть в выводе. `GROUP_CONCAT()` обогащает группировку, объединяя значения конкретного поля в группе. Возьмём предыдущий пример и улучшим его, отобразив все возраста в каждой группе.
 
-`GROUP_CONCAT(field)` returns the list as comma-separated values.
+`GROUP_CONCAT(field)` возвращает список через запятую.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1576,13 +1963,71 @@ SELECT major, count(*), count(distinct age), group_concat(age) FROM students GRO
 | cs       |        2 |                   2 | 21,22             |
 +----------+----------+---------------------+-------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age), group_concat(age) FROM students GROUP BY major"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "major": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(distinct age)": {
+          "type": "long long"
+        }
+      },
+      {
+        "group_concat(age)": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "major": "arts",
+        "count(*)": 2,
+        "count(distinct age)": 1,
+        "group_concat(age)": 21,21
+      },
+      {
+        "major": "business",
+        "count(*)": 1,
+        "count(distinct age)": 1,
+        "group_concat(age)": 22
+      },
+      {
+        "major": "cs",
+        "count(*)": 2,
+        "count(distinct age)": 2,
+        "group_concat(age)": 21,22
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example sum -->
 ##### SUM(), MIN(), MAX(), AVG()
-Of course, you can also obtain the sum, average, minimum, and maximum values within a group.
+Разумеется, можно получить сумму, среднее, минимальное и максимальное значения в группе.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1600,21 +2045,101 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 | 2004 | 300.920044 | 0.990000 | 4.990000 | 2.78629661 |
 +------+------------+----------+----------+------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg FROM films GROUP BY release_year ORDER BY year asc LIMIT 5;"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "sum": {
+          "type": "long long"
+        }
+      },
+      {
+        "min": {
+          "type": "long long"
+        }
+      },
+      {
+        "max": {
+          "type": "long long"
+        }
+      },
+      {
+        "avg": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2000,
+        "sum": 308.030029,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 3.17556739
+      },
+      {
+        "year": 2001,
+        "sum": 282.090118,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 3.09989142
+      },
+      {
+        "year": 2002,
+        "sum": 332.919983,
+        "min": 0.99,
+        "max": 4.990000,
+        "avg": 3.08259249
+      },
+      {
+        "year": 2003,
+        "sum": 310.940063,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 2.93339682
+      },
+      {
+        "year": 2004,
+        "sum": 300.920044,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 2.78629661
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example accuracy -->
-## Grouping accuracy
+## Точность группировки
 
-Grouping is done in fixed memory, which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If `max_matches` allows for storage of all found groups, the results will be 100% accurate. However, if the value of `max_matches` is lower, the results will be less accurate.
+Группировка выполняется в фиксированной памяти, которая зависит от настройки [max_matches](../Searching/Options.md#max_matches). Если `max_matches` позволяет сохранить все найденные группы, результаты будут 100% точными. Однако, если значение `max_matches` меньше, результаты будут менее точными.
 
-When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT table with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
+При использовании параллельной обработки ситуация усложняется. При включённом `pseudo_sharding` и/или при использовании RT-таблицы с несколькими дисковыми чанками каждая часть или псевдо-шард получает набор результатов не больше чем `max_matches`. Это может привести к неточностям в агрегатах и подсчётах групп при объединении результатов из разных потоков. Чтобы исправить это, можно либо увеличить значение `max_matches`, либо отключить параллельную обработку.
 
-Manticore will try to increase `max_matches` up to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) if it detects that groupby may return inaccurate results. Detection is based on the number of unique values of the groupby attribute, which is retrieved from secondary indexes (if present).
+Manticore попробует увеличить `max_matches` до [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), если обнаружит, что groupby может возвращать неточные результаты. Обнаружение основывается на количестве уникальных значений атрибута groupby, которые извлекаются из вторичных индексов (если они присутствуют).
 
-To ensure accurate aggregates and/or group counts when using RT tables or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
+Для обеспечения точных агрегатов и/или подсчёта групп при использовании RT таблиц или `pseudo_sharding` можно включить `accurate_aggregation`. Это попытается увеличить `max_matches` до порога, а если порог недостаточно высок, Manticore отключит параллельную обработку для запроса.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1653,6 +2178,143 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 | 2001 |       91 |
 +------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 108
+      },
+      {
+        "year": 2002,
+        "count(*)": 108
+      },
+      {
+        "year": 2001,
+        "count(*)": 91
+      },
+      {
+        "year": 2005,
+        "count(*)": 93
+      },
+      {
+        "year": 2000,
+        "count(*)": 97
+      },
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=1;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 76
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=2;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 76
+      },
+      {
+        "year": 2002,
+        "count(*)": 74
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=3;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 108
+      },
+      {
+        "year": 2002,
+        "count(*)": 108
+      },
+      {
+        "year": 2001,
+        "count(*)": 91
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
 

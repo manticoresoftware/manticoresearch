@@ -1,25 +1,25 @@
 # 删除文档
 
-删除文档仅在以下表类型的[RT模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)中支持：
+删除文档仅支持在[RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下，对以下表类型进行：
 * [实时](../Creating_a_table/Local_tables/Real-time_table.md) 表
 * [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) 表
 * 仅包含 RT 表作为本地或远程代理的分布式表。
 
 您可以根据文档的 ID 或某些条件从表中删除现有文档。
 
-此外，还提供了[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion)功能以删除多个文档。
+另外，[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) 可用于删除多个文档。
 
-文档的删除可以通过 SQL 和 JSON 接口完成。
+文档的删除可以通过 SQL 和 JSON 接口来完成。
 
 对于 SQL，成功操作的响应将指示删除的行数。
 
-对于 JSON，使用 `json/delete` 端点。服务器将响应一个 JSON 对象，指示操作是否成功以及删除的行数。
+对于 JSON，使用 `json/delete` 端点。服务器将返回一个 JSON 对象，指示操作是否成功以及删除的行数。
 
 建议使用[表截断](../Emptying_a_table.md)来删除表中的所有文档，因为这是一种更快的操作。
 
 
 <!-- example delete 2 -->
-在此示例中，我们从名为 `test` 的表中删除所有匹配全文查询 `test document` 的文档：
+在此示例中，我们删除了名称为 `test` 的表中所有符合全文查询 `test document` 的文档：
 
 
 <!-- intro -->
@@ -73,7 +73,7 @@ POST /delete -d '
     }'
 ```
 
-* JSON 中的 `query` 包含全文搜索的子句；其语法与[JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON)中的相同。
+* JSON 的 `query` 包含全文搜索的条件；其语法与[JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON)中的相同。
 
 <!-- response JSON -->
 
@@ -257,7 +257,7 @@ deleteRequest.SetQuery(deleteQuery)
 <!-- end -->
 
 <!-- example delete 3 -->
-这里 - 从名为 `test` 的表中删除 `id` 等于 1 的文档：
+这里 - 删除表 `test` 中 `id` 等于 1 的文档：
 
 
 <!-- intro -->
@@ -280,7 +280,7 @@ POST /delete -d '
     }'
 ```
 
-* JSON 中的 `id` 是应删除的行 `id`。
+* JSON 的 `id` 是要删除的行的 `id`。
 
 <!-- response JSON -->
 
@@ -451,10 +451,10 @@ deleteRequest.SetId(1)
 <!-- end -->
 
 <!-- example delete 4 -->
-这里，删除与名为 `test` 的表中值匹配的 `id` 的文档：
+这里，删除表 `test` 中 `id` 匹配指定值的文档：
 
-请注意，带有 `id=N` 或 `id IN (X,Y)` 的删除形式是最快的，因为它们在删除文档时不执行搜索。
-还请注意，响应中仅包含对应 `_id` 字段中第一个被删除文档的 id。
+注意，形式为 `id=N` 或 `id IN (X,Y)` 的删除是最快的，因为它们在删除文档时不执行搜索。
+另外注意，响应中只包含第一个被删除文档的 id ，对应字段为 `_id`。
 
 <!-- intro -->
 ##### SQL:
@@ -518,7 +518,7 @@ Array(
 <!-- example delete 5 -->
 Manticore SQL 允许对 `DELETE` 语句使用复杂条件。
 
-例如，这里我们删除匹配全文查询 `test document` 并且属性 `mva1` 的值大于 206 或 `mva1` 值为 100 或 103 的文档，来自名为 `test` 的表：
+例如，这里我们删除表 `test` 中符合全文查询 `test document` 且属性 `mva1` 大于 206，或 `mva1` 的值为 100 或 103 的文档：
 
 
 <!-- intro -->
@@ -547,10 +547,68 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "DELETE FROM TEST WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) );"
+
+POST /sql?mode=raw -d "SELECT * FROM TEST;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "gid": {
+          "type": "long"
+        }
+      },
+      {
+        "mva1": {
+          "type": "long"
+        }
+      },
+      {
+        "mva2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "gid": "1001",
+        "mva1": 101,102,
+        "mva2": 101
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->
-这是在集群 `cluster` 的表 `test` 中删除文档的示例。请注意，我们必须提供集群名称属性以及表属性，才能从复制集群中的表删除行：
+这是在集群 `cluster` 的表 `test` 中删除文档的示例。注意我们必须提供集群名称属性以及表属性，才能删除复制集群中的表中的行：
 
 
 <!-- intro -->
@@ -571,7 +629,7 @@ POST /delete -d '
       "id": 100
     }'
 ```
-* JSON 中的 `cluster` 是包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)的名称
+* JSON 的 `cluster` 是包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)名称。
 
 <!-- intro -->
 ##### PHP:
@@ -735,11 +793,11 @@ deleteRequest.SetId(1)
 <!-- end -->
 
 
-## 批量删除
+## Bulk deletion
 
 <!-- example bulk delete -->
 
-您还可以使用 `/bulk` 端点在单个调用中执行多个删除操作。此端点仅适用于 `Content-Type` 设置为 `application/x-ndjson` 的数据。数据应格式化为换行分隔的 JSON（NDJSON）。本质上，这意味着每行应包含一个完整的 JSON 语句，并以换行符 `\n` 结尾，可能还有一个 `\r`。
+You can also perform multiple delete operations in a single call using the `/bulk` endpoint. This endpoint only works with data that has `Content-Type` set to `application/x-ndjson`. The data should be formatted as newline-delimited JSON (NDJSON). Essentially, this means that each line should contain exactly one JSON statement and end with a newline `\n` and, possibly, a `\r`.
 
 
 <!-- intro -->

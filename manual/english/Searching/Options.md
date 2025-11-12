@@ -311,6 +311,58 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select * from tbl where match('-d');"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+
+POST /sql?mode=raw -d "select * from t where match('-d')  option not_terms_only_allowed=1;"
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "f1": {
+          "type": "string"
+        }
+      },
+      {
+        "f2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      },
+      {
+        "id": 724024784404348900,
+        "f1": "c",
+        "f2": 3
+      },
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ### ranker
@@ -376,6 +428,12 @@ For more information on how the query optimizer works, refer to the [Cost based 
 
 ```sql
 SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
 ```
 
 <!-- end -->

@@ -547,6 +547,64 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "DELETE FROM TEST WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) );"
+
+POST /sql?mode=raw -d "SELECT * FROM TEST;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "gid": {
+          "type": "long"
+        }
+      },
+      {
+        "mva1": {
+          "type": "long"
+        }
+      },
+      {
+        "mva2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "gid": "1001",
+        "mva1": 101,102,
+        "mva2": 101
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->

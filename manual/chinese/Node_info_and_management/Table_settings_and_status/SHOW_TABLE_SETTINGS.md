@@ -4,7 +4,7 @@
 
 `SHOW TABLE SETTINGS` 是一个 SQL 语句，用于以与配置文件兼容的格式显示每个表的设置。
 
-语法为：
+语法如下：
 
 ```sql
 SHOW TABLE table_name[.N | CHUNK N] SETTINGS
@@ -31,6 +31,43 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 1 row in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE forum SETTINGS;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "settings",
+        "Value": "min_prefix_len = 3\ncharset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example SHOW TABLE SETTINGS N -->
@@ -54,6 +91,43 @@ SHOW TABLE forum CHUNK 0 SETTINGS;
 charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F |
 +---------------+-----------------------------------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLE forum CHUNK 0 SETTINGS;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "settings",
+        "Value": "min_prefix_len = 3\ncharset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

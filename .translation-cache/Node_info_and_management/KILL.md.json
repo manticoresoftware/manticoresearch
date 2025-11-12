@@ -6,5 +6,13 @@
       "russian": "# KILL\n\n<!-- example KILL -->\n\nCODE_BLOCK_0\n\n`KILL` завершает выполнение запроса по его ID, который вы можете найти в [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- end -->\n\n<!-- proofread -->"
     },
     "is_code_or_comment": false
+  },
+  "6cf17343665ad572264723e7a8b83d596df7dae37ca2637319b2f5ade44359cf": {
+    "original": "# KILL\n\n<!-- example KILL -->\n\nCODE_BLOCK_0\n\n`KILL` terminates the execution of a query by its ID, which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- request JSON -->\n\nCODE_BLOCK_2\n\n<!-- end -->\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# KILL\n\n<!-- example KILL -->\n\nCODE_BLOCK_0\n\n`KILL` 通过查询的 ID 终止该查询的执行，您可以在 [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) 中找到该 ID。\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- request JSON -->\n\nCODE_BLOCK_2\n\n<!-- end -->\n\n<!-- proofread -->",
+      "russian": "# KILL\n\n<!-- example KILL -->\n\nCODE_BLOCK_0\n\n`KILL` завершает выполнение запроса по его ID, который вы можете найти в [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- request JSON -->\n\nCODE_BLOCK_2\n\n<!-- end -->\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
   }
 }

@@ -1,18 +1,18 @@
-# Добавление правил в таблицу перколяции
+# Добавление правил в таблицу percolate
 
 <!-- example -->
-В [таблице перколяции](../../Creating_a_table/Local_tables/Percolate_table.md) хранятся документы, которые являются правилами запроса перколяции и должны строго соответствовать схеме из четырёх полей:
+В [таблице percolate](../../Creating_a_table/Local_tables/Percolate_table.md) хранятся документы с правилами перколяции, и они должны строго соответствовать схеме из четырёх полей:
 
 | поле | тип | описание |
 | - | - | - |
-| id | bigint | идентификатор правила PQ (если не указан, будет назначен автоматически) |
-| query | string | полнотекстовый запрос (может быть пустым), совместимый с [таблицей перколяции](../../Creating_a_table/Local_tables/Percolate_table.md) |
-| filters | string | дополнительные фильтры по полям, не являющимся полнотекстовыми (может быть пустым), совместимые с [таблицей перколяции](../../Creating_a_table/Local_tables/Percolate_table.md) |
-| tags   | string | строка с одним или несколькими тегами, разделёнными запятыми, которые могут использоваться для выборочного отображения/удаления сохранённых запросов |
+| id | bigint | Идентификатор правила PQ (если не указан, будет назначен автоматически) |
+| query | string | Полнотекстовый запрос (может быть пустым), совместимый с [таблицей percolate](../../Creating_a_table/Local_tables/Percolate_table.md) |
+| filters | string | Дополнительные фильтры по не полнотекстовым полям (может быть пустым), совместимый с [таблицей percolate](../../Creating_a_table/Local_tables/Percolate_table.md) |
+| tags   | string | Строка с одним или несколькими тегами, разделёнными запятыми, которые могут использоваться для выборочного отображения/удаления сохранённых запросов |
 
 Любые другие имена полей не поддерживаются и вызовут ошибку.
 
-**Внимание:** Вставка/замена правил PQ в формате JSON через SQL не сработает. Другими словами, операторы, специфичные для JSON (`match` и т.п.), будут рассматриваться просто как части текста правила, которые должны совпадать с документами. Если вы предпочитаете синтаксис JSON, используйте HTTP-эндпоинт вместо `INSERT`/`REPLACE`.
+**Внимание:** Вставка/замена правил PQ в формате JSON через SQL не сработает. Другими словами, специализированные операторы JSON (`match` и др.) будут рассматриваться просто как части текста правила, с которыми должны совпадать документы. Если вы предпочитаете синтаксис JSON, используйте HTTP-эндпоинт вместо `INSERT`/`REPLACE`.
 
 <!-- intro -->
 ##### SQL
@@ -36,7 +36,7 @@ SELECT * FROM pq;
 <!-- intro -->
 ##### JSON
 <!-- request JSON -->
-Существует два способа добавить запрос перколяции в таблицу перколяции:
+Существует два способа добавить запрос percolate в таблицу percolate:
 * Запрос в формате JSON, совместимом с /search, описанном в [json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
 PUT /pq/pq_table/doc/1
@@ -55,7 +55,7 @@ PUT /pq/pq_table/doc/1
 }
 ```
 
-* Запрос в формате SQL, описанном в [синтаксисе запросов search](../../Searching/Filters.md#Queries-in-SQL-format)
+* Запрос в формате SQL, описанный в [синтаксисе поискового запроса](../../Searching/Filters.md#Queries-in-SQL-format)
 ```json
 PUT /pq/pq_table/doc/2
 {
@@ -161,9 +161,9 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example noid -->
-## Автоматическое назначение ID
+## Автоматическое присвоение ID
 
-Если вы не указываете ID, он будет назначен автоматически. Подробнее об авто-ID можно прочитать [здесь](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
+Если вы не укажете ID, он будет назначен автоматически. Подробнее об авто-ID можно прочитать [здесь](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
 
 <!-- intro -->
 ##### SQL:
@@ -358,11 +358,11 @@ let insert_res = index_api.insert(insert_req).await;
 
 <!-- example noschema -->
 ## Отсутствие схемы в SQL
-Если в SQL-команде `INSERT` опустить схему, ожидаются следующие параметры:
-1. ID. Можно использовать `0` в качестве ID, чтобы вызвать автоматическую генерацию ID.
-2. Query - полнотекстовый запрос.
-3. Tags - строка тегов правила PQ.
-4. Filters - дополнительные фильтры по атрибутам.
+Если схема в SQL-команде `INSERT` опущена, ожидаются следующие параметры:
+1. ID. Можно использовать `0` в качестве ID, чтобы инициировать автоматическую генерацию ID.
+2. Query — Полнотекстовый запрос.
+3. Tags — строка тегов правила PQ.
+4. Filters — дополнительные фильтры по атрибутам.
 
 <!-- request SQL -->
 
@@ -381,12 +381,82 @@ SELECT * FROM pq;
 | 2810855531667783689 | @title shoes | Louis Vuitton |         |
 +---------------------+--------------+---------------+---------+
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', '', '');"
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', 'Louis Vuitton', '');"
+POST /sql?mode=raw -d "SELECT * FROM pq;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "query": "@title shoes",
+        "tags": "Louis Vuitton",
+        "filters": ""
+      },
+      {
+        "id": 724024784404348900,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": ""
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example replace -->
 ## Замена правил в таблице PQ
 
-Чтобы заменить существующее правило PQ новым в SQL, просто используйте обычную команду [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md). Существует специальный синтаксис `?refresh=1` для замены правила PQ **определённого в JSON-режиме** через HTTP JSON интерфейс.
+Для замены существующего правила PQ на новое в SQL просто используйте обычную команду [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md). Существует особый синтаксис `?refresh=1` для замены правила PQ **определённого в JSON-режиме** через HTTP JSON интерфейс.
 
 
 <!-- intro -->

@@ -1,0 +1,430 @@
+––– block: ../../base/dind/init –––
+––– input –––
+apk add --no-cache curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+cat << 'EOF' > /tmp/grafana-single-test.sh
+#!/bin/bash
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+    echo "✗ Usage: $0 <grafana_version>" >&2
+    echo "✗ Example: $0 12.2" >&2
+    exit 1
+fi
+
+VERSION="$1"
+NETWORK_NAME="manticore-grafana-test"
+MANTICORE_CONTAINER="manticore-test-kit"
+GRAFANA_CONTAINER="grafana-${VERSION}"
+
+# Cleanup function (only removes Grafana container, keeps Manticore and network for reuse)
+cleanup() {
+    docker rm -f "$GRAFANA_CONTAINER" > /dev/null 2>&1 || true
+}
+
+# Cleanup before test
+cleanup
+
+echo ">>> Testing Grafana version: $VERSION"
+
+# Verify Manticore container is running (should be created before running tests)
+if docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "SELECT 1" > /dev/null 2>&1; then
+    echo "✓ Manticore Search available"
+else
+    echo "✗ Error: Manticore Search unavailable" >&2
+    cleanup
+    exit 1
+fi
+
+# Start Grafana container
+docker run -d --name "$GRAFANA_CONTAINER" \
+    --network "$NETWORK_NAME" \
+    -e GF_SECURITY_ADMIN_PASSWORD=admin \
+    grafana/grafana:${VERSION}.0 > /dev/null 2>&1 || {
+    echo "✗ Error: Failed to start Grafana container" >&2
+    cleanup
+    exit 1
+}
+
+# Wait for Grafana to be ready
+timeout 60 bash -c "until docker logs $GRAFANA_CONTAINER 2>&1 | grep -q 'HTTP Server Listen'; do sleep 1; done" || {
+    echo "✗ Error: Grafana failed to start" >&2
+    cleanup
+    exit 1
+}
+
+echo "✓ Grafana $VERSION started successfully"
+
+# Verify Grafana is accessible
+if docker exec "$GRAFANA_CONTAINER" wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
+    echo "✓ Grafana API accessible"
+else
+    echo "✗ Error: Grafana API unavailable" >&2
+    cleanup
+    exit 1
+fi
+
+# Create Manticore data source
+DATASOURCE_RESPONSE=$(docker exec "$GRAFANA_CONTAINER" curl -s -X POST "http://localhost:3000/api/datasources" \
+    -u "admin:admin" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"Manticore\",\"type\":\"mysql\",\"url\":\"${MANTICORE_CONTAINER}:9306\",\"access\":\"proxy\"}")
+
+if echo "$DATASOURCE_RESPONSE" | grep -q '"message":"Datasource added"'; then
+    echo "✓ Data source created successfully"
+else
+    echo "✗ Error: Failed to create data source" >&2
+    echo "$DATASOURCE_RESPONSE" >&2
+    cleanup
+    exit 1
+fi
+
+# Create test tables
+docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products" > /dev/null 2>&1
+docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "CREATE TABLE products (title text, price float, created bigint)" > /dev/null 2>&1 || {
+    echo "✗ Error: Failed to create test table" >&2
+    cleanup
+    exit 1
+}
+
+# Insert test data
+docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "INSERT INTO products (title, price, created) VALUES ('Laptop', 999.99, 1697200000), ('Mouse', 29.99, 1697210000), ('Keyboard', 79.99, 1697220000)" > /dev/null 2>&1 || {
+    echo "✗ Error: Failed to insert test data" >&2
+    cleanup
+    exit 1
+}
+
+# Wait a bit for table to be ready
+sleep 1
+
+# Verify information_schema.tables returns correct data
+TABLE_CHECK=$(docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='products'" 2>&1 | sed -n '2p' | tr -cd '0-9')
+if [ "$TABLE_CHECK" -ge "1" ]; then
+    echo "✓ information_schema.tables check passed"
+else
+    echo "✗ Error: information_schema.tables check failed (got: '$TABLE_CHECK')" >&2
+    cleanup
+    exit 1
+fi
+
+# Test table discovery query used by Grafana Query Builder
+DISCOVERY_CHECK=$(docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -N -B -e "SELECT table_name FROM information_schema.tables WHERE table_schema = 'Manticore'" 2>&1 | grep -c "products")
+if [ "$DISCOVERY_CHECK" -ge "1" ]; then
+    echo "✓ Table discovery query works"
+else
+    echo "✗ Error: Table discovery query failed" >&2
+    cleanup
+    exit 1
+fi
+
+# Test query execution via Grafana API
+QUERY_RESPONSE=$(docker exec "$GRAFANA_CONTAINER" curl -s -X POST "http://localhost:3000/api/ds/query" \
+    -u "admin:admin" \
+    -H "Content-Type: application/json" \
+    -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT COUNT(*) as total FROM products","format":"table"}]}')
+
+if echo "$QUERY_RESPONSE" | grep -q '"total"' && echo "$QUERY_RESPONSE" | grep -q '\[3\]'; then
+    echo "✓ Query execution via Grafana API works"
+else
+    echo "✗ Error: Query execution failed" >&2
+    echo "$QUERY_RESPONSE" >&2
+    cleanup
+    exit 1
+fi
+
+# Test aggregations (COUNT, AVG, MAX, MIN)
+AVG_CHECK=$(docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -N -B -e "SELECT AVG(price) FROM products" 2>&1 | sed -n '2p' | tr -cd '0-9.')
+if [ -n "$AVG_CHECK" ]; then
+    echo "✓ AVG aggregation works"
+else
+    echo "✗ Error: AVG aggregation failed" >&2
+    cleanup
+    exit 1
+fi
+
+# Test GROUP BY via Grafana API
+docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "DROP TABLE IF EXISTS orders" > /dev/null 2>&1
+docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "CREATE TABLE orders (order_id bigint, amount float, status string)" > /dev/null 2>&1
+docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "INSERT INTO orders (order_id, amount, status) VALUES (1, 500.0, 'completed'), (2, 750.5, 'completed'), (3, 320.0, 'pending')" > /dev/null 2>&1
+
+GROUP_BY_RESPONSE=$(docker exec "$GRAFANA_CONTAINER" curl -s -X POST "http://localhost:3000/api/ds/query" \
+    -u "admin:admin" \
+    -H "Content-Type: application/json" \
+    -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT status, COUNT(*) as count FROM orders GROUP BY status","format":"table"}]}')
+
+if echo "$GROUP_BY_RESPONSE" | grep -q '"status"' && echo "$GROUP_BY_RESPONSE" | grep -q '"count"'; then
+    echo "✓ GROUP BY query works"
+else
+    echo "✗ Error: GROUP BY query failed" >&2
+    cleanup
+    exit 1
+fi
+
+# Test ORDER BY
+ORDER_BY_CHECK=$(docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -N -B -e "SELECT title FROM products ORDER BY price DESC LIMIT 1" 2>&1 | sed -n '2p' | tr -d '| ')
+if [ "$ORDER_BY_CHECK" = "Laptop" ]; then
+    echo "✓ ORDER BY works"
+else
+    echo "✗ Error: ORDER BY failed" >&2
+    cleanup
+    exit 1
+fi
+
+# Test WHERE clause
+WHERE_CHECK=$(docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM products WHERE price > 50" 2>&1 | sed -n '2p' | tr -cd '0-9')
+if [ "$WHERE_CHECK" = "2" ]; then
+    echo "✓ WHERE clause works"
+else
+    echo "✗ Error: WHERE clause failed" >&2
+    cleanup
+    exit 1
+fi
+
+echo "✓ Grafana version $VERSION tested successfully"
+
+# Cleanup
+cleanup
+EOF
+––– output –––
+––– input –––
+chmod +x /tmp/grafana-single-test.sh; echo $?
+––– output –––
+0
+––– comment –––
+Create shared network for all Grafana versions
+––– input –––
+docker network create manticore-grafana-test > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Start shared Manticore container
+––– input –––
+docker run -it -d --name manticore-test-kit \
+  --network=manticore-grafana-test \
+  --platform linux/amd64 \
+  ghcr.io/manticoresoftware/manticoresearch:test-kit-latest \
+  bash > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Configure Manticore
+––– input –––
+docker exec manticore-test-kit sed -i 's/127.0.0.1/0.0.0.0/g' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+docker exec manticore-test-kit bash -c "mkdir -p /var/log/manticore && stdbuf -oL searchd --logdebugvv > /dev/null 2>&1 &"
+––– output –––
+––– input –––
+docker exec manticore-test-kit bash -c "timeout 10 bash -c 'until [ -f /var/log/manticore/searchd.log ] && grep -q \"accepting connections\" /var/log/manticore/searchd.log; do sleep 0.5; done'" && echo 'Manticore ready'
+––– output –––
+Manticore ready
+––– comment –––
+Verify Manticore is working
+––– input –––
+docker exec manticore-test-kit mysql -h0 -P9306 -e "SELECT 1\G"
+––– output –––
+*************************** 1. row ***************************
+1: 1
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 10.0
+––– output –––
+>>> Testing Grafana version: 10.0
+✓ Manticore Search available
+✓ Grafana 10.0 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 10.0 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 10.1
+––– output –––
+>>> Testing Grafana version: 10.1
+✓ Manticore Search available
+✓ Grafana 10.1 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 10.1 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 10.2
+––– output –––
+>>> Testing Grafana version: 10.2
+✓ Manticore Search available
+✓ Grafana 10.2 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 10.2 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 10.3
+––– output –––
+>>> Testing Grafana version: 10.3
+✓ Manticore Search available
+✓ Grafana 10.3 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 10.3 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 10.4
+––– output –––
+>>> Testing Grafana version: 10.4
+✓ Manticore Search available
+✓ Grafana 10.4 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 10.4 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 11.0
+––– output –––
+>>> Testing Grafana version: 11.0
+✓ Manticore Search available
+✓ Grafana 11.0 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 11.0 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 11.1
+––– output –––
+>>> Testing Grafana version: 11.1
+✓ Manticore Search available
+✓ Grafana 11.1 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 11.1 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 11.2
+––– output –––
+>>> Testing Grafana version: 11.2
+✓ Manticore Search available
+✓ Grafana 11.2 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 11.2 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 11.3
+––– output –––
+>>> Testing Grafana version: 11.3
+✓ Manticore Search available
+✓ Grafana 11.3 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 11.3 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 12.0
+––– output –––
+>>> Testing Grafana version: 12.0
+✓ Manticore Search available
+✓ Grafana 12.0 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 12.0 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 12.1
+––– output –––
+>>> Testing Grafana version: 12.1
+✓ Manticore Search available
+✓ Grafana 12.1 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 12.1 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 12.2
+––– output –––
+>>> Testing Grafana version: 12.2
+✓ Manticore Search available
+✓ Grafana 12.2 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 12.2 tested successfully
+––– input –––
+rm -f /tmp/grafana-single-test.sh
+––– output –––
+––– comment –––
+Cleanup shared Manticore container and network
+––– input –––
+docker rm -f manticore-test-kit > /dev/null 2>&1 && docker network rm manticore-grafana-test > /dev/null 2>&1; echo $?
+––– output –––
+0

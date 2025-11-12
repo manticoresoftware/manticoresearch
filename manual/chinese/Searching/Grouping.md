@@ -1,18 +1,18 @@
 # 分组搜索结果
 
 <!-- example general -->
-分组搜索结果通常有助于获取每组的匹配计数或其他聚合。例如，它对于创建每月匹配博客文章数量的图表，或按网站分组网页搜索结果，或按作者分组论坛帖子等非常有用。
+分组搜索结果通常有助于获取每个组的匹配计数或其他聚合。例如，它对于创建按月匹配博客帖子数量的图表，或按站点分组网页搜索结果，或按作者分组论坛帖子等非常有用。
 
-Manticore 支持按单列或多列以及计算表达式对搜索结果进行分组。结果可以：
+Manticore 支持按单列、多列和计算表达式对搜索结果进行分组。结果可以：
 
 * 在组内排序
 * 每组返回多行
-* 过滤组
+* 对组进行过滤
 * 对组进行排序
 * 使用[聚合函数](../Searching/Grouping.md#Aggregation-functions)进行聚合
 
 <!-- intro -->
-通用语法是：
+一般语法是：
 
 <!-- request SQL -->
 通用语法
@@ -29,7 +29,7 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 <!-- request JSON -->
-JSON 查询格式目前支持基本分组，可以检索聚合值及其 count(*)。
+JSON 查询格式目前支持基本分组，可检索聚合值及其 count(*)。
 
 ```json
 {
@@ -46,19 +46,19 @@ JSON 查询格式目前支持基本分组，可以检索聚合值及其 count(*)
 }
 ```
 
-标准查询输出返回未分组的结果集，可以使用 `limit`（或 `size`）隐藏。
-聚合需要设置组结果集的 `size`。
+标准查询输出返回未分组的结果集，可以通过 `limit`（或 `size`）将其隐藏。
+聚合需要设置组结果集大小 `size`。
 
 <!-- end -->
 
 <!-- example group1 -->
 ### 仅分组
-分组非常简单——只需在 `SELECT` 查询末尾添加 "GROUP BY smth"。这里的某物可以是：
+分组相当简单——只需在 `SELECT` 查询末尾添加 "GROUP BY smth"。该某物可以是：
 
-* 表中的任何非全文字段：整数、浮点数、字符串、多值属性（MVA）
-* 或者，如果你在 `SELECT` 列表中使用了别名，也可以按别名分组
+* 表中的任何非全文字段：整数、浮点、字符串、多值属性(MVA)
+* 或者，如果你在 `SELECT` 列表中使用了别名，也可以按它分组
 
-你可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#Aggregation-functions)，它仍然有效：
+你可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#Aggregation-functions)，仍然有效：
 
 <!-- intro -->
 ##### 示例：
@@ -81,12 +81,12 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- end -->
 <!-- example group2 -->
-然而，在大多数情况下，你会想为每个组获取一些聚合数据，例如：
+然而，在大多数情况下，你会想为每个组获得一些聚合数据，例如：
 
-* `COUNT(*)` 用于简单获取每组中的元素数量
-* 或者 `AVG(field)` 用于计算组内字段的平均值
+* `COUNT(*)` 仅仅获取每组的元素数量
+* 或 `AVG(field)` 计算组内字段的平均值
 
-对于 HTTP JSON 请求，使用单个带有 `limit=0` 的 `aggs` 桶，在主查询级别，效果类似于带有 `GROUP BY` 和 `COUNT(*)` 的 SQL 查询，提供等效的行为和性能。
+对于 HTTP JSON 请求，使用单个 `aggs` 桶，并在主查询级别设置 `limit=0`，效果类似于 SQL 查询中的 `GROUP BY` 和 `COUNT(*)`，提供等效的行为和性能。
 
 <!-- intro -->
 ##### 示例：
@@ -501,8 +501,8 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 <!-- example sort1 -->
-##### 对组进行排序
-默认情况下，组不排序，接下来你通常想做的是按某个字段排序，比如你分组所用的字段：
+##### 组内排序
+默认情况下，组不排序，接下来你通常想做的是按某个字段排序，比如你分组用的字段：
 
 <!-- intro -->
 ##### 示例：
@@ -525,10 +525,10 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 ```
 <!-- end -->
 <!-- example sort2 -->
-或者，你可以按聚合排序：
+另外，你也可以按聚合排序：
 
-* 按 `count(*)` 显示元素最多的组优先
-* 按 `avg(rental_rate)` 显示评分最高的电影优先。注意示例中是通过别名完成的：`avg(rental_rate)` 首先在 `SELECT` 列表中映射为 `avg`，然后我们简单地做 `ORDER BY avg`
+* 按 `count(*)` 排序，优先显示包含最多元素的组
+* 按 `avg(rental_rate)` 排序，优先显示评分最高的电影。注意，在示例中，这是通过别名完成的：先在 `SELECT` 列表中将 `avg(rental_rate)` 映射为 `avg`，然后简单地执行 `ORDER BY avg`
 
 
 <!-- intro -->
@@ -570,8 +570,8 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 <!-- end -->
 
 <!-- example group3 -->
-##### 同时按多个字段 GROUP BY
-在某些情况下，你可能想不仅按单个字段分组，而是同时按多个字段分组，比如电影的类别和年份：
+##### 一次按多个字段 GROUP BY
+有时你可能想按多个字段分组，而不仅仅是单个字段，比如电影的类别和年份：
 
 <!-- intro -->
 ##### 示例：
@@ -688,7 +688,7 @@ POST /search -d '
 
 <!-- example group4 -->
 ##### 给我 N 行
-有时查看每组不止一个元素很有用。这可以通过 `GROUP N BY` 轻松实现。例如，下面的例子中，我们为每年获取两部电影，而不是简单的 `GROUP BY release_year` 返回的一部。
+有时看到每组不止一个元素也很有用。这可以通过 `GROUP N BY` 很容易实现。例如，下面的例子中，我们为每个年份获取两部电影，而不是简单 `GROUP BY release_year` 只返回一部。
 
 <!-- intro -->
 ##### 示例：
@@ -714,10 +714,10 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 
 <!-- example group5 -->
 ##### 组内排序
-另一个关键的分析需求是对组内元素排序。为此，使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，我们获取每年评分最高的电影。注意它与单独的 `ORDER BY` 并行工作：
+另一个关键的分析需求是对组内元素排序。为此，使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，获取每年评分最高的电影。注意它与普通的 `ORDER BY` 并行工作：
 
-* `WITHIN GROUP ORDER BY` 对组内结果排序
-* 而单独的 `GROUP BY` 对组本身排序
+* `WITHIN GROUP ORDER BY` 对**组内**结果排序
+* 而仅用 `GROUP BY` 对**组本身**排序
 
 这两者完全独立工作。
 
@@ -745,7 +745,7 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 
 <!-- example group6 -->
 ##### 过滤组
-`HAVING expression` 是过滤组的有用子句。`WHERE` 在分组前应用，而 `HAVING` 作用于组。例如，我们只保留那些该年电影平均租赁率高于 3 的年份。结果只有四个年份：
+`HAVING expression` 是过滤组的有用子句。`WHERE` 用于分组前过滤，而 `HAVING` 用于分组后过滤。例如，我们只保留那些该年电影平均租赁率高于3的年份。结果只有四个年份：
 
 <!-- intro -->
 ##### 示例：
@@ -766,8 +766,6 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 +--------------+------------+
 ```
 <!-- end -->
-
-注意 `HAVING` 不影响[搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的 `total_found`。
 
 <!-- example group7 -->
 ##### GROUPBY()

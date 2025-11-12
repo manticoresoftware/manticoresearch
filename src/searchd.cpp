@@ -10886,20 +10886,18 @@ void UnlockTables(ClientSession_c* pSess)
 	pSess->m_dLockedTables.Reset();
 }
 
-void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString& sWarningOut )
 {
 	StrVec_t dIndexes;
 	bool bHasWrite = false;
 	tStmt.m_dInsertValues.for_each ( [&] (const SqlInsert_t& tVal) {
-		bHasWrite |= tVal.m_iType>10;
-		dIndexes.Add(tVal.m_sVal);
+		if ( tVal.m_iType>10 )
+			bHasWrite = true;
+		else
+			dIndexes.Add(tVal.m_sVal);
 	});
 
-	if (bHasWrite)
-	{
-		tOut.Error ( "Write lock is not implemented." );
-		return;
-	}
+	sWarningOut = bHasWrite ? "Write lock is not implemented." : "";
 
 	if ( session::GetProto()!=Proto_e::MYSQL41 )
 	{
@@ -10932,7 +10930,7 @@ void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		sphLogDebug ( "Locked %s", sIndex.cstr() );
 	}
 
-	tOut.Ok ( 0 );
+	tOut.Ok ( 0, bHasWrite ? 1 : 0 );
 }
 
 void HandleMysqlUnlockTables ( RowBuffer_i & tOut )
@@ -11516,7 +11514,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_LOCK_TABLES:
-		HandleMysqlLockTables ( tOut, *pStmt );
+		HandleMysqlLockTables ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_UNLOCK_TABLES:

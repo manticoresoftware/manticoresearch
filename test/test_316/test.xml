@@ -75,7 +75,9 @@ searchd
 	select * from a order by id asc;
 	select * from b order by id asc;
 	lock tables a read, b write;
+	show warnings;
 	lock tables a read, b read;
+	show warnings;
 	insert into a values (6, 1);
 	insert into b values (6, 2);
 	update a set iid=6 where id=1;

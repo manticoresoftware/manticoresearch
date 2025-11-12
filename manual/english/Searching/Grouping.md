@@ -767,7 +767,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
-**Note:** `HAVING` correctly affects `total_found` in the [search query meta info](../Node_info_and_management/SHOW_META.md#SHOW-META). The `total_found` value now reflects the number of groups **after** the `HAVING` filter is applied, not before. This enables proper pagination when using `HAVING` clauses with `GROUP BY`.
+**Note:** `HAVING` correctly affects `total_found` in the [search query meta info](../Node_info_and_management/SHOW_META.md#SHOW-META). The `total_found` value counts only the groups that match the `HAVING` condition. This enables proper pagination when using `HAVING` clauses with `GROUP BY`.
 
 <!-- example group7 -->
 ##### GROUPBY()

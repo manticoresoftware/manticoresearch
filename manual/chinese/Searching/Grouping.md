@@ -767,6 +767,8 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
+**注意：** `HAVING` 正确地影响[搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的 `total_found`。`total_found` 值只计算匹配 `HAVING` 条件的分组。这使得在使用 `HAVING` 子句与 `GROUP BY` 时能够正确分页。
+
 <!-- example group7 -->
 ##### GROUPBY()
 有一个函数 `GROUPBY()`，它返回当前分组的键。在许多情况下非常有用，特别是当你[按 MVA 分组](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29)或按[JSON 值分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)时。

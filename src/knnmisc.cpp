@@ -623,6 +623,13 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		return { nullptr, true };
 	}
 
+	// Validate vector dimension matches the index requirements
+	if ( !tKNN.m_sEmbStr && pKNNAttr->m_tKNN.m_iDims != tKNN.m_dVec.GetLength() )
+	{
+		sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", tKNN.m_sAttr.cstr(), pKNNAttr->m_tKNN.m_iDims, tKNN.m_dVec.GetLength() );
+		return { nullptr, true };
+	}
+
 	const auto pAttr = tSorterSchema.GetAttr ( GetKnnDistAttrName() );
 	assert(pAttr);
 

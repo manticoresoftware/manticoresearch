@@ -121,12 +121,6 @@ define ( "SPH_UPDATE_MVA",			1 );
 define ( "SPH_UPDATE_STRING",		2 );
 define ( "SPH_UPDATE_JSON",			3 );
 
-/// known auth types
-define ( "AUTH_NO",     1 );
-define ( "AUTH_SHA1",   2 );
-define ( "AUTH_SHA256", 3 );
-
-
 // important properties of PHP's integers:
 //  - always signed (one bit short of PHP_INT_SIZE)
 //  - conversion from string to int is saturated
@@ -465,9 +459,6 @@ class SphinxClient
 	var $_token_filter_library; ///< token_filter plugin library name
 	var $_token_filter_name; ///< token_filter plugin name
 	var $_token_filter_opts; ///< token_filter plugin options
-    
-	var $user;          ///< user name
-	var $user_token;    ///< user hashed password
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -537,9 +528,6 @@ class SphinxClient
 		$this->_mbenc		= "";
 		$this->_arrayresult	= false;
 		$this->_timeout		= 0;
-        
-		$this->user = '';
-		$this->user_token = '';
 	}
 
 	function __destruct()
@@ -596,18 +584,8 @@ class SphinxClient
 	}
 
 
-	function _Send ( $handle, $data, $length, $add_auth )
+	function _Send ( $handle, $data, $length )
 	{
-		if ( $add_auth )
-		{
-			// auth data head
-			$auth_head = $this->GetUserData();
-			$length += strlen ( $auth_head );
-			
-			$auth_head .= $data;
-			$data = $auth_head;
-		}
-		
 		if ( feof($handle) || fwrite ( $handle, $data, $length ) !== $length )
 		{
 			$this->_error = 'connection unexpectedly closed (timed out?)';
@@ -688,7 +666,7 @@ class SphinxClient
 		// this is a subtle part. we must do it before (!) reading back from searchd.
 		// because otherwise under some conditions (reported on FreeBSD for instance)
 		// TCP stack could throttle write-write-read pattern because of Nagle.
-		if ( !$this->_Send ( $fp, pack ( "N", 2 ), 4, false ) )
+		if ( !$this->_Send ( $fp, pack ( "N", 1 ), 4 ) )
 		{
 			fclose ( $fp );
 			$this->_error = "failed to send client protocol version";
@@ -1316,7 +1294,7 @@ class SphinxClient
 		$len = 8+strlen($req);
 		$req = pack ( "nnNNN", SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, $len, 0, $nreqs ) . $req; // add header
 
-		if ( !( $this->_Send ( $fp, $req, $len+8, true ) ) ||
+		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_SEARCH ) ) )
 		{
 			$this->_MBPop ();
@@ -1599,7 +1577,7 @@ class SphinxClient
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, $len ) . $req; // add header
-		if ( !( $this->_Send ( $fp, $req, $len+8, true ) ) ||
+		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_EXCERPT ) ) )
 		{
 			$this->_MBPop ();
@@ -1669,7 +1647,7 @@ class SphinxClient
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, $len ) . $req; // add header
-		if ( !( $this->_Send ( $fp, $req, $len+8, true ) ) ||
+		if ( !( $this->_Send ( $fp, $req, $len+8 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_KEYWORDS ) ) )
 		{
 			$this->_MBPop ();
@@ -1803,7 +1781,7 @@ class SphinxClient
 
 		$len = strlen($req);
 		$req = pack ( "nnN", SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, $len ) . $req; // add header
-		if ( !$this->_Send ( $fp, $req, $len+8, true ) )
+		if ( !$this->_Send ( $fp, $req, $len+8 ) )
 		{
 			$this->_MBPop ();
 			return -1;
@@ -1837,7 +1815,7 @@ class SphinxClient
 
 		// command, command version = 0, body length = 4, body = 1
 		$req = pack ( "nnNN", SEARCHD_COMMAND_PERSIST, 0, 4, 1 );
-		if ( !$this->_Send ( $fp, $req, 12, true ) )
+		if ( !$this->_Send ( $fp, $req, 12 ) )
 			return false;
 
 		$this->_socket = $fp;
@@ -1874,7 +1852,7 @@ class SphinxClient
 		}
 
 		$req = pack ( "nnNN", SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, 4, $session?0:1 ); // len=4, body=1
-		if ( !( $this->_Send ( $fp, $req, 12, true ) ) ||
+		if ( !( $this->_Send ( $fp, $req, 12 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_STATUS ) ) )
 		{
 			$this->_MBPop ();
@@ -1910,7 +1888,7 @@ class SphinxClient
 		}
 
 		$req = pack ( "nnN", SEARCHD_COMMAND_FLUSHATTRS, VER_COMMAND_FLUSHATTRS, 0 ); // len=0
-		if ( !( $this->_Send ( $fp, $req, 8, true ) ) ||
+		if ( !( $this->_Send ( $fp, $req, 8 ) ) ||
 			 !( $response = $this->_GetResponse ( $fp, VER_COMMAND_FLUSHATTRS ) ) )
 		{
 			$this->_MBPop ();
@@ -1926,35 +1904,6 @@ class SphinxClient
 		$this->_MBPop ();
 		return $tag;
 	}
-    
-	//////////////////////////////////////////////////////////////////////////
-	// user
-	//////////////////////////////////////////////////////////////////////////
-
-	function SetUser ($user, $password)
-	{
-		$this->user = $user;
-		
-		$password_hash = hash ( "sha256", $password, true );
-		$pwd_hash = hash ( "sha256", $user . $password_hash, true );
-		$this->user_token = $pwd_hash;
-	}
-	
-	function GetUserData ()
-	{
-		$data = '';
-		if ( $this->user=='' )
-		{
-			$data .= pack ( "C", AUTH_NO );
-		} else
-		{
-			$data .= pack ( "C", AUTH_SHA256 );
-			$data .= $this->user_token;
-		}
-		
-		return $data;
-	}
-
 }
 
 //

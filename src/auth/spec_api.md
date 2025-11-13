@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the specification for a secure **binary TCP API protocol** used by multiple internal daemons. It defines a secure message exchange without relying on TLS, leveraging AES-256-GCM encryption for all inter-daemon communication.
+This document describes the specification for a secure **binary TCP API protocol** used exclusively for **inter-daemon communication** (e.g., between a master and its agents, or between nodes in a cluster). It defines a secure message exchange without relying on TLS, leveraging AES-256-GCM encryption for all communication.
+
+End-user clients communicate with the daemon via the separate and distinct MySQL and HTTP protocols. This specification does not apply to those interfaces.
 
 ## Goals
 
@@ -32,12 +34,24 @@ This document describes the specification for a secure **binary TCP API protocol
 *   16-byte authentication tag (GCM tag)
 
 ### **Binary Packet Format**
+Instead of JSON, the protocol uses a packed binary format for efficiency. A complete message consists of an unencrypted header followed by an encrypted payload.
 
-Instead of JSON, the protocol uses a packed binary format for efficiency. The encrypted portion of a packet follows this structure:
+**1. Unencrypted Header:**
+The encrypted payload is typically preceded by an unencrypted header containing the packet length and command code. This header is handled by the calling network function and is not part of the encrypted data itself.
 
-`[Nonce (12 bytes)][Tag (16 bytes)][Ciphertext (variable length)]`
+**2. Encrypted Payload Format:**
+The payload that is processed by the cryptographic functions (`EncryptGCM`/`DecryptGCM`) has the following structure. The `Username` field is included as Associated Authenticated Data (AAD), which means it is authenticated by the GCM tag but not encrypted. This binds the encrypted message to a specific user context.
 
-This encrypted blob is typically preceded by an unencrypted header containing the packet length and command code.
+| Field | Size | Description |
+| :--- | :--- | :--- |
+| **Algorithm Version** | 1 byte | A version number for the cryptographic scheme. Currently `1`. |
+| **Username Length** | 4 bytes | The length of the `Username` string that follows. |
+| **Username** | Variable | The sender's username. Used as **AAD** to ensure the message cannot be re-assigned to another user. |
+| **Nonce** | 12 bytes | The unique, structured nonce for this message. |
+| **Tag** | 16 bytes | The AES-GCM authentication tag. |
+| **Ciphertext** | Variable | The AES-256-GCM encrypted original message payload. |
+
+This entire block is what follows the initial unencrypted length and command code on the wire.
 
 ### Message Lifecycle
 
@@ -190,9 +204,11 @@ This multi-layered validation ensures that only fresh messages from the most rec
 
 Error conditions are communicated via **status codes within the binary reply packets**, not HTTP codes.
 
-*   **Decryption Errors:** If tag verification fails, the daemon must reply with a status code indicating an authentication failure (e.g., `STATUS_AUTH_ERROR`).
+*   **Decryption and Authentication Errors:** If the receiver fails to decrypt a message for any cryptographic reason—including an incorrect GCM tag (indicating tampering or wrong key), a stale `boot_id`, or a replayed `counter`—the packet must be rejected.
+    *   The receiving daemon **logs the specific reason for the failure** (e.g., `GCM authentication failed (bad tag)` or `replay detected`) for security auditing purposes.
+    *   For security reasons, to avoid leaking internal state information, the daemon replies to the sender with a **generic status code indicating an authentication failure** (e.g., `STATUS_AUTH_ERROR`). It does not send back the specific reason for the failure.
+
 *   **Malformed Packet:** If a received packet has an invalid length or fails basic structural checks before decryption, the connection may be closed, or a reply with a generic error status (e.g., `STATUS_ERROR`) should be sent.
-*   **Nonce Replay:** If the validator detects a replayed or stale nonce, the daemon must reply with a specific status code indicating a replay attempt (e.g., `STATUS_REPLAY_DETECTED`). The attempt should be logged for security auditing.
 
 ## Performance Considerations
 

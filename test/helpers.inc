@@ -6,9 +6,6 @@ ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
 
-$g_daemon_user = "test2";
-$g_daemon_user_password = "test2";
-
 function MyMicrotime ()
 {
 	$q = @gettimeofday();
@@ -284,6 +281,22 @@ if ( !function_exists("mysql_query") ) {
  else {
 	$mysql_simulated = false;
  }
+
+function mysql_test_connect($host)
+{
+	mysqli_report(MYSQLI_REPORT_OFF);
+	global $gl_conn;
+	$conndetails = explode(":",$host);
+	if ( count($conndetails)==1 )
+		$gl_conn = new mysqli($host,'','', 'Manticore');
+	else
+	{
+		$gl_conn = new mysqli($host, '', '', 'Manticore', (int)$port);
+	}
+	if ($gl_conn->connect_error)
+		return false;
+	return $gl_conn;
+}
 
 // will use mysql_query from php, or our redefined
 function legacy_mysql_wr ($q, $conn)
@@ -597,7 +610,7 @@ function GetTmDelta()
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requirements, $addr=false, $port=false )
 {
-	global $g_locals, $windows, $cygwin, $action_wait_timeout, $sd_address, $sd_port, $g_daemon_user, $g_daemon_user_password;
+	global $g_locals, $windows, $cygwin, $action_wait_timeout, $sd_address, $sd_port;
 
 
 	$abs_config_file = testdir($config_file);
@@ -723,7 +736,6 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 		$cl = new SphinxClient;
 		$cl->SetServer ( $addr, $port );
 		$cl->SetConnectTimeout ( 10 );
-		$cl->SetUser ( $g_daemon_user, $g_daemon_user_password );
 
 		$ok = false;
 		$start = MyMicrotime();
@@ -1063,7 +1075,7 @@ function TouchVal ( &$var, $name, $default="" )
 
 function ConnectSpecificQL($agent, $vip=false)
 {
-	global $agents, $g_daemon_user, $g_daemon_user_password;
+	global $agents;
 
 	$address = $agents[$agent]["address"];
 	if ( $vip )
@@ -1075,7 +1087,7 @@ function ConnectSpecificQL($agent, $vip=false)
 	if ($address == "localhost")
 		$address = "127.0.0.1";
 	mysqli_report(MYSQLI_REPORT_OFF);
-	return @mysqli_connect ( $address, $g_daemon_user, $g_daemon_user_password, '', $port );
+	return @mysqli_connect ( $address, '', '', 'Manticore', $port );
 }
 
 function ConnectQL()
@@ -1275,14 +1287,9 @@ function HttpFormatResultSet ( $result, $nquery, $keep_json_ctrls=false )
 
 function RunCurl ( $curl_desc, &$rows )
 {
-	global $g_daemon_user, $g_daemon_user_password;
-	
 	$con = curl_init();
 
 	curl_setopt_array ( $con, $curl_desc );
-	curl_setopt($con, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-	curl_setopt($con, CURLOPT_USERPWD, "$g_daemon_user:$g_daemon_user_password");
-	
 	$rows = curl_exec ( $con );
 	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
@@ -2425,11 +2432,10 @@ class SphinxConfig
 
     function RunQueryApiUpdate ( $query, &$error, &$examples )
     {
-        global $sd_address, $sd_port, $g_daemon_user, $g_daemon_user_password;
+        global $sd_address, $sd_port;
 
         $cl = new APIClient();
         $cl->SetServer ( $sd_address, $sd_port );
-		$cl->SetUser ( $g_daemon_user, $g_daemon_user_password );
 
         $res = $cl->XUpdateAttributes ($query['index'], $query['query']['attrs'], $query['query']['values'], $query['mode'] );
         $query_result = array ('updated'=> $res);
@@ -2872,7 +2878,7 @@ class SphinxConfig
 
 	function RunQuery ( &$error, &$examples, $benchmark = false )
 	{
-		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query, $g_daemon_user, $g_daemon_user_password;
+		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query;
 		$total = $done = 0;
 
 		if ( $benchmark )
@@ -2887,12 +2893,10 @@ class SphinxConfig
 
 		$cl = new APIClient;
 		$pconn = $benchmark && method_exists ( $cl, 'Open' );
-		$cl->SetUser ( $g_daemon_user, $g_daemon_user_password );
 		if ( $pconn )
 		{
 			$cl = new APIClient;
 			$cl->SetServer ( $sd_address, $sd_port );
-			$cl->SetUser ( $g_daemon_user, $g_daemon_user_password );
 			$cl->Open ();
 		}
 
@@ -2960,7 +2964,6 @@ class SphinxConfig
 					{
 						$cl = new APIClient();
 						$cl->SetServer ( $sd_address, $sd_port );
-						$cl->SetUser ( $g_daemon_user, $g_daemon_user_password );
 					} else
 					{
 						$cl->ResetFilters ();
@@ -3086,7 +3089,7 @@ class SphinxConfig
 
 	function RunCustomTest ( & $error )
 	{
-		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_locals, $g_daemon_user, $g_daemon_user_password;
+		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_locals;
 
 		$bOk = false;
 		$results = false;
@@ -3095,7 +3098,6 @@ class SphinxConfig
 		{
 			$cl = new APIClient;
 			$cl->SetServer ( $sd_address, $sd_port );
-			$cl->SetUser ( $g_daemon_user, $g_daemon_user_password );
 
 			$results = false;
 			$run_func = function( $client, $ql, &$results ) { eval( $this->_custom_test ); };
@@ -4174,7 +4176,7 @@ class SphinxConfig
 				$connect_string = "$address:$port";
 				if ( $cn !== false )
 					$cn->close();
-				$cn = new mysqli( $address, "", "", "", $port );
+				$cn = new mysqli( $address, "", "", "Manticore", $port );
 			}
 			if ( $cn === false )
 				return false;
@@ -4268,7 +4270,7 @@ class SphinxConfig
 
 	function WriteSearchdSettings ( $fp )
 	{
-		global $sd_log, $sd_split_logs, $sd_query_log, $sd_network_timeout, $sd_max_children, $sd_pid_file, $windows;
+		global $sd_log, $sd_split_logs, $sd_query_log, $sd_network_timeout, $sd_max_children, $sd_pid_file;
 
 		if ( $this->_compat098 )
 		{
@@ -4308,12 +4310,6 @@ class SphinxConfig
 		fwrite ( $fp, "\tmax_connections	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
 		fwrite ( $fp, "#\tbinlog_path		=\n" );
-		if ( $windows )
-		{
-			//fwrite ( $fp, "\tauth_user_file = C:\\dev\\sphinx\\build\\m_dbg22\\test\\.htpasswd \n" );
-		}else {
-			//fwrite ( $fp, "\tauth_user_file = /home/stas/build/m_dbg/test/.htpasswd\n" );
-		}
 	}
 
 	function WriteSqlSettings ( $fp, $attributes )

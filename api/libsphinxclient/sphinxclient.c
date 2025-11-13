@@ -69,7 +69,6 @@
 #define MAX_REQS				32
 #define CONNECT_TIMEOUT_MSEC	1000
 #define MAX_PACKET_LEN			(8*1024*1024)
-#define SPHINX_CLIENT_VERSION	2
 
 enum
 {
@@ -87,13 +86,6 @@ enum
 	VER_COMMAND_UPDATE			= 0x102,
 	VER_COMMAND_KEYWORDS		= 0x100,
 	VER_COMMAND_STATUS			= 0x101
-};
-
-enum
-{
-	AUTH_NO = 1,
-	AUTH_SHA1 = 2,
-	AUTH_SHA256 = 3
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -130,8 +122,6 @@ struct st_override
 	const unsigned int *	uint_values;
 };
 
-#define SHA1_SIZE 20
-#define AUTH_HEADER_SIZE (SHA1_SIZE+1)
 
 struct st_sphinx_client
 {
@@ -190,8 +180,6 @@ struct st_sphinx_client
 	int						outer_limit;
 	sphinx_bool				has_outer;
 
-	sphinx_bool				has_user;
-	unsigned char			user_token[SHA1_SIZE];
 
 	int						num_reqs;
 	int						req_lens [ MAX_REQS ];
@@ -214,8 +202,6 @@ static void *				chain ( sphinx_client * client, const void * ptr, size_t len );
 static const char *			strchain ( sphinx_client * client, const char * s );
 static void					unchain ( sphinx_client * client, const void * ptr );
 static void					unchain_all ( sphinx_client * client );
-
-static void					sphinx_add_auth ( sphinx_client * client, char ** pp );
 
 sphinx_client * sphinx_create ( sphinx_bool copy_args )
 {
@@ -283,9 +269,6 @@ sphinx_client * sphinx_create ( sphinx_bool copy_args )
 	client->outer_limit				= 0;
 	client->has_outer				= SPH_FALSE;
 
-	client->has_user				= SPH_FALSE;
-	memset ( client->user_token, 0, sizeof ( client->user_token ) );
-
 	client->num_reqs				= 0;
 	client->response_len			= 0;
 	client->response_buf			= NULL;
@@ -352,9 +335,6 @@ void sphinx_cleanup ( sphinx_client * client )
 	client->num_results = 0;
 
 	safe_free ( client->response_buf );
-
-	client->has_user = SPH_FALSE;
-	memset ( client->user_token, 0, sizeof ( client->user_token ) );
 }
 
 
@@ -1704,7 +1684,7 @@ static int net_connect_get ( sphinx_client * client )
 			sock_set_blocking ( sock );
 
 			// now send major client protocol version
-			my_proto = htonl ( SPHINX_CLIENT_VERSION );
+			my_proto = htonl ( 1 );
 			if ( !net_write ( sock, (char*)&my_proto, sizeof(my_proto), client ) )
 			{
 				sock_close ( sock );
@@ -1941,7 +1921,7 @@ static void net_get_response ( int fd, sphinx_client * client )
 
 sphinx_bool sphinx_open ( sphinx_client * client )
 {
-	char buf[16+AUTH_HEADER_SIZE], *pbuf;
+	char buf[16], *pbuf;
 
 	if ( client->sock>=0 )
 	{
@@ -1954,8 +1934,6 @@ sphinx_bool sphinx_open ( sphinx_client * client )
 		return SPH_FALSE;
 
 	pbuf = buf;
-
-	sphinx_add_auth ( client, &pbuf );
 	send_word ( &pbuf, SEARCHD_COMMAND_PERSIST );
 	send_word ( &pbuf, 0 ); // dummy version
 	send_int ( &pbuf, 4 ); // dummy body len
@@ -2007,7 +1985,7 @@ static void * sphinx_malloc ( int len, sphinx_client * client )
 sphinx_result * sphinx_run_queries ( sphinx_client * client )
 {
 	int i, j, k, l, fd, len, nreqs, id64;
-	char req_header[32+AUTH_HEADER_SIZE], *req, *p, *pmax;
+	char req_header[32], *req, *p, *pmax;
 	sphinx_result * res;
 	union un_attr_value * pval;
 
@@ -2033,7 +2011,6 @@ sphinx_result * sphinx_run_queries ( sphinx_client * client )
 		len += client->req_lens[i];
 
 	req = req_header;
-	sphinx_add_auth ( client, &req );
 	send_word ( &req, SEARCHD_COMMAND_SEARCH );
 	send_word ( &req, client->ver_search );
 	send_int ( &req, len );
@@ -2255,7 +2232,7 @@ const char * sphinx_get_string ( sphinx_result * result, int match, int attr )
 
 //////////////////////////////////////////////////////////////////////////
 
-static sphinx_bool net_simple_query ( sphinx_client * client, char * buf, int buf_len )
+static sphinx_bool net_simple_query ( sphinx_client * client, char * buf, int req_len )
 {
 	int fd;
 
@@ -2266,7 +2243,7 @@ static sphinx_bool net_simple_query ( sphinx_client * client, char * buf, int bu
 		return SPH_FALSE;
 	}
 
-	if ( !net_write ( fd, buf, buf_len, client ) )
+	if ( !net_write ( fd, buf, 8+req_len, client ) )
 	{
 		free ( buf );
 		return SPH_FALSE;
@@ -2342,7 +2319,7 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	for ( i=0; i<num_docs; i++ )
 		req_len += (int)( 4 + safestrlen(docs[i]) );
 
-	buf = malloc ( 12 + AUTH_HEADER_SIZE + req_len ); // request body length plus 12 header bytes plus auth header size
+	buf = malloc ( 12+req_len ); // request body length plus 12 header bytes
 	if ( !buf )
 	{
 		set_error ( client, "malloc() failed (bytes=%d)", req_len );
@@ -2352,7 +2329,6 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	// build request
 	req = buf;
 
-	sphinx_add_auth ( client, &req );
 	send_word ( &req, SEARCHD_COMMAND_EXCERPT );
 	send_word ( &req, VER_COMMAND_EXCERPT );
 	send_int ( &req, req_len );
@@ -2387,8 +2363,15 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	for ( i=0; i<num_docs; i++ )
 		send_str ( &req, docs[i] );
 
+	if ( (int)(req-buf)!=8+req_len )
+	{
+		set_error ( client, "internal error: failed to build request in sphinx_build_excerpts()" );
+		free ( buf );
+		return NULL;
+	}
+
 	// send query, get response
-	if ( !net_simple_query ( client, buf, (int)(req-buf) ) )
+	if ( !net_simple_query ( client, buf, req_len ) )
 		return NULL;
 
 	// parse response
@@ -2445,7 +2428,7 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 	for ( i=0; i<num_attrs; i++ )
 		req_len += (int)( 4 + safestrlen(attrs[i]) );
 
-	buf = malloc ( 12 + AUTH_HEADER_SIZE + req_len ); // request body length plus 12 header bytes
+	buf = malloc ( 12+req_len ); // request body length plus 12 header bytes
 	if ( !buf )
 	{
 		set_error ( client, "malloc() failed (bytes=%d)", req_len );
@@ -2455,7 +2438,6 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 	// build request
 	req = buf;
 
-	sphinx_add_auth ( client, &req );
 	send_word ( &req, SEARCHD_COMMAND_UPDATE );
 	send_word ( &req, VER_COMMAND_UPDATE );
 	send_int ( &req, req_len );
@@ -2477,7 +2459,7 @@ int sphinx_update_attributes ( sphinx_client * client, const char * index, int n
 	}
 
 	// send query, get response
-	if ( !net_simple_query ( client, buf, (int)(req-buf) ) )
+	if ( !net_simple_query ( client, buf, req_len ) )
 		return -1;
 
 	// parse response
@@ -2506,9 +2488,9 @@ int sphinx_update_attributes_mva	( sphinx_client * client, const char * index, c
 	}
 
 	// alloc buffer
-	req_len = (int)( 32 + safestrlen(index) + safestrlen(attr) + num_values*4 );
+	req_len = (int)( 38 + safestrlen(index) + safestrlen(attr) + num_values*4 );
 
-	buf = malloc ( 12 + AUTH_HEADER_SIZE + req_len ); // request body length plus 12 header bytes
+	buf = malloc ( 12+req_len ); // request body length plus 12 header bytes
 	if ( !buf )
 	{
 		set_error ( client, "malloc() failed (bytes=%d)", req_len );
@@ -2518,7 +2500,6 @@ int sphinx_update_attributes_mva	( sphinx_client * client, const char * index, c
 	// build request
 	req = buf;
 
-	sphinx_add_auth ( client, &req );
 	send_word	( &req, SEARCHD_COMMAND_UPDATE );
 	send_word	( &req, VER_COMMAND_UPDATE );
 	send_int	( &req, req_len );
@@ -2535,7 +2516,7 @@ int sphinx_update_attributes_mva	( sphinx_client * client, const char * index, c
 		send_int ( &req, values[i] );
 
 	// send query, get response
-	if ( !net_simple_query ( client, buf, (int)(req-buf) ) )
+	if ( !net_simple_query ( client, buf, req_len ) )
 		return -1;
 
 	// parse response
@@ -2569,7 +2550,7 @@ sphinx_keyword_info * sphinx_build_keywords ( sphinx_client * client, const char
 	// alloc buffer
 	req_len = (int)( safestrlen(query) + safestrlen(index) + 12 );
 
-	buf = malloc ( 12 + AUTH_HEADER_SIZE + req_len ); // request body length plus 12 header bytes
+	buf = malloc ( 12+req_len ); // request body length plus 12 header bytes
 	if ( !buf )
 	{
 		set_error ( client, "malloc() failed (bytes=%d)", req_len );
@@ -2579,7 +2560,6 @@ sphinx_keyword_info * sphinx_build_keywords ( sphinx_client * client, const char
 	// build request
 	req = buf;
 
-	sphinx_add_auth ( client, &req );
 	send_word ( &req, SEARCHD_COMMAND_KEYWORDS );
 	send_word ( &req, VER_COMMAND_KEYWORDS );
 	send_int ( &req, req_len );
@@ -2589,7 +2569,7 @@ sphinx_keyword_info * sphinx_build_keywords ( sphinx_client * client, const char
 	send_int ( &req, hits );
 
 	// send query, get response
-	if ( !net_simple_query ( client, buf, (int)(req-buf) ) )
+	if ( !net_simple_query ( client, buf, req_len ) )
 		return NULL;
 
 	// parse response
@@ -2643,7 +2623,7 @@ char ** sphinx_status_extended ( sphinx_client * client, int * num_rows, int * n
 	}
 
 	// build request
-	buf = malloc ( 12 + AUTH_HEADER_SIZE );
+	buf = malloc ( 12 );
 	if ( !buf )
 	{
 		set_error ( client, "malloc() failed (bytes=12)" );
@@ -2656,15 +2636,13 @@ char ** sphinx_status_extended ( sphinx_client * client, int * num_rows, int * n
 		local=1;
 
 	req = buf;
-
-	sphinx_add_auth ( client, &req );
 	send_word ( &req, SEARCHD_COMMAND_STATUS );
 	send_word ( &req, VER_COMMAND_STATUS );
 	send_int ( &req, 4 );
 	send_int ( &req, local );
 
 	// send query, get response
-	if ( !net_simple_query ( client, buf, (int)(req-buf) ) )
+	if ( !net_simple_query ( client, buf, 12 ) )
 		return NULL;
 
 	// parse response
@@ -2693,159 +2671,4 @@ void sphinx_status_destroy ( char ** status, int num_rows, int num_cols )
 	for ( i=0; i<num_rows*num_cols; i++ )
 		free ( status[i] );
 	free ( status );
-}
-
-#define SHA1_BUF_SIZE 64
-
-struct sha1_st
-{
-	unsigned int state[5];
-	unsigned int count[2];
-	unsigned char buffer[SHA1_BUF_SIZE];
-};
-
-static void sha1_transform ( const unsigned char * buf, struct sha1_st * p );
-
-static void sha1_init ( struct sha1_st * p )
-{
-	p->state[0] = 0x67452301;
-	p->state[1] = 0xEFCDAB89;
-	p->state[2] = 0x98BADCFE;
-	p->state[3] = 0x10325476;
-	p->state[4] = 0xC3D2E1F0;
-	memset ( p->count, 0, sizeof ( p->count ) );
-}
-
-static void sha1_update ( const unsigned char * data, int len, struct sha1_st * p )
-{
-	int i, j;
-
-	j = ( p->count[0] >> 3 ) & 63;
-	p->count[0] += ( len << 3 );
-	if ( p->count[0] < (unsigned int)( len << 3 ) )
-		p->count[1]++;
-	p->count[1] += ( len >> 29 );
-	if ( ( j + len ) > 63 )
-	{
-		i = 64 - j;
-		memcpy ( &p->buffer[j], data, i );
-		sha1_transform ( p->buffer, p );
-		for ( ; i + 63 < len; i += 64 )
-			sha1_transform ( data + i, p );
-		j = 0;
-	} else
-	{
-		i = 0;
-	}
-	memcpy ( &p->buffer[j], &data[i], len - i );
-}
-
-static void sha1_final ( unsigned char * digest, struct sha1_st * p )
-{
-	int i;
-	unsigned char finalcount[8];
-
-	for ( i = 0; i < 8; ++i )
-		finalcount[i] = (unsigned char)( ( p->count[( i >= 4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
-								& 255 ); // endian independent
-	sha1_update ( (const unsigned char*)"\200", 1, p );	 // add padding
-	while ( ( p->count[0] & 504 ) != 448 )
-		sha1_update ( (const unsigned char*)"\0", 1, p );
-	sha1_update ( finalcount, 8, p ); // should cause a SHA1_Transform()
-	for ( i = 0; i < SHA1_SIZE; ++i )
-		digest[i] = (unsigned char)( ( p->state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
-}
-
-void sha1_transform ( const unsigned char * buf, struct sha1_st * p )
-{
-	int i;
-	unsigned int a, b, c, d, e, t;
-	unsigned int block[16];
-
-	a = p->state[0];
-	b = p->state[1];
-	c = p->state[2];
-	d = p->state[3];
-	e = p->state[4];
-	memset ( block, 0, sizeof ( block ) ); // initial conversion to big-endian units
-	for ( i = 0; i < 64; i++ )
-		block[i >> 2] += buf[i] << ( ( 3 - ( i & 3 ) ) * 8 );
-	for ( int i = 0; i < 80; i++ ) // do hashing rounds
-	{
-#define LROT( value, bits ) ( ( ( value ) << ( bits ) ) | ( ( value ) >> ( 32 - ( bits ) ) ) )
-		if ( i >= 16 )
-			block[i & 15] = LROT (
-					block[( i + 13 ) & 15] ^ block[( i + 8 ) & 15] ^ block[( i + 2 ) & 15] ^ block[i & 15], 1 );
-
-		if ( i < 20 )
-			e += ( ( b & ( c ^ d ) ) ^ d ) + 0x5A827999;
-		else if ( i < 40 )
-			e += ( b ^ c ^ d ) + 0x6ED9EBA1;
-		else if ( i < 60 )
-			e += ( ( ( b | c ) & d ) | ( b & c ) ) + 0x8F1BBCDC;
-		else
-			e += ( b ^ c ^ d ) + 0xCA62C1D6;
-
-		e += block[i & 15] + LROT ( a, 5 );
-		t = e;
-		e = d;
-		d = c;
-		c = LROT ( b, 30 );
-		b = a;
-		a = t;
-	}
-	p->state[0] += a; // save state
-	p->state[1] += b;
-	p->state[2] += c;
-	p->state[3] += d;
-	p->state[4] += e;
-}
-
-sphinx_bool sphinx_set_user ( sphinx_client * client, const char * user, const char * password )
-{
-	struct sha1_st * hash;
-
-	// check args
-	if ( !client || !user || !password )
-	{
-		if ( !user )			set_error ( client, "invalid arguments (user must not be empty)" );
-		else if ( !password )	set_error ( client, "invalid arguments (password must not be empty)" );
-		return SPH_FALSE;
-	}
-
-	hash = malloc ( sizeof(struct sha1_st) );
-	if ( !hash )
-	{
-		set_error ( client, "malloc() failed (bytes=%d)", sizeof(struct sha1_st) );
-		return SPH_FALSE;
-	}
-	sha1_init ( hash );
-	sha1_update ( (const unsigned char *)password, strlen ( password ), hash );
-	sha1_final ( client->user_token, hash );
-
-	sha1_init ( hash );
-	sha1_update ( (const unsigned char *)user, strlen ( user ), hash );
-	sha1_update ( client->user_token, sizeof ( client->user_token ), hash );
-	sha1_final ( client->user_token, hash );
-
-	client->has_user = SPH_TRUE;
-
-	free ( hash );
-
-	return SPH_TRUE;
-}
-
-void sphinx_add_auth ( sphinx_client * client, char ** pp )
-{
-	unsigned char * p = (unsigned char*)*pp;
-	if ( client->has_user )
-	{
-		p[0] = AUTH_SHA1;
-		memcpy ( p+1, client->user_token, SHA1_SIZE );
-		*pp += AUTH_HEADER_SIZE;
-	} else
-	{
-		p[0] = AUTH_NO;
-		*pp += 1;
-	}
 }

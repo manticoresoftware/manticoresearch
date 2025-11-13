@@ -1,7 +1,4 @@
-# Spec v1.4.0
-
-## Changes
-- Simplified the binary protocol authentication. We might implement the method described in v1.3.0 later, but for now, this should be enough.  
+# Spec v1.5.0
 
 ## Table of Contents
 
@@ -21,7 +18,7 @@
    - Granular Permissions
    - Rule Resolution Strategy
    - Rule Evaluation Algorithm
-8. Management Tool (`/usr/bin/manticore`)
+8. Initial Administrator Setup (`--auth` mode)
 9. Configuration
 10. SQL Commands for Authentication and Authorization (RT Mode)
 11. DUMP AUTH SQL Command
@@ -33,7 +30,7 @@
 
 ### Overview
 
-This document provides the specifications for implementing authentication and authorization functionality in Manticore Search. The system includes support for managing users and their credentials, as well as finely-grained permissions defined at the level of individual actions and targets. It ensures compatibility with MySQL and HTTP clients while offering basic authentication in the binary protocol.
+This document provides the specifications for implementing authentication and authorization functionality in Manticore Search. The system includes support for managing users and their credentials, as well as finely-grained permissions defined at the level of individual actions and targets. It ensures compatibility with end-user clients via the MySQL and HTTP protocols, while providing a robust, encrypted binary protocol for secure inter-daemon communication.
 
 ### Requirements
 
@@ -47,16 +44,17 @@ This document provides the specifications for implementing authentication and au
    - Authentication via two methods:
      - Basic Auth: Username and password encoded in the request header (e.g., `Authorization: Basic <base64(user:password)>`).
      - Bearer Token: Header like `Authorization: Bearer <token>`.
-
-3. **Binary Protocol**
-    - Supports basic bearer-based authentication.
-    - Tokens are sent in plain text, meaning they could be intercepted if the network is not secure.
-    - Unlike MySQL and HTTP protocols, SSL encryption is not available for the binary protocol.
-    - If security is a concern, using MySQL or HTTP protocols with SSL is recommended. However, if the network is controlled and secure, the binary protocol may still be a viable option.
+     
+3. **Binary Protocol (for Inter-Daemon Communication)**
+   - Utilizes a secure, encrypted transport layer based on **AES-256-GCM**.
+   - Provides built-in confidentiality, integrity, authenticity, and replay protection without relying on an external SSL/TLS layer.
+   - This protocol is designed exclusively for communication between Manticore daemon instances (e.g., in a cluster) and is not intended for general-purpose client libraries.
+   - For full details, see the "Authentication via Binary Protocol" section.
 
 #### Usability
 
-- Easy user management through a CLI tool (`/usr/bin/manticore`).
+- A command-line bootstrap mode (`searchd --auth`) for secure initial administrator setup.
+- Easy ongoing user management through SQL commands.
 - File-based authentication storage for plain mode (no replication). When replication is used, authentication/authorization data must be stored in dedicated system tables.
 - Permissions-based access control defined by records indicating which user can perform which action on which target, optionally with usage budgets.
 
@@ -269,7 +267,7 @@ Authentication supports the following mechanisms:
    The server validates the token by hashing it and comparing it to the stored `bearer_sha256`.
 
    - **Token Generation**:
-     - The client uses the token received previously on the server using the `manticore` tool or the `TOKEN` SQL statement:
+     - The client uses the token received previously using the `TOKEN` SQL command or the `POST /token` HTTP endpoint:
      - The token is sent to the server as-is in the `Authorization` header.
 
    - **Storage**:
@@ -287,61 +285,40 @@ Authentication supports the following mechanisms:
 
      In this example:
      - `Authorization: Bearer a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2`
-     - The token (`a1b2c3...`) is the user's token, obtained earlier using the `manticore` tool or the `TOKEN` SQL command.
+     - The token (`a1b2c3...`) is the user's token, obtained earlier using the `TOKEN` SQL command or the `POST /token` HTTP endpoint.
 
    - **Validation**:
      - The server looks for a user by matching the provided token with `bearer_sha256`. If a match is found, the request is considered authorized.
 
 ### Authentication via Binary Protocol
 
-Authentication via the binary protocol uses a basic bearer-based authentication method.
 
-#### **Security Considerations**
-- The token is sent in plain text, meaning it can be intercepted if transmitted over an untrusted network.
-- The binary protocol does not support SSL encryption.
-- If the environment is secure and controlled (e.g., internal network, VPN), using the binary protocol may be acceptable. Otherwise, MySQL or HTTP protocols with SSL are recommended.
-- For master/agent communication between Manticore instances, it is assumed that users ensure the channel is secure, as the protocol itself does not provide encryption.
+Communication via the Manticore binary protocol utilizes a robust, encrypted, and authenticated transport layer designed to ensure confidentiality, integrity, and protection against replay attacks, even when SSL/TLS is not used.
 
-#### **Implementation Details**
-- The token is included in the request headers.
-- The server verifies the token against the stored `bearer_sha256` hash.
-- If the token matches, access is granted.
+The protocol implements a custom cryptographic scheme known as Mini-TLS, built upon **AES-256-GCM** (Authenticated Encryption with Associated Data).
 
-#### **Process Overview**
+For detailed technical specifications, refer to the [Specification: Secure Binary Protocol for Daemon Communication](spec\_api.md).
 
-1. **Client Authentication Request**:
-  - The client sends the authentication request containing the bearer token.
-  - The token is included in the request in plain text.
+#### Key Features of the Secure Binary Protocol
 
-2. **Server Validation**:
-  - The server retrieves the user's stored `bearer_sha256` value.
-  - The server hashes the received token and compares it to the stored hash.
-  - If the hashes match, authentication succeeds; otherwise, access is denied.
+1.  **Confidentiality and Integrity:** All message payloads are encrypted using **AES-256-GCM** with a per-message 12-byte nonce and a 16-byte authentication tag (GCM tag). This tag guarantees the message has not been tampered with and ensures the identity of the sender (integrity and authenticity).
+2.  **Mutual Authentication:** Both the client (Daemon Agent) and the server (API Server/Master Daemon) use the same pre-shared or derived symmetric key for encryption and decryption, establishing trust in both directions of communication.
+3.  **Replay Protection:** The protocol mandates a robust, stateful **12-byte structured nonce** composed of a sender ID, a monotonic Boot ID (unique per daemon lifetime), and an atomically incrementing message counter. This prevents adversaries from replaying old, captured messages.
+4.  **Key Derivation:** The symmetric AES-256 key used for the session is derived from the user's securely stored password hash and salt using **PKCS5\_PBKDF2\_HMAC-SHA256**. This key is unique per user and is never transmitted over the network.
 
-3. **Session Handling**:
-  - Each authenticated session lasts as long as the connection remains open.
-  - The client must re-authenticate if the connection is closed and reopened.
+#### Binary Packet Format (Encrypted)
 
-#### **Process Flow Diagram**
-```mermaid
-sequenceDiagram
-    participant Client as Client (Manticore instance or user's app)
-    participant Server as Server (Manticore instance)
+The binary packets sent over the wire include an unencrypted header (containing command and length) followed by the cryptographic blob:
 
-    Client->>Server: Send authentication request with bearer token (unencrypted)
-    Server->>Server: Retrieve stored `bearer_sha256` hash
-    Server->>Server: Compute hash of received token
-    alt Hash matches
-        Server->>Client: Authentication successful
-    else Hash does not match
-        Server->>Client: Authentication failed
-    end
-```
+`[Nonce (12 bytes)][Tag (16 bytes)][Ciphertext (variable length)]`
+
+#### Authentication Failure and Error Handling
+
+If decryption fails (due to wrong key, tampering detected by the GCM tag, or a detected nonce replay attack), the message is rejected. The server replies with a status code indicating an authentication or integrity failure (e.g., `STATUS_AUTH_ERROR` or similar internal status codes).
 
 #### Usage Recommendations
-- If security is a concern, MySQL or HTTP protocols with SSL are recommended instead of the binary protocol.
-- If operating in a controlled environment with trusted network conditions, the binary protocol may still be a viable option.
-- For master/agent communication between Manticore instances, users are responsible for securing the communication channel (e.g., using a VPN or private network).
+
+Due to the built-in security features, this protocol is suitable for inter-daemon communication over both trusted and untrusted networks. It replaces the need for an external TLS layer while maintaining equivalent security guarantees for the message payload.
 
 ---
 
@@ -474,6 +451,12 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
 
   - HTTP endpoints that manage authentication and authorization:
     - None explicitly defined at this time; all admin-related SQL commands must be executed through the `/sql`, `/cli`, or `/cli_json` endpoints.
+    - **`POST /token`**
+        - **Purpose:** Generates or updates a bearer token for the currently authenticated user.
+        - **Authentication:** The request must include a valid `Authorization` header (e.g., Basic Auth).
+        - **Authorization:** The authenticated user must have the `admin` permission.
+        - **Request Body:** An empty JSON object (e.g., `{}`).
+        - **Response:** A JSON object containing the new, unhashed token: `{"token": "<new_token>"}`.    
 
 **Notes**
 
@@ -535,193 +518,61 @@ To help administrators understand the system, we should document the rule resolu
 
 ---
 
-### Management Tool (`/usr/bin/manticore`)
+### Initial Administrator Setup (`--auth` mode)
 
-The `manticore` tool must securely manage users, permissions, and authentication files. It interacts with the running Manticore Search instance to ensure changes to authentication data are dynamically applied without requiring a manual restart. The following changes outline how the tool should handle list operations and real-time (RT) mode scenarios.
+To ensure a secure-by-default configuration, Manticore Search provides a command-line bootstrap procedure for creating the initial administrator user. This process must be run after the daemon has been started for the first time.
 
-**How it works**
+**How it works:**
 
 ```mermaid
-graph TD
-  A[Start] --> B{Is Manticore Search Instance Running?}
-  B -- No --> C[Show Error: ERROR: The Manticore Search instance is not running. Please start the instance and try again.]
-  B -- Yes --> D[Plain Mode or RT Mode?]
+sequenceDiagram
+    participant User
+    participant Daemon as Manticore Daemon (Running)
+    participant Bootstrap as searchd --auth (Client Mode)
 
-  D -- Plain Mode --> E[Modify Auth File]
-  E --> F[Manticore Buddy Detects Change]
-  F --> G[Calls RELOAD AUTH]
-  G --> H[Manticore Search Reloads Authentication Data]
+    User->>Daemon: Starts daemon normally (e.g., `searchd -c manticore.conf`)
+    Note over Daemon: Daemon is running and creates an empty `auth.json` if needed.
 
-  D -- RT Mode --> I{Listing or Modify Operation?}
-  I -- Listing --> J[Create Empty <data_dir>/auth.tmp]
-  J --> K[Manticore Buddy Populates <data_dir>/auth.tmp with DUMP AUTH and Replaces Hashes with *]
-  K --> L[Tool Reads Data for Listing Operation]
+    User->>Bootstrap: Runs `searchd -c manticore.conf --auth`
+    Bootstrap->>User: prompts for "Enter a new administrator login:"
+    User-->>Bootstrap: Enters login
+    Bootstrap->>User: prompts for "Enter password:" (twice)
+    User-->>Bootstrap: Enters password securely
 
-  I -- Modify --> M[Tool Reads Existing <data_dir>/auth.tmp]
-  M --> N[Modify Temporary File Content]
-  N --> O[Write Updated File to <data_dir>/auth.tmp]
-  O --> P[Manticore Buddy Detects Update]
-  P --> Q[Executes SQL Commands to Update System Tables]
-  P --> R{Error Encountered?}
-  R -- No --> S[Buddy Removes <data_dir>/auth.tmp]
-  R -- Yes --> T[Buddy Writes Error Message in <data_dir>/auth.tmp]
-  T --> U[Tool Reads Error and Fails with Buddy's Message]
-  U --> U2[Tool Removes <data_dir>/auth.tmp]
+    Bootstrap->>Bootstrap: Generates salt and hashes
+    Bootstrap->>Bootstrap: Writes new admin user and full permissions to `auth.json`
+    Note over Bootstrap: Fails if `auth.json` is not empty.
 
-  H --> V[End]
-  L --> V
-  S --> V
-  U2 --> V
+    Bootstrap->>Daemon: Sends IPC command to trigger `RELOAD AUTH`
+    Daemon->>Daemon: Receives IPC command and reloads auth data from `auth.json`
+    Daemon-->>Bootstrap: Sends IPC reply with success/failure status
 
+    Bootstrap->>User: Prints "authentication settings successfully created and reloaded"
 ```
 
-1. **Ensures the Manticore Search Instance is Running**
-   - The tool must verify that the corresponding Manticore Search instance is running.
-   - If the instance is not running, the tool must fail with the following error message:
-     `"ERROR: The Manticore Search instance is not running. Please start the instance and try again."`
+**Process Flow:**
 
-2. **Plain Mode**:
-   - After modifying the auth file, Manticore Buddy detects the file change (e.g., within one second) and calls `RELOAD AUTH` in the Manticore instance.
-   - The `RELOAD AUTH` command triggers Manticore Search to reload the updated authentication and authorization data.
+1.  **Start the Daemon:** Start the `searchd` process normally. If authentication is enabled, it will run but will not have any users defined.
+2.  **Run Bootstrap Mode:** In a separate terminal, run the same `searchd` binary with the `--auth` flag (e.g., `sudo -u manticore searchd -c /etc/manticoresearch/manticore.conf --auth`).
+3.  **Provide Credentials:** The tool will interactively prompt for a new administrator login and a password (which must be entered twice for confirmation).
+4.  **File Creation:** The tool securely generates the necessary password hashes and creates the `auth.json` file (or populates it if it was empty). This process will fail if the file already contains user or permission data, preventing accidental overwrites.
+5.  **Daemon Notification:** Using a secure, cross-platform Inter-Process Communication (IPC) mechanism (named pipes), the bootstrap process signals the running daemon to execute a `RELOAD AUTH` command.
+6.  **Confirmation:** The bootstrap process waits for a confirmation reply from the daemon and informs the user whether the new authentication settings were successfully loaded.
 
-3. **Real-Time (RT) Mode**:
-   - **Listing Operations**:
-     - The tool creates an empty file `<data_dir>/auth.tmp` in the data directory.
-     - Manticore Buddy detects this file and populates it with the current authentication and authorization information (replacing all actual hashes with `*`) by using `DUMP AUTH`.
-     - The tool reads the data from `<data_dir>/auth.tmp` to perform listing operations.
+This one-time procedure is the only supported method for creating the first user, ensuring the system is immediately secured.
 
-   - **Modify Operations**:
-     - The tool reads the existing content of `<data_dir>/auth.tmp` populated by Buddy.
-     - The tool modifies the content of the temporary file in the same way it would modify the auth file in plain mode.
-     - The updated file is written back to `<data_dir>/auth.tmp`.
-     - Manticore Buddy detects the updated `<data_dir>/auth.tmp`, prepares SQL commands to update the `system.auth_users` and `system.auth_permissions` tables, and removes the file upon successful execution.
-     - If Buddy encounters an error, it writes the error message into the file (not in JSON format). The tool must detect this, read the error, and fail with the message provided by Buddy.
+### Ongoing User and Permission Management
 
-4. **Password Entry**:
-  - When adding or updating a user, the tool must prompt for the password interactively, without echoing.
-  - Alternatively, the password can be provided via STDIN (e.g., through a pipe).
+Once the initial administrator is created, all subsequent user and permission management is performed via **SQL commands**. These commands are processed by **Manticore Buddy** and operate on the `system.auth_users` and `system.auth_permissions` tables (in RT mode) or by modifying the `auth.json` file (in plain mode, via Buddy's file-watching mechanism).
 
-5. **File Locking**:
-   - All file operations (reading and writing) on `<data_dir>/auth.tmp` must be covered by a file-based lock. The lock file should be located at `<data_dir>/auth.lock` to prevent concurrent modifications and ensure safe interactions between the `manticore` tool and Buddy.
-   - If the tool cannot acquire the lock, it must log an error:
-     `"ERROR: Unable to acquire lock at '<data_dir>/auth.lock'. Another process might be modifying authentication data. Please try again later."`
+This SQL-based approach provides a standardized and powerful interface for all day-to-day administrative tasks, including:
 
-6. **File Permissions**: The auth files must meet the following requirements:
-   - Permissions set to `600`
-   - File/group owner must match the user under which the current Manticore instance is running
+*   Creating and deleting users (`CREATE USER`, `DROP USER`).
+*   Changing passwords and renewing tokens (`SET PASSWORD`, `TOKEN`).
+*   Managing permissions (`GRANT`, `REVOKE`).
+*   Auditing the system (`SHOW USERS`, `SHOW PERMISSIONS`).
 
-7. **Conflict Detection**:
-   - When adding or modifying permissions via the CLI, the tool must warn users if the new rule conflicts with existing ones.
-
-**Examples**:
-
-- Adding a user (interactively):
-  ```bash
-  manticore user add admin
-  # The tool then prompts twice: "Enter password:" and the user types the password securely.
-  ```
-
-- Adding a user (via pipe):
-  ```bash
-  echo "secret_password" | manticore user add admin
-  ```
-
-- Adding permissions to a user (no password required):
-  ```bash
-  manticore permission add --user admin --action read --target "*" --allow true --budget '{"queries_per_minute":1000}'
-  ```
-
-- Conflict:
-  ```bash
-  manticore permission add --user admin --action read --target table/restricted_table --allow true
-  # Output:
-  # WARNING: This rule conflicts with an existing deny rule for user 'admin' on 'restricted_table'.
-  ```
-
-**Configuration File Flag**:
-
-- The `manticore` tool must respect the `-c` or `--config` flag specifying the path to the Manticore Search configuration file.
-- If not specified, the tool looks for the config file in default locations.
-- The tool should report which configuration file it used and which `auth` file path it derived from that configuration.
-
-**Examples with Configuration Flags**:
-
-- Add a user with a specific configuration file:
-```bash
-manticore -c /custom/path/manticore.conf user add admin
-```
-
-- Add permissions with a specific configuration file:
-```bash
-manticore -c /custom/path/manticore.conf permission add --user admin --action write --target "table/mytable" --allow true
-```
-
-**Post-Operation Reporting**:
-
-After completing an operation, the tool should:
-- Log a success message confirming that the operation was successfully written to the `auth` file or `<data_dir>/auth.tmp`.
-- Log whether Buddy successfully triggered the `RELOAD AUTH` or SQL update process.
-- Log any warnings or errors that occurred during the process.
-
-#### `manticore` Tool Usage Information
-
-When the `manticore` tool is run without any flags or with `-h`/`--help`, it should display a complete usage guide with examples for managing users, permissions, and the authentication system.
-
-**Example Output**:
-
-```text
-Manticore Search Management Tool
-
-Usage:
-  manticore [options] <command>
-
-Commands:
-  user add <username>             Add a new user. Prompts for a password interactively or accepts it via a pipe.
-  user token <username>           Generates or updates a user's token for HTTP authentication.
-  user delete <username>          Delete an existing user.
-  user password <username>        Update an existing user's password.
-  user list                       List all users.
-
-  permission add --user <username> --action <action> --target <target> --allow <true|false> [--budget <budget>]
-                                  Add permissions for a user. Specify action (read, write, schema),
-                                  target (e.g., "table/<table name>" or "*"), allow (true/false), and an optional budget.
-  permission delete --user <username> --id <permission id>
-                                  Remove specific permission for a user.
-  permission list                 List all permissions.
-
-Options:
-  -c, --config <path>             Specify the path to the Manticore Search configuration file.
-                                  If not provided, the tool uses default locations (e.g., /etc/manticoresearch/manticore.conf).
-  -h, --help                      Show this usage information.
-
-Examples:
-
-  # Add a new user interactively
-  manticore user add admin
-  # The tool prompts for a password:
-  # "Enter password:"
-
-  # Add a new user with a password provided via a pipe
-  echo "mypassword" | manticore user add admin
-
-  # Delete a user
-  manticore user delete admin
-
-  # List all users
-  manticore user list
-
-  # Creates or updates the token of user "admin"
-  manticore user token admin
-
-  # Add permissions for a user
-  manticore permission add --user admin --action read --target "*" --allow true --budget '{"queries_per_minute":1000}'
-
-  # Remove permissions for a user for a specific table
-  manticore permission delete --user admin --action read --target "table/mytable"
-
-  # List all users and their permissions
-  manticore permission list
-```
+Please refer to the section **"SQL Commands for Authentication and Authorization"** for a complete list of available commands and their usage.
 
 ---
 
@@ -729,7 +580,7 @@ Examples:
 
 1. **Create a User**
    Adds a new user with a password.
-   - **Note**: Users with the `ADMIN` action cannot be created via SQL commands; they must be created using the `manticore` tool.
+   - **Note**: The initial administrator user must be created using the `searchd --auth` bootstrap process. This `CREATE USER` command is intended for creating subsequent, non-admin users.
    - SQL Command:
      ```sql
      CREATE USER '<username>' IDENTIFIED BY '<password>';
@@ -917,6 +768,26 @@ Examples:
      | 'mytable'   |
      +-------------+
      ```
+     
+12. **Show Bearer Token Hash**
+Displays the securely hashed bearer token (`bearer_sha256`) for a specified user or the current user. This is useful for administrative verification.
+   - **SQL Command:**
+     ```sql
+     SHOW TOKEN [FOR '<username>'];
+     ```
+   - **Behavior:**
+     - `SHOW TOKEN`: Shows the token hash for the current user.
+     - `SHOW TOKEN FOR 'some_user'`: Shows the token hash for the specified user.
+   - **Permissions:**
+     - Any user can run `SHOW TOKEN` to see their own token hash.
+     - Requires `admin` permission to run `SHOW TOKEN FOR '<username>'` to see another user's token hash.
+   - **Example Output:**
+     ```
+     +----------+------------------------------------------------------------------+
+     | Username | Token                                                            |
+     +----------+------------------------------------------------------------------+
+     | admin    | 27f955c72fa08387001c6cb5f83985d7baf002e632e60cdbd0b1985136a366c1 |
+     +----------+------------------------------------------------------------------+     
 
 **Notes on `ADMIN` Action**
 
@@ -1033,30 +904,34 @@ Manticore Buddy and the Manticore Search daemon communicate via a secure HTTPS c
 
 ```mermaid
 sequenceDiagram
-    participant ManticoreTool as manticore tool
+    participant SQLClient as SQL Client
     participant ManticoreSearch as Manticore Search
     participant Buddy as Manticore Buddy
-    participant Client as User's Client
+    participant EndUserClient as User's Client
 
     Note over ManticoreSearch: On start, generates and holds BUDDY_TOKEN.
     ManticoreSearch->>Buddy: Starts Buddy, passing BUDDY_TOKEN via env var.
 
-    alt Administrative Path (e.g., manticore user add)
-        ManticoreTool->>Buddy: Send command
-        Buddy->>ManticoreSearch: Send request with `Authorization: Bearer BUDDY_TOKEN`
-        ManticoreSearch->>ManticoreSearch: Authenticate BUDDY_TOKEN (grants admin rights)
-        ManticoreSearch->>Buddy: Return result
-        Buddy->>ManticoreTool: Return result
+    alt Administrative Path (e.g., CREATE USER)
+        SQLClient->>ManticoreSearch: Send `CREATE USER 'new_user' ...`
+        Note over ManticoreSearch: Recognizes command is for Buddy.
+        ManticoreSearch->>Buddy: Delegate command (e.g., via internal API with BUDDY_TOKEN)
+        Buddy->>Buddy: Prepares SQL to modify system.auth_users
+        Buddy->>ManticoreSearch: Execute `INSERT` on system.auth_users (with BUDDY_TOKEN)
+        ManticoreSearch->>ManticoreSearch: Authenticates Buddy and executes INSERT
+        ManticoreSearch-->>Buddy: Return success
+        Buddy-->>ManticoreSearch: Return success
+        ManticoreSearch-->>SQLClient: Return "OK"
     end
 
     alt User Request Path (e.g., /search)
-        Client->>ManticoreSearch: Send request with `Authorization: Bearer <user_token>`
-        Note over ManticoreSearch: Forwards request to a Buddy plugin
+        EndUserClient->>ManticoreSearch: Send request with `Authorization: Bearer <user_token>`
+        Note over ManticoreSearch: Forwards request to a Buddy plugin (if any)
         ManticoreSearch->>Buddy: Send request with original `Authorization: Bearer <user_token>`
         Note over Buddy: Buddy processes the request...
         Buddy->>ManticoreSearch: Forwards request back with original `Authorization: Bearer <user_token>`
         ManticoreSearch->>ManticoreSearch: Authenticate <user_token> and check permissions
-        ManticoreSearch->>Client: Return final result
+        ManticoreSearch->>EndUserClient: Return final result
     end
 ```
 
@@ -1093,21 +968,95 @@ sequenceDiagram
 
 ### Logging
 
-All changes to authentication and authorization settings should be recorded in a dedicated authentication log. The log file path should match the path of the `searchd` log, with the addition of a `.auth` suffix. For example: `/var/log/manticore/searchd.log.auth`. The following actions must be included in this log:
-1. **User Management**:
-   - Adding, deleting, or updating users.
-   - Changes to user permissions.
-2. **Cluster Synchronization**:
-   - Any synchronization of the `system.auth` table across nodes.
-   - Overriding of a node's local `system.auth` table when joining a cluster, along with the backup dump of the original table.
-3. **Errors and Warnings**:
-   - Logging any errors during authentication or replication-related operations.
-   - Warnings for missing or corrupted authentication data.
-Comprehensive logging ensures traceability of changes and aids in troubleshooting and auditing.
+All changes and significant events related to authentication and authorization are recorded in a dedicated, human-readable log file. This log is crucial for security auditing, troubleshooting access issues, and monitoring administrative actions.
+
+#### **Configuration**
+
+The authentication log's behavior is controlled by settings in the `searchd` section of your Manticore configuration file.
+
+**1. Log File Location:**
+The authentication log is automatically created alongside the main `searchd` log file, with an `.auth` suffix.
+*   **Example:** If `log` is set to `/var/log/manticore/searchd.log`, the authentication log will be located at `/var/log/manticore/searchd.log.auth`.
+
+**2. Log Level (`auth_log_level`):**
+This setting controls the verbosity of the authentication log.
+*   **Syntax:** `auth_log_level = <level>`
+*   **Default:** `info`
+*   **Available Levels:**
+    *   `disabled`: No authentication events are logged.
+    *   `error`: Logs only critical failures and permission denials.
+    *   `warning`: Logs errors plus failed authentication attempts.
+    *   `info`: Logs warnings plus all successful administrative changes and successful logins. This is the recommended level for most production environments.
+
+#### **Log Entry Format**
+
+Each line in the authentication log follows a consistent format, providing clear context for every event:
+
+`[Timestamp][ThreadID][LEVEL] Log Message`
+
+*   **Timestamp:** The date and time of the event, with microsecond precision.
+*   **ThreadID:** The internal ID of the worker thread that handled the event.
+*   **LEVEL:** The severity of the event (`INFO`, `WARN`, `ERROR`, `CRITICAL`).
+*   **Log Message:** A detailed, human-readable description of the event.
+
+#### **Logged Events**
+
+The log captures a comprehensive set of events, which can be grouped into the following categories. The log level at which each event is recorded is shown in parentheses.
+
+**1. User and Permission Management (`INFO`)**
+Tracks all administrative changes to the authentication system, always including which user performed the action and from where.
+*   User creation and deletion.
+*   Bearer token regeneration.
+*   Granting or revoking permissions.
+
+    *Example:* `[...][INFO] granted read on 'my_index' to user 'readonly_user' by 'admin' via SphinxQL`
+
+**2. Security and Access Events**
+Tracks real-time access attempts and the enforcement of permissions.
+*   **Successful authentication (`INFO`):** Records when a user successfully logs in, including the method (HTTP, MySQL, etc.) and source IP.
+    *Example:* `[...][INFO] user 'admin' successfully authenticated via HTTP Basic from 127.0.0.1`
+*   **Failed authentication (`WARN`):** Records any failed login attempt, including the reason (e.g., unknown user, invalid password).
+    *Example:* `[...][WARN] failed authentication attempt for user 'admin' via HTTP Basic from 192.168.1.50: invalid password`
+*   **Permission denied (`ERROR`):** Records when an authenticated user is denied access to a resource due to insufficient permissions.
+    *Example:* `[...][ERROR] user 'readonly_user' from 127.0.0.1 denied write on 'my_index'`
+
+**3. System and Cluster Events**
+Tracks high-level changes to the authentication state.
+*   **Auth data reloaded (`INFO`):** Logs when the authentication configuration is successfully reloaded.
+*   **Cluster join (`CRITICAL`):** A high-priority message is logged when a node joins a cluster and its local authentication data is about to be overwritten.
+*   **Local auth data backup (`INFO`):** When joining a cluster, the node's original authentication data is dumped to the log as a JSON backup before being replaced.
+*   **Failed Actions (`WARN`):** Any administrative action that fails (e.g., trying to create a duplicate user) is logged with an error reason.
 
 ---
 
 ### Clients
 
-- Update binary protocol clients to handle the token-based and hashed password approach.
-- Update HTTP JSON clients to handle Basic Auth and Bearer Tokens.
+This section provides guidance for client library developers and users on how to interact with a Manticore Search instance that has authentication enabled.
+
+#### **MySQL and HTTP Clients**
+
+All standard Manticore Search clients that communicate over the **MySQL** or **HTTP** protocols are fully compatible with the authentication system.
+
+*   **HTTP Clients (Official and Third-Party):**
+    *   Clients must be updated or configured to support sending an `Authorization` header.
+    *   **Basic Authentication:** The client should send the header `Authorization: Basic <base64(user:password)>`.
+    *   **Bearer Token Authentication:** The client should send the header `Authorization: Bearer <token>`.
+    *   If SSL/TLS is enabled on the daemon's HTTP port, it is strongly recommended that clients use `https` for all connections to protect credentials.
+
+*   **MySQL Clients (Official and Third-Party):**
+    *   Clients must support the `mysql_native_password` authentication mechanism.
+    *   Users should provide their username and password in the connection string or parameters, just as they would when connecting to a standard MySQL database.
+    *   If SSL/TLS is enabled on the daemon's MySQL port, it is strongly recommended that clients enable SSL in their connection options to protect credentials.
+
+#### **Binary Protocol Clients and Inter-Daemon Communication**
+
+The secure binary protocol described in this specification is designed exclusively for **inter-daemon communication** (e.g., between a master and agents in a replication cluster). It is **not intended for use by general-purpose, third-party client libraries** (e.g., from PHP, Python, Java, etc.).
+
+*   **Why can't standard clients use it?**
+    *   The binary protocol's security relies on a complex, stateful, and custom cryptographic scheme (AES-256-GCM with a structured nonce and replay protection).
+    *   The symmetric encryption key is derived on the server from the user's password hash and salt; it is not directly available to an external client.
+    *   Implementing this custom "mini-TLS" layer would be a significant and complex undertaking for every client library, and it falls outside their intended scope.
+
+*   **Guidance for Users of Binary Client Libraries:**
+    *   If you have authentication enabled on your Manticore Search instance, you **must use the HTTP or MySQL protocols** for your application's client connections.
+    *   The binary protocol port should be firewalled off from public access and used only for communication between Manticore nodes.

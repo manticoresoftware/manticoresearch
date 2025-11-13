@@ -35,33 +35,22 @@ struct Nonce_t
 };
 
 
-class NonceGenerator_c
+class NonceGenerator_i
 {
 public:
-	NonceGenerator_c();
-	void Generate ( DWORD uServerId, bool bIsMaster, BYTE * pNonce );
-
-private:
-	DWORD m_uBootId; // random ID generated on startup
-	std::atomic<DWORD> m_uCounter;
+	NonceGenerator_i() = default;
+	virtual ~NonceGenerator_i() {};
+	virtual void Generate ( DWORD uServerId, bool bIsMaster, BYTE * pNonce ) = 0;
 };
 
 
-class NonceValidator_c
+class NonceValidator_i
 {
 public:
-	bool Validate ( const BYTE * pNonce, bool bIsMaster, CSphString & sError );
-
-private:
-	struct AgentState_t
-	{
-		DWORD m_uLastBootId = 0;
-		DWORD m_uLastCounter = 0;
-	};
-
-	CSphMutex m_tLock;
-	CSphOrderedHash<AgentState_t, DWORD, IdentityHash_fn, 1024> m_hStates;
+	NonceValidator_i() = default;
+	virtual ~NonceValidator_i() {};
+	virtual bool Validate ( const BYTE * pNonce, bool bIsMaster, CSphString & sError ) = 0;
 };
 
-NonceGenerator_c &  GetNonceGen();
-NonceValidator_c & GetNonceValidator();
+NonceGenerator_i &  GetNonceGen();
+NonceValidator_i & GetNonceValidator();

@@ -170,7 +170,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
 		frontendschema.h debug_cmds.h dynamic_idx.h sphinxexcerpt.h querystats.h
-		auth/auth.h auth/auth_common.h auth/auth_proto_http.h auth/auth_proto_mysql.h auth/auth_proto_api.h digest_sha256.h auth/auth_perms.h auth/gcm_nonce.h auth/auth_log.h auth/auth_bootstrap.h)
+		auth/auth.h auth/auth_common.h auth/auth_proto_http.h auth/auth_proto_mysql.h auth/auth_proto_api.h digest_sha256.h auth/auth_perms.h auth/gcm_nonce.h auth/auth_log.h )
 
 
 # add the extra targets in the case we want on-the-fly grammar compiler

@@ -22,8 +22,6 @@
 #include "auth_common.h"
 #include "daemon/daemon_ipc.h"
 
-#include "auth_bootstrap.h"
-
 constexpr int g_iSignalTimeoutUs = 3000000; // default timeout on daemon auth rotation is 3 seconds
 
 static CSphString ReadLine()

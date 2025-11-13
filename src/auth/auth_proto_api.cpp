@@ -198,6 +198,12 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 	if ( iReplySize<=Request_t::m_iSizeHeader )
 		return true;
 
+	if ( !IsAuthEnabled() )
+	{
+		sphLogDebug ( "no users found in config, access granted" );
+		return true;
+	}
+
 	const BYTE * pEncrypted = nullptr;
 	if ( !tIn.GetBytesZerocopy ( &pEncrypted, iReplySize ) )
 	{

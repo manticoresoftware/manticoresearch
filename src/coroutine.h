@@ -355,6 +355,7 @@ public:
 	void WaitRead() noexcept;
 	void FinishWrite() noexcept;
 	[[nodiscard]] bool UnlockRead() noexcept;
+	[[nodiscard]] DWORD GetReads() const noexcept;
 };
 
 class ScopedWriteTable_c final

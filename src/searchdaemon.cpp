@@ -1285,6 +1285,11 @@ void ServedIndex_c::LockRead() const noexcept
 	return m_tTableLock.UnlockRead();
 }
 
+[[nodiscard]] DWORD ServedIndex_c::GetReadLocks() const noexcept
+{
+	return m_tTableLock.GetReads();
+}
+
 [[nodiscard]] Threads::Coro::ReadTableLock_c& ServedIndex_c::Locker() const noexcept
 {
 	return m_tTableLock;

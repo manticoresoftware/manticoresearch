@@ -1167,6 +1167,11 @@ bool ReadTableLock_c::UnlockRead() noexcept
 	return true;
 }
 
+[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+{
+	return m_uReads;
+}
+
 ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )
 	: m_tTableLock { tTableLock }
 	, m_bCanWrite { tTableLock.TryWrite() }

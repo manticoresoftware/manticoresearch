@@ -10842,32 +10842,32 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 	if ( !tOut.HeadEnd () )
 		return;
 
+	auto fnLine = [&tOut](const NamedIndexType_t& dPair, int iLocks, const char* szType ) noexcept -> bool
+	{
+		tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
+		tOut.PutString ( dPair.m_sName );
+		tOut.PutString ( szType );
+		tOut.PutStringf ( "Count: %d", iLocks );
+		return tOut.Commit ();
+	};
 
 	// collect local, rt, percolate
 	auto dIndexes = GetAllServedIndexes ();
 	for ( auto & dPair: dIndexes )
 	{
-		switch ( dPair.m_eType )
+		auto pIndex = GetServed ( dPair.m_sName );
+		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
-		case IndexType_e::RT:
-		case IndexType_e::PERCOLATE:
-		{
-			auto pIndex = GetServed ( dPair.m_sName );
-			assert ( ServedDesc_t::IsMutable ( pIndex ) );
 			RIdx_T<RtIndex_i *> pRt { pIndex };
-			int iLocks = pRt->GetNumOfLocks ();
-			if ( iLocks>0 )
-			{
-				tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
-				tOut.PutString ( dPair.m_sName );
-				tOut.PutString ( "freeze" );
-				tOut.PutStringf ( "Count: %d", iLocks );
-				if ( !tOut.Commit () )
-					return;
-			}
+			const int iLocks = pRt->GetNumOfLocks ();
+			if ( iLocks>0 && !fnLine ( dPair, iLocks, "freeze" ) )
+				return;
 		}
-		default:
-			break;
+		if ( ServedDesc_t::IsLocal ( pIndex ) )
+		{
+			const int iRLocks = pIndex->GetReadLocks();
+			if ( iRLocks>0 && !fnLine ( dPair, iRLocks, "read" ) )
+				return;
 		}
 	}
 

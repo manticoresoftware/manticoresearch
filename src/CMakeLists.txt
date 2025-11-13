@@ -51,6 +51,20 @@ add_library ( generated_config INTERFACE )
 target_include_directories ( generated_config INTERFACE "${MANTICORE_BINARY_DIR}/config" )
 target_link_libraries ( lextra INTERFACE generated_config )
 
+add_library ( lmanticore_coro OBJECT coroutine.cpp coro_stack.cpp task_dispatcher.cpp coroutine.h coro_stack.h coro_waker.h task_dispatcher.h )
+target_link_libraries ( lmanticore_coro PRIVATE lextra )
+
+add_library ( conversion OBJECT conversion.cpp )
+target_link_libraries ( conversion PRIVATE lextra )
+
+add_subdirectory ( std )
+add_subdirectory ( stripper )
+add_subdirectory ( tokenizer )
+add_subdirectory ( schema )
+add_subdirectory ( dict )
+add_subdirectory ( sphinxquery )
+add_subdirectory ( indexing_sources )
+
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp
@@ -78,50 +92,24 @@ add_library ( indexcheck OBJECT indexcheck.cpp indexcheck.h )
 target_link_libraries ( indexcheck PRIVATE lextra roaring::roaring )
 target_link_libraries ( lmanticore PUBLIC indexcheck )
 
-add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
-		sphinxstemcz.cpp sphinxstemar.cpp )
-target_link_libraries ( lstem PUBLIC lextra )
-
-add_library ( conversion conversion.cpp )
-target_link_libraries ( conversion PUBLIC lextra )
-
-target_link_libraries ( lmanticore PUBLIC conversion )
-
-add_subdirectory ( std )
-target_link_libraries ( lmanticore PUBLIC manticore_std )
-
-add_subdirectory ( stripper )
-target_link_libraries ( lmanticore PUBLIC stripper )
-
-add_subdirectory ( tokenizer )
-target_link_libraries ( lmanticore PUBLIC tokenizer )
-target_link_libraries ( lmanticore PUBLIC lextra )
-
-add_subdirectory ( schema )
-target_link_libraries ( lmanticore PUBLIC schema )
-
-add_subdirectory ( dict )
-target_link_libraries ( lmanticore PUBLIC dict )
-
-add_subdirectory ( sphinxquery )
-target_link_libraries ( lmanticore PUBLIC sphinxquery )
+target_link_libraries ( lmanticore PUBLIC lextra indexcheck conversion manticore_std stripper tokenizer
+		schema dict sphinxquery sourcedoc lmanticore_coro )
 
 if (WITH_ICU OR WITH_JIEBA)
 	add_library ( lcjk cjkpreprocessor.cpp )
-	target_link_libraries ( lcjk PUBLIC lextra)
-endif()
+	target_link_libraries ( lcjk PUBLIC lextra )
 
-add_library ( lmanticore_icu icu.cpp )
-if (WITH_ICU)
-	target_link_libraries ( lmanticore_icu PRIVATE icu::icu )
-endif ()
-target_link_libraries ( lmanticore_icu PRIVATE lcjk )
-target_link_libraries ( lmanticore PUBLIC lmanticore_icu )
+	if (WITH_ICU)
+		add_library ( lmanticore_icu icu.cpp )
+		target_link_libraries ( lmanticore_icu PRIVATE icu::icu lcjk )
+		target_link_libraries ( lmanticore PUBLIC lmanticore_icu )
+	endif ()
 
-if (WITH_JIEBA)
-	add_library ( lmanticore_jieba jieba.cpp jieba.h )
-	target_link_libraries ( lmanticore_jieba PRIVATE lcjk jieba::jieba )
-	target_link_libraries ( lmanticore PUBLIC lmanticore_jieba )
+	if (WITH_JIEBA)
+		add_library ( lmanticore_jieba jieba.cpp jieba.h )
+		target_link_libraries ( lmanticore_jieba PRIVATE jieba::jieba lcjk )
+		target_link_libraries ( lmanticore PUBLIC lmanticore_jieba )
+	endif ()
 endif ()
 
 if (WITH_STEMMER)
@@ -130,9 +118,6 @@ endif ()
 if (WITH_RE2)
 	target_link_libraries ( lmanticore PRIVATE re2::re2 )
 endif ()
-
-add_subdirectory ( indexing_sources )
-target_link_libraries ( lmanticore PUBLIC sourcedoc )
 
 if (WIN32)
 	if (NOT CMAKE_CROSSCOMPILING)
@@ -161,16 +146,11 @@ target_link_libraries ( lextra INTERFACE Boost::boost Boost::context )
 # (we don't link with fiber since our custom build dockers doesn't include it, and they need to be rebuilt before)
 target_compile_definitions ( lextra INTERFACE BOOST_ALL_NO_LIB=1 )
 
-add_library ( lmanticore_coro coroutine.cpp coro_stack.cpp task_dispatcher.cpp coroutine.h coro_stack.h coro_waker.h task_dispatcher.h)
-target_link_libraries ( lmanticore_coro PUBLIC lextra )
-
-target_link_libraries ( lmanticore PUBLIC lmanticore_coro )
-
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
 set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
-		sphinxsort.h sphinxstem.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
+		sphinxsort.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h event.h threadutils.h threadutils_impl.h
 		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h
@@ -262,34 +242,6 @@ target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
 if (WIN32)
 target_link_libraries ( lsearchd PRIVATE iphlpapi WS2_32 wsock32 )
 endif()
-
-function (stackmock processors compiler versions config values)
-	if (NOT CMAKE_SYSTEM_PROCESSOR IN_LIST processors)
-		return()
-	endif()
-
-	if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "${compiler}")
-		return()
-	endif()
-
-	if (NOT CMAKE_CXX_COMPILER_VERSION IN_LIST versions)
-		return()
-	endif()
-
-	string ( TOUPPER ${config} CONFIGUPPER )
-	diags ( "Set ${values} for ${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} config ${config}")
-	set_source_files_properties ( stackmock.cpp PROPERTIES COMPILE_DEFINITIONS_${CONFIGUPPER} "${values}" )
-endfunction()
-
-diag ( CMAKE_SYSTEM_PROCESSOR CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION )
-stackmock ( "x86_64;amd64" Clang "12;13;13.0.1" relwithdebinfo "KNOWN_CREATE_SIZE=768;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=224" )
-stackmock ( "x86_64;amd64" Clang "12;13;13.0.1" debug "KNOWN_CREATE_SIZE=4208;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=400" )
-stackmock ( "x86_64;amd64" Clang "15.0.2" relwithdebinfo "KNOWN_CREATE_SIZE=208;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=128" )
-stackmock ( "x86_64;amd64" Clang "15.0.4;15.0.6" relwithdebinfo "KNOWN_CREATE_SIZE=208;KNOWN_EXPR_SIZE=96;KNOWN_FILTER_SIZE=304;KNOWN_MATCH_SIZE=336;START_KNOWN_MATCH_SIZE=14456" )
-stackmock ( "x86_64;amd64" Clang "15.0.7" relwithdebinfo "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=32;KNOWN_FILTER_SIZE=224;KNOWN_MATCH_SIZE=336;START_KNOWN_MATCH_SIZE=14456" )
-stackmock ( "x86_64;amd64" Clang "15.0.2;15.0.4;15.0.6" debug "KNOWN_CREATE_SIZE=1936;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=368" )
-stackmock ( "x86_64;amd64" GNU "9.3;9.4" relwithdebinfo "KNOWN_CREATE_SIZE=16;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=240" )
-stackmock ( "x86_64;amd64" GNU "9.3;9.4" debug "KNOWN_CREATE_SIZE=256;KNOWN_EXPR_SIZE=48;KNOWN_FILTER_SIZE=272" )
 
 if (WITH_ZLIB OR WITH_ZSTD)
 	target_sources ( lsearchd PRIVATE compressed_mysql_layer.cpp compressed_mysql_layer.h )

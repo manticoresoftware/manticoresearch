@@ -578,6 +578,7 @@ struct CSphQuery
 	CSphString		m_sJoinIdx;						///< index to perform join on
 	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
 	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
+	CSphVector<CSphFilterSettings> m_dOnValueFilters;	///< JOIN ON value filters
 	int				m_iJoinBatchSize = -1;			///< join batch size (-1==default, 0==disable batching)
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
@@ -987,6 +988,7 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	bool									m_bFinalizeSorters = true;
 	int										m_iThreads = 1;
 	int										m_iTotalThreads = 1;
+	bool									m_bUseSICache = false;
 
 	CSphMultiQueryArgs ( int iIndexWeight );
 };

@@ -24,7 +24,7 @@ class XQParser_t;
 #include "bissphinxquery.h"
 
 static bool g_bOnlyNotAllowed = false;
-static std::optional<bool> g_bBooleanSimplify;
+static bool g_bBooleanSimplify = CSphQuery::m_bDefaultSimplify;
 
 void AllowOnlyNot ( bool bAllowed )
 {
@@ -43,13 +43,7 @@ void SetBooleanSimplify ( bool bSimplify )
 
 bool GetBooleanSimplify ( const CSphQuery & tQuery )
 {
-	if ( tQuery.m_bSimplify.has_value() )
-		return tQuery.m_bSimplify.value();
-
-	if ( g_bBooleanSimplify.has_value() )
-		return g_bBooleanSimplify.value();
-
-	return CSphQuery::m_bDefaultSimplify;
+	return tQuery.m_bSimplify.value_or ( g_bBooleanSimplify );
 }
 
 namespace {
@@ -101,6 +95,7 @@ public:
 	void			SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
 	XQNode_t *		AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
+	void			CreateSpPhraseNode ( XQNode_t* pNode );
 
 	void	Cleanup () override;
 
@@ -912,6 +907,24 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp 
 	assert ( eOp==SPH_QUERY_PHRASE || eOp==SPH_QUERY_PROXIMITY || eOp==SPH_QUERY_QUORUM );
 	assert ( !pNode->dWords().IsEmpty() || !pNode->dChildren().IsEmpty() );
 
+	// all terms with OR operator inside the phrase are just OR terms without the phrase
+	if ( pNode->GetOp()==SPH_QUERY_OR && !pNode->dChildren().IsEmpty() )
+	{
+		bool bAllOrTerms = true;
+		pNode->WithChildren ( [&bAllOrTerms] ( const auto & dChildren )
+		{
+			for ( auto & pChild : dChildren )
+			{
+				bAllOrTerms &= ( pChild->GetOp()==SPH_QUERY_AND && pChild->dWords().GetLength() );
+				if ( !bAllOrTerms )
+					break;
+			}
+		} );
+
+		if ( bAllOrTerms )
+			return;
+	}
+
 	if ( bSetExact )
 	{
 		pNode->WithWords ( [] ( auto& dWords ) {
@@ -978,6 +991,11 @@ XQNode_t * XQParser_t::AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 		return AddOp ( SPH_QUERY_PHRASE, pLeft, pRight );
 
 	return AddKeyword ( pLeft, pRight );
+}
+
+void XQParser_t::CreateSpPhraseNode ( XQNode_t* pNode )
+{
+	SetPhrase ( pNode, false, SPH_QUERY_PHRASE  );
 }
 
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )

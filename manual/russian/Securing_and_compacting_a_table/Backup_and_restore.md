@@ -1,60 +1,60 @@
-# Backup and Restore
+# Резервное копирование и восстановление
 
-Backing up your tables on a regular basis is essential for recovery in the event of system crashes, hardware failure, or data corruption/loss. It's also highly recommended to make backups before upgrading to a new Manticore Search version or running [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
+Регулярное резервное копирование ваших таблиц необходимо для восстановления в случае сбоев системы, отказа оборудования или повреждения/потери данных. Также настоятельно рекомендуется создавать резервные копии перед обновлением до новой версии Manticore Search или выполнением [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode).
 
-Backing up database systems can be done in two unique ways: logical and physical backups. Each of these methods has its pros and cons, which may vary based on the specific database environment and needs. Here, we'll delve into the distinction between these two types of backups.
+Резервное копирование систем баз данных может выполняться двумя уникальными способами: логическим и физическим. Каждый из этих методов имеет свои плюсы и минусы, которые могут варьироваться в зависимости от конкретной среды базы данных и потребностей. Здесь мы рассмотрим различия между этими двумя типами резервных копий.
 
-### Logical Backups
+### Логические резервные копии
 
-Logical backups entail exporting the database schema and data as SQL statements or as data formats specific to the database. This backup form is typically readable by humans and can be employed to restore the database on various systems or database engines.
+Логические резервные копии предполагают экспорт схемы базы данных и данных в виде SQL-запросов или в форматах данных, специфичных для базы данных. Эта форма резервного копирования обычно читаема человеком и может использоваться для восстановления базы данных на различных системах или движках баз данных.
 
-Pros and cons of logical backups:
-- ➕ **Portability:** Logical backups are generally more portable than physical backups, as they can be used to restore the database on different hardware or operating systems.
-- ➕ **Flexibility:** Logical backups allow you to selectively restore specific tables, indexes, or other database objects.
-- ➕ **Compatibility:** Logical backups can be used to migrate data between different database management systems or versions, provided the target system supports the exported format or SQL statements.
-- ➖ **Slower Backup and Restore:** Logical backups can be slower than physical backups, as they require the database engine to convert the data into SQL statements or another export format.
-- ➖ **Increased System Load:** Creating logical backups can cause higher system load, as the process requires more CPU and memory resources to process and export the data.
+Плюсы и минусы логических резервных копий:
+- ➕ **Портативность:** Логические резервные копии, как правило, более портативны, чем физические, так как их можно использовать для восстановления базы данных на разном оборудовании или операционных системах.
+- ➕ **Гибкость:** Логические резервные копии позволяют выборочно восстанавливать конкретные таблицы, индексы или другие объекты базы данных.
+- ➕ **Совместимость:** Логические резервные копии можно использовать для миграции данных между разными системами управления базами данных или версиями, при условии, что целевая система поддерживает экспортируемый формат или SQL-запросы.
+- ➖ **Медленнее создание и восстановление:** Логические резервные копии могут выполняться медленнее, чем физические, так как движок базы данных должен преобразовать данные в SQL-запросы или другой формат экспорта.
+- ➖ **Повышенная нагрузка на систему:** Создание логических резервных копий может вызывать большую нагрузку на систему, так как процесс требует больше ресурсов CPU и памяти для обработки и экспорта данных.
 
-Manticore Search supports [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) for logical backups.
+Manticore Search поддерживает [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) для логических резервных копий.
 
-### Physical Backups
+### Физические резервные копии
 
-Physical backups involve copying the raw data files and system files that comprise the database. This type of backup essentially creates a snapshot of the database's physical state at a given point in time.
+Физические резервные копии включают копирование необработанных файлов данных и системных файлов, составляющих базу данных. Этот тип резервного копирования фактически создает снимок физического состояния базы данных в определенный момент времени.
 
-Pros and cons of physical backups:
-- ➕ **Speed:** Physical backups are usually faster than logical backups, as they involve copying raw data files directly from disk.
-- ➕ **Consistency:** Physical backups ensure a consistent backup of the entire database, as all related files are copied together.
-- ➕ **Lower System Load:** Creating physical backups generally places less load on the system compared to logical backups, as the process does not involve additional data processing.
-- ➖ **Portability:** Physical backups are typically less portable than logical backups, as they may be dependent on the specific hardware, operating system, or database engine configuration.
-- ➖ **Flexibility:** Physical backups do not allow for the selective restoration of specific database objects, as the backup contains the entire database's raw files.
-- ➖ **Compatibility:** Physical backups cannot be used to migrate data between different database management systems or versions, as the raw data files may not be compatible across different platforms or software.
+Плюсы и минусы физических резервных копий:
+- ➕ **Скорость:** Физические резервные копии обычно выполняются быстрее логических, так как включают прямое копирование необработанных файлов данных с диска.
+- ➕ **Согласованность:** Физические резервные копии обеспечивают согласованное резервное копирование всей базы данных, так как все связанные файлы копируются вместе.
+- ➕ **Меньшая нагрузка на систему:** Создание физических резервных копий обычно создает меньшую нагрузку на систему по сравнению с логическими, так как процесс не требует дополнительной обработки данных.
+- ➖ **Портативность:** Физические резервные копии, как правило, менее портативны, чем логические, так как могут зависеть от конкретного оборудования, операционной системы или конфигурации движка базы данных.
+- ➖ **Гибкость:** Физические резервные копии не позволяют выборочно восстанавливать отдельные объекты базы данных, так как резервная копия содержит необработанные файлы всей базы данных.
+- ➖ **Совместимость:** Физические резервные копии нельзя использовать для миграции данных между разными системами управления базами данных или версиями, так как необработанные файлы данных могут быть несовместимы между разными платформами или программным обеспечением.
 
-Manticore Search has [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md#Using-manticore-backup-command-line-tool) command line tool for physical backups.
+Manticore Search имеет командный инструмент [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md#Using-manticore-backup-command-line-tool) для физических резервных копий.
 
-In summary, logical backups provide more flexibility, portability, and compatibility but can be slower and more resource-intensive, while physical backups are faster, more consistent, and less resource-intensive but may be limited in terms of portability and flexibility. The choice between these two backup methods will depend on your specific database environment, hardware, and requirements.
+В итоге, логические резервные копии обеспечивают большую гибкость, портативность и совместимость, но могут быть медленнее и требовать больше ресурсов, тогда как физические резервные копии быстрее, более согласованы и менее ресурсоемки, но могут иметь ограничения по портативности и гибкости. Выбор между этими двумя методами резервного копирования зависит от вашей конкретной среды базы данных, оборудования и требований.
 
-## Using manticore-backup command line tool
+## Использование командного инструмента manticore-backup
 
-The `manticore-backup` tool, included in the official Manticore Search [packages](https://manticoresearch.com/install), automates the process of backing up tables for an instance running in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode).
+Инструмент `manticore-backup`, включенный в официальные [пакеты](https://manticoresearch.com/install) Manticore Search, автоматизирует процесс резервного копирования таблиц для экземпляра, работающего в [RT режиме](../Read_this_first.md#Real-time-mode-vs-plain-mode).
 
-### Installation
+### Установка
 
-**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), which is a part of the `manticore-extra` package, and you need to ensure that one of these is available.
+**Если вы следовали [официальным инструкциям по установке](https://manticoresearch.com/install/), у вас уже должно быть все установлено, и вам не о чем беспокоиться.** В противном случае, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) требует PHP 8.1.10 и [специфические модули](https://github.com/manticoresoftware/executor/blob/main/build-linux) или [`manticore-executor`](https://github.com/manticoresoftware/executor), который является частью пакета `manticore-extra`, и вам нужно убедиться, что один из них доступен.
 
-Note that `manticore-backup` is not available for Windows yet.
+Обратите внимание, что `manticore-backup` пока недоступен для Windows.
 
-### How to use
+### Как использовать
 
-First, make sure you're running `manticore-backup` on the same server where the Manticore instance you are about to back up is running.
+Во-первых, убедитесь, что вы запускаете `manticore-backup` на том же сервере, где работает экземпляр Manticore, который вы собираетесь резервировать.
 
-Second, we recommend running the tool under the `root` user so the tool can transfer ownership of the files you are backing up. Otherwise, a backup will be also made but with no ownership transfer. In either case, you should make sure that `manticore-backup` has access to the data dir of the Manticore instance.
+Во-вторых, рекомендуется запускать инструмент под пользователем `root`, чтобы инструмент мог передавать права собственности на файлы, которые вы резервируете. В противном случае резервная копия также будет создана, но без передачи прав собственности. В любом случае, убедитесь, что `manticore-backup` имеет доступ к каталогу данных экземпляра Manticore.
 
 <!-- example backup1 -->
 
-The only required argument for `manticore-backup` is `--backup-dir`, which specifies the destination for the backup. If you don't provide any additional arguments, `manticore-backup` will:
-- locate a Manticore instance running with the default configuration
-- create a subdirectory in the `--backup-dir` directory with a timestamped name
-- backup all tables found in the instance
+Единственным обязательным аргументом для `manticore-backup` является `--backup-dir`, который указывает место назначения для резервной копии. Если вы не укажете дополнительных аргументов, `manticore-backup`:
+- найдет экземпляр Manticore, работающий с конфигурацией по умолчанию
+- создаст подкаталог в директории `--backup-dir` с именем, содержащим временную метку
+- сделает резервную копию всех таблиц, найденных в экземпляре
 
 <!-- request Example -->
 ```bash
@@ -93,7 +93,7 @@ Manticore versions:
 <!-- end -->
 
 <!-- example backup2 -->
-To back up specific tables only, use the `--tables` flag followed by a comma-separated list of tables, for example `--tables=tbl1,tbl2`. This will only backup the specified tables and ignore the rest.
+Чтобы сделать резервную копию только определенных таблиц, используйте флаг `--tables`, за которым следует список таблиц через запятую, например `--tables=tbl1,tbl2`. Это создаст резервную копию только указанных таблиц, игнорируя остальные.
 
 <!-- request Example -->
 ```bash
@@ -129,26 +129,26 @@ Manticore versions:
 ```
 <!-- end -->
 
-### Arguments
+### Аргументы
 
-| Argument | Description |
+| Аргумент | Описание |
 |-|-|
-| `--backup-dir=path` | Это путь к директории резервного копирования, где будет храниться резервная копия. Директория должна уже существовать. Этот аргумент обязателен и не имеет значения по умолчанию. При каждом запуске резервного копирования manticore-backup создаст поддиректорию в указанной директории с отметкой времени в имени (`backup-[datetime]`) и скопирует в неё все необходимые таблицы. Таким образом, `--backup-dir` является контейнером для всех ваших резервных копий, и безопасно запускать скрипт несколько раз. |
+| `--backup-dir=path` | Это путь к каталогу резервного копирования, где будет храниться резервная копия. Каталог должен уже существовать. Этот аргумент обязателен и не имеет значения по умолчанию. При каждом запуске резервного копирования manticore-backup создаст подкаталог в указанном каталоге с отметкой времени в имени (`backup-[datetime]`) и скопирует в него все необходимые таблицы. Таким образом, `--backup-dir` является контейнером для всех ваших резервных копий, и безопасно запускать скрипт несколько раз.|
 | `--restore[=backup]` | Восстановление из `--backup-dir`. Просто --restore выводит список доступных резервных копий. `--restore=backup` восстановит из `<--backup-dir>/backup`. |
-| `--force` | Пропустить проверку версий при восстановлении и выполнить восстановление резервной копии без ошибок. |
-| `--disable-telemetry` | Используйте этот флаг, если хотите отключить отправку анонимизированных метрик в Manticore. Также можно использовать переменную окружения TELEMETRY=0 |
-| `--config=/path/to/manticore.conf` | Путь к конфигурации Manticore. Необязательно. Если не указан, будет использована конфигурация по умолчанию для вашей операционной системы. Используется для определения хоста и порта для взаимодействия с демоном Manticore. Инструмент `manticore-backup` поддерживает [динамические конфигурационные файлы](../Server_settings/Scripted_configuration.md). Вы можете указывать опцию `--config` несколько раз, если ваша конфигурация разбита на несколько файлов. |
-| `--tables=tbl1,tbl2, ...` | Список таблиц, которые необходимо сохранить, разделенный точкой с запятой. Чтобы сохранить все таблицы, пропустите этот аргумент. Все указанные таблицы должны существовать в экземпляре Manticore, с которого выполняется резервное копирование, иначе резервное копирование завершится ошибкой. |
-| `--compress` | Следует ли сжимать резервные файлы. По умолчанию не включено. | необязательно |
-| `--unlock` | В редких случаях, если что-то пошло не так, таблицы могут остаться заблокированными. Используйте этот аргумент, чтобы разблокировать их. |
+| `--force` | Пропустить проверку версий при восстановлении и аккуратно восстановить резервную копию. |
+| `--disable-telemetry` | Укажите этот флаг, если хотите отключить отправку анонимизированных метрик в Manticore. Также можно использовать переменную окружения TELEMETRY=0 |
+| `--config=/path/to/manticore.conf` | Путь к конфигурации Manticore. Необязательно. Если не указан, будет использована конфигурация по умолчанию для вашей операционной системы. Используется для определения хоста и порта для связи с демоном Manticore. Инструмент `manticore-backup` поддерживает [динамические конфигурационные](../Server_settings/Scripted_configuration.md) файлы. Вы можете указать опцию `--config` несколько раз, если ваша конфигурация разбита на несколько файлов. |
+| `--tables=tbl1,tbl2, ...` | Список таблиц через запятую, которые вы хотите сохранить. Чтобы сохранить все таблицы, опустите этот аргумент. Все указанные таблицы должны существовать в экземпляре Manticore, с которого вы делаете резервное копирование, иначе резервное копирование завершится с ошибкой. |
+| `--compress` | Нужно ли сжимать файлы резервной копии. По умолчанию не включено. | необязательно |
+| `--unlock` | В редких случаях, когда что-то идет не так, таблицы могут остаться заблокированными. Используйте этот аргумент, чтобы разблокировать их. |
 | `--version` | Показать текущую версию. |
 | `--help` | Показать эту справку. |
 
-## Справочник по команде BACKUP SQL
+## Справочник по SQL-команде BACKUP
 
-Вы также можете создавать резервные копии через SQL, выполнив простую команду `BACKUP TO /path/to/backup`.
+Вы также можете сделать резервную копию данных через SQL, выполнив простую команду `BACKUP TO /path/to/backup`.
 
-> ПРИМЕЧАНИЕ: `BACKUP` не поддерживается в Windows. Рассмотрите возможность использования [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) вместо него.
+> ПРИМЕЧАНИЕ: `BACKUP` не поддерживается в Windows. Рассмотрите возможность использования [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) вместо этого.
 
 > ПРИМЕЧАНИЕ: `BACKUP` требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
@@ -157,48 +157,78 @@ Manticore versions:
 ```sql
 BACKUP
   [{TABLE | TABLES} a[, b]]
+  TO path_to_backup
   [{OPTION | OPTIONS}
     async = {on | off | 1 | 0 | true | false | yes | no}
     [, compress = {on | off | 1 | 0 | true | false | yes | no}]
   ]
-  TO path_to_backup
 ```
 
-Например, чтобы создать резервные копии таблиц `a` и `b` в директорию `/backup`, выполните следующую команду:
+Например, чтобы сделать резервную копию таблиц `a` и `b` в каталог `/backup`, выполните следующую команду:
 
 ```sql
 BACKUP TABLES a, b TO /backup
 ```
 
-Доступны опции для управления процессом резервного копирования, такие как:
+Доступны опции для управления и настройки процесса резервного копирования, такие как:
 
-* `async`: делает резервное копирование неблокирующим, позволяя сразу получить ответ с ID запроса и выполнять другие запросы во время выполнения резервного копирования. Значение по умолчанию `0`.
-* `compress`: включает сжатие файлов с использованием zstd. Значение по умолчанию `0`.
-Например, чтобы выполнить резервное копирование всех таблиц в асинхронном режиме с включенным сжатием в директорию `/tmp`:
+* `async`: делает резервное копирование неблокирующим, позволяя сразу получить ответ с путем резервной копии и выполнять другие запросы во время выполнения резервного копирования. Значение по умолчанию — `0`.
+* `compress`: включает сжатие файлов с помощью zstd. Значение по умолчанию — `0`.
+
+Например, чтобы выполнить резервное копирование всех таблиц в асинхронном режиме с включенным сжатием в каталог `/tmp`:
 
 ```sql
-BACKUP OPTION async = yes, compress = yes TO /tmp
+BACKUP TO /tmp OPTION async = yes, compress = yes
 ```
+
+### Поведение асинхронного резервного копирования
+
+При использовании `async = 1` (или `yes`, `on`, `true`) операция резервного копирования выполняется в фоновом задании:
+
+* Команда возвращает управление сразу с путем резервной копии
+* Вы можете продолжать выполнять другие запросы во время выполнения резервного копирования
+* Задание резервного копирования выполняется в отдельном потоке, управляемом Manticore Buddy
+* Во время выполнения задание резервного копирования будет отображаться в выводе `SHOW QUERIES` и автоматически удалится после завершения
+
+**Пример асинхронного резервного копирования:**
+
+```sql
+BACKUP TO /tmp/mybackup OPTION async = 1
+```
+
+Это вернет результат сразу, например:
+```
++----------------------------------+
+| Path                             |
++----------------------------------+
+| /tmp/mybackup/backup-20221004... |
++----------------------------------+
+```
+
+Вы можете проверить, выполняется ли резервное копирование, используя `SHOW QUERIES`. После завершения задание исчезнет из списка запросов, и все файлы резервной копии будут присутствовать в указанном каталоге.
 
 ### Важные замечания
 
-1. Путь не должен содержать специальные символы или пробелы, так как они не поддерживаются.
-2. Убедитесь, что Manticore Buddy запущен (по умолчанию он запущен).
+1. Путь резервной копии может содержать пробелы, если он заключен в одинарные кавычки, например, `BACKUP TO '/path/with spaces'`
+2. Пути без пробелов не требуют кавычек: `BACKUP TO /tmp/backup`
+3. Поддерживаются пути Windows: `BACKUP TO 'C:\path'` или `BACKUP TO C:\windows\backup`
+4. Убедитесь, что Manticore Buddy запущен (по умолчанию он запущен)
+5. Каталог резервного копирования должен существовать и быть доступным для записи процессом Manticore
 
-### Как резервное копирование обеспечивает согласованность таблиц
+### Как резервное копирование поддерживает согласованность таблиц
 
-Для обеспечения согласованности таблиц во время резервного копирования инструменты резервного копирования Manticore Search используют инновационные команды [FREEZE и UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md). В отличие от традиционной блокировки и разблокировки таблиц, например, в MySQL, команда `FREEZE` приостанавливает запись данных на диск, но при этом продолжает позволять запись (в определённой степени) и выборку обновленных данных из таблицы.
+Для обеспечения согласованности таблиц во время резервного копирования инструменты резервного копирования Manticore Search используют инновационные команды [FREEZE и UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md). В отличие от традиционной функции блокировки и разблокировки таблиц, например, в MySQL, `FREEZE` останавливает сброс данных на диск, при этом позволяя (в некоторой степени) записывать и выбирать обновленные данные из таблицы.
 
-Однако, если размер chunks в RAM превысит предел `rt_mem_limit` во время длительных операций резервного копирования с большим количеством вставок, данные могут быть сброшены на диск, и операции записи будут заблокированы до завершения сброса. Несмотря на это, инструмент поддерживает баланс между блокировкой таблиц, согласованностью данных и доступностью записи в базу данных во время заморозки таблицы.
+Однако, если размер RAM-чана превышает порог `rt_mem_limit` во время длительных операций резервного копирования с большим количеством вставок, данные могут быть сброшены на диск, и операции записи будут заблокированы до завершения сброса. Несмотря на это, инструмент поддерживает баланс между блокировкой таблиц, согласованностью данных и доступностью записи в базу данных, пока таблица заморожена.
 
-Когда вы используете `manticore-backup` или SQL-команду `BACKUP`, команда `FREEZE` выполняется один раз и одновременно замораживает все таблицы, которые вы резервируете. Процесс резервного копирования затем копирует каждую таблицу по очереди, снимая заморозку после успешного резервного копирования каждой таблицы.
+При использовании `manticore-backup` или SQL-команды `BACKUP` команда `FREEZE` выполняется один раз и замораживает все таблицы, которые вы резервируете, одновременно. Затем процесс резервного копирования последовательно сохраняет каждую таблицу, снимая заморозку после успешного резервного копирования каждой таблицы.
 
-Если резервное копирование не удаётся или прерывается, инструмент пытается разморозить все таблицы.
+Если резервное копирование не удается или прерывается, инструмент пытается разморозить все таблицы.
 
 ## Восстановление с помощью инструмента manticore-backup
 
 <!-- example restore_list -->
-Для восстановления экземпляра Manticore из резервной копии используйте команду `manticore-backup` с аргументами `--backup-dir` и `--restore`. Например: `manticore-backup --backup-dir=/path/to/backups --restore`. Если вы не укажете аргумент для `--restore`, он просто выведет список всех резервных копий в `--backup-dir`.
+Для восстановления экземпляра Manticore из резервной копии используйте команду `manticore-backup` с аргументами `--backup-dir` и `--restore`. Например: `manticore-backup --backup-dir=/path/to/backups --restore`. Если не указать аргумент для `--restore`, будет просто выведен список всех резервных копий в `--backup-dir`.
 
 <!-- request Example -->
 ```bash
@@ -223,13 +253,13 @@ Available backups: 3
 
 <!-- example restore -->
 
-Чтобы запустить задание на восстановление, выполните `manticore-backup` с флагом `--restore=backup name`, где `backup name` — имя каталога резервной копии в `--backup-dir`. Обратите внимание:
-1. Нельзя запускать экземпляр Manticore на том же хосте и порту, что и восстанавливаемый.
+Чтобы начать задачу восстановления, запустите `manticore-backup` с флагом `--restore=backup name`, где `backup name` — имя каталога резервной копии внутри `--backup-dir`. Обратите внимание, что:
+1. На том же хосте и порту не должно быть запущено ни одного экземпляра Manticore, который восстанавливается.
 2. Старый файл `manticore.json` не должен существовать.
 3. Старый конфигурационный файл не должен существовать.
-4. Директория с данными должна существовать и быть пустой.
+4. Старый каталог данных должен существовать и быть пустым.
 
-Если все условия выполнены, восстановление начнётся. Инструмент предоставит подсказки, чтобы вам не пришлось их запоминать. Очень важно не перезаписывать существующие файлы, поэтому убедитесь, что вы их удалили до восстановления, если они всё ещё существуют. Именно поэтому все эти условия.
+Если все условия выполнены, восстановление продолжится. Инструмент будет предоставлять подсказки, так что вам не нужно их запоминать. Очень важно не перезаписывать существующие файлы, поэтому убедитесь, что вы удалили их перед восстановлением, если они еще существуют. Отсюда и все условия.
 
 <!-- request Example -->
 ```bash
@@ -262,11 +292,13 @@ Manticore config
 
 ## Резервное копирование и восстановление с помощью mysqldump
 
+Manticore поддерживает утилиту `mysqldump` из MySQL до версии 9.5 и утилиту `mariadb-dump` из MariaDB до версии 12.0.
+
 <!-- example mysqldump_backup -->
 
 > ПРИМЕЧАНИЕ: некоторые версии `mysqldump` / `mariadb-dump` требуют [Manticore Buddy](../Installation/Manticore_Buddy.md). Если дамп не работает, убедитесь, что Buddy установлен.
 
-Чтобы создать резервную копию вашей базы данных Manticore Search, вы можете использовать команду `mysqldump`. В примерах будет использоваться порт и хост по умолчанию.
+Для создания резервной копии вашей базы данных Manticore Search вы можете использовать команду `mysqldump`. В примерах мы будем использовать порт и хост по умолчанию.
 
 Обратите внимание, что `mysqldump` поддерживается только для таблиц реального времени.
 
@@ -276,14 +308,14 @@ mysqldump -h0 -P9306 manticore > manticore_backup.sql
 mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 ```
 
-Выполнение этой команды создаст файл резервной копии с именем `manticore_backup.sql`. В этом файле будут содержаться все данные и схемы таблиц.
+Выполнение этой команды создаст файл резервной копии с именем `manticore_backup.sql`. Этот файл будет содержать все данные и схемы таблиц.
 
 <!-- request Replace mode -->
 ```bash
 mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.sql
 ```
 
-Это создаст файл резервной копии `tbl.sql` с командами `replace` вместо `insert`, при этом имена столбцов сохраняются в каждом пакете. Документы будут объединены в пакеты размером до 16 мегабайт. Команды `drop`/`create table` отсутствуют. Это полезно для полнотекстовой переиндексации после изменения настроек токенизации.
+Это создаст файл резервной копии `tbl.sql` с командами `replace` вместо `insert`, при этом имена столбцов сохраняются в каждой партии. Документы будут группироваться в партии размером до 16 мегабайт. Команд `drop`/`create table` не будет. Это полезно для полнотекстовой переиндексации после изменения настроек токенизации.
 
 <!-- request Replication mode -->
 ```bash
@@ -291,17 +323,17 @@ mysqldump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P93
 mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
 ```
 
-В этом случае `mysqldump` будет генерировать команды вида `REPLACE INTO cluster:table ...`, которые будут напрямую отправляться в экземпляр Manticore, что приведет к повторной вставке документов.
-Используйте пользователя `cluster` и флаг `-t` для включения режима репликации. Подробнее об этом смотрите в примечаниях ниже.
+В этом случае `mysqldump` сгенерирует команды вида `REPLACE INTO cluster:table ...`, которые будут отправлены напрямую в экземпляр Manticore, что приведет к повторной вставке документов.
+Используйте пользователя `cluster` и флаг `-t` для включения режима репликации. Подробнее см. в примечаниях ниже.
 
 <!-- end -->
 
 <!-- example mysqldump_restore -->
 ### Восстановление
 
-Если вы хотите восстановить базу данных Manticore Search из файла резервной копии, инструментом выбора является клиент mysql.
+Если вы хотите восстановить базу данных Manticore Search из файла резервной копии, клиент mysql — ваш инструмент выбора.
 
-Обратите внимание, что при восстановлении в [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) вы не можете напрямую удалять и создавать таблицы. Поэтому необходимо:
+Обратите внимание, что если вы восстанавливаете в [Plain режиме](../Read_this_first.md#Real-time-mode-vs-plain-mode), вы не можете напрямую удалять и создавать таблицы заново. Поэтому вам следует:
 - Использовать `mysqldump` с опцией `-t`, чтобы исключить из резервной копии команды `CREATE TABLE`.
 - Вручную [TRUNCATE](../Emptying_a_table.md) таблицы перед продолжением восстановления.
 
@@ -311,31 +343,30 @@ mysql -h0 -P9306 < manticore_backup.sql
 mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
-Эта команда позволяет восстановить все из файла `manticore_backup.sql`.
+Эта команда позволяет восстановить всё из файла `manticore_backup.sql`.
 <!-- end -->
 
 ### Дополнительные опции
 
-Вот еще несколько настроек, которые можно использовать с mysqldump для настройки резервного копирования:
+Вот некоторые дополнительные настройки, которые можно использовать с mysqldump для настройки резервного копирования:
 
 - `-t` пропускает команды `drop`/`create` таблиц. Полезно для полнотекстовой переиндексации таблицы после изменения настроек токенизации.
-- `--no-data`: Эта опция исключает данные таблиц из резервной копии, создавая файл, содержащий только схемы таблиц.
-- `--ignore-table=[database_name].[table_name]`: Эта опция позволяет пропустить конкретную таблицу при резервном копировании. Имя базы данных должно быть `manticore`.
-- `--replace` для использования `replace` вместо `insert`. Полезно для полнотекстовой переиндексации таблицы после изменения настройки токенизации.
-- `--net-buffer-length=16M` для создания пакетов размером до 16 мегабайт для более быстрой реставрации.
-- `-e` для объединения документов в пакеты. Ускоряет реставрацию.
-- `-c` для сохранения имен столбцов. Полезно для переиндексации таблицы после изменения ее схемы (например, изменения порядка полей).
+- `--no-data`: эта настройка исключает данные таблиц из резервной копии, в результате чего файл резервной копии содержит только схемы таблиц.
+- `--ignore-table=[database_name].[table_name]`: эта опция позволяет пропустить определённую таблицу во время резервного копирования. Обратите внимание, что имя базы данных должно быть `manticore`.
+- `--replace` для выполнения `replace` вместо `insert`. Полезно для полнотекстовой переиндексации таблицы после изменения настроек токенизации.
+- `--net-buffer-length=16M` для формирования партий размером до 16 мегабайт для более быстрого восстановления.
+- `-e` для пакетной обработки документов. Полезно для более быстрого восстановления.
+- `-c` для сохранения имён столбцов. Полезно для переиндексации таблицы после изменения её схемы (например, изменения порядка полей).
 
-Для полного списка настроек и их подробного описания обратитесь к официальной [документации MySQL](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) или [документации MariaDB](https://mariadb.com/kb/en/mariadb-dump/).
+Для полного списка настроек и их подробного описания, пожалуйста, обратитесь к официальной [документации MySQL](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) или [документации MariaDB](https://mariadb.com/kb/en/mariadb-dump/).
 
 ### Примечания
 
 * Для создания дампа в режиме репликации (когда дамп включает `INSERT/REPLACE INTO <cluster_name>:<table_name>`):
   - Используйте пользователя `cluster`. Например: `mysqldump -u cluster ...` или `mariadb-dump -u cluster ...`. Вы можете изменить имя пользователя, включающего режим репликации для `mysqldump`, выполнив `SET GLOBAL cluster_user = new_name`.
   - Используйте флаг `-t`.
-  - При указании таблицы в режиме репликации следует использовать синтаксис `cluster_name:table_name`. Например: `mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`.
-* Рекомендуется явно указывать базу данных `manticore`, если вы планируете бэкапить все базы данных, вместо использования опции `--all-databases`.
-* Обратите внимание, что `mysqldump` не поддерживает резервное копирование распределенных таблиц и не может делать бэкап таблиц, содержащих нестатические поля. Для таких случаев рассмотрите использование `manticore-backup` или SQL-команды `BACKUP`. Если у вас есть распределенные таблицы, рекомендуется всегда специально указывать таблицы для дампа.
+  - При указании таблицы в режиме репликации необходимо использовать синтаксис `cluster_name:table_name`. Например: `mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`.
+* Рекомендуется явно указывать базу данных `manticore`, если вы планируете делать резервную копию всех баз данных, вместо использования опции `--all-databases`.
+* Обратите внимание, что `mysqldump` не поддерживает резервное копирование распределённых таблиц и не может создавать резервные копии таблиц, содержащих нестандартные поля. В таких случаях рассмотрите возможность использования `manticore-backup` или SQL-команды `BACKUP`. Если у вас есть распределённые таблицы, рекомендуется всегда явно указывать таблицы для дампа.
 
 <!-- proofread -->
-

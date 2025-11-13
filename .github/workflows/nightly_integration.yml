@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-dbeaver
+          test_prefix: test/clt-tests/integrations/dbeaver/test-integrations-dbeaver
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-filebeat
+          test_prefix: test/clt-tests/integrations/filebeat/test-integrations-filebeat
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
@@ -64,7 +64,7 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-fluentbit
+          test_prefix: test/clt-tests/integrations/fluentbit/test-integrations-fluentbit
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
@@ -78,7 +78,7 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-logstash
+          test_prefix: test/clt-tests/integrations/logstash/test-integrations-logstash
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
@@ -93,22 +93,37 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-support-filebeat-versions
+          test_prefix: test/clt-tests/integrations/filebeat/test-integrations-support-filebeat-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
           ui_host: "https://clt.manticoresearch.com"
 
-  test_support_logstash_versions:
-    name: Test Logstash versions support
+  test_check_logstash_versions:
+    name: Check for new Logstash versions
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-support-logstash-versions
+          test_prefix: test/clt-tests/integrations/logstash/test-integrations-check-logstash-versions
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+          comment_mode: failures
+          run_args: --privileged
+          ui_host: "https://clt.manticoresearch.com"
+
+  test_logstash_versions:
+    name: Test Logstash versions support
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - uses: manticoresoftware/clt@0.7.3
+        with:
+          test_prefix: test/clt-tests/integrations/logstash/test-integrations-test-logstash-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
@@ -123,7 +138,7 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.7.3
         with:
-          test_prefix: test/clt-tests/integrations/test-integrations-vector
+          test_prefix: test/clt-tests/integrations/vector/test-integrations-vector
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
           comment_mode: failures
           run_args: --privileged
@@ -139,6 +154,21 @@ jobs:
       - uses: manticoresoftware/clt@0.7.3
         with:
           test_prefix: test/clt-tests/integrations/kafka/test-integration-
+          image: manticoresearch/dind:v1
+          comment_mode: failures
+          run_args: --privileged -v $(pwd)/manual:/manual
+          ui_host: "https://clt.manticoresearch.com"
+
+  test_grafana:
+    name: Test Grafana integration
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - uses: manticoresoftware/clt@0.7.3
+        with:
+          test_prefix: test/clt-tests/integrations/grafana/test-integrations-grafana
           image: manticoresearch/dind:v1
           comment_mode: failures
           run_args: --privileged

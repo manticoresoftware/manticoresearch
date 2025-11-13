@@ -1,0 +1,10 @@
+{
+  "f7454b379dfdaecfc590c8ce6b077231019c174a6705be706f0e14766528566a": {
+    "original": "# FLUSH ATTRIBUTES\n\nCODE_BLOCK_0\n\nThe FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active disk tables to disk. It returns a tag that identifies the result on-disk state (which is basically a number of actual disk attribute saves performed since the server startup).\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# FLUSH ATTRIBUTES\n\nCODE_BLOCK_0\n\nFLUSH ATTRIBUTES 命令将所有活动磁盘表中所有内存中的属性更新刷新到磁盘。它返回一个标记，该标记标识结果的磁盘状态（基本上是自服务器启动以来实际执行的磁盘属性保存次数）。\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+      "russian": "# FLUSH ATTRIBUTES\n\nCODE_BLOCK_0\n\nКоманда FLUSH ATTRIBUTES сбрасывает все обновления атрибутов, находящиеся в памяти, во всех активных дисковых таблицах на диск. Она возвращает тег, который идентифицирует результат состояния на диске (что по сути является числом фактически выполненных сохранений атрибутов на диск с момента запуска сервера).\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

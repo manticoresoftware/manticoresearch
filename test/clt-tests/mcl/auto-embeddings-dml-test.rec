@@ -1,0 +1,192 @@
+––– comment –––
+Start Manticore Search with buddy
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_delete ( title TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' ) engine='rowwise'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_delete (id, title) VALUES (1, 'One')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_delete WHERE id = 1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_delete"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+––– comment –––
+TEST 2: DELETE multiple records
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_delete (id, title) VALUES (2,'Two'),(3,'Three'),(4,'Four'),(5,'Five')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_delete WHERE id IN (2,3,4)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_delete"
+––– output –––
++------+
+| id   |
++------+
+|    5 |
++------+
+––– comment –––
+TEST 3: REPLACE for updating TEXT and columnar attributes
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_replace"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_replace ( title TEXT, price INTEGER, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' ) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_replace (id, title, price) VALUES (1, 'Original', 100)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO test_replace (id, title, price) VALUES (1, 'Updated', 200)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT title, price FROM test_replace WHERE id = 1"
+––– output –––
++---------+-------+
+| title   | price |
++---------+-------+
+| Updated |   200 |
++---------+-------+
+––– comment –––
+TEST 4: Vector regeneration on REPLACE with proper FLUSH and OPTIMIZE
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_vector_regen"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_vector_regen ( content TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='content')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_vector_regen (id, content) VALUES (1,'AI and ML'),(2,'Deep Learning'),(3,'Cooking')"; echo $?
+––– output –––
+0
+––– comment –––
+FLUSH and OPTIMIZE before KNN search
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_vector_regen; OPTIMIZE TABLE test_vector_regen OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_vector_regen WHERE KNN(vec, 2, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO test_vector_regen (id, content) VALUES (1, 'Cooking recipes')"; echo $?
+––– output –––
+0
+––– comment –––
+FLUSH and OPTIMIZE after REPLACE for proper vector regeneration
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_vector_regen; OPTIMIZE TABLE test_vector_regen OPTION sync=1, cutoff=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM test_vector_regen WHERE KNN(vec, 2, 'artificial intelligence')"
+––– output –––
++------+
+| id   |
++------+
+|    2 |
+|    3 |
++------+
+––– comment –––
+TEST 5: TRUNCATE with vector tables
+––– input –––
+mysql -h0 -P9306 -e "TRUNCATE TABLE test_vector_regen"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_vector_regen"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+––– comment –––
+TEST 6: Bulk DELETE operations
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_bulk"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_bulk ( content TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='content' ) engine='rowwise'"; echo $?
+––– output –––
+0
+––– input –––
+for i in {1..50}; do
+    mysql -h0 -P9306 -e "INSERT INTO test_bulk (id, content) VALUES ($i, 'Document $i')" 2>/dev/null
+done
+echo "Inserted 50 records"
+––– output –––
+Inserted 50 records
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_bulk WHERE id <= 10"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_bulk WHERE id >= 40"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_bulk"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       29 |
++----------+
+––– comment –––
+TEST 7: Multiple vector fields
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_multi_vec"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_multi_vec ( title TEXT, description TEXT, title_vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title', desc_vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='description' ) engine='columnar'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_multi_vec (id, title, description) VALUES (1,'Title1','Desc1'),(2,'Title2','Desc2')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_multi_vec WHERE id=1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO test_multi_vec (id, title, description) VALUES (2,'NewTitle','NewDesc')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM test_multi_vec"
+––– output –––
++------+----------+
+| id   | title    |
++------+----------+
+|    2 | NewTitle |
++------+----------+

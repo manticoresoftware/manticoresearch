@@ -4,7 +4,7 @@
 
 [DBeaver](https://dbeaver.io/) is a SQL client software application and a database administration tool. For MySQL databases, it applies the JDBC application programming interface to interact with them via a JDBC driver.
 
-Manticore allows you to use DBeaver for working with data stored in Manticore tables the same way as if it was stored in a MySQL database.
+Manticore allows you to use DBeaver for working with data stored in Manticore tables the same way as if it was stored in a MySQL database. Currently, version 25.2.0 is tested and recommended. Other versions may work but could introduce issues.
 
 ## Settings to use
 

@@ -21,6 +21,12 @@
 // Once we do link - add searching of that component into Cmake, than m.b. remove this comment as redundant
 #include "coro_waker.h"
 
+#if defined( __clang__ ) || defined( __GNUC__ )
+#define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__ ( ( no_sanitize_address ) )
+#else
+#define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
+
 #define LOG_LEVEL_RESEARCH true
 #define LOG_COMPONENT_OBJ this << " "
 #define LOG_COMPONENT_COROEV LOG_COMPONENT_OBJ << m_szName << ": "
@@ -34,8 +40,11 @@ const void* MyStack();
 /// get size of the stack (either thread, either coro - depends from context)
 int MyStackSize();
 
+/// whether I run in mocking context
+bool IsIMocked ();
+
 /// get size of used stack (threads or coro - depends from context)
-int64_t GetStackUsed();
+int64_t ATTRIBUTE_NO_SANITIZE_ADDRESS GetStackUsed ();
 
 // helper to align stack suze
 size_t AlignStackSize ( size_t iSize );
@@ -54,7 +63,7 @@ void StartJob ( Handler handler, Scheduler_i * pScheduler = GlobalWorkPool() );
 // perform handler in custom stack
 // note: handler is called as linear routine, without scheduler.
 // It should NOT switch context (i.e. no yield/resume)
-void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler );
+ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler );
 
 // if returns true - we could perform runtime calculation of stack sizes.
 bool StackMockingAllowed();
@@ -329,6 +338,36 @@ public:
 	void ReadLock() ACQUIRE_SHARED();
 	void Unlock() UNLOCK_FUNCTION();
 	bool TestNextWlock() const noexcept;
+};
+
+class ReadTableLock_c final
+{
+	mutable sph::Spinlock_c m_tInternalMutex {};
+	WaitQueue_c m_tWaitRQueue {};
+	DWORD m_uReads = 0;
+	DWORD m_uWrites = 0;
+
+public:
+	NONCOPYMOVABLE ( ReadTableLock_c );
+	ReadTableLock_c() = default;
+	~ReadTableLock_c() = default;
+	bool TryWrite() noexcept;
+	void WaitRead() noexcept;
+	void FinishWrite() noexcept;
+	[[nodiscard]] bool UnlockRead() noexcept;
+	[[nodiscard]] DWORD GetReads() const noexcept;
+};
+
+class ScopedWriteTable_c final
+{
+	ReadTableLock_c& m_tTableLock;
+	bool m_bCanWrite;
+
+public:
+	NONCOPYMOVABLE ( ScopedWriteTable_c );
+	explicit ScopedWriteTable_c ( ReadTableLock_c& tTableLock );
+	~ScopedWriteTable_c();
+	[[nodiscard]] bool CanWrite() const noexcept;
 };
 
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable

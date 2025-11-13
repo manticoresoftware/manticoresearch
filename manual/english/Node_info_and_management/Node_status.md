@@ -288,7 +288,7 @@ SHOW SETTINGS;
 | searchd.listen           | 0.0.0:9308:http                     |
 | searchd.log              | /var/log/manticore/searchd.log      |
 | searchd.query_log        | /var/log/manticore/query.log        |
-| searchd.pid_file         | /var/run/manticore/searchd.pid      |
+| searchd.pid_file         | /run/manticore/searchd.pid          |
 | searchd.data_dir         | /var/lib/manticore                  |
 | searchd.query_log_format | sphinxql                            |
 | searchd.binlog_path      | /var/lib/manticore/binlog           |

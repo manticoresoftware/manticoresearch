@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>HAVING vs total_found</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+CREATE TABLE t (grp INT, v INT);
+INSERT INTO t VALUES  (1,1,10),(2,1,20),(3,2,5),(4,2,5),(5,3,100);
+SELECT grp, SUM(v) AS s FROM t GROUP BY grp;
+SELECT grp, SUM(v) AS s FROM t GROUP BY grp HAVING s > 20;
+SHOW META;
+DROP TABLE t;
+
+<!-- regression for 'filter with empty name' -->
+create table t(a int, b int);
+insert into t values(0,1,2);
+select a, count(*) from t where a=1 or b=2 group by a having count(*) = 1;
+drop table t;
+</sphinxql>
+</queries>
+
+</test>

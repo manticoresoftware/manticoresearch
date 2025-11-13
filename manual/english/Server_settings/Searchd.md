@@ -469,7 +469,12 @@ expansion_merge_threshold_hits = 512
 <!-- example conf expansion_phrase_limit -->
 This setting controls the maximum number of alternative phrase variants generated due to `OR` operators inside `PHRASE`, `PROXIMITY`, and `QUORUM` operators. It is optional, with a default value of 1024.
 
-When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing. If the number of generated variants exceeds this limit, the query will fail with an error.
+When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing.
+
+If the number of generated variants exceeds this limit, the query will either:
+
+- fail with an error (default behavior)
+- return partial results with a warning, if `expansion_phrase_warning` is enabled
 
 <!-- intro -->
 ##### Example:
@@ -478,6 +483,23 @@ When using the `|` (OR) operator inside phrase-like operator, the total number o
 
 ```ini
 expansion_phrase_limit = 4096
+```
+<!-- end -->
+
+### expansion_phrase_warning
+
+<!-- example conf expansion_phrase_warning -->
+This setting controls the behavior when the query expansion limit defined by `expansion_phrase_limit` is exceeded.
+
+By default, the query will fail with an error message. When `expansion_phrase_warning` is set to 1, the search continues using a partial transformation of the phrase (up to the configured limit), and the server returns a warning message to the user along with the result set. This allows queries that are too complex for full expansion to still return partial results without complete failure.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_phrase_warning = 1
 ```
 <!-- end -->
 
@@ -1016,7 +1038,7 @@ The purpose of this file is to enable Manticore to perform various internal task
 <!-- request Example -->
 
 ```ini
-pid_file = /var/run/manticore/searchd.pid
+pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 
@@ -1280,7 +1302,7 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-Refines the behavior of networking timeouts (such as `network_timeout`, `read_timeout`, and `agent_query_timeout`).
+Refines the behavior of networking timeouts (such as `network_timeout` and `agent_query_timeout`).
 
 When set to 0, timeouts limit the maximum time for sending the entire request/query.
 When set to 1 (default), timeouts limit the maximum time between network activities.
@@ -1391,6 +1413,29 @@ Seamless rotate comes at the cost of higher peak memory usage during the rotatio
 ```ini
 seamless_rotate = 1
 ```
+<!-- end -->
+
+### secondary_index_block_cache
+<!-- example conf secondary_index_block_cache -->
+
+This option specifies the size of the block cache used by secondary indexes. It is optional, with a default of 8 MB. When secondary indexes work with filters that contain many values (e.g., IN() filters), they read and process metadata blocks for these values.
+In joined queries, this process is repeated for each batch of rows from the left table, and each batch may reread the same metadata within a single joined query. This can severely affect performance. The metadata block cache keeps these blocks in memory so they
+can be reused by subsequent batches.
+
+The cache is only used in joined queries and has no effect on non-joined queries. Note that the cache size limit applies per attribute and per secondary index. Each attribute within each disk chunk operates within this limit. In the worst case, the total memory
+usage can be estimated by multiplying the limit by the number of disk chunks and the number of attributes used in joined queries.
+
+Setting `secondary_index_block_cache = 0` disables the cache.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+secondary_index_block_cache = 16M
+```
+
 <!-- end -->
 
 ### secondary_indexes

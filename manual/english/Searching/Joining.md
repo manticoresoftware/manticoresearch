@@ -18,6 +18,7 @@ join_condition: {
 	left_table.attr = right_table.attr
 	| left_table.json_attr.string_id = string(right_table.json_attr.string_id)
 	| left_table.json_attr.int_id = int(right_table.json_attr.int_id)
+	| [..filters on right table attributes]
 }
 ```
 
@@ -705,28 +706,25 @@ FACET orders.details.warranty;
 POST /search
 {
   "table": "customers",
-  "query": {
-    "query_string": "alice | bob"
+  "query":  {
+      "bool": {
+          "must": [
+          {
+              "range": {
+                  "orders.details.price": {
+                      "gt": 500
+                  }
+               },
+               "query_string": "alice | bob"
+          ]
+      }
   },
   "join": [
     {
       "type": "left",
       "table": "orders",
       "query": {
-        "bool": {
-          "must": [
-            {
-              "range": {
-                "details.price": {
-                  "gt": 500
-                }
-              }
-            },
-            {
-              "query_string": "laptop | phone | tablet"
-            }
-          ]
-        }
+          "query_string": "laptop | phone | tablet"
       },
       "on": [
         {

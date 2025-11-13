@@ -59,9 +59,48 @@ compare_files() {
     f1_lines=$(wc -l < "$file1")
     f2_lines=$(wc -l < "$file2")
 
-    # Compare files line by line
+    # First check line count
     if [[ $f1_lines -ne $f2_lines ]]; then
         echo "$f1_lines:$f2_lines"
+        return 1
+    fi
+
+    # Check empty/non-empty line alignment
+    local line_num=1
+    local misaligned_lines=()
+    
+    while IFS= read -r line1 && IFS= read -r line2 <&3; do
+        # Remove \r and check if line is empty
+        local clean_line1="${line1//$'\r'/}"
+        local clean_line2="${line2//$'\r'/}"
+        
+        local is_empty1=false
+        local is_empty2=false
+        
+        [[ -z "$clean_line1" ]] && is_empty1=true
+        [[ -z "$clean_line2" ]] && is_empty2=true
+        
+        # Check if empty/non-empty state matches
+        if [[ "$is_empty1" != "$is_empty2" ]]; then
+            misaligned_lines+=("$line_num")
+        fi
+        
+        ((line_num++))
+    done < "$file1" 3< "$file2"
+    
+    # Return misaligned lines if any found
+    if [[ ${#misaligned_lines[@]} -gt 0 ]]; then
+        echo "alignment:$(IFS=,; echo "${misaligned_lines[*]}")"
+        return 1
+    fi
+
+    # Check HTML comments are identical (not translated)
+    local comments1 comments2
+    comments1=$(grep -o '<!--.*-->' "$file1" | sort)
+    comments2=$(grep -o '<!--.*-->' "$file2" | sort)
+    
+    if [[ "$comments1" != "$comments2" ]]; then
+        echo "comments:translated"
         return 1
     fi
 
@@ -192,10 +231,22 @@ compare_with_languages() {
             for file_info in "${different_files[@]}"; do
                 if [[ "$file_info" == *"|"* ]]; then
                     local file="${file_info%|*}"
-                    local line_counts="${file_info#*|}"
-                    local eng_lines="${line_counts%:*}"
-                    local lang_lines="${line_counts#*:}"
-                    printf '  %s (English: %d lines, %s: %d lines)\n' "$file" "$eng_lines" "$lang_name" "$lang_lines"
+                    local error_info="${file_info#*|}"
+                    if [[ "$error_info" == *":"* ]] && [[ "$error_info" != "alignment:"* ]] && [[ "$error_info" != "comments:"* ]]; then
+                        # Line count mismatch
+                        local eng_lines="${error_info%:*}"
+                        local lang_lines="${error_info#*:}"
+                        printf '  %s (English: %d lines, %s: %d lines)\n' "$file" "$eng_lines" "$lang_name" "$lang_lines"
+                    elif [[ "$error_info" == "alignment:"* ]]; then
+                        # Empty/non-empty line alignment issue
+                        local misaligned_lines="${error_info#alignment:}"
+                        printf '  %s (empty/non-empty line alignment mismatch at lines: %s)\n' "$file" "$misaligned_lines"
+                    elif [[ "$error_info" == "comments:"* ]]; then
+                        # HTML comments translated
+                        printf '  %s (HTML comments <!-- --> were translated, must remain in English)\n' "$file"
+                    else
+                        printf '  %s (%s)\n' "$file" "$error_info"
+                    fi
                 else
                     printf '  %s\n' "$file_info"
                 fi

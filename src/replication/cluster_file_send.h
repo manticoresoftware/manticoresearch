@@ -24,5 +24,5 @@ struct RemoteFileState_t
 };
 
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
-bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, const CSphString & sUser );
+bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, SstProgress_i & tProgress );
 

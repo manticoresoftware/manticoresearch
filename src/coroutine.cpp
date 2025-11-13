@@ -104,6 +104,11 @@ public:
 		return m_eState==State_e::Finished;
 	}
 
+	bool IsMocked () const noexcept
+	{
+		return m_tStack.second==StackFlavour_E::mocked_prealloc;
+	}
+
 	// yield to external context
 	void Yield_ ()
 	{
@@ -354,7 +359,7 @@ public:
 		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
-	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	ATTRIBUTE_NO_SANITIZE_ADDRESS static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
 		Worker_c tAction ( std::move ( fnHandler ), dStack );
 		auto pOldStack = Threads::TopOfStack ();
@@ -449,6 +454,11 @@ public:
 	int GetStackSize () const noexcept
 	{
 		return m_tCoroutine.GetStackSize ();
+	}
+
+	bool IsMocked () const noexcept
+	{
+		return m_tCoroutine.IsMocked ();
 	}
 
 	inline Scheduler_i * CurrentScheduler() const noexcept
@@ -646,7 +656,7 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	tEvent.WaitEvent ();
 }
 
-void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
+ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
 {
 	Coro::Worker_c::MockRun ( std::move ( fnHandler ), dStack );
 }
@@ -775,7 +785,15 @@ int MyStackSize()
 	return Threads::STACK_SIZE;
 }
 
-int64_t GetStackUsed()
+bool IsIMocked ()
+{
+	auto pWorker = Coro::Worker_c::CurrentWorker();
+	if ( pWorker )
+		return pWorker->IsMocked();
+	return false;
+}
+
+int64_t ATTRIBUTE_NO_SANITIZE_ADDRESS GetStackUsed ()
 {
 	BYTE cStack;
 	auto* pStackTop = (const BYTE*)MyStack();
@@ -1114,6 +1132,61 @@ bool RWLock_c::TestNextWlock () const noexcept
 	return !m_tWaitWQueue.Empty ();
 }
 
+void ReadTableLock_c::WaitRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	++m_uReads;
+	while ( m_uWrites )
+		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+}
+
+bool ReadTableLock_c::TryWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_uReads )
+		return false;
+	++m_uWrites;
+	return true;
+}
+
+void ReadTableLock_c::FinishWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( !--m_uWrites )
+		m_tWaitRQueue.NotifyAll();
+}
+
+bool ReadTableLock_c::UnlockRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+
+	if ( !m_uReads )
+		return false;
+
+	--m_uReads;
+	return true;
+}
+
+[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+{
+	return m_uReads;
+}
+
+ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )
+	: m_tTableLock { tTableLock }
+	, m_bCanWrite { tTableLock.TryWrite() }
+{}
+
+ScopedWriteTable_c::~ScopedWriteTable_c()
+{
+	if (m_bCanWrite)
+		m_tTableLock.FinishWrite();
+}
+
+bool ScopedWriteTable_c::CanWrite() const noexcept
+{
+	return m_bCanWrite;
+}
 
 } // namespace Coro
 } // namespace Threads

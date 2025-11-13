@@ -1,6 +1,6 @@
-# 中文，日文和韩文（CJK）及泰语
+# 中文、日文和韩文（CJK）及泰语
 
-Manticore 提供内置支持，用于索引[连续书写](https://en.wikipedia.org/wiki/Scriptio_continua)语言（即不使用空格或其他标记分隔单词或句子的语言）。这允许您用两种不同的方式处理这些语言的文本：
+Manticore 提供对[连续书写](https://en.wikipedia.org/wiki/Scriptio_continua)语言（即不在单词或句子之间使用空格或其他标记的语言）的内置支持。这允许您以两种不同的方式处理这些语言的文本：
 
 <!-- example cont 1 -->
 1. 使用 [ICU](https://icu.unicode.org/) 库进行精确分词。目前仅支持中文。
@@ -106,7 +106,7 @@ table products {
 <!-- end -->
 
 <!-- example cont 2 -->
-2. 使用 [Jieba](https://github.com/fxsjy/jieba) 库进行精确分词。和 ICU 一样，目前仅支持中文。
+2. 使用 [Jieba](https://github.com/fxsjy/jieba) 库进行精确分词。与 ICU 类似，目前仅支持中文。
 
 <!-- intro -->
 ##### SQL:
@@ -208,8 +208,8 @@ table products {
 <!-- end -->
 
 <!-- example cont 3 -->
-3. 使用 N-gram 选项 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 和 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 进行基本支持
-对于每种使用连续书写的语言，都有单独的字符集表（`chinese`、`korean`、`japanese`、`thai`）可用。或者，您可以使用通用的 `cont` 字符集表来一次性支持所有 CJK 和泰语，或者使用 `cjk` 字符集仅包含所有 CJK 语言。
+3. 使用 N-gram 选项 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 和 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 进行基础支持
+对于每种使用连续书写的语言，都有单独的字符集表（`chinese`、`korean`、`japanese`、`thai`）可供使用。或者，您可以使用通用的 `cont` 字符集表来同时支持所有 CJK 和泰语，或者使用 `cjk` 字符集仅包含所有 CJK 语言。
 
 
 <!-- intro -->
@@ -320,7 +320,7 @@ table products {
 <!-- end -->
 
 <!-- example cont 3_2 -->
-此外，内置支持中文 [停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)，别名为 `zh`。
+此外，内置支持中文[停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)，别名为 `zh`。
 
 
 <!-- intro -->

@@ -1,36 +1,36 @@
-# ЗАМЕНИТЬ
+# REPLACE
 
 <!-- example replace -->
 
-`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но помечает предыдущий документ с тем же ID как удалённый перед вставкой нового.
+`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но перед вставкой нового документа помечает предыдущий документ с тем же ID как удалённый.
 
-Если вам нужны обновления на месте, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
+Если вам нужны обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
 
-Синтаксис SQL-запроса `REPLACE` следующий:
+Синтаксис SQL оператора `REPLACE` следующий:
 
-**Чтобы заменить весь документ:**
+**Для замены всего документа:**
 ```sql
 REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-Столбцы, явно не включённые в SQL-запрос, устанавливаются в значения по умолчанию, например 0 или пустую строку, в зависимости от типа данных.
+Столбцы, явно не включённые в SQL-запрос, устанавливаются в значения по умолчанию, такие как 0 или пустая строка, в зависимости от их типа данных.
 
-**Чтобы заменить только выбранные поля:**
+**Для замены только выбранных полей:**
 ```sql
 REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-Обратите внимание, что фильтровать можно только по id в этом режиме.
+Обратите внимание, что в этом режиме фильтровать можно только по id.
 
-> ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Подробнее о `UPDATE` и частичном `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
+Подробнее о `UPDATE` и частичной замене `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
-См. примеры для подробностей.
+Смотрите примеры для более подробной информации.
 
 ## JSON REPLACE
 
@@ -48,7 +48,7 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` — это алиас эндпоинта, работает так же.
+  `/index` — это псевдоним эндпоинта и работает так же.
 * Эндпоинт в стиле Elasticsearch `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
@@ -68,11 +68,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет делать обновления по конкретному кластеру при необходимости.
+  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру при необходимости.
 
   > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-См. примеры для подробностей.
+Смотрите примеры для более подробной информации.
 
 <!-- intro -->
 ##### SQL:
@@ -136,7 +136,7 @@ POST /replace
 ```
 
 <!-- intro -->
-##### В стиле Elasticsearch
+##### Elasticsearch-like
 
 <!-- request Elasticsearch-like -->
 
@@ -190,7 +190,7 @@ POST /products/_doc/3
 ```
 
 <!-- intro -->
-##### Частичная замена в стиле Elasticsearch:
+##### Elasticsearch-like partial replace:
 
 <!-- request Elasticsearch-like partial -->
 
@@ -215,7 +215,7 @@ POST /products/_update/55
 ```
 
 <!-- intro -->
-##### Частичная замена в стиле Elasticsearch в кластере:
+##### Elasticsearch-like partial replace in cluster:
 
 <!-- request Elasticsearch-like partial in cluster -->
 
@@ -435,15 +435,15 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` доступен для таблиц реального времени и percolate. Вы не можете заменить данные в обычной таблице.
+`REPLACE` доступен для real-time и percolate таблиц. Нельзя заменять данные в plain таблице.
 
-Когда вы выполняете `REPLACE`, предыдущий документ не удаляется, а помечается как удаленный, поэтому размер таблицы растет до тех пор, пока не произойдет слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+При выполнении `REPLACE` предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-## Массовая замена
+## Bulk replace
 
 <!-- example bulk_replace -->
 
-Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [массовое добавление документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
+Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
 
 <!-- intro -->
 ##### HTTP:
@@ -721,8 +721,7 @@ res = await indexApi.bulk(
 
 ``` go
 body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
-
-"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
 res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 ```
 
@@ -759,3 +758,4 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 <!-- end -->
 
 <!-- proofread -->
+

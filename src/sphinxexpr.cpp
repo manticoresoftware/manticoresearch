@@ -2463,12 +2463,22 @@ void ExprCaseTrival_c<false>::DoCase ( char * pString ) const
 
 void UTF8ToLower( std::vector<char> & dBuf, std::basic_string_view<char> source )
 {
+#ifdef __FreeBSD__
+	std::string result = una::cases::to_lowercase_utf8( source );
+	dBuf.assign( result.begin(), result.end() );
+#else
 	return una::detail::t_map<std::vector<char>, std::basic_string_view<char>, una::detail::impl_x_case_map_utf8, una::detail::impl_case_map_loc_utf8> ( dBuf, source, una::detail::impl_case_map_mode_lowercase );
+#endif
 }
 
 void UTF8ToUpper( std::vector<char> & dBuf, std::basic_string_view<char> source )
 {
+#ifdef __FreeBSD__
+	std::string result = una::cases::to_uppercase_utf8( source );
+	dBuf.assign( result.begin(), result.end() );
+#else
 	return una::detail::t_map<std::vector<char>, std::basic_string_view<char>, una::detail::impl_x_case_map_utf8, una::detail::impl_case_map_loc_utf8> ( dBuf, source, una::detail::impl_case_map_mode_uppercase );
+#endif
 }
 
 template<bool UPPER>
@@ -4473,7 +4483,10 @@ static int ConvertToColumnarType ( ESphAttr eAttr )
 {
 	switch ( eAttr )
 	{
-	case SPH_ATTR_INTEGER:		return TOK_COLUMNAR_INT;
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TOKENCOUNT:
+		return TOK_COLUMNAR_INT;
+
 	case SPH_ATTR_TIMESTAMP:	return TOK_COLUMNAR_TIMESTAMP;
 	case SPH_ATTR_FLOAT:		return TOK_COLUMNAR_FLOAT;
 	case SPH_ATTR_BIGINT:		return TOK_COLUMNAR_BIGINT;
@@ -6918,7 +6931,16 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_SINT:		return new Expr_Sint_c ( dArgs[0] );
 	case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
 	case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
-	case FUNC_KNN_DIST:	return new Expr_GetFloat_c ( m_pSchema->GetAttr ( GetKnnDistAttrName() )->m_tLocator, GetKnnDistAttrName() );
+	case FUNC_KNN_DIST:
+	{
+		const CSphColumnInfo * pAttr = m_pSchema->GetAttr ( GetKnnDistAttrName() );
+		if ( !pAttr )
+		{
+			m_sCreateError = "KNN_DIST() attribute not available in this context";
+			return nullptr;
+		}
+		return new Expr_GetFloat_c ( pAttr->m_tLocator, GetKnnDistAttrName() );
+	}
 
 	case FUNC_DAY:			return CreateExprDay ( dArgs[0] );
 	case FUNC_WEEK:			return CreateExprWeek ( dArgs[0], dArgs.GetLength()>1 ? dArgs[1] : nullptr );
@@ -10764,7 +10786,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	int iStackNeeded = -1;
 	int iStackEval = -1;
 	const int TREE_SIZE_THRESH = 20;
-	if ( m_dNodes.GetLength ()>TREE_SIZE_THRESH )
+	if ( m_dNodes.GetLength ()>TREE_SIZE_THRESH && !Threads::IsIMocked() )
 	{
 		StackSizeParams_t tParams;
 		tParams.iMaxDepth = EvalMaxTreeHeight ( m_dNodes, m_iParsed );
@@ -10815,7 +10837,15 @@ static void CheckDescendingNodes ( const CSphVector<ExprNode_t> & dNodes )
 ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
 {
 	if ( GetError () )
+	{
+		if ( !m_sLexerError.IsEmpty() )
+			sError = m_sLexerError;
+		else if ( !m_sParserError.IsEmpty() )
+			sError = m_sParserError;
+		else if ( !m_sCreateError.IsEmpty() )
+			sError = m_sCreateError;
 		return nullptr;
+	}
 
 #ifndef NDEBUG
 	CheckDescendingNodes ( m_dNodes );

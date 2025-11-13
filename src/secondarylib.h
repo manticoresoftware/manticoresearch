@@ -22,7 +22,7 @@ void			ShutdownSecondary();
 const char *	GetSecondaryVersionStr();
 bool			IsSecondaryLibLoaded();
 
-SI::Index_i *		CreateSecondaryIndex ( const char * sFile, CSphString & sError );
+SI::Index_i *	CreateSecondaryIndex ( const char * szFile, CSphString & sError );
 std::unique_ptr<SI::Builder_i> CreateSecondaryIndexBuilder ( const common::Schema_t & tSchema, int64_t iMemoryLimit, const CSphString & sFile, int iBufferSize, CSphString & sError );
 
 enum class SIDefault_e
@@ -33,6 +33,9 @@ enum class SIDefault_e
 };
 
 void				SetSecondaryIndexDefault ( SIDefault_e eState );
-SIDefault_e			GetSecondaryIndexDefault ();
+SIDefault_e			GetSecondaryIndexDefault();
+
+void				SetSIBlockCacheSize ( uint64_t uSize );
+uint64_t			GetSIBlockCacheSize();
 
 #endif // _secondarylib_

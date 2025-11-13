@@ -1,10 +1,10 @@
-# 替换
+# REPLACE
 
 <!-- example replace -->
 
-`REPLACE` 的工作原理类似于 [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)，但它会在插入新文档之前将具有相同 ID 的先前文档标记为已删除。
+`REPLACE` 的工作方式类似于 [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)，但它在插入新文档之前，会将具有相同 ID 的先前文档标记为已删除。
 
-如果您需要就地更新，请参见 [本节](../../Data_creation_and_modification/Updating_documents/UPDATE.md)。
+如果您正在寻找原地更新，请参见 [本节](../../Data_creation_and_modification/Updating_documents/UPDATE.md)。
 
 ## SQL REPLACE
 
@@ -16,7 +16,7 @@ REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-SQL 语句中未显式包含的列将设置为其默认值，如 0 或空字符串，具体取决于其数据类型。
+SQL 语句中未明确包含的列将被设置为其默认值，例如 0 或空字符串，具体取决于其数据类型。
 
 **仅替换选定字段：**
 ```sql
@@ -24,17 +24,17 @@ REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-注意，在此模式下只能通过 id 过滤。
+注意，在此模式下，您只能按 id 进行过滤。
 
 > 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 
-详情请阅读 `UPDATE` 与部分 `REPLACE` 的比较 [这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
+关于 `UPDATE` 与部分 `REPLACE` 的更多信息，请参见 [这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
 
-更多细节请参见示例。
+详情请参见示例。
 
 ## JSON REPLACE
 
-* `/replace`:
+* `/replace`：
   ```
   POST /replace
   {
@@ -49,7 +49,7 @@ REPLACE INTO table
   }
   ```
   `/index` 是别名端点，功能相同。
-* 类似 Elasticsearch 的端点 `<table>/_doc/<id>`:
+* 类似 Elasticsearch 的端点 `<table>/_doc/<id>`：
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -68,11 +68,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` 可以是表名，或格式为 `cluster:table`。这可用于跨特定集群进行更新。
+  `<table name>` 可以是仅表名，也可以是 `cluster:table` 格式。如果需要，可以跨特定集群进行更新。
 
   > 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 
-更多细节请参见示例。
+详情请参见示例。
 
 <!-- intro -->
 ##### SQL:
@@ -136,7 +136,7 @@ POST /replace
 ```
 
 <!-- intro -->
-##### 类似 Elasticsearch
+##### Elasticsearch-like
 
 <!-- request Elasticsearch-like -->
 
@@ -190,7 +190,7 @@ POST /products/_doc/3
 ```
 
 <!-- intro -->
-##### 类似 Elasticsearch 部分替换：
+##### Elasticsearch-like partial replace:
 
 <!-- request Elasticsearch-like partial -->
 
@@ -215,7 +215,7 @@ POST /products/_update/55
 ```
 
 <!-- intro -->
-##### 类似 Elasticsearch 集群内部分替换：
+##### Elasticsearch-like partial replace in cluster:
 
 <!-- request Elasticsearch-like partial in cluster -->
 
@@ -435,15 +435,15 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` 可用于实时和感知表。你不能在普通表中替换数据。
+`REPLACE` 可用于实时表和预选表。您不能替换普通表中的数据。
 
-当你执行 `REPLACE` 操作时，先前的文档不会被删除，而是被标记为已删除，因此表的大小会增长，直到进行块合并。要强制进行块合并，请使用 [OPTIMIZE 语句](../../Securing_and_compacting_a_table/Compacting_a_table.md)。
+当您执行 `REPLACE` 时，先前的文档不会被删除，而是被标记为已删除，因此表的大小会增长，直到发生块合并。要强制块合并，请使用 [OPTIMIZE 语句](../../Securing_and_compacting_a_table/Compacting_a_table.md)。
 
 ## 批量替换
 
 <!-- example bulk_replace -->
 
-你可以一次替换多个文档。更多信息请参考[批量添加文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents)。
+您可以一次替换多个文档。更多信息请查看 [批量添加文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents)。
 
 <!-- intro -->
 ##### HTTP:
@@ -457,7 +457,7 @@ REPLACE INTO products(id,title,tag) VALUES (1, 'doc one', 10), (2,' doc two', 20
 <!-- response SQL -->
 
 ```sql
-查询成功，影响行数：2（0.00秒）
+Query OK, 2 rows affected (0.00 sec)
 ```
 
 <!-- request JSON -->
@@ -721,8 +721,7 @@ res = await indexApi.bulk(
 
 ``` go
 body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
-
-"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
 res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 ```
 
@@ -759,3 +758,4 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 <!-- end -->
 
 <!-- proofread -->
+

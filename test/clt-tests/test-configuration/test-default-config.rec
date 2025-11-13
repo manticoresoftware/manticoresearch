@@ -7,6 +7,6 @@ searchd {
     listen = 127.0.0.1:9308:http
     log = /var/log/manticore/searchd.log
     query_log = /var/log/manticore/query.log
-    pid_file = /var/run/manticore/searchd.pid
+    pid_file = /run/manticore/searchd.pid
     data_dir = /var/lib/manticore
 }

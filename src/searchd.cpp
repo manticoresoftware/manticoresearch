@@ -48,7 +48,7 @@
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
-#include "daemon/daemon_ipc.h"
+#include "dict/stem/sphinxstem.h"
 
 // services
 #include "taskping.h"
@@ -62,10 +62,6 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
-
-#include "auth/auth.h"
-#include "auth/auth_common.h"
-#include "auth/auth_proto_mysql.h"
 
 #include <csignal>
 #include <clocale>
@@ -276,6 +272,13 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 	return false; // don't lot to stdout
 }
 
+static CSphString GetNamedPipeName ( int iPid )
+{
+	CSphString sRes;
+	sRes.SetSprintf ( "/tmp/searchd_%d", iPid );
+	return sRes;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 
@@ -434,9 +437,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
-
-	SHUTINFO << "Close auth log ...";
-	AuthDone();
 
 	// close pid
 	SHUTINFO << "Release (close) pid file ...";
@@ -860,7 +860,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 	sError.SetSprintfVa ( sTemplate, ap );
 	va_end ( ap );
 
-	auto tHdr = APIAnswer ( tOut, 0, SEARCHD_ERROR );
+	auto tHdr = APIHeader ( tOut, SEARCHD_ERROR );
 	tOut.SendString ( sError.cstr() );
 
 	// --console logging
@@ -1820,7 +1820,6 @@ static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
 	// and finally most interesting remote case with possibly scattered.
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
-	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -1862,7 +1861,6 @@ static void MakeRemoteNonScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueri
 
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
-	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -2114,10 +2112,6 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
-
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
-		return;
-
 	myinfo::SetTaskInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
@@ -2170,9 +2164,6 @@ static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuf
 
 	if ( uVer>=0x102 )
 		tSettings.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
-
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
-		return;
 
 	CSphString sError;
 	SearchFailuresLog_c tFailureLog;
@@ -2481,9 +2472,6 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( tReq.GetError() )
 		return SendErrorReply ( tOut, "invalid or truncated request" );
 
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sIndexes, tOut ) )
-		return;
-
 	// check index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
@@ -2530,7 +2518,6 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 			{
 				VecRefPtrsAgentConn_t dAgents;
 				pDist->GetAllHosts ( dAgents );
-				SetSessionAuth ( dAgents );
 
 				// connect to remote agents and query them
 				UpdateRequestBuilder_c tReqBuilder ( pUpd );
@@ -2988,9 +2975,6 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 	bool bGlobalStat = tReq.GetDword ()!=0;
 
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::SCHEMA, "", tOut ) )
-		return;
-
 	VectorLike dStatus;
 
 	if ( bGlobalStat )
@@ -3021,9 +3005,6 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
-		return;
-
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, "", tOut ) )
 		return;
 
 	int iTag = CommandFlush ();
@@ -3927,8 +3908,6 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
-		SetSessionAuth ( dAgents );
-
 		pReqBuilder = std::make_unique<PqRequestBuilder_c> ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
 		pParser = std::make_unique<PqReplyParser_c>();
@@ -4018,9 +3997,6 @@ void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tRe
 			SendErrorReply ( tOut, "Can't retrieve doc from input buffer" );
 			return;
 		}
-
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tOpts.m_sIndex, tOut ) )
-		return;
 
 	// working
 	CSphSessionAccum tAcc;
@@ -4803,23 +4779,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		if ( tStmt.m_sIndex.Begins ( GetPrefixAuth().cstr() ) )
-		{
-			bool bCommit = ( pSession->m_bAutoCommit && !pSession->m_bInTransaction );
-			if ( !bCommit )
-			{
-				tOut.Error ( "table '%s': %s is not supported on system auth tables when autocommit=0", ( bReplace ? "REPLACE" : "INSERT" ), tStmt.m_sIndex.cstr() );
-				return;
-			}
-
-			CSphString sError;
-			if ( !InsertAuthDocuments ( tStmt, sError ) )
-				tOut.Error ( "%s", sError.cstr () );
-			else
-				tOut.Ok ( tStmt.m_iRowsAffected, CSphString(), 0 ); // FIXME!!!
-			return;
-		}
-
 		bool bDistTable = false;
 		if ( !pServed )
 		{
@@ -4831,6 +4790,14 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
 
+		return;
+	}
+
+	assert ( pServed );
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		tOut.Error ( "table '%s' is locked", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
@@ -5272,8 +5239,6 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		int iAgentsReply = 0;
 		if ( !dAgents.IsEmpty() )
 		{
-			SetSessionAuth ( dAgents );
-
 			// connect to remote agents and query them
 			KeywordsRequestBuilder_c tReqBuilder ( tSettings, sQuery );
 			KeywordsReplyParser_c tParser ( tSettings.m_bStats, dKeywords );
@@ -5645,7 +5610,7 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 		return false;
 	}
 
-	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence ) )
+	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs.m_bForceBigrams ) )
 		pIdx->GetSuggest ( tArgs, tRes );
 
 	return true;
@@ -5730,9 +5695,6 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
-
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
-		return;
 
 	auto pServed = GetServed ( sIndex );
 	if ( !pServed )
@@ -5850,8 +5812,6 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 	int iAgentsReply = 0;
 	if ( !dAgents.IsEmpty() )
 	{
-		SetSessionAuth ( dAgents );
-
 		SuggestResult_t tCur;
 		// connect to remote agents and query them
 		SuggestRequestBuilder_c tReqBuilder ( tArgs, sWord );
@@ -5925,6 +5885,9 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else if ( sOpt=="sentence" )
 		{
 			tArgs.m_bSentence = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
+		} else if ( sOpt=="force_bigrams" )
+		{
+			tArgs.m_bForceBigrams = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -6306,22 +6269,12 @@ void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		return bSystem == bIsSystem;
 	};
 
-	CSphString sUser;
-	CSphString sPermsError;
-	bool bAuthCheck = IsAuthEnabled();
-	if ( bAuthCheck )
-		sUser = session::GetUser();
-
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
 		if ( !fnFilter ( dPair ) )
 			continue;
-
-		if ( bAuthCheck && !CheckPerms ( sUser, AuthAction_e::READ, dPair.m_sName, false, sPermsError ) )
-			continue;
-
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else
@@ -6957,7 +6910,7 @@ public:
 		m_iLength = pCur-m_dBuf.Begin();
 	}
 
-	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
+	void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR );
@@ -7009,8 +6962,6 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 	// connect to remote agents and query them
 	if ( !dAgents.IsEmpty() )
 	{
-		SetSessionAuth ( dAgents );
-
 		UVarRequestBuilder_c tReqBuilder ( sUserVarName, dSetValues );
 		UVarReplyParser_c tParser;
 		PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
@@ -7041,9 +6992,6 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
-
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sUserVar, tOut ) )
-		return;
 
 	SphAttr_t iLast = 0;
 	const BYTE * pCur = dBuf.Begin();
@@ -7139,6 +7087,13 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	if ( !ValidateClusterStatement ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
+		return;
+	}
+
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		dFails.Submit ( sIndex, szDistributed, "table is locked" );
 		return;
 	}
 
@@ -7309,7 +7264,6 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			VecRefPtrs_t<AgentConn_t *> dAgents;
 			pDist->GetAllHosts ( dAgents );
-			SetSessionAuth ( dAgents );
 
 			// connect to remote agents and query them
 			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
@@ -7326,12 +7280,11 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		tOut.Error ( "%s", sReport.cstr() );
 		return;
-	} else
-	{
-		int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
-		if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
-			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
+
+	int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
+	if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
+		LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 
 	tOut.Ok ( iUpdated, iWarns );
 }
@@ -7915,6 +7868,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		return 0;
 	}
 
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+		return err ( "table is locked" );
 
 	RtAccum_t* pAccum = nullptr;
 
@@ -8000,23 +7956,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
-	if ( dNames[0].Begins ( GetPrefixAuth().cstr() ) )
-	{
-		if ( !bCommit )
-		{
-			tOut.Error ( "table '%s': DELETE is not supported on system auth tables when autocommit=0", tStmt.m_sIndex.cstr() );
-			return;
-		}
-
-		CSphString sError;
-		int iAffected = DeleteAuthDocuments ( dNames[0], tStmt, sError );
-		if ( !sError.IsEmpty() )
-			tOut.Error ( "%s", sError.cstr () );
-		else
-			tOut.Ok ( iAffected );
-		return;
-	}
-
 	DistrPtrs_t dDistributed;
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dNames, dDistributed, sMissed ) )
@@ -8070,7 +8009,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
 			pDist->GetAllHosts ( dAgents );
-			SetSessionAuth ( dAgents );
 
 			int iGot = 0;
 			int iWarns = 0;
@@ -9014,8 +8952,8 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	// get an exclusive lock for operation
 	// but only read lock for check
+	auto pIndex = GetServed ( sIndex );
 	{
-		auto pIndex = GetServed ( sIndex );
 		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			tOut.Error ( "TRUNCATE RTINDEX requires an existing RT table" );
@@ -9027,6 +8965,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 			tOut.Error ( TlsMsg::szError() );
 			return;
 		}
+	}
+
+	assert ( pIndex );
+	Threads::Coro::ScopedWriteTable_c tWriting { pIndex->Locker() };
+	if ( !tWriting.CanWrite () )
+	{
+		tOut.Error ( "table is locked" );
+		return;
 	}
 
 	auto* pSession = session::GetClientSession();
@@ -10183,12 +10129,28 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		{
 		case Alter_e::AddColumn:
 		case Alter_e::ModifyColumn:
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
-			break;
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+				break;
+			}
 
 		case Alter_e::DropColumn:
-			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
-			break;
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+				RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
+				break;
+			}
 
 		case Alter_e::RebuildSI:
 			WIdx_c(pServed)->AlterSI(sAlterError);
@@ -10880,36 +10842,108 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 	if ( !tOut.HeadEnd () )
 		return;
 
+	auto fnLine = [&tOut](const NamedIndexType_t& dPair, int iLocks, const char* szType ) noexcept -> bool
+	{
+		tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
+		tOut.PutString ( dPair.m_sName );
+		tOut.PutString ( szType );
+		tOut.PutStringf ( "Count: %d", iLocks );
+		return tOut.Commit ();
+	};
 
 	// collect local, rt, percolate
 	auto dIndexes = GetAllServedIndexes ();
 	for ( auto & dPair: dIndexes )
 	{
-		switch ( dPair.m_eType )
+		auto pIndex = GetServed ( dPair.m_sName );
+		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
-		case IndexType_e::RT:
-		case IndexType_e::PERCOLATE:
-		{
-			auto pIndex = GetServed ( dPair.m_sName );
-			assert ( ServedDesc_t::IsMutable ( pIndex ) );
 			RIdx_T<RtIndex_i *> pRt { pIndex };
-			int iLocks = pRt->GetNumOfLocks ();
-			if ( iLocks>0 )
-			{
-				tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
-				tOut.PutString ( dPair.m_sName );
-				tOut.PutString ( "freeze" );
-				tOut.PutStringf ( "Count: %d", iLocks );
-				if ( !tOut.Commit () )
-					return;
-			}
+			const int iLocks = pRt->GetNumOfLocks ();
+			if ( iLocks>0 && !fnLine ( dPair, iLocks, "freeze" ) )
+				return;
 		}
-		default:
-			break;
+		if ( ServedDesc_t::IsLocal ( pIndex ) )
+		{
+			const int iRLocks = pIndex->GetReadLocks();
+			if ( iRLocks>0 && !fnLine ( dPair, iRLocks, "read" ) )
+				return;
 		}
 	}
 
 	tOut.Eof ( false );
+}
+
+void UnlockTables(ClientSession_c* pSess)
+{
+	assert (pSess);
+	for ( const auto& sIndex : pSess->m_dLockedTables )
+	{
+		auto pLocal = GetServed ( sIndex );
+		if ( pLocal && pLocal->UnlockRead() )
+			sphLogDebug ( "Unlocked %s", sIndex.cstr() );
+	}
+	pSess->m_dLockedTables.Reset();
+}
+
+void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString& sWarningOut )
+{
+	StrVec_t dIndexes;
+	bool bHasWrite = false;
+	tStmt.m_dInsertValues.for_each ( [&] (const SqlInsert_t& tVal) {
+		if ( tVal.m_iType>10 )
+			bHasWrite = true;
+		else
+			dIndexes.Add(tVal.m_sVal);
+	});
+
+	sWarningOut = bHasWrite ? "Write lock is not implemented." : "";
+
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+	{
+		tOut.Error ( "Locking works only for mysql session." );
+		return;
+	}
+
+	auto* pSess = session::GetClientSession();
+	assert (pSess);
+
+	// by spec, any lock first unlock all the tables.
+	UnlockTables(pSess);
+
+	for ( const auto& sIndex : dIndexes )
+	{
+		auto pLocal = GetServed ( sIndex );
+		if ( !(pLocal && ServedDesc_t::IsLocal ( pLocal ) ) )
+		{
+			tOut.ErrorEx ( "Table %s absent, or not suitable for lock", sIndex.cstr() );
+			return;
+		}
+		if ( ServedDesc_t::IsCluster ( pLocal ) )
+		{
+			tOut.ErrorEx ( "Table %s is member of a cluster; not suitable for lock", sIndex.cstr() );
+			return;
+		}
+
+		pLocal->LockRead();
+		pSess->m_dLockedTables.Add(sIndex);
+		sphLogDebug ( "Locked %s", sIndex.cstr() );
+	}
+
+	tOut.Ok ( 0, bHasWrite ? 1 : 0 );
+}
+
+void HandleMysqlUnlockTables ( RowBuffer_i & tOut )
+{
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+	{
+		tOut.Error ( "Locking works only for mysql session." );
+		return;
+	}
+
+	UnlockTables(session::GetClientSession());
+
+	tOut.Ok ( 0 );
 }
 
 
@@ -10946,6 +10980,11 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta = CSphQueryResultMeta();
 	m_tLastMeta.m_sError = m_sError;
 	m_tLastMeta.m_sWarning = "";
+}
+
+ClientSession_c::~ClientSession_c ()
+{
+	UnlockTables(this);
 }
 
 static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut );
@@ -11011,13 +11050,6 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			tOut.Error ( m_sError.cstr() );
 			return true;
 		}
-	}
-
-	if ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) )
-	{
-		FreezeLastMeta();
-		tOut.Error ( m_sError.cstr(), EMYSQL_ERR::ACCESS_DENIED_ERROR );
-		return true;
 	}
 
 	// handle multi SQL query
@@ -11481,27 +11513,13 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowTableIndexes ( tOut, *pStmt );
 		return true;
 
-	case STMT_RELOAD_AUTH:
-		if ( AuthReload ( m_sError ) )
-			tOut.Ok();
-		else
-			tOut.Error ( m_sError.cstr() );
+	case STMT_LOCK_TABLES:
+		HandleMysqlLockTables ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
-	case STMT_SHOW_PERMISSIONS:
-		HandleMysqlShowPerms ( tOut );
+	case STMT_UNLOCK_TABLES:
+		HandleMysqlUnlockTables ( tOut );
 		return true;
-
-	case STMT_SHOW_USERS:
-		HandleMysqlShowUsers ( tOut );
-		return true;
-
-	case STMT_SHOW_TOKEN:
-	{
-		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
-		HandleMysqlShowToken ( sUser, tOut );
-	}
-	return true;
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
@@ -11567,11 +11585,6 @@ void session::SetFederatedUser ()
 void session::SetUser ( const CSphString & sUser )
 {
 	GetClientSession()->m_sUser = sUser;
-}
-
-const CSphString & session::GetUser()
-{
-	return GetClientSession()->m_sUser;
 }
 
 void session::SetCurrentDbName ( CSphString sDb )
@@ -13159,18 +13172,14 @@ static void CheckRotate () REQUIRES ( MainThread )
 
 void CheckReopenLogs () REQUIRES ( MainThread )
 {
-	ManageIpcSession();
-
 	if ( !g_bGotSigusr1 )
-		return;
-
-	g_bGotSigusr1 = 0;
-	if ( AuthReloadSignalled ( getpid() ) )
 		return;
 
 	ReopenDaemonLog ();
 	ReopenQueryLog ();
 	ReopenHttpLog();
+
+	g_bGotSigusr1 = 0;
 }
 
 
@@ -13842,8 +13851,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
-	if ( hSearchd ( "boolean_simplify" ) )
-		SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", CSphQuery::m_bDefaultSimplify )!=0 );
+	SetBooleanSimplify ( hSearchd.GetBool ( "boolean_simplify", CSphQuery::m_bDefaultSimplify ) );
 
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
@@ -13853,6 +13861,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );
+	SetSIBlockCacheSize ( hSearchd.GetSize64 ( "secondary_index_block_cache", GetSIBlockCacheSize() ) );
 
 	CSphString sWarning;
 	AttrEngine_e eEngine = AttrEngine_e::DEFAULT;
@@ -13874,9 +13883,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", bTestMode ? -1 : 1 ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", 30 ) );
 
 	int iExpansionPhraseLimit = hSearchd.GetInt ( "expansion_phrase_limit", 1024 );
-	SetExpansionPhraseLimit ( iExpansionPhraseLimit );
-
-	AuthConfigure ( hSearchd );
+	bool bExpansionPhraseWarning = hSearchd.GetBool ( "expansion_phrase_warning", false );
+	SetExpansionPhraseLimit ( iExpansionPhraseLimit, bExpansionPhraseWarning );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -14221,9 +14229,77 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	int iExitCode = 0;
 #if _WIN32
-	iExitCode = WinStopOrWaitAnother ( iPid, iWaitTimeout );
+	WinStopOrWaitAnother(iPid, iWaitTimeout);
 #else
-	iExitCode = StopDaemonAndWait ( bWait, iPid, iWaitTimeout );
+	CSphString sPipeName;
+	int iPipeCreated = -1;
+	int fdPipe = -1;
+	if ( bWait )
+	{
+		sPipeName = GetNamedPipeName ( iPid );
+		::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
+                int iMask = umask ( 0 );
+		iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
+                umask ( iMask );
+		if ( iPipeCreated!=-1 )
+			fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
+
+		if ( iPipeCreated==-1 )
+			sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
+		else if ( fdPipe<0 )
+			sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
+	}
+
+	if ( kill ( iPid, SIGTERM ) )
+		sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
+	sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
+
+	iExitCode = ( bWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
+	bool bHandshake = true;
+	if ( bWait && fdPipe>=0 )
+		while ( true )
+		{
+			int iReady = sphPoll ( fdPipe, iWaitTimeout );
+
+			// error on wait
+			if ( iReady<0 )
+			{
+				iExitCode = 3;
+				sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerrorm(errno) );
+				break;
+			}
+
+			// timeout
+			if ( iReady==0 )
+			{
+				if ( !bHandshake )
+					continue;
+
+				iExitCode = 1;
+				break;
+			}
+
+			// reading data
+			DWORD uStatus = 0;
+			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
+			if ( iRead!=sizeof(DWORD) )
+			{
+				sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
+				iExitCode = 3; // stopped demon crashed during stop
+				break;
+			}
+			iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
+
+			if ( !bHandshake )
+				break;
+
+			bHandshake = false;
+		}
+	::unlink ( sPipeName.cstr () ); // is ok on linux after it is opened.
+
+	if ( fdPipe>=0 )
+		::close ( fdPipe );
+
 #endif
 	return iExitCode;}
 } // static namespace
@@ -14370,7 +14446,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
 	bool			bMeasureStack = false;
-	bool			bOptAuth = false;
 
 	DWORD			uReplayFlags = 0;
 
@@ -14417,7 +14492,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster" )	bNewCluster = true;
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
-		OPT1 ( "--auth" )			{ bOptAuth = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -14470,16 +14544,16 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !LoadExFunctions () )
 		sphFatal ( "failed to initialize extended socket functions: %s", sphSockError ( iStartupErr ) );
 
-//	// i want my windows sessions to log onto stdout
-//	// both in Debug and Release builds
-//	if ( !WinService() )
-//		g_bOptNoDetach = true;
-//
-//#ifndef NDEBUG
-//	// i also want my windows debug builds to skip locking by default
-//	// NOTE, this also skips log files!
-//	g_bOptNoLock = true;
-//#endif
+	// i want my windows sessions to log onto stdout
+	// both in Debug and Release builds
+	if ( !WinService() )
+		g_bOptNoDetach = true;
+
+#ifndef NDEBUG
+	// i also want my windows debug builds to skip locking by default
+	// NOTE, this also skips log files!
+	g_bOptNoLock = true;
+#endif
 #endif
 
 	if ( !bOptPIDFile )
@@ -14548,12 +14622,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	sphInitCJson();
 	if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
-
-	////////////////////////////////
-	// auth bootstrap after fonfigless \ data_dir setup
-
-	if ( bOptAuth )
-		return AuthBootstrap ( hSearchdpre, g_sConfigFile );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 	g_sExePath = sphGetCwd();
@@ -14646,8 +14714,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// create http log if required
 		if ( hSearchd.Exists ( "log_http" ) )
 			SetupHttpLog ( hSearchd["log_http"] );
-
-		AuthLogInit ( hSearchd );
 	}
 
 #if !_WIN32
@@ -14968,13 +15034,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	g_pTickPoolThread = MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
-
-	RplBootstrap_e eBs = RplBootstrap_e::OFF;
-	if ( bNewClusterForce )
-		eBs = RplBootstrap_e::FORCED;
-	else if ( bNewCluster )
-		eBs = RplBootstrap_e::ON;
-	PrepareClustersOnStartup ( dListenerDescs, eBs );
+	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
 
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
@@ -14992,7 +15052,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
-	ReplicationServiceStart ( eBs );
+	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest

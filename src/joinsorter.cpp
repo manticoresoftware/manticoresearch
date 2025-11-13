@@ -134,6 +134,32 @@ static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoin
 }
 
 
+bool SplitJoinedAttrName ( const CSphString & sJoinedAttr, CSphString & sTable, CSphString & sAttr, CSphString * pError )
+{
+	StrVec_t dAttr = sphSplit ( sJoinedAttr.cstr(), "." );
+	if ( dAttr.GetLength()<2 )
+	{
+		if ( pError )
+			pError->SetSprintf ( "table not specified in JOIN ON clause: '%s'", sJoinedAttr.cstr() );
+
+		return false;
+	}
+
+	sTable = dAttr[0];
+	sAttr = Vec2Str ( dAttr.Slice ( 1, dAttr.GetLength()-1 ), "." );
+
+	if ( !sAttr.Length() )
+	{
+		if ( pError )
+			pError->SetSprintf ( "table not specified in JOIN ON clause: '%s'", sJoinedAttr.cstr() );
+
+		return false;
+	}
+
+	return true;
+}
+
+
 static StrVec_t ParseGroupBy ( const CSphString & sGroupBy )
 {
 	StrVec_t dRes;
@@ -659,6 +685,7 @@ private:
 
 	bool							m_bErrorFlag = false;
 	CSphString						m_sErrorMessage;
+	CSphString						m_sWarning;
 
 	int								m_iBatchSize = 0;
 	int								m_iBatched = 0;
@@ -693,6 +720,7 @@ private:
 	FORCE_INLINE uint64_t SetupJoinFilters ( const CSphMatch & tEntry );
 	bool		SetupRightFilters ( CSphString & sError );
 	bool		SetupOnFilters ( CSphString & sError );
+	bool		SetupOnValueFilters ( CSphString & sError );
 	void		SetupRightStandaloneLocators();
 	void		AddToAttrRemap ( const CSphString & sFrom, const CSphString & sTo );
 	void		AddToJoinSelectList ( const CSphString & sExpr );
@@ -899,6 +927,7 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 	SetupJoinSelectList();
 	if ( !SetupRightFilters(sError) )	return false;
 	if ( !SetupOnFilters(sError) )		return false;
+	if ( !SetupOnValueFilters(sError) )	return false;
 
 	AddBatchedFilterItemsToJoinSelectList();
 	if ( !SetupJoinSorter(sError) )		return false;
@@ -1239,6 +1268,8 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	m_pRightSorter->SetSchema ( m_pRightSorterRsetSchema->CloneMe(), true );
 
 	CSphMultiQueryArgs tArgs ( GetIndexWeight ( m_tJoinQuery, m_tQuery.m_sJoinIdx ) );
+	tArgs.m_bUseSICache = true;
+
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{
@@ -1246,6 +1277,9 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 		m_sErrorMessage.SetSprintf ( "joined table %s: %s", GetJoinedIndexName().cstr(), tMeta.m_sError.cstr() );
 		return false;
 	}
+
+	if ( m_sWarning.IsEmpty() && !tMeta.m_sWarning.IsEmpty() )
+		m_sWarning = tMeta.m_sWarning;
 
 	m_dMatches.Resize(0);
 
@@ -1544,6 +1578,8 @@ bool JoinSorter_c::RunFinalBatch()
 
 bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
+	sWarning = m_sWarning;
+
 	if ( !RunFinalBatch() )
 	{
 		if ( m_bErrorFlag )
@@ -1717,7 +1753,7 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 		bool bStringFilter = pAttr1->m_eAttrType==SPH_ATTR_STRING || pAttr1->m_eAttrType==SPH_ATTR_STRINGPTR;
 
 		tFilter.m_sAttrName = sAttrIdx2;
-		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING : SPH_FILTER_VALUES;
+		tFilter.m_eType		= bStringFilter ? SPH_FILTER_STRING_LIST : SPH_FILTER_VALUES;
 
 		int iFilterId = m_tJoinQuery.m_dFilters.GetLength()-1;
 		m_dFilterRemap.Add ( { iFilterId, pAttr1->m_tLocator, {}, bStringFilter } );
@@ -1738,6 +1774,33 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 
 	m_dJoinOnFilterValues.Resize ( m_dIntFilters.GetLength() );
 	m_dJoinOnFilterStrings.Resize ( m_dStrFilters.GetLength() );
+
+	return true;
+}
+
+
+bool JoinSorter_c::SetupOnValueFilters ( CSphString & sError )
+{
+	for ( auto & tOnFilter : m_tQuery.m_dOnValueFilters )
+	{
+		CSphFilterSettings & tFilter = m_tJoinQuery.m_dFilters.Add();
+		tFilter = tOnFilter;
+
+		CSphString sTable, sAttr;
+		if ( !SplitJoinedAttrName ( tFilter.m_sAttrName, sTable, sAttr, &sError ) )
+			return false;
+
+		if ( sTable.ToLower()!=m_tQuery.m_sJoinIdx )
+		{
+			sError = "Only right table attributes allowed in JOIN ON clause filters";
+			return false;
+		}
+
+		tFilter.m_sAttrName = sAttr;
+
+		int iFilterId = m_tJoinQuery.m_dFilters.GetLength()-1;
+		AddOnFilterToFilterTree(iFilterId);
+	}
 
 	return true;
 }
@@ -1876,11 +1939,13 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias )
 {
-	int iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
-	if ( iSorterAttrId==-1 )
-		iSorterAttrId = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	int iSorterAttrId1 = m_pSorterSchema->GetAttrIndex ( sExpr.cstr() );
+	if ( iSorterAttrId1!=-1 )
+		AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId1 );
 
-	AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId );
+	int iSorterAttrId2 = m_pSorterSchema->GetAttrIndex ( sAlias.cstr() );
+	if ( iSorterAttrId2!=-1 && iSorterAttrId2!=iSorterAttrId1 )
+			AddToJoinSelectList ( sExpr, sAlias, iSorterAttrId2 );
 }
 
 
@@ -2022,7 +2087,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 		if ( GetJoinAttrName ( i.m_sAttrName, GetJoinedIndexName(), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
-			if ( pAttr && pAttr->IsColumnar() )
+			if ( pAttr )
 				AddToJoinSelectList ( i.m_sAttrName, i.m_sAttrName );
 		}		
 	}

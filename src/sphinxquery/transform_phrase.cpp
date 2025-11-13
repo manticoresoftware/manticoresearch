@@ -13,16 +13,17 @@
 #include <stack>
 
 static int g_iMaxVariants = 1024;
+static bool g_bExpansionPhraseWarning = false;
 
 using VecKw = CSphVector < const XQKeyword_t * >;
 using VVKw = CSphVector < VecKw >;
 
-static VVKw ComputeCartesianProduct ( const VVKw & dNodes, VecTraits_T<int> & dComponentBounds, int iMaxVariants, CSphString & sError ) 
+static VVKw ComputeCartesianProduct ( const VVKw & dNodes, VecTraits_T<int> & dComponentBounds, int iMaxVariants, bool bAllowPartial, CSphString & sError, CSphString & sWarning ) 
 {
 	if ( dNodes.IsEmpty() )
 		return {};
 
-	// fail after calc complexity
+	// could fail after calc complexity
 	int iTotalVariants = 1;
 	int iStart = 0;
 	for ( int iEnd : dComponentBounds )
@@ -35,8 +36,16 @@ static VVKw ComputeCartesianProduct ( const VVKw & dNodes, VecTraits_T<int> & dC
 		iTotalVariants *= iSize;
 		if ( iTotalVariants>iMaxVariants )
 		{
-			sError.SetSprintf ( "query too complex, exceeds max variants limit during OR combination (complexity %d, expansion_phrase_limit %d)", iTotalVariants, iMaxVariants );
-			return {};
+			if ( bAllowPartial )
+			{
+				sWarning.SetSprintf ( "query is too complex, partial results generated (limited to %d variants)", iMaxVariants );
+				break;
+
+			} else
+			{
+				sError.SetSprintf ( "query too complex, exceeds max variants limit during OR combination (complexity %d, expansion_phrase_limit %d)", iTotalVariants, iMaxVariants );
+				return {};
+			}
 		}
 	}
 
@@ -54,17 +63,26 @@ static VVKw ComputeCartesianProduct ( const VVKw & dNodes, VecTraits_T<int> & dC
 			continue;
 
 		dTmp.Resize ( 0 );
-		dTmp.Reserve ( dRes.GetLength() * iSize );
+		// should be clumped to iMaxVariants
+		int iTmpSize = Min ( iMaxVariants, dRes.GetLength() * iSize );
+		dTmp.Reserve ( iTmpSize );
 
 		for (const VecKw & dCur : dRes )
 		{
 			for ( int i=iCur; i<iEnd; ++i )
 			{
+				// if already hit the limit - stop generate variants for this component
+				if ( dTmp.GetLength()>=iMaxVariants )
+					break;
+
 				const VecKw & dNew = dNodes[i];
 				VecKw dCombined = dCur;
 				dCombined.Append ( dNew );
 				dTmp.Add ( std::move ( dCombined ) );
 			}
+			// stop generate from previous results
+			if ( dTmp.GetLength()>=iMaxVariants )
+				break;
 		}
 		// replace with longer seq
 		dRes.SwapData( dTmp );
@@ -78,7 +96,7 @@ struct PtrHash_fn
 	static uint64_t Hash ( const XQNode_t * pNode ) { return (uint64_t) pNode; }
 };
 
-VVKw GenVariants ( const XQNode_t * pRoot, int iMaxVariants, CSphString & sError )
+VVKw GenVariants ( const XQNode_t * pRoot, int iMaxVariants, bool bAllowPartial, CSphString & sError, CSphString & sWarning )
 {
 	if ( !pRoot )
 		return {};
@@ -152,7 +170,7 @@ VVKw GenVariants ( const XQNode_t * pRoot, int iMaxVariants, CSphString & sError
 				}
 				
 				// order matters for phrase
-				dCurVariants = ComputeCartesianProduct ( dComponents, dComponentBounds, iMaxVariants, sError );
+				dCurVariants = ComputeCartesianProduct ( dComponents, dComponentBounds, iMaxVariants, bAllowPartial, sError, sWarning );
 			}
 			break;
 
@@ -161,20 +179,26 @@ VVKw GenVariants ( const XQNode_t * pRoot, int iMaxVariants, CSphString & sError
 				break;
 		}
 		
-		if  ( dCurVariants.GetLength()>iMaxVariants )
+		if ( sError.IsEmpty() && dCurVariants.GetLength()>iMaxVariants )
 		{
-			 sError.SetSprintf ( "query too complex, exceeds max variants limit during OR combination (complexity %d, expansion_phrase_limit %d)", dCurVariants.GetLength(), iMaxVariants );
-			 break;
+			if ( bAllowPartial )
+			{
+				dCurVariants.Resize ( iMaxVariants ); // truncate to allowed size
+				sWarning.SetSprintf ( "query is too complex, partial results generated (limited to %d variants)", iMaxVariants );
+			} else
+			{
+				sError.SetSprintf ( "query too complex, exceeds max variants limit during OR combination (complexity %d, expansion_phrase_limit %d)", dCurVariants.GetLength(), iMaxVariants );
+			}
 		}
 
 		hResolved.AddUnique ( pCur ) = std::move ( dCurVariants );
 	}
 
 	// result variants for the root node
-	if ( sError.IsEmpty() )
-		return hResolved[ pRoot ];
-	else
+	if ( !sError.IsEmpty() )
 		return {};
+	else
+		return hResolved[pRoot];
 }
 
 static bool CheckTransform ( const XQNode_t * pNode )
@@ -185,56 +209,60 @@ static bool CheckTransform ( const XQNode_t * pNode )
 	return ( eOp==SPH_QUERY_PHRASE || eOp==SPH_QUERY_QUORUM || eOp==SPH_QUERY_PROXIMITY );
 }
 
-static void DoTransform ( XQNode_t * pNode, CSphString & sError )
+static void DoTransform ( XQNode_t * pNode, CSphString & sError, CSphString & sWarning )
 {
 	assert ( pNode );
 
-	VVKw dVariants = GenVariants ( pNode, g_iMaxVariants, sError );
+	VVKw dVariants = GenVariants ( pNode, g_iMaxVariants, g_bExpansionPhraseWarning, sError, sWarning );
 	if ( !sError.IsEmpty() )
 		return;
 
-	CSphVector < XQNode_t * > dPhrases;
-	for ( const auto & dTerms : dVariants )
+	if ( !dVariants.IsEmpty() )
 	{
-		assert ( dTerms.GetLength() );
-		int iStartPos = dTerms[0]->m_iAtomPos;
-		XQNode_t * pPhrase = new XQNode_t ( pNode->m_dSpec );
-
-		for ( const auto & tSrcTerm : dTerms )
+		CSphVector < XQNode_t * > dPhrases;
+		for ( const auto & dTerms : dVariants )
 		{
-			XQKeyword_t tTerm = *tSrcTerm;
-			tTerm.m_iAtomPos = iStartPos++;
-			pPhrase->AddDirtyWord ( tTerm );
+			assert ( dTerms.GetLength() );
+			int iStartPos = dTerms[0]->m_iAtomPos;
+			XQNode_t * pPhrase = new XQNode_t ( pNode->m_dSpec );
+
+			for ( const auto & tSrcTerm : dTerms )
+			{
+				XQKeyword_t tTerm = *tSrcTerm;
+				tTerm.m_iAtomPos = iStartPos++;
+				pPhrase->AddDirtyWord ( tTerm );
+			}
+
+			pPhrase->m_iOpArg = pNode->m_iOpArg;
+			pPhrase->m_bPercentOp = pNode->m_bPercentOp;
+			pPhrase->SetOp ( pNode->GetOp() );
+			dPhrases.Add ( pPhrase );
 		}
 
-		pPhrase->m_iOpArg = pNode->m_iOpArg;
-		pPhrase->m_bPercentOp = pNode->m_bPercentOp;
-		pPhrase->SetOp ( pNode->GetOp() );
-		dPhrases.Add ( pPhrase );
+		pNode->ResetWords();
+		pNode->WithChildren ( [] ( auto & dChildren ) { for ( auto * pChild : dChildren ) SafeDelete ( pChild ); } );
+		pNode->ResetChildren();
+		pNode->SetOp ( SPH_QUERY_OR, dPhrases );
 	}
-
-	pNode->ResetWords();
-	pNode->WithChildren ( [] ( auto & dChildren ) { for ( auto * pChild : dChildren ) SafeDelete ( pChild ); } );
-	pNode->ResetChildren();
-	pNode->SetOp ( SPH_QUERY_OR, dPhrases );
 }
 
-bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError )
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError, CSphString & sWarning )
 {
 	XQNode_t *& pNode = *ppNode;
 
 	if ( CheckTransform ( pNode ) && pNode->dChildren().GetLength() )
-		DoTransform ( pNode, sError );
+		DoTransform ( pNode, sError, sWarning );
 	else
 	{
 		ARRAY_FOREACH ( i, pNode->dChildren() )
-			TransformPhraseBased ( &pNode->dChildren()[i], sError );
+			TransformPhraseBased ( &pNode->dChildren()[i], sError, sWarning );
 	}
 
 	return sError.IsEmpty();
 }
 
-void SetExpansionPhraseLimit ( int iMaxVariants )
+void SetExpansionPhraseLimit ( int iMaxVariants, bool bExpansionPhraseWarning )
 {
 	g_iMaxVariants = iMaxVariants;
+	g_bExpansionPhraseWarning = bExpansionPhraseWarning;
 }

@@ -93,8 +93,8 @@ jobs:
       boost_url_key: boost_rhel_feb17
       PACK_GALERA: 1
       cmake_command: |
-        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
-        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0
+        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0
         mkdir build
         cd build
         cmake -DPACK=1 ..

@@ -17,3 +17,5 @@ role_template: translator.role.tpl
 # If the translated md has yaml files, like in Hugo, we dont
 check_yaml_keys: false
 
+translation_parallel_files: 10
+translation_parallel_chunks: 10

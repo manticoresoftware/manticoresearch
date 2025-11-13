@@ -1,11 +1,11 @@
 # Установка Manticore в Debian или Ubuntu
 
-### Поддерживаемые релизы:
+### Поддерживаемые версии:
 
 * Debian
-  * 10.0 (Buster)
   * 11.0 (Bullseye)
   * 12.0 (Bookworm)
+  * 13.0 (Trixie)
 
 * Ubuntu
   * 18.04 (Bionic)
@@ -35,7 +35,7 @@ sudo apt update
 sudo apt install manticore manticore-extra
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов из-за обновлённой структуры пакетов:
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновлённой структурой пакетов:
 
 ```bash
 sudo apt remove manticore*
@@ -44,7 +44,7 @@ sudo apt remove manticore*
 Это не удалит ваши данные и файл конфигурации.
 
 ###### Пакеты для разработки
-Если вы предпочитаете версии "Nightly" (разработческие), выполните:
+Если вы предпочитаете "Nightly" (разработческие) версии, выполните:
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
 sudo dpkg -i manticore-dev-repo.noarch.deb && \
@@ -52,12 +52,12 @@ sudo apt -y update && \
 sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l manticore-galera manticore-galera-dbgsym manticore-language-packs manticore-load
 ```
 
-### Автономные DEB-пакеты
-Чтобы скачать автономные DEB-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
+### Отдельные DEB-пакеты
+Чтобы скачать отдельные DEB-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
 
-### Другие пакеты, которые могут понадобиться
+### Дополнительные пакеты, которые могут понадобиться
 #### Для indexer
-Пакет Manticore зависит от библиотек zlib и ssl, других обязательных зависимостей нет. Однако, если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних хранилищ, вам нужно установить соответствующие клиентские библиотеки. Чтобы узнать, какие конкретно библиотеки нужны `indexer`, запустите его и посмотрите в начале его вывода:
+Пакет Manticore зависит от библиотек zlib и ssl, ничего другого строго не требуется. Однако, если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних хранилищ, вам нужно будет установить соответствующие клиентские библиотеки. Чтобы узнать, какие конкретно библиотеки требуются `indexer`, запустите его и посмотрите в начале вывода:
 
 ```bash
 $ sudo -u manticore indexer
@@ -73,9 +73,9 @@ Built on Linux runner-0277ea0f-project-3858465-concurrent-0 4.19.78-coreos #1 SM
 Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=xenial -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmysqlclient.so.20 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_POSTGRESQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 ```
 
-Здесь видно упоминания **libodbc.so.2**, **libexpat.so.1**, **libmysqlclient.so.20** и **libpq.so.5**.
+Здесь вы можете увидеть упоминания **libodbc.so.2**, **libexpat.so.1**, **libmysqlclient.so.20** и **libpq.so.5**.
 
-Ниже таблица с перечнем всех клиентских библиотек для разных версий Debian/Ubuntu:
+Ниже приведена справочная таблица со списком всех клиентских библиотек для разных версий Debian/Ubuntu:
 
 | Distr | MySQL | PostgreSQL | XMLpipe | UnixODBC |
 | - | - | - | - | - |
@@ -89,7 +89,7 @@ Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -D
 | Debian Bullseye | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 | Debian Bookworm | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 
-Чтобы найти пакеты, в которых содержатся эти библиотеки, можно использовать, например, `apt-file`:
+Чтобы найти пакеты, которые предоставляют эти библиотеки, вы можете использовать, например, `apt-file`:
 
 ```bash
 apt-file find libmysqlclient.so.20
@@ -98,7 +98,7 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-Обратите внимание, что нужны только библиотеки для тех типов хранилищ, которые вы будете использовать. Если вы планируете строить таблицы только из MySQL, то, возможно, достаточно установить только библиотеку MySQL (в примере выше — `libmysqlclient20`).
+Обратите внимание, что вам нужны только библиотеки для тех типов хранилищ, которые вы собираетесь использовать. Если вы планируете создавать таблицы только из MySQL, то, возможно, вам нужно установить только библиотеку MySQL (в приведённом выше примере `libmysqlclient20`).
 
 В конце установите необходимые пакеты:
 
@@ -106,12 +106,12 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 ```
 
-Если вы вообще не собираетесь использовать инструмент `indexer`, искать и устанавливать библиотеки не нужно.
+Если вы не собираетесь использовать инструмент `indexer` вообще, вам не нужно искать и устанавливать какие-либо библиотеки.
 
-Для поддержки токенизации CJK официальные пакеты содержат бинарные файлы с встроенной библиотекой ICU и включают в себя файл данных ICU. Они не зависят от какой-либо ICU runtime-библиотеки, которая может быть установлена в вашей системе, и не подлежат обновлению.
+Для включения поддержки токенизации CJK официальные пакеты содержат бинарные файлы с встроенной библиотекой ICU и включают файл данных ICU. Они независимы от любой ICU runtime-библиотеки, которая может быть доступна в вашей системе, и не могут быть обновлены.
 
 #### Украинский лемматизатор
-Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и с опцией `--enable-shared`.**
+Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и сконфигурирован с опцией `--enable-shared`.**
 
 Вот как установить Python 3.9 и украинский лемматизатор в Debian и Ubuntu:
 

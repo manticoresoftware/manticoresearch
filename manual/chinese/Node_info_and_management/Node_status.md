@@ -1,18 +1,18 @@
 # 节点状态
 
-## STATUS
+## 状态
 
 <!-- example status -->
-查看 Manticore 节点高层信息的最简单方法是在 MySQL 客户端中运行 `status`。它会显示各个方面的信息，例如：
+查看 Manticore 节点的高级信息最简单的方法是在 MySQL 客户端中运行 `status`。它将显示各种方面的信息，例如：
 * 当前版本
-* 是否启用 SSL
+* 是否启用了 SSL
 * 当前 TCP 端口/Unix 套接字
 * 运行时间
 * [线程](../Server_settings/Searchd.md#threads) 数量
 * [队列中的作业](../Server_settings/Searchd.md#jobs_queue_size) 数量
 * 连接数（`clients`）
 * 当前正在处理的任务数
-* 启动以来执行的查询数
+* 自启动以来执行的查询数
 * 队列中的作业数和任务数，按线程数归一化
 
 <!-- request SQL -->
@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` 是一条 SQL 语句，展示各种有用的性能计数器。IO 和 CPU 计数器只有在 `searchd` 启动时使用 `--iostats` 和 `--cpustats` 开关（或通过 `SET GLOBAL iostats/cpustats=1` 启用）时才可用。
+`SHOW STATUS` 是一个 SQL 语句，显示各种有用的性能计数器。IO 和 CPU 计数器仅在 `searchd` 启动时使用了 `--iostats` 和 `--cpustats` 开关（或通过 `SET GLOBAL iostats/cpustats=1` 启用）时可用。
 
 <!-- intro -->
 ##### SQL:
@@ -155,7 +155,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-支持可选的 `LIKE` 子句，允许你只选择匹配特定模式的变量。模式语法遵循标准 SQL 通配符，其中 `%` 表示任意数量的任意字符，`_` 表示单个字符。
+支持可选的 `LIKE` 子句，允许您仅选择匹配特定模式的变量。模式语法遵循标准 SQL 通配符，其中 `%` 表示任意数量的任意字符，`_` 表示单个字符。
 
 <!-- request qcache -->
 
@@ -212,20 +212,20 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- example show status like stats_ms -->
 
-`SHOW STATUS` 命令提供 Manticore 各项性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计基于 1、5 和 15 分钟的滑动窗口，显示查询时间的平均值、最小值、最大值以及 95%/99% 百分位值。
+`SHOW STATUS` 命令提供了 Manticore 中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计数据是在 1、5 和 15 分钟的滑动窗口内计算的，显示查询时间的平均值、最小值、最大值以及 95%/99% 百分位值。
 
-这些指标帮助跟踪特定时间间隔内的性能，便于发现查询响应时间趋势和潜在瓶颈。
+这些指标有助于跟踪特定时间间隔内的性能，使得更容易发现查询响应时间的趋势并找到可能的瓶颈。
 
 以下指标是 `SHOW STATUS` 输出的一部分：
-- `*_avg`：每种查询类型在最近 1、5 和 15 分钟内的平均查询时间。
+- `*_avg`：过去 1、5 和 15 分钟内每种查询类型的平均查询时间。
 - `*_min`：每种查询类型记录的最短查询时间。
 - `*_max`：每种查询类型记录的最长查询时间。
 - `*_pct95`：95% 查询完成所需的时间。
 - `*_pct99`：99% 查询完成所需的时间。
 
-这些统计分别针对插入/替换 (`insert_replace_stats_*`)、搜索 (`search_stats_*`) 和更新 (`update_stats_*`) 查询提供，详细洞察不同操作的性能。
+这些统计数据分别针对插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询提供，详细展示了不同操作的性能。
 
-如果监控期间无查询执行，系统将显示 `N/A`。
+如果在监控间隔内没有执行查询，系统将显示 `N/A`。
 
 <!-- request perf_stats -->
 
@@ -262,10 +262,10 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` 是一条 SQL 语句，用于显示配置文件中的当前设置。设置名称格式为：`'config_section_name'.'setting_name'`
+`SHOW SETTINGS` 是一个 SQL 语句，显示配置文件中的当前设置。设置名称以以下格式表示：`'config_section_name'.'setting_name'`
 
-结果还包括两个额外值：
-- `configuration_file` - 配置文件路径
+结果还包括两个附加值：
+- `configuration_file` - 配置文件的路径
 - `worker_pid` - 正在运行的 `searchd` 实例的进程 ID
 
 <!-- intro -->
@@ -288,7 +288,7 @@ SHOW SETTINGS;
 | searchd.listen           | 0.0.0:9308:http                     |
 | searchd.log              | /var/log/manticore/searchd.log      |
 | searchd.query_log        | /var/log/manticore/query.log        |
-| searchd.pid_file         | /var/run/manticore/searchd.pid      |
+| searchd.pid_file         | /run/manticore/searchd.pid          |
 | searchd.data_dir         | /var/lib/manticore                  |
 | searchd.query_log_format | sphinxql                            |
 | searchd.binlog_path      | /var/lib/manticore/binlog           |
@@ -307,7 +307,7 @@ SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` 显示[远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)或分布式表的统计信息。它包括最后请求时间、最后响应时间、各种错误与成功次数等值。对于每个代理，列出了最近 1、5 和 15 个时间段的统计，每个时间段由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
+`SHOW AGENT STATUS` 显示[远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)或分布式表的统计信息。它包括最后请求时间、最后响应时间、各种错误和成功次数等值。统计信息针对每个代理在最近 1、5 和 15 个间隔内显示，每个间隔由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
 
 <!-- intro -->
 ##### SQL:
@@ -1022,7 +1022,7 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-支持可选的 `LIKE` 子句，语法同 `SHOW STATUS`。
+支持可选的 `LIKE` 子句，语法与 `SHOW STATUS` 中相同。
 
 <!-- intro -->
 ##### SQL:
@@ -1266,7 +1266,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-您可以通过其地址指定特定的代理。在这种情况下，只会显示该代理的数据。此外，将使用 `agent_` 前缀代替 `ag_N_`：
+You can specify a particular agent by its address. In this case, only that agent's data will be displayed. Additionally, the `agent_` prefix will be used instead of `ag_N_`:
 
 <!-- intro -->
 ##### SQL:
@@ -1583,7 +1583,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。该语句显示表的高可用性 (HA) 状态（即是否使用代理镜像）并提供有关镜像的信息，包括：地址、blackhole 和持久标志，以及当采用[加权概率策略](../Creating_a_cluster/Remote_nodes/Load_balancing.md)之一时使用的镜像选择概率。
+Finally, you can check the status of the agents in a specific distributed table using the `SHOW AGENT table_name STATUS` statement. This statement displays the table's HA status (i.e., whether or not it uses agent mirrors at all) and provides information on the mirrors, including: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect.
 
 <!-- intro -->
 ##### SQL:
@@ -1929,10 +1929,10 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 
 <!-- example prometheus exporter -->
 
-Manticore Search 内置了 Prometheus 导出器。
-要请求指标，请确保 HTTP 端口已暴露，然后调用 /metrics 端点。
+Manticore Search has a built-in Prometheus exporter.
+To request metrics, make sure the HTTP port is exposed and simply call the /metrics endpoint.
 
-**注意：**导出器需要启用 **Buddy**。
+**Note:** The exporter requires **Buddy** to be enabled.
 
 <!-- intro -->
 ##### HTTP:

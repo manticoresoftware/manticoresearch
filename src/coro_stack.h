@@ -24,6 +24,12 @@
 namespace Threads
 {
 
+#if defined(__has_feature)
+#   if __has_feature(address_sanitizer) // for clang
+#       define __SANITIZE_ADDRESS__ // GCC already sets this
+#   endif
+#endif
+
 static constexpr size_t STACK_ALIGN = 16;					  // stack align - let it be 16 bytes for convenience
 static constexpr size_t DEFAULT_CORO_STACK_SIZE = 1024 * 128; // stack size - 128K
 

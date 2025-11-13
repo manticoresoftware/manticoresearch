@@ -3,9 +3,9 @@
 ### Supported releases:
 
 * Debian
-  * 10.0 (Buster)
   * 11.0 (Bullseye)
   * 12.0 (Bookworm)
+  * 13.0 (Trixie)
 
 * Ubuntu
   * 18.04 (Bionic)

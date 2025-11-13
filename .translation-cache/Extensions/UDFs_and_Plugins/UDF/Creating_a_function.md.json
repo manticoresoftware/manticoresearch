@@ -1,0 +1,10 @@
+{
+  "32ab09a7304619c47a578566ef027d7ea42853fbf2170a5e6b5238f9e24a68df": {
+    "original": "# CREATE FUNCTION\n\nCODE_BLOCK_0\n\n`CREATE FUNCTION` statement installs a user-defined function [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) with the specified name and type from the provided library file. The library file must be located in a trusted [plugin_dir](../../../Server_settings/Common.md#plugin_dir) directory. Upon successful installation, the function becomes available for use in all subsequent queries received by the server. Example:\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# CREATE FUNCTION\n\nCODE_BLOCK_0\n\n`CREATE FUNCTION` 语句从提供的库文件安装具有指定名称和类型的用户自定义函数 [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md)。库文件必须位于受信任的 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 目录中。安装成功后，该函数将在服务器接收的所有后续查询中可用。示例：\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+      "russian": "# CREATE FUNCTION\n\nCODE_BLOCK_0\n\nОператор `CREATE FUNCTION` устанавливает пользовательскую функцию [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) с указанным именем и типом из предоставленного файла библиотеки. Файл библиотеки должен находиться в доверенной директории [plugin_dir](../../../Server_settings/Common.md#plugin_dir). После успешной установки функция становится доступной для использования во всех последующих запросах, получаемых сервером. Пример:\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

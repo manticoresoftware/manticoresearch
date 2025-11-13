@@ -48,8 +48,10 @@ const char * dlerror()
 
 ScopedHandle_c::~ScopedHandle_c ()
 {
+#if HAVE_DLOPEN
 	if ( m_pHandle )
 		dlclose ( m_pHandle );
+#endif
 }
 
 void * DlSym ( void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )

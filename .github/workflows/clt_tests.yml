@@ -38,7 +38,7 @@ jobs:
   clt:
     name: CLT
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     continue-on-error: ${{ inputs.continue_on_error }}
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -62,8 +62,8 @@ jobs:
             test_prefix: test/clt-tests/expected-errors/
           - name: Fulltext-search
             test_prefix: test/clt-tests/fulltext-search/
-          - name: Columnar
-            test_prefix: test/clt-tests/columnar/
+          - name: MCL
+            test_prefix: test/clt-tests/mcl/
           - name: HTTP interface tests
             test_prefix: test/clt-tests/http-interface/
           - name: Indexer

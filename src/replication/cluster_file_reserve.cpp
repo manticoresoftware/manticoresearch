@@ -93,6 +93,8 @@ void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq )
 	SendArray ( pSrc->m_dBaseNames, tOut );
 	SendArray ( pSrc->m_dChunks, tOut );
 	SendArray ( pSrc->m_dHashes, tOut );
+
+	tOut << tReq.m_tProgressCtx;
 }
 
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveRequest_t& tReq )
@@ -117,6 +119,8 @@ void operator>> ( InputBuffer_c& tIn, FileReserveRequest_t& tReq )
 	GetArray ( pSrc->m_dBaseNames, tIn );
 	GetArray ( pSrc->m_dChunks, tIn );
 	GetArray ( pSrc->m_dHashes, tIn );
+
+	tIn >> tReq.m_tProgressCtx;
 }
 
 
@@ -180,6 +184,11 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 
 	int64_t tmStartReserve = sphMicroTimer();
 	CSphString sLocalIndexPath;
+
+	auto pProgressSst = GetClusterProgress ( tCmd.m_sCluster );
+	if ( pProgressSst )
+		pProgressSst->StartLocalStage ( tCmd.m_tProgressCtx, SstStage_e::RESERVE_FILES );
+	AT_SCOPE_EXIT ( [&pProgressSst] { if ( pProgressSst ) pProgressSst->FinishLocalStage(); } );
 
 	assert ( tCmd.m_pChunks );
 	// use index path first
@@ -259,6 +268,9 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 				tmTimeoutFile = Max ( tmReadDelta, tmTimeoutFile );
 			}
 		}
+
+		if ( pProgressSst )
+			pProgressSst->AddComplete ( tFile.m_iFileSize );
 	}
 
 	StrVec_t dLocalPaths ( tRes.m_dRemotePaths.GetLength() );

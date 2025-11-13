@@ -26,15 +26,15 @@ namespace sph
 	}
 
 	/// call sphMicroTime, track value and return it
-	int64_t MicroTimer() noexcept;
+	[[nodiscard]] int64_t MicroTimer() noexcept;
 
 	/// return last tracked value of MicroTimer (don't call sphMicroTime)
-	int64_t LastTimestamp() noexcept;
+	[[nodiscard]] int64_t LastTimestamp() noexcept;
 
 	/// returns true if provided timestamp is already reached or not
 	/// it IMPLIES timer is engaged to given limit timestamp.
 	/// non-engaged timer doesn't tick and may infinitely return false.
-	bool TimeExceeded ( int64_t iTimestampUS ) noexcept;
+	[[nodiscard]] bool TimeExceeded ( int64_t iTimestampUS ) noexcept;
 
 	/// should be called on shutdown
 	void ShutdownMiniTimer();
@@ -65,17 +65,17 @@ public:
 		, m_fnOnTimer { std::move ( fnOnTimer ) }
 	{}
 
-	void SetHandler ( Threads::Handler&& fnOnTimer = nullptr );
+	void SetHandler ( Threads::Handler&& fnOnTimer = nullptr ) noexcept;
 
 	/// on period<=0 does nothing, returns 0. On positive - engage tick after given period; returns timestamp where it should tick.
-	int64_t Engage ( int64_t iTimePeriodMS );
-	int64_t Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTimer ); // fnOnTimer may be set here alternatively to be set in ctr
+	int64_t Engage ( int64_t iTimePeriodMS ) noexcept;
+	int64_t Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTimer ) noexcept; // fnOnTimer may be set here alternatively to be set in ctr
 
 	/// engage to be kicked at absolute time (in microseconds)
-	void EngageAt ( int64_t iTimeStampUS );
-	void EngageAt ( int64_t iTimeStampUS, Threads::Handler&& fnOnTimer ); // fnOnTimer may be set here alternatively to be set in ctr
+	void EngageAt ( int64_t iTimeStampUS ) noexcept;
+	void EngageAt ( int64_t iTimeStampUS, Threads::Handler&& fnOnTimer ) noexcept; // fnOnTimer may be set here alternatively to be set in ctr
 
-	void 	UnEngage();
+	void 	UnEngage() noexcept;
 
 	// dtr calls UnEngage(), so it is safe to delete engaged timer
 	~MiniTimer_c();

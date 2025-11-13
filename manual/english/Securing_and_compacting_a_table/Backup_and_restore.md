@@ -157,11 +157,11 @@ You can also back up your data through SQL by running the simple command `BACKUP
 ```sql
 BACKUP
   [{TABLE | TABLES} a[, b]]
+  TO path_to_backup
   [{OPTION | OPTIONS}
     async = {on | off | 1 | 0 | true | false | yes | no}
     [, compress = {on | off | 1 | 0 | true | false | yes | no}]
   ]
-  TO path_to_backup
 ```
 
 For instance, to back up tables `a` and `b` to the `/backup` directory, run the following command:
@@ -172,18 +172,48 @@ BACKUP TABLES a, b TO /backup
 
 There are options available to control and adjust the backup process, such as:
 
-* `async`: makes the backup non-blocking, allowing you to receive a response with the query ID immediately and run other queries while the backup is ongoing. The default value is `0`.
+* `async`: makes the backup non-blocking, allowing you to receive a response with the backup path immediately and run other queries while the backup is ongoing. The default value is `0`.
 * `compress`: enables file compression using zstd. The default value is `0`.
+
 For example, to run a backup of all tables in async mode with compression enabled to the `/tmp` directory:
 
 ```sql
-BACKUP OPTION async = yes, compress = yes TO /tmp
+BACKUP TO /tmp OPTION async = yes, compress = yes
 ```
+
+### Async backup behavior
+
+When using `async = 1` (or `yes`, `on`, `true`), the backup operation runs in a background task:
+
+* The command returns immediately with the backup path
+* You can continue running other queries while the backup is in progress
+* The backup task runs in a separate thread managed by Manticore Buddy
+* While running, the backup task will appear in `SHOW QUERIES` output and will be removed automatically when complete
+
+**Example of async backup:**
+
+```sql
+BACKUP TO /tmp/mybackup OPTION async = 1
+```
+
+This will return immediately with output like:
+```
++----------------------------------+
+| Path                             |
++----------------------------------+
+| /tmp/mybackup/backup-20221004... |
++----------------------------------+
+```
+
+You can check if the backup is still running by using `SHOW QUERIES`. Once complete, the task will disappear from the queries list and all backup files will be present in the specified directory.
 
 ### Important considerations
 
-1. The path should not contain special symbols or spaces, as they are not supported.
-2. Ensure that Manticore Buddy is launched (it is by default).
+1. The backup path can contain spaces if enclosed in single quotes, e.g., `BACKUP TO '/path/with spaces'`
+2. Paths without spaces don't require quotes: `BACKUP TO /tmp/backup`
+3. Windows paths are supported: `BACKUP TO 'C:\path'` or `BACKUP TO C:\windows\backup`
+4. Ensure that Manticore Buddy is launched (it is by default)
+5. The backup directory must exist and be writable by the Manticore process
 
 ### How backup maintains consistency of tables
 
@@ -262,6 +292,8 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
+Manticore supports `mysqldump` utility from MySQL up to 9.5 and `mariadb-dump` utility from MariaDB up to 12.0.
+
 <!-- example mysqldump_backup -->
 
 > NOTE: some versions of `mysqldump` / `mariadb-dump` require [Manticore Buddy](../Installation/Manticore_Buddy.md). If the dump isn't working, make sure Buddy is installed.
@@ -338,4 +370,3 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 * Note that `mysqldump` does not support backing up distributed tables and cannot back up tables containing non-stored fields. For such cases, consider using `manticore-backup` or the `BACKUP` SQL command. If you have distributed tables, it is recommended to always specify the tables to be dumped.
 
 <!-- proofread -->
-

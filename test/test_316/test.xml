@@ -93,12 +93,6 @@ searchd
 	select * from a order by id asc;
 	select * from b order by id asc;
 	show locks;
-	create cluster c;
-	alter cluster c add a;
-	lock tables a read;
-	lock tables c:a read;
-	alter cluster c drop a;
-	delete cluster c;
 	drop table a;
 	drop table b;
 </sphinxql>

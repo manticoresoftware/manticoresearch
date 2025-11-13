@@ -36,6 +36,7 @@ enum class E_CLUSTER : WORD
 	GET_NODE_VER		= 10,
 	GET_NODE_VER_ID		= 11,
 	UPDATE_SST_PROGRESS	= 12,
+	GET_NODE_AUTH		= 13,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -54,6 +55,7 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::GET_NODE_VER: return "get_node_ver";
 	case E_CLUSTER::GET_NODE_VER_ID: return "get_node_ver_id";
 	case E_CLUSTER::UPDATE_SST_PROGRESS: return "update_sst_progress";
+	case E_CLUSTER::GET_NODE_AUTH: return "get_node_auth";
 	default: return "unknown";
 	}
 }
@@ -93,6 +95,8 @@ struct CustomAgentData_T final: public DefaultQueryResult_t
 
 // base of API commands request and reply builders
 AgentConn_t* CreateAgentBase ( const AgentDesc_t& tDesc, int64_t iTimeoutMs );
+void SetAuth ( const CSphString & sUser, CSphVector<AgentConn_t *> & dRemotes );
+void SetAuth ( const CSphString & sUser, AgentConn_t * pAgent );
 
 // set to true to see all proto exchanging in the log
 constexpr bool VERBOSE_LOG = false;
@@ -118,19 +122,25 @@ public:
 		return pResult->m_tRequest;
 	}
 
-	static AgentConn_t* CreateAgent ( const AgentDesc_t& tDesc, int64_t iTimeoutMs, const REQUEST& tReq )
+	static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const CSphString & sUser, int64_t iTimeoutMs, const REQUEST & tReq )
 	{
 		auto* pAgent = CreateAgentBase ( tDesc, iTimeoutMs );
 		pAgent->m_pResult = std::make_unique<CustomAgentData_T<REQUEST, REPLY>> ( tReq );
+		SetAuth ( sUser, pAgent );
 		return pAgent;
 	}
 
-	static VecRefPtrs_t<AgentConn_t*> MakeAgents ( const VecTraits_T<AgentDesc_t>& dDesc, int64_t iTimeout, const REQUEST& tReq )
+	static VecRefPtrs_t<AgentConn_t *> MakeAgents ( const VecTraits_T<AgentDesc_t> & dDesc, const CSphString & sUser, int64_t iTimeout, const REQUEST & tReq )
 	{
 		VecRefPtrs_t<AgentConn_t*> dNodes;
 		dNodes.Resize ( dDesc.GetLength() );
 		ARRAY_FOREACH ( i, dDesc )
-			dNodes[i] = CreateAgent ( dDesc[i], iTimeout, tReq );
+		{
+			auto * pAgent = CreateAgentBase ( dDesc[i], iTimeout );
+			pAgent->m_pResult = std::make_unique<CustomAgentData_T<REQUEST, REPLY>> ( tReq );
+			dNodes[i] = pAgent;
+		}
+		SetAuth ( sUser, dNodes );
 		return dNodes;
 	}
 
@@ -148,25 +158,29 @@ public:
 
 	void BuildRequest ( const AgentConn_t& tAgent, ISphOutputBuffer& tOut ) const final
 	{
-		if ( CMD==E_CLUSTER::FILE_SEND )
-		{
-			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
-				tOut.SendInt ( 1 ); // set persistent to 1
-			}
-		}
+		//sphLogDebugRpl ( "%d, token(%d) %s", static_cast<DWORD> ( CMD ), tAgent.m_tAuthToken.m_dToken.GetLength(), BinToHex ( tAgent.m_tAuthToken.m_dToken.Begin(), tAgent.m_tAuthToken.m_dToken.GetLength() ).cstr() ); // !COMMIT
+
+		// FIXME!!! add !IsAuthEnabled()
+		//if ( CMD==E_CLUSTER::FILE_SEND )
+		//{
+		//	{
+		//		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0 );
+		//		tOut.SendInt ( 1 ); // set persistent to 1
+		//	}
+		//}
 		// API header
 		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER );
 		tOut.SendWord ( static_cast<WORD> ( CMD ) );
 		tOut << GetReq ( tAgent );
 
-		if ( CMD==E_CLUSTER::FILE_SEND )
-		{
-			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
-				tOut.SendInt ( 0 ); // set persistent to 0
-			}
-		}
+		// FIXME!!! add !IsAuthEnabled()
+		//if ( CMD==E_CLUSTER::FILE_SEND )
+		//{
+		//	{
+		//		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0 );
+		//		tOut.SendInt ( 0 ); // set persistent to 0
+		//	}
+		//}
 
 		VerboseProto ( "BldRq", GetReq ( tAgent ) );
 	}

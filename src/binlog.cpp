@@ -1278,7 +1278,7 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 	// sphWarning ( "%s", sMetaLog.cstr() );
 
 	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
-	if ( eForce==eNoForce && m_dCurrentFiles==dFiles )
+	if ( eForce==eNoForce && m_dCurrentFiles==(const IntVec_t &)dFiles )
 		return;
 
 	if ( dFiles.IsEmpty() )

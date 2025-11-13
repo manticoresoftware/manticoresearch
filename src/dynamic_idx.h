@@ -23,3 +23,22 @@ ServedIndexRefPtr_c MakeDynamicIndex ( TableFeeder_fn fnFeed );
 
 // schema of any generic table of columns as index with possibility to filter (full-scan)
 ServedIndexRefPtr_c MakeDynamicIndexSchema ( TableFeeder_fn fnFeed );
+
+class GenericTableIndex_c : public CSphIndexStub
+{
+public:
+	GenericTableIndex_c ();
+	bool MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final;
+
+private:
+	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
+
+	virtual void SetSorterStuff ( CSphMatch * pMatch ) const = 0;
+	virtual bool FillNextMatch () const = 0;
+	virtual Str_t GetErrors() const = 0;
+
+protected:
+	bool m_bForceFinalize = false;
+};
+
+ServedIndexRefPtr_c MakeServed ( CSphIndex * pIndex );

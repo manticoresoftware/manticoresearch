@@ -57,7 +57,28 @@ version_compare($0, latest) > 0')
 if [ -n "$NEW_VERSIONS" ]; then
     echo "🆕 NEW Logstash versions detected:"
     echo "$NEW_VERSIONS"
-    echo "❌ Need to test new versions and update the list!"
+    echo ""
+    echo "❌ Need to test new versions and update the following:"
+    echo ""
+    echo "📝 Files to update:"
+    echo "  1. test/clt-tests/integrations/logstash/test-integrations-check-logstash-versions.rec"
+    echo "     - Update TESTED_VERSIONS list"
+    echo "     - Update LATEST_TESTED_VERSION='$LATEST_TESTED_VERSION' -> new version"
+    echo ""
+    echo "  2. test/clt-tests/integrations/logstash/test-integrations-test-logstash-versions.rec"
+    echo "     - Add new test section for new version"
+    echo ""
+    echo "  3. Update documentation with new version support:"
+    echo "     - manual/english/Integration/Logstash.md"
+    echo "     - Search for: 'versions up to X.X'"
+    echo "     - Update version number to latest tested"
+    echo ""
+    echo "  4. Update website content (separate repository):"
+    echo "     - https://github.com/manticoresoftware/site"
+    echo "     - content/english/blog/integration-of-manticore-with-logstash-filebeat/index.md"
+    echo "     - Search for: 'Logstash versions up to X.X'"
+    echo "     - Update version number to latest tested"
+    echo ""
     exit 1
 else
     echo "✅ No new versions found after $LATEST_TESTED_VERSION"
@@ -94,3 +115,35 @@ Using tested versions:
 9.0
 9.1
 9.2
+––– input –––
+bash << 'SCRIPT'
+# Check documentation versions for Logstash
+echo "Checking manual documentation for Logstash version references..."
+
+# Latest tested version
+LOGSTASH_LATEST="9.2"
+
+# Check Logstash in manual documentation
+LOGSTASH_MANUAL="manual/english/Integration/Logstash.md"
+if [ -f "$LOGSTASH_MANUAL" ]; then
+    echo "✓ Checking $LOGSTASH_MANUAL"
+    if grep -q "versions up to ${LOGSTASH_LATEST}" "$LOGSTASH_MANUAL"; then
+        echo "✅ Logstash manual contains correct version: up to ${LOGSTASH_LATEST}"
+    else
+        echo "❌ Logstash manual does NOT contain expected version: up to ${LOGSTASH_LATEST}" >&2
+        echo "Found in manual:" >&2
+        grep -i "versions.*supported\|Currently.*versions" "$LOGSTASH_MANUAL" || echo "No version info found" >&2
+        exit 1
+    fi
+else
+    echo "⚠ Logstash manual not found at $LOGSTASH_MANUAL (skipping check)"
+fi
+
+echo ""
+echo "✅ Logstash manual documentation check passed!"
+SCRIPT
+––– output –––
+Checking manual documentation for Logstash version references...
+✓ Checking manual/english/Integration/Logstash.md
+✅ Logstash manual contains correct version: up to 9.2
+✅ Logstash manual documentation check passed!

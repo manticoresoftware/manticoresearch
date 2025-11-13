@@ -4,7 +4,7 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) 是一个轻量级的日志数据转发和集中器。安装为代理后，它会监控您指定的日志文件或位置，收集日志事件，并将其转发以进行索引，通常是发送到 Elasticsearch 或 Logstash。
 
-现在，Manticore 也支持将 Filebeat 用作处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前，所有版本到 9.0 都完全支持。
+现在，Manticore 也支持将 Filebeat 用作处理管道。这允许将收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前支持的版本最高到 9.2。
 
 ## Filebeat 配置
 
@@ -71,7 +71,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Filebeat 8.11 - 8.19 的配置
+### Filebeat 8.11 - 8.x 的配置
 
 从 8.11 版本开始，输出压缩默认启用，因此您必须显式设置 `compression_level: 0` 以兼容 Manticore：
 

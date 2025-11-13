@@ -34,10 +34,11 @@ TESTED_VERSIONS="7.17
 8.18
 8.19
 9.0
-9.1"
+9.1
+9.2"
 
 # Check for NEW versions (after latest tested)
-LATEST_TESTED_VERSION="9.1"
+LATEST_TESTED_VERSION="9.2"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size=100" \
 | jq -r ".results[].name" \
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
@@ -56,7 +57,28 @@ version_compare($0, latest) > 0')
 if [ -n "$NEW_VERSIONS" ]; then
     echo "🆕 NEW Logstash versions detected:"
     echo "$NEW_VERSIONS"
-    echo "❌ Need to test new versions and update the list!"
+    echo ""
+    echo "❌ Need to test new versions and update the following:"
+    echo ""
+    echo "📝 Files to update:"
+    echo "  1. test/clt-tests/integrations/logstash/test-integrations-check-logstash-versions.rec"
+    echo "     - Update TESTED_VERSIONS list"
+    echo "     - Update LATEST_TESTED_VERSION='$LATEST_TESTED_VERSION' -> new version"
+    echo ""
+    echo "  2. test/clt-tests/integrations/logstash/test-integrations-test-logstash-versions.rec"
+    echo "     - Add new test section for new version"
+    echo ""
+    echo "  3. Update documentation with new version support:"
+    echo "     - manual/english/Integration/Logstash.md"
+    echo "     - Search for: 'versions up to X.X'"
+    echo "     - Update version number to latest tested"
+    echo ""
+    echo "  4. Update website content (separate repository):"
+    echo "     - https://github.com/manticoresoftware/site"
+    echo "     - content/english/blog/integration-of-manticore-with-logstash-filebeat/index.md"
+    echo "     - Search for: 'Logstash versions up to X.X'"
+    echo "     - Update version number to latest tested"
+    echo ""
     exit 1
 else
     echo "✅ No new versions found after $LATEST_TESTED_VERSION"
@@ -67,6 +89,30 @@ echo "Using tested versions:"
 echo "$TESTED_VERSIONS"
 SCRIPT
 ––– output –––
-🆕 NEW Logstash versions detected:
+✅ No new versions found after 9.2
+Using tested versions:
+7.17
+8.0
+8.1
+8.2
+8.3
+8.4
+8.5
+8.6
+8.7
+8.8
+8.9
+8.10
+8.11
+8.12
+8.13
+8.14
+8.15
+8.16
+8.17
+8.18
+8.19
+9.0
+9.1
 9.2
-❌ Need to test new versions and update the list!
+

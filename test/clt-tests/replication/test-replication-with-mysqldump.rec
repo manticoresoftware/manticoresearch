@@ -175,7 +175,7 @@ mysql -h0 -P1306 -e "REPLACE INTO c:tbl1 VALUES (1, 'Updated feline runs', 42, 3
 ––– output –––
 0
 ––– input –––
-mysqldump -etc --column-statistics=0 --replace -u cluster -h0 -P1306 --skip-comments manticore c:tbl1 | mysql -h0 -P1306; echo $?
+mysqldump --skip-lock-tables -etc --column-statistics=0 --replace -u cluster -h0 -P1306 --skip-comments manticore c:tbl1 | mysql -h0 -P1306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0

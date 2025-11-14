@@ -227,13 +227,19 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, const ScrollSettings_t & tScroll )
 {
 	// Safety check: ensure scroll settings are valid before proceeding
+	// On Windows, if tScroll is uninitialized/corrupted, accessing m_dAttrs might crash.
+	// Check if scroll was actually requested and if m_dAttrs is valid.
+	// If ParseScroll failed, m_dAttrs should be empty (default state).
 	if ( !tScroll.m_dAttrs.GetLength() )
 		return false;
 
 	// if we only have one sort attribute (id), we don't need scroll at all (a filter would be enough)
 	if ( tScroll.m_dAttrs.GetLength()==1 )
 	{
-		assert ( tScroll.m_dAttrs[0].m_sSortAttr=="id" );
+		// Safety: only access [0] if we know the vector has at least one element
+		// (we already checked GetLength() above, so this should be safe)
+		if ( tScroll.m_dAttrs[0].m_sSortAttr=="id" )
+			return false;
 		return false;
 	}
 

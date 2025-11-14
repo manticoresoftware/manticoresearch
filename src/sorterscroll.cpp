@@ -126,6 +126,10 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 	// Free old data pointer attributes before resetting
 	FreeDataPtrAttrs();
 	
+	// Safety check: if scroll settings are invalid, don't set up reference match
+	if ( !m_tScroll.m_dAttrs.GetLength() )
+		return;
+	
 	m_tRefMatch.Reset ( pSchema->GetDynamicSize() );
 	m_dStatic.Resize ( pSchema->GetStaticSize() );
 	m_tRefMatch.m_pStatic = m_dStatic.Begin();
@@ -207,6 +211,7 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 
 static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, const ScrollSettings_t & tScroll )
 {
+	// Safety check: ensure scroll settings are valid before proceeding
 	if ( !tScroll.m_dAttrs.GetLength() )
 		return false;
 
@@ -235,6 +240,10 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 
 	for ( const auto & i : tScroll.m_dAttrs )
 	{
+		// Safety check: ensure sort attribute name is valid
+		if ( i.m_sSortAttr.IsEmpty() )
+			return false;
+
 		if ( i.m_sSortAttr=="weight()" )
 			continue;
 

@@ -132,10 +132,17 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 	void BuildMockExpr ( int iComplexity ) final
 	{
 		m_sExpr.Clear();
-		m_sExpr << "((attr_a=0)*1)";
+		m_sExpr << "IF(attr_a IN(0,1),10,";
 
-		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
-			m_sExpr << "+((attr_b=" << i << ")*" << i * 2+1 << ")";
+		for ( int i = 1; i<iComplexity+1; ++i )
+			m_sExpr << "IF(attr_a IN(" << i << "," << i+1 << ")," << (i+1)*10 << ",";
+		m_sExpr << (iComplexity+2)*10 << ")";
+		for ( int i = 0; i<iComplexity; ++i )
+			m_sExpr << ")";
+
+		//IF(a IN(0,1),10,20)
+		//IF(a IN(0,1),10,IF(a IN(1,2),20,30))
+		//IF(a IN(0,1),10,IF(a IN(1,2),20,IF(a IN(2,3),30,40))) ...
 	}
 
 	ATTRIBUTE_NO_SANITIZE_ADDRESS void MockParseTest () final
@@ -153,8 +160,6 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 		CSphColumnInfo tAttr;
 		tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 		tAttr.m_sName = "attr_a";
-		tParams.m_tSchema.AddAttr ( tAttr, false );
-		tAttr.m_sName = "attr_b";
 		tParams.m_tSchema.AddAttr ( tAttr, false );
 
 		tParams.m_sExpr = m_sExpr.cstr();

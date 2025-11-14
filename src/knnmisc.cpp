@@ -623,11 +623,27 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		return { nullptr, true };
 	}
 
-	// Validate vector dimension matches the index requirements
-	if ( !tKNN.m_sEmbStr && pKNNAttr->m_tKNN.m_iDims != tKNN.m_dVec.GetLength() )
+	// Check if index uses deprecated 4-bit quantization
+	if ( pKNNAttr->m_tKNN.m_eQuantization == knn::Quantization_e::BIT4 )
 	{
-		sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", tKNN.m_sAttr.cstr(), pKNNAttr->m_tKNN.m_iDims, tKNN.m_dVec.GetLength() );
+		sError.SetSprintf ( "KNN index '%s' uses 4-bit quantization which is no longer supported. Please recreate the index without quantization or with a different quantization type", tKNN.m_sAttr.cstr() );
 		return { nullptr, true };
+	}
+
+	// Validate vector dimension matches the index requirements
+	if ( !tKNN.m_sEmbStr )
+	{
+		if ( tKNN.m_dVec.IsEmpty() )
+		{
+			sError.SetSprintf ( "KNN search requires a non-empty vector for attribute '%s'", tKNN.m_sAttr.cstr() );
+			return { nullptr, true };
+		}
+
+		if ( pKNNAttr->m_tKNN.m_iDims != tKNN.m_dVec.GetLength() )
+		{
+			sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", tKNN.m_sAttr.cstr(), pKNNAttr->m_tKNN.m_iDims, tKNN.m_dVec.GetLength() );
+			return { nullptr, true };
+		}
 	}
 
 	const auto pAttr = tSorterSchema.GetAttr ( GetKnnDistAttrName() );
@@ -639,8 +655,21 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 	auto pKnnDist = (Expr_KNNDist_c*)pExpr;
 
 	CSphVector<float> dPoint ( tKNN.m_dVec );
+	if ( dPoint.IsEmpty() )
+	{
+		sError.SetSprintf ( "KNN search requires a non-empty vector for attribute '%s'", tKNN.m_sAttr.cstr() );
+		return { nullptr, true };
+	}
+
 	if ( pKNNAttr->m_tKNN.m_eHNSWSimilarity == knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(dPoint);
+
+	// Additional safety check: ensure vector is still valid after normalization
+	if ( dPoint.IsEmpty() || !dPoint.Begin() )
+	{
+		sError.SetSprintf ( "KNN search vector became invalid for attribute '%s'", tKNN.m_sAttr.cstr() );
+		return { nullptr, true };
+	}
 
 	std::string sErrorSTL;
 	int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;

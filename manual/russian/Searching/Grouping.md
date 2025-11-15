@@ -767,6 +767,8 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
+**Примечание:** `HAVING` корректно влияет на `total_found` в [мета-информации поискового запроса](../Node_info_and_management/SHOW_META.md#SHOW-META). Значение `total_found` учитывает только группы, соответствующие условию `HAVING`. Это обеспечивает корректную пагинацию при использовании `HAVING` с `GROUP BY`.
+
 <!-- example group7 -->
 ##### GROUPBY()
 Есть функция `GROUPBY()`, которая возвращает ключ текущей группы. Она полезна во многих случаях, особенно когда вы [GROUP BY по MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) или по [JSON значению](../Searching/Grouping.md#Grouping-by-a-JSON-node).

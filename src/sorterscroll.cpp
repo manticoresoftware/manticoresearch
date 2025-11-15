@@ -64,6 +64,7 @@ private:
 	CSphVector<CSphRowitem>			m_dStatic;
 	CSphMatchComparatorState		m_tState;
 	ScrollSettings_t				m_tScroll;
+	CSphVector<const CSphColumnInfo*>	m_dAllocatedPtrAttrs; // Track which attributes we allocated pointers for
 
 	FORCE_INLINE bool PushMatch ( const CSphMatch & tEntry );
 	void	SetupRefMatch();
@@ -122,8 +123,10 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
+	// Free old data pointer attributes before resetting
 	FreeDataPtrAttrs();
-	m_tRefMatch.Reset ( pSchema->GetRowSize() );
+	
+	m_tRefMatch.Reset ( pSchema->GetDynamicSize() );
 	m_dStatic.Resize ( pSchema->GetStaticSize() );
 	m_tRefMatch.m_pStatic = m_dStatic.Begin();
 
@@ -137,11 +140,31 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 		}
 
 		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
+		if ( !pAttr )
+			continue;
+
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// use the remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				pAttr = pRemapped;
+		}
+
 		auto pRowData = pAttr->m_tLocator.m_bDynamic ? m_tRefMatch.m_pDynamic : m_dStatic.Begin();
 		switch ( i.m_eType )
 		{
 		case SPH_ATTR_STRINGPTR:
-			sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
+			// After remapping, pAttr should be SPH_ATTR_STRINGPTR, but check to be safe
+			if ( pAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
+			{
+				sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
+				// Track that we allocated a pointer for this attribute
+				m_dAllocatedPtrAttrs.Add(pAttr);
+			}
 			break;
 
 		case SPH_ATTR_FLOAT:
@@ -158,25 +181,26 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 template <typename COMP>
 void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 {
-	if ( !m_tRefMatch.m_pDynamic )
+	if ( !m_tRefMatch.m_pDynamic && !m_tRefMatch.m_pStatic )
 		return;
 
-	const ISphSchema * pSchema = m_pSorter->GetSchema();
-	assert(pSchema);
-
-	for ( auto & i : m_tScroll.m_dAttrs )
+	// Only free pointers for attributes that we actually allocated
+	for ( auto pAttr : m_dAllocatedPtrAttrs )
 	{
-		if ( i.m_sSortAttr=="weight()" )
+		if ( !pAttr )
 			continue;
 
-		const CSphColumnInfo * pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
-		assert(pAttr);
-		if ( sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
-		{
-			auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
+		if ( pAttr->m_tLocator.m_bDynamic && !m_tRefMatch.m_pDynamic )
+			continue;
+		if ( !pAttr->m_tLocator.m_bDynamic && !m_tRefMatch.m_pStatic )
+			continue;
+
+		auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
+		if ( pData )
 			sphDeallocatePacked(pData);
-		}
 	}
+	
+	m_dAllocatedPtrAttrs.Resize(0);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -218,9 +242,22 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		if ( !pAttr )
 			return false;
 
+		ESphAttr eCheckType = pAttr->m_eAttrType;
+		
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// check if there's a remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && eCheckType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = tSchema.GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				eCheckType = SPH_ATTR_STRINGPTR;
+		}
+
 		bool bSupported = false;
 		for ( auto eType : dSupportedTypes )
-			if ( pAttr->m_eAttrType==eType )
+			if ( eCheckType==eType )
 			{
 				bSupported = true;
 				break;
@@ -311,6 +348,9 @@ bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sEr
 
 static void AddScrollFilter ( CSphQuery & tQuery )
 {
+	if ( !tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
+		return;
+
 	const ScrollAttr_t & tFirst = tQuery.m_tScrollSettings.m_dAttrs[0];
 	int iFilterId = tQuery.m_dFilters.GetLength();
 
@@ -359,6 +399,10 @@ static void AddScrollFilter ( CSphQuery & tQuery )
 bool SetupScroll ( CSphQuery & tQuery, CSphString & sError )
 {
 	if ( !tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
+		return true;
+
+	// Ensure m_sSortBy is set (scroll settings are valid)
+	if ( tQuery.m_tScrollSettings.m_sSortBy.IsEmpty() )
 		return true;
 
 	// replace order by with order_by_str here (if order by is default)

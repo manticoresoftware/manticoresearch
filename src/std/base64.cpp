@@ -21,6 +21,17 @@ bool DecodeBase64 ( const CSphString & sValue, CSphString & sResult )
 {
 	std::string sVal = sValue.cstr();
 
+	// Validate base64 characters before attempting decode to avoid crashes
+	// Base64 uses A-Z, a-z, 0-9, +, /, and = for padding
+	if ( sVal.empty() )
+		return false;
+
+	for ( char c : sVal )
+	{
+		if ( !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=') )
+			return false;
+	}
+
 	using namespace boost::archive::iterators;
 	try
 	{

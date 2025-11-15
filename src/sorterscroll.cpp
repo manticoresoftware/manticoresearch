@@ -123,12 +123,13 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
-	// Free old data pointer attributes before resetting
-	FreeDataPtrAttrs();
-	
 	// Safety check: if scroll settings are invalid, don't set up reference match
+	// This check must come BEFORE FreeDataPtrAttrs() to prevent accessing corrupted data
 	if ( !m_tScroll.m_dAttrs.GetLength() )
 		return;
+
+	// Free old data pointer attributes before resetting
+	FreeDataPtrAttrs();
 	
 	m_tRefMatch.Reset ( pSchema->GetDynamicSize() );
 	m_dStatic.Resize ( pSchema->GetStaticSize() );
@@ -162,13 +163,9 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 		switch ( i.m_eType )
 		{
 		case SPH_ATTR_STRINGPTR:
-			// After remapping, pAttr should be SPH_ATTR_STRINGPTR, but check to be safe
-			if ( pAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
-			{
-				sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
-				// Track that we allocated a pointer for this attribute
-				m_dAllocatedPtrAttrs.Add(pAttr);
-			}
+			sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
+			// Track that we allocated a pointer for this attribute
+			m_dAllocatedPtrAttrs.Add(pAttr);
 			break;
 
 		case SPH_ATTR_FLOAT:
@@ -429,10 +426,6 @@ static void AddScrollFilter ( CSphQuery & tQuery )
 bool SetupScroll ( CSphQuery & tQuery, CSphString & sError )
 {
 	if ( !tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
-		return true;
-
-	// Ensure m_sSortBy is set (scroll settings are valid)
-	if ( tQuery.m_tScrollSettings.m_sSortBy.IsEmpty() )
 		return true;
 
 	// replace order by with order_by_str here (if order by is default)

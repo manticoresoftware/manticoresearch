@@ -182,30 +182,15 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 template <typename COMP>
 void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 {
-	// Safety check: if scroll settings are invalid, m_dAllocatedPtrAttrs should be empty
-	// On Windows, if m_dAllocatedPtrAttrs contains uninitialized memory (0xCDCDCDCD),
-	// accessing it will crash. Clear it first if scroll settings are invalid.
-	if ( !m_tScroll.m_dAttrs.GetLength() )
-	{
-		m_dAllocatedPtrAttrs.Resize(0);
-		return;
-	}
-
 	if ( !m_tRefMatch.m_pDynamic && !m_tRefMatch.m_pStatic )
-	{
-		m_dAllocatedPtrAttrs.Resize(0);
 		return;
-	}
 
 	// Only free pointers for attributes that we actually allocated
-	// m_dAllocatedPtrAttrs should only contain valid pointers from SetupRefMatch()
 	for ( auto pAttr : m_dAllocatedPtrAttrs )
 	{
-		// Safety check: ensure pointer is valid (not null)
 		if ( !pAttr )
 			continue;
 
-		// Additional safety: ensure we have the required match data before accessing locator
 		if ( pAttr->m_tLocator.m_bDynamic && !m_tRefMatch.m_pDynamic )
 			continue;
 		if ( !pAttr->m_tLocator.m_bDynamic && !m_tRefMatch.m_pStatic )
@@ -223,20 +208,13 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 
 static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, const ScrollSettings_t & tScroll )
 {
-	// Safety check: ensure scroll settings are valid before proceeding
-	// On Windows, if tScroll is uninitialized/corrupted, accessing m_dAttrs might crash.
-	// Check if scroll was actually requested and if m_dAttrs is valid.
-	// If ParseScroll failed, m_dAttrs should be empty (default state).
 	if ( !tScroll.m_dAttrs.GetLength() )
 		return false;
 
 	// if we only have one sort attribute (id), we don't need scroll at all (a filter would be enough)
 	if ( tScroll.m_dAttrs.GetLength()==1 )
 	{
-		// Safety: only access [0] if we know the vector has at least one element
-		// (we already checked GetLength() above, so this should be safe)
-		if ( tScroll.m_dAttrs[0].m_sSortAttr=="id" )
-			return false;
+		assert ( tScroll.m_dAttrs[0].m_sSortAttr=="id" );
 		return false;
 	}
 
@@ -258,10 +236,6 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 
 	for ( const auto & i : tScroll.m_dAttrs )
 	{
-		// Safety check: ensure sort attribute name is valid
-		if ( i.m_sSortAttr.IsEmpty() )
-			return false;
-
 		if ( i.m_sSortAttr=="weight()" )
 			continue;
 

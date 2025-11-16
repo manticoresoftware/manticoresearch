@@ -96,9 +96,9 @@ public:
 		}
 
 		auto iValues = i;
-		std::vector<std::pair<int, int>> dDeltas { iMeasures };
+		std::vector<std::pair<int, DWORD>> dDeltas { iMeasures };
 		sphLogDebugv( "========= start measure ==============" );
-		std::pair<int,int> dInitial {0,0};
+		std::pair<int,DWORD> dInitial {0,0};
 		for ( i=0; i<iValues; ++i )
 		{
 			dDeltas[i].first = dMeasures[i].first-dInitial.first;
@@ -109,16 +109,15 @@ public:
 
 		int iStart = dMeasures.front().second;
 
-		int iStack = 0;
+		uStack = 0;
 		for ( i=iValues-1; i>0; --i )
 		{
 			if ( dDeltas[i].first !=1 )
 				break;
-			iStack = Max ( iStack, dDeltas[i].second );
+			uStack = Max ( uStack, dDeltas[i].second );
 		}
-		assert (iStack>0);
 
-		int iDelta = sphRoundUp ( iStack, 8 );
+		int iDelta = sphRoundUp ( uStack, 8 );
 		return { iStart, iDelta };
 	}
 

@@ -74,52 +74,70 @@ public:
 	ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t MockMeasureStack ()
 	{
 		constexpr int iMeasures = 50;
-		std::vector<std::pair<int,DWORD>> dMeasures { iMeasures };
-		int i = 0;
+		DWORD uDepth = 0;
+		BuildMockExprWrapper ( uDepth );
+		auto uStartingStack = MeasureStack ();
+		sphLogDebugv( "========= start measure ==============" );
+		sphLogDebugv( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
 
-		int iDepth = 0;
-		DWORD uStack = 0;
+		DWORD i = 1;
+		CSphVector<std::pair<int,int>> dHistogram;
+		auto IncValue = [&dHistogram] ( int i ) {
+			for ( auto& pair : dHistogram ) { // expected 2..5 elements; so linear search is perfect here.
+				if ( pair.first != i )
+					continue;
+				++pair.second;
+				return pair.second;
+			}
+			dHistogram.Add({i,1});
+			return 1;
+		};
+		DWORD uPreviousStack = uStartingStack;
+		DWORD uPreviousDepth = uDepth;
 		while ( i<iMeasures )
 		{
-			BuildMockExprWrapper ( iDepth++ );
+			BuildMockExprWrapper ( ++uDepth );
 			auto uThisStack = MeasureStack ();
-			if ( uThisStack == uStack )
+			if ( uThisStack == uPreviousStack )
 				continue;
 
-			dMeasures[i].first = iDepth-1;
-			dMeasures[i].second = uThisStack;
-			auto iDelta = uThisStack-uStack;
-			uStack = uThisStack;
+			int iDelta = uThisStack - uPreviousStack;
+			DWORD uDeltaDepth = uDepth - uPreviousDepth;
+			uPreviousStack = uThisStack;
+			uPreviousDepth = uDepth;
+			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", uDepth, uThisStack, uDeltaDepth, iDelta );
 			++i;
-			if ( uStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			if ( uDeltaDepth==1 )
+			{
+				auto iMaxTries = IncValue ( iDelta );
+				const auto iRestTries = iMeasures - i;
+				if ( iMaxTries>iRestTries ) // we may stop here, if continuing will definitely give us nothing better
+				{
+					if ( dHistogram.GetLength()==1)
+						break;
+					dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
+					assert (iMaxTries == dHistogram.First().second);
+					if ( iMaxTries > (iRestTries + dHistogram[1].second) )
+						break;
+				}
+			}
+			if ( uPreviousStack + iDelta >= m_dMockStack.GetLengthBytes() )
 				break;
 		}
 
-		auto iValues = i;
-		std::vector<std::pair<int, int>> dDeltas { iMeasures };
-		sphLogDebugv( "========= start measure ==============" );
-		std::pair<int,int> dInitial {0,0};
-		for ( i=0; i<iValues; ++i )
-		{
-			dDeltas[i].first = dMeasures[i].first-dInitial.first;
-			dDeltas[i].second = dMeasures[i].second-dInitial.second;
-			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", dMeasures[i].first, dMeasures[i].second, dDeltas[i].first, dDeltas[i].second );
-			dInitial = dMeasures[i];
-		}
+		dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
+		sphLogDebugv( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
+		for ( const auto& pair : dHistogram )
+			sphLogDebugv( "stack frame size %d, frames %d", pair.first, pair.second );
 
-		int iStart = dMeasures.front().second;
+		if ( dHistogram.IsEmpty() )
+			sphWarning ("Something wrong measuring stack. After %d tries, %d depth", i, uDepth );
 
-		int iStack = 0;
-		for ( i=iValues-1; i>0; --i )
-		{
-			if ( dDeltas[i].first !=1 )
-				break;
-			iStack = Max ( iStack, dDeltas[i].second );
-		}
+		auto iStack = dHistogram.First().first;
 		assert (iStack>0);
 
 		int iDelta = sphRoundUp ( iStack, 8 );
-		return { iStart, iDelta };
+		return { (int)uStartingStack, iDelta };
 	}
 
 	virtual ~StackMeasurer_c () = default;

@@ -3,9 +3,9 @@ Test for force_bigrams option in CALL AUTOCOMPLETE, CALL SUGGEST, and fuzzy sear
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/3853
 
 This test verifies that force_bigrams parameter works correctly in three contexts:
-1. CALL AUTOCOMPLETE (tests 1-9): autocomplete with bigram-based fuzzy matching
-2. CALL SUGGEST (tests 10-14): suggestions with bigram-based fuzzy matching
-3. SELECT with OPTION fuzzy=1 (tests 15-19): regular search with fuzzy option
+1. CALL AUTOCOMPLETE (tests 1-8): autocomplete with bigram-based fuzzy matching
+2. CALL SUGGEST (tests 9-13): suggestions with bigram-based fuzzy matching
+3. SELECT with OPTION fuzzy=1 (tests 14-18): regular search with fuzzy option
 
 The force_bigrams option helps find transposition errors (e.g., "ipohne" -> "iphone")
 in longer words where bigrams are not used by default.
@@ -17,7 +17,7 @@ mysql -P9306 -h0 -e "drop table if exists t"
 mysql -P9306 -h0 -e "create table t(f text) min_infix_len='2'"
 ––– output –––
 ––– input –––
-mysql -P9306 -h0 -e "insert into t values(1,'iphone developer george something planet letter')"
+mysql -P9306 -h0 -e "insert into t values(1,'iphone george planet letter')"
 ––– output –––
 ––– comment –––
 Test 1: force_bigrams=1 finds transposition errors
@@ -32,56 +32,47 @@ Test 2: force_bigrams=0 does NOT find transpositions in long words
 mysql -P9306 -h0 -e "call autocomplete('ipohne', 't', 0 as force_bigrams)\G"
 ––– output –––
 ––– comment –––
-Test 3: Long word transposition + force_bigrams
-––– input –––
-mysql -P9306 -h0 -e "call autocomplete('develepor', 't', 1 as force_bigrams)\G"
-––– output –––
-*************************** 1. row ***************************
-query: developer
-––– comment –––
-Test 4: Transposition in middle
+Test 3: Transposition with force_bigrams=1
 ––– input –––
 mysql -P9306 -h0 -e "call autocomplete('geroge', 't', 1 as force_bigrams)\G"
 ––– output –––
 *************************** 1. row ***************************
 query: george
 ––– comment –––
-Test 5: Another transposition
+Test 4: Same word with force_bigrams=0 - does NOT find transposition
 ––– input –––
-mysql -P9306 -h0 -e "call autocomplete('somtehing', 't', 1 as force_bigrams)\G"
+mysql -P9306 -h0 -e "call autocomplete('geroge', 't', 0 as force_bigrams)\G"
 ––– output –––
-*************************** 1. row ***************************
-query: something
 ––– comment –––
-Test 6: Short word - bigrams automatic
+Test 5: Short word - bigrams automatic
 ––– input –––
 mysql -P9306 -h0 -e "call autocomplete('lanet', 't', 0 as force_bigrams)\G"
 ––– output –––
 *************************** 1. row ***************************
 query: planet
 ––– comment –––
-Test 7: Append option
+Test 6: Append option
 ––– input –––
 mysql -P9306 -h0 -e "call autocomplete('geor', 't', 1 as append, 1 as force_bigrams)\G"
 ––– output –––
 *************************** 1. row ***************************
 query: george
 ––– comment –––
-Test 8: Prepend option
+Test 7: Prepend option
 ––– input –––
 mysql -P9306 -h0 -e "call autocomplete('eorge', 't', 1 as prepend, 1 as force_bigrams)\G"
 ––– output –––
 *************************** 1. row ***************************
 query: george
 ––– comment –––
-Test 9: Multiple options
+Test 8: Multiple options
 ––– input –––
 mysql -P9306 -h0 -e "call autocomplete('geor', 't', 1 as fuzziness, 1 as append, 1 as prepend, 1 as force_bigrams)\G"
 ––– output –––
 *************************** 1. row ***************************
 query: george
 ––– comment –––
-Test 10: CALL SUGGEST with force_bigrams=1 - finds transpositions (SUGGEST is fuzzy by default)
+Test 9: CALL SUGGEST with force_bigrams=1 - finds transpositions (SUGGEST is fuzzy by default)
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('ipohne', 't', 1 as force_bigrams)\G"
 ––– output –––
@@ -94,21 +85,12 @@ distance: 2
 distance: 4
     docs: 1
 ––– comment –––
-Test 11: CALL SUGGEST with force_bigrams=0 - may not find transpositions in long words
+Test 10: CALL SUGGEST with force_bigrams=0 - may not find transpositions in long words
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('ipohne', 't', 0 as force_bigrams)\G"
 ––– output –––
 ––– comment –––
-Test 12: CALL SUGGEST with force_bigrams=1 - long word transposition
-––– input –––
-mysql -P9306 -h0 -e "call suggest('develepor', 't', 1 as force_bigrams)\G"
-––– output –––
-*************************** 1. row ***************************
- suggest: developer
-distance: 2
-    docs: 1
-––– comment –––
-Test 13: CALL SUGGEST with force_bigrams=1 - another transposition
+Test 11: CALL SUGGEST with force_bigrams=1 - transposition
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('geroge', 't', 1 as force_bigrams)\G"
 ––– output –––
@@ -117,7 +99,12 @@ mysql -P9306 -h0 -e "call suggest('geroge', 't', 1 as force_bigrams)\G"
 distance: 2
     docs: 1
 ––– comment –––
-Test 14: CALL SUGGEST with force_bigrams=0 - short word (bigrams automatic)
+Test 12: Same word with force_bigrams=0 - does NOT find transposition
+––– input –––
+mysql -P9306 -h0 -e "call suggest('geroge', 't', 0 as force_bigrams)\G"
+––– output –––
+––– comment –––
+Test 13: CALL SUGGEST with force_bigrams=0 - short word (bigrams automatic)
 ––– input –––
 mysql -P9306 -h0 -e "call suggest('lanet', 't', 0 as force_bigrams)\G"
 ––– output –––
@@ -130,50 +117,45 @@ distance: 1
 distance: 4
     docs: 1
 ––– comment –––
-Test 15: SELECT with OPTION fuzzy=1, force_bigrams=1 - finds transposition errors
+Test 14: SELECT with OPTION fuzzy=1, force_bigrams=1 - finds transposition errors
 ––– input –––
 mysql -P9306 -h0 -e "SELECT * FROM t WHERE MATCH('ipohne') OPTION fuzzy=1, force_bigrams=1"
 ––– output –––
-+------+-------------------------------------------------+
-| id   | f                                               |
-+------+-------------------------------------------------+
-|    1 | iphone developer george something planet letter |
-+------+-------------------------------------------------+
++------+-----------------------------+
+| id   | f                           |
++------+-----------------------------+
+|    1 | iphone george planet letter |
++------+-----------------------------+
 ––– comment –––
-Test 16: SELECT with OPTION fuzzy=1, force_bigrams=0 - may not find transpositions in long words
+Test 15: SELECT with OPTION fuzzy=1, force_bigrams=0 - may not find transpositions in long words
 ––– input –––
 mysql -P9306 -h0 -e "SELECT * FROM t WHERE MATCH('ipohne') OPTION fuzzy=1, force_bigrams=0"
 ––– output –––
 ––– comment –––
-Test 17: SELECT with OPTION fuzzy=1, force_bigrams=1 - long word transposition
-––– input –––
-mysql -P9306 -h0 -e "SELECT * FROM t WHERE MATCH('develepor') OPTION fuzzy=1, force_bigrams=1"
-––– output –––
-+------+-------------------------------------------------+
-| id   | f                                               |
-+------+-------------------------------------------------+
-|    1 | iphone developer george something planet letter |
-+------+-------------------------------------------------+
-––– comment –––
-Test 18: SELECT with OPTION fuzzy=1, force_bigrams=1 - another transposition
+Test 16: SELECT with OPTION fuzzy=1, force_bigrams=1 - transposition
 ––– input –––
 mysql -P9306 -h0 -e "SELECT * FROM t WHERE MATCH('geroge') OPTION fuzzy=1, force_bigrams=1"
 ––– output –––
-+------+-------------------------------------------------+
-| id   | f                                               |
-+------+-------------------------------------------------+
-|    1 | iphone developer george something planet letter |
-+------+-------------------------------------------------+
++------+-----------------------------+
+| id   | f                           |
++------+-----------------------------+
+|    1 | iphone george planet letter |
++------+-----------------------------+
 ––– comment –––
-Test 19: SELECT with OPTION fuzzy=1, force_bigrams=0 - short word (bigrams automatic)
+Test 17: Same word with force_bigrams=0 - does NOT find transposition
+––– input –––
+mysql -P9306 -h0 -e "SELECT * FROM t WHERE MATCH('geroge') OPTION fuzzy=1, force_bigrams=0"
+––– output –––
+––– comment –––
+Test 18: SELECT with OPTION fuzzy=1, force_bigrams=0 - short word (bigrams automatic)
 ––– input –––
 mysql -P9306 -h0 -e "SELECT * FROM t WHERE MATCH('lanet') OPTION fuzzy=1, force_bigrams=0"
 ––– output –––
-+------+-------------------------------------------------+
-| id   | f                                               |
-+------+-------------------------------------------------+
-|    1 | iphone developer george something planet letter |
-+------+-------------------------------------------------+
++------+-----------------------------+
+| id   | f                           |
++------+-----------------------------+
+|    1 | iphone george planet letter |
++------+-----------------------------+
 ––– input –––
 mysql -P9306 -h0 -e "drop table t"
 ––– output –––

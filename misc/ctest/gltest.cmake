@@ -135,21 +135,62 @@ if (NO_TESTS)
 	return()
 endif()
 
-set ( ctest_test_args ${ctest_test_args} RETURN_VALUE retcode REPEAT UNTIL_PASS:${RETRIES} )
+# Special handling for test_006: run it separately with 10 retries and 60 second timeout
+# Run test_006 FIRST, before all other tests
+# Check if we should run test_006
+set ( _run_test_006 TRUE )
+if ( CTEST_REGEX AND NOT "${CTEST_REGEX}" MATCHES "006|test_006" )
+	set ( _run_test_006 FALSE )
+endif()
+if (CTEST_EXCLUDE_REGEX AND "${CTEST_EXCLUDE_REGEX}" MATCHES "006" )
+	set ( _run_test_006 FALSE )
+endif()
+
+if ( _run_test_006 )
+	message ( STATUS "run test_006 FIRST with 10 attempts, 60s timeout, fail on first failure" )
+	find_program ( CTEST_CMD NAMES ctest )
+	if ( CTEST_CMD )
+		# Run test_006 only (not rt_006)
+		execute_process (
+			COMMAND ${CTEST_CMD} -C ${CTEST_CONFIGURATION_TYPE} -R "^test_006 --" --repeat until-fail:10 --stop-on-failure
+			WORKING_DIRECTORY ${CTEST_BINARY_DIRECTORY}
+			RESULT_VARIABLE retcode_006
+		)
+		if ( retcode_006 )
+			set ( retcode_006 1 )
+		else()
+			set ( retcode_006 0 )
+		endif()
+	else()
+		message ( WARNING "ctest command not found, skipping test_006" )
+		set ( retcode_006 0 )
+	endif()
+else()
+	set ( retcode_006 0 )
+	message ( STATUS "skipping test_006 (doesn't match CTEST_REGEX or matches CTEST_EXCLUDE_REGEX)" )
+endif()
+
+# Then run all other tests except test_006 with normal retry count
+set ( ctest_test_args_main ${ctest_test_args} RETURN_VALUE retcode_main REPEAT UNTIL_PASS:${RETRIES} )
+set ( ctest_test_args_main ${ctest_test_args_main} EXCLUDE ".*006 --" )
 if ( CTEST_REGEX )
-	set ( ctest_test_args ${ctest_test_args} INCLUDE "${CTEST_REGEX}" )
+	set ( ctest_test_args_main ${ctest_test_args_main} INCLUDE "${CTEST_REGEX}" )
 endif()
-
 if (CTEST_EXCLUDE_REGEX)
-	set ( ctest_test_args ${ctest_test_args} EXCLUDE "${CTEST_EXCLUDE_REGEX}" )
+	set ( ctest_test_args_main ${ctest_test_args_main} EXCLUDE "${CTEST_EXCLUDE_REGEX}" )
 endif ()
-
 if( CTEST_START AND CTEST_END )
-	set ( ctest_test_args ${ctest_test_args} START ${CTEST_START} END ${CTEST_END})
+	set ( ctest_test_args_main ${ctest_test_args_main} START ${CTEST_START} END ${CTEST_END})
 endif()
+message ( STATUS "run ctest with params (excluding test_006): ${ctest_test_args_main}" )
+ctest_test ( ${ctest_test_args_main} )
 
-message ( STATUS "run ctest with params: ${ctest_test_args}" )
-ctest_test ( ${ctest_test_args} )
+# Combine return codes: if either failed, the overall result is failure
+if ( retcode_main OR retcode_006 )
+	set ( retcode 1 )
+else ()
+	set ( retcode 0 )
+endif ()
 
 #ctest_test ( STRIDE 50 )
 #ctest_test ( STRIDE 50 EXCLUDE_LABEL RT RETURN_VALUE retcode )

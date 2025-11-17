@@ -73,11 +73,13 @@ protected:
 public:
 	ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t MockMeasureStack ()
 	{
+		StringBuilder_c sLog;
 		constexpr int iMeasures = 50;
 		DWORD uDepth = 0;
 		BuildMockExprWrapper ( uDepth );
 		auto uStartingStack = MeasureStack ();
 		sphLogDebugv( "========= start measure ==============" );
+		sLog.Sprintf( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
 		sphLogDebugv( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
 
 		DWORD i = 1;
@@ -106,8 +108,9 @@ public:
 			uPreviousStack = uThisStack;
 			uPreviousDepth = uDepth;
 			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", uDepth, uThisStack, uDeltaDepth, iDelta );
+			sLog.Sprintf( "%d: %d: %d: %d", uDepth, uThisStack, uDeltaDepth, iDelta );
 			++i;
-			if ( uDeltaDepth==1 )
+			if ( uDeltaDepth==1 && iDelta>0 )
 			{
 				auto iMaxTries = IncValue ( iDelta );
 				const auto iRestTries = iMeasures - i;
@@ -126,11 +129,18 @@ public:
 
 		dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
 		sphLogDebugv( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
+		sLog.Sprintf( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
 		for ( const auto& pair : dHistogram )
+		{
 			sphLogDebugv( "stack frame size %d, frames %d", pair.first, pair.second );
+			sLog.Sprintf( "stack frame size %d, frames %d", pair.first, pair.second );
+		}
 
 		if ( dHistogram.IsEmpty() )
+		{
 			sphWarning ("Something wrong measuring stack. After %d tries, %d depth", i, uDepth );
+			sphWarning ("log: %s", sLog.cstr());
+		}
 
 		auto iStack = dHistogram.First().first;
 		assert (iStack>0);

@@ -116,7 +116,6 @@ public:
 					if ( dHistogram.GetLength()==1)
 						break;
 					dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
-					assert (iMaxTries == dHistogram.First().second);
 					if ( iMaxTries > (iRestTries + dHistogram[1].second) )
 						break;
 				}

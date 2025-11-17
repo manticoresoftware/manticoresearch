@@ -1,0 +1,135 @@
+––– comment –––
+Test for issue #3428: total_found with HAVING clause
+https://github.com/manticoresoftware/manticoresearch/issues/3428
+
+Issue: total_found was returning count of all groups, not filtered groups after HAVING.
+This broke pagination as total_found didn't reflect actual result count.
+
+Test validates:
+1. HAVING filters groups correctly (total_found < all groups)
+2. total_found stable across paginated queries
+3. Edge cases (empty results, stricter filters)
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create table with 10K rows across ~200 categories (uneven distribution for HAVING testing)
+––– input –––
+manticore-load --quiet --json --init="CREATE TABLE test_having (id bigint, category int, price float, quantity int)" --load="INSERT INTO test_having (id, category, price, quantity) VALUES (<increment>, <int/1/200>, <float/10.0/100.0>, <int/1/50>)" --batch-size=1000 --threads=4 --total=10000 > /dev/null; echo $?
+––– output –––
+0
+––– comment –––
+Verify: 10K rows loaded
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_having\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): 10000
+––– comment –––
+Verify: ~200 distinct categories exist
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(DISTINCT category) as distinct_categories FROM test_having\G"
+––– output –––
+*************************** 1. row ***************************
+distinct_categories: 200
+––– comment –––
+Verify: data loaded correctly
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_having ORDER BY id ASC LIMIT 10000;" > /tmp/test_having_data.txt
+––– output –––
+––– input –––
+md5sum /tmp/test_having_data.txt
+––– output –––
+e499c54e1ba655eb1e93a51e3e424d5f  /tmp/test_having_data.txt
+––– comment –––
+TEST 1: Get total_found WITH HAVING filter (cnt > 30)
+Expected: 199 groups (one category has ≤30 rows)
+––– input –––
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 30 ORDER BY category ASC LIMIT 1\G; SHOW META LIKE 'total_found'\G"
+––– output –––
+*************************** 1. row ***************************
+category: 1
+     cnt: 62
+*************************** 1. row ***************************
+Variable_name: total_found
+        Value: 199
+––– comment –––
+TEST 2: Get total_found WITHOUT HAVING (baseline - all groups)
+Expected: 200 groups (all categories)
+––– input –––
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category ORDER BY category ASC LIMIT 1\G; SHOW META LIKE 'total_found'\G"
+––– output –––
+*************************** 1. row ***************************
+category: 1
+     cnt: 62
+*************************** 1. row ***************************
+Variable_name: total_found
+        Value: 200
+––– comment –––
+TEST 3: Pagination page 1 (OFFSET 0) - verify total_found
+Expected: 199 groups (same as TEST 1)
+––– input –––
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 30 ORDER BY category ASC LIMIT 5 OFFSET 0\G; SHOW META LIKE 'total_found'\G"
+––– output –––
+*************************** 1. row ***************************
+category: 1
+     cnt: 62
+*************************** 2. row ***************************
+category: 2
+     cnt: 51
+*************************** 3. row ***************************
+category: 3
+     cnt: 50
+*************************** 4. row ***************************
+category: 4
+     cnt: 38
+*************************** 5. row ***************************
+category: 5
+     cnt: 53
+*************************** 1. row ***************************
+Variable_name: total_found
+        Value: 199
+––– comment –––
+TEST 4: Pagination page 2 (OFFSET 5) - verify total_found stable
+CRITICAL: total_found must be same as page 1 (main issue #3428 complaint)
+Expected: 199 groups (same as page 1)
+––– input –––
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 30 ORDER BY category ASC LIMIT 5 OFFSET 5\G; SHOW META LIKE 'total_found'\G"
+––– output –––
+*************************** 1. row ***************************
+category: 6
+     cnt: 52
+*************************** 2. row ***************************
+category: 7
+     cnt: 47
+*************************** 3. row ***************************
+category: 8
+     cnt: 59
+*************************** 4. row ***************************
+category: 9
+     cnt: 59
+*************************** 5. row ***************************
+category: 10
+     cnt: 42
+*************************** 1. row ***************************
+Variable_name: total_found
+        Value: 199
+––– comment –––
+TEST 5: Edge case - HAVING filters everything (cnt > 10000)
+Expected: 0 groups (HAVING filters all groups out)
+––– input –––
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 10000\G; SHOW META LIKE 'total_found'\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: total_found
+        Value: 0
+––– comment –––
+TEST 6: Stricter HAVING filter (cnt > 60)
+Expected: fewer groups than cnt > 30 (exactly 15 groups)
+––– input –––
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 60 ORDER BY category ASC LIMIT 1\G; SHOW META LIKE 'total_found'\G"
+––– output –––
+*************************** 1. row ***************************
+category: 1
+     cnt: 62
+*************************** 1. row ***************************
+Variable_name: total_found
+        Value: 15

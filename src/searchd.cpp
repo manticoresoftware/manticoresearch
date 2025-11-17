@@ -14402,7 +14402,14 @@ static void CheckAddSSL ( bool bForced, CSphConfigSection & hSearchd )
 		}
 		else // otherwise just a warning and HTTPS listener does not work
 		{
-			sphWarning ( "SSL initialization failed: %s. HTTPS listeners will not be available", sError.cstr() );
+			for ( const auto & tListener : g_dListeners )
+			{
+				if ( tListener.m_eProto==Proto_e::HTTPS )
+				{
+					sphWarning ( "SSL initialization failed: %s. HTTPS listeners will not be available", sError.cstr() );
+					return;
+				}
+			}
 		}
 	}
 	

@@ -699,7 +699,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 
 	if ( !file_exists($abs_pidfile) )
 	{
-		$error = "PID file ($abs_pidfile) was not created";
+		$error = "PID file ($abs_pidfile) was not created after $i tries";
 		return 1;
 	}
 

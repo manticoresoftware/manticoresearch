@@ -378,10 +378,15 @@ void ManageIpcSession()
 	if ( !g_pIpcSession )
 		return;
 
+	int iFD = g_pIpcSession->m_tPipeReq.GetFD();
 	// poll pipe with zero \ non-blocking timeout
 	// POLLHUP event- client has closed the pipe
 	struct pollfd pfd;
-	pfd.fd = (SOCKET)g_pIpcSession->m_tPipeReq.GetFD();
+#if _WIN32
+	pfd.fd = (SOCKET)iFD;
+#else
+	pfd.fd = iFD;
+#endif
 	pfd.events = 0;
 	pfd.revents = 0;
 	poll ( &pfd, 1, 0 );

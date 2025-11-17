@@ -37,6 +37,10 @@ void AuthConfigure ( const CSphConfigSection & hSearchd )
 	if ( g_sAuthFile.IsEmpty() )
 		return;
 
+#if !WITH_SSL
+	sphFatal ( "requiring authentication but the daemon was built without SSL support. Please either disable authentication in the configuration or recompile with WITH_SSL." );
+#endif
+
 	CSphString sError;
 	// need to create empty file for bootstrap to work
 	if ( !sphIsReadable ( g_sAuthFile, nullptr ) )

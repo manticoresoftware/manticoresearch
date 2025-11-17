@@ -380,7 +380,10 @@ void ManageIpcSession()
 
 	// poll pipe with zero \ non-blocking timeout
 	// POLLHUP event- client has closed the pipe
-	struct pollfd pfd = { g_pIpcSession->m_tPipeReq.GetFD(), 0, 0 };
+	struct pollfd pfd;
+	pfd.fd = (SOCKET)g_pIpcSession->m_tPipeReq.GetFD();
+	pfd.events = 0;
+	pfd.revents = 0;
 	poll ( &pfd, 1, 0 );
 
 	// if the client has hung up, the session is over

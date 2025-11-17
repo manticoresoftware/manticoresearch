@@ -14389,19 +14389,53 @@ static void InitBanner()
 }
 
 
-static void CheckSSL()
+static void CheckAddSSL ( bool bForced, CSphConfigSection & hSearchd )
 {
-	// check for SSL inited well
-	for ( const auto & tListener : g_dListeners )
+	CSphString sError;
+	bool bGotSSL = CheckWeCanUseSSL ( &sError );
+	if ( !bGotSSL )
 	{
-		CSphString sError;
-		if ( tListener.m_eProto==Proto_e::HTTPS )
+		// iff SSL is mandatory - fatal error
+		if ( bForced )
 		{
-			if ( !CheckWeCanUseSSL ( &sError ) )
-				sphWarning ( "SSL init error: %s", sError.cstr() );
-
-			break;
+			sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
 		}
+		else // otherwise just a warning and HTTPS listener does not work
+		{
+			sphWarning ( "SSL initialization failed: %s. HTTPS listeners will not be available", sError.cstr() );
+		}
+	}
+	
+	// add an HTTPS listener for Buddy if none exists
+	// Buddy can connect HTTPS even if the user did not configure it
+	if ( bForced && bGotSSL )
+	{
+		// add default loopback-only HTTPS listener for Buddy
+		for ( const auto & tListener : g_dListeners )
+		{
+			if ( tListener.m_eProto==Proto_e::HTTPS )
+				return;
+		}
+
+		int iMaxPort = -1;
+		for ( CSphVariant * v = hSearchd ( "listen" ); v; v = v->m_pNext )
+		{
+			auto tDesc = ParseListener ( v->cstr () );
+			iMaxPort = Max ( iMaxPort, tDesc.m_iPort + tDesc.m_iPortsCount );
+		}
+
+		if ( iMaxPort!=-1 )
+			iMaxPort++;
+		else
+			iMaxPort = SPHINXAPI_PORT + 1;
+
+		// new listener port
+		AddGlobalListener ( MakeLocalhostListener ( iMaxPort, Proto_e::HTTPS ) );
+		// entry for the show status
+		CSphString sHttps;
+		sHttps.SetSprintf ( "127.0.0.1:%d:HTTPS", iMaxPort );
+		hSearchd.AddEntry ( "listen", sHttps.cstr() );
+		sphLogDebug ( "no HTTPS listener configured, added '%s' for Buddy communication", sHttps.cstr() );
 	}
 }
 
@@ -14859,7 +14893,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	FixPathAbsolute ( sSslKey );
 	FixPathAbsolute ( sSslCa );
 	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-	CheckSSL();
+	bool bForcedSsl = false;
+	if ( IsAuthEnabled() && HasBuddyConfigured ( g_sBuddyPath, g_bHasBuddyPath ) )
+	{
+		ForceSsl();
+		bForcedSsl = true;
+	}
+	CheckAddSSL ( bForcedSsl, hSearchd );
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).

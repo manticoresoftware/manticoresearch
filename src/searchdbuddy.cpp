@@ -470,7 +470,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 	SetContainerName ( sConfigFilePath );
 	// should not check buddy related code if buddy disabled at config
-	if ( bHasBuddyPath && sConfigPath.IsEmpty() )
+	if ( !HasBuddyConfigured ( sConfigPath, bHasBuddyPath ) )
 		return;
 
 	ARRAY_FOREACH ( i, dListeners )
@@ -1028,4 +1028,9 @@ void BuddySetLogLevel ( ESphLogLevel eLogLevel )
 	sUrl.SetSprintf ( "%s/config", g_sUrlBuddy.cstr() );
 
 	PostToHelperUrl ( sUrl, (Str_t)tBuddyQuery, dHeaders );
+}
+
+bool HasBuddyConfigured ( const CSphString & sConfigPath, bool bHasBuddyPath )
+{
+	return ( !bHasBuddyPath || !sConfigPath.IsEmpty() );
 }

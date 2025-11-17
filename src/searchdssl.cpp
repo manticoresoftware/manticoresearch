@@ -12,17 +12,25 @@
 
 #include "searchdssl.h"
 
+static CSphString g_sSslCert;
+static CSphString g_sSslKey;
+static CSphString g_sSslCaFileName;
+
+static bool g_bSslForced = false;
+
+void ForceSsl()
+{
+	g_bSslForced = true;
+}
+
 #if WITH_SSL
 #include "sphinxstd.h"
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#include <openssl/x509v3.h>
 
 #include <memory>
-
-static CSphString g_sSslCert;
-static CSphString g_sSslKey;
-static CSphString g_sSslCa;
 
 static BIO_METHOD * BIO_s_coroAsync ( bool bDestroy = false );
 
@@ -57,16 +65,51 @@ static int fnSslError ( const char * pStr, size_t iLen, void * pError )
 #define BACKN FYELLOW
 #define SYSN FCYAN
 
+static bool ReadSslData ( CSphString & sBuf, const CSphString & sFileName, CSphString & sError )
+{
+	CSphAutofile tRd;
+	int iFD = tRd.Open ( sFileName, SPH_O_READ, sError );
+	if ( iFD<0 )
+		return false;
+
+	int iSize = tRd.GetSize();
+	if ( iSize<0 )
+	{
+		sError.SetSprintf ( "%s invalid size %d", sFileName.cstr(), iSize );
+		return false;
+	}
+	sBuf.Reserve ( iSize + CSphString::GetGap() );
+
+	int iGot = sphReadThrottled ( iFD, (char *)sBuf.cstr(), iSize );
+	if ( iGot!=iSize )
+		return false;
+
+	memset ( (char *)sBuf.cstr() + iSize, 0, CSphString::GetGap() );
+	return true;
+}
+
 void SetServerSSLKeys ( const CSphString & sSslCert,  const CSphString & sSslKey,  const CSphString & sSslCa )
 {
-	g_sSslCert = sSslCert;
-	g_sSslKey = sSslKey;
-	g_sSslCa = sSslCa;
+	CSphString sError;
+
+	if ( !sSslCert.IsEmpty() && !ReadSslData ( g_sSslCert, sSslCert, sError ) )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
+	if ( !sSslKey.IsEmpty() && !ReadSslData ( g_sSslKey, sSslKey, sError ) )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
+	g_sSslCaFileName = sSslCa;
 }
 
 static bool IsKeysSet()
 {
-	return !( g_sSslCert.IsEmpty () && g_sSslKey.IsEmpty () && g_sSslCa.IsEmpty ());
+	return !( g_sSslCert.IsEmpty () && g_sSslKey.IsEmpty () && g_sSslCaFileName.IsEmpty ());
 }
 
 // set SSL key, certificate and ca-certificate to global SSL context
@@ -87,7 +130,7 @@ static bool SetGlobalKeys ( SSL_CTX * pCtx, CSphString * pError )
 		return false;
 	}
 
-	if ( !g_sSslCa.IsEmpty () && SSL_CTX_load_verify_locations ( pCtx, g_sSslCa.cstr(), nullptr )<=0 )
+	if ( !g_sSslCaFileName.IsEmpty () && SSL_CTX_load_verify_locations ( pCtx, g_sSslCaFileName.cstr(), nullptr )<=0 )
 	{
 		ERR_print_errors_cb ( &fnSslError, pError );
 		return false;
@@ -118,7 +161,6 @@ static void SslFreeCtx ( SSL_CTX * pCtx )
 }
 
 using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX>;
-static const BYTE g_SslSessionContext[] = "ManticoreSearchDaemon";
 
 // init SSL library and global context by demand
 static SmartSSL_CTX_t GetSslCtx ()
@@ -137,13 +179,6 @@ static SmartSSL_CTX_t GetSslCtx ()
 			SslFreeCtx ( pCtx );
 		});
 		SSL_CTX_set_verify ( pSslCtx, SSL_VERIFY_NONE, nullptr );
-		// set server cache
-		SSL_CTX_set_ciphersuites ( pSslCtx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256" );
-		SSL_CTX_set_cipher_list ( pSslCtx, "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256" );
-		SSL_CTX_set_min_proto_version ( pSslCtx, TLS1_2_VERSION );
-
-		SSL_CTX_set_session_id_context ( pSslCtx, g_SslSessionContext, sizeof ( g_SslSessionContext )-1 );
-		SSL_CTX_set_session_cache_mode ( pSslCtx, SSL_SESS_CACHE_SERVER );
 
 		// schedule callback for final shutdown.
 		searchd::AddShutdownCb ( [pRefCtx = pSslCtx] {
@@ -155,31 +190,221 @@ static SmartSSL_CTX_t GetSslCtx ()
 	return pSslCtx;
 }
 
+static bool AddCertExtension ( X509 * pCert, int iNid, char * sVal )
+{
+	X509_EXTENSION * pExt;
+	X509V3_CTX tCtx;
+	X509V3_set_ctx_nodb ( &tCtx );
+	X509V3_set_ctx ( &tCtx, pCert, pCert, nullptr, nullptr, 0 );
+	pExt = X509V3_EXT_conf_nid ( nullptr, &tCtx, iNid, sVal );
+	if ( !pExt )
+		return false;
+
+	X509_add_ext ( pCert, pExt, -1 );
+	X509_EXTENSION_free ( pExt );
+	return true;
+}
+
+static bool GenerateInMemorySslKeys ( CSphString & sSslCert, CSphString & sSslKey, CSphString * pError )
+{
+	// EVP_PKEY for the private key
+	std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> pKey( EVP_PKEY_new(), EVP_PKEY_free );
+	if ( !pKey )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	// generate RSA key
+	std::unique_ptr<RSA, decltype(&RSA_free)> pRsa ( RSA_new(), RSA_free );
+	if ( !pRsa )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	std::unique_ptr<BIGNUM, decltype(&BN_free)> pBne ( BN_new(), BN_free );
+	if ( !pBne || !BN_set_word ( pBne.get(), RSA_F4 ) )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	if ( !RSA_generate_key_ex ( pRsa.get(), 2048, pBne.get(), nullptr ) )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	if ( !EVP_PKEY_assign_RSA ( pKey.get(), RSAPrivateKey_dup ( pRsa.get() ) ) )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	// X509 cert
+	std::unique_ptr<X509, decltype(&X509_free)> pCert ( X509_new(), X509_free );
+	if ( !pCert )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	X509_set_version ( pCert.get(), 2 );
+	// timestamp as serial
+	ASN1_INTEGER_set ( X509_get_serialNumber ( pCert.get() ), sphMicroTimer() );
+	// cert valid from now
+	X509_gmtime_adj ( X509_getm_notBefore ( pCert.get() ), 0 );
+	// cert valid for 1 year
+	X509_gmtime_adj ( X509_getm_notAfter ( pCert.get()), 31536000L );
+	X509_set_pubkey ( pCert.get(), pKey.get() );
+
+	// subject and issuer name (self-signed)
+	X509_NAME * pName = X509_get_subject_name ( pCert.get() );
+	X509_NAME_add_entry_by_txt ( pName, "CN", MBSTRING_ASC, (const BYTE *)"ManticoreSoftwareLTD", -1, -1, 0);
+	X509_set_issuer_name ( pCert.get(), pName );
+
+	// extensions for TLS server certificate
+	if ( !AddCertExtension ( pCert.get(), NID_subject_alt_name, "IP:127.0.0.1,DNS:localhost" ) || !AddCertExtension ( pCert.get(), NID_basic_constraints, "critical,CA:FALSE" ) || !AddCertExtension ( pCert.get(), NID_key_usage, "critical,digitalSignature,keyEncipherment" ) )
+	{
+        ERR_print_errors_cb ( &fnSslError, pError );
+        return false;
+	}
+
+	// sign the cert
+	if ( !X509_sign ( pCert.get(), pKey.get(), EVP_sha256() ) )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	// convert key and cert to memory PEM string
+	std::unique_ptr<BIO, decltype(&BIO_free)> pKeyBio ( BIO_new ( BIO_s_mem() ), BIO_free );
+	if ( !PEM_write_bio_PrivateKey ( pKeyBio.get(), pKey.get(), nullptr, nullptr, 0, nullptr, nullptr ) )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	char * pKeyData = nullptr;
+	int iKeyLen = BIO_get_mem_data ( pKeyBio.get(), &pKeyData );
+
+	std::unique_ptr<BIO, decltype(&BIO_free)> pCertBio ( BIO_new ( BIO_s_mem() ), BIO_free );
+	if ( !PEM_write_bio_X509 ( pCertBio.get(), pCert.get() ) )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );;
+		return false;
+	}
+
+	char * pCertData = nullptr;
+	long iCertLen = BIO_get_mem_data ( pCertBio.get(), &pCertData );
+
+	sSslKey.SetBinary ( pKeyData, iKeyLen );
+	sSslCert.SetBinary ( pCertData, iCertLen );
+
+	return true;
+}
+
+static bool SetKeysFromPem ( const CSphString & sSslCert, const CSphString & sSslKey, const CSphString & sSslCaFileName, SSL_CTX * pCtx, CSphString * pError )
+{
+	// load cert from PEM string
+	std::unique_ptr<BIO, decltype(&BIO_free)> pCertBio ( BIO_new_mem_buf ( sSslCert.cstr(), sSslCert.Length() ), BIO_free );
+	if ( !pCertBio )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );
+		return false;
+	}
+
+	std::unique_ptr<X509, decltype(&X509_free)> pCertX509 ( PEM_read_bio_X509 ( pCertBio.get(), nullptr, nullptr, nullptr ), X509_free );
+	if ( !pCertX509 )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );
+		return false;
+	}
+
+	if ( SSL_CTX_use_certificate ( pCtx, pCertX509.get() )<= 0 )
+	{
+		ERR_print_errors_cb(&fnSslError, pError);
+		return false;
+	}
+
+	// load private key from PEM string
+	std::unique_ptr<BIO, decltype ( &BIO_free ) > pKeyBio ( BIO_new_mem_buf ( sSslKey.cstr(), sSslKey.Length() ), BIO_free );
+	if ( !pKeyBio || SSL_CTX_use_PrivateKey ( pCtx, PEM_read_bio_PrivateKey ( pKeyBio.get(), nullptr, nullptr, nullptr ) )<=0 )
+	{
+		ERR_print_errors_cb( &fnSslError, pError );
+		return false;
+	}
+	
+	// load CA file by the file path
+	if ( !sSslCaFileName.IsEmpty() && SSL_CTX_load_verify_locations ( pCtx, sSslCaFileName.cstr(), nullptr )<=0 )
+	{
+		ERR_print_errors_cb ( &fnSslError, pError );
+		return false;
+	}
+
+	// check key and cert match
+	if ( SSL_CTX_check_private_key ( pCtx )!=1 )
+	{
+		ERR_print_errors_cb(&fnSslError, pError);
+		return false;
+	}
+
+	return true;
+}
+
 static SmartSSL_CTX_t GetReadySslCtx ( CSphString * pError=nullptr )
 {
-	if ( !IsKeysSet ())
-		return SmartSSL_CTX_t ( nullptr );
-
 	auto pCtx = GetSslCtx ();
 	if ( !pCtx )
 		return pCtx;
 
-	static bool bKeysLoaded = false;
+	static bool bKeysSet = false;
+	if ( bKeysSet )
+		return pCtx;
 
-	if ( !bKeysLoaded && SetGlobalKeys ( pCtx, pError ) )
-		bKeysLoaded = true;
+	bKeysSet = true;
+	bool bHasKeys = ( !g_sSslCert.IsEmpty() && !g_sSslKey.IsEmpty() );
 
-	if ( !bKeysLoaded )
+	// keys provided by the config
+	if ( bHasKeys )
+	{
+		if ( SetKeysFromPem ( g_sSslCert, g_sSslKey, g_sSslCaFileName, pCtx, pError ) )
+			return pCtx;
+
+		// if load keys fails and SSL is forced (for auth and Buddy communication) - fatal error
+		if ( g_bSslForced && pError )
+			pError->SetSprintf ( "failed to load configured SSL keys: %s", pError->cstr() );
+
 		return SmartSSL_CTX_t ( nullptr );
+	}
 
-	return pCtx;
+	// no keys in config but SSL is required (for auth and Buddy communication)
+	if ( g_bSslForced )
+	{
+		if ( GenerateInMemorySslKeys ( g_sSslCert, g_sSslKey, pError ) && SetKeysFromPem ( g_sSslCert, g_sSslKey, g_sSslCaFileName, pCtx, pError ) )
+		{
+			sphLogDebug ( "generated in-memory SSL certificate" );
+			//sphSafeInfoWrite ( GetActiveLogFD(), g_sSslCert.cstr(), g_sSslCert.Length() );				
+			return pCtx;
+		}
+		else
+		{
+			if ( pError )
+				pError->SetSprintf ( "failed to generate in-memory SSL keys: %s", pError->cstr() );
+		}
+		return SmartSSL_CTX_t ( nullptr );
+	}
+
+	// no keys provided and SSL is not required - nothing to do
+	return SmartSSL_CTX_t ( nullptr );
 }
 
 // is global SSL context created and keys set
 bool CheckWeCanUseSSL ( CSphString * pError )
 {
 	static bool bCheckPerformed = false; // to check only once
-	static bool bWeCanUseSSL;
+	static bool bWeCanUseSSL = false;
 
 	if ( bCheckPerformed )
 		return bWeCanUseSSL;
@@ -402,23 +627,6 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 		auto iRes = BIO_flush ( m_pSslBackend );
 		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM, (BIO*)m_pSslBackend, iRes, iSent, dData.GetLength () );
 		m_iSendTotal += dData.GetLength();
-
-		SSL * pSSL = nullptr;
-		if ( BIO_get_ssl(m_pSslBackend, &pSSL) == 1 && pSSL )
-		{
-			const SSL_SESSION *sess = SSL_get_session(pSSL);
-			if (sess)
-			{
-				unsigned int iIdLen = 0;
-				const unsigned char *session_id = SSL_SESSION_get_id(sess, &iIdLen);
-
-				sphInfo("server at SendBuffer: TLS session %s, cache size %d, session ID len %d",
-					(SSL_session_reused(pSSL) ? "reused" : "new"),
-					(int)SSL_CTX_sess_number(SSL_get_SSL_CTX(pSSL)),
-					iIdLen);
-			}
-		}
-
 		return ( iRes>0 );
 	}
 
@@ -508,9 +716,6 @@ bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 
 	BIO_get_ssl ( pFrontEnd, &pSSL );
 	SSL_set_mode ( pSSL, SSL_MODE_AUTO_RETRY );
-
-	sphInfo ( "server at MakeSecureLayer: TLS session %s, cache size %d", ( SSL_session_reused ( pSSL ) ? "reused" : "new" ), (int)( SSL_CTX_sess_number ( SSL_get_SSL_CTX ( pSSL ) ) ) ); // !COMMIT
-
 	BIO_push ( pFrontEnd, BIO_new_coroAsync ( std::move ( pSource ) ) );
 	pSource = std::make_unique<AsyncSSBufferedSocket_c> ( std::move ( pFrontEnd ) );
 	return true;
@@ -732,6 +937,34 @@ bool MakeRandBuf ( VecTraits_T<BYTE> & dRes, CSphString & sError )
 		return true;
 	else
 		return SslError ( sError );
+}
+
+#else
+
+static bool NoSslSupport ( CSphString & sError )
+{
+	sError = "daemon built without SSL support";
+	return false;
+}
+
+bool EncryptGCM ( const VecTraits_T<BYTE> & , const CSphString & , const VecTraits_T<BYTE> & , const BYTE * , int , CSphVector<BYTE> & , CSphString & sError )
+{
+	return NoSslSupport ( sError );
+}
+
+bool DecryptGCM ( const VecTraits_T<BYTE> & , CSphVector<BYTE> & , CSphString & , GcmUserKey_i & , CSphString & sError )
+{
+	return NoSslSupport ( sError );
+}
+
+bool MakeApiKdf ( const ByteBlob_t & , const ByteBlob_t & , CSphFixedVector<BYTE> & , CSphString & sError )
+{
+	return NoSslSupport ( sError );
+}
+
+bool MakeRandBuf ( VecTraits_T<BYTE> & , CSphString & sError )
+{
+	return NoSslSupport ( sError );
 }
 
 #endif

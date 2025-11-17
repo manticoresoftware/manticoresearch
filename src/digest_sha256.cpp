@@ -22,7 +22,6 @@
 #if WITH_SSL
 #define USE_SHA1_FROM_OPENSSL
 #include <openssl/evp.h>
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 // SHA256 digests
@@ -59,6 +58,19 @@ public:
 private:
 	EVP_MD_CTX * m_pCtx = nullptr;
 };
+
+#else
+
+class SHA256_c : public SHA256_i
+{
+public:
+	void Init() final {}
+	void Update ( const BYTE *, int ) final {}
+	void Final ( HASH256_t & ) final {}
+	HASH256_t FinalHash() final { return HASH256_t(); }
+};
+
+#endif
 
 SHA256_i * CreateSHA256()
 {

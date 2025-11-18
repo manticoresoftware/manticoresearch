@@ -16,6 +16,7 @@
 #include "std/string.h"
 #include "std/scoped_comma.h"
 #include "sphinxjson.h"
+#include "daemon/logger.h"
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -663,4 +664,55 @@ TEST ( functions, JsonEscapedBuilder_sugar )
 	tOut.Clear();
 	tOut.AppendEscaped ( "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f" );
 	EXPECT_STREQ ( tOut.cstr(), "\"\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\"" );
+}
+
+TEST ( functions, VacuumSpacesFromJson )
+{
+	StringBuilder_c tOut;
+	VacuumSpacesFromJson ( "bla", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "bla" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( "a     b", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "a b" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( "a     b\"a   b", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "a b\"a   b" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( "(a  \t\r\n   b)", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "(a b)" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( "\"(a  \t\r\n   b)\"", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "\"(a  \t\r\n   b)\"" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( R"(a  \t\r\n   b)", tOut );
+	EXPECT_STREQ ( tOut.cstr(), R"(a \t\r\n b)" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( "a  \r   b\"a  \n   c\"  \t  d", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "a b\"a  \n   c\" d" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( "a  \r   b\"a  \\\"   c\"  \t  d", tOut );
+	EXPECT_STREQ ( tOut.cstr(), "a b\"a  \\\"   c\" d" );
+
+	tOut.Clear();
+	VacuumSpacesFromJson ( R"({
+    "index" : "test",
+    "query":
+    {
+        "match":
+        {
+            "*" : "test"
+        }
+    },
+    "_source": ["f"],
+    "limit": 30
+})", tOut );
+	EXPECT_STREQ ( tOut.cstr(), R"({ "index" : "test", "query": { "match": { "*" : "test" } }, "_source": ["f"], "limit": 30 })" );
+
 }

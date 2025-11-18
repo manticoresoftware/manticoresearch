@@ -626,6 +626,19 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 		return 1;
 
 	// try to wait a bit here
+	// Ensure the directory exists before trying to create the error file
+	$error_dir = dirname($abs_error_file);
+	if ( !is_dir($error_dir) )
+	{
+		if ( !@mkdir($error_dir, 0777, true) )
+		{
+			$last_error = error_get_last();
+			$sys_error = $last_error ? $last_error['message'] : 'unknown error';
+			$error = "$abs_error_file: unable to create error file directory ($error_dir): $sys_error";
+			return 1;
+		}
+	}
+
 	$action_retries = ActionRetries();
 	$i = 0;
 	while ( !@touch($abs_error_file) && $i < $action_retries )
@@ -635,7 +648,10 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	}
 	if ( !@touch($abs_error_file) )
 	{
-		$error = "$abs_error_file: unable to create error file";
+		// Capture the actual system error message
+		$last_error = error_get_last();
+		$sys_error = $last_error ? $last_error['message'] : 'unknown error';
+		$error = "$abs_error_file: unable to create error file: $sys_error";
 		return 1;
 	}
 

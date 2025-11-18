@@ -10,14 +10,57 @@
 
 #include "datetime.h"
 #include "fileutils.h"
+#include "sphinxint.h"
 
 #include "cctz/time_zone.h"
 #include <stdlib.h>
+#include <time.h>
 
 static bool g_bIntialized = false;
 static bool g_bTimeZoneUTC = false;
 static bool g_bTimeZoneSet = false;
 static cctz::time_zone g_hTimeZone, g_hTimeZoneLocal, g_hTimeZoneUTC;
+static CSphString g_sTimeZoneName; // cached timezone name when explicitly set
+
+
+// Calculate UTC offset string as fallback when timezone name cannot be determined
+// Returns format like "UTC+07" (whole hours) or "UTC+05:30" (with minutes)
+// Called only from GetTimeZoneName() which is invoked infrequently (startup log, SHOW VARIABLES)
+static CSphString GetUTCOffsetString()
+{
+	time_t t = time(nullptr);
+	struct tm local_tm;
+	localtime_r(&t, &local_tm);
+	
+	char offset[16];
+	int iLen = strftime(offset, sizeof(offset), "%z", &local_tm);
+	if ( iLen > 0 && iLen == 5 && ( offset[0] == '+' || offset[0] == '-' ) )
+	{
+		// Parse standard format: "+0700" or "+0530" (sign + 4 digits)
+		int iHours = ( offset[1] - '0' ) * 10 + ( offset[2] - '0' );
+		int iMinutes = ( offset[3] - '0' ) * 10 + ( offset[4] - '0' );
+		
+		// Return "UTC" if offset is zero
+		if ( iHours == 0 && iMinutes == 0 )
+			return "UTC";
+		
+		if ( iMinutes == 0 )
+			return CSphString().SetSprintf("UTC%c%d", offset[0], iHours);
+		else
+			return CSphString().SetSprintf("UTC%c%d:%02d", offset[0], iHours, iMinutes);
+	}
+	
+	// If format is different, check if it's zero offset
+	if ( iLen > 0 && ( offset[0] == '+' || offset[0] == '-' ) )
+	{
+		// If offset is "+0000" or "-0000" or similar, return "UTC"
+		if ( strcmp(offset, "+0000") == 0 || strcmp(offset, "-0000") == 0 || strcmp(offset, "+00:00") == 0 || strcmp(offset, "-00:00") == 0 )
+			return "UTC";
+		return CSphString().SetSprintf("UTC%s", offset);
+	}
+	
+	return "";
+}
 
 
 static void CheckForUTC()
@@ -26,7 +69,7 @@ static void CheckForUTC()
 }
 
 #if !_WIN32
-static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
+static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning, bool bUseSystemDir = false )
 {
 	CSphString sPrefix = "Error resolving local time zone from";
 	CSphString sTimeZoneFile = "/etc/localtime";
@@ -34,23 +77,16 @@ static CSphString DetermineLocalTimeZoneName ( CSphString & sWarning )
 	if ( szTZDefault )
 		sTimeZoneFile = szTZDefault;
 
-	const char * szTZ = getenv("TZ");
-	if ( szTZ )
-	{
-		sPrefix.SetSprintf ( "%s TZ='%s'", sPrefix.cstr(), szTZ );
-
-		if ( *szTZ==':' )
-			++szTZ;
-
-		if ( *szTZ )
-			sTimeZoneFile = szTZ;
-	}
-	else
-		sPrefix.SetSprintf ( "%s '%s'", sPrefix.cstr(), sTimeZoneFile.cstr() );
+	// Note: We intentionally ignore TZ environment variable here because
+	// logging should always use the actual system local timezone, not TZ
+	// TZ is meant for application-level timezone overrides, not system timezone
+	sPrefix.SetSprintf ( "%s '%s'", sPrefix.cstr(), sTimeZoneFile.cstr() );
 
 	CSphString sTimeZoneDir = "/usr/share/zoneinfo/";
+	// When detecting system timezone (bUseSystemDir=true), always use system directory
+	// Otherwise, use TZDIR if set (for Manticore's tzdata)
 	const char * szTZDIR = getenv("TZDIR");
-	if ( szTZDIR )
+	if ( !bUseSystemDir && szTZDIR )
 	{
 		sPrefix.SetSprintf ( "%s and TZDIR='%s'", sPrefix.cstr(), szTZDIR );
 		sTimeZoneDir = szTZDIR;
@@ -116,30 +152,47 @@ static void SetTimeZoneLocal ( StrVec_t & dWarnings )
 	CSphString sDirName;
 	sDirName.SetSprintf ( "%s/tzdata", GET_FULL_SHARE_DIR() );
 
+	// Save TZ env var before we potentially unset it (needed for time functions)
+	const char * szTZ = getenv("TZ");
+
 #if _WIN32
 	_putenv_s ( "TZDIR", sDirName.cstr() );
-
-	// use cctz's internal local time zone code
 	g_hTimeZoneLocal = cctz::local_time_zone();
 #else
 	CSphString sWarning;
 	CSphString sZone = DetermineLocalTimeZoneName(sWarning);
 	if ( !sWarning.IsEmpty() )
 		dWarnings.Add(sWarning);
-
 	sZone = FixupZoneName(sZone);
 
-	setenv ( "TZDIR", sDirName.cstr(), 1 );
+	// Get actual system local timezone for logging (ignore TZ env var)
+	// Temporarily unset TZ so cctz::local_time_zone() uses /etc/localtime, not TZ
+	if ( szTZ )
+		unsetenv("TZ");
+	g_hTimeZoneLocal = cctz::local_time_zone();
+	if ( szTZ )
+		setenv("TZ", szTZ, 1);
 
-	if ( !cctz::load_time_zone ( sZone.cstr(), &g_hTimeZoneLocal ) )
-	{
-		sWarning.SetSprintf ( "Unable to load local time zone '%s' from '%s' dir", sZone.cstr(), sDirName.cstr() );
-		dWarnings.Add(sWarning);
-		g_hTimeZoneLocal = g_hTimeZoneUTC;
-	}
+	setenv ( "TZDIR", sDirName.cstr(), 1 );
 #endif
 
-	g_hTimeZone = g_hTimeZoneLocal;
+	// Configure timezone for time functions (NOW(), CURTIME(), etc.)
+	// Use TZ env var if set, otherwise use local timezone
+	// Note: logging always uses g_hTimeZoneLocal (actual system timezone)
+	if ( szTZ && *szTZ )
+	{
+		const char * szTZName = szTZ;
+		if ( *szTZName == ':' )
+			++szTZName;
+		if ( *szTZName && cctz::load_time_zone ( szTZName, &g_hTimeZone ) )
+			g_sTimeZoneName = szTZName;
+		else
+			g_hTimeZone = g_hTimeZoneLocal;
+	}
+	else
+	{
+		g_hTimeZone = g_hTimeZoneLocal;
+	}
 	CheckForUTC();
 }
 
@@ -161,6 +214,7 @@ bool SetTimeZone ( const char * szTZ, CSphString & sError )
 	}
 
 	g_bTimeZoneSet = !g_hTimeZone.name().empty() && strcasecmp ( g_hTimeZone.name().c_str(), "UTC" );
+	g_sTimeZoneName = szTZ; // store the timezone name for display
 
 	CheckForUTC();
 	return true;
@@ -178,7 +232,39 @@ CSphString GetTimeZoneName()
 	if ( !g_bIntialized )
 		return "";
 
-	return g_hTimeZone.name().c_str();
+	// Return explicitly set timezone name (from config or SET timezone)
+	// Check g_sTimeZoneName first, as it's set even when timezone is UTC
+	if ( !g_sTimeZoneName.IsEmpty() )
+		return g_sTimeZoneName;
+
+	// Get timezone name from cctz
+	CSphString sName = g_hTimeZone.name().c_str();
+	
+#if !_WIN32
+	// If no explicit timezone was set, try to determine the actual local timezone name
+	// This handles cases where cctz returns a file path or an incorrect name
+	if ( sName.Begins("/") || sName == "UTC" || sName.IsEmpty() )
+	{
+		// Parse /etc/localtime symlink to get timezone name like "Asia/Singapore" or "Europe/London"
+		// Use system directory (not Manticore's TZDIR) to detect actual system timezone
+		CSphString sWarning;
+		CSphString sZone = DetermineLocalTimeZoneName(sWarning, true);
+		sZone = FixupZoneName(sZone);
+		// Return detected timezone name if successful (skip if detection failed and returned "UTC")
+		if ( sZone != "UTC" && !sZone.IsEmpty() )
+			return sZone;
+	}
+#endif
+	
+	// If timezone name cannot be determined, calculate UTC offset as fallback
+	// This handles cases where detection fails or timezone is actually UTC
+	if ( sName == "UTC" || sName.IsEmpty() || sName.Begins("/") )
+	{
+		CSphString sOffset = GetUTCOffsetString();
+		return sOffset.IsEmpty() ? "UTC" : sOffset;
+	}
+
+	return sName;
 }
 
 

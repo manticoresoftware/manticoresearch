@@ -10842,32 +10842,32 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 	if ( !tOut.HeadEnd () )
 		return;
 
+	auto fnLine = [&tOut](const NamedIndexType_t& dPair, int iLocks, const char* szType ) noexcept -> bool
+	{
+		tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
+		tOut.PutString ( dPair.m_sName );
+		tOut.PutString ( szType );
+		tOut.PutStringf ( "Count: %d", iLocks );
+		return tOut.Commit ();
+	};
 
 	// collect local, rt, percolate
 	auto dIndexes = GetAllServedIndexes ();
 	for ( auto & dPair: dIndexes )
 	{
-		switch ( dPair.m_eType )
+		auto pIndex = GetServed ( dPair.m_sName );
+		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
-		case IndexType_e::RT:
-		case IndexType_e::PERCOLATE:
-		{
-			auto pIndex = GetServed ( dPair.m_sName );
-			assert ( ServedDesc_t::IsMutable ( pIndex ) );
 			RIdx_T<RtIndex_i *> pRt { pIndex };
-			int iLocks = pRt->GetNumOfLocks ();
-			if ( iLocks>0 )
-			{
-				tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
-				tOut.PutString ( dPair.m_sName );
-				tOut.PutString ( "freeze" );
-				tOut.PutStringf ( "Count: %d", iLocks );
-				if ( !tOut.Commit () )
-					return;
-			}
+			const int iLocks = pRt->GetNumOfLocks ();
+			if ( iLocks>0 && !fnLine ( dPair, iLocks, "freeze" ) )
+				return;
 		}
-		default:
-			break;
+		if ( ServedDesc_t::IsLocal ( pIndex ) )
+		{
+			const int iRLocks = pIndex->GetReadLocks();
+			if ( iRLocks>0 && !fnLine ( dPair, iRLocks, "read" ) )
+				return;
 		}
 	}
 
@@ -10886,20 +10886,18 @@ void UnlockTables(ClientSession_c* pSess)
 	pSess->m_dLockedTables.Reset();
 }
 
-void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString& sWarningOut )
 {
 	StrVec_t dIndexes;
 	bool bHasWrite = false;
 	tStmt.m_dInsertValues.for_each ( [&] (const SqlInsert_t& tVal) {
-		bHasWrite |= tVal.m_iType>10;
-		dIndexes.Add(tVal.m_sVal);
+		if ( tVal.m_iType>10 )
+			bHasWrite = true;
+		else
+			dIndexes.Add(tVal.m_sVal);
 	});
 
-	if (bHasWrite)
-	{
-		tOut.Error ( "Write lock is not implemented." );
-		return;
-	}
+	sWarningOut = bHasWrite ? "Write lock is not implemented." : "";
 
 	if ( session::GetProto()!=Proto_e::MYSQL41 )
 	{
@@ -10932,7 +10930,7 @@ void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		sphLogDebug ( "Locked %s", sIndex.cstr() );
 	}
 
-	tOut.Ok ( 0 );
+	tOut.Ok ( 0, bHasWrite ? 1 : 0 );
 }
 
 void HandleMysqlUnlockTables ( RowBuffer_i & tOut )
@@ -11516,7 +11514,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_LOCK_TABLES:
-		HandleMysqlLockTables ( tOut, *pStmt );
+		HandleMysqlLockTables ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_UNLOCK_TABLES:

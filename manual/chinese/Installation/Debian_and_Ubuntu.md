@@ -89,7 +89,7 @@ Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -D
 | Debian Bullseye | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 | Debian Bookworm | libmariadb.so.3 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 
-要查找提供这些库的软件包，您可以使用例如 `apt-file`：
+要查找提供这些库的软件包，可以使用例如 `apt-file`：
 
 ```bash
 apt-file find libmysqlclient.so.20
@@ -98,7 +98,7 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-请注意，您只需要为您将使用的存储类型安装相应的库。因此，如果您计划仅从 MySQL 构建表，则可能只需安装 MySQL 库（上述情况中为 `libmysqlclient20`）。
+请注意，您只需要为您将使用的存储类型安装相应的库。因此，如果您计划仅从 MySQL 构建表，则可能只需要安装 MySQL 库（上述情况为 `libmysqlclient20`）。
 
 最后，安装所需的软件包：
 
@@ -111,7 +111,7 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 为了启用 CJK 分词支持，官方软件包包含嵌入 ICU 库的二进制文件，并包含 ICU 数据文件。它们独立于系统上可能存在的任何 ICU 运行时库，且无法升级。
 
 #### 乌克兰语词形还原器
-词形还原器需要 Python 3.9+。**请确保已安装且配置了 `--enable-shared` 的 Python。**
+词形还原器需要 Python 3.9+。**请确保已安装并且配置了 `--enable-shared`。**
 
 以下是在 Debian 和 Ubuntu 上安装 Python 3.9 和乌克兰语词形还原器的方法：
 

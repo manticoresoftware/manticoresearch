@@ -1,0 +1,10 @@
+{
+  "195773fce9ad28e8f6c718e473d4d4541f40cb0b33b2e2a8a90e757af148041b": {
+    "original": "# Flushing RAM chunk to a new disk chunk\n\n## FLUSH RAMCHUNK\n\n<!-- example flush_ramchunk -->\n\nCODE_BLOCK_0\n\nThe `FLUSH RAMCHUNK` command creates a new disk chunk in an RT table.\n\nNormally, an RT table automatically flushes and converts the contents of the RAM chunk into a new disk chunk when one of the [special conditions](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#RAM-chunk-flushing-conditions) is met. In some cases, though, you may want to trigger the flush manually — and the `FLUSH RAMCHUNK` statement lets you do that.\n\n<!-- intro -->\n\n##### SQL:\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- response mysql -->\n\nCODE_BLOCK_2\n\n<!-- end -->\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 将 RAM 块刷新到新的磁盘块\n\n## FLUSH RAMCHUNK\n\n<!-- example flush_ramchunk -->\n\nCODE_BLOCK_0\n\n`FLUSH RAMCHUNK` 命令在 RT 表中创建一个新的磁盘块。\n\n通常，当满足某个[特殊条件](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#RAM-chunk-flushing-conditions)时，RT 表会自动刷新并将 RAM 块的内容转换为新的磁盘块。但在某些情况下，您可能希望手动触发刷新——`FLUSH RAMCHUNK` 语句允许您这样做。\n\n<!-- intro -->\n\n##### SQL:\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- response mysql -->\n\nCODE_BLOCK_2\n\n<!-- end -->\n\n<!-- proofread -->",
+      "russian": "# Сброс RAM-чанка в новый диск-чанк\n\n## FLUSH RAMCHUNK\n\n<!-- example flush_ramchunk -->\n\nCODE_BLOCK_0\n\nКоманда `FLUSH RAMCHUNK` создает новый диск-чанк в RT-таблице.\n\nОбычно RT-таблица автоматически сбрасывает и конвертирует содержимое RAM-чанка в новый диск-чанк, когда выполняется одно из [специальных условий](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#RAM-chunk-flushing-conditions). Однако в некоторых случаях вы можете захотеть инициировать сброс вручную — и оператор `FLUSH RAMCHUNK` позволяет это сделать.\n\n<!-- intro -->\n\n##### SQL:\n\n<!-- request SQL -->\n\nCODE_BLOCK_1\n\n<!-- response mysql -->\n\nCODE_BLOCK_2\n\n<!-- end -->\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

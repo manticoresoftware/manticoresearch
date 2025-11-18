@@ -1,0 +1,10 @@
+{
+  "6b1a08faea85f3cc968658f6159df13bd9275ac725db16292214fde582b768f8": {
+    "original": "# Docker logging\n\nWhen you use the [official Manticore docker image](https://hub.docker.com/r/manticoresearch/manticore/), the server log is sent to `/dev/stdout` which can be viewed from host with:\n\nCODE_BLOCK_0\n\nThe query log can be diverted to the Docker log by passing the variable `QUERY_LOG_TO_STDOUT=true`.\n\nThe log folder is the same as in the case of the Linux package, set to `/var/log/manticore`. If desired, it can be mounted to a local path to view or process the logs.\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# Docker 日志\n\n当您使用 [官方 Manticore docker 镜像](https://hub.docker.com/r/manticoresearch/manticore/) 时，服务器日志会发送到 `/dev/stdout`，可以通过主机查看：\n\nCODE_BLOCK_0\n\n查询日志可以通过传递变量 `QUERY_LOG_TO_STDOUT=true` 重定向到 Docker 日志。\n\n日志文件夹与 Linux 包的情况相同，设置为 `/var/log/manticore`。如果需要，可以将其挂载到本地路径以查看或处理日志。\n\n<!-- proofread -->",
+      "russian": "# Логирование Docker\n\nКогда вы используете [официальный образ Manticore для Docker](https://hub.docker.com/r/manticoresearch/manticore/), журнал сервера отправляется в `/dev/stdout`, который можно просмотреть с хоста с помощью:\n\nCODE_BLOCK_0\n\nЖурнал запросов можно перенаправить в лог Docker, передав переменную `QUERY_LOG_TO_STDOUT=true`.\n\nПапка для логов такая же, как и в случае с пакетом для Linux, установлена в `/var/log/manticore`. При желании её можно смонтировать в локальный путь для просмотра или обработки логов.\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

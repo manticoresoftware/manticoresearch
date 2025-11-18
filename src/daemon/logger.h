@@ -66,6 +66,7 @@ void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int i
 void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes );
 void LogSphinxqlClause ( Str_t sQuery, int iRealTime );
 void LogQueryToSphinxlLog (const CSphString& sQuery, const CSphString& sError );
+void VacuumSpacesFromJson ( const char* szJson, StringBuilder_c & tBuf ) noexcept;
 
 class LogStmtGuard_c
 {

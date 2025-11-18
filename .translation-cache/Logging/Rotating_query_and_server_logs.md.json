@@ -1,0 +1,10 @@
+{
+  "e971593e5db96a7b8f8d11cd174ce30fe37c44df4c21e890a3ba70ff74d59dad": {
+    "original": "# Rotating query and server logs\n\nManticore Search accepts the USR1 signal for reopening server and query log files.\n\nThe official [DEB and RPM packages](https://manticoresearch.com/install/) install a Logrotate configuration file for all files in the default log folder.\n\nA simple logrotate configuration for log files looks like:\n\nCODE_BLOCK_0\n\n## FLUSH LOGS\n\nCODE_BLOCK_1\n\nAdditionally, the `FLUSH LOGS` SQL command is available, which works the same way as the USR1 system signal. It initiates the reopening of searchd log and query log files, allowing you to implement log file rotation. The command is non-blocking (i.e., it returns immediately).\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 旋转查询和服务器日志\n\nManticore Search 接受 USR1 信号以重新打开服务器和查询日志文件。\n\n官方的 [DEB 和 RPM 软件包](https://manticoresearch.com/install/) 会为默认日志文件夹中的所有文件安装一个 Logrotate 配置文件。\n\n一个简单的日志轮换配置文件示例如下：\n\nCODE_BLOCK_0\n\n## 刷新日志\n\nCODE_BLOCK_1\n\n此外，还提供了 `FLUSH LOGS` SQL 命令，其工作方式与 USR1 系统信号相同。它会触发重新打开 searchd 日志和查询日志文件，从而允许您实现日志文件轮换。该命令是非阻塞的（即立即返回）。",
+      "russian": "# Вращение журналов запросов и сервера\n\nManticore Search принимает сигнал USR1 для повторного открытия файлов журнала сервера и запросов.\n\nОфициальные [DEB и RPM пакеты](https://manticoresearch.com/install/) устанавливают конфигурационный файл Logrotate для всех файлов в папке журналов по умолчанию.\n\nПростая конфигурация logrotate для файлов журналов выглядит так:\n\nCODE_BLOCK_0\n\n## FLUSH LOGS\n\nCODE_BLOCK_1\n\nКроме того, доступна SQL-команда `FLUSH LOGS`, которая работает так же, как и системный сигнал USR1. Она инициирует повторное открытие файлов журнала searchd и журнала запросов, что позволяет реализовать вращение файлов журнала. Команда не блокирующая (т.е. возвращается сразу)."
+    },
+    "is_code_or_comment": false
+  }
+}

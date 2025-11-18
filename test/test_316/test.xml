@@ -59,6 +59,7 @@ searchd
 </sphinxql>
 <sphinxql conn="1">lock tables a read</sphinxql>
 <sphinxql>
+	show locks;
 	insert into a values (9, 1);
 	insert into b values (9, 2);
 	update a set iid=9 where id=1;
@@ -75,7 +76,11 @@ searchd
 	select * from a order by id asc;
 	select * from b order by id asc;
 	lock tables a read, b write;
+	show warnings;
+	show locks;
 	lock tables a read, b read;
+	show warnings;
+	show locks;
 	insert into a values (6, 1);
 	insert into b values (6, 2);
 	update a set iid=6 where id=1;
@@ -87,6 +92,7 @@ searchd
 	update b set iid=7 where id=1;
 	select * from a order by id asc;
 	select * from b order by id asc;
+	show locks;
 	drop table a;
 	drop table b;
 </sphinxql>

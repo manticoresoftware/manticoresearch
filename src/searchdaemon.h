@@ -741,6 +741,7 @@ public:
 
 	void LockRead() const noexcept;
 	[[nodiscard]] bool UnlockRead() const noexcept;
+	[[nodiscard]] DWORD GetReadLocks() const noexcept;
 	[[nodiscard]] Threads::Coro::ReadTableLock_c& Locker() const noexcept;
 };
 

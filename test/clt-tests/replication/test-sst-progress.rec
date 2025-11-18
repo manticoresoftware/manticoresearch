@@ -96,7 +96,7 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_node_state'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_node_state
-  Value: #!/.+/!#
+  Value: #!/(donor|joiner|synced)/!#
 ––– comment –––
 Verify all 5 SST progress variables exist
 ––– input –––
@@ -111,31 +111,31 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_total'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_sst_total
-  Value: #!/.*/!#
+  Value: #!/([0-9]{1,2}|100|-)/!#
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_stage'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_sst_stage
-  Value: #!/.*/!#
+  Value: #!/([a-z ]+|-)/!#
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_stage_total'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_sst_stage_total
-  Value: #!/.*/!#
+  Value: #!/([0-9]{1,2}|100|-)/!#
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_tables'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_sst_tables
-  Value: #!/.*/!#
+  Value: #!/([0-9]+|-)/!#
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_table'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_sst_table
-  Value: #!/.*/!#
+  Value: #!/([0-9]+ \([a-z_]+\)|-)/!#
 ––– comment –––
 Verify both nodes are synced
 ––– input –––

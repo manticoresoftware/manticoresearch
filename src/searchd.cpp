@@ -14642,16 +14642,16 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !LoadExFunctions () )
 		sphFatal ( "failed to initialize extended socket functions: %s", sphSockError ( iStartupErr ) );
 
-//	// i want my windows sessions to log onto stdout
-//	// both in Debug and Release builds
-//	if ( !WinService() )
-//		g_bOptNoDetach = true;
-//
-//#ifndef NDEBUG
-//	// i also want my windows debug builds to skip locking by default
-//	// NOTE, this also skips log files!
-//	g_bOptNoLock = true;
-//#endif
+	// i want my windows sessions to log onto stdout
+	// both in Debug and Release builds
+	if ( !WinService() )
+		g_bOptNoDetach = true;
+
+#ifndef NDEBUG
+	// i also want my windows debug builds to skip locking by default
+	// NOTE, this also skips log files!
+	g_bOptNoLock = true;
+#endif
 #endif
 
 	if ( !bOptPIDFile )

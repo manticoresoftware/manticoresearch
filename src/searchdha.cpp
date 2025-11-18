@@ -1046,7 +1046,7 @@ SearchdStats_t & gStats ()
 }
 
 // generic stats track - always to agent stats, separately to dashboard.
-void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
+static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 {
 	assert ( iCountID<=eMaxAgentStat );
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1077,7 +1077,7 @@ void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 }
 
 // special case of stats - all is ok, just need to track the time in dashboard.
-void track_processing_time ( AgentConn_t & tAgent )
+static void track_processing_time ( AgentConn_t &tAgent )
 {
 	// first we count temporary statistic (into dashboard)
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1726,18 +1726,6 @@ void AgentConn_t::SendingState ()
 		m_iPoolerTimeoutUS = MonoMicroTimer() + m_iPoolerTimeoutPeriodUS;
 		LazyDeleteOrChange ( m_iPoolerTimeoutUS, m_iPoolerTimeoutPeriodUS ); // assign new time value, don't touch the handler
 	}
-}
-
-void AgentConn_t::SetDescMultiAgent()
-{
-	if ( m_pMultiAgent )
-		m_tDesc.CloneFrom ( m_pMultiAgent->ChooseAgent () );
-}
-
-void AgentConn_t::SetRecvBuf ( ByteBlob_t tBuf )
-{
-	m_dReplyBuf.Reset ( 0 );
-	m_dReplyBuf.Set ( (BYTE *)tBuf.first, tBuf.second );
 }
 
 /// prepare all necessary things to connect

@@ -525,11 +525,6 @@ public:
 
 	// helper for beautiful logging
 	inline const char * StateName () const 	{ return Agent_e_Name ( m_eConnState ); }
-	
-	int GetRetries() const { return m_iRetries; }
-	int GetDelay() const { return m_iDelay; }
-	void SetDescMultiAgent();
-	void SetRecvBuf ( ByteBlob_t tBuf );
 
 private:
 
@@ -811,7 +806,5 @@ protected:
 
 void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
-void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCountID );
-void track_processing_time ( AgentConn_t & tAgent );
 
 #endif // _searchdha_

@@ -453,13 +453,75 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	tBuf << " */";
 }
 
+void VacuumSpacesFromJson ( const char* szJson, StringBuilder_c & tBuf ) noexcept
+{
+	if (!szJson)
+		return;
+	enum class eStates { initial, has_space, quoted, backslash };
+	auto eState = eStates::initial;
+	while (*szJson)
+	{
+		const char c = *szJson++;
+		switch (eState)
+		{
+		case eStates::initial:
+			switch (c)
+			{
+				case ' ':
+				case '\t':
+				case '\n':
+				case '\r': eState = eStates::has_space;
+					tBuf << " "; break;
+				case '"': eState = eStates::quoted;
+					tBuf << "\""; break;
+				default:
+					tBuf << c; break;
+			}
+			break;
+
+		case eStates::has_space:
+			switch (c)
+			{
+				case ' ':
+				case '\t':
+				case '\n':
+				case '\r': break;
+				case '"': eState = eStates::quoted;
+					tBuf << "\""; break;
+				default: eState = eStates::initial;
+					tBuf << c; break;
+			}
+			break;
+
+		case eStates::quoted:
+			tBuf << c;
+			switch (c)
+			{
+				case '"': eState = eStates::initial; break;
+				case '\\': eState = eStates::backslash;
+				default: break;
+			}
+			break;
+
+		case eStates::backslash:
+			tBuf << c;
+			eState = eStates::quoted;
+		}
+	}
+}
+
 
 static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
+	tBuf << " /*";
 	if ( q.m_sRawQuery.IsEmpty() )
-		tBuf << " /*" << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*" << q.m_sQuery << " */";
+	{
+		tBuf << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*";
+		VacuumSpacesFromJson ( q.m_sQuery.cstr(), tBuf );
+	}
 	else
-		tBuf << " /*" << q.m_sRawQuery << " */";
+		VacuumSpacesFromJson ( q.m_sRawQuery.cstr(), tBuf );
+	tBuf << " */";
 }
 
 

@@ -1679,7 +1679,8 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	tRes["hits"]["total"]["value"] = iDocsTotal;
 
 	std::string sRes = tRes.dump();
-	HttpBuildReply ( dResult, EHTTP_STATUS::_200, sRes.c_str(), sRes.length(), false );
+	HttpReplyTrait_t tReply { EHTTP_STATUS::_200, FromSz ( sRes.c_str() ) };
+	HttpBuildReply ( tReply, dResult );
 
 	return true;
 }

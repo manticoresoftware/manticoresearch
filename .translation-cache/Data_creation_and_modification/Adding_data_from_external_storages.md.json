@@ -1,0 +1,10 @@
+{
+  "076d1fb4476f6a9a861c994404d293f3506ebadf0411fc9d52e2643bbaee9fcb": {
+    "original": "# Adding data from external storages\n\nYou can ingest data into Manticore from external storages using various methods:\n\n* [Indexer tool](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) to fetch data from various databases into plain tables.\n\n* [Logstash](../Integration/Logstash.md), [Filebeat](../Integration/Filebeat.md), and [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) integrations to put data to Manticore real-time tables from these tools.\n\n* [Kafka integration](../Integration/Kafka.md) to synchronize data from Kafka topics into a real-time table.",
+    "translations": {
+      "chinese": "# 从外部存储添加数据\n\n您可以使用多种方法将数据从外部存储导入到 Manticore：\n\n* 使用 [Indexer 工具](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) 从各种数据库获取数据到普通表中。\n\n* 使用 [Logstash](../Integration/Logstash.md)、[Filebeat](../Integration/Filebeat.md) 和 [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) 集成，将数据从这些工具导入到 Manticore 实时表中。\n\n* 使用 [Kafka 集成](../Integration/Kafka.md) 将 Kafka 主题中的数据同步到实时表中。",
+      "russian": "# Добавление данных из внешних хранилищ\n\nВы можете загружать данные в Manticore из внешних хранилищ с помощью различных методов:\n\n* [Инструмент Indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) для получения данных из различных баз данных в plain-таблицы.\n\n* Интеграции [Logstash](../Integration/Logstash.md), [Filebeat](../Integration/Filebeat.md) и [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) для передачи данных в real-time таблицы Manticore из этих инструментов.\n\n* [Интеграция Kafka](../Integration/Kafka.md) для синхронизации данных из тем Kafka в real-time таблицу."
+    },
+    "is_code_or_comment": false
+  }
+}

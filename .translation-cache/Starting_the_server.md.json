@@ -1,0 +1,10 @@
+{
+  "c23cba9e649146b589b53b8a50763f492ef5a89aacabde9f8d7db975b9d64c84": {
+    "original": "# Starting the server\n\nManticore Search server can be started using different methods, depending on the installation type.\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 启动服务器\n\nManticore Search 服务器可以根据安装类型使用不同的方法启动。\n\n<!-- proofread -->",
+      "russian": "# Запуск сервера\n\nСервер Manticore Search можно запустить разными способами, в зависимости от типа установки.\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

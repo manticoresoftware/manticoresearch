@@ -1,0 +1,30 @@
+Test for issue #3602: searchd crash on particular SQL query with KNN and MATCH
+https://github.com/manticoresoftware/manticoresearch/issues/3602
+
+Bug: Query with knn() function and MATCH() condition using ranker=expr('knn_dist()') crashes searchd.
+Expected: Query should return proper error instead of crashing.
+
+––– comment –––
+Start Manticore Search daemon
+––– block: ../base/start-searchd –––
+––– comment –––
+Drop table if it exists
+––– input –––
+mysql -h0 -P9306 -e 'drop table if exists companysearch;'
+––– output –––
+––– comment –––
+Create table with text field and float_vector embeddings field
+––– input –––
+mysql -h0 -P9306 -e "create table companysearch(f text, embeddings float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');"
+––– output –––
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P9306 -e "insert into companysearch values(1, 'web', (0,0));"
+––– output –––
+––– comment –––
+Test query with KNN and MATCH - should return error, not crash
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM companysearch WHERE knn(embeddings, 5, (1,1)) AND MATCH('web')  OPTION ranker=expr('knn_dist()');"
+––– output –––
+ERROR 1064 (42000) at line 1: table companysearch: KNN_DIST() attribute not available in this context

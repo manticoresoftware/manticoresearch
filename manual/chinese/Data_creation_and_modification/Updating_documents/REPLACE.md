@@ -2,9 +2,9 @@
 
 <!-- example replace -->
 
-`REPLACE` 的工作方式类似于 [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)，但它在插入新文档之前，将具有相同 ID 的先前文档标记为已删除。
+`REPLACE` 的工作方式类似于 [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)，但它在插入新文档之前，会将具有相同 ID 的先前文档标记为已删除。
 
-如果您正在寻找就地更新，请参见 [本节](../../Data_creation_and_modification/Updating_documents/UPDATE.md)。
+如果您正在寻找原地更新，请参见 [本节](../../Data_creation_and_modification/Updating_documents/UPDATE.md)。
 
 ## SQL REPLACE
 
@@ -16,7 +16,7 @@ REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-SQL 语句中未显式包含的列将被设置为其默认值，例如 0 或空字符串，具体取决于其数据类型。
+SQL 语句中未明确包含的列将被设置为其默认值，例如 0 或空字符串，具体取决于其数据类型。
 
 **仅替换选定字段：**
 ```sql
@@ -24,13 +24,13 @@ REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-注意，在此模式下只能按 id 进行过滤。
+注意，在此模式下，您只能按 id 进行过滤。
 
-> 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+> 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 
-有关 `UPDATE` 与部分 `REPLACE` 的更多信息，请参见 [这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
+关于 `UPDATE` 与部分 `REPLACE` 的更多信息，请参见 [这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
 
-详情请参阅示例。
+详情请参见示例。
 
 ## JSON REPLACE
 
@@ -49,7 +49,7 @@ REPLACE INTO table
   }
   ```
   `/index` 是别名端点，功能相同。
-* 类 Elasticsearch 端点 `<table>/_doc/<id>`：
+* 类似 Elasticsearch 的端点 `<table>/_doc/<id>`：
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -58,7 +58,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  > 注意：类 Elasticsearch 替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+  > 注意：类似 Elasticsearch 的替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 * 部分替换：
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -68,11 +68,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` 可以是单纯的表名，也可以是 `cluster:table` 格式。如果需要，可以跨指定集群进行更新。
+  `<table name>` 可以是仅表名，也可以是 `cluster:table` 格式。如果需要，可以跨特定集群进行更新。
 
-  > 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+  > 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 
-详情请参阅示例。
+详情请参见示例。
 
 <!-- intro -->
 ##### SQL:
@@ -140,7 +140,7 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
-> 注意：类 Elasticsearch 替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+> 注意：类似 Elasticsearch 的替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 
 ```json
 PUT /products/_doc/2
@@ -194,7 +194,7 @@ POST /products/_doc/3
 
 <!-- request Elasticsearch-like partial -->
 
-> 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
+> 注意：部分替换需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
 
 ```json
 POST /products/_update/55
@@ -435,9 +435,9 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` 可用于实时表和感知表。不能在普通表中替换数据。
+`REPLACE` 可用于实时表和预选表。您不能替换普通表中的数据。
 
-当你执行 `REPLACE` 时，之前的文档不会被删除，而是被标记为已删除，因此表大小会增长，直到发生区块合并。要强制区块合并，请使用 [OPTIMIZE 语句](../../Securing_and_compacting_a_table/Compacting_a_table.md)。
+当您执行 `REPLACE` 时，先前的文档不会被删除，而是被标记为已删除，因此表的大小会增长，直到发生块合并。要强制块合并，请使用 [OPTIMIZE 语句](../../Securing_and_compacting_a_table/Compacting_a_table.md)。
 
 ## 批量替换
 

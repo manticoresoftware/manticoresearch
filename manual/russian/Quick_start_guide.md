@@ -3,7 +3,7 @@
 <!-- example install -->
 ## Установка и запуск Manticore
 
-Вы можете легко установить и запустить Manticore на различных операционных системах, включая Ubuntu, Centos, Debian, Windows и MacOS. Кроме того, вы также можете использовать Manticore как контейнер Docker.
+Вы можете легко установить и запустить Manticore на различных операционных системах, включая Ubuntu, Centos, Debian, Windows и MacOS. Кроме того, вы также можете использовать Manticore в виде Docker-контейнера.
 
 <!-- intro -->
 ### Ubuntu
@@ -49,7 +49,7 @@ sudo systemctl start manticore
 * ```bash
   C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
   ```
-* Запустите Manticore из оснастки служб Microsoft Management Console.
+* Запустите Manticore через оснастку служб Microsoft Management Console.
 
 <!-- intro -->
 ### MacOS
@@ -67,19 +67,19 @@ brew services start manticoresearch
 docker pull manticoresearch/manticore
 docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
-Для сохранения вашего каталога данных прочитайте [как использовать Manticore docker в продакшн](Starting_the_server/Docker.md#Production-use)
+Для сохранения данных вашего каталога, прочитайте [как использовать Manticore docker в продакшене](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
 
 <!-- example connect -->
 ## Подключение к Manticore
 
-По умолчанию Manticore ожидает ваши подключения на следующих портах:
+По умолчанию Manticore ожидает подключения на:
 
   * порт 9306 для клиентов MySQL
-  * порт 9308 для HTTP/HTTPS подключений
-  * порт 9312 для подключений с других узлов Manticore и клиентов, основанных на бинарном API Manticore
+  * порт 9308 для HTTP/HTTPS соединений
+  * порт 9312 для соединений с другими узлами Manticore и клиентами, использующими бинарный API Manticore
 
-Более подробная информация о поддержке HTTPS доступна в нашем учебном курсе [здесь](https://play.manticoresearch.com/https/).
+Более подробную информацию о поддержке HTTPS можно найти в нашем обучающем курсе [здесь](https://play.manticoresearch.com/https/).
 
 <!-- intro -->
 ##### Подключение через MySQL:
@@ -93,7 +93,7 @@ mysql -h0 -P9306
 ##### Подключение через JSON по HTTP
 
 <!-- request HTTP -->
-HTTP — это протокол без состояния, поэтому не требует специальной фазы подключения. Вы можете просто отправить HTTP-запрос серверу и получить ответ. Для общения с Manticore через JSON интерфейс вы можете использовать любую HTTP клиентскую библиотеку на вашем языке программирования, чтобы отправлять GET или POST запросы серверу и парсить JSON ответы:
+HTTP — это безсостояний протокол, поэтому он не требует специальной фазы подключения. Вы можете просто отправить HTTP-запрос на сервер и получить ответ. Для общения с Manticore через JSON-интерфейс вы можете использовать любую HTTP клиентскую библиотеку на выбранном вами языке программирования для отправки GET или POST запросов на сервер и парсинга JSON ответов:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -259,20 +259,20 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 <!-- example create -->
 ## Создание таблицы
 
-Давайте теперь создадим таблицу с именем "products" с 2 полями:
+Давайте теперь создадим таблицу с названием "products" с 2 полями:
 * title - полнотекстовое поле, которое будет содержать название нашего продукта
 * price - типа "float"
 
-Обратите внимание, что можно опустить создание таблицы явным оператором create. Для дополнительной информации смотрите [Auto schema](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Обратите внимание, что можно не создавать таблицу явно с помощью оператора create. Для дополнительной информации смотрите [Автоматическая схема](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
-Больше информации о разных способах создания таблиц можно найти в наших учебных курсах:
-* [Создание RealTime таблицы](https://play.manticoresearch.com/rtmode/)
-* [Создание таблицы из MySQL источника](https://play.manticoresearch.com/mysql/)
-* [Создание таблицы из CSV источника](https://play.manticoresearch.com/csv/)
-* [Создание таблицы с помощью механизма авто схемы](https://play.manticoresearch.com/autoschema/)
+Больше информации о различных способах создания таблиц можно найти в наших обучающих курсах:
+* [Создание таблицы RealTime](https://play.manticoresearch.com/rtmode/)
+* [Создание таблицы из источника MySQL](https://play.manticoresearch.com/mysql/)
+* [Создание таблицы из источника CSV](https://play.manticoresearch.com/csv/)
+* [Создание таблицы с использованием механизма авто схемы](https://play.manticoresearch.com/autoschema/)
 * [Создание таблицы с Logstash/Beats](https://play.manticoresearch.com/logstash/)
 * [Создание таблицы с Fluentbit](https://play.manticoresearch.com/vectordev/)
-* [Создание таблицы с помощью агента Vector.dev](https://play.manticoresearch.com/vectordev/)
+* [Создание таблицы с использованием агента Vector.dev](https://play.manticoresearch.com/vectordev/)
 
 <!-- intro -->
 ##### SQL:
@@ -648,15 +648,15 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 
 <!-- end -->
 
-Подробнее по теме можно найти здесь:
+Более подробную информацию по теме можно найти здесь:
 * [Добавление данных в обычную таблицу](https://play.manticoresearch.com/mysql/)
-* [Добавление данных в таблицу RealTime](https://play.manticoresearch.com/rtintro/)
+* [Добавление данных в RealTime таблицу](https://play.manticoresearch.com/rtintro/)
 
 
 <!-- example search -->
 ## Поиск
 
-Давайте найдем один из документов. Запрос, который мы используем, — 'remove hair'. Как вы видите, он находит документ с заголовком 'Pet Hair Remover Glove' и подсвечивает 'Hair remover' в нем, даже несмотря на то, что в запросе стоит "remove", а не "remover". Это происходит потому, что при создании таблицы мы включили использование стемминга для английского (`morphology "stem_en"`).
+Давайте найдём один из документов. Запрос, который мы будем использовать — 'remove hair'. Как видите, он находит документ с заголовком 'Pet Hair Remover Glove' и выделяет в нём 'Hair remover', хотя в запросе есть "remove", а не "remover". Это потому, что при создании таблицы мы включили использование английского стемминга (`morphology "stem_en"`).
 
 <!-- intro -->
 ##### SQL:
@@ -984,15 +984,15 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 <!-- end -->
 
-Больше информации о различных вариантах поиска в Manticore можно найти в наших обучающих курсах:
+Более подробную информацию о различных вариантах поиска в Manticore можно найти в наших обучающих курсах:
 * [Фасетный поиск](https://play.manticoresearch.com/faceting/)
-* [Гео-поиск](https://play.manticoresearch.com/geosearch/)
+* [Геопоиск](https://play.manticoresearch.com/geosearch/)
 * [Поиск похожих документов](https://play.manticoresearch.com/mlt/)
 
 <!-- example update -->
 ## Обновление
 
-Предположим, что теперь мы хотим обновить документ — изменить цену на 18.5. Это можно сделать, отфильтровав по любому полю, но обычно у вас есть id документа, и обновление происходит на его основе.
+Предположим, что теперь мы хотим обновить документ — изменить цену на 18.5. Это можно сделать, отфильтровав по любому полю, но обычно вы знаете id документа и обновляете что-то на его основе.
 
 <!-- intro -->
 ##### SQL:
@@ -1144,7 +1144,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- example delete -->
 ## Удаление
 
-Теперь удалим все документы с ценой ниже 10.
+Теперь давайте удалим все документы с ценой ниже 10.
 
 <!-- intro -->
 ##### SQL:

@@ -1,0 +1,10 @@
+{
+  "3a74623b9e39156ae267ddb73e009c50e7a90bc90918ce2afa5021a9c403a780": {
+    "original": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\nIt returns the current values of a few server-wide variables. Also, support for `GLOBAL` and `SESSION` clauses was added.\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\n它返回一些服务器范围变量的当前值。同时，添加了对 `GLOBAL` 和 `SESSION` 子句的支持。\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n\n<!-- proofread -->",
+      "russian": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\nОн возвращает текущие значения нескольких переменных, действующих на уровне всего сервера. Также была добавлена поддержка клаузул `GLOBAL` и `SESSION`.\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

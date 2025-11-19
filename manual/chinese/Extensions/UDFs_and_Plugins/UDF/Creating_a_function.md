@@ -6,7 +6,7 @@ CREATE FUNCTION udf_name
     SONAME 'udf_lib_file'
 ```
 
-`CREATE FUNCTION` 语句从指定的库文件安装一个具有指定名称和类型的用户自定义函数 [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md)。库文件必须位于受信任的 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 目录中。安装成功后，该函数将在服务器收到的所有后续查询中可用。示例：
+`CREATE FUNCTION` 语句从提供的库文件安装具有指定名称和类型的用户自定义函数 [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md)。库文件必须位于受信任的 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 目录中。安装成功后，该函数将在服务器接收的所有后续查询中可用。示例：
 
 ```sql
 mysql> CREATE FUNCTION avgmva RETURNS INTEGER SONAME 'udfexample.dll';

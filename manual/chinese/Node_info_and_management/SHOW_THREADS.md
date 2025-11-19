@@ -11,15 +11,15 @@ SHOW THREADS [ OPTION columns=width[,format=sphinxql][,format=all] ]
 结果表包含以下列：
 
 * `TID`：内核分配给线程的 ID
-* `Name`：线程名称，在 `top`、`htop`、`ps` 以及其他进程查看工具中也可见
-* `Proto`：连接协议；可能的值包括 `sphinx`、`mysql`、`http`、`ssl`、`compressed`、`replication`，或组合（例如，`http,ssl` 或 `compressed,mysql`）
-* `State`：线程状态；可能的值为 `handshake`、`net_read`、`net_write`、`query`、`net_idle`
+* `Name`：线程名称，也可在 `top`、`htop`、`ps` 及其他进程查看工具中看到
+* `Proto`：连接协议；可能的值包括 `sphinx`、`mysql`、`http`、`ssl`、`compressed`、`replication`，或组合（例如 `http,ssl` 或 `compressed,mysql`）
+* `State`：线程状态；可能的值有 `handshake`、`net_read`、`net_write`、`query`、`net_idle`
 * `Connection from`：客户端的 `ip:port`
 * `ConnID`：连接 ID（从 0 开始）
-* `This/prev job time`：当线程忙碌时 - 当前任务已运行的时长；当线程空闲时 - 上一个任务的时长 + 后缀 `prev`
-* `Jobs done`：该线程完成的任务数
+* `This/prev job time`：当线程忙碌时 - 当前任务运行的时间；当线程空闲时 - 上一个任务的持续时间 + 后缀 `prev`
+* `Jobs done`：该线程完成的任务数量
 * `Thread status`：`idling` 或 `working`
-* `Info`：关于查询的信息，如果查询针对分布式表或实时表，可能包含多个查询
+* `Info`：查询信息，如果查询针对分布式表或实时表，可能包含多个查询
 
 <!-- intro -->
 ##### SQL:
@@ -704,15 +704,15 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
 `Info` 列显示：
 
 * 通过 Manticore SQL 接口执行的查询的原始文本
-* 通过内部 Manticore 二进制协议（例如，从远程 Manticore 实例）运行的查询的完整语法、注释及数据大小
+* 通过内部 Manticore 二进制协议执行的查询的完整文本语法、注释和数据大小（例如，来自远程 Manticore 实例）
 
 <!-- example SHOW THREADS WIDTH -->
 
-您可以通过指定 `columns=N` 选项来限制 `Info` 列的最大宽度。
+您可以通过指定 `columns=N` 选项限制 `Info` 列的最大宽度。
 
-默认情况下，查询以其原始格式显示。然而，当使用 `format=sphinxql` 选项时，查询将以 SQL 格式显示，无论执行使用何种协议。
+默认情况下，查询以其原始格式显示。但当使用 `format=sphinxql` 选项时，无论执行协议如何，查询都会以 SQL 格式显示。
 
-使用 `format=all` 会显示所有线程，而不使用此选项则会隐藏空闲和系统线程（例如，正忙于执行 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 的线程）。
+使用 `format=all` 将显示所有线程，而不使用此选项时，空闲和系统线程会被隐藏（例如，忙于执行 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 的线程）。
 
 <!-- intro -->
 ##### SQL:

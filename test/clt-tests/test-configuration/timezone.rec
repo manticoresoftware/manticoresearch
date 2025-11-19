@@ -1,12 +1,17 @@
 ––– comment –––
 Extended timezone test based on original test from documentation
+––– input –––
+ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime
+echo "America/Los_Angeles" > /etc/timezone
+dpkg-reconfigure -f noninteractive tzdata > /dev/null 2>&1
+––– output –––
 ––– block: ../base/start-searchd –––
 ––– comment –––
 Check initial timezone and basic SET GLOBAL functionality (original test)
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: #!/[0-9a-zA-Z]\w+/!#
+America/Los_Angeles
 ––– input –––
 mysql -h0 -P9306 -e "select curtime()\G" | awk 'NR>1 {print $2}' > /tmp/utc.txt
 ––– output –––
@@ -26,9 +31,9 @@ mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timesta
 mysql -h0 -P9306 -e "set global timezone='UTC';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: UTC
+UTC
 ––– input –––
 mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
 ––– output –––
@@ -48,9 +53,9 @@ cat /tmp/bkk.txt
 ––– output –––
 #!/\d+:\d+:\d+/!#
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: Asia/Bangkok
+Asia/Bangkok
 ––– input –––
 mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
 ––– output –––
@@ -79,9 +84,9 @@ export TZ=Asia/Tokyo && searchd --config /etc/manticoresearch/manticore.conf > /
 sleep 2
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: Asia/Tokyo
+Asia/Tokyo
 ––– input –––
 mysql -h0 -P9306 -e "select hour(now()) as tokyo_hour\G" | grep "tokyo_hour:" | awk '{print $2}' > /tmp/tokyo_hour.txt
 ––– output –––
@@ -98,9 +103,9 @@ export TZ=UTC && searchd --config /etc/manticoresearch/manticore.conf > /dev/nul
 sleep 2
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: UTC
+UTC
 ––– input –––
 mysql -h0 -P9306 -e "select hour(now()) as utc_hour\G" | grep "utc_hour:" | awk '{print $2}' > /tmp/tz_utc_hour.txt
 ––– output –––
@@ -126,9 +131,9 @@ unset TZ && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&
 sleep 2
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: Asia/Singapore
+Asia/Singapore
 ––– comment –––
 Test Europe/London through system files (previously problematic)
 ––– input –––
@@ -145,9 +150,9 @@ searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 sleep 2
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: Europe/London
+Europe/London
 ––– input –––
 echo "Europe/London works correctly from system files"
 ––– output –––
@@ -172,9 +177,9 @@ searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
 sleep 2
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: America/New_York
+America/New_York
 ––– comment –––
 Test priority: config should override TZ and system files
 ––– input –––
@@ -195,9 +200,9 @@ searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
 sleep 2
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: America/New_York
+America/New_York
 ––– input –––
 echo "Priority test: Config (America/New_York) overrides TZ (Africa/Cairo) and system (Australia/Sydney)"
 ––– output –––
@@ -235,23 +240,23 @@ Test special timezone formats
 mysql -h0 -P9306 -e "set global timezone='GMT';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: GMT
+GMT
 ––– input –––
 mysql -h0 -P9306 -e "set global timezone='EST5EDT';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: EST5EDT
+EST5EDT
 ––– input –––
 mysql -h0 -P9306 -e "set global timezone='Asia/Kolkata';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
 ––– output –––
-        Value: Asia/Kolkata
+Asia/Kolkata
 ––– input –––
 mysql -h0 -P9306 -e "select hour(now()) as kolkata_h, minute(now()) as kolkata_m\G" | grep -E "kolkata_h:|kolkata_m:" | awk '{print $2}' | tr '\n' ':' | sed 's/:$//' > /tmp/kolkata_time.txt
 ––– output –––
@@ -260,11 +265,15 @@ echo "Kolkata (UTC+5:30) time: $(cat /tmp/kolkata_time.txt)"
 ––– output –––
 #!/Kolkata \(UTC\+5:30\) time: .*/!#
 ––– comment –––
-Cleanup and restore original configuration
+Cleanup: Remove config timezone setting before cleanup
 ––– input –––
-searchd --stopwait --config /tmp/manticore_tz.conf 2>&1 | grep "successfully sent SIGTERM"
+searchd --stopwait > /dev/null 2>&1
 ––– output –––
-[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/timezone=America\/New_York/d' /etc/manticoresearch/manticore.conf
+––– output –––
+––– comment –––
+Cleanup and restore original configuration
 ––– input –––
 mv /tmp/localtime.backup /etc/localtime
 ––– output –––
@@ -277,3 +286,221 @@ mv /tmp/manticore.conf.backup /etc/manticoresearch/manticore.conf
 ––– input –––
 rm -f /tmp/manticore_tz.conf /tmp/*.txt
 ––– output –––
+––– comment –––
+Test logging timezone vs time function timezone - Case 1: Default (no TZ, no config)
+Verify: Logs use local timezone, time functions use local timezone
+––– input –––
+date +%H:%M
+––– output –––
+#!/\d{2}:\d{2}/!#
+––– input –––
+searchd --stopwait > /dev/null 2>&1
+––– output –––
+––– input –––
+rm /var/log/manticore/*.log
+––– output –––
+––– input –––
+unset TZ && searchd > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 1
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t; insert into t values(1); select hour(now()) as tz_hour from t"
+––– output –––
++---------+
+| tz_hour |
++---------+
+| #!/[0-9]+/!# |
++---------+
+––– input –––
+LOCAL_HOUR=$((10#$(date +%H))); ACTUAL_HOUR=$((10#$(mysql -P9306 -h0 -e "select hour(now()) from t" | awk 'NR==4 {print $2}'))); DIFF=$(( (ACTUAL_HOUR - LOCAL_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Timezone precedence correct: hour=$ACTUAL_HOUR matches local hour=$LOCAL_HOUR (using system local timezone)" || echo "Timezone precedence FAILED: actual hour=$ACTUAL_HOUR, local hour=$LOCAL_HOUR"
+––– output –––
+Timezone precedence correct: hour=#!/[0-9]+/!# matches local hour=#!/[0-9]+/!# (using system local timezone)
+––– input –––
+LOG_TS=$(tail -n 1 /var/log/manticore/searchd.log | grep -oE '\[.*\]' | head -1); DATE_TS=$(date '+%a %b %d %H:%M'); LOG_HOUR=$((10#$(echo "$LOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (LOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Log timestamp is in local timezone (log hour: $LOG_HOUR, local hour: $DATE_HOUR)" || echo "Log timestamp timezone issue: log=$LOG_HOUR local=$DATE_HOUR"
+––– output –––
+Log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+QLOG_TS=$(tail -n 1 /var/log/manticore/query.log | grep -oE '/\* .* \*/'); QLOG_HOUR=$((10#$(echo "$QLOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (QLOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Query log timestamp is in local timezone (log hour: $QLOG_HOUR, local hour: $DATE_HOUR)" || echo "Query log timestamp timezone issue: log=$QLOG_HOUR local=$DATE_HOUR"
+––– output –––
+Query log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
+––– output –––
+America/Los_Angeles
+––– comment –––
+Test logging timezone vs time function timezone - Case 2: TZ environment variable
+Verify: Logs use local timezone (not TZ), time functions use TZ
+––– input –––
+date +%H:%M
+––– output –––
+#!/\d{2}:\d{2}/!#
+––– input –––
+searchd --stopwait > /dev/null 2>&1
+––– output –––
+––– input –––
+rm /var/log/manticore/*.log
+––– output –––
+––– input –––
+TZ=Europe/Berlin searchd > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 1
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select hour(now()) as tz_hour from t"
+––– output –––
++---------+
+| tz_hour |
++---------+
+| #!/[0-9]+/!# |
++---------+
+––– input –––
+EXPECTED_TZ="Europe/Berlin"; EXPECTED_HOUR=$((10#$(TZ=$EXPECTED_TZ date +%H))); ACTUAL_HOUR=$((10#$(mysql -P9306 -h0 -e "select hour(now()) from t" | awk 'NR==4 {print $2}'))); [ $ACTUAL_HOUR -eq $EXPECTED_HOUR ] && echo "Timezone precedence correct: hour=$ACTUAL_HOUR matches expected $EXPECTED_TZ hour=$EXPECTED_HOUR" || echo "Timezone precedence FAILED: actual hour=$ACTUAL_HOUR, expected $EXPECTED_TZ hour=$EXPECTED_HOUR"
+––– output –––
+Timezone precedence correct: hour=#!/[0-9]+/!# matches expected Europe/Berlin hour=#!/[0-9]+/!#
+––– input –––
+LOG_TS=$(tail -n 1 /var/log/manticore/searchd.log | grep -oE '\[.*\]' | head -1); DATE_TS=$(date '+%a %b %d %H:%M'); LOG_HOUR=$((10#$(echo "$LOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (LOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Log timestamp is in local timezone (log hour: $LOG_HOUR, local hour: $DATE_HOUR)" || echo "Log timestamp timezone issue: log=$LOG_HOUR local=$DATE_HOUR"
+––– output –––
+Log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+QLOG_TS=$(tail -n 1 /var/log/manticore/query.log | grep -oE '/\* .* \*/'); QLOG_HOUR=$((10#$(echo "$QLOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (QLOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Query log timestamp is in local timezone (log hour: $QLOG_HOUR, local hour: $DATE_HOUR)" || echo "Query log timestamp timezone issue: log=$QLOG_HOUR local=$DATE_HOUR"
+––– output –––
+Query log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
+––– output –––
+Europe/Berlin
+––– comment –––
+Test logging timezone vs time function timezone - Case 3: Config timezone setting
+Verify: Logs use local timezone (not config), time functions use config
+––– input –––
+sed -i '$i timezone=America/New_York' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+date
+––– output –––
+#!/.*/!#
+––– input –––
+searchd --stopwait > /dev/null 2>&1
+––– output –––
+––– input –––
+rm /var/log/manticore/*.log
+––– output –––
+––– input –––
+unset TZ && searchd > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 1
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select hour(now()) as tz_hour from t"
+––– output –––
++---------+
+| tz_hour |
++---------+
+| #!/[0-9]+/!# |
++---------+
+––– input –––
+EXPECTED_TZ="America/New_York"; EXPECTED_HOUR=$((10#$(TZ=$EXPECTED_TZ date +%H))); ACTUAL_HOUR=$((10#$(mysql -P9306 -h0 -e "select hour(now()) from t" | awk 'NR==4 {print $2}'))); [ $ACTUAL_HOUR -eq $EXPECTED_HOUR ] && echo "Timezone precedence correct: hour=$ACTUAL_HOUR matches expected $EXPECTED_TZ hour=$EXPECTED_HOUR" || echo "Timezone precedence FAILED: actual hour=$ACTUAL_HOUR, expected $EXPECTED_TZ hour=$EXPECTED_HOUR"
+––– output –––
+Timezone precedence correct: hour=#!/[0-9]+/!# matches expected America/New_York hour=#!/[0-9]+/!#
+––– input –––
+LOG_TS=$(tail -n 1 /var/log/manticore/searchd.log | grep -oE '\[.*\]' | head -1); DATE_TS=$(date '+%a %b %d %H:%M'); LOG_HOUR=$((10#$(echo "$LOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (LOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Log timestamp is in local timezone (log hour: $LOG_HOUR, local hour: $DATE_HOUR)" || echo "Log timestamp timezone issue: log=$LOG_HOUR local=$DATE_HOUR"
+––– output –––
+Log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+QLOG_TS=$(tail -n 1 /var/log/manticore/query.log | grep -oE '/\* .* \*/'); QLOG_HOUR=$((10#$(echo "$QLOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (QLOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Query log timestamp is in local timezone (log hour: $QLOG_HOUR, local hour: $DATE_HOUR)" || echo "Query log timestamp timezone issue: log=$QLOG_HOUR local=$DATE_HOUR"
+––– output –––
+Query log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
+––– output –––
+America/New_York
+––– comment –––
+Test logging timezone vs time function timezone - Case 4: Config timezone with TZ env var (config should override)
+Verify: Logs use local timezone (not TZ or config), time functions use config (overrides TZ)
+––– input –––
+date +%H:%M
+––– output –––
+#!/\d{2}:\d{2}/!#
+––– input –––
+searchd --stopwait > /dev/null 2>&1
+––– output –––
+––– input –––
+rm /var/log/manticore/*.log
+––– output –––
+––– input –––
+TZ=Europe/Berlin searchd > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 1
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select hour(now()) as tz_hour from t"
+––– output –––
++---------+
+| tz_hour |
++---------+
+| #!/[0-9]+/!# |
++---------+
+––– input –––
+EXPECTED_TZ="America/New_York"; EXPECTED_HOUR=$((10#$(TZ=$EXPECTED_TZ date +%H))); ACTUAL_HOUR=$((10#$(mysql -P9306 -h0 -e "select hour(now()) from t" | awk 'NR==4 {print $2}'))); [ $ACTUAL_HOUR -eq $EXPECTED_HOUR ] && echo "Timezone precedence correct: hour=$ACTUAL_HOUR matches expected $EXPECTED_TZ hour=$EXPECTED_HOUR (config overrides TZ)" || echo "Timezone precedence FAILED: actual hour=$ACTUAL_HOUR, expected $EXPECTED_TZ hour=$EXPECTED_HOUR"
+––– output –––
+Timezone precedence correct: hour=#!/[0-9]+/!# matches expected America/New_York hour=#!/[0-9]+/!# (config overrides TZ)
+––– input –––
+LOG_TS=$(tail -n 1 /var/log/manticore/searchd.log | grep -oE '\[.*\]' | head -1); DATE_TS=$(date '+%a %b %d %H:%M'); LOG_HOUR=$((10#$(echo "$LOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (LOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Log timestamp is in local timezone (log hour: $LOG_HOUR, local hour: $DATE_HOUR)" || echo "Log timestamp timezone issue: log=$LOG_HOUR local=$DATE_HOUR"
+––– output –––
+Log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+QLOG_TS=$(tail -n 1 /var/log/manticore/query.log | grep -oE '/\* .* \*/'); QLOG_HOUR=$((10#$(echo "$QLOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (QLOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Query log timestamp is in local timezone (log hour: $QLOG_HOUR, local hour: $DATE_HOUR)" || echo "Query log timestamp timezone issue: log=$QLOG_HOUR local=$DATE_HOUR"
+––– output –––
+Query log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
+––– output –––
+America/New_York
+––– comment –––
+Test logging timezone vs time function timezone - Case 5: TZ env var with SET GLOBAL timezone (SET GLOBAL should override)
+Verify: Logs use local timezone (not TZ or SET GLOBAL), time functions use SET GLOBAL (overrides TZ)
+––– input –––
+date +%H:%M
+––– output –––
+#!/\d{2}:\d{2}/!#
+––– input –––
+searchd --stopwait > /dev/null 2>&1
+––– output –––
+––– input –––
+rm /var/log/manticore/*.log
+––– output –––
+––– input –––
+TZ=Europe/Berlin searchd > /dev/null 2>&1
+––– output –––
+––– input –––
+sleep 1
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "set global timezone='Europe/Riga'; select hour(now()) as tz_hour from t"
+––– output –––
++---------+
+| tz_hour |
++---------+
+| #!/[0-9]+/!# |
++---------+
+––– input –––
+EXPECTED_TZ="Europe/Riga"; EXPECTED_HOUR=$((10#$(TZ=$EXPECTED_TZ date +%H))); ACTUAL_HOUR=$((10#$(mysql -P9306 -h0 -e "select hour(now()) from t" | awk 'NR==4 {print $2}'))); [ $ACTUAL_HOUR -eq $EXPECTED_HOUR ] && echo "Timezone precedence correct: hour=$ACTUAL_HOUR matches expected $EXPECTED_TZ hour=$EXPECTED_HOUR (SET GLOBAL overrides TZ)" || echo "Timezone precedence FAILED: actual hour=$ACTUAL_HOUR, expected $EXPECTED_TZ hour=$EXPECTED_HOUR"
+––– output –––
+Timezone precedence correct: hour=#!/[0-9]+/!# matches expected Europe/Riga hour=#!/[0-9]+/!# (SET GLOBAL overrides TZ)
+––– input –––
+LOG_TS=$(tail -n 1 /var/log/manticore/searchd.log | grep -oE '\[.*\]' | head -1); DATE_TS=$(date '+%a %b %d %H:%M'); LOG_HOUR=$((10#$(echo "$LOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (LOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Log timestamp is in local timezone (log hour: $LOG_HOUR, local hour: $DATE_HOUR)" || echo "Log timestamp timezone issue: log=$LOG_HOUR local=$DATE_HOUR"
+––– output –––
+Log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+QLOG_TS=$(tail -n 1 /var/log/manticore/query.log | grep -oE '/\* .* \*/'); QLOG_HOUR=$((10#$(echo "$QLOG_TS" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | cut -d: -f1))); DATE_HOUR=$((10#$(date +%H))); DIFF=$(( (QLOG_HOUR - DATE_HOUR + 24) % 24 )); [ $DIFF -le 1 ] && echo "Query log timestamp is in local timezone (log hour: $QLOG_HOUR, local hour: $DATE_HOUR)" || echo "Query log timestamp timezone issue: log=$QLOG_HOUR local=$DATE_HOUR"
+––– output –––
+Query log timestamp is in local timezone (log hour: #!/[0-9]+/!#, local hour: #!/[0-9]+/!#)
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value | awk '{print $2}'
+––– output –––
+Europe/Riga

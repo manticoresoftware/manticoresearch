@@ -137,7 +137,7 @@ When a session requests a read lock, Manticore:
 2. Checks that the table can be locked. It must be a local real-time or percolate table and must not be part of a replication cluster.
 3. Automatically releases any locks the session already holds.
 4. Waits for all ongoing insert, replace, update, or delete operations on the table to finish.
-5. Increases the table's read-lock counter (see [SHOW LOCKS](Freezing_and_locking_a_table.md#SHOW-LOCKS)).
+5. Increases the table's read-lock counter (see [SHOW LOCKS](../Freezing_and_locking_a_table.md#SHOW-LOCKS)).
 
 Any modifying statement (insert/replace/update/delete) first checks if a table is read-locked. If it is, the statement fails with the error `table is locked`.
 

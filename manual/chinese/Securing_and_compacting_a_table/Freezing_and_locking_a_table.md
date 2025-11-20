@@ -137,7 +137,7 @@ Manticore 仅支持**读（共享）**锁。不支持**写（独占）**锁。
 2. 检查表是否可以被锁定。它必须是本地的实时或 percolate 表，且不能是复制集群的一部分。
 3. 自动释放会话已持有的任何锁。
 4. 等待表上所有正在进行的插入、替换、更新或删除操作完成。
-5. 增加表的读锁计数器（参见 [SHOW LOCKS](Freezing_and_locking_a_table.md#SHOW-LOCKS)）。
+5. 增加表的读锁计数器（参见 [SHOW LOCKS](../Freezing_and_locking_a_table.md#SHOW-LOCKS)）。
 
 任何修改语句（插入/替换/更新/删除）首先检查表是否被读锁定。如果是，语句将失败并返回错误 `table is locked`。
 

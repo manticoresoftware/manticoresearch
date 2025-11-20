@@ -55,9 +55,9 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_status'\G"
 Counter: cluster_sst_test_status
   Value: primary
 ––– comment –––
-Create simple table and add to cluster
+Create table with MANY fields to make it large on disk
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE test_table (id bigint, title text)"
+mysql -h0 -P1306 -e "CREATE TABLE test_table (id bigint, title text, content text, description text, tags text, author text, category text, summary text, attr1 int, attr2 int, attr3 int, attr4 int, attr5 int, attr6 int, attr7 int, attr8 int, attr9 int, attr10 int, price float, rating float, created bigint, json_data json, str1 string, str2 string, str3 string, str4 string, str5 string)"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "ALTER CLUSTER sst_test ADD test_table"
@@ -68,6 +68,31 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G"
 *************************** 1. row ***************************
 Counter: cluster_sst_test_indexes
   Value: test_table
+––– comment –––
+Insert LARGE amount of data with many fields to create big disk chunks
+Insert 30000 documents in 5000 batches of 6 documents each
+Each document has lots of text fields and attributes to make it large on disk
+––– input –––
+for batch in $(seq 1 5000); do mysql -h0 -P1306 -e "INSERT INTO sst_test:test_table(title,content,description,tags,author,category,summary,attr1,attr2,attr3,attr4,attr5,attr6,attr7,attr8,attr9,attr10,price,rating,created,json_data,str1,str2,str3,str4,str5) VALUES('Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor','Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor','Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum','web development programming software engineering technology computer science artificial intelligence machine learning data science cloud computing devops','John Smith','Technology',  'Summary of the article about modern technology and software development practices in the current era',1,2,3,4,5,6,7,8,9,10,99.99,4.5,1234567890,'{\"key\":\"value\",\"items\":[1,2,3],\"metadata\":{\"type\":\"article\"}}','category1','tag1','attribute1','metadata1','value1'),('Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore','Tempor incididunt ut labore et dolore magna aliqua Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat Duis aute irure dolor in reprehenderit','In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum sed ut','database architecture cloud computing devops kubernetes docker containers microservices serverless functions','Jane Doe','Engineering','Deep dive into cloud architecture and modern deployment strategies for scalable systems',11,12,13,14,15,16,17,18,19,20,149.99,4.8,1234567891,'{\"type\":\"article\",\"tags\":[\"tech\",\"cloud\"],\"author\":\"Jane\"}','category2','tag2','attribute2','metadata2','value2'),('Sed do eiusmod tempor incididunt ut labore et dolore magna','Et dolore magna aliqua Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat Duis aute irure dolor in reprehenderit in voluptate velit esse','Velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum sed ut perspiciatis unde omnis','api rest graphql websockets realtime communication protocols networking infrastructure distributed systems','Bob Johnson','Architecture','Understanding modern API design patterns and best practices for distributed applications',21,22,23,24,25,26,27,28,29,30,199.99,4.2,1234567892,'{\"format\":\"json\",\"version\":1,\"schema\":\"v2\"}','category3','tag3','attribute3','metadata3','value3'),('Magna aliqua Ut enim ad minim veniam quis nostrud','Quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur','Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum sed ut perspiciatis unde omnis iste natus error','microservices architecture patterns best practices design principles solid clean code','Alice Williams','Development','Comprehensive guide to microservices architecture and implementation strategies',31,32,33,34,35,36,37,38,39,40,249.99,4.7,1234567893,'{\"service\":\"microservice\",\"version\":\"1.0\"}','category4','tag4','attribute4','metadata4','value4'),('Exercitation ullamco laboris nisi ut aliquip ex ea','Ex ea commodo consequat Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident','Sunt in culpa qui officia deserunt mollit anim id est laborum sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque','performance optimization monitoring observability metrics logging tracing debugging profiling','Charlie Brown','Performance','Advanced performance optimization techniques for modern web applications',41,42,43,44,45,46,47,48,49,50,179.99,4.6,1234567894,'{\"perf\":\"optimization\",\"tools\":[\"prometheus\"]}','category5','tag5','attribute5','metadata5','value5'),('Commodo consequat Duis aute irure dolor in reprehenderit','Dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit','Anim id est laborum sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium totam rem aperiam eaque','security authentication authorization encryption cryptography oauth jwt tokens session','David Miller','Security','Essential security practices and authentication mechanisms for web services',51,52,53,54,55,56,57,58,59,60,299.99,4.9,1234567895,'{\"security\":\"critical\",\"level\":\"high\"}','category6','tag6','attribute6','metadata6','value6')"; done > /dev/null 2>&1; echo "Insert completed"
+––– output –––
+Insert completed
+––– comment –––
+Verify data was inserted
+––– input –––
+count=$(mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM sst_test:test_table" | grep -oE '[0-9]+' | head -1); echo "Documents inserted: $count"
+––– output –––
+#!/Documents inserted: [0-9]+/!#
+––– comment –––
+Wait briefly to allow some data to be written to disk
+––– input –––
+sleep 2
+––– output –––
+––– comment –––
+Start background load to continue inserting during SST to slow it down
+––– input –––
+(for i in $(seq 1 5000); do mysql -h0 -P1306 -e "INSERT INTO sst_test:test_table(title,content,description,attr1,attr2,attr3,str1,str2) VALUES('Background doc $i','Background content with lots of text to make it large','More description text here',$i,$i,$i,'str1','str2')"; done) > /dev/null 2>&1 & LOAD_PID=$!; sleep 1; echo "Background load started: $LOAD_PID"
+––– output –––
+Background load started: %{NUMBER}
 ––– comment –––
 Start node 2
 ––– input –––
@@ -84,15 +109,15 @@ if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore
 ––– output –––
 Buddy started!
 ––– comment –––
-Join node 2 to cluster - this triggers SST
+Join node 2 to cluster in background - this triggers SST
+We check metrics immediately while SST is in progress
 ––– input –––
-mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'"
+mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'" > /dev/null 2>&1 &
 ––– output –––
 ––– comment –––
-Verify SST progress variables exist on donor node
-The main goal is to check that these variables are available, not their specific values
+Sleep briefly then check SST metrics WHILE transfer is happening
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_node_state'\G"
+sleep 0.5; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_node_state'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_node_state
@@ -157,6 +182,12 @@ mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G"
 *************************** 1. row ***************************
 Counter: cluster_sst_test_indexes
   Value: test_table
+––– comment –––
+Stop background load process
+––– input –––
+kill $LOAD_PID 2>/dev/null; wait $LOAD_PID 2>/dev/null; echo "Background load stopped"
+––– output –––
+Background load stopped
 ––– comment –––
 Cleanup: Remove watchdog from base config to avoid affecting other tests
 ––– input –––

@@ -23,7 +23,7 @@
 * [SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) - 显示表的可用二级索引信息
 * [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - 显示当前表状态信息
 * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - 显示表设置
-* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_a_table.md#SHOW-LOCKS) - 显示冻结表的信息
+* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS) - 显示冻结表的信息
 
 ##### 数据管理
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - 添加新文档
@@ -38,15 +38,15 @@
 
 ##### SELECT
 * [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - 搜索
-  * [WHERE](Searching/Filters.md#Filters) - 过滤
+  * [WHERE](Searching/Filters.md#Filters) - 过滤条件
   * [GROUP BY](Searching/Grouping.md) - 分组搜索结果
-  * [GROUP BY ORDER](Searching/Grouping.md) - 对分组排序
+  * [GROUP BY ORDER](Searching/Grouping.md) - 分组排序
   * [GROUP BY HAVING](Searching/Grouping.md) - 过滤分组
   * [OPTION](Searching/Options.md#OPTION) - 查询选项
   * [FACET](Searching/Faceted_search.md) - 分面搜索
   * [SUB-SELECTS](Searching/Sub-selects.md) - 关于使用 SELECT 子查询
   * [JOIN](Searching/Joining.md) - SELECT 中的表连接
-* [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - 显示查询执行计划而不运行查询本身
+* [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - 显示查询执行计划而不运行查询
 * [SHOW META](Node_info_and_management/SHOW_META.md) - 显示已执行查询的扩展信息
 * [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - 显示已执行查询的性能分析信息
 * [SHOW PLAN](Searching/Full_text_matching/Profiling.md#Profiling-the-query-tree-in-SQL) - 显示查询执行计划（查询执行后）

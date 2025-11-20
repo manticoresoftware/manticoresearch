@@ -1,8 +1,9 @@
 # Freezing and locking a table
 
-`Freezing` a table is useful for physical copy/backup. It 'freezes' files belonging to a table, and display where they are located. After freezing, you can safely back up files to other location. You can still insert new documents into frozen tables, up to reaching rt_mem_limit, but this data will be accumulated in RAM and will not be saved to disk, until table is unfrozen. If you exceed rt_mem_limit, changes will be paused until table is unfrozen. If daemon unexpectedly terminates, unsaved data will be restored from binlog.
+"Freezing" a table is useful when you want to make a physical copy or backup. It marks the table's files as frozen and shows where they are stored. After freezing, you can safely copy these files elsewhere. You can still add new documents to a frozen table until it reaches `rt_mem_limit`, but that new data stays in memory and is not written to disk until the table is unfrozen. If the table exceeds `rt_mem_limit`, all changes pause until it is unfrozen. If the daemon stops unexpectedly, any unsaved data is restored from the binlog.
 
-A complement `locking` a table is useful for logical backup. It doesn't affect any current internal reorganization, like optimize, saving ram chunk to disk, etc. Instead, it just prohibits any modifying ops. That is - you can't insert/replace/update data into locked table. That is useful for tools like mysqldump. By locking a table it ensures data is logically consistent. For example if you replace a document during dumping, it might happen, that previous version is already in the dump, and new version also appears at the end, with same document ID. By locking a table you can be sure, such case will not happen.
+"Locking" a table is useful for logical backups. It doesn't stop internal maintenance tasks, such as disk chunk merging operations or writing a RAM chunk to disk. It only blocks write operations. This means you can’t insert, replace, or update data in a locked table. This is helpful for tools like `mysqldump`, because locking ensures the data stays logically consistent. For example, without a lock, if you replace a document during a dump, the old version might already be in the dump and the new version might also appear later, both with the same document ID. Locking a table prevents that situation.
+
 
 ## Freezing a table
 <!-- example freeze -->
@@ -97,10 +98,7 @@ UNFREEZE tbl;
 
 You can use `SHOW table_name STATUS` to check if a table is frozen or not.
 
-The locked counter is displayed in the table's status under the `locked` column. A value of zero indicates that the
-table is not frozen, while a non-zero value reflects the number of active locks. Each explicit `FREEZE` command and
-implicit locking (such as when the table is part of a cluster and a replication routine selects it as a donor for a
-replica) increases the counter. Each `UNFREEZE` command decreases the counter, eventually down to zero.
+The locked counter is displayed in the table's status under the `locked` column. A value of zero indicates that the table is not frozen, while a non-zero value reflects the number of active locks. Each explicit `FREEZE` command and implicit locking (such as when the table is part of a cluster and a replication routine selects it as a donor for a replica) increases the counter. Each `UNFREEZE` command decreases the counter, eventually down to zero.
 
 <!-- request Example -->
 
@@ -121,52 +119,62 @@ SHOW TABLE `foo` STATUS LIKE 'locked';
 
 <!-- end -->
 
-## Table Lock Acquisition
+## Locking a table
 
 <!-- example lock -->
 
 ```sql
-lock tables tbl1 read[, tbl2 write, ...]
+lock tables tbl1 read[, tbl2 read, ...]
 ```
 
-Manticore enables sphinxql client sessions to acquire table locks explicitly for the purpose of cooperating with other sessions for access to tables, or to prevent other sessions from modifying tables during periods when a session requires exclusive access to them. A sphinxql session can acquire or release locks only for itself. One session cannot acquire locks for another session or release locks held by another session. Locks may be acquired and released only in sphinxql sessions, connected by mysql proto, however you can't modify data in locked tables by any proto. Also, locks are not available for tables in cluster. That is because if we reject changes came from cluster to locked table, whole cluster may be stalled, or even damaged.
+You can explicitly lock tables in an SQL client session to coordinate access with other sessions or to stop other sessions from changing data while you need exclusive access. A session can only lock or unlock tables for itself. It cannot lock or unlock tables on behalf of another session. Locks can be used only in SQL sessions connected through the MySQL protocol. While a table is locked, no protocol is allowed to change its data (SQL / HTTP / binary). Locks also don't work for tables that belong to a replication cluster.
 
-Manticore implements only read (shared) locks. Write (exclusive) locks are not implemented.
 
-Read lock:
+Manticore supports only **read (shared)** locks. **Write (exclusive)** locks are not supported.
 
-1. Checks if current connection proto is mysql.
-2. Checks if table is suitable for lock. It must be local rt or percolate table. It must not be part of a cluster.
-3. Implicitly releases any table locks held by the current session.
-4. Waits all currently running changes (inserts/replaces/updates) are finished.
-5. Increments the table's read locked counter.
+When a session requests a read lock, Manticore:
+1. Checks that the connection uses the MySQL protocol.
+2. Checks that the table can be locked. It must be a local real-time or percolate table and must not be part of a replication cluster.
+3. Automatically releases any locks the session already holds.
+4. Waits for all ongoing insert, replace, update, or delete operations on the table to finish.
+5. Increases the table's read-lock counter (see [SHOW LOCKS](Freezing_and_locking_a_table.md#SHOW-LOCKS)).
 
-Modifier statements, like insert/replace/update/delete, first check if table is read locked. In this case they will be rejected with error "table is locked".
+Any modifying statement (insert/replace/update/delete) first checks if a table is read-locked. If it is, the statement fails with the error `table is locked`.
 
-Write lock:
-
-1. Checks if current connection proto is mysql.
-2. Does not check if table suitable, or even if it exists or not.
-3. Implicitly releases any table locks held by the current session.
-4. Fires a warning "Write lock is not implemented."
 
 <!-- request Example -->
 
 ```sql
-LOCK TABLES tbl READ, tbl2 WRITE;
+--------------
+LOCK TABLES tbl READ
+--------------
+
+Query OK, 0 rows affected (0.000 sec)
+
+--------------
+LOCK TABLES tbl READ, tbl2 WRITE
+--------------
+
+Query OK, 0 rows affected, 1 warning (0.000 sec)
+
+--------------
+SHOW WARNINGS
+--------------
+
++---------+------+--------------------------------+
+| Level   | Code | Message                        |
++---------+------+--------------------------------+
+| warning | 1000 | Write lock is not implemented. |
++---------+------+--------------------------------+
+1 row in set (0.000 sec)
 ```
 
 <!-- end -->
 
-## Table lock release
+## UNLOCK TABLES
 
 <!-- example unlock -->
-
-```sql
-UNLOCK TABLES
-```
-
-`UNLOCK` command explicitly releases any table locks held by the current sphinxql session.
+`UNLOCK TABLES` command explicitly releases any table locks held by the current SQL session.
 
 If the connection for a client session terminates, whether normally or abnormally, the daemon implicitly releases all
 table locks held by the session. If the client reconnects, the locks are no longer in effect.
@@ -184,7 +192,12 @@ UNLOCK TABLES;
 
 <!-- example show_locks -->
 
-Locked and frozen tables are also displayed using the `SHOW LOCKS` command. The lock counters are shown in the `Additional Info` column.
+The `SHOW LOCKS` command lists all tables that are currently locked or frozen.  
+Each row shows the table type, its name, the kind of lock it has, and a counter that indicates how many times that lock was applied.
+
+**Lock Type** can be:
+- `read` — the table is protected by a read lock. Modifying statements will fail until the lock is released.
+- `freeze` — the table is frozen. This stops any operation that would write data to disk until the table is unfrozen.
 
 <!-- request Example -->
 
@@ -206,4 +219,3 @@ SHOW LOCKS;
 ```
 
 <!-- end -->
-

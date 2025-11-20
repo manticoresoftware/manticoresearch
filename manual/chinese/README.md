@@ -140,7 +140,7 @@
     * [• 将 RT 表刷新到磁盘](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md)
     * [• 压缩表](Securing_and_compacting_a_table/Compacting_a_table.md)
     * [• 刷新和合并期间的隔离](Securing_and_compacting_a_table/Isolation_during_flushing_and_merging.md)
-    * [• 冻结表](Securing_and_compacting_a_table/Freezing_a_table.md)
+    * [• 冻结和锁定表](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md)
     * [• 刷新属性](Securing_and_compacting_a_table/Flushing_attributes.md)
     * [• 刷新主机名](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ 安全]

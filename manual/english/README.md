@@ -140,7 +140,7 @@
     * [• Flushing RT table to disk](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md)
     * [• Compacting a table](Securing_and_compacting_a_table/Compacting_a_table.md)
     * [• Isolation during flushing and merging](Securing_and_compacting_a_table/Isolation_during_flushing_and_merging.md)
-    * [• Freezing a table](Securing_and_compacting_a_table/Freezing_a_table.md)
+    * [• Freezing and locking a table](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md)
     * [• Flushing attributes](Securing_and_compacting_a_table/Flushing_attributes.md)
     * [• Flushing hostnames](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Security]

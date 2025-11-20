@@ -133,7 +133,7 @@ Manticore versions:
 
 | 参数 | 描述 |
 |-|-|
-| `--backup-dir=path` | 这是备份目录的路径，备份将存储在该目录中。该目录必须已存在。此参数是必需的且没有默认值。每次备份运行时，manticore-backup 会在提供的目录中创建一个带有时间戳的子目录（`backup-[datetime]`），并将所有所需的表复制到该子目录中。因此，`--backup-dir` 是所有备份的容器，运行脚本多次是安全的。|
+| `--backup-dir=path` | 这是备份目录的路径，备份将存储在该目录中。该目录必须已存在。此参数是必需的且没有默认值。在每次备份运行时，manticore-backup 会在提供的目录中创建一个带有时间戳名称的子目录（`backup-[datetime]`），并将所有所需的表复制到该子目录中。因此，`--backup-dir` 是所有备份的容器，运行脚本多次是安全的。|
 | `--restore[=backup]` | 从 `--backup-dir` 恢复。仅使用 --restore 会列出可用的备份。`--restore=backup` 将从 `<--backup-dir>/backup` 恢复。 |
 | `--force` | 在恢复时跳过版本检查并优雅地恢复备份。 |
 | `--disable-telemetry` | 如果您想禁用向 Manticore 发送匿名指标，请传递此标志。您也可以使用环境变量 TELEMETRY=0 |
@@ -196,7 +196,7 @@ BACKUP TO /tmp OPTION async = yes, compress = yes
 BACKUP TO /tmp/mybackup OPTION async = 1
 ```
 
-这将立即返回类似如下的输出：
+这将立即返回如下输出：
 ```
 +----------------------------------+
 | Path                             |
@@ -209,19 +209,19 @@ BACKUP TO /tmp/mybackup OPTION async = 1
 
 ### 重要注意事项
 
-1. 如果路径中包含空格，可以用单引号括起来，例如 `BACKUP TO '/path/with spaces'`
-2. 不含空格的路径无需引号：`BACKUP TO /tmp/backup`
+1. 如果路径包含空格，可以用单引号括起来，例如 `BACKUP TO '/path/with spaces'`
+2. 不含空格的路径不需要引号：`BACKUP TO /tmp/backup`
 3. 支持 Windows 路径：`BACKUP TO 'C:\path'` 或 `BACKUP TO C:\windows\backup`
-4. 确保已启动 Manticore Buddy（默认启动）
+4. 确保 Manticore Buddy 已启动（默认启动）
 5. 备份目录必须存在且 Manticore 进程有写权限
 
 ### 备份如何保持表的一致性
 
-为了确保备份期间表的一致性，Manticore Search 的备份工具使用了创新的 [FREEZE 和 UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) 命令。与例如 MySQL 的传统锁定和解锁表功能不同，`FREEZE` 会停止将数据刷新到磁盘，同时仍允许一定程度的写入和从表中选择更新的数据。
+为了确保备份期间表的一致性，Manticore Search 的备份工具使用了创新的 [FREEZE 和 UNFREEZE](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md) 命令。与例如 MySQL 的传统锁表功能不同，`FREEZE` 会停止将数据刷新到磁盘，同时仍允许一定程度的写入和从表中选择更新的数据。
 
 然而，如果在涉及大量插入的长时间备份操作中，您的 RAM 块大小超过了 `rt_mem_limit` 阈值，数据可能会被刷新到磁盘，写操作将被阻塞直到刷新完成。尽管如此，该工具在表冻结期间保持了表锁定、数据一致性和数据库写入可用性之间的平衡。
 
-当您使用 `manticore-backup` 或 SQL `BACKUP` 命令时，`FREEZE` 命令会执行一次，并同时冻结所有您正在备份的表。备份过程随后逐个备份每个表，成功备份后释放冻结。
+当您使用 `manticore-backup` 或 SQL `BACKUP` 命令时，`FREEZE` 命令会执行一次，并同时冻结所有您要备份的表。备份过程随后逐个备份每个表，成功备份后释放冻结。
 
 如果备份失败或中断，工具会尝试解冻所有表。
 

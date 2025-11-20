@@ -33,18 +33,18 @@ SHOW TABLE table_name STATUS
 * `disk_mapped_cached`：实际缓存于 RAM 中的文件映射总大小。
 * `disk_mapped_doclists` 和 `disk_mapped_cached_doclists`：属于文档列表的总映射和缓存映射部分。
 * `disk_mapped_hitlists` 和 `disk_mapped_cached_hitlists`：属于命中列表的总映射和缓存映射部分。文档列表和命中列表的值分开显示，因为它们通常很大（例如，大约占整个表大小的 90%）。
-* `killed_documents` 和 `killed_rate`：前者表示已删除文档的数量，后者表示删除文档与索引文档的比例。从技术上讲，删除文档意味着在搜索结果中屏蔽它，但它仍物理存在于表中，只有在合并/优化表后才会被清除。
+* `killed_documents` 和 `killed_rate`：前者表示已删除文档的数量，后者表示删除文档与已索引文档的比例。从技术上讲，删除文档意味着在搜索结果中屏蔽它，但它仍然物理存在于表中，只有在合并/优化表后才会被清除。
 * `ram_chunk`：实时或 percolate 表的 RAM 块大小。
 * `ram_chunk_segments_count`：RAM 块内部由段组成，通常不超过 32。此行显示当前段数。
 * `disk_chunks`：实时表中的磁盘块数量。
 * `mem_limit`：表的 `rt_mem_limit` 实际值。
-* `mem_limit_rate`：RAM 块被刷新为磁盘块的比例，例如，如果 `rt_mem_limit` 是 128M，比例是 50%，当 RAM 块超过 64M 时会保存一个新的磁盘块。
+* `mem_limit_rate`：RAM 块被刷新为磁盘块的比例，例如，如果 `rt_mem_limit` 是 128M，比例是 50%，当 RAM 块超过 64M 时将保存一个新的磁盘块。
 * `ram_bytes_retired`：表示 RAM 块中的垃圾大小（例如，已删除或替换但尚未永久移除的文档）。
-* `optimizing`：大于 0 表示表当前正在执行优化（即正在合并某些磁盘块）。
-* `locked`：大于 0 表示表当前被 [FREEZE](../../Securing_and_compacting_a_table/Freezing_a_table.md#Freezing-a-table) 锁定。数字表示表被冻结的次数。例如，一个表可能被 `manticore-backup` 冻结，然后又被复制冻结。只有当没有其他进程需要冻结时，才应完全解冻。
-* `max_stack_need`：计算存储的 percolate 查询中最复杂查询所需的栈空间。该值是动态的，取决于构建细节如编译器、优化、硬件等。
+* `optimizing`：值大于 0 表示表当前正在执行优化（即正在合并某些磁盘块）。
+* `locked`：值大于 0 表示表当前被 [FREEZE](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#Freezing-a-table) 锁定。数字表示表被冻结的次数。例如，表可能先被 `manticore-backup` 冻结，然后又被复制冻结。只有当没有其他进程需要冻结时，才应完全解冻。
+* `max_stack_need`：计算存储的 percolate 查询中最复杂部分所需的栈空间。这是动态值，取决于构建细节如编译器、优化、硬件等。
 * `average_stack_base`：通常在开始计算 percolate 查询时占用的栈空间。
-* `desired_thread_stack`：上述值的总和，向上取整到 128 字节边界。如果该值大于 `thread_stack`，则可能无法对该表执行 `call pq`，因为某些存储的查询会失败。默认 `thread_stack` 值为 1M（即 1048576）；其他值应自行配置。
+* `desired_thread_stack`：上述值的总和，向上取整到 128 字节边界。如果此值大于 `thread_stack`，则可能无法在此表上执行 `call pq`，因为某些存储的查询会失败。默认 `thread_stack` 值为 1M（即 1048576）；其他值应自行配置。
 * `tid` 和 `tid_saved`：表示表的保存状态。`tid` 随每次更改（事务）递增。`tid_saved` 显示保存在 `<table>.ram` 文件中 RAM 块状态的最大 `tid`。当数字不同时，某些更改仅存在于 RAM 中，并且也由 binlog 备份（如果启用）。执行 `FLUSH TABLE` 或安排定期刷新会保存这些更改。刷新后，binlog 被清除，`tid_saved` 表示新的实际状态。
 * `query_time_*`，`exact_query_time_*`：查询执行时间统计，针对最近 1 分钟、5 分钟、15 分钟和服务器启动以来的总时间；数据封装为 JSON 对象，包括查询次数以及最小、最大、平均、95 和 99 百分位值。
 * `found_rows_*`：查询找到的行数统计；提供最近 1 分钟、5 分钟、15 分钟和服务器启动以来的总时间；数据封装为 JSON 对象，包括查询次数以及最小、最大、平均、95 和 99 百分位值。

@@ -217,7 +217,7 @@ You can check if the backup is still running by using `SHOW QUERIES`. Once compl
 
 ### How backup maintains consistency of tables
 
-To ensure consistency of tables during backup, Manticore Search's backup tools use the innovative [FREEZE and UNFREEZE](../Securing_and_compacting_a_table/Freezing_a_table.md) commands. Unlike the traditional lock and unlock tables feature of e.g. MySQL, `FREEZE` stops flushing data to disk while still permitting writing (to some extent) and selecting updated data from the table.
+To ensure consistency of tables during backup, Manticore Search's backup tools use the innovative [FREEZE and UNFREEZE](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md) commands. Unlike the traditional lock and unlock tables feature of e.g. MySQL, `FREEZE` stops flushing data to disk while still permitting writing (to some extent) and selecting updated data from the table.
 
 However, if your RAM chunk size grows beyond the `rt_mem_limit` threshold during lengthy backup operations involving many inserts, data may be flushed to disk, and write operations will be blocked until flushing is complete. Despite this, the tool maintains a balance between table locking, data consistency, and database write availability while the table is frozen.
 

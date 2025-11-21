@@ -506,6 +506,9 @@ udf_type:
 	| TOK_FLOAT		{ $$.SetValueInt ( SPH_ATTR_FLOAT ); }
 	| TOK_STRING	{ $$.SetValueInt ( SPH_ATTR_STRINGPTR ); }
 	| TOK_INTEGER	{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
+	| TOK_MULTI		{ $$.SetValueInt ( SPH_ATTR_UINT32SET_PTR ); }
+	| TOK_MULTI64	{ $$.SetValueInt ( SPH_ATTR_INT64SET_PTR ); }
+	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR_PTR ); }
 	;
 
 drop_function:

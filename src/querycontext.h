@@ -51,7 +51,21 @@ FORCE_INLINE void CalcContextItem ( CSphMatch & tMatch, const ContextCalcItem_t 
 	case SPH_ATTR_INT64SET_PTR:
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_FLOAT_VECTOR_PTR:
-		tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->Int64Eval ( tMatch ) );
+		{
+			// Check if this is a UDF expression that returns raw MVA data
+			// UDF expressions need MvaEval() + packing, while regular expressions use Int64Eval()
+			if ( tCalc.m_pExpr->IsDataPtrAttr() )
+			{
+				ByteBlob_t tMva = tCalc.m_pExpr->MvaEval ( tMatch );
+				BYTE * pPacked = sphPackPtrAttr ( tMva );
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)pPacked );
+			}
+			else
+			{
+				// Regular MVA expressions (including columnar) return packed data directly
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->Int64Eval ( tMatch ) );
+			}
+		}
 		break;
 
 	case SPH_ATTR_DOUBLE:

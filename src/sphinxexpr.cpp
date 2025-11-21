@@ -5584,6 +5584,7 @@ void MoveToArgList ( ISphExpr * pLeft, VecRefPtrs_t<ISphExpr*> &dArgs )
 using UdfInt_fn = sphinx_int64_t ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 using UdfDouble_fn = double ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 using UdfCharptr_fn = char * ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
+using UdfMva_fn = ByteBlob_t ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 
 class Expr_Udf_c : public ISphExpr
 {
@@ -5890,6 +5891,89 @@ private:
 };
 
 
+class Expr_UdfMva_c : public Expr_Udf_c
+{
+public:
+	explicit Expr_UdfMva_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
+		: Expr_Udf_c ( pCall, pProfiler )
+		, m_bMva64 ( pCall->m_pUdf->m_eRetType==SPH_ATTR_INT64SET_PTR )
+		, m_bFloatVector ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT_VECTOR_PTR )
+	{
+		assert ( ( !m_bMva64 && !m_bFloatVector && pCall->m_pUdf->m_eRetType==SPH_ATTR_UINT32SET_PTR ) ||
+			( m_bMva64 && !m_bFloatVector && pCall->m_pUdf->m_eRetType==SPH_ATTR_INT64SET_PTR ) ||
+			( !m_bMva64 && m_bFloatVector && pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT_VECTOR_PTR ) );
+		m_pFn = (UdfMva_fn) m_pCall->m_pUdf->m_fnFunc;
+	}
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const final
+	{
+		if ( m_bError )
+			return {nullptr, 0};
+
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
+		FillArgs ( tMatch );
+		auto tRes = m_pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
+		FreeArgs();
+		return tRes;
+	}
+
+	float Eval ( const CSphMatch & ) const final
+	{
+		if ( m_bFloatVector )
+			assert ( 0 && "internal error: float_vector udf evaluated as float" );
+		else if ( m_bMva64 )
+			assert ( 0 && "internal error: mva64 udf evaluated as float" );
+		else
+			assert ( 0 && "internal error: mva32 udf evaluated as float" );
+		return 0.0f;
+	}
+
+	int IntEval ( const CSphMatch & ) const final
+	{
+		if ( m_bFloatVector )
+			assert ( 0 && "internal error: float_vector udf evaluated as int" );
+		else if ( m_bMva64 )
+			assert ( 0 && "internal error: mva64 udf evaluated as int" );
+		else
+			assert ( 0 && "internal error: mva32 udf evaluated as int" );
+		return 0;
+	}
+
+	int64_t Int64Eval ( const CSphMatch & ) const final
+	{
+		if ( m_bFloatVector )
+			assert ( 0 && "internal error: float_vector udf evaluated as bigint" );
+		else if ( m_bMva64 )
+			assert ( 0 && "internal error: mva64 udf evaluated as bigint" );
+		else
+			assert ( 0 && "internal error: mva32 udf evaluated as bigint" );
+		return 0;
+	}
+
+	bool IsDataPtrAttr() const final
+	{
+		return true;
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_UdfMva_c ( *this );
+	}
+
+private:
+	Expr_UdfMva_c ( const Expr_UdfMva_c& rhs )
+		: Expr_Udf_c ( rhs )
+		, m_pFn ( rhs.m_pFn )
+		, m_bMva64 ( rhs.m_bMva64 )
+		, m_bFloatVector ( rhs.m_bFloatVector )
+	{
+	}
+	UdfMva_fn m_pFn; // to avoid dereference on each MvaEval() call
+	bool m_bMva64; // true for MVA64, false for MVA32 or float_vector
+	bool m_bFloatVector; // true for float_vector, false for MVA32 or MVA64
+};
+
+
 ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 {
 	if ( !CheckStoredArg(pLeft) )
@@ -5907,6 +5991,11 @@ ISphExpr * ExprParser_t::CreateUdfNode ( int iCall, ISphExpr * pLeft )
 			break;
 		case SPH_ATTR_STRINGPTR:
 			pRes = new Expr_UdfStringptr_c ( m_dUdfCalls[iCall], m_pProfiler );
+			break;
+		case SPH_ATTR_UINT32SET_PTR:
+		case SPH_ATTR_INT64SET_PTR:
+		case SPH_ATTR_FLOAT_VECTOR_PTR:
+			pRes = new Expr_UdfMva_c ( m_dUdfCalls[iCall], m_pProfiler );
 			break;
 		default:
 			m_sCreateError.SetSprintf ( "internal error: unhandled type %d in CreateUdfNode()", m_dUdfCalls[iCall]->m_pUdf->m_eRetType );
@@ -7727,9 +7816,10 @@ template < typename T >
 class Expr_MVAAggr_c : public Expr_WithLocator_c
 {
 public:
-	Expr_MVAAggr_c ( const CSphAttrLocator & tLoc, const CSphString & sAttr, ESphAggrFunc eFunc )
+	Expr_MVAAggr_c ( const CSphAttrLocator & tLoc, const CSphString & sAttr, ESphAggrFunc eFunc, bool bIsSorted = true )
 		: Expr_WithLocator_c ( tLoc, sAttr )
 		, m_eFunc ( eFunc )
+		, m_bIsSorted ( bIsSorted )
 	{}
 
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
@@ -7739,16 +7829,51 @@ public:
 			return 0;
 
 		int nValues = dMva.second / sizeof(T);
+		if ( nValues==0 )
+			return 0;
 
-		const T * L = (const T *)dMva.first;
-		const T * R = L+nValues-1;
+		const T * pValues = (const T *)dMva.first;
 
+		// Fast path for single value
+		if ( nValues==1 )
+			return (int64_t)pValues[0];
+
+		// For sorted MVAs (stored attributes), use O(1) path.
+		// For unsorted MVAs (computed expressions), scan all values.
+		if ( m_bIsSorted )
+		{
+			const T * pFirst = pValues;
+			const T * pLast = pValues + nValues - 1;
+			switch ( m_eFunc )
+			{
+				case SPH_AGGR_MIN:	return (int64_t)*pFirst;
+				case SPH_AGGR_MAX:	return (int64_t)*pLast;
+				default:			return 0;
+			}
+		}
+
+		// Unsorted: iterate through all values to find min/max
+		T tResult = pValues[0];
 		switch ( m_eFunc )
 		{
-			case SPH_AGGR_MIN:	return *L;
-			case SPH_AGGR_MAX:	return *R;
-			default:			return 0;
+			case SPH_AGGR_MIN:
+				for ( int i = 1; i < nValues; ++i )
+				{
+					if ( pValues[i] < tResult )
+						tResult = pValues[i];
+				}
+				break;
+			case SPH_AGGR_MAX:
+				for ( int i = 1; i < nValues; ++i )
+				{
+					if ( pValues[i] > tResult )
+						tResult = pValues[i];
+				}
+				break;
+			default:
+				return 0;
 		}
+		return (int64_t)tResult;
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -7777,11 +7902,13 @@ public:
 protected:
 	const BYTE *	m_pBlobPool {nullptr};
 	ESphAggrFunc	m_eFunc {SPH_AGGR_NONE};
+	bool			m_bIsSorted {true};	///< true if MVA is from storage (sorted), false if computed (unsorted)
 
 private:
 	Expr_MVAAggr_c ( const Expr_MVAAggr_c& rhs )
 		: Expr_WithLocator_c ( rhs )
 		, m_eFunc ( rhs.m_eFunc )
+		, m_bIsSorted ( rhs.m_bIsSorted )
 	{}
 };
 
@@ -9172,17 +9299,44 @@ ISphExpr * ExprParser_t::CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *
 }
 
 
+static bool CheckIsStored ( const ISphSchema * pSchema, const ExprNode_t & tLeft, const CSphString & sName )
+{
+	// Check if attribute is from storage (sorted) or computed expression (unsorted)
+	bool bIsSorted = true;
+	if ( pSchema )
+	{
+		int iAttr = pSchema->GetAttrIndex ( sName.cstr() );
+		if ( iAttr >= 0 )
+		{
+			const CSphColumnInfo & tAttr = pSchema->GetAttr ( iAttr );
+			// If attribute has an expression, it's likely computed (unsorted)
+			bIsSorted = !tAttr.m_pExpr.Ptr();
+		}
+	}
+	return bIsSorted;
+}
+
+
 ISphExpr * ExprParser_t::CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft )
 {
 	const ExprNode_t & tLeft = m_dNodes [ tNode.m_iLeft ];
 	switch ( tLeft.m_iToken )
 	{
 		case TOK_ATTR_JSON:			return new Expr_JsonFieldAggr_c ( pLeft, eFunc );
-		case TOK_ATTR_MVA32:		return new Expr_MVAAggr_c<DWORD> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc );
-		case TOK_ATTR_MVA64:		return new Expr_MVAAggr_c<int64_t> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc );
+		case TOK_ATTR_MVA32:
+		{
+			bool bIsSorted = CheckIsStored ( m_pSchema, tLeft, GetNameByLocator(tLeft) );
+			return new Expr_MVAAggr_c<DWORD> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc, bIsSorted );
+		}
+		case TOK_ATTR_MVA64:
+		{
+			bool bIsSorted = CheckIsStored ( m_pSchema, tLeft, GetNameByLocator(tLeft) );
+			return new Expr_MVAAggr_c<int64_t> ( tLeft.m_tLocator, GetNameByLocator(tLeft), eFunc, bIsSorted );
+		}
 		case TOK_COLUMNAR_UINT32SET:return CreateExpr_ColumnarMva32Aggr ( pLeft, eFunc );
 		case TOK_COLUMNAR_INT64SET:	return CreateExpr_ColumnarMva64Aggr ( pLeft, eFunc );
-		default:					return nullptr;
+		default:
+			return nullptr;
 	}
 }
 
@@ -10288,6 +10442,10 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				case SPH_ATTR_JSON_FIELD:
 					eRes = SPH_UDF_TYPE_JSON;
 					break;
+				case SPH_ATTR_FLOAT_VECTOR:
+				case SPH_ATTR_FLOAT_VECTOR_PTR:
+					eRes = SPH_UDF_TYPE_FLOAT_VECTOR_RETURN;
+					break;
 				default:
 					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%u)", i, dArgTypes[i] );
 					return -1;
@@ -10319,6 +10477,8 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 	// deduce type
 	tNode.m_eArgType = ( iArg>=0 ) ? m_dNodes[iArg].m_eRetType : SPH_ATTR_INTEGER;
 	tNode.m_eRetType = pCall->m_pUdf->m_eRetType;
+	
+	
 	return m_dNodes.GetLength()-1;
 }
 

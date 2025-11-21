@@ -580,7 +580,7 @@ private:
 	bool StartNextRetry ();
 
 	void LazyTask ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS, bool bHardTimeout = false, BYTE ActivateIO = 0 ); // 1=RW, 2=RO.
-	void LazyDeleteOrChange ( int64_t iTimeoutMS = -1, int64_t iTimeoutPeriodUS = -1 );
+	void LazyDeleteOrChange ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS, bool bForced );
 	void ScheduleCallbacks ();
 	void DisableWrite();
 

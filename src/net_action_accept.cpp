@@ -323,8 +323,8 @@ void NetActionAccept_c::Impl_c::ProcessAccept ()
 			default:
 				break;
 		}
-		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this,
-				RelaxedProtoName(m_tListener.m_eProto), iClientSock, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
+		sphLogDebugv ( "%p accepted %s from %s, sock=%d, tick=%u", this,
+				RelaxedProtoName(m_tListener.m_eProto), szClientName, iClientSock, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
 	}
 }
 

@@ -58,7 +58,7 @@ CSphString HostDesc_t::GetMyUrl() const
 	return sName;
 }
 
-#define VERBOSE_NETLOOP 0
+#define VERBOSE_NETLOOP 1
 
 #if VERBOSE_NETLOOP
 	#define sphLogDebugA( ... ) TimePrefixed::LogDebugv ("A ", __VA_ARGS__)
@@ -1640,7 +1640,10 @@ void AgentConn_t::ReturnPersist ()
 {
 	assert ( ( m_iSock==-1 ) || IsPersistent () ); // otherwize it will leak...
 	if ( IsPersistent() )
+	{
+		sphLogDebugA ( "%d Returning persistent connection %d (sock=%d) after agent query to %s", this, m_iStoreTag, m_iSock, m_tDesc.GetMyUrl().cstr() );
 		m_tDesc.m_pDash->m_pPersPool->ReturnConnection ( m_iSock );
+	}
 	m_iSock = -1;
 }
 
@@ -1680,7 +1683,7 @@ void AgentConn_t::Finish ( bool bFail )
 	}
 
 	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-	LazyDeleteOrChange (); // remove timer and all callbacks, if any
+	LazyDeleteOrChange ( -1, -1, IsPersistent() ); // remove timer and all callbacks, if any
 	m_pPollerTask = nullptr;
 
 	ReturnPersist ();
@@ -1724,7 +1727,7 @@ void AgentConn_t::SendingState ()
 		State ( Agent_e::HEALTHY );
 		m_iPoolerTimeoutPeriodUS = m_iMyQueryTimeoutMs* 1000;
 		m_iPoolerTimeoutUS = MonoMicroTimer() + m_iPoolerTimeoutPeriodUS;
-		LazyDeleteOrChange ( m_iPoolerTimeoutUS, m_iPoolerTimeoutPeriodUS ); // assign new time value, don't touch the handler
+		LazyDeleteOrChange ( m_iPoolerTimeoutUS, m_iPoolerTimeoutPeriodUS, false ); // assign new time value, don't touch the handler
 	}
 }
 
@@ -1750,9 +1753,13 @@ bool AgentConn_t::StartNextRetry ()
 	{
 		assert ( m_iSock==-1 );
 		m_iSock = m_tDesc.m_pDash->m_pPersPool->RentConnection ();
+		sphLogDebugA ( "%d Renting persistent connection %d (sock=%d) for agent query to %s", this, m_iStoreTag, m_iSock, m_tDesc.GetMyUrl().cstr() );
 		m_tDesc.m_bPersistent = m_iSock!=-2;
 		if ( m_iSock>=0 && sphNBSockEof ( m_iSock ) )
+		{
+			sphLogDebugA ( "%d Closed persistent connection %d (sock=%d) for agent query to %s", this, m_iStoreTag, m_iSock, m_tDesc.GetMyUrl().cstr() );
 			SafeCloseSocket ( m_iSock );
+		}
 	}
 
 	return true;
@@ -1873,6 +1880,13 @@ void AgentConn_t::RecvCallback ( int64_t iWaited, DWORD uReceived )
 	if ( !m_pPollerTask )
 		return;
 
+    if ( uReceived==0 )
+    {
+        Fatal ( eUnexpectedClose, "agent closed connection (0 bytes received)" );
+        StartRemoteLoopTry ();
+        return;
+    }
+
 	m_iWaited += iWaited;
 
 	if ( !ReceiveAnswer ( uReceived ) )
@@ -1947,9 +1961,9 @@ void AgentConn_t::LeakSendTo ( CSphVector <ISphOutputBuffer* >& dOut, CSphVector
 #if _WIN32
 inline SSIZE_T AgentConn_t::RecvChunk ()
 {
-	assert ( !m_pPollerTask->m_dRead.m_bInUse );
 	if ( !m_pPollerTask )
 		ScheduleCallbacks ();
+	assert ( !m_pPollerTask->m_dRead.m_bInUse );
 	WSABUF dBuf;
 	dBuf.buf = (CHAR*) m_pReplyCur;
 	dBuf.len = (ULONG) ReplyBufPlace ();
@@ -1963,10 +1977,10 @@ inline SSIZE_T AgentConn_t::RecvChunk ()
 
 inline SSIZE_T AgentConn_t::SendChunk ()
 {
-	assert ( !m_pPollerTask->m_dWrite.m_bInUse );
-	SendingState ();
 	if ( !m_pPollerTask )
 		ScheduleCallbacks ();
+	assert ( !m_pPollerTask->m_dWrite.m_bInUse );
+	SendingState ();
 	m_pPollerTask->m_dWrite.Zero ();
 	sphLogDebugA ( "%d overlaped WSASend called for %d chunks", m_iStoreTag, m_dIOVec.IOSize () );
 	m_pPollerTask->m_dWrite.m_bInUse = true;
@@ -2428,7 +2442,7 @@ bool AgentConn_t::EstablishConnection ()
 #endif
 
 	m_iSock = (int)socket ( m_tDesc.m_iFamily, SOCK_STREAM, 0 );
-	sphLogDebugA ( "%d Created new socket %d", m_iStoreTag, m_iSock );
+	sphLogDebugA ( "%d Created new sock=%d to agent %s", m_iStoreTag, m_iSock, m_tDesc.GetMyUrl().cstr() );
 
 	if ( m_iSock<0 )
 		return Fatal ( eConnectFailures, "socket() failed: %s", sphSockError () );
@@ -3690,7 +3704,7 @@ public:
 		return true;
 	}
 
-	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutUS, int64_t iTimeoutPeriodUS )
+	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutUS, int64_t iTimeoutPeriodUS, bool bForced )
 	{
 		auto pTask = ( TaskNet_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
@@ -3699,17 +3713,17 @@ public:
 		pTask->m_iLastActivityTm = MonoMicroTimer();
 
 		// check for same timeout as we have. Avoid dupes, if so.
-		if ( !iTimeoutUS || pTask->m_iTimeoutTimeUS==iTimeoutUS )
+		if ( !bForced && ( !iTimeoutUS || pTask->m_iTimeoutTimeUS==iTimeoutUS ) )
 			return;
 
 		pTask->m_iPlannedTimeoutUS = iTimeoutUS;
 
 		// case of delete: pConn socket m.b. already closed and ==-1. Actualize it right now.
-		if ( iTimeoutUS<0 )
+		if ( iTimeoutUS<0 || bForced )
 		{
 			pTask->m_ifd = pConnection->m_iSock;
 			pConnection->m_pPollerTask = nullptr; // this will allow to create another task.
-			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS );
+			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us, forced %d", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, (int)bForced );
 		} else
 			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
@@ -3757,13 +3771,13 @@ void AgentConn_t::LazyTask ( int64_t iTimeoutUS, int64_t iTimeoutPeriodUS, bool 
 	LazyPoller ().EnqueueNewTask ( this, iTimeoutUS, iTimeoutPeriodUS, uActivateIO );
 }
 
-void AgentConn_t::LazyDeleteOrChange ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS )
+void AgentConn_t::LazyDeleteOrChange ( int64_t iTimeoutMS, int64_t iTimeoutPeriodUS, bool bForced )
 {
 	// skip del/change for not scheduled conns
 	if ( !m_pPollerTask )
 		return;
 
-	LazyPoller ().ChangeDeleteTask ( this, iTimeoutMS, iTimeoutPeriodUS );
+	LazyPoller ().ChangeDeleteTask ( this, iTimeoutMS, iTimeoutPeriodUS, bForced );
 }
 
 

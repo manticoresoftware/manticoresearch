@@ -3326,6 +3326,109 @@ class SphinxConfig
 		}
 	}
 
+	// Compare two float values with tolerance
+	// Returns true if the floats are within acceptable tolerance
+	// Uses absolute tolerance to handle architecture-related precision differences
+	function CompareFloatsWithTolerance ( $f1, $f2 )
+	{
+		// Handle zero or very small values - any tiny difference is acceptable
+		if ( abs($f1) < 1e-10 && abs($f2) < 1e-10 )
+			return true;
+
+		return abs($f1 - $f2) < 1e-6;
+	}
+
+	// Compare strings with tolerance for float values
+	// Extracts float numbers and compares them with tolerance
+	function CompareStringsWithFloatTolerance ( $str1, $str2 )
+	{
+		if ( $str1 === $str2 )
+			return true;
+
+		// Extract all float numbers from both strings
+		// Match: optional minus, digits, decimal point, one or more digits
+		preg_match_all('/(-?\d+\.\d+)/', $str1, $matches1);
+		preg_match_all('/(-?\d+\.\d+)/', $str2, $matches2);
+
+		// If number of floats doesn't match, strings are different
+		if ( count($matches1[0]) !== count($matches2[0]) )
+			return false;
+
+		// If no floats found, do strict comparison
+		if ( count($matches1[0]) === 0 )
+			return $str1 === $str2;
+
+		// Compare each float with tolerance
+		for ( $i = 0; $i < count($matches1[0]); $i++ )
+		{
+			$f1 = floatval($matches1[0][$i]);
+			$f2 = floatval($matches2[0][$i]);
+			if ( !$this->CompareFloatsWithTolerance($f1, $f2) )
+				return false;
+		}
+
+		// Replace all floats with placeholders and compare the rest
+		$norm1 = preg_replace('/(-?\d+\.\d+)/', 'FLOAT', $str1);
+		$norm2 = preg_replace('/(-?\d+\.\d+)/', 'FLOAT', $str2);
+
+		return $norm1 === $norm2;
+	}
+
+	// Recursively compare arrays with tolerance for float values in strings and arrays
+	function CompareArraysWithFloatTolerance ( $arr1, $arr2 )
+	{
+		// Type check
+		if ( gettype($arr1) !== gettype($arr2) )
+			return false;
+
+		// Handle arrays recursively
+		if ( is_array($arr1) )
+		{
+			if ( count($arr1) !== count($arr2) )
+				return false;
+
+			// Check keys match
+			$keys1 = array_keys($arr1);
+			$keys2 = array_keys($arr2);
+			sort($keys1);
+			sort($keys2);
+			if ( $keys1 !== $keys2 )
+				return false;
+
+			// Recursively compare values
+			foreach ( $arr1 as $key => $val1 )
+			{
+				$val2 = $arr2[$key];
+				if ( !$this->CompareArraysWithFloatTolerance($val1, $val2) )
+					return false;
+			}
+			return true;
+		}
+
+		// Handle numeric values (floats or numeric strings) - compare with tolerance
+		if ( is_numeric($arr1) && is_numeric($arr2) )
+		{
+			// Check if either value has a decimal point (indicating it's a float)
+			$has_decimal1 = (is_string($arr1) && strpos($arr1, '.') !== false) || is_float($arr1);
+			$has_decimal2 = (is_string($arr2) && strpos($arr2, '.') !== false) || is_float($arr2);
+			
+			if ( $has_decimal1 || $has_decimal2 )
+			{
+				$f1 = floatval($arr1);
+				$f2 = floatval($arr2);
+				return $this->CompareFloatsWithTolerance($f1, $f2);
+			}
+		}
+
+		// Handle strings - compare with float tolerance
+		if ( is_string($arr1) )
+		{
+			return $this->CompareStringsWithFloatTolerance($arr1, $arr2);
+		}
+
+		// For other types, use strict comparison
+		return $arr1 === $arr2;
+	}
 
 	function CompareResultSets ( $set1, $set2 )
 	{
@@ -3339,7 +3442,15 @@ class SphinxConfig
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		return $set1===$set2;
+		// Check if float tolerance is disabled
+		global $g_disable_float_tolerance;
+		if ( $g_disable_float_tolerance )
+		{
+			// Use strict comparison when float tolerance is disabled
+			return $set1 === $set2;
+		}
+
+		return $this->CompareArraysWithFloatTolerance($set1, $set2);
 	}
 
 	function CompareResults ( $query1, $query2 )

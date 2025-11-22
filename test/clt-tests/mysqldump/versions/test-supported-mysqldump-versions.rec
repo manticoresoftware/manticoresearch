@@ -37,7 +37,7 @@ docker exec manticore mysql -h0 -P9306 -e 'show tables'
 bash ./test/clt-tests/mysqldump/versions/script_versions.sh
 ––– output –––
 🔍 Checking for new major.minor versions...
-✅ No new versions found after MariaDB 12.0 and MySQL 9.5
+✅ No new versions found after MariaDB 12.1 and MySQL 9.5
 ✅ Version check completed
 Testing version: mariadb:10.5
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+

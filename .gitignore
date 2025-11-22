@@ -64,6 +64,8 @@
 /clt
 /test/clt-tests/*repo.noarch.deb.*
 /test/clt-tests/**/*.cmp
+/test/.cache/
+/test/examples.txt
 
 # /test/ql/
 /test/ql/data/*.log

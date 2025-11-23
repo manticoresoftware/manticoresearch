@@ -115,24 +115,18 @@ conflicts=0; for i in {1..50}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tb
 Conflicts: %{NUMBER}/50
 PASS
 ––– comment –––
-Test 7: UPDATE WHERE attr & REPLACE (CONFLICT expected) - run 30 times, require ≥1 conflict
+Test 7: UPDATE WHERE attr & REPLACE (CONFLICT expected) - run 100 times, require ≥1 conflict
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 2
+conflicts=0; for i in {1..100}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 0.5; result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" 2>&1 & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 333)" 2>&1 & wait) ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/100"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
 ––– output –––
-––– input –––
-conflicts=0; for i in {1..50}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" 2>&1 & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 333)" 2>&1 & wait) ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/50"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
-––– output –––
-Conflicts: %{NUMBER}/50
+Conflicts: %{NUMBER}/100
 PASS
 ––– comment –––
-Test 8: UPDATE WHERE attr & DELETE (CONFLICT expected) - run 30 times, require ≥1 conflict
+Test 8: UPDATE WHERE attr & DELETE (CONFLICT expected) - run 100 times, require ≥1 conflict
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 2
+conflicts=0; for i in {1..100}; do mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (3, 2)" > /dev/null 2>&1; sleep 0.5; result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" 2>&1 & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=3" 2>&1 & wait) ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/100"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
 ––– output –––
-––– input –––
-conflicts=0; for i in {1..50}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE attr1=2" 2>&1 & mysql -h0 -P1306 -e "DELETE FROM test:tbl1 WHERE id=3" 2>&1 & wait) ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/50"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
-––– output –––
-Conflicts: %{NUMBER}/50
+Conflicts: %{NUMBER}/100
 PASS
 ––– comment –––
 Test 9: DELETE & REPLACE same doc (CONFLICT expected) - run 30 times, require ≥1 conflict

@@ -34,8 +34,7 @@ jobs:
       - uses: manticoresoftware/clt@0.7.3
         with:
           image: manticoresearch/dind:v1
-          test_prefix: test/clt-tests/mysqldump/versions/
-          test: test-supported-mysqldump-mariadb-versions.rec
+          test_prefix: test/clt-tests/mysqldump/versions/mariadb/
           run_args: --privileged -v $(pwd)/manual:/manual
           ui_host: "https://clt.manticoresearch.com"
 
@@ -49,8 +48,7 @@ jobs:
       - uses: manticoresoftware/clt@0.7.3
         with:
           image: manticoresearch/dind:v1
-          test_prefix: test/clt-tests/mysqldump/versions/
-          test: test-supported-mysqldump-mysql-versions.rec
+          test_prefix: test/clt-tests/mysqldump/versions/mysql/
           run_args: --privileged -v $(pwd)/manual:/manual
           ui_host: "https://clt.manticoresearch.com"
 

@@ -860,6 +860,16 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
+// Check if a result set contains "knn" in the query (case insensitive)
+function HasKnnInQuery ( $result_set )
+{
+	if ( isset ( $result_set['sphinxql'] ) )
+		return stripos($result_set['sphinxql'], 'knn') !== false;
+	if ( isset ( $result_set['http_request'] ) )
+		return stripos($result_set['http_request'], 'knn') !== false;
+	return false;
+}
+
 function RandomWords ( $n, $seed )
 {
 	srand ( $seed );
@@ -871,6 +881,12 @@ function RandomWords ( $n, $seed )
 
 function RoundFloatValues ( &$values, $roundoff )
 {
+	global $g_disable_float_tolerance;
+	
+	// If float tolerance is disabled, don't round values
+	if ( $g_disable_float_tolerance )
+		return;
+	
 	if ( !is_array ( $values ) )
 		return;
 
@@ -878,6 +894,9 @@ function RoundFloatValues ( &$values, $roundoff )
 	{
 		if ( is_float ( $value ) )
 			$value = round ( $value, $roundoff );
+		else if ( is_string ( $value ) && is_numeric ( $value ) && strpos ( $value, '.' ) !== false )
+			// Handle numeric strings (e.g., from MySQL results)
+			$value = (string)round ( floatval ( $value ), $roundoff );
 
 		if ( is_array ( $value ) )
 			RoundFloatValues ( $value, $roundoff );
@@ -918,6 +937,8 @@ function CompareColumns ( $a, $b )
 
 function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 {
+	$has_knn = HasKnnInQuery($set);
+	
 	if ( isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
@@ -932,7 +953,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		{
 			foreach ( $rows["hits"]["hits"] as &$hit )
 			{
-				RoundFloatValues ( $hit, 6 );
+				RoundFloatValues ( $hit, $has_knn ? 5 : 6 );
 				if ( isset ( $hit["_source"] ) )
 					ksort ( $hit["_source"] );
 			}
@@ -2321,6 +2342,8 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
+        $has_knn = HasKnnInQuery($query_result);
+
         if ( $keep_json_ctrls )
         {
 			$json_handler = new SafeJsonHandler();
@@ -2342,7 +2365,7 @@ class SphinxConfig
         if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
         {
             foreach ( $decoded_rows->hits->hits as &$hit )
-                RoundFloatValues ( $hit, 6 );
+                RoundFloatValues ( $hit, $has_knn ? 5 : 6 );
         }
 
         $query_result['rows'] = $keep_json_ctrls ? $json_handler->Encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
@@ -2553,6 +2576,10 @@ class SphinxConfig
 		{
             $raw_result["total_rows"] = mysqli_num_rows($result);
 			$query_result["total_rows"] = $raw_result["total_rows"];
+			
+			// Check if query contains "knn" (case insensitive) to determine if we should round floats
+			$has_knn = (stripos($query, 'knn') !== false);
+			
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
                 $raw_result["rows"][] = $row;
@@ -2568,6 +2595,11 @@ class SphinxConfig
                 }
                 if ($cont)
                     continue;
+				
+				// Round float values if query contains "knn" (use 5 decimal places to handle architecture differences)
+				if ( $has_knn )
+					RoundFloatValues ( $row, 5 );
+				
 				$query_result["rows"][] = $row;
 			}
 			mysqli_free_result($result);
@@ -3326,109 +3358,6 @@ class SphinxConfig
 		}
 	}
 
-	// Compare two float values with tolerance
-	// Returns true if the floats are within acceptable tolerance
-	// Uses absolute tolerance to handle architecture-related precision differences
-	function CompareFloatsWithTolerance ( $f1, $f2 )
-	{
-		// Handle zero or very small values - any tiny difference is acceptable
-		if ( abs($f1) < 1e-10 && abs($f2) < 1e-10 )
-			return true;
-
-		return abs($f1 - $f2) < 1e-6;
-	}
-
-	// Compare strings with tolerance for float values
-	// Extracts float numbers and compares them with tolerance
-	function CompareStringsWithFloatTolerance ( $str1, $str2 )
-	{
-		if ( $str1 === $str2 )
-			return true;
-
-		// Extract all float numbers from both strings
-		// Match: optional minus, digits, decimal point, one or more digits
-		preg_match_all('/(-?\d+\.\d+)/', $str1, $matches1);
-		preg_match_all('/(-?\d+\.\d+)/', $str2, $matches2);
-
-		// If number of floats doesn't match, strings are different
-		if ( count($matches1[0]) !== count($matches2[0]) )
-			return false;
-
-		// If no floats found, do strict comparison
-		if ( count($matches1[0]) === 0 )
-			return $str1 === $str2;
-
-		// Compare each float with tolerance
-		for ( $i = 0; $i < count($matches1[0]); $i++ )
-		{
-			$f1 = floatval($matches1[0][$i]);
-			$f2 = floatval($matches2[0][$i]);
-			if ( !$this->CompareFloatsWithTolerance($f1, $f2) )
-				return false;
-		}
-
-		// Replace all floats with placeholders and compare the rest
-		$norm1 = preg_replace('/(-?\d+\.\d+)/', 'FLOAT', $str1);
-		$norm2 = preg_replace('/(-?\d+\.\d+)/', 'FLOAT', $str2);
-
-		return $norm1 === $norm2;
-	}
-
-	// Recursively compare arrays with tolerance for float values in strings and arrays
-	function CompareArraysWithFloatTolerance ( $arr1, $arr2 )
-	{
-		// Type check
-		if ( gettype($arr1) !== gettype($arr2) )
-			return false;
-
-		// Handle arrays recursively
-		if ( is_array($arr1) )
-		{
-			if ( count($arr1) !== count($arr2) )
-				return false;
-
-			// Check keys match
-			$keys1 = array_keys($arr1);
-			$keys2 = array_keys($arr2);
-			sort($keys1);
-			sort($keys2);
-			if ( $keys1 !== $keys2 )
-				return false;
-
-			// Recursively compare values
-			foreach ( $arr1 as $key => $val1 )
-			{
-				$val2 = $arr2[$key];
-				if ( !$this->CompareArraysWithFloatTolerance($val1, $val2) )
-					return false;
-			}
-			return true;
-		}
-
-		// Handle numeric values (floats or numeric strings) - compare with tolerance
-		if ( is_numeric($arr1) && is_numeric($arr2) )
-		{
-			// Check if either value has a decimal point (indicating it's a float)
-			$has_decimal1 = (is_string($arr1) && strpos($arr1, '.') !== false) || is_float($arr1);
-			$has_decimal2 = (is_string($arr2) && strpos($arr2, '.') !== false) || is_float($arr2);
-			
-			if ( $has_decimal1 || $has_decimal2 )
-			{
-				$f1 = floatval($arr1);
-				$f2 = floatval($arr2);
-				return $this->CompareFloatsWithTolerance($f1, $f2);
-			}
-		}
-
-		// Handle strings - compare with float tolerance
-		if ( is_string($arr1) )
-		{
-			return $this->CompareStringsWithFloatTolerance($arr1, $arr2);
-		}
-
-		// For other types, use strict comparison
-		return $arr1 === $arr2;
-	}
 
 	function CompareResultSets ( $set1, $set2 )
 	{
@@ -3439,18 +3368,23 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
+		$has_knn = HasKnnInQuery($set1) || HasKnnInQuery($set2);
+
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		// Check if float tolerance is disabled
-		global $g_disable_float_tolerance;
-		if ( $g_disable_float_tolerance )
+		// Round float values in both sets if query contains "knn" (ensures both are rounded to same precision)
+		// Use 5 decimal places to handle architecture differences in 6th-8th decimal places
+		if ( $has_knn )
 		{
-			// Use strict comparison when float tolerance is disabled
-			return $set1 === $set2;
+			if ( isset ( $set1["rows"] ) )
+				RoundFloatValues ( $set1["rows"], 5 );
+			if ( isset ( $set2["rows"] ) )
+				RoundFloatValues ( $set2["rows"], 5 );
 		}
 
-		return $this->CompareArraysWithFloatTolerance($set1, $set2);
+		// Use strict comparison (RoundFloatValues handles the tolerance via rounding)
+		return $set1 === $set2;
 	}
 
 	function CompareResults ( $query1, $query2 )

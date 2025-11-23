@@ -74,7 +74,7 @@ for version in "${versions[@]}"; do
 
     # Stopping and deleting a container
     docker stop db-test > /dev/null
-    rm dump.sql
+    rm -f dump.sql
 done
 
 echo "All MySQL versions tested successfully!"

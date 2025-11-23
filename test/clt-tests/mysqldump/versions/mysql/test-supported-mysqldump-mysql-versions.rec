@@ -1,4 +1,4 @@
-––– block: ../../base/dind/init –––
+––– block: ../../../base/dind/init –––
 ––– input –––
 docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null 2>&1; echo $?
 ––– output –––
@@ -34,7 +34,7 @@ docker exec manticore mysql -h0 -P9306 -e 'show tables'
 | t     | rt   |
 +-------+------+
 ––– input –––
-bash ./test/clt-tests/mysqldump/versions/script_versions_mysql.sh
+bash ./test/clt-tests/mysqldump/versions/mysql/script_versions_mysql.sh
 ––– output –––
 🔍 Checking for new MySQL major.minor versions...
 ✅ No new versions found after MySQL 9.5

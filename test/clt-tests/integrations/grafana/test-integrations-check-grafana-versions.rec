@@ -26,6 +26,7 @@ TESTED_VERSIONS="10.0
 12.2"
 
 # Check for NEW versions (after latest tested)
+# WARNING: Also update GRAFANA_LATEST below when changing this!
 LATEST_TESTED_VERSION="12.2"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/grafana/grafana/tags/?page_size=100" \
 | jq -r ".results[].name" \
@@ -43,27 +44,13 @@ function version_compare(v1, v2) {
 version_compare($0, latest) > 0')
 
 if [ -n "$NEW_VERSIONS" ]; then
-    echo "🆕 NEW Grafana versions detected:"
-    echo "$NEW_VERSIONS"
+    echo "🆕 NEW Grafana versions detected: $NEW_VERSIONS"
     echo ""
-    echo "❌ Need to test new versions and update the following:"
-    echo ""
-    echo "📝 Files to update:"
-    echo "  1. test/clt-tests/integrations/grafana/test-integrations-check-grafana-versions.rec"
-    echo "     - Update TESTED_VERSIONS list"
-    echo "     - Update LATEST_TESTED_VERSION='$LATEST_TESTED_VERSION' -> new version"
-    echo ""
-    echo "  2. test/clt-tests/integrations/grafana/test-integrations-test-grafana-versions.rec"
-    echo "     - Add new test section: timeout 300 bash /tmp/grafana-single-test.sh X.X"
-    echo ""
-    echo "  3. Update documentation with new version support:"
-    echo "     - manual/english/Changelog.md (add release note about new version support)"
-    echo ""
-    echo "  4. Update website content (separate repository):"
-    echo "     - https://github.com/manticoresoftware/site"
-    echo "     - content/english/blog/manticoresearch-grafana-integration/index.md"
-    echo "     - Search for: 'compatible with Grafana versions up to X.X'"
-    echo "     - Update version number to latest tested"
+    echo "📝 Update required:"
+    echo "  1. test-integrations-check-grafana-versions.rec - Update TESTED_VERSIONS and LATEST_TESTED_VERSION"
+    echo "  2. test-integrations-test-grafana-versions.rec - Add test for new version"
+    echo "  3. manual/english/Changelog.md - Add release note"
+    echo "  4. site repo: blog/manticoresearch-grafana-integration/index.md"
     echo ""
     exit 1
 else

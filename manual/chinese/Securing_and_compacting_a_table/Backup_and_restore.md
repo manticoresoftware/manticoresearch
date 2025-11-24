@@ -259,7 +259,7 @@ Available backups: 3
 3. 旧的配置文件必须不存在。
 4. 旧的数据目录必须存在且为空。
 
-如果满足所有条件，恢复将继续。该工具会提供提示，因此您无需记住它们。避免覆盖现有文件至关重要，因此如果它们仍然存在，请确保在恢复之前将其删除。因此需要满足所有条件。
+如果所有条件都满足，恢复过程将继续。工具会提供提示，所以你不必记住它们。避免覆盖现有文件至关重要，因此如果它们仍然存在，请确保在恢复之前将其删除。因此有所有这些条件。
 
 <!-- request Example -->
 ```bash
@@ -292,13 +292,13 @@ Manticore config
 
 ## 使用 mysqldump 进行备份和恢复
 
-Manticore 支持来自 MySQL 9.5 及以下版本的 `mysqldump` 工具和来自 MariaDB 12.0 及以下版本的 `mariadb-dump` 工具。
+Manticore 支持来自 MySQL（最高 9.5 版本）的 `mysqldump` 工具和来自 MariaDB（最高 12.1 版本）的 `mariadb-dump` 工具。
 
 <!-- example mysqldump_backup -->
 
-> 注意：某些版本的 `mysqldump` / `mariadb-dump` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果转储无法工作，请确保已安装 Buddy。
+> 注意：某些版本的 `mysqldump` / `mariadb-dump` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果导出不工作，请确保 Buddy 已安装。
 
-要创建 Manticore Search 数据库的备份，可以使用 `mysqldump` 命令。示例中将使用默认端口和主机。
+要创建 Manticore Search 数据库的备份，可以使用 `mysqldump` 命令。示例中我们将使用默认端口和主机。
 
 注意，`mysqldump` 仅支持实时表。
 
@@ -315,7 +315,7 @@ mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.sql
 ```
 
-这将生成一个备份文件 `tbl.sql`，其中使用 `replace` 命令替代 `insert`，并在每个批次中保留列名。文档将批量处理，最大大小为16兆字节。不会有 `drop`/`create table` 命令。这对于更改分词设置后进行全文重新索引非常有用。
+这将生成一个带有 `replace` 命令（而非 `insert`），且每批都保留列名的备份文件 `tbl.sql`。文档将按最大 16 兆字节分批。文件中不会有 `drop` / `create table` 命令。这对更改分词设置后进行全文重新索引非常有用。
 
 <!-- request Replication mode -->
 ```bash
@@ -323,19 +323,19 @@ mysqldump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables clust
 mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore --skip-lock-tables cluster:tbl | mysql -P9306 -h0
 ```
 
-在这种情况下，`mysqldump` 将生成类似 `REPLACE INTO cluster:table ...` 的命令，这些命令将直接发送到 Manticore 实例，从而重新插入文档。
-使用 `cluster` 用户和 `-t` 标志以启用复制模式。详情见下方注释。
+在这种情况下，`mysqldump` 将生成类似 `REPLACE INTO cluster:table ...` 的命令，直接发送到 Manticore 实例，从而实现文档的重新插入。
+使用 `cluster` 用户和 `-t` 标志启用复制模式。详情见下面的说明。
 
 <!-- end -->
 
 <!-- example mysqldump_restore -->
 ### 恢复
 
-如果您想从备份文件恢复 Manticore Search 数据库，mysql 客户端是您的首选工具。
+如果你想从备份文件恢复 Manticore Search 数据库，mysql 客户端是你的首选工具。
 
-注意，如果您在[纯模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除并重新创建表。因此，您应该：
-- 使用带有 `-t` 选项的 `mysqldump`，以排除备份中的 `CREATE TABLE` 语句。
-- 在继续恢复之前，手动[清空](../Emptying_a_table.md)表。
+注意，如果你在[普通模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下恢复，不能直接删除和重建表。因此，你应该：
+- 使用带 `-t` 选项的 `mysqldump`，以排除备份中的 `CREATE TABLE` 语句。
+- 在恢复之前，手动[清空](../Emptying_a_table.md)表。
 
 <!-- request SQL -->
 ```bash
@@ -343,32 +343,32 @@ mysql -h0 -P9306 < manticore_backup.sql
 mariadb -h0 -P9306 < manticore_backup.sql
 ```
 
-此命令允许您从 `manticore_backup.sql` 文件恢复所有内容。
+此命令使你能够从 `manticore_backup.sql` 文件恢复所有内容。
 <!-- end -->
 
 ### 其他选项
 
-以下是一些可与 mysqldump 一起使用以定制备份的设置：
+这里列出了一些可与 mysqldump 一起使用的更多设置，以定制你的备份：
 
-- `-t` 跳过 `drop`/`create` 表命令。适用于更改分词设置后对表进行全文重新索引。
-- `--no-data`：此设置会省略备份中的表数据，生成仅包含表结构的备份文件。
-- `--ignore-table=[database_name].[table_name]`：此选项允许您在备份操作中跳过特定表。注意数据库名必须是 `manticore`。
-- `--replace` 执行 `replace` 替代 `insert`。适用于更改分词设置后对表进行全文重新索引。
-- `--net-buffer-length=16M` 使批次最大为16兆字节，以加快恢复速度。
-- `-e` 批量处理文档。适用于更快恢复。
-- `-c` 保留列名。适用于更改表结构（例如更改字段顺序）后重新索引表。
+- `-t` 跳过 `drop` / `create` 表命令。对更改分词设置后进行表的全文重新索引很有用。
+- `--no-data`：该选项在备份时省略表数据，生成只包含表结构的备份文件。
+- `--ignore-table=[database_name].[table_name]`：此选项允许你在备份过程中跳过某个表。注意数据库名称必须是 `manticore`。
+- `--replace` 使用 `replace` 替代 `insert`。对更改分词设置后进行表的全文重新索引很有用。
+- `--net-buffer-length=16M` 使批次最大为 16 兆字节，加快恢复速度。
+- `-e` 进行文档批处理。加快恢复速度。
+- `-c` 保留列名。对更改表结构（如字段顺序）后进行重新索引很有用。
 
-有关设置的完整列表及详细说明，请参阅官方 [MySQL 文档](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 或 [MariaDB 文档](https://mariadb.com/kb/en/mariadb-dump/)。
+欲了解设置的完整列表及详细说明，请参考官方 [MySQL 文档](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) 或 [MariaDB 文档](https://mariadb.com/kb/en/mariadb-dump/)。
 
-### 注释
+### 说明
 
-* 要创建复制模式下的转储（转储包含 `INSERT/REPLACE INTO <cluster_name>:<table_name>`）：
-  - 确保转储时表未被更改。
-  - 使用 `cluster` 用户。例如：`mysqldump -u cluster ...` 或 `mariadb-dump -u cluster ...`。您可以通过运行 `SET GLOBAL cluster_user = new_name` 来更改启用 mysqldump 复制模式的用户名。
+* 若要创建复制模式下的转储（即转储包含 `INSERT/REPLACE INTO <cluster_name>:<table_name>`）：
+  - 确保在导出期间表未被更改。
+  - 使用 `cluster` 用户。例如：`mysqldump -u cluster ...` 或 `mariadb-dump -u cluster ...`。你可以通过执行 `SET GLOBAL cluster_user = new_name` 来更改启用 mysqldump 复制模式的用户名。
   - 使用 `-t` 标志。
   - 使用 `--skip-lock-tables` 标志。
-  - 在复制模式下指定表时，需要遵循 `cluster_name:table_name` 语法。例如：`mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`。
-* 建议在计划备份所有数据库时明确指定 `manticore` 数据库，而不是使用 `--all-databases` 选项。
-* 注意，`mysqldump` 不支持备份分布式表，也无法备份包含非存储字段的表。对于这种情况，请考虑使用 `manticore-backup` 或 `BACKUP` SQL 命令。如果您有分布式表，建议始终指定要转储的表。
+  - 在复制模式下指定表时，需遵循 `cluster_name:table_name` 语法。例如：`mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`。
+* 如果计划备份所有数据库，建议明确指定 `manticore` 数据库，而不是使用 `--all-databases` 选项。
+* 注意，`mysqldump` 不支持备份分布式表，也不能备份包含非存储字段的表。此类情况下，建议使用 `manticore-backup` 或 `BACKUP` SQL 命令。如果你有分布式表，建议始终指定具体要转储的表。
 
 <!-- proofread -->

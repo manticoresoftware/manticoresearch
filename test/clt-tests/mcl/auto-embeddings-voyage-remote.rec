@@ -120,3 +120,21 @@ Test API key environment variable handling
 if [ -n "$VOYAGE_API_KEY" ] && [ "$VOYAGE_API_KEY" != "dummy_key_for_testing" ]; then echo "API key is available for testing"; else echo "API key not available - using dummy for error testing"; fi
 ––– output –––
 #!/(API key is available for testing|API key not available - using dummy for error testing)/!#
+––– comment –––
+Test KNN search with text query parameter (auto-embeddings approach)
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_voyage_remote WHERE knn(embedding, 3, 'machine learning and artificial intelligence')"
+––– output –––
+#!/.*id.*knn_dist().*/!#
+#!/.*[12].*[0-9]+\.[0-9]+.*/!#
+#!/.*[12].*[0-9]+\.[0-9]+.*/!#
+––– comment –––
+Test KNN search with additional filtering
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as count FROM test_voyage_remote WHERE knn(embedding, 5, 'technology and AI') AND id > 0"
+––– output –––
++-------+
+| count |
++-------+
+|     2 |
++-------+

@@ -108,9 +108,9 @@ conflicts=0; for i in {1..50}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tb
 Conflicts: %{NUMBER}/50
 PASS
 ––– comment –––
-Test 6: UPDATE WHERE id=14 & REPLACE (CONFLICT expected) - run 50 times, require ≥1 conflict
+Test 6: UPDATE WHERE id>13 & REPLACE (CONFLICT expected) - run 50 times, require ≥1 conflict
 ––– input –––
-conflicts=0; for i in {1..50}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=14" 2>&1 & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 888)" 2>&1 & wait) ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/50"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
+conflicts=0; for i in {1..50}; do result=$( (mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id>13" 2>&1 & mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (14, 888)" 2>&1 & wait) ); if echo "$result" | grep -q "error at PostRollback"; then ((conflicts++)); fi; done; echo "Conflicts: $conflicts/50"; test $conflicts -ge 1 && echo "PASS" || echo "FAIL"
 ––– output –––
 Conflicts: %{NUMBER}/50
 PASS

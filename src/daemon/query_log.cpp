@@ -759,28 +759,20 @@ void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQ
 	}
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError )
+void LogSphinxqlError ( const char * szStmt, const Str_t & sError )
 {
-	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || !sStmt || IsEmpty ( sError ) )
+	LogSphinxqlError ( FromSz ( szStmt ), sError );
+}
+
+void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
+{
+	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || !IsFilled ( sStmt ) || IsEmpty ( sError ) )
 		return;
 
 	// some mysql cli, like mysql 9.0.1, 9.1.0, 9.3.0, may be others, fire 'select $$' query after connect
 	// that produces some noise in query log, so let's just filter out these queries. #2772
-	if ( !strcmp (sStmt, "select $$") )
-		return;
-
-	StringBuilder_c tBuf;
-	tBuf << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " */ " << sStmt << " # error=" << sError << '\n';
-
-	WriteQuery ( tBuf );
-}
-
-
-void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
-{
-	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || IsEmpty ( sStmt ) || IsEmpty ( sError ) )
+	constexpr Str_t selectSS = FROMS("select $$");
+	if ( sStmt.second==selectSS.second && !strncmp (sStmt.first, selectSS.first, selectSS.second) )
 		return;
 
 	QuotationEscapedBuilder tBuf;

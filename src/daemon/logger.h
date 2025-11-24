@@ -81,6 +81,6 @@ public:
 
 // used by Buddy
 enum class BuddyQuery_e : BYTE { SQL, HTTP };
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
+void LogSphinxqlError ( const char * szStmt, const Str_t & sError );
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
 void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType );

@@ -71,7 +71,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Configuration for Filebeat 8.11 - 8.x
+### Configuration for Filebeat 8.11 - 8.19
 
 From version 8.11, output compression is enabled by default, so you must explicitly set `compression_level: 0` for compatibility with Manticore:
 

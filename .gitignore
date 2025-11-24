@@ -88,3 +88,4 @@
 # dist
 /dist/docker
 /.env
+/dump.sql

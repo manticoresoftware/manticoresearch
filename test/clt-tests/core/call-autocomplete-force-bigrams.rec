@@ -42,7 +42,7 @@ mysql -P9306 -h0 -e "call autocomplete('geroge', 't', 0 as force_bigrams)\G"
 ––– output –––
 ––– comment –––
 Test 5: 6-char word "planet" (boundary case), force_bigrams=0, expect: found
-Note: "lanet" (5 chars) uses bigrams automatically, so it can match "planet" (6 chars)
+Note: "lanet" uses bigrams, "planet" uses trigrams, but fuzzy matching still works (edit distance=1)
 ––– input –––
 mysql -P9306 -h0 -e "call autocomplete('lanet', 't', 0 as force_bigrams)\G"
 ––– output –––

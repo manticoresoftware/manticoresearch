@@ -790,29 +790,27 @@ static void CountFieldLengths ( const VecTraits_T<CSphWordHit> & dHits, DWORD * 
 	}
 }
 
-void CSphSource::ProcessCollectedHits ( int iHitsBegin, bool bMarkTail, int iBlendedHitsStart )
+static void ProcessCollectedHits ( VecTraits_T<CSphWordHit> & dHits, int iHitsBegin, bool bMarkTail, int iBlendedHitsStart, bool bHasStopwords, DWORD * pFieldLengthAttrs )
 {
-	bool bHasStopwords = !m_pDict->GetSettings().m_sStopwords.IsEmpty();
-
 	// mark trailing hit
 	// and compute field lengths
 	if ( bMarkTail )
 	{
-		auto * pTail = const_cast < CSphWordHit * > ( &m_tHits.Last() );
+		auto * pTail = const_cast < CSphWordHit * > ( &dHits.Last() );
 
-		if ( m_pFieldLengthAttrs && !bHasStopwords )
-			m_pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
+		if ( pFieldLengthAttrs && !bHasStopwords )
+			pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
 
 		Hitpos_t uEndPos = pTail->m_uWordPos;
 		if ( iBlendedHitsStart>=0 )
 		{
-			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.GetLength() );
-			Hitpos_t uBlendedPos = m_tHits[iBlendedHitsStart].m_uWordPos;
+			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<dHits.GetLength() );
+			Hitpos_t uBlendedPos = dHits[iBlendedHitsStart].m_uWordPos;
 			uEndPos = Min ( uEndPos, uBlendedPos );
 		}
 
 		// set end marker for all tail hits
-		const CSphWordHit * pStart = m_tHits.Begin();
+		const CSphWordHit * pStart = dHits.Begin();
 		while ( pStart<=pTail && uEndPos<=pTail->m_uWordPos )
 		{
 			HITMAN::SetEndMarker ( &pTail->m_uWordPos );
@@ -821,8 +819,9 @@ void CSphSource::ProcessCollectedHits ( int iHitsBegin, bool bMarkTail, int iBle
 	}
 
 	// for stopwords need to process whole stream of collected tokens
-	if ( m_pFieldLengthAttrs && bHasStopwords )
-		CountFieldLengths ( VecTraits_T<CSphWordHit> ( m_tHits.Begin()+iHitsBegin, m_tHits.GetLength()-iHitsBegin ), m_pFieldLengthAttrs );
+	if ( pFieldLengthAttrs && bHasStopwords )
+		CountFieldLengths ( VecTraits_T<CSphWordHit> ( dHits.Begin()+iHitsBegin, dHits.GetLength()-iHitsBegin ), pFieldLengthAttrs );
+
 }
 
 void CSphSource::BuildHits ( CSphString & sError, bool bSkipEndMarker )
@@ -898,7 +897,7 @@ void CSphSource::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			else
 				BuildRegularHits ( tRowID, tField.m_bPayload, iBlendedHitsStart );
 
-			ProcessCollectedHits ( iHitsBegin, ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() ), iBlendedHitsStart );
+			ProcessCollectedHits ( m_tHits, iHitsBegin, ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() ), iBlendedHitsStart, !m_pDict->GetSettings().m_sStopwords.IsEmpty(), m_pFieldLengthAttrs );
 		}
 
 		if ( m_tState.m_bProcessingHits )

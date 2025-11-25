@@ -185,11 +185,6 @@ protected:
 
 	bool 					QueryPreAll ( CSphString& sError) ;
 
-	/// Find the start index of the last blended hits sequence in joined field hits
-	/// @param iHitsBegin starting index of hits to search from
-	/// @return index of first hit in last blended sequence, or -1 if none found
-	int						FindBlendedHitsStart ( int iHitsBegin ) const;
-
 private:
 	bool					m_bSqlConnected = false;	///< am i connected?
 

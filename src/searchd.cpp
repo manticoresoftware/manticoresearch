@@ -9402,7 +9402,7 @@ static void AddQueryTimeStatsToOutput ( VectorLike & dStatus, const char * szPre
 	AddQueryStats ( dStatus, szPrefix, tQueryTimeStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
-			uQueries ? sBuf.Sprintf( R"("%s_sec":%.3F)", sType, uStat ) : sBuf.AppendName( sType ) << R"("-")";
+			uQueries ? sBuf.Sprintf( R"("%s_sec":%.3F)", sType, uStat / 1000 ) : sBuf.AppendName( sType ) << R"("-")";
 		} );
 }
 

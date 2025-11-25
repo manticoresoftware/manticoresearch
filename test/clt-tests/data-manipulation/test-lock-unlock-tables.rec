@@ -1,0 +1,303 @@
+# Test LOCK TABLES and UNLOCK TABLES functionality
+# Validates MySQL-compatible table locking for read and write operations
+# Issue: https://github.com/manticoresoftware/manticoresearch/issues/3047
+
+––– block: ../base/start-searchd –––
+––– comment –––
+Create test table with sample product data
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products; CREATE TABLE products (id BIGINT, title TEXT, price FLOAT);"
+––– output –––
+––– comment –––
+Insert initial test data
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (1, 'iPhone 15', 999.99), (2, 'Samsung Galaxy S24', 899.99), (3, 'Google Pixel 8', 799.99);"
+––– output –––
+––– comment –––
+Verify initial data
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY id;"
+––– output –––
++------+--------------------+----------+
+| id   | title              | price    |
++------+--------------------+----------+
+|    1 | iPhone 15          | 999.9900 |
+|    2 | Samsung Galaxy S24 | 899.9900 |
+|    3 | Google Pixel 8     | 799.9900 |
++------+--------------------+----------+
+––– comment –––
+Lock table with READ lock
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ;"
+––– output –––
+––– comment –––
+Read from locked table (should work)
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
+––– output –––
++------+-----------+----------+
+| id   | title     | price    |
++------+-----------+----------+
+|    1 | iPhone 15 | 999.9900 |
++------+-----------+----------+
+––– comment –––
+Release READ lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Lock table with WRITE lock
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
+––– output –––
+––– comment –––
+Insert new record under WRITE lock
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"
+––– output –––
+––– comment –––
+Verify count after insert
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        4 |
++----------+
+––– comment –––
+Release WRITE lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Verify data persisted after unlock
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY id;"
+––– output –––
++------+--------------------+----------+
+| id   | title              | price    |
++------+--------------------+----------+
+|    1 | iPhone 15          | 999.9900 |
+|    2 | Samsung Galaxy S24 | 899.9900 |
+|    3 | Google Pixel 8     | 799.9900 |
+|    4 | OnePlus 12         | 699.9900 |
++------+--------------------+----------+
+––– comment –––
+Lock table with alias (READ lock on same table twice)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products AS p1 READ;"
+––– output –––
+––– comment –––
+Query using both main table and alias
+––– input –––
+mysql -h0 -P9306 -e "SELECT p1.title, products.price FROM products, products AS p1 WHERE products.id = p1.id LIMIT 2;"
+––– output –––
++--------------------+----------+
+| title              | price    |
++--------------------+----------+
+| iPhone 15          | 999.9900 |
+| Samsung Galaxy S24 | 899.9900 |
++--------------------+----------+
+––– comment –––
+Release locks
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Create second table for multi-table lock test
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS orders; CREATE TABLE orders (id BIGINT, product_id BIGINT, quantity INTEGER);"
+––– output –––
+––– comment –––
+Insert data into orders table
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO orders VALUES (1, 1, 2), (2, 2, 1);"
+––– output –––
+––– comment –––
+Lock multiple tables with different lock types (products READ, orders WRITE)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ, orders WRITE;"
+––– output –––
+––– comment –––
+Read from READ-locked table
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
+––– output –––
++------+-----------+----------+
+| id   | title     | price    |
++------+-----------+----------+
+|    1 | iPhone 15 | 999.9900 |
++------+-----------+----------+
+––– comment –––
+Insert into WRITE-locked table
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO orders VALUES (3, 1, 5);"
+––– output –––
+––– comment –––
+Verify insert succeeded
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM orders;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+Release all locks
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Lock table for write operations
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
+––– output –––
+––– comment –––
+Update price under WRITE lock
+––– input –––
+mysql -h0 -P9306 -e "UPDATE products SET price = 1099.99 WHERE id = 1;"
+––– output –––
+––– comment –––
+Delete record under WRITE lock
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;"
+––– output –––
+––– comment –––
+Verify UPDATE and DELETE worked
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY id;"
+––– output –––
++------+--------------------+-----------+
+| id   | title              | price     |
++------+--------------------+-----------+
+|    1 | iPhone 15          | 1099.9900 |
+|    2 | Samsung Galaxy S24 |  899.9900 |
+|    3 | Google Pixel 8     |  799.9900 |
++------+--------------------+-----------+
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Test READ LOCAL lock (allows concurrent inserts in MySQL, implementation may vary)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ LOCAL;"
+––– output –––
+––– comment –––
+Read from READ LOCAL locked table
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 2;"
+––– output –––
++------+--------------------+----------+
+| id   | title              | price    |
++------+--------------------+----------+
+|    2 | Samsung Galaxy S24 | 899.9900 |
++------+--------------------+----------+
+––– comment –––
+Release READ LOCAL lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Lock for REPLACE INTO operation
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
+––– output –––
+––– comment –––
+REPLACE INTO updates existing record
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO products VALUES (2, 'Samsung Galaxy S24 Ultra', 1199.99);"
+––– output –––
+––– comment –––
+Verify REPLACE worked
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 2;"
+––– output –––
++------+---------------------------+-----------+
+| id   | title                     | price     |
++------+---------------------------+-----------+
+|    2 | Samsung Galaxy S24 Ultra  | 1199.9900 |
++------+---------------------------+-----------+
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Create distributed table for testing lock compatibility
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS dist_products; CREATE TABLE dist_products type='distributed' local='products';"
+––– output –––
+––– comment –––
+Lock distributed table with READ
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES dist_products READ;"
+––– output –––
+––– comment –––
+Query distributed table under lock
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM dist_products WHERE id = 1;"
+––– output –––
++------+-----------+-----------+
+| id   | title     | price     |
++------+-----------+-----------+
+|    1 | iPhone 15 | 1099.9900 |
++------+-----------+-----------+
+––– comment –––
+Release lock on distributed table
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Test SHOW TABLES works while table is locked
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ;"
+––– output –––
+––– comment –––
+SHOW TABLES should work with active lock
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++---------------+-------------+
+| Table         | Type        |
++---------------+-------------+
+| dist_products | distributed |
+| orders        | rt          |
+| products      | rt          |
++---------------+-------------+
+––– comment –––
+Release lock and run SHOW TABLES again
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES; SHOW TABLES;"
+––– output –––
++---------------+-------------+
+| Table         | Type        |
++---------------+-------------+
+| dist_products | distributed |
+| orders        | rt          |
+| products      | rt          |
++---------------+-------------+
+––– comment –––
+Test re-locking (LOCK replaces previous lock)
+Lock WRITE first, then re-lock with READ
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; LOCK TABLES products READ;"
+––– output –––
+––– comment –––
+Verify READ lock is active (can read)
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM products LIMIT 1;"
+––– output –––
++------+-----------+-----------+
+| id   | title     | price     |
++------+-----------+-----------+
+|    1 | iPhone 15 | 1099.9900 |
++------+-----------+-----------+
+––– comment –––
+Final cleanup
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––

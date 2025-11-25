@@ -1363,6 +1363,8 @@ void QueueCreator_c::ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy )
 			CSphColumnInfo tGroupbyStr ( sJsonGroupBy.cstr() );
 			if ( bJoinAttr )
 				tGroupbyStr.m_eAttrType = SPH_ATTR_STRINGPTR;
+			else if ( m_tGroupSorterSettings.m_pGrouper && m_tGroupSorterSettings.m_pGrouper->IsMultiValue() )
+				tGroupbyStr.m_eAttrType = SPH_ATTR_BIGINT; // JSON array (MVA) grouper (j['*'].id) BIGINT to store group key as is
 			else
 				tGroupbyStr.m_eAttrType = SPH_ATTR_JSON_FIELD;
 

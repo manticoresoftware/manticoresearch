@@ -722,8 +722,13 @@ private:
 	// update @groupbystr value, if available
 	void UpdateGroupbyStr ( CSphMatch& tMatch, const SphAttr_t * pAttr )
 	{
-		if ( this->m_tLocGroupbyStr.m_bDynamic )
+		if ( !this->m_tLocGroupbyStr.m_bDynamic )
+			return;
+
+		if ( pAttr )
 			tMatch.SetAttr ( this->m_tLocGroupbyStr, *pAttr );
+		else
+			tMatch.SetAttr ( this->m_tLocGroupbyStr, tMatch.GetAttr ( m_tLocGroupby ) ); // JSON array elements - group key value
 	}
 
 	// lazy resort matches so that best are located up to iBound
@@ -1688,6 +1693,21 @@ public:
 private:
 	FORCE_INLINE bool PushMatch ( const CSphMatch & tMatch )
 	{
+		if ( this->m_pGrouper->IsMultiValue() )
+		{
+			CSphVector<SphGroupKey_t> dKeys;
+			this->m_pGrouper->MultipleKeysFromMatch ( tMatch, dKeys );
+
+			bool bRes = false;
+			bool bClearNotify = true;
+			ARRAY_FOREACH ( i, dKeys )
+			{
+				bRes |= BASE::template PushEx<false> ( tMatch, dKeys[i], false, false, bClearNotify, dKeys.Begin() + i );
+				bClearNotify = false;
+			}
+			return bRes;
+		}
+
 		SphGroupKey_t uGroupKey = this->m_pGrouper->KeyFromMatch ( tMatch );
 		const BYTE * pBlobPool = this->m_pGrouper->GetBlobPool();
 		bool bClearNotify = true;
@@ -2032,6 +2052,7 @@ static ISphMatchSorter * CreateGroupSorter ( const ISphMatchComparator * pComp, 
 	case 36:CREATE_SORTER_4TH ( CSphKBufferNGroupSorter,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 	case 37:CREATE_SORTER_4TH ( MultiValueNGroupSorter_T,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 	case 40:CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
+	case 41:CREATE_SORTER_4TH ( CSphKBufferJsonGroupSorter,	COMPGROUP, UniqHLL_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 	case 48:CREATE_SORTER_4TH ( CSphKBufferGroupSorter,		COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 	case 49:CREATE_SORTER_4TH ( MultiValueGroupSorter_T,	COMPGROUP, UniqCount_c,	pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );
 	case 50:CREATE_SORTER_4TH ( CSphImplicitGroupSorter,	COMPGROUP, UniqCountSingle_c, pComp, pQuery, tSettings, bHasPackedFactors, bHasAggregates );

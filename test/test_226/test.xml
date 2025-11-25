@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>multi-queries and facet keyword</name>
+
+<requires><sphinxql_keep_null/></requires>
+
 <config>
 searchd
 {
@@ -166,6 +169,20 @@ index fs2
 	path              = <data_path/>/fs2
 }
 
+source src_fs3
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_fs3
+	sql_attr_json     = j
+}
+
+
+index fs3
+{
+	source            = src_fs3
+	path              = <data_path/>/fs3
+}
 
 </config>
 
@@ -263,6 +280,21 @@ insert into table_fs2 (id,title,j) values
 (4,'Product 4', '{"key": [4,5,2147483648]}')
 </db_insert>
 
+<db_create>
+CREATE TABLE `table_fs3` (
+  `id` int(11),
+  `j` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `table_fs3`;</db_drop>
+
+<db_insert>
+insert into table_fs3 (id,j) values
+('1','[{"id":1,"type":"A"},{"id":2,"type":"B"}]'),
+('2','[{"id":2,"type":"B"},{"id":3,"type":"C"}]'),
+('3','[{"id":1,"type":"A"},{"id":4,"type":"D"}]');
+</db_insert>
 
 <queries><sphinxql>
 
@@ -397,6 +429,14 @@ select id, j from fs1 where id &lt; 3 facet j['x'] as x_val;;
 
 select id, j from fs2 facet j.key;;
 select id, j from fs2 facet j.key as k;;
+
+select * from fs3 facet j.id;;
+select * from fs3 facet j.id, j.type;;
+select * from fs3 facet j['*'].id;;
+select * from fs3 facet j['*'].id, j['*'].type;;
+select * from fs3 facet j['*'].id, to_string(j['*'].type);;
+
+select id,categories from loc12 facet categories;;
 
 </sphinxql></queries>
 

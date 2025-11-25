@@ -1488,6 +1488,21 @@ public:
 		assert ( dArgs.GetLength()==dRetTypes.GetLength() );
 		m_dArgs.SwapData ( dArgs );
 		m_dRetTypes.SwapData ( dRetTypes );
+
+		ARRAY_FOREACH ( i, m_dArgs )
+		{
+			if ( m_dRetTypes[i]==SPH_ATTR_STRING && m_dArgs[i]->IsConst() )
+			{
+				CSphMatch tMatch;
+				const BYTE * pStr;
+				int iLen = m_dArgs[i]->StringEval ( tMatch, &pStr );
+				if ( iLen==1 && pStr[0]=='*' )
+				{
+					m_bMultiValue = true;
+					break;
+				}
+			}
+		}
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) override
@@ -1664,6 +1679,142 @@ public:
 		return true;
 	}
 
+	bool IsMultiValue() const override
+	{
+		return m_bMultiValue;
+	}
+
+	mutable CSphVector<int64_t> m_dMvaBuf; // FIXME!!! not safe for multiple threads
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const override
+	{
+		m_dMvaBuf.Resize ( 0 );
+
+		if ( !m_pBlobPool )
+			return { nullptr, 0 };
+
+		const BYTE * pVal = nullptr;
+		ESphJsonType eJson = JSON_EOF;
+
+		if ( m_tLocator.m_bDynamic )
+		{
+			uint64_t uPacked = tMatch.GetAttr ( m_tLocator );
+			if ( !uPacked )
+				return { nullptr, 0 };
+
+			eJson = sphJsonUnpackType ( uPacked );
+			pVal = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
+		} else
+		{
+			int iLen = 0;
+			pVal = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool, iLen );
+			if ( !pVal )
+				return { nullptr, 0 };
+
+			eJson = sphJsonFindFirst ( &pVal );
+		}
+
+		DoEvalMva ( eJson, pVal, tMatch, 0 );
+		return { (BYTE*)m_dMvaBuf.Begin(), m_dMvaBuf.GetLengthBytes() };
+	}
+
+	void DoEvalMva ( ESphJsonType eJson, const BYTE * pVal, const CSphMatch & tMatch, int iArg ) const
+	{
+		if ( eJson==JSON_EOF )
+			return;
+
+		if ( iArg==m_dArgs.GetLength() )
+		{
+			switch ( eJson )
+			{
+			case JSON_INT32:	m_dMvaBuf.Add ( sphJsonLoadInt ( &pVal ) ); break;
+			case JSON_INT64:	m_dMvaBuf.Add ( sphJsonLoadBigint ( &pVal ) ); break;
+			default: break;
+			}
+			return;
+		}
+
+		switch ( m_dRetTypes[iArg] )
+		{
+		case SPH_ATTR_STRING:
+			{
+				const BYTE * pStr;
+				int iLen = m_dArgs[iArg]->StringEval ( tMatch, &pStr );
+				
+				if ( iLen==1 && pStr[0]=='*' )
+				{
+					const BYTE * p = pVal;
+					switch ( eJson )
+					{
+					case JSON_INT32_VECTOR:
+					case JSON_INT64_VECTOR:
+					case JSON_DOUBLE_VECTOR:
+					{
+						int iLen = sphJsonUnpackInt ( &p );
+						int iSize = (eJson==JSON_INT32_VECTOR) ? 4 : 8;
+						ESphJsonType eItemType = ( eJson==JSON_INT32_VECTOR ) ? JSON_INT32 : ( eJson==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE );
+						for ( int i=0; i<iLen; ++i )
+						{
+							DoEvalMva ( eItemType, p, tMatch, iArg+1 );
+							p += iSize;
+						}
+					}
+					break;
+
+					case JSON_STRING_VECTOR:
+					{
+						sphJsonUnpackInt ( &p );
+						int iLen = sphJsonUnpackInt ( &p );
+						for ( int i=0; i<iLen; ++i )
+						{
+							const BYTE * pStart = p;
+							int iSize = sphJsonUnpackInt ( &p );
+							DoEvalMva ( JSON_STRING, pStart, tMatch, iArg+1 );
+							p += iSize;
+						}
+					}
+					break;
+
+					case JSON_MIXED_VECTOR:
+					{
+						sphJsonUnpackInt ( &p );
+						int iLen = sphJsonUnpackInt ( &p );
+						for ( int i=0; i<iLen; ++i )
+						{
+							ESphJsonType eType = (ESphJsonType)*p++;
+							DoEvalMva ( eType, p, tMatch, iArg+1 );
+							sphJsonSkipNode ( eType, &p );
+						}
+					}
+					break;
+
+					default:
+						break;
+					}
+
+				} else
+				{
+					eJson = sphJsonFindByKey ( eJson, &pVal, (const void *)pStr, iLen, sphJsonKeyMask ( (const char *)pStr, iLen ) );
+					DoEvalMva ( eJson, pVal, tMatch, iArg+1 );
+				}
+			}
+			break;
+			
+		case SPH_ATTR_INTEGER:
+			eJson = sphJsonFindByIndex ( eJson, &pVal, m_dArgs[iArg]->IntEval ( tMatch ) );
+			DoEvalMva ( eJson, pVal, tMatch, iArg+1 );
+			break;
+
+		case SPH_ATTR_BIGINT:
+			eJson = sphJsonFindByIndex ( eJson, &pVal, (int)m_dArgs[iArg]->Int64Eval ( tMatch ) );
+			DoEvalMva ( eJson, pVal, tMatch, iArg+1 );
+			break;
+			
+		default:
+			break;
+		}
+	}
+
 	ISphExpr* Clone() const override
 	{
 		return new Expr_JsonField_c ( *this );
@@ -1675,11 +1826,13 @@ protected:
 private:
 	VecRefPtrs_t<ISphExpr*>	m_dArgs;
 	CSphVector<ESphAttr>	m_dRetTypes;
+	bool					m_bMultiValue = false;
 
 protected:
 	Expr_JsonField_c ( const Expr_JsonField_c & rhs )
 		: Expr_WithLocator_c ( rhs )
 		, m_dRetTypes ( rhs.m_dRetTypes )
+		, m_bMultiValue ( rhs.m_bMultiValue )
 	{
 		m_dArgs.Resize ( rhs.m_dArgs.GetLength ());
 		ARRAY_FOREACH ( i, m_dArgs )
@@ -1764,6 +1917,70 @@ public:
 	{
 		bConverted = false;
 		return true;
+	}
+
+	bool IsMultiValue() const override
+	{
+		return ( m_sKey=="*" );
+	}
+
+	mutable CSphVector<int64_t> m_dMvaBuf;  // FIXME!!! not safe for multiple threads
+
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const override
+	{
+		m_dMvaBuf.Resize ( 0 );
+		if ( !IsMultiValue() )
+			return { nullptr, 0 };
+
+		const BYTE * pJson = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool ).first;
+		if ( !pJson )
+			return { nullptr, 0 };
+
+		ESphJsonType eJson = sphJsonFindFirst ( &pJson );
+		const BYTE * p = pJson;
+
+		switch ( eJson )
+		{
+		case JSON_INT32_VECTOR:
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+		{
+			int iLen = sphJsonUnpackInt ( &p );
+			int iSize = (eJson==JSON_INT32_VECTOR) ? 4 : 8;
+			for ( int i=0; i<iLen; ++i )
+			{
+				if ( eJson==JSON_INT32_VECTOR )
+					m_dMvaBuf.Add ( sphJsonLoadInt ( &p ) );
+				else if ( eJson==JSON_INT64_VECTOR )
+					m_dMvaBuf.Add ( sphJsonLoadBigint ( &p ) );
+				else
+					p += 8;
+			}
+		}
+		break;
+
+		case JSON_MIXED_VECTOR:
+		{
+			sphJsonUnpackInt ( &p );
+			int iLen = sphJsonUnpackInt ( &p );
+			for ( int i=0; i<iLen; ++i )
+			{
+				ESphJsonType eType = (ESphJsonType)*p++;
+				if ( eType==JSON_INT32 )
+					m_dMvaBuf.Add ( sphJsonLoadInt ( &p ) );
+				else if ( eType==JSON_INT64 )
+					m_dMvaBuf.Add ( sphJsonLoadBigint ( &p ) );
+				else
+					sphJsonSkipNode ( eType, &p );
+			}
+		}
+		break;
+
+		default:
+			break;
+		}
+
+		return { (BYTE*)m_dMvaBuf.Begin(), m_dMvaBuf.GetLengthBytes() };
 	}
 
 	ISphExpr* Clone() const final

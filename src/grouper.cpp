@@ -128,7 +128,26 @@ public:
 
 	void			GetLocator ( CSphAttrLocator & tOut ) const final	{ tOut = m_tLocator; }
 	ESphAttr		GetResultType() const final							{ return SPH_ATTR_BIGINT; }
-	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
+	bool IsMultiValue() const override
+	{
+		return ( m_pExpr && m_pExpr->IsMultiValue() );
+	}
+
+	void MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final
+	{
+		dKeys.Resize ( 0 );
+		if ( !m_pExpr )
+			return;
+
+		ByteBlob_t tBlob = m_pExpr->MvaEval ( tMatch );
+		if ( !tBlob.second )
+			return;
+
+		int iCount = tBlob.second / sizeof(int64_t);
+		const int64_t * pValues = (const int64_t *)tBlob.first;
+		for ( int i=0; i<iCount; ++i )
+			dKeys.Add ( pValues[i] );
+	}
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final				{ assert(0); return SphGroupKey_t(); }
 	CSphGrouper *	Clone() const final									{ return new CSphGrouperJsonField (*this); }
 

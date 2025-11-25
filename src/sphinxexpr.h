@@ -143,6 +143,9 @@ public:
 	/// FIXME? replace with a single GetType() call?
 	virtual bool IsArglist () const { return false; }
 
+	/// check if expression returns multiple values (MVA)
+	virtual bool IsMultiValue() const { return false; }
+
 	/// was this expression spawned in place of a columnar attr?
 	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
 

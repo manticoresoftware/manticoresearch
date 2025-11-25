@@ -44,7 +44,7 @@ This document provides the specifications for implementing authentication and au
    - Authentication via two methods:
      - Basic Auth: Username and password encoded in the request header (e.g., `Authorization: Basic <base64(user:password)>`).
      - Bearer Token: Header like `Authorization: Bearer <token>`.
-     
+
 3. **Binary Protocol (for Inter-Daemon Communication)**
    - Utilizes a secure, encrypted transport layer based on **AES-256-GCM**.
    - Provides built-in confidentiality, integrity, authenticity, and replay protection without relying on an external SSL/TLS layer.
@@ -446,7 +446,6 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - SET PASSWORD - will be implemented in Buddy
     - TOKEN - will be implemented in Buddy
     - SHOW USAGE
-    - DUMP AUTH
     - RELOAD AUTH
 
   - HTTP endpoints that manage authentication and authorization:
@@ -456,7 +455,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
         - **Authentication:** The request must include a valid `Authorization` header (e.g., Basic Auth).
         - **Authorization:** The authenticated user must have the `admin` permission.
         - **Request Body:** An empty JSON object (e.g., `{}`).
-        - **Response:** A JSON object containing the new, unhashed token: `{"token": "<new_token>"}`.    
+        - **Response:** A JSON object containing the new, unhashed token: `{"token": "<new_token>"}`.
 
 **Notes**
 
@@ -768,7 +767,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      | 'mytable'   |
      +-------------+
      ```
-     
+
 12. **Show Bearer Token Hash**
 Displays the securely hashed bearer token (`bearer_sha256`) for a specified user or the current user. This is useful for administrative verification.
    - **SQL Command:**
@@ -787,7 +786,7 @@ Displays the securely hashed bearer token (`bearer_sha256`) for a specified user
      | Username | Token                                                            |
      +----------+------------------------------------------------------------------+
      | admin    | 27f955c72fa08387001c6cb5f83985d7baf002e632e60cdbd0b1985136a366c1 |
-     +----------+------------------------------------------------------------------+     
+     +----------+------------------------------------------------------------------+
 
 **Notes on `ADMIN` Action**
 
@@ -815,14 +814,6 @@ Displays the securely hashed bearer token (`bearer_sha256`) for a specified user
   ```
 
 If the `system.auth*` tables (RT Mode) or the authentication file (Plain Mode) do not exist, Manticore should create them. If they already exist, Manticore should validate them during startup. If validation fails, Manticore should not start.
-
----
-
-### DUMP AUTH SQL command
-
-`DUMP AUTH` is an SQL statement designed to facilitate migration from RT mode (tables) to plain mode (JSON). It extracts the contents of the `system.auth_users` and `system.auth_permissions` tables into a JSON format compatible with plain mode.
-
-- The command outputs the data directly as a JSON object, allowing administrators to redirect the output to a file for use as the plain mode `auth` file.
 
 ---
 
@@ -936,7 +927,7 @@ sequenceDiagram
 ```
 
 1. **Token Initialization for Buddy User**:
-    - When Manticore Search starts Manticore Buddy, it generates a random, unique token for Buddy user with all necessary permissions. 
+    - When Manticore Search starts Manticore Buddy, it generates a random, unique token for Buddy user with all necessary permissions.
     - The token is passed to Buddy using an environment variable `BUDDY_TOKEN` along with SSL materials via environment variables: `BUDDY_SSL_CERT_CONTENT`, and `BUDDY_SSL_KEY_CONTENT`.
     - All communication between the daemon and Buddy occurs exclusively over a secure HTTPS channel.
 

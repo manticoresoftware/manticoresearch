@@ -1564,9 +1564,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 			m_tDocInfo.m_tRowID = pIdPair->m_tRowID;
 		}
 				
-		// track where hits for this field begin
-		int iHitsBegin = m_tHits.GetLength();
-		BuildHits ( sError, false );
+		BuildHits ( sError );
 
 		// update current position
 		if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )

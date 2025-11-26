@@ -25,7 +25,7 @@
 // KEYWORDS STORING DICTIONARY, INFIX HASH BUILDER
 //////////////////////////////////////////////////////////////////////////
 
-static constexpr int INFIX_ARENA_LENGTH = 1 << 24; // 16M buckets (was 1M)
+static constexpr int INFIX_ARENA_LENGTH = 1 << 24; // 16M buckets provides better performance than 1M which was used previously
 
 template<int SIZE>
 struct Infix_t
@@ -481,10 +481,9 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 	wrDict.PutBlob ( g_sTagInfixEntries );
 
 	CSphVector<int> dIndex;
-	int iTotalEntries = m_dArena.GetLength() - 1;
-	dIndex.Resize ( iTotalEntries );
+	dIndex.Resize ( m_dArena.GetLength() - 1 );
 	dIndex.FillSeq(1);
-	// Use radix sort for O(n) performance instead of O(n log n)
+	// Use radix sort for O(n) performance instead of O(n log n) which std::sort provides
 	RadixSortIndices<SIZE> ( dIndex, m_dArena );
 
 	m_dBlocksWords.Reserve ( m_dArena.GetLength() / INFIX_BLOCK_SIZE * sizeof ( DWORD ) * SIZE );

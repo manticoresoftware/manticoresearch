@@ -1,0 +1,10 @@
+{
+  "0788f8dc7dd794c9db5279415d0cb4ce404cffccf26739d4f2f6387eaead538f": {
+    "original": "# Installing Manticore Search as a Docker image\n\nDocker images of Manticore Search are publicly accessible on [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/), built from the [Manticore Search docker GitHub repository](https://github.com/manticoresoftware/docker).\n\nTo retrieve the Manticore image, run the following command:\n\nCODE_BLOCK_0\n\nFor more information about using Manticore in Docker, see the [Using Manticore in Docker](../Starting_the_server/Docker.md) section.\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 以 Docker 镜像安装 Manticore Search\n\nManticore Search 的 Docker 镜像可在 [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/) 上公开获取，镜像由 [Manticore Search docker GitHub 仓库](https://github.com/manticoresoftware/docker) 构建。\n\n要获取 Manticore 镜像，请运行以下命令：\n\nCODE_BLOCK_0\n\n有关在 Docker 中使用 Manticore 的更多信息，请参见 [在 Docker 中使用 Manticore](../Starting_the_server/Docker.md) 部分。\n\n<!-- proofread -->",
+      "russian": "# Установка Manticore Search в виде Docker-образа\n\nDocker-образы Manticore Search общедоступны на [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/), собраны из [репозитория Manticore Search docker на GitHub](https://github.com/manticoresoftware/docker).\n\nЧтобы получить образ Manticore, выполните следующую команду:\n\nCODE_BLOCK_0\n\nДля получения дополнительной информации о использовании Manticore в Docker смотрите раздел [Использование Manticore в Docker](../Starting_the_server/Docker.md).\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

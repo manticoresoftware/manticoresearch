@@ -1132,6 +1132,61 @@ bool RWLock_c::TestNextWlock () const noexcept
 	return !m_tWaitWQueue.Empty ();
 }
 
+void ReadTableLock_c::WaitRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	++m_uReads;
+	while ( m_uWrites )
+		m_tWaitRQueue.SuspendAndWait ( tLock, Worker() );
+}
+
+bool ReadTableLock_c::TryWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( m_uReads )
+		return false;
+	++m_uWrites;
+	return true;
+}
+
+void ReadTableLock_c::FinishWrite() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+	if ( !--m_uWrites )
+		m_tWaitRQueue.NotifyAll();
+}
+
+bool ReadTableLock_c::UnlockRead() noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+
+	if ( !m_uReads )
+		return false;
+
+	--m_uReads;
+	return true;
+}
+
+[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+{
+	return m_uReads;
+}
+
+ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )
+	: m_tTableLock { tTableLock }
+	, m_bCanWrite { tTableLock.TryWrite() }
+{}
+
+ScopedWriteTable_c::~ScopedWriteTable_c()
+{
+	if (m_bCanWrite)
+		m_tTableLock.FinishWrite();
+}
+
+bool ScopedWriteTable_c::CanWrite() const noexcept
+{
+	return m_bCanWrite;
+}
 
 } // namespace Coro
 } // namespace Threads

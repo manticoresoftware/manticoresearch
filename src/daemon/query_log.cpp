@@ -453,13 +453,75 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 	tBuf << " */";
 }
 
+void VacuumSpacesFromJson ( const char* szJson, StringBuilder_c & tBuf ) noexcept
+{
+	if (!szJson)
+		return;
+	enum class eStates { initial, has_space, quoted, backslash };
+	auto eState = eStates::initial;
+	while (*szJson)
+	{
+		const char c = *szJson++;
+		switch (eState)
+		{
+		case eStates::initial:
+			switch (c)
+			{
+				case ' ':
+				case '\t':
+				case '\n':
+				case '\r': eState = eStates::has_space;
+					tBuf << " "; break;
+				case '"': eState = eStates::quoted;
+					tBuf << "\""; break;
+				default:
+					tBuf << c; break;
+			}
+			break;
+
+		case eStates::has_space:
+			switch (c)
+			{
+				case ' ':
+				case '\t':
+				case '\n':
+				case '\r': break;
+				case '"': eState = eStates::quoted;
+					tBuf << "\""; break;
+				default: eState = eStates::initial;
+					tBuf << c; break;
+			}
+			break;
+
+		case eStates::quoted:
+			tBuf << c;
+			switch (c)
+			{
+				case '"': eState = eStates::initial; break;
+				case '\\': eState = eStates::backslash;
+				default: break;
+			}
+			break;
+
+		case eStates::backslash:
+			tBuf << c;
+			eState = eStates::quoted;
+		}
+	}
+}
+
 
 static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
 {
+	tBuf << " /*";
 	if ( q.m_sRawQuery.IsEmpty() )
-		tBuf << " /*" << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*" << q.m_sQuery << " */";
+	{
+		tBuf << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*";
+		VacuumSpacesFromJson ( q.m_sQuery.cstr(), tBuf );
+	}
 	else
-		tBuf << " /*" << q.m_sRawQuery << " */";
+		VacuumSpacesFromJson ( q.m_sRawQuery.cstr(), tBuf );
+	tBuf << " */";
 }
 
 
@@ -697,23 +759,20 @@ void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQ
 	}
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError )
+void LogSphinxqlError ( const char * szStmt, const Str_t & sError )
 {
-	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || !sStmt || IsEmpty ( sError ) )
-		return;
-
-	StringBuilder_c tBuf;
-	tBuf << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " */ " << sStmt << " # error=" << sError << '\n';
-
-	WriteQuery ( tBuf );
+	LogSphinxqlError ( FromSz ( szStmt ), sError );
 }
-
 
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
 {
-	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || IsEmpty ( sStmt ) || IsEmpty ( sError ) )
+	if ( g_eLogFormat != LOG_FORMAT::SPHINXQL || g_iQueryLogFile < 0 || !IsFilled ( sStmt ) || IsEmpty ( sError ) )
+		return;
+
+	// some mysql cli, like mysql 9.0.1, 9.1.0, 9.3.0, may be others, fire 'select $$' query after connect
+	// that produces some noise in query log, so let's just filter out these queries. #2772
+	constexpr Str_t selectSS = FROMS("select $$");
+	if ( sStmt.second==selectSS.second && !strncmp (sStmt.first, selectSS.first, selectSS.second) )
 		return;
 
 	QuotationEscapedBuilder tBuf;

@@ -3,9 +3,9 @@
 ### 支持的版本：
 
 * Debian
-  * 10.0 (Buster)
   * 11.0 (Bullseye)
   * 12.0 (Bookworm)
+  * 13.0 (Trixie)
 
 * Ubuntu
   * 18.04 (Bionic)
@@ -28,23 +28,23 @@ wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 ```
-（如果尚未安装 `wget`，请安装；如果 `apt-key` 失败，请安装 `gnupg2`）。
+（如果未安装 `wget`，请安装；如果 `apt-key` 失败，请安装 `gnupg2`）。
 
 然后安装 Manticore Search：
 ```
 sudo apt install manticore manticore-extra
 ```
 
-如果你是从旧版本升级到 Manticore 6，建议先卸载旧包，以避免由更新的包结构引起的冲突：
+如果您是从旧版本升级到 Manticore 6，建议先删除旧的软件包，以避免因软件包结构更新而导致的冲突：
 
 ```bash
 sudo apt remove manticore*
 ```
 
-这不会删除你的数据和配置文件。
+这不会删除您的数据和配置文件。
 
 ###### 开发包
-如果你更喜欢“Nightly”（开发）版本，请执行：
+如果您更喜欢“Nightly”（开发）版本，请执行：
 ```bash
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
 sudo dpkg -i manticore-dev-repo.noarch.deb && \
@@ -53,11 +53,11 @@ sudo apt -y install manticore manticore-extra manticore-common manticore-server 
 ```
 
 ### 独立 DEB 包
-要从 Manticore 仓库下载独立 DEB 文件，请按照 https://manticoresearch.com/install/ 上的说明操作。
+要从 Manticore 仓库下载独立的 DEB 文件，请按照 https://manticoresearch.com/install/ 上的说明操作。
 
-### 你可能需要的更多软件包
+### 您可能需要的更多软件包
 #### 对于 indexer
-Manticore 软件包依赖 zlib 和 ssl 库，除此之外没有其他严格要求。然而，如果你打算使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部存储创建表，你需要安装相应的客户端库。要了解 `indexer` 需要哪些具体库，可以运行它并查看其输出顶端：
+Manticore 软件包依赖于 zlib 和 ssl 库，除此之外没有严格要求。然而，如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部存储创建表，则需要安装相应的客户端库。要了解 `indexer` 具体需要哪些库，请运行它并查看输出顶部：
 
 ```bash
 $ sudo -u manticore indexer
@@ -73,9 +73,9 @@ Built on Linux runner-0277ea0f-project-3858465-concurrent-0 4.19.78-coreos #1 SM
 Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=xenial -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmysqlclient.so.20 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_POSTGRESQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 ```
 
-这里你可以看到提到了 **libodbc.so.2**、**libexpat.so.1**、**libmysqlclient.so.20** 和 **libpq.so.5**。
+这里您可以看到提到了 **libodbc.so.2**、**libexpat.so.1**、**libmysqlclient.so.20** 和 **libpq.so.5**。
 
-下面是一个包含不同 Debian/Ubuntu 版本所有客户端库的参考表：
+下面是一个参考表，列出了不同 Debian/Ubuntu 版本的所有客户端库：
 
 | 发行版 | MySQL | PostgreSQL | XMLpipe | UnixODBC |
 | - | - | - | - | - |
@@ -98,22 +98,22 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-注意，你只需要安装你将使用的存储类型所需的库。如果你只打算从 MySQL 构建表，则可能只需要安装 MySQL 库（上述情况下为 `libmysqlclient20`）。
+请注意，您只需要为您将使用的存储类型安装相应的库。因此，如果您计划仅从 MySQL 构建表，则可能只需要安装 MySQL 库（上述情况为 `libmysqlclient20`）。
 
-最后，安装所需的包：
+最后，安装所需的软件包：
 
 ```bash
 sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 ```
 
-如果你根本不打算使用 `indexer` 工具，则无需查找和安装任何库。
+如果您根本不打算使用 `indexer` 工具，则无需查找和安装任何库。
 
 为了启用 CJK 分词支持，官方软件包包含嵌入 ICU 库的二进制文件，并包含 ICU 数据文件。它们独立于系统上可能存在的任何 ICU 运行时库，且无法升级。
 
 #### 乌克兰语词形还原器
-词形还原器需要 Python 3.9 及以上版本。**确保你已安装并且已使用 `--enable-shared` 配置。**
+词形还原器需要 Python 3.9+。**请确保已安装并且配置了 `--enable-shared`。**
 
-这是在 Debian 和 Ubuntu 上安装 Python 3.9 和乌克兰语词形还原器的方法：
+以下是在 Debian 和 Ubuntu 上安装 Python 3.9 和乌克兰语词形还原器的方法：
 
 ```bash
 # install Manticore Search and UK lemmatizer from APT repository

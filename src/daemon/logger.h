@@ -66,6 +66,7 @@ void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int i
 void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes );
 void LogSphinxqlClause ( Str_t sQuery, int iRealTime );
 void LogQueryToSphinxlLog (const CSphString& sQuery, const CSphString& sError );
+void VacuumSpacesFromJson ( const char* szJson, StringBuilder_c & tBuf ) noexcept;
 
 class LogStmtGuard_c
 {
@@ -80,6 +81,6 @@ public:
 
 // used by Buddy
 enum class BuddyQuery_e : BYTE { SQL, HTTP };
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
+void LogSphinxqlError ( const char * szStmt, const Str_t & sError );
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
 void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType );

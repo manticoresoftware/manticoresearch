@@ -1,0 +1,10 @@
+{
+  "9a8cb1b98f75a240e21b71d9458c15edc377b80480e9df2348d406859481e6df": {
+    "original": "# DROP FUNCTION\n\nCODE_BLOCK_0\n\n`DROP FUNCTION` statement uninstalls a user-defined function [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) with the specified name. Upon successful removal, the function will no longer be available for use in subsequent queries. However, ongoing concurrent queries will not be affected, and if necessary, the library unloading will be delayed until those queries are completed. Example:\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# DROP FUNCTION\n\nCODE_BLOCK_0\n\n`DROP FUNCTION` 语句用于卸载指定名称的用户自定义函数 [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md)。成功移除后，该函数将不再可用于后续查询。然而，正在进行的并发查询不会受到影响，如有必要，库的卸载将延迟到这些查询完成之后。示例：\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+      "russian": "# DROP FUNCTION\n\nCODE_BLOCK_0\n\nОператор `DROP FUNCTION` удаляет пользовательскую функцию [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) с указанным именем. После успешного удаления функция больше не будет доступна для использования в последующих запросах. Однако текущие параллельные запросы не будут затронуты, и при необходимости выгрузка библиотеки будет отложена до их завершения. Пример:\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

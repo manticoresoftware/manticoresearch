@@ -1,0 +1,10 @@
+{
+  "740b4f597097c268a76c85c615ae90705b8caccd6f5973624470308b4881d2ad": {
+    "original": "# FLUSH HOSTNAMES\n\nCODE_BLOCK_0\n\nThe FLUSH HOSTNAMES command is used to renew IP addresses associated with agent host names. If you want to always query the DNS for getting the host name IP, you can use the [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) directive.\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+    "translations": {
+      "chinese": "# 刷新主机名\n\nCODE_BLOCK_0\n\nFLUSH HOSTNAMES 命令用于更新与代理主机名关联的 IP 地址。如果您希望始终查询 DNS 以获取主机名的 IP，可以使用 [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) 指令。\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
+      "russian": "# FLUSH HOSTNAMES\n\nCODE_BLOCK_0\n\nКоманда FLUSH HOSTNAMES используется для обновления IP-адресов, связанных с именами хостов агентов. Если вы хотите всегда запрашивать DNS для получения IP-адреса хоста, вы можете использовать директиву [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup).\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
+    },
+    "is_code_or_comment": false
+  }
+}

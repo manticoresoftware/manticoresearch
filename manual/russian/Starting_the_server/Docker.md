@@ -4,17 +4,17 @@
 
 [comment]: # (the below should be in sync with https://github.com/manticoresoftware/docker/blob/master/README.md)
 
-Стандартная конфигурация включает пример Real-Time таблицы и прослушивает на стандартных портах:
+Конфигурация по умолчанию включает пример таблицы Real-Time и слушает на стандартных портах:
 
-  * `9306` для подключений клиента MySQL
+  * `9306` для подключений от MySQL клиента
   * `9308` для подключений через HTTP
-  * `9312` для подключений через бинарный протокол (например, если вы запускаете кластер)
+  * `9312` для подключений по бинарному протоколу (например, если вы запускаете кластер)
 
-Образ поставляется с библиотеками для лёгкой индексации данных из MySQL, PostgreSQL, XML и CSV файлов.
+Образ поставляется с библиотеками для удобного индексирования данных из MySQL, PostgreSQL, XML и CSV файлов.
 
-## Как запустить Docker образ Manticore Search
+## Как запустить Docker-образ Manticore Search
 
-### Быстрый старт
+### Быстрый запуск
 
 Ниже приведён самый простой способ запустить Manticore в контейнере и войти в него через mysql клиент:
 
@@ -22,26 +22,26 @@
 docker run --name manticore --rm -d manticoresearch/manticore && echo "Waiting for Manticore docker to start. Consider mapping the data_dir to make it start faster next time" && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; echo -n .; done && echo && docker exec -it manticore mysql && docker stop manticore
 ```
 
-Обратите внимание, что после выхода из MySQL клиента контейнер Manticore будет остановлен и удалён, из-за чего данные не сохранятся. Для информации о использовании Manticore в продакшн-среде смотрите ниже.
+Обратите внимание, что при выходе из MySQL клиента контейнер Manticore будет остановлен и удалён, в результате данные не сохранятся. Для информации по использованию Manticore в продакшене смотрите ниже.
 
-Образ поставляется с примером таблицы, которую можно загрузить так:
+Образ содержит пример таблицы, которую можно загрузить так:
 
 ```sql
 mysql> source /sandbox.sql
 ```
 
-Также mysql клиент имеет несколько примеров запросов в своей истории, которые вы можете выполнить на указанной таблице, просто используйте клавиши Вверх/Вниз, чтобы просмотреть и запустить их.
+Также mysql клиент имеет несколько примеров запросов в своей истории, которые вы можете выполнить на вышеуказанной таблице, просто используйте клавиши Вверх/Вниз в клиенте для просмотра и запуска.
 
 ### Использование в продакшене
 
 
 #### Порты и точки монтирования
 
-Для сохранения данных папка `/var/lib/manticore/` должна быть смонтирована к локальному хранилищу или другому желаемому хранилищу.
+Для сохранения данных папка `/var/lib/manticore/` должна быть смонтирована в локальное хранилище или другой желаемый движок хранения.
 
-Конфигурационный файл внутри инстанса располагается по пути `/etc/manticoresearch/manticore.conf`. Для пользовательских настроек этот файл должен быть смонтирован к вашему собственному конфигурационному файлу.
+Файл конфигурации внутри инстанса находится по пути `/etc/manticoresearch/manticore.conf`. Для пользовательских настроек этот файл должен быть смонтирован в ваш собственный конфигурационный файл.
 
-Порты — 9306/9308/9312 для SQL/HTTP/Бинарного, выставляйте их наружу в зависимости от того, как вы собираетесь использовать Manticore. Например:
+Порты 9306/9308/9312 предназначены для SQL/HTTP/Бинарного протокола, откройте их в зависимости от того, как вы собираетесь использовать Manticore. Например:
 
 ```bash
 docker run --name manticore -v $(pwd)/data:/var/lib/manticore -p 127.0.0.1:9306:9306 -p 127.0.0.1:9308:9308 -d manticoresearch/manticore
@@ -53,15 +53,15 @@ docker run --name manticore -v $(pwd)/data:/var/lib/manticore -p 127.0.0.1:9306:
 docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data:/var/lib/manticore/ -p 127.0.0.1:9306:9306 -p 127.0.0.1:9308:9308 -d manticoresearch/manticore
 ```
 
-Обязательно уберите `127.0.0.1:`, если хотите, чтобы порты были доступны для внешних хостов.
+Убедитесь, что удалили `127.0.0.1:`, если хотите, чтобы порты были доступны для внешних хостов.
 
-#### Manticore Columnar Library and Manticore Buddy
+#### Библиотека Manticore Columnar и Manticore Buddy
 
-Docker образ Manticore Search поставляется с предустановленными [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) и [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy)
+Docker-образ Manticore Search поставляется с предустановленными [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) и [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy)
 
 #### Docker-compose
 
-Во многих случаях вы можете захотеть использовать Manticore вместе с другими образами, указанными в YAML файле Docker Compose. Ниже минимальная рекомендуемая конфигурация для Manticore Search в docker-compose.yml файле:
+Во многих случаях вы можете захотеть использовать Manticore вместе с другими образами, указанными в YAML-файле Docker Compose. Ниже минимальная рекомендуемая конфигурация для Manticore Search в файле docker-compose.yml:
 
 ```yaml
 version: '2.2'
@@ -91,7 +91,7 @@ services:
 
 #### HTTP протокол
 
-HTTP протокол доступен на порту 9308. Вы можете пробросить этот порт локально и подключиться с помощью curl:
+HTTP протокол доступен на порту 9308. Вы можете пробросить порт локально и подключиться с помощью curl:
 
 ```bash
 docker run --name manticore -p 9308:9308 -d manticoresearch/manticore
@@ -125,19 +125,19 @@ POST /search -d '{"table":"testrt","query":{"match":{"*":"hello world"}}}'
 
 ### Логирование
 
-По умолчанию сервер настроен на отправку логов в `/dev/stdout`, которые можно просматривать с хоста с помощью:
+По умолчанию сервер настроен отправлять логи в `/dev/stdout`, которые можно просмотреть с хоста с помощью:
 
 
 ```bash
 docker logs manticore
 ```
 
-Логи запросов можно направить в Docker лог, передав переменную `QUERY_LOG_TO_STDOUT=true`.
+Лог запросов можно направить в Docker лог, передав переменную `QUERY_LOG_TO_STDOUT=true`.
 
 
-#### Кластер из нескольких узлов с репликацией
+#### Многозвенный кластер с репликацией
 
-Ниже простой пример `docker-compose.yml` для определения кластера из двух узлов:
+Вот простой `docker-compose.yml` для определения кластера из двух узлов:
 
 ```yaml
 version: '2.2'
@@ -174,8 +174,8 @@ networks:
   manticore:
     driver: bridge
 ```
-* Запуск: `docker-compose up`
-* Создание кластера:
+* Запустите его: `docker-compose up`
+* Создайте кластер:
   ```sql
   $ docker-compose exec manticore-1 mysql
 
@@ -190,7 +190,7 @@ networks:
   MySQL [(none)]> exit
   Bye
   ```
-* Подключение ко 2-му узлу к кластеру
+* Присоединитесь к кластеру на втором инстансе
   ```sql
   $ docker-compose exec manticore-2 mysql
 
@@ -201,7 +201,7 @@ networks:
   MySQL [(none)]> exit
   Bye
   ```
-* Если теперь вернуться к первому узлу, вы увидите новую запись:
+* Если теперь вернуться к первому инстансу, вы увидите новую запись:
   ```sql
   $ docker-compose exec manticore-1 mysql
 
@@ -219,13 +219,13 @@ networks:
 
 ### Блокировка памяти и лимиты
 
-Рекомендуется переопределить значения ulimits docker для инстанса Manticore:
+Рекомендуется переопределить стандартные ulimits docker для инстанса Manticore:
 
 ```bash
  --ulimit nofile=65536:65536
 ```
 
-Для лучшей производительности компоненты таблиц могут быть "заблокированы" (mlocked) в памяти. При запуске Manticore в Docker инстанс требует дополнительных привилегий для блокировки памяти. Следующие опции должны быть добавлены при запуске инстанса:
+Для лучшей производительности компоненты таблиц могут быть "mlocked" в память. При запуске Manticore под Docker инстансу требуются дополнительные привилегии для разрешения блокировки памяти. Следующие опции должны быть добавлены при запуске инстанса:
 
 ```bash
   --cap-add=IPC_LOCK --ulimit memlock=-1:-1
@@ -233,28 +233,28 @@ networks:
 
 ### Настройка Manticore Search с Docker
 
-Если вы хотите запустить Manticore с пользовательской конфигурацией, которая включает определения таблиц, необходимо примонтировать конфигурацию к инстансу:
+Если вы хотите запустить Manticore с пользовательской конфигурацией, включающей определения таблиц, вам нужно смонтировать конфигурацию в инстанс:
 
 ```bash
 docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data/:/var/lib/manticore -p 127.0.0.1:9306:9306 -d manticoresearch/manticore
 ```
 
-Учитывайте, что поиск Manticore внутри контейнера запускается под пользователем `manticore`. Все операции с файлами таблиц (например, создание или ротация plain таблиц) также должны выполняться под `manticore`. Иначе файлы создадутся от `root`, и поисковый демон не сможет их открыть. Например, вот как можно сделать ротацию всех таблиц:
+Учтите, что Manticore search внутри контейнера запускается под пользователем `manticore`. Операции с файлами таблиц (например, создание или ротация plain таблиц) также должны выполняться под `manticore`. Иначе файлы будут созданы под `root`, и демон поиска не сможет их открыть. Например, вот как можно выполнить ротацию всех таблиц:
 
 ```bash
 docker exec -it manticore gosu manticore indexer --all --rotate
 ```
 
-Также можно задать отдельные настройки `searchd` и `common` с помощью переменных окружения Docker.
+Вы также можете задать отдельные настройки `searchd` и `common` через переменные окружения Docker.
 
-Настройки должны иметь префикс с названием секции, пример: для `mysql_version_string` переменной должно быть имя `searchd_mysql_version_string`:
+Настройки должны иметь префикс с именем секции, пример для `mysql_version_string` — переменная должна называться `searchd_mysql_version_string`:
 
 
 ```bash
 docker run --name manticore  -p 127.0.0.1:9306:9306  -e searchd_mysql_version_string='5.5.0' -d manticoresearch/manticore
 ```
 
-В случае директивы `listen` новые интерфейсы прослушивания задаются с помощью Docker переменной `searchd_listen` дополнительно к стандартным. Можно объявлять несколько интерфейсов, разделённых точкой с запятой ("|"). Для прослушивания только сетевого адреса можно использовать `$ip` (который извлекается внутренне через `hostname -i`) в качестве псевдонима адреса.
+В случае директивы `listen` новые интерфейсы прослушивания добавляются с помощью Docker переменной `searchd_listen` в дополнение к стандартным. Можно объявить несколько интерфейсов, разделённых точкой с запятой ("|"). Для прослушивания только на сетевом адресе можно использовать `$ip` (получаемый внутренне из `hostname -i`) как псевдоним адреса.
 
 For example `-e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'` will add an additional SQL interface on port 9307, an SQL VIP listener on port 5443 running only on the instance's IP, and an HTTP listener on port 9316, in addition to the defaults on 9306 and 9308, respectively.
 
@@ -273,37 +273,37 @@ prereaded 0 indexes in 0.000 sec
 accepting connections
 ```
 
-#### Параметры запуска
+#### Startup flags
 
-Чтобы запустить Manticore с пользовательскими параметрами запуска, укажите их в качестве аргументов при использовании docker run. Убедитесь, что не включаете команду `searchd` и добавляете флаг `--nodetach`. Пример:
+To start Manticore with custom startup flags, specify them as arguments when using docker run. Ensure you do not include the `searchd` command and include the `--nodetach` flag. Here's an example:
 ```bash
 docker run --name manticore --rm manticoresearch/manticore:latest --replay-flags=ignore-trx-errors --nodetach
 ```
 
-#### Запуск от имени не-root пользователя
-По умолчанию основной процесс Manticore `searchd` запускается от имени пользователя `manticore` внутри контейнера, но скрипт, который выполняется при запуске контейнера, запускается от вашего стандартного пользователя docker, который в большинстве случаев является `root`. Если вы хотите иначе, вы можете использовать `docker ... --user manticore` или `user: manticore` в docker compose yaml, чтобы всё запускалось от имени `manticore`. Ниже описаны возможные проблемы с разрешениями для томов и способы их решения.
+#### Running under non-root
+By default, the main Manticore process `searchd` is running under user `manticore` inside the container, but the script which runs on starting the container is run under your default docker user which in most cases is `root`. If that's not what you want you can use `docker ... --user manticore` or `user: manticore` in docker compose yaml to make everything run under `manticore`. Read below about possible volume permissions issue you can get and how to solve it.
 
-#### Создание обычных таблиц при запуске
-Чтобы создавать обычные таблицы, указанные в вашем пользовательском конфигурационном файле, можно использовать переменную окружения `CREATE_PLAIN_TABLES=1`. Это выполнит команду `indexer --all` перед запуском Manticore. Это полезно, если вы не используете тома и ваши таблицы легко пересоздаются.
+#### Creating plain tables on startup
+To build plain tables specified in your custom configuration file, you can use the `CREATE_PLAIN_TABLES=1` environment variable. It will execute `indexer --all` before Manticore starts. This is useful if you don't use volumes, and your tables are easy to recreate.
 ```bash
 docker run -e CREATE_PLAIN_TABLES=1 --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -p 9308:9308 -d manticoresearch/manticore
 ```
 
-### Устранение неполадок
+### Troubleshooting
 
-#### Проблемы с разрешениями у смонтированного тома
+#### Permissions issue with a mounted volume
 
-Если вы запускаете Manticore Search docker от имени не-root пользователя (с помощью `docker ... --user manticore` или `user: manticore` в docker compose yaml), возможно возникновение проблем с разрешениями, например:
+In case you are running Manticore Search docker under non-root (using `docker ... --user manticore` or `user: manticore` in docker compose yaml), you can face a permissions issue, for example:
 ```bash
 FATAL: directory /var/lib/manticore write error: failed to open /var/lib/manticore/tmp: Permission denied
 ```
 
-Такое может происходить, потому что пользователь, под которым запускаются процессы внутри контейнера, может не иметь прав на изменение директории, смонтированной в контейнер. Для решения вы можете изменить владельца или права с помощью `chown` или `chmod` на монтируемую директорию. Если вы запускаете контейнер от имени пользователя `manticore`, нужно сделать следующее:
+This can happen because the user which is used to run processes inside the container may have no permissions to modify the directory you have mounted to the container. To fix it you can `chown` or `chmod` the mounted directory. If you run the container under user `manticore` you need to do:
 ```bash
 chown -R 999:999 data
 ```
 
-поскольку пользователь `manticore` имеет ID 999 внутри контейнера.
+since user `manticore` has ID 999 inside the container.
 
 <!-- proofread -->
 

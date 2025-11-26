@@ -578,7 +578,7 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 
 In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following options and conditions:
 
-* Frozen state. If the table is [frozen](../../Securing_and_compacting_a_table/Freezing_a_table.md), flushing is deferred. That is a permanent rule; nothing can override it. If the `rt_mem_limit` condition is reached while the table is frozen, all further inserts will be delayed until the table is unfrozen.
+* Frozen state. If the table is [frozen](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md), flushing is deferred. That is a permanent rule; nothing can override it. If the `rt_mem_limit` condition is reached while the table is frozen, all further inserts will be delayed until the table is unfrozen.
 
 * [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout): This option defines the timeout (in seconds) for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk. Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
 

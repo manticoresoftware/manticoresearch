@@ -7,12 +7,12 @@ SHOW QUERIES
 
 > ПРИМЕЧАНИЕ: `SHOW QUERIES` требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-`SHOW QUERIES` возвращает информацию обо всех текущих выполняемых запросах. Вывод представляет собой таблицу со следующей структурой:
+`SHOW QUERIES` возвращает информацию обо всех текущих выполняющихся запросах. Вывод представляет собой таблицу со следующей структурой:
 
 - `id`: ID запроса, который можно использовать в [KILL](../Node_info_and_management/KILL.md) для завершения запроса
 - `query`: Текст запроса или его часть
-- `time`: Время выполнения команды или как давно был выполнен запрос (в этом случае значение будет содержать `ago`)
-- `protocol`: [Протокол соединения](../Server_settings/Searchd.md#listen), возможные значения `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication` или их комбинация (например, `http,ssl` или `compressed,mysql`)
+- `time`: Время выполнения команды или сколько времени назад был выполнен запрос (в этом случае значение будет содержать `ago`)
+- `protocol`: [Протокол соединения](../Server_settings/Searchd.md#listen), возможные значения: `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication` или их комбинации (например, `http,ssl` или `compressed,mysql`)
 - `host`: `ip:port` клиента
 
 

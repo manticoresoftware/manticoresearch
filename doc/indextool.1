@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "INDEXTOOL" "1" "07/03/2025" "Manticore Search" ""
+.TH "INDEXTOOL" "1" "03/11/2025" "Manticore Search" ""
 .SH "NAME"
 indextool
 .SH "SYNOPSIS"
@@ -57,6 +57,8 @@ Here are the available commands:
 .IP \(bu 2
 \fB\fC\-\-dumphitlist TABLENAME \-\-wordid ID\fR dumps all instances (occurrences) of a specific keyword in a given table, with the keyword represented as an internal numeric ID.
 .IP \(bu 2
+\fB\fC\-\-dumpkilllist TABLENAME\fR dumps the kill list contents of the specified table, including targets and flags. It can also be used as \fB\fC\-\-dumpkilllist FILENAME.spk\fR\&.
+.IP \(bu 2
 \fB\fC\-\-docextract TBL DOCID\fR executes a standard table check pass of the entire dictionary/docs/hits, and gathers all the words and hits associated with the requested document. Subsequently, all the words are arranged according to their fields and positions, and the result is printed, grouped by field.
 .IP \(bu 2
 \fB\fC\-\-fold TABLENAME OPTFILE\fR This option helps understand how the tokenizer processes input. You can supply the indextool with text from a file, if specified, or from stdin otherwise. The output will replace separators with spaces (based on your \fB\fCcharset_table\fR settings) and convert letters in words to lowercase.
@@ -70,7 +72,7 @@ Here are the available commands:
 \fB\fC\-\-check TABLENAME\fR evaluates the table data files for consistency errors that could be caused by bugs in \fB\fCindexer\fR or hardware faults. \fB\fC\-\-check\fR is also functional on RT tables, RAM, and disk chunks. Additional options:
 .RS
 .IP \(bu 2
-\fB\fC\-\-check\-id\-dups\fR assesses for duplicate ids
+\fB\fC\-\-check\-id\-dups\fR checks for duplicate document IDs in the plain table and all disk chunks of an RT table
 .IP \(bu 2
 \fB\fC\-\-check\-disk\-chunk CHUNK_NAME\fR checks only a specific disk chunk of an RT table. The argument is the numeric extension of the RT table's disk chunk to be checked.
 .RE
@@ -95,13 +97,10 @@ To avoid these warning and ensure a proper check of an RT table, consider the fo
 .RS
 .IP \(bu 2
 stop the daemon before running \fB\fCindextool \-\-check\fR\&.
-.br
 .IP \(bu 2
 ensure that the RT table is not actively served by the daemon.
-.br
 .IP \(bu 2
 check a separate copy of the RT table instead of the live one.
-.br
 .RE
 .PP
 If stopping the daemon is not an option, you can prevent unintended modifications to the RT table by executing the following MySQL statement before running \fB\fCindextool \-\-check\fR:

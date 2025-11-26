@@ -4793,6 +4793,14 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 		return;
 	}
 
+	assert ( pServed );
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		tOut.Error ( "table '%s' is locked", tStmt.m_sIndex.cstr ());
+		return;
+	}
+
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
 
 	// with index RLocked at the
@@ -7113,6 +7121,13 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+	{
+		dFails.Submit ( sIndex, szDistributed, "table is locked" );
+		return;
+	}
+
 	RtAccum_t tAcc;
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
@@ -7317,12 +7332,11 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		tOut.Error ( "%s", sReport.cstr() );
 		return;
-	} else
-	{
-		int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
-		if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
-			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
+
+	int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
+	if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
+		LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 
 	if ( sWarning.IsEmpty() )
 		tOut.Ok ( iUpdated, iWarns );
@@ -7909,6 +7923,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 		return 0;
 	}
 
+	Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+	if ( !tWriting.CanWrite() )
+		return err ( "table is locked" );
 
 	RtAccum_t* pAccum = nullptr;
 
@@ -8990,8 +9007,8 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 
 	// get an exclusive lock for operation
 	// but only read lock for check
+	auto pIndex = GetServed ( sIndex );
 	{
-		auto pIndex = GetServed ( sIndex );
 		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			tOut.Error ( "TRUNCATE RTINDEX requires an existing RT table" );
@@ -9003,6 +9020,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 			tOut.Error ( TlsMsg::szError() );
 			return;
 		}
+	}
+
+	assert ( pIndex );
+	Threads::Coro::ScopedWriteTable_c tWriting { pIndex->Locker() };
+	if ( !tWriting.CanWrite () )
+	{
+		tOut.Error ( "table is locked" );
+		return;
 	}
 
 	auto* pSession = session::GetClientSession();
@@ -9432,7 +9457,7 @@ static void AddQueryTimeStatsToOutput ( VectorLike & dStatus, const char * szPre
 	AddQueryStats ( dStatus, szPrefix, tQueryTimeStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
-			uQueries ? sBuf.Sprintf( R"("%s_sec":%.3F)", sType, uStat ) : sBuf.AppendName( sType ) << R"("-")";
+			uQueries ? sBuf.Sprintf( R"("%s_sec":%.3F)", sType, uStat / 1000 ) : sBuf.AppendName( sType ) << R"("-")";
 		} );
 }
 
@@ -10159,12 +10184,28 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		{
 		case Alter_e::AddColumn:
 		case Alter_e::ModifyColumn:
-			AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
-			break;
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+				break;
+			}
 
 		case Alter_e::DropColumn:
-			RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
-			break;
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+				RemoveAttrFromIndex ( tStmt, WIdx_c ( pServed ), sAlterError );
+				break;
+			}
 
 		case Alter_e::RebuildSI:
 			WIdx_c(pServed)->AlterSI(sAlterError);
@@ -10856,36 +10897,108 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 	if ( !tOut.HeadEnd () )
 		return;
 
+	auto fnLine = [&tOut](const NamedIndexType_t& dPair, int iLocks, const char* szType ) noexcept -> bool
+	{
+		tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
+		tOut.PutString ( dPair.m_sName );
+		tOut.PutString ( szType );
+		tOut.PutStringf ( "Count: %d", iLocks );
+		return tOut.Commit ();
+	};
 
 	// collect local, rt, percolate
 	auto dIndexes = GetAllServedIndexes ();
 	for ( auto & dPair: dIndexes )
 	{
-		switch ( dPair.m_eType )
+		auto pIndex = GetServed ( dPair.m_sName );
+		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
-		case IndexType_e::RT:
-		case IndexType_e::PERCOLATE:
-		{
-			auto pIndex = GetServed ( dPair.m_sName );
-			assert ( ServedDesc_t::IsMutable ( pIndex ) );
 			RIdx_T<RtIndex_i *> pRt { pIndex };
-			int iLocks = pRt->GetNumOfLocks ();
-			if ( iLocks>0 )
-			{
-				tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
-				tOut.PutString ( dPair.m_sName );
-				tOut.PutString ( "freeze" );
-				tOut.PutStringf ( "Count: %d", iLocks );
-				if ( !tOut.Commit () )
-					return;
-			}
+			const int iLocks = pRt->GetNumOfLocks ();
+			if ( iLocks>0 && !fnLine ( dPair, iLocks, "freeze" ) )
+				return;
 		}
-		default:
-			break;
+		if ( ServedDesc_t::IsLocal ( pIndex ) )
+		{
+			const int iRLocks = pIndex->GetReadLocks();
+			if ( iRLocks>0 && !fnLine ( dPair, iRLocks, "read" ) )
+				return;
 		}
 	}
 
 	tOut.Eof ( false );
+}
+
+void UnlockTables(ClientSession_c* pSess)
+{
+	assert (pSess);
+	for ( const auto& sIndex : pSess->m_dLockedTables )
+	{
+		auto pLocal = GetServed ( sIndex );
+		if ( pLocal && pLocal->UnlockRead() )
+			sphLogDebug ( "Unlocked %s", sIndex.cstr() );
+	}
+	pSess->m_dLockedTables.Reset();
+}
+
+void HandleMysqlLockTables ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString& sWarningOut )
+{
+	StrVec_t dIndexes;
+	bool bHasWrite = false;
+	tStmt.m_dInsertValues.for_each ( [&] (const SqlInsert_t& tVal) {
+		if ( tVal.m_iType>10 )
+			bHasWrite = true;
+		else
+			dIndexes.Add(tVal.m_sVal);
+	});
+
+	sWarningOut = bHasWrite ? "Write lock is not implemented." : "";
+
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+	{
+		tOut.Error ( "Locking works only for mysql session." );
+		return;
+	}
+
+	auto* pSess = session::GetClientSession();
+	assert (pSess);
+
+	// by spec, any lock first unlock all the tables.
+	UnlockTables(pSess);
+
+	for ( const auto& sIndex : dIndexes )
+	{
+		auto pLocal = GetServed ( sIndex );
+		if ( !(pLocal && ServedDesc_t::IsLocal ( pLocal ) ) )
+		{
+			tOut.ErrorEx ( "Table %s absent, or not suitable for lock", sIndex.cstr() );
+			return;
+		}
+		if ( ServedDesc_t::IsCluster ( pLocal ) )
+		{
+			tOut.ErrorEx ( "Table %s is member of a cluster; not suitable for lock", sIndex.cstr() );
+			return;
+		}
+
+		pLocal->LockRead();
+		pSess->m_dLockedTables.Add(sIndex);
+		sphLogDebug ( "Locked %s", sIndex.cstr() );
+	}
+
+	tOut.Ok ( 0, bHasWrite ? 1 : 0 );
+}
+
+void HandleMysqlUnlockTables ( RowBuffer_i & tOut )
+{
+	if ( session::GetProto()!=Proto_e::MYSQL41 )
+	{
+		tOut.Error ( "Locking works only for mysql session." );
+		return;
+	}
+
+	UnlockTables(session::GetClientSession());
+
+	tOut.Ok ( 0 );
 }
 
 
@@ -10922,6 +11035,11 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta = CSphQueryResultMeta();
 	m_tLastMeta.m_sError = m_sError;
 	m_tLastMeta.m_sWarning = "";
+}
+
+ClientSession_c::~ClientSession_c ()
+{
+	UnlockTables(this);
 }
 
 static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut );
@@ -11450,6 +11568,13 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowTableIndexes ( tOut, *pStmt );
 		return true;
 
+	case STMT_LOCK_TABLES:
+		HandleMysqlLockTables ( tOut, *pStmt, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_UNLOCK_TABLES:
+		HandleMysqlUnlockTables ( tOut );
+		return true;
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
@@ -13781,8 +13906,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
-	if ( hSearchd ( "boolean_simplify" ) )
-		SetBooleanSimplify ( hSearchd.GetInt ( "boolean_simplify", CSphQuery::m_bDefaultSimplify )!=0 );
+	SetBooleanSimplify ( hSearchd.GetBool ( "boolean_simplify", CSphQuery::m_bDefaultSimplify ) );
 
 	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 

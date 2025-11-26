@@ -154,7 +154,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10A,
+	VER_COMMAND_CLUSTER		= 0x10B,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x101,
 
@@ -705,6 +705,7 @@ using RunningIndexRefPtr_t = CSphRefcountedPtr<RunningIndex_c>;
 class ServedIndex_c : public ServedDesc_t
 {
 	mutable int64_t			m_iMass = 0;	// relative weight (by access speed) of the index
+	mutable Threads::Coro::ReadTableLock_c  m_tTableLock;
 
 	ServedIndex_c() = default;
 	friend CSphRefcountedPtr<ServedIndex_c> MakeServedIndex();
@@ -737,6 +738,11 @@ public:
 	void SetIdxAndStatsFrom ( const ServedIndex_c& tIndex );
 	void SetStatsFrom ( const ServedIndex_c& tIndex );
 	void SetUnlink ( CSphString sUnlink ) const;
+
+	void LockRead() const noexcept;
+	[[nodiscard]] bool UnlockRead() const noexcept;
+	[[nodiscard]] DWORD GetReadLocks() const noexcept;
+	[[nodiscard]] Threads::Coro::ReadTableLock_c& Locker() const noexcept;
 };
 
 using cServedIndexRefPtr_c = CSphRefcountedPtr<const ServedIndex_c>;
@@ -1385,7 +1391,19 @@ void LogToConsole(const char* szKind, const char* szMsg) noexcept;
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
 EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml );
+
+struct HttpReplyTrait_t
+{
+	EHTTP_STATUS m_eCode = EHTTP_STATUS::_503;
+	Str_t m_sBody;
+	bool m_bHtml = false;
+	bool m_bHeadReply = false;
+	const char * m_sContentType = nullptr;
+};
+
+void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 

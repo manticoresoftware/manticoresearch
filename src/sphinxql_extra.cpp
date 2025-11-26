@@ -76,6 +76,21 @@ public:
 		auto& sIns = dVec.Add();
 		ToString ( sIns, tNode ).Unquote();
 	}
+
+	void LockStatement()
+	{
+		m_pStmt->m_eStmt = STMT_LOCK_TABLES;
+	}
+
+	void UnlockStatement()
+	{
+		m_pStmt->m_eStmt = STMT_UNLOCK_TABLES;
+	}
+
+	void LockType (bool bWrite)
+	{
+		m_pStmt->m_iIntParam = bWrite?100:0;
+	}
 };
 
 using YYSTYPE = SqlNode_t;

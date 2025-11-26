@@ -48,7 +48,8 @@ The features of the Manticore SQL log format compared to the [plain format](../L
 * The query log can be replayed.
 * Additional performance counters (currently, per-agent distributed query times) are logged.
 * Each log entry is a valid Manticore SQL/JSON statement that reconstructs the full request, except if the logged request is too large and needs to be shortened for performance reasons.
-* JSON requests and additional messages, counters, etc., are logged as comments.
+* JSON requests are logged as comments, skipping extra whitespaces between elements. 
+* Additional messages, counters, etc., are logged as comments.
 
 <!-- intro -->
 `sphinxql` log entries example:
@@ -56,18 +57,7 @@ The features of the Manticore SQL log format compared to the [plain format](../L
 ```sql
 /* Sun Apr 28 12:38:02.808 2024 conn 2 (127.0.0.1:53228) real 0.000 wall 0.000 found 0 */ SELECT * FROM test WHERE MATCH('test') OPTION ranker=proximity;
 /* Sun Apr 28 12:38:05.585 2024 conn 2 (127.0.0.1:53228) real 0.001 wall 0.001 found 0 */ SELECT * FROM test WHERE MATCH('test') GROUP BY channel_id OPTION ranker=proximity;
-/* Sun Apr 28 12:40:57.366 2024 conn 4 (127.0.0.1:53256) real 0.000 wall 0.000 found 0 */  /*{
-    "table" : "test",
-    "query":
-    {
-        "match":
-        {
-            "*" : "test"
-        }
-    },
-    "_source": ["f"],
-    "limit": 30
-} */
+/* Sun Apr 28 12:40:57.366 2024 conn 4 (127.0.0.1:53256) real 0.000 wall 0.000 found 0 */  /*{ "index" : "test", "query": { "match": { "*" : "test" } }, "_source": ["f"], "limit": 30 } */
 ```
 <!-- end -->
 

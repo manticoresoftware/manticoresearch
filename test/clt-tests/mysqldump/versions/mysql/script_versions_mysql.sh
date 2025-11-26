@@ -88,9 +88,45 @@ for version in "${versions[@]}"; do
         echo "Error: dump.sql is empty for $version"
     fi
 
+    # Test replicated table (cluster:table syntax) - Issue #3047
+    echo "Testing cluster:table with $version..."
+    
+    # Create cluster and replicated table
+    docker exec manticore mysql -h0 -P9306 -e "DELETE CLUSTER test_c;" 2>/dev/null || true
+    docker exec manticore mysql -h0 -P9306 -e "CREATE CLUSTER test_c;"
+    docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE test_repl (id BIGINT, data TEXT);"
+    docker exec manticore mysql -h0 -P9306 -e "ALTER CLUSTER test_c ADD test_repl;"
+    docker exec manticore mysql -h0 -P9306 -e "INSERT INTO test_c:test_repl (id, data) VALUES (1, 'cluster_data');"
+    
+    # Test 1: mysqldump WITHOUT --skip-lock-tables should fail
+    echo "  Testing WITHOUT --skip-lock-tables (should fail)..."
+    if docker exec db-test $dump_command -hmanticore -P9306 -ucluster -t manticore test_c:test_repl > cluster_dump_fail.sql 2>&1; then
+        echo "  ⚠️  WARNING: mysqldump succeeded without --skip-lock-tables (bug may be fixed)"
+    else
+        echo "  ✅ Expected: mysqldump failed without --skip-lock-tables"
+    fi
+    
+    # Test 2: mysqldump WITH --skip-lock-tables should succeed
+    echo "  Testing WITH --skip-lock-tables (should succeed)..."
+    if docker exec db-test $dump_command -hmanticore -P9306 -ucluster -t --skip-lock-tables --compact manticore test_c:test_repl > cluster_dump_ok.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2); then
+        if grep -q "cluster_data" cluster_dump_ok.sql; then
+            echo "  ✅ Workaround successful: dump contains data with --skip-lock-tables"
+        else
+            echo "  ❌ ERROR: dump succeeded but data missing"
+        fi
+    else
+        echo "  ❌ ERROR: mysqldump failed even with --skip-lock-tables"
+    fi
+    
+    # Cleanup cluster test
+    docker exec manticore mysql -h0 -P9306 -e "ALTER CLUSTER test_c DROP test_repl;" 2>/dev/null || true
+    docker exec manticore mysql -h0 -P9306 -e "DELETE CLUSTER test_c;" 2>/dev/null || true
+    docker exec manticore mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_repl;" 2>/dev/null || true
+    rm -f cluster_dump_fail.sql cluster_dump_ok.sql
+
     # Stopping and deleting a container
     docker stop db-test > /dev/null
-    rm -f dump.sql
+    rm -f dump.sql 2>/dev/null || true
 done
 
 echo "All MySQL versions tested successfully!"

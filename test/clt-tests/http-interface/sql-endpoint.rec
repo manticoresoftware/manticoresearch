@@ -17,7 +17,7 @@ curl -s -X POST "http://localhost:9308/sql" -d "select count(*) from t"
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "select * from t where match('exmaple') option fuzzy=1"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"took":0,"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":1,"_score":%{NUMBER},"_source":{"value":"example","value_attr":"example"}}]}}
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "create table t_copy like t"
 ––– output –––

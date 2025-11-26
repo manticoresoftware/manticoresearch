@@ -933,7 +933,6 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 	auto pServed = GetServed ( sName );
 	if ( !pServed )
 	{
-		tSqlOut.Eof();
 		return;
 	}
 

@@ -1093,6 +1093,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
 	{ "auth",					0, NULL },
+	{ "auth_log_level",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

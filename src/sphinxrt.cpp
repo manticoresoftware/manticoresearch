@@ -8769,7 +8769,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 		return 0;
 
 	int iUpdated = tUpd.m_uAffected;
-	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError, &sWarning ) )
+	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError, sWarning ) )
 		return -1;
 
 	UpdateContext_t tCtx ( tUpd, m_tSchema );

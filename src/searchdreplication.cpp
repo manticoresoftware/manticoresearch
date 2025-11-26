@@ -1360,8 +1360,11 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd )
 
 	assert ( tCmd.m_pUpdateAPI );
 	CSphString sError;
-	if ( !Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) )
+	CSphString sWarning;
+	if ( !Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError, sWarning ) )
 		return TlsMsg::Err ( sError );
+
+	assert ( sWarning.IsEmpty() ); // FIXME!!! should be validated on donor
 	return true;
 }
 

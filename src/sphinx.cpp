@@ -664,12 +664,11 @@ UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tS
 
 //////////////////////////////////////////////////////////////////////////
 
-bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError, CSphString* pWarning )
+bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError, CSphString & sWarning )
 {
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
 		const CSphString & sUpdAttrName = tUpdAttr.m_sName;
-		bool bIsField = ( tSchema.GetField ( sUpdAttrName.cstr() ) != nullptr );
 		int iUpdAttrId = tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
 		// try to find JSON attribute with a field
@@ -677,16 +676,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		{
 			CSphString sJsonCol;
 			if ( sphJsonNameSplit ( sUpdAttrName.cstr(), nullptr, &sJsonCol ) )
-			{
-				bool bJsonColIsField = ( tSchema.GetField ( sJsonCol.cstr() ) != nullptr );
 				iUpdAttrId = tSchema.GetAttrIndex ( sJsonCol.cstr() );
-				// if JSON column is a field but not an attribute, reject
-				if ( bJsonColIsField && iUpdAttrId<0 )
-				{
-					sError.SetSprintf ( "attribute '%s' can not be updated (full-text field)", sUpdAttrName.cstr() );
-					return false;
-				}
-			}
 		}
 
 		if ( iUpdAttrId<0 )
@@ -695,6 +685,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 				continue;
 
 			// if it's a field but not an attribute, reject
+			bool bIsField = ( tSchema.GetField ( sUpdAttrName.cstr() ) != nullptr );
 			if ( bIsField )
 			{
 				sError.SetSprintf ( "attribute '%s' can not be updated (full-text field)", sUpdAttrName.cstr() );
@@ -715,21 +706,22 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
-		case SPH_ATTR_STRING:
 		case SPH_ATTR_BIGINT:
 		case SPH_ATTR_FLOAT:
 		case SPH_ATTR_JSON:
-		// if attribute is also a full-text field, allow update but warn
-		if ( bIsField && pWarning )
-		{
-			CSphString sMsg;
-			sMsg.SetSprintf ( "attribute '%s' is updated, but full-text field is not (recommended to use REPLACE instead)", sUpdAttrName.cstr() );
-			if ( pWarning->IsEmpty() )
-				*pWarning = sMsg;
-			else
-				pWarning->SetSprintf ( "%s; %s", pWarning->cstr(), sMsg.cstr() );
-		}
 			break;
+
+		// if string attribute is also a full-text field, allow update but warn
+		case SPH_ATTR_STRING:
+		if ( tSchema.GetField ( sUpdAttrName.cstr() )!=nullptr )
+		{
+			if ( sWarning.IsEmpty() )
+				sWarning.SetSprintf ( "attribute '%s' is updated, but full-text field is not (recommended to use REPLACE instead)", sUpdAttrName.cstr() );
+			else
+				sWarning.SetSprintf ( "%s; attribute '%s' is updated, but full-text field is not (recommended to use REPLACE instead)", sWarning.cstr(), sUpdAttrName.cstr() );
+		}
+		break;
+
 		default:
 			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, string, MVA or JSON)", sUpdAttrName.cstr() );
 			return false;
@@ -1364,7 +1356,7 @@ private:
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, ByteBlob_t tBlob, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) final;
 	void						Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx );
 	void						MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx );
-	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError );
+	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
@@ -2489,13 +2481,13 @@ void CSphIndex_VLN::MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const U
 }
 
 
-bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError )
+bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError, CSphString & sWarning )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::DoUpdateAttributes" );
 	if ( dRows.IsEmpty() )
 		return true;
 
-	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError, nullptr ) )
+	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError, sWarning ) )
 		return false;
 
 	tCtx.m_pHistograms = m_pHistograms;
@@ -2591,14 +2583,12 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	if ( !m_iDocinfo || tUpd.m_pUpdate->m_dDocids.IsEmpty() )
 		return 0;
 
-	int iUpdated = tUpd.m_uAffected;
-	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError, &sWarning ) )
-		return -1;
-
 	UpdateContext_t tCtx ( tUpd, m_tSchema );
+	int iUpdated = tUpd.m_uAffected;
+
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
 
-	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))
+	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError, sWarning ) )
 		return -1;
 
 	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
@@ -2633,6 +2623,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 		return;
 
 	CSphString sError;
+	CSphString sWarning;
 	bool bCritical;
 
 	for ( auto & tPostUpdate : dPostUpdates )
@@ -2641,7 +2632,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 
 		AttrUpdateInc_t tUpdInc { tPostUpdate.m_pUpdate }; // don't move, keep update (need twice when split chunks)
 		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
-		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError ) )
+		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError, sWarning ) )
 		{
 			sphWarning ("UpdateAttributesOffline: %s", sError.cstr() );
 			break;

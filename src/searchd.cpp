@@ -3108,7 +3108,7 @@ public:
 
 	void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) final
 	{
-		m_tRowBuffer.Ok ( iAffectedRows, ( sWarning.IsEmpty() ? 0 : 1 ), sWarning.IsEmpty() ? nullptr : sWarning.cstr(), false, iLastInsertId );
+		m_tRowBuffer.Ok ( iAffectedRows, ( sWarning.IsEmpty() ? 0 : 1 ), sWarning.cstr(), false, iLastInsertId );
 	}
 
 	void Ok ( int iAffectedRows, int nWarnings ) final
@@ -7030,8 +7030,7 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 		*m_pUpdated += MysqlUnpack ( tReq, &uSize );
 		MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
 		auto uWarnStatus = tReq.GetLSBDword ();
-		int iWarnings = ( uWarnStatus >> 16 ) & 0xFFFF;
-		*m_pWarns += iWarnings;
+		*m_pWarns += ( uWarnStatus >> 16 ) & 0xFFFF; ///< num of warnings
 		uSize -= 4;
 		if ( uSize > 0 )
 		{
@@ -7041,7 +7040,7 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 			if ( iInfoLen > 0 && iInfoLen <= (int)uSize )
 			{
 				CSphString sInfo = tReq.GetRawString ( iInfoLen );
-				if ( iWarnings > 0 && m_pWarning && !sInfo.IsEmpty() )
+				if ( *m_pWarns>0 && m_pWarning && !sInfo.IsEmpty() )
 				{
 					if ( !m_pWarning->IsEmpty() )
 						m_pWarning->SetSprintf ( "%s; %s", m_pWarning->cstr(), sInfo.cstr() );
@@ -7325,8 +7324,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
 
-	iWarns = sWarning.IsEmpty() ? 0 : 1;
-	tOut.Ok ( iUpdated, sWarning, 0 );
+	if ( sWarning.IsEmpty() )
+		tOut.Ok ( iUpdated, iWarns );
+	else
+		tOut.Ok ( iUpdated, sWarning, 0 );
 }
 
 bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )

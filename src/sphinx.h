@@ -1074,7 +1074,7 @@ public:
 	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 };
 
-bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError, CSphString* pWarning = nullptr );
+bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError, CSphString & sWarning );
 
 // helper - collects killed documents
 struct KillAccum_t final : public IndexSegment_c

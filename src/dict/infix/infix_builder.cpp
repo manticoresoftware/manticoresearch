@@ -354,8 +354,9 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 	}
 }
 
-// Optimized radix sort using 16-bit (2-byte) passes to reduce memory scans
-// This reduces passes from 12 to 6 for SIZE=3, and from 20 to 10 for SIZE=5
+// Radix sort for fixed-size keys using LSD (Least Significant Digit) algorithm
+// Processes bytes from least significant (last) to most significant (first)
+// This ensures exact compatibility with std::array::operator< lexicographic comparison
 template<int SIZE>
 void RadixSortIndices ( CSphVector<int>& dIndex, const CSphSwapVector<InfixHashEntry_t<SIZE>>& dArena )
 {
@@ -372,7 +373,6 @@ void RadixSortIndices ( CSphVector<int>& dIndex, const CSphSwapVector<InfixHashE
 	if constexpr ( SIZE == 2 )
 	{
 		// For SIZE=2: use std::sort fallback (SIZE=2 uses packed keys which need special handling)
-		// This optimization is mainly for SIZE=3 and SIZE=5
 		dIndex.Sort ( Lesser ( [&dArena] ( int a, int b ) noexcept { 
 			return dArena[a].m_tKey.m_Data < dArena[b].m_tKey.m_Data; 
 		} ) );
@@ -380,77 +380,76 @@ void RadixSortIndices ( CSphVector<int>& dIndex, const CSphSwapVector<InfixHashE
 	}
 	else
 	{
-		// For SIZE=3 (12 bytes) or SIZE=5 (20 bytes): use optimized 16-bit passes
+		// For SIZE=3 (12 bytes) or SIZE=5 (20 bytes): use byte-by-byte LSD radix sort
 		constexpr int KEY_SIZE = SIZE * sizeof(DWORD);
-		constexpr int WORD_COUNT = ( KEY_SIZE + 1 ) / 2; // Round up
 		
-		// Pre-extract all key words to improve cache locality
+		// Pre-extract all key bytes to improve cache locality
 		// This trades memory for better cache behavior by avoiding random dArena access
-		CSphVector<uint16_t> dKeyWords;
-		dKeyWords.Resize ( iCount * WORD_COUNT );
-		uint16_t* pKeyWords = dKeyWords.Begin();
+		CSphVector<BYTE> dKeyBytes;
+		dKeyBytes.Resize ( iCount * KEY_SIZE );
+		BYTE* pKeyBytes = dKeyBytes.Begin();
 		
-		// Extract all key words in one sequential pass
+		// Extract all key bytes in one sequential pass
 		for ( int i = 0; i < iCount; ++i )
 		{
 			int idx = pInput[i];
-			if ( idx < 1 || idx >= dArena.GetLength() )
+			if ( idx >= 1 && idx < dArena.GetLength() )
 			{
-				// Zero out to prevent crash
-				memset ( pKeyWords + ( i * WORD_COUNT ), 0, KEY_SIZE );
-				continue;
+				const BYTE* pSrc = dArena[idx].m_tKey.m_Data.data();
+				memcpy ( pKeyBytes + ( i * KEY_SIZE ), pSrc, KEY_SIZE );
 			}
-			const uint16_t* pKeyData = reinterpret_cast<const uint16_t*>( dArena[idx].m_tKey.m_Data.data() );
-			uint16_t* pDst = pKeyWords + ( i * WORD_COUNT );
-			memcpy ( pDst, pKeyData, KEY_SIZE );
+			else
+			{
+				memset ( pKeyBytes + ( i * KEY_SIZE ), 0, KEY_SIZE );
+			}
 		}
 		
-		// Use heap-allocated arrays to avoid stack overflow (256KB each)
+		// Use heap-allocated arrays to avoid stack overflow
 		CSphVector<int> dCount, dPos;
-		dCount.Resize ( 65536 );
-		dPos.Resize ( 65536 );
+		dCount.Resize ( 256 );
+		dPos.Resize ( 256 );
 		int* aCount = dCount.Begin();
 		int* aPos = dPos.Begin();
 		
-		// Allocate temp key words buffer once outside the loop to avoid reallocation
-		CSphVector<uint16_t> dKeyWordsTemp;
-		dKeyWordsTemp.Resize ( iCount * WORD_COUNT );
+		// Allocate temp key bytes buffer once outside the loop
+		CSphVector<BYTE> dKeyBytesTemp;
+		dKeyBytesTemp.Resize ( iCount * KEY_SIZE );
 		
-		// Process 16-bit words from LSB to MSB
-		for ( int iWord = 0; iWord < WORD_COUNT; ++iWord )
+		// Process bytes from last (least significant) to first (most significant)
+		// This is LSD radix sort: stable and produces correct lexicographic ordering
+		for ( int iByte = KEY_SIZE - 1; iByte >= 0; --iByte )
 		{
-			// Clear count array efficiently
-			memset ( aCount, 0, 65536 * sizeof(int) );
+			// Clear count array
+			memset ( aCount, 0, 256 * sizeof(int) );
 			
-			// Count phase - sequential access to pre-extracted keys
-			// After the first pass, pKeyWords points to reordered data, so we access it in order
+			// Count phase: sequential access to pre-extracted keys
 			for ( int i = 0; i < iCount; ++i )
 			{
-				uint16_t uWord = pKeyWords[i * WORD_COUNT + iWord];
-				++aCount[uWord];
+				BYTE uByte = pKeyBytes[i * KEY_SIZE + iByte];
+				++aCount[uByte];
 			}
 			
-			// Convert to positions
+			// Convert counts to starting positions (cumulative sum)
 			aPos[0] = 0;
-			for ( int i = 1; i < 65536; ++i )
+			for ( int i = 1; i < 256; ++i )
 				aPos[i] = aPos[i-1] + aCount[i-1];
 			
-			// Distribute phase - update indices and reorder key words
-			// Get pointer to temp buffer - this will be swapped with pKeyWords after distribution
-			// After first pass, pKeyWords points to reordered data, so we need to get the other buffer
-			uint16_t* pKeyWordsTemp = ( pKeyWords == dKeyWords.Begin() ) ? dKeyWordsTemp.Begin() : dKeyWords.Begin();
+			// Distribute phase: reorder indices and key bytes
+			// Get pointer to temp buffer - this will be swapped with pKeyBytes after distribution
+			BYTE* pKeyBytesTemp = ( pKeyBytes == dKeyBytes.Begin() ) ? dKeyBytesTemp.Begin() : dKeyBytes.Begin();
 			
 			for ( int i = 0; i < iCount; ++i )
 			{
-				uint16_t uWord = pKeyWords[i * WORD_COUNT + iWord];
-				int iNewPos = aPos[uWord]++;
+				BYTE uByte = pKeyBytes[i * KEY_SIZE + iByte];
+				int iNewPos = aPos[uByte]++;
 				pOutput[iNewPos] = pInput[i];
-				// Copy key words to new position for next pass
-				memcpy ( pKeyWordsTemp + ( iNewPos * WORD_COUNT ), pKeyWords + ( i * WORD_COUNT ), KEY_SIZE );
+				// Copy key bytes to new position for next pass
+				memcpy ( pKeyBytesTemp + ( iNewPos * KEY_SIZE ), pKeyBytes + ( i * KEY_SIZE ), KEY_SIZE );
 			}
 			
+			// Swap input/output buffers and key byte buffers for next iteration
 			std::swap ( pInput, pOutput );
-			std::swap ( pKeyWords, pKeyWordsTemp );
+			std::swap ( pKeyBytes, pKeyBytesTemp );
 		}
 	}
 

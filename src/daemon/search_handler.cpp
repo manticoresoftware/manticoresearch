@@ -1611,25 +1611,35 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 
 	int64_t tmDelta = tmSubset - tmAccountedWall;
 
-	auto nValidDistrIndexes = dDistrServedByAgent.count_of ( [] ( auto& t ) { return t.m_dStats.any_of ( [] ( auto& i ) { return i.m_iSuccesses; } ); } );
-	int64_t nDistrDivider = iTotalSuccesses * nValidDistrIndexes;
+	// distribute overhead \  tmDelta proportionally to all tables
+	// if table has 0 successes - it gets 0 overhead as (tmDelta * 0 / Divider = 0)
+	int64_t nDistrDivider = iTotalSuccesses;
 	if ( nDistrDivider )
+	{
 		for ( auto &tDistrStat : dDistrServedByAgent )
+		{
 			for ( QueryStat_t& tStat : tDistrStat.m_dStats )
 			{
 				auto tmDeltaWallAgent = tmDelta * tStat.m_iSuccesses / nDistrDivider;
 				tStat.m_tmQueryTime += tmDeltaWallAgent;
 			}
+		}
+	}
 
-	auto nValidLocalIndexes = m_dQueryIndexStats.count_of ( [] ( auto& t ) { return t.m_dStats.any_of ( [] ( auto& i ) { return i.m_iSuccesses; } ); } );
-	int64_t nLocalDivider = iTotalSuccesses * nValidLocalIndexes;
+	int64_t nLocalDivider = iTotalSuccesses;
 	if ( nLocalDivider )
+	{
 		for ( auto &dQueryIndexStat : m_dQueryIndexStats )
+		{
 			for ( QueryStat_t& tStat : dQueryIndexStat.m_dStats )
 			{
+				// do not need to check tStat.m_iSuccesses>0 here
+				// if m_iSuccesses is 0 - the added time is 0
 				int64_t tmDeltaWallLocal = tmDelta * tStat.m_iSuccesses / nLocalDivider;
 				tStat.m_tmQueryTime += tmDeltaWallLocal;
 			}
+		}
+	}
 }
 
 

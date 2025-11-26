@@ -563,31 +563,31 @@ RT表将部分数据存储在内存中，称为“RAM块”，同时维护多个
 * 实时表类似于由多个本地表组成的[分布式表](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table)，这些本地表也称为磁盘块。
 * 每个 RAM 块由多个段组成，这些段是特殊的仅限 RAM 的表。
 * 磁盘块存储在磁盘上，而 RAM 块存储在内存中。
-* 对实时表的每个事务都会生成一个新段，RAM 块段在每次事务提交后合并。执行数百或数千文档的批量 INSERT 比多次单文档 INSERT 更高效，以减少合并 RAM 块段的开销。
-* 当段的数量超过 32 时，它们将被合并以保持数量低于 32。
+* 对实时表的每个事务都会生成一个新段，RAM 块段在每次事务提交后合并。执行数百或数千条文档的批量 INSERT 比多次单文档 INSERT 更高效，以减少合并 RAM 块段的开销。
+* 当段数超过 32 时，它们将被合并以保持段数低于 32。
 * 实时表始终有一个 RAM 块（可能为空）和一个或多个磁盘块。
 * 合并较大的段需要更长时间，因此最好避免拥有非常大的 RAM 块（因此也避免设置过大的 `rt_mem_limit`）。
 * 磁盘块的数量取决于表中的数据和 `rt_mem_limit` 设置。
 * Searchd 在关闭时以及根据 [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period) 设置定期将 RAM 块刷新到磁盘（作为持久化文件，而非磁盘块）。刷新几个 GB 到磁盘可能需要一些时间。
-* 大的 RAM 块在刷新到磁盘的 `.ram` 文件以及 RAM 块满时转储为磁盘块时，会对存储造成更大压力。
+* 大的 RAM 块在刷新到磁盘的 `.ram` 文件时以及 RAM 块满时转储为磁盘块时，会对存储造成更大压力。
 * RAM 块由[二进制日志](../../Logging/Binary_logging.md)备份，直到刷新到磁盘，较大的 `rt_mem_limit` 设置会增加重放二进制日志和恢复 RAM 块所需的时间。
 * RAM 块的速度可能略慢于磁盘块。
-* 虽然 RAM 块本身占用的内存不会超过 `rt_mem_limit`，但在某些情况下，Manticore 可能会占用更多内存，例如当您启动一个插入数据的事务但长时间不提交时，此时您已传输的数据会保留在内存中。
+* 虽然 RAM 块本身占用的内存不会超过 `rt_mem_limit`，但在某些情况下，Manticore 可能会占用更多内存，例如当您启动一个插入数据的事务但长时间不提交时，此时事务中已传输的数据会保留在内存中。
 
 ##### RAM 块刷新条件
 
 除了 `rt_mem_limit`，RAM 块的刷新行为还受以下选项和条件影响：
 
-* 冻结状态。如果表处于[冻结](../../Securing_and_compacting_a_table/Freezing_a_table.md)状态，刷新将被推迟。这是永久规则，无法被覆盖。如果在表冻结时达到 `rt_mem_limit` 条件，所有后续插入将被延迟，直到表解冻。
+* 冻结状态。如果表处于[冻结](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md)状态，刷新将被推迟。这是永久规则，无法被覆盖。如果在表冻结时达到 `rt_mem_limit` 条件，所有后续插入将被延迟，直到表解冻。
 
 * [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout)：此选项定义了如果没有写入操作，自动刷新 RAM 块的超时时间（秒）。如果在此时间内没有写入，块将被刷新到磁盘。设置为 `-1` 禁用基于写入活动的自动刷新。默认值为 1 秒。
 
-* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout)：此选项设置如果表中没有搜索，防止自动刷新 RAM 块的超时时间（秒）。只有在此时间内至少有一次搜索时，才会自动刷新。默认值为 30 秒。
+* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout)：此选项设置防止自动刷新 RAM 块的超时时间（秒），如果表中没有搜索操作。只有在此时间内至少有一次搜索时，才会自动刷新。默认值为 30 秒。
 
 * 正在进行的优化：如果当前有优化进程运行，且现有磁盘块数量已达到或超过配置的内部 `cutoff` 阈值，则由 `diskchunk_flush_write_timeout` 或 `diskchunk_flush_search_timeout` 超时触发的刷新将被跳过。
 * RAM 段中文档数量过少：如果 RAM 段中的文档总数低于最小阈值（8192），则由 `diskchunk_flush_write_timeout` 或 `diskchunk_flush_search_timeout` 超时触发的刷新将被跳过，以避免创建非常小的磁盘块。这有助于减少不必要的磁盘写入和块碎片。
 
-这些超时设置是协同工作的。只要达到任一超时，RAM 块就会被刷新。这确保即使没有写入，数据最终也会持久化到磁盘；反之，即使有持续写入但没有搜索，数据也会被持久化。这些设置提供了更细粒度的控制，平衡数据持久性和性能考虑。每个表的指令优先级更高，会覆盖实例范围的默认值。
+这些超时设置是协同工作的。只要达到任一超时，RAM 块就会被刷新。这确保即使没有写入，数据最终也会持久化到磁盘；反之，即使有持续写入但没有搜索，数据也会被持久化。这些设置提供了更细粒度的控制，平衡了数据持久性和性能考虑。每个表的指令优先级更高，会覆盖实例范围的默认值。
 ### 普通表设置：
 
 #### source
@@ -599,7 +599,7 @@ source = srcpart2
 ```ini
 source = srcpart3
 source 字段指定在当前表索引期间将从哪个源获取文档。必须至少有一个源。源可以是不同类型的（例如，一个可能是 MySQL，另一个是 PostgreSQL）。有关从外部存储索引的更多信息，[请阅读这里](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
-值：源名称是**必需的**。允许多个值。
+值：必须指定源的名称。允许多个值。
 ```
 
 #### killlist_target

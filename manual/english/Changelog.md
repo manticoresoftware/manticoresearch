@@ -1022,7 +1022,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time.
 
 ### Minor changes
-* [Issue #822](https://github.com/manticoresoftware/manticoresearch/issues/822) SQL commands [FREEZE/UNFREEZE](Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup.
+* [Issue #822](https://github.com/manticoresoftware/manticoresearch/issues/822) SQL commands [FREEZE/UNFREEZE](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md) to prepare a real-time/plain table for a backup.
 * [Commit c470](https://github.com/manticoresoftware/manticoresearch/commit/c47052f18ad4868134de1a97e8d7da570e531dfa) New settings `accurate_aggregation` and `max_matches_increase_threshold`  for controlled aggregation accuracy.
 * [Issue #718](https://github.com/manticoresoftware/manticoresearch/issues/718) Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 * As we recently added support for secondary indexes, things became confusing as "index" could refer to a secondary index, a full-text index, or a plain/real-time `index`. To reduce confusion, we are renaming the latter to "table". The following SQL/command line commands are affected by this change. Their old versions are deprecated, but still functional:

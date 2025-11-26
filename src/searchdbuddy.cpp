@@ -661,6 +661,7 @@ struct BuddyReply_t
 	CSphString m_sType;
 	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
+	CSphString m_sContentType;
 };
 
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
@@ -700,6 +701,9 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 		return false;
 
 	if ( !tParsed.m_tRoot.FetchIntItem ( tParsed.m_iReplyHttpCode, "error_code", sError, false ) )
+		return false;
+
+	if ( !tParsed.m_tRoot.FetchStrItem ( tParsed.m_sContentType, "content_type", sError, true ) )
 		return false;
 
 	return true;
@@ -853,7 +857,11 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
-	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
+
+	HttpReplyTrait_t tReplyBuf { eHttpStatus, sDump };
+	tReplyBuf.m_bHtml = bNeedHttpResponse;
+	tReplyBuf.m_sContentType = tReplyParsed.m_sContentType.cstr();
+	ReplyBuf ( tReplyBuf, dResult );
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );

@@ -797,11 +797,13 @@ class SphinxqlReplyParser_c : public ReplyParser_i
 {
 public:
 	explicit SphinxqlReplyParser_c ( int * pUpd, int * pWarns );
+	SphinxqlReplyParser_c ( int * pUpd, int * pWarns, CSphString * pWarning );
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 
 protected:
 	int * m_pUpdated;
 	int * m_pWarns;
+	CSphString * m_pWarning;
 };
 
 void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );

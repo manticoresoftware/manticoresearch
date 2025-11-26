@@ -1416,7 +1416,12 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd )
 
 	assert ( tCmd.m_pUpdateAPI );
 	CSphString sError;
-	return Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) || TlsMsg::Err ( sError );
+	CSphString sWarning;
+	if ( !Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError, sWarning ) )
+		return TlsMsg::Err ( sError );
+
+	assert ( sWarning.IsEmpty() ); // FIXME!!! should be validated on donor
+	return true;
 }
 
 // load indexes received from another node or existed already into daemon

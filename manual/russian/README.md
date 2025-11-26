@@ -76,7 +76,7 @@
         * [• Получение из CSV,TSV](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_CSV,TSV.md)
         * [• Схема Main+delta](Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)
         * [≫ Добавление данных из таблиц]
-            * [• Слияние таблиц](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
+            * [• Объединение таблиц](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
             * [• Killlists в простых таблицах](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
             * [• Присоединение одной таблицы к другой](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
             * [• Импорт RT таблицы](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
@@ -89,7 +89,7 @@
     * [• Транзакции](Data_creation_and_modification/Transactions.md)
 * [5️⃣ Поиск]
     * [• Введение](Searching/Intro.md)
-    * [≫ Полнотекстовый поиск]
+    * [≫ Полнотекстовое сопоставление]
         * [• Основное использование](Searching/Full_text_matching/Basic_usage.md)
         * [• Операторы](Searching/Full_text_matching/Operators.md)
         * [• Экранирование](Searching/Full_text_matching/Escaping.md)
@@ -114,9 +114,9 @@
     * [• Исправление орфографии](Searching/Spell_correction.md)
         * [• Нечёткий поиск](Searching/Spell_correction.md#Fuzzy-Search)
     * [• Кэш запросов](Searching/Query_cache.md)
-    * [• Сопоставления](Searching/Collations.md)
+    * [• Сопоставления (Collations)](Searching/Collations.md)
     * [• Оптимизатор на основе стоимости](Searching/Cost_based_optimizer.md)
-    * [• Поиск ближайших соседей векторов](Searching/KNN.md)
+    * [• Поиск ближайших соседей (KNN)](Searching/KNN.md)
 * [• Обновление схемы и настроек таблицы](Updating_table_schema_and_settings.md)
     * [• Обновление схемы таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Обновление настроек FT таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -140,7 +140,7 @@
     * [• Сброс RT таблицы на диск](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md)
     * [• Сжатие таблицы](Securing_and_compacting_a_table/Compacting_a_table.md)
     * [• Изоляция при сбросе и слиянии](Securing_and_compacting_a_table/Isolation_during_flushing_and_merging.md)
-    * [• Заморозка таблицы](Securing_and_compacting_a_table/Freezing_a_table.md)
+    * [• Заморозка и блокировка таблицы](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md)
     * [• Сброс атрибутов](Securing_and_compacting_a_table/Flushing_attributes.md)
     * [• Сброс имён хостов](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Безопасность]
@@ -151,7 +151,7 @@
     * [• Логирование сервера](Logging/Server_logging.md)
     * [• Бинарное логирование](Logging/Binary_logging.md)
     * [• Логирование Docker](Logging/Docker_logging.md)
-    * [• Вращение логов запросов и сервера](Logging/Rotating_query_and_server_logs.md)
+    * [• Ротация логов запросов и сервера](Logging/Rotating_query_and_server_logs.md)
 * [≫ Информация и управление узлом]
     * [• Статус узла](Node_info_and_management/Node_status.md)
     * [• SHOW META](Node_info_and_management/SHOW_META.md)

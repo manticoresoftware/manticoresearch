@@ -184,7 +184,8 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	{
 		if ( IsEmpty ( sMsg ) )
 		{
-			HttpBuildReply ( dResult, eCode, sMsg, false );
+			HttpReplyTrait_t tReply { eCode, sMsg };
+			HttpBuildReply ( tReply, dResult );
 		} else
 		{
 			LogNetError ( sMsg.first );

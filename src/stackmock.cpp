@@ -73,52 +73,80 @@ protected:
 public:
 	ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t MockMeasureStack ()
 	{
-		constexpr int iMeasures = 20;
-		std::vector<std::pair<int,DWORD>> dMeasures { iMeasures };
-		int i = 0;
+		StringBuilder_c sLog;
+		constexpr int iMeasures = 50;
+		DWORD uDepth = 0;
+		BuildMockExprWrapper ( uDepth );
+		auto uStartingStack = MeasureStack ();
+		sphLogDebugv( "========= start measure ==============" );
+		sLog.Sprintf( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
+		sphLogDebugv( "height 0, stack %d, deltah %d, deltastack %d", uStartingStack, 0, uStartingStack );
 
-		int iDepth = 0;
-		DWORD uStack = 0;
+		DWORD i = 1;
+		CSphVector<std::pair<int,int>> dHistogram;
+		auto IncValue = [&dHistogram] ( int i ) {
+			for ( auto& pair : dHistogram ) { // expected 2..5 elements; so linear search is perfect here.
+				if ( pair.first != i )
+					continue;
+				++pair.second;
+				return pair.second;
+			}
+			dHistogram.Add({i,1});
+			return 1;
+		};
+		DWORD uPreviousStack = uStartingStack;
+		DWORD uPreviousDepth = uDepth;
 		while ( i<iMeasures )
 		{
-			BuildMockExprWrapper ( iDepth++ );
+			BuildMockExprWrapper ( ++uDepth );
 			auto uThisStack = MeasureStack ();
-			if ( uThisStack == uStack )
+			if ( uThisStack == uPreviousStack )
 				continue;
 
-			dMeasures[i].first = iDepth-1;
-			dMeasures[i].second = uThisStack;
-			auto iDelta = uThisStack-uStack;
-			uStack = uThisStack;
+			int iDelta = uThisStack - uPreviousStack;
+			DWORD uDeltaDepth = uDepth - uPreviousDepth;
+			uPreviousStack = uThisStack;
+			uPreviousDepth = uDepth;
+			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", uDepth, uThisStack, uDeltaDepth, iDelta );
+			sLog.Sprintf( "%d: %d: %d: %d", uDepth, uThisStack, uDeltaDepth, iDelta );
 			++i;
-			if ( uStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			if ( uDeltaDepth==1 && iDelta>0 )
+			{
+				auto iMaxTries = IncValue ( iDelta );
+				const auto iRestTries = iMeasures - i;
+				if ( iMaxTries>iRestTries ) // we may stop here, if continuing will definitely give us nothing better
+				{
+					if ( dHistogram.GetLength()==1)
+						break;
+					dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
+					if ( iMaxTries > (iRestTries + dHistogram[1].second) )
+						break;
+				}
+			}
+			if ( uPreviousStack + iDelta >= m_dMockStack.GetLengthBytes() )
 				break;
 		}
 
-		auto iValues = i;
-		std::vector<std::pair<int, DWORD>> dDeltas { iMeasures };
-		sphLogDebugv( "========= start measure ==============" );
-		std::pair<int,DWORD> dInitial {0,0};
-		for ( i=0; i<iValues; ++i )
+		dHistogram.Sort ( Lesser ( [] ( auto l, auto r ) { return l.second>r.second; } ) );
+		sphLogDebugv( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
+		sLog.Sprintf( "Performed %d measures out of %d, max depth %d", i, iMeasures, uDepth );
+		for ( const auto& pair : dHistogram )
 		{
-			dDeltas[i].first = dMeasures[i].first-dInitial.first;
-			dDeltas[i].second = dMeasures[i].second-dInitial.second;
-			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", dMeasures[i].first, dMeasures[i].second, dDeltas[i].first, dDeltas[i].second );
-			dInitial = dMeasures[i];
+			sphLogDebugv( "stack frame size %d, frames %d", pair.first, pair.second );
+			sLog.Sprintf( "stack frame size %d, frames %d", pair.first, pair.second );
 		}
 
-		int iStart = dMeasures.front().second;
-
-		uStack = 0;
-		for ( i=iValues-1; i>0; --i )
+		if ( dHistogram.IsEmpty() )
 		{
-			if ( dDeltas[i].first !=1 )
-				break;
-			uStack = Max ( uStack, dDeltas[i].second );
+			sphWarning ("Something wrong measuring stack. After %d tries, %d depth", i, uDepth );
+			sphWarning ("log: %s", sLog.cstr());
 		}
 
-		int iDelta = sphRoundUp ( uStack, 8 );
-		return { iStart, iDelta };
+		auto iStack = dHistogram.First().first;
+		assert (iStack>0);
+
+		int iDelta = sphRoundUp ( iStack, 8 );
+		return { (int)uStartingStack, iDelta };
 	}
 
 	virtual ~StackMeasurer_c () = default;
@@ -131,10 +159,17 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 	void BuildMockExpr ( int iComplexity ) final
 	{
 		m_sExpr.Clear();
-		m_sExpr << "((attr_a=0)*1)";
+		m_sExpr << "IF(attr_a IN(0,1),10,";
 
-		for ( int i = 1; i<iComplexity+1; ++i ) // ((attr_a=0)*1) + ((attr_b=1)*3) + ((attr_b=2)*5) + ...
-			m_sExpr << "+((attr_b=" << i << ")*" << i * 2+1 << ")";
+		for ( int i = 1; i<iComplexity+1; ++i )
+			m_sExpr << "IF(attr_a IN(" << i << "," << i+1 << ")," << (i+1)*10 << ",";
+		m_sExpr << (iComplexity+2)*10 << ")";
+		for ( int i = 0; i<iComplexity; ++i )
+			m_sExpr << ")";
+
+		//IF(a IN(0,1),10,20)
+		//IF(a IN(0,1),10,IF(a IN(1,2),20,30))
+		//IF(a IN(0,1),10,IF(a IN(1,2),20,IF(a IN(2,3),30,40))) ...
 	}
 
 	ATTRIBUTE_NO_SANITIZE_ADDRESS void MockParseTest () final
@@ -152,8 +187,6 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 		CSphColumnInfo tAttr;
 		tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 		tAttr.m_sName = "attr_a";
-		tParams.m_tSchema.AddAttr ( tAttr, false );
-		tAttr.m_sName = "attr_b";
 		tParams.m_tSchema.AddAttr ( tAttr, false );
 
 		tParams.m_sExpr = m_sExpr.cstr();

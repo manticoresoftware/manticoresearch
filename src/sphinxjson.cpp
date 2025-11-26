@@ -724,9 +724,15 @@ public:
 
 		ESphJsonType eBase = m_dNodes[tNode.m_dChildren.m_iStart].m_eType;
 		bool bAllSame = true;
+		bool bAllInt = true;
 		JSON_FOREACH ( j, tNode )
+		{
 			if ( eBase!=m_dNodes[j].m_eType )
 				bAllSame = false;
+			if ( m_dNodes[j].m_eType!=JSON_INT32 && m_dNodes[j].m_eType!=JSON_INT64 )
+				bAllInt = false;
+		}
+
 		if ( bAllSame )
 			switch ( eBase )
 			{
@@ -736,6 +742,10 @@ public:
 			case JSON_STRING: return JSON_STRING_VECTOR;
 			default: break; // type matches across all entries, but we do not have a special format for that type
 			}
+		
+		if ( bAllInt )
+			return JSON_INT64_VECTOR;
+
 		return JSON_MIXED_VECTOR;
 	}
 
@@ -3305,16 +3315,22 @@ public:
 
 	inline int MeasureAndOptimizeVector ( cJSON * pCJSON, ESphJsonType &eType )
 	{
-		int iSize = 0;
+  		int iSize = 0;
 		ESphJsonType eOutType = JSON_TOTAL;
 		cJSON * pNode;
 		bool bAllSame = true;
+		bool bAllInt = true;
 		cJSON_ArrayForEach( pNode, pCJSON )
 		{
+			ESphJsonType eCurType = NumericFixup ( pNode );
 			if ( !iSize )
-				eOutType = NumericFixup ( pNode );
-			else if ( bAllSame && ( eOutType!=NumericFixup ( pNode ) ) )
+				eOutType = eCurType;
+			else if ( bAllSame && ( eOutType!=eCurType ) )
 				bAllSame = false;
+
+			if ( eCurType!=JSON_INT32 && eCurType!=JSON_INT64 )
+				bAllInt = false;
+
 			++iSize;
 		}
 
@@ -3322,6 +3338,7 @@ public:
 			return 0;
 
 		if ( bAllSame )
+		{
 			switch ( eOutType )
 			{
 			case JSON_INT32: eType = JSON_INT32_VECTOR; break;
@@ -3330,6 +3347,10 @@ public:
 			case JSON_STRING: eType = JSON_STRING_VECTOR; break;
 			default: break;
 			}
+		} else if ( bAllInt )
+		{
+			eType = JSON_INT64_VECTOR;
+		}
 
 		return iSize;
 	}

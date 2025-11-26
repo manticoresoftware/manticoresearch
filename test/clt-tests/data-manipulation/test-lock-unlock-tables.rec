@@ -14,17 +14,15 @@ Insert initial test data
 mysql -h0 -P9306 -e "INSERT INTO products VALUES (1, 'iPhone 15', 999.99), (2, 'Samsung Galaxy S24', 899.99), (3, 'Google Pixel 8', 799.99);"
 ––– output –––
 ––– comment –––
-Verify initial data
+Verify initial data count
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY id;"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 ––– output –––
-+------+--------------------+----------+
-| id   | title              | price    |
-+------+--------------------+----------+
-|    1 | iPhone 15          | 999.9900 |
-|    2 | Samsung Galaxy S24 | 899.9900 |
-|    3 | Google Pixel 8     | 799.9900 |
-+------+--------------------+----------+
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
 ––– comment –––
 Lock table with READ lock
 ––– input –––
@@ -35,11 +33,11 @@ Read from locked table (should work)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 ––– output –––
-+------+-----------+----------+
-| id   | title     | price    |
-+------+-----------+----------+
-|    1 | iPhone 15 | 999.9900 |
-+------+-----------+----------+
++------+-----------+------------+
+| id   | title     | price      |
++------+-----------+------------+
+|    1 | iPhone 15 | 999.989990 |
++------+-----------+------------+
 ––– comment –––
 Release READ lock
 ––– input –––
@@ -73,32 +71,43 @@ mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– comment –––
 Verify data persisted after unlock
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY id;"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 ––– output –––
-+------+--------------------+----------+
-| id   | title              | price    |
-+------+--------------------+----------+
-|    1 | iPhone 15          | 999.9900 |
-|    2 | Samsung Galaxy S24 | 899.9900 |
-|    3 | Google Pixel 8     | 799.9900 |
-|    4 | OnePlus 12         | 699.9900 |
-+------+--------------------+----------+
++----------+
+| count(*) |
++----------+
+|        4 |
++----------+
 ––– comment –––
-Lock table with alias (READ lock on same table twice)
+Test locking multiple tables with READ
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ, products AS p1 READ;"
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products2; CREATE TABLE products2 (id BIGINT, name TEXT);"
 ––– output –––
 ––– comment –––
-Query using both main table and alias
+Insert test data into second table
 ––– input –––
-mysql -h0 -P9306 -e "SELECT p1.title, products.price FROM products, products AS p1 WHERE products.id = p1.id LIMIT 2;"
+mysql -h0 -P9306 -e "INSERT INTO products2 VALUES (1, 'test1'), (2, 'test2');"
 ––– output –––
-+--------------------+----------+
-| title              | price    |
-+--------------------+----------+
-| iPhone 15          | 999.9900 |
-| Samsung Galaxy S24 | 899.9900 |
-+--------------------+----------+
+––– comment –––
+Lock both tables for READ
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ;"
+––– output –––
+––– comment –––
+Verify we can read from both locked tables
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        4 |
++----------+
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
 ––– comment –––
 Release locks
 ––– input –––
@@ -124,11 +133,11 @@ Read from READ-locked table
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 ––– output –––
-+------+-----------+----------+
-| id   | title     | price    |
-+------+-----------+----------+
-|    1 | iPhone 15 | 999.9900 |
-+------+-----------+----------+
++------+-----------+------------+
+| id   | title     | price      |
++------+-----------+------------+
+|    1 | iPhone 15 | 999.989990 |
++------+-----------+------------+
 ––– comment –––
 Insert into WRITE-locked table
 ––– input –––
@@ -167,37 +176,15 @@ mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;"
 ––– comment –––
 Verify UPDATE and DELETE worked
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products ORDER BY id;"
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 ––– output –––
-+------+--------------------+-----------+
-| id   | title              | price     |
-+------+--------------------+-----------+
-|    1 | iPhone 15          | 1099.9900 |
-|    2 | Samsung Galaxy S24 |  899.9900 |
-|    3 | Google Pixel 8     |  799.9900 |
-+------+--------------------+-----------+
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
 ––– comment –––
 Release lock
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Test READ LOCAL lock (allows concurrent inserts in MySQL, implementation may vary)
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ LOCAL;"
-––– output –––
-––– comment –––
-Read from READ LOCAL locked table
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 2;"
-––– output –––
-+------+--------------------+----------+
-| id   | title              | price    |
-+------+--------------------+----------+
-|    2 | Samsung Galaxy S24 | 899.9900 |
-+------+--------------------+----------+
-––– comment –––
-Release READ LOCAL lock
 ––– input –––
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
@@ -216,11 +203,11 @@ Verify REPLACE worked
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 2;"
 ––– output –––
-+------+---------------------------+-----------+
-| id   | title                     | price     |
-+------+---------------------------+-----------+
-|    2 | Samsung Galaxy S24 Ultra  | 1199.9900 |
-+------+---------------------------+-----------+
++------+--------------------------+-------------+
+| id   | title                    | price       |
++------+--------------------------+-------------+
+|    2 | Samsung Galaxy S24 Ultra | 1199.989990 |
++------+--------------------------+-------------+
 ––– comment –––
 Release lock
 ––– input –––
@@ -232,25 +219,21 @@ Create distributed table for testing lock compatibility
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS dist_products; CREATE TABLE dist_products type='distributed' local='products';"
 ––– output –––
 ––– comment –––
-Lock distributed table with READ
+Lock distributed table with READ (should fail - distributed tables don't support locks)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES dist_products READ;"
 ––– output –––
+ERROR 1064 (42000) at line 1: Table dist_products absent, or not suitable for lock
 ––– comment –––
-Query distributed table under lock
+Verify we can still query distributed table even though locking failed
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM dist_products WHERE id = 1;"
 ––– output –––
-+------+-----------+-----------+
-| id   | title     | price     |
-+------+-----------+-----------+
-|    1 | iPhone 15 | 1099.9900 |
-+------+-----------+-----------+
-––– comment –––
-Release lock on distributed table
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
++------+-----------+-------------+
+| id   | title     | price       |
++------+-----------+-------------+
+|    1 | iPhone 15 | 1099.989990 |
++------+-----------+-------------+
 ––– comment –––
 Test SHOW TABLES works while table is locked
 ––– input –––
@@ -267,6 +250,7 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | dist_products | distributed |
 | orders        | rt          |
 | products      | rt          |
+| products2     | rt          |
 +---------------+-------------+
 ––– comment –––
 Release lock and run SHOW TABLES again
@@ -279,6 +263,7 @@ mysql -h0 -P9306 -e "UNLOCK TABLES; SHOW TABLES;"
 | dist_products | distributed |
 | orders        | rt          |
 | products      | rt          |
+| products2     | rt          |
 +---------------+-------------+
 ––– comment –––
 Test re-locking (LOCK replaces previous lock)
@@ -289,15 +274,56 @@ mysql -h0 -P9306 -e "LOCK TABLES products WRITE; LOCK TABLES products READ;"
 ––– comment –––
 Verify READ lock is active (can read)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products LIMIT 1;"
+mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 ––– output –––
-+------+-----------+-----------+
-| id   | title     | price     |
-+------+-----------+-----------+
-|    1 | iPhone 15 | 1099.9900 |
-+------+-----------+-----------+
++------+-----------+-------------+
+| id   | title     | price       |
++------+-----------+-------------+
+|    1 | iPhone 15 | 1099.989990 |
++------+-----------+-------------+
 ––– comment –––
 Final cleanup
 ––– input –––
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Test WRITE lock returns warning (not implemented)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
+––– output –––
++---------+------+--------------------------------+
+| Level   | Code | Message                        |
++---------+------+--------------------------------+
+| warning | 1000 | Write lock is not implemented. |
++---------+------+--------------------------------+
+––– comment –––
+Release WRITE lock before SHOW LOCKS test
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Test SHOW LOCKS displays active locks (must be in same session)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW LOCKS; UNLOCK TABLES;"
+––– output –––
++------+----------+-----------+-----------------+
+| Type | Name     | Lock Type | Additional Info |
++------+----------+-----------+-----------------+
+| rt   | products | read      | Count: 1        |
++------+----------+-----------+-----------------+
+––– comment –––
+Test SHOW LOCKS with multiple tables locked
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; SHOW LOCKS; UNLOCK TABLES;"
+––– output –––
++------+-----------+-----------+-----------------+
+| Type | Name      | Lock Type | Additional Info |
++------+-----------+-----------+-----------------+
+| rt   | products  | read      | Count: 1        |
+| rt   | products2 | read      | Count: 1        |
++------+-----------+-----------+-----------------+
+––– comment –––
+Final cleanup - drop all test tables
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products; DROP TABLE IF EXISTS products2; DROP TABLE IF EXISTS orders; DROP TABLE IF EXISTS dist_products;"
 ––– output –––

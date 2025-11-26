@@ -65,6 +65,11 @@ Testing version: mariadb:10.5
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.5 completed successfully
+Testing cluster:table with mariadb:10.5...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.6
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -91,6 +96,11 @@ Testing version: mariadb:10.6
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.6 completed successfully
+Testing cluster:table with mariadb:10.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.7
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -117,6 +127,11 @@ Testing version: mariadb:10.7
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.7 completed successfully
+Testing cluster:table with mariadb:10.7...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.8
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -143,6 +158,11 @@ Testing version: mariadb:10.8
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.8 completed successfully
+Testing cluster:table with mariadb:10.8...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.9
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -169,6 +189,11 @@ Testing version: mariadb:10.9
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.9 completed successfully
+Testing cluster:table with mariadb:10.9...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.10
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -195,6 +220,11 @@ Testing version: mariadb:10.10
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.10 completed successfully
+Testing cluster:table with mariadb:10.10...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.11
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -221,6 +251,11 @@ Testing version: mariadb:10.11
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:10.11 completed successfully
+Testing cluster:table with mariadb:10.11...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -247,6 +282,11 @@ Testing version: mariadb:11.0
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.0 completed successfully
+Testing cluster:table with mariadb:11.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.1
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -273,6 +313,11 @@ Testing version: mariadb:11.1
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.1 completed successfully
+Testing cluster:table with mariadb:11.1...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -299,6 +344,11 @@ Testing version: mariadb:11.2
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.2 completed successfully
+Testing cluster:table with mariadb:11.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.3-rc
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -325,6 +375,11 @@ Testing version: mariadb:11.3-rc
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.3-rc completed successfully
+Testing cluster:table with mariadb:11.3-rc...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.4
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -354,6 +409,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.4 completed successfully
+Testing cluster:table with mariadb:11.4...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.5
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -383,6 +444,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.5 completed successfully
+Testing cluster:table with mariadb:11.5...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.6
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -412,6 +479,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.6 completed successfully
+Testing cluster:table with mariadb:11.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.7
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -441,6 +514,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.7 completed successfully
+Testing cluster:table with mariadb:11.7...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.8
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -470,6 +549,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.8 completed successfully
+Testing cluster:table with mariadb:11.8...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:12.0
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -499,6 +584,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:12.0 completed successfully
+Testing cluster:table with mariadb:12.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:12.1
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -528,6 +619,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:12.1 completed successfully
+Testing cluster:table with mariadb:12.1...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:latest
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
@@ -557,6 +654,12 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:latest completed successfully
+Testing cluster:table with mariadb:latest...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 All MariaDB versions tested successfully!
 Checking documentation versions...
 Checking documentation file...

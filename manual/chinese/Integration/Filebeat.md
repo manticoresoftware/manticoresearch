@@ -71,7 +71,7 @@ setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
 
-### Filebeat 8.11 - 8.x 的配置
+### Filebeat 8.11 - 8.19 的配置
 
 从 8.11 版本起，默认启用输出压缩，因此您必须显式设置 `compression_level: 0` 以保证与 Manticore 的兼容：
 

@@ -98,6 +98,9 @@ static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tR
 
 static bool CheckBearerMatched ( const HASH256_t & tHashTokenData, const AuthUserCred_t & tUser, CSphString & sUser )
 {
+	assert ( !tUser.m_dSalt.IsEmpty() );
+	assert ( !tUser.m_dBearerSha256.IsEmpty() );
+
 	std::unique_ptr<SHA256_i> pHashBearer256 { CreateSHA256() };
 	pHashBearer256->Init();
 	pHashBearer256->Update ( tUser.m_dSalt.Begin(), tUser.m_dSalt.GetLength() );
@@ -121,7 +124,7 @@ static bool CheckCacheMatched ( const HASH256_t & tHashTokenData, const AuthUser
 		return false;
 
 	const auto * pUser = pUsers->m_hUserToken ( sCachedUser );
-	if ( pUser && CheckBearerMatched ( tHashTokenData, *pUser, sUser ) )
+	if ( pUser && !pUser->m_dBearerSha256.IsEmpty() && CheckBearerMatched ( tHashTokenData, *pUser, sUser ) )
 		return true;
 
 	// if the cache returns user but the bearer does not match - need to invalidate the cache
@@ -151,7 +154,7 @@ static bool CheckAuthBearer ( const Str_t & sToken, HttpProcessResult_t & tRes, 
 	for ( const auto & tItem : pUsers->m_hUserToken )
 	{
 		const auto & tUser = tItem.second;
-		if ( CheckBearerMatched ( tHashTokenData, tUser, sUser ) )
+		if ( !tUser.m_dBearerSha256.IsEmpty() && CheckBearerMatched ( tHashTokenData, tUser, sUser ) )
 		{
 			AuthLog().AuthSuccess ( sUser, AccessMethod_e::HTTP_BEARER, session::szClientName() );
 			return true;

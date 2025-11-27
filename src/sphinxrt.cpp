@@ -4187,12 +4187,12 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	tWriterDict.ZipOffset ( uOff ); // store last doclist length
 
 	// flush infix hash entries, if any
+	int64_t tmInfixTotal = 0;
 	if ( tCtx.m_pInfixer )
 	{
 		int64_t tmInfix = sphMicroTimer();
 		tCtx.m_pInfixer->SaveEntries ( tWriterDict );
-		if ( pTimings )
-			pTimings->m_tmInfix = sphMicroTimer() - tmInfix;
+		tmInfixTotal = sphMicroTimer() - tmInfix;
 	}
 
 	tCtx.m_iDictCheckpointsOffset = tWriterDict.GetPos();
@@ -4220,12 +4220,18 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 	// flush infix hash blocks
 	if ( tCtx.m_pInfixer )
 	{
+		int64_t tmInfixBlocks = sphMicroTimer();
 		tCtx.m_iInfixBlocksOffset = tCtx.m_pInfixer->SaveEntryBlocks ( tWriterDict );
 		tCtx.m_iInfixBlocksWordsSize = tCtx.m_pInfixer->GetBlocksWordsSize();
+		tmInfixTotal += sphMicroTimer() - tmInfixBlocks;
 
 		if ( tCtx.m_iInfixBlocksOffset>UINT_MAX )
 			sphWarning ( "INTERNAL ERROR: dictionary size " INT64_FMT " overflow at infix save", tCtx.m_iInfixBlocksOffset );
 	}
+
+	// Store total infix time (SaveEntries + SaveEntryBlocks)
+	if ( pTimings )
+		pTimings->m_tmInfix = tmInfixTotal;
 
 	// flush header
 	// mostly for debugging convenience

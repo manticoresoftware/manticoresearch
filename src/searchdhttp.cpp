@@ -1095,7 +1095,7 @@ void HttpHandler_c::ReportError ( const char * sError, HttpErrorType_e eType, EH
 	const char * sErrorType = GetErrorTypeName ( eType );
 	int iStatus = HttpGetStatusCodes ( eStatus );
 	CSphString sReply = ( sErrorType ? JsonEncodeResultError ( m_sError, sErrorType, iStatus, sIndex ) : JsonEncodeResultError ( m_sError, iStatus ) );
-	HttpBuildReplyHead ( GetResult(), eStatus, sReply.cstr(), sReply.Length(), false );
+	BuildReply ( sReply, eStatus );
 }
 
 void HttpHandler_c::BuildReply ( const CSphString & sResult, EHTTP_STATUS eStatus )

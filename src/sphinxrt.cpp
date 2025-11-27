@@ -795,6 +795,7 @@ struct RtAttrMergeContext_t
 
 struct RtQword_t;
 struct SaveDiskDataContext_t;
+struct SaveDiskDataTimings_t;
 
 // kind of 'mini served_desc' inside index - manages state of one disk chunk
 class DiskChunk_c final : public ISphRefcountedMT
@@ -1555,7 +1556,7 @@ private:
 	void						SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames );
 	void						SaveMeta ();
 	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
-	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const;
+	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						ConditionalDiskChunk ();
 
@@ -1565,7 +1566,7 @@ private:
 
 	bool						WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sError ) const;
 	bool						WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const;
-	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict ) const;
+	void						WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	static bool					WriteDeadRowMap ( SaveDiskDataContext_t & tCtx, CSphString & sError );
 
 	void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const final;
@@ -3681,6 +3682,16 @@ void RtIndex_c::ConditionalDiskChunk ( )
 }
 
 
+struct SaveDiskDataTimings_t
+{
+	int64_t m_tmAttributes = 0;
+	int64_t m_tmDeadRowMap = 0;
+	int64_t m_tmDocs = 0;
+	int64_t m_tmInfix = 0;  // Time spent in infix builder SaveEntries
+	int64_t m_tmCheckpoints = 0;  // Time for checkpoint writing (excluding infix)
+	int64_t m_tmHeader = 0;
+};
+
 struct SaveDiskDataContext_t : public BuildHeader_t
 {
 	SphOffset_t						m_tDocsOffset {0};
@@ -4167,7 +4178,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 }
 
 
-void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict ) const
+void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, SaveDiskDataTimings_t * pTimings ) const
 {
 	// write checkpoints
 	SphOffset_t uOff = m_bKeywordDict ? 0 : tCtx.m_tDocsOffset - tCtx.m_tLastDocPos;
@@ -4177,7 +4188,12 @@ void RtIndex_c::WriteCheckpoints ( SaveDiskDataContext_t & tCtx, CSphWriter & tW
 
 	// flush infix hash entries, if any
 	if ( tCtx.m_pInfixer )
+	{
+		int64_t tmInfix = sphMicroTimer();
 		tCtx.m_pInfixer->SaveEntries ( tWriterDict );
+		if ( pTimings )
+			pTimings->m_tmInfix = sphMicroTimer() - tmInfix;
+	}
 
 	tCtx.m_iDictCheckpointsOffset = tWriterDict.GetPos();
 	if ( m_bKeywordDict )
@@ -4247,7 +4263,7 @@ struct FilesCleanup_t
 
 // SaveDiskChunk -> SaveDiskData
 // RO save RAM chunks from tSegs into new disk chunk (nothing added/released, just disk files created)
-bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const
+bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError, SaveDiskDataTimings_t * pTimings ) const
 {
 	RTSAVELOG << "SaveDiskData to " << szFilename << ", " << tSegs.GetLength() << " segments";
 
@@ -4263,10 +4279,17 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 //	PauseCheck("savepause"); // catch if something happened between RtGuard() and actual updates
 
 	// fixme: handle errors
+	int64_t tmStart = sphMicroTimer();
 	if ( !WriteAttributes ( tCtx, sError ) )
 		return false;
+	if ( pTimings )
+		pTimings->m_tmAttributes = sphMicroTimer() - tmStart;
+
+	tmStart = sphMicroTimer();
 	if ( !WriteDeadRowMap ( tCtx, sError ) )
 		return false;
+	if ( pTimings )
+		pTimings->m_tmDeadRowMap = sphMicroTimer() - tmStart;
 
 	CSphWriterNonThrottled tWriterDict;
 	CSphString sSPI = IndexFileBase_c { szFilename }.GetFilename ( SPH_EXT_SPI );
@@ -4276,16 +4299,29 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 
 	tWriterDict.PutByte ( 1 );
 
+	tmStart = sphMicroTimer();
 	if ( !WriteDocs ( tCtx, tWriterDict, sError ) )
 		return false;
-	WriteCheckpoints ( tCtx, tWriterDict );
+	if ( pTimings )
+		pTimings->m_tmDocs = sphMicroTimer() - tmStart;
+
+	tmStart = sphMicroTimer();
+	WriteCheckpoints ( tCtx, tWriterDict, pTimings );
+	if ( pTimings )
+	{
+		int64_t tmCheckpointsTotal = sphMicroTimer() - tmStart;
+		pTimings->m_tmCheckpoints = tmCheckpointsTotal - pTimings->m_tmInfix;
+	}
 		
 	tWriterDict.CloseFile();
 	if ( tWriterDict.IsError() )
 		return false;
 
+	tmStart = sphMicroTimer();
 	if ( !SaveDiskHeader ( tCtx, tStats, sError ) )
 		return false;
+	if ( pTimings )
+		pTimings->m_tmHeader = sphMicroTimer() - tmStart;
 
 	tFiles.m_bRemoveFiles = false;
 	return true;
@@ -4529,6 +4565,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
 
 	std::unique_ptr<CSphIndex> pNewChunk;
+	SaveDiskDataTimings_t tTimings;
 	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
@@ -4537,7 +4574,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		TRACE_SCHED_VARID ( "rt", "SaveDiskChunk-routine", iSaveOp );
 
 		tmSave = -sphMicroTimer();
-		if ( !SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError ) )
+		if ( !SaveDiskData ( sChunk.cstr(), dSegments, tStats, m_sLastError, &tTimings ) )
 		{
 			sphWarning ( "rt: table %s failed to save disk chunk %s: %s", GetName(), sChunk.cstr(), m_sLastError.cstr() );
 			tmSave += sphMicroTimer();
@@ -4654,6 +4691,18 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	StringBuilder_c sInfo;
 	sInfo.Sprintf ( "rt: table %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", GetName (), iChunkID
 					, dChunks.GetLength(), iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
+
+	// Add timing breakdown
+	if ( tTimings.m_tmAttributes || tTimings.m_tmDeadRowMap || tTimings.m_tmDocs || tTimings.m_tmInfix || tTimings.m_tmCheckpoints || tTimings.m_tmHeader )
+	{
+		sInfo << " [attrs=" << ( tTimings.m_tmAttributes / 1000 ) << "ms"
+			  << " deadmap=" << ( tTimings.m_tmDeadRowMap / 1000 ) << "ms"
+			  << " docs=" << ( tTimings.m_tmDocs / 1000 ) << "ms"
+			  << " infix=" << ( tTimings.m_tmInfix / 1000 ) << "ms"
+			  << " checkpoints=" << ( tTimings.m_tmCheckpoints / 1000 ) << "ms"
+			  << " header=" << ( tTimings.m_tmHeader / 1000 ) << "ms"
+			  << "]";
+	}
 
 	// calculate DoubleBuf percent using current save/insert rate
 	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );

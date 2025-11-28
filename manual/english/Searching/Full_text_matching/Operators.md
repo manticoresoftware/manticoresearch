@@ -97,6 +97,8 @@ The phrase operator mandates that the words be adjacent to each other.
 
 The phrase search operator can include a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
 
+Note: When using this operator with queries containing more than 31 keywords, ranking statistics (such as `tf`, `idf`, `bm25`) for keywords at position 31 and above may be under-counted. This is due to a 32-bit mask used internally to track term occurrences within a match. Matching logic (finding documents) remains correct, but ranking scores may be affected for very long queries.
+
 ```sql
 "exact * phrase * * for terms"
 ```
@@ -123,6 +125,8 @@ You can also use the OR operator inside the quotes. The OR operator (`|`) must b
 ```
 
 Proximity distance is measured in words, accounting for word count, and applies to all words within quotes. For example, the query `"cat dog mouse"~5` indicates that there must be a span of fewer than 8 words containing all 3 words. Therefore, a document with `CAT aaa bbb ccc DOG eee fff MOUSE` will not match this query, as the span is exactly 8 words long.
+
+Note: When using this operator with queries containing more than 31 keywords, ranking statistics (such as `tf`, `idf`, `bm25`) for keywords at position 31 and above may be under-counted. This is due to a 32-bit mask used internally to track term occurrences within a match. Matching logic (finding documents) remains correct, but ranking scores may be affected for very long queries.
 
 You can also use the OR operator inside a proximity search. The OR operator (`|`) must be enclosed in brackets `()` when used inside proximity searches. Each option is checked separately.
 
@@ -246,6 +250,8 @@ The `NEAR` operator is a more generalized version of the proximity operator. Its
 While the original proximity operator works only on sets of keywords, `NEAR` is more versatile and can accept arbitrary subexpressions as its two arguments. It matches a document when both subexpressions are found within N words of each other, regardless of their order. `NEAR` is left-associative and shares the same (lowest) precedence as [BEFORE](../../Searching/Full_text_matching/Operators.md#Strict-order-operator).
 
 It is important to note that `one NEAR/7 two NEAR/7 three` is not exactly equivalent to `"one two three"~7`. The key difference is that the proximity operator allows up to 6 non-matching words between all three matching words, while the version with `NEAR` is less restrictive: it permits up to 6 words between `one` and `two`, and then up to 6 more between that two-word match and `three`.
+
+Note: When using this operator with queries containing more than 31 keywords, ranking statistics (such as `tf`, `idf`, `bm25`) for keywords at position 31 and above may be under-counted. This is due to a 32-bit mask used internally to track term occurrences within a match. Matching logic (finding documents) remains correct, but ranking scores may be affected for very long queries.
 
 ### NOTNEAR operator
 

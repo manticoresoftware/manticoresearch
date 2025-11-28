@@ -765,9 +765,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	bool bHttpEndpoint = true;
-	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL )
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI_JSON )
 	{
-		bHttpEndpoint = false;
+		bHttpEndpoint = ( tRes.m_eEndpoint!=EHTTP_ENDPOINT::SQL );
 
 		// sql parser put \0 at error position at the reference string
 		// should use raw_query for buddy request

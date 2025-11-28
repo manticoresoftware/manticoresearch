@@ -37,6 +37,7 @@
 #include "daemon/logger.h"
 #include "auth/auth.h"
 #include "auth/auth_proto_http.h"
+#include "auth/auth_log.h"
 #include "searchdssl.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
@@ -654,6 +655,13 @@ bool IsBuddyQuery ( const OptionsHash_t & hOptions )
 	return pProhibit != nullptr && ( pProhibit->Begins ( "Manticore Buddy" ) );
 }
 
+struct BuddyReplyLog_t
+{
+	CSphString m_sType;
+	CSphString m_sSeverity;
+	CSphString m_sMessage;
+};
+
 struct BuddyReply_t
 {
 	JsonObj_c m_tRoot;
@@ -662,7 +670,28 @@ struct BuddyReply_t
 	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
 	CSphString m_sContentType;
+
+	CSphVector<BuddyReplyLog_t> m_dLogs;
 };
+
+static void ProcessBuddyLogs ( const BuddyReply_t & tReply )
+{
+	for ( const auto & tLog : tReply.m_dLogs )
+	{
+		if ( tLog.m_sType!="auth" )
+			continue;
+
+		AuthLogLevel_e eLevel = AuthLogLevel_e::INFO;
+		if ( tLog.m_sSeverity=="WARN" )
+			eLevel = AuthLogLevel_e::WARNING;
+		else if ( tLog.m_sSeverity=="ERROR" )
+			eLevel = AuthLogLevel_e::ERR;
+		else if ( tLog.m_sSeverity=="CRITICAL" )
+			eLevel = AuthLogLevel_e::CRITICAL;
+
+		AuthLog().Log ( eLevel, tLog.m_sMessage.cstr() );
+	}
+}
 
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
 {
@@ -705,6 +734,22 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 
 	if ( !tParsed.m_tRoot.FetchStrItem ( tParsed.m_sContentType, "content_type", sError, true ) )
 		return false;
+
+	// optional log array with object items
+	JsonObj_c tLogs = tParsed.m_tRoot.GetItem ( "log" );
+	if ( tLogs && tLogs.IsArray() )
+	{
+		for ( const auto & tLog : tLogs )
+		{
+			if ( !tLog.IsObj() )
+				continue;
+
+			auto & tEntry = tParsed.m_dLogs.Add();
+			tLog.FetchStrItem ( tEntry.m_sType, "type", sError, false );
+			tLog.FetchStrItem ( tEntry.m_sSeverity, "severity", sError, false );
+			tLog.FetchStrItem ( tEntry.m_sMessage, "message", sError, false );
+		}
+	}
 
 	return true;
 }
@@ -866,6 +911,8 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
 
+	ProcessBuddyLogs ( tReplyParsed );
+
 	return true;
 }
 
@@ -935,6 +982,8 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
+
+	ProcessBuddyLogs ( tReplyParsed );
 }
 
 #ifdef _WIN32

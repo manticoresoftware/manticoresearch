@@ -30,6 +30,17 @@ enum class AccessMethod_e
 	HTTP_BEARER,
 };
 
+enum class AuthLogLevel_e
+{
+	ALL,
+	INFO,
+	WARNING,
+	ERR,
+	CRITICAL,
+
+	DISABLED
+};
+
 class AuthLogger_i
 {
 public:
@@ -37,6 +48,8 @@ public:
 
 	virtual void Init ( const CSphString & sDaemonLogPath, const CSphConfigSection & hSearchd, bool bLogStdout, bool bLogSyslog ) = 0;
 	virtual void Close() = 0;
+
+	virtual void Log ( AuthLogLevel_e eLevel, const char * sMessage ) = 0;
 
 	/// user and permission
 

@@ -36,6 +36,6 @@ curl -s -X POST http://localhost:9312/update -d '{"cluster": "unknown_cluster", 
 ––– output –––
 {"error":{"type":"action_request_validation_exception","reason":"table t: table t: table 't' is not in any cluster, use just 't'","table":"d"},"status":409}
 ––– input –––
-cat /var/log/manticore/searchd.log | grep 'response data' | head -n 1 | awk -F 'response data: ' '{print $2}'
+sleep 0.1; cat /var/log/manticore/searchd.log | grep 'response data' | head -n 1 | awk -F 'response data: ' '{print $2}'
 ––– output –––
 {"version":3,"type":"json response","message":{"error":"table t: table 't' is not in any cluster, use just 't'"},"meta":null,"error_code":0}

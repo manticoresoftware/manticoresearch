@@ -17,19 +17,19 @@ curl -s -X POST "http://localhost:9308/sql" -d "select count(*) from t"
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "select * from t where match('exmaple') option fuzzy=1"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "create table t_copy like t"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "show tables"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "insert into t values (3, 'new', 'new')"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s "http://localhost:9308/sql?query=select%20count(*)%20from%20t"
 ––– output –––

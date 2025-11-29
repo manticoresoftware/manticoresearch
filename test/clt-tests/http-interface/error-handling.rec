@@ -13,7 +13,7 @@ curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM nonexistent_table"; e
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "SELECT * FROM t; SHOW META"; echo
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "DESCRIBE t; SELECT * FROM t" | awk '!/row.*in set/'; echo
 ––– output –––

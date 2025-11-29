@@ -1264,7 +1264,7 @@ protected:
 
 			if ( tStmt.m_eStmt!=STMT_SELECT )
 			{
-				ReportError ( "only SELECT queries are supported", EHTTP_STATUS::_501 );
+				ReportError ( "Only search queries are supported", EHTTP_STATUS::_501 );
 				return nullptr;
 			}
 		}

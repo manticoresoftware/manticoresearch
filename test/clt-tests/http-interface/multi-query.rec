@@ -79,11 +79,11 @@ curl -s "http://localhost:9308/cli_json?select%20*%20from%20t%20where%20match('t
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "select * from t limit 1;show tables"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "select * from t where match('test');show meta"
 ––– output –––
-{"error":"only SELECT queries are supported"}
+{"error":"Only search queries are supported"}
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t limit 1;show tables"
 ––– output –––

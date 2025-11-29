@@ -3006,8 +3006,9 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 			JsonObj_c tReason = tReplyError.GetItem ( "reason" );
 			if ( tReason && tReason.IsStr() )
 				sError = tReason.StrVal();
-		}
-		if ( sError.IsEmpty() )
+		} else if ( tReplyError.IsStr() )
+			sError = tReplyError.StrVal();
+		else if ( sError.IsEmpty() )
 			sError = tReplyError.AsString();
 
 		iAffected = 0;

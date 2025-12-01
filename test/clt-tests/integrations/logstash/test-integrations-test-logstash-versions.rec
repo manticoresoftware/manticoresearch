@@ -82,12 +82,21 @@ if [ "$version_major" -ge 8 ]; then
     ilm_settings="ilm_enabled => false
     manage_template => false"
 fi
-if [ "$version_major" -ge 9 ]; then
+if [ "$version_major" -eq 9 ] && [ "$version_minor" -lt 2 ]; then
     export ALLOW_SUPERUSER=1
     sed -i '259s/^/# /' /usr/share/logstash/logstash-${VERSION}.0/logstash-core/lib/logstash/runner.rb 2>/dev/null || true
 fi
+if [ "$version_major" -gt 9 ] || ([ "$version_major" -eq 9 ] && [ "$version_minor" -ge 2 ]); then
+    mkdir -p /etc/logstash
+    cat > /etc/logstash/logstash.yml << LSYML
+allow_superuser: true
+LSYML
+    logstash_settings_args="--path.settings=/etc/logstash"
+else
+    logstash_settings_args=""
+fi
 CONFIG_FILE="/tmp/logstash_config_${VERSION}.conf"
-if [ "$version_major" -gt 9 ] || ([ "$version_major" -eq 9 ] && [ "$version_minor" -ge 1 ]); then
+if [ "$version_major" -eq 9 ] && [ "$version_minor" -eq 1 ]; then
     cat > "$CONFIG_FILE" << CONF
 input {
   file {
@@ -186,6 +195,7 @@ timeout $wait_time logstash --path.data="$TEMP_DATA_DIR" \
   --log.level=error \
   --pipeline.batch.size $batch_size \
   $ecs_args \
+  $logstash_settings_args \
   > /dev/null 2>&1 || true
 sleep 10
 echo "✓ Logstash $VERSION started and processed logs"
@@ -602,6 +612,20 @@ timeout 300 bash /tmp/logstash-single-test.sh 9.1
 ✓ Row count check for 9.1: 5 rows
 ✓ Structure check for 9.1: passed
 ✓ Logstash version 9.1 tested successfully
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-9.2.0-linux-x86_64.tar.gz" -O logstash-9.2.0.tar.gz && gzip -t logstash-9.2.0.tar.gz 2>/dev/null && tar -tzf logstash-9.2.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 9.2.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 9.2.0 after 3 attempts" >&2 || rm -f logstash-9.2.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 9.2.0 downloaded successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 9.2
+––– output –––
+>>> Testing Logstash version: 9.2
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 9.2 started and processed logs
+✓ Row count check for 9.2: 5 rows
+✓ Structure check for 9.2: passed
+✓ Logstash version 9.2 tested successfully
 ––– input –––
 rm -f logstash-*.tar.gz
 ––– output –––

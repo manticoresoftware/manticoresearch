@@ -4,7 +4,7 @@
 
 [Logstash](https://www.elastic.co/logstash) is a log management tool that collects data from a variety of sources, transforms it on the fly, and sends it to your desired destination. It is often used as a data pipeline for Elasticsearch, an open-source analytics and search engine.
 
-Now, Manticore supports the use of Logstash as a processing pipeline. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, versions 7.6+ are supported.
+Now, Manticore supports the use of Logstash as a processing pipeline. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, versions 7.6-9.2 are supported.
 
 Let’s examine a simple example of a Logstash config file used for indexing `dpkg.log`, a standard log file of the Debian package manager. The log itself has a simple structure, as shown below:
 
@@ -44,6 +44,112 @@ output {
 ```
 
 Note that, before proceeding further, one crucial caveat needs to be addressed: Manticore does not support Log Template Management and the Index Lifecycle Management features of Elasticsearch. As these features are enabled by default in Logstash, they need to be explicitly disabled in the config. Additionally, the hosts option in the output config section must correspond to Manticore’s HTTP listen port (default is localhost:9308).
+
+## Version-specific configuration
+
+Configuration varies depending on which version of Logstash you're using.
+
+### Configuration for Logstash 7.17
+
+For Logstash 7.17, the basic configuration is straightforward and doesn't require additional ILM settings:
+
+```
+input {
+  file {
+    path => ["/var/log/dpkg.log"]
+    start_position => "beginning"
+    sincedb_path => "/dev/null"
+    mode => "read"
+    exit_after_read => "true"
+    file_completed_action => "log"
+    file_completed_log_path => "/dev/null"
+  }
+}
+
+output {
+  elasticsearch {
+    index => "dpkg_log"
+    hosts => ["http://localhost:9308"]
+  }
+}
+```
+
+Run with:
+```bash
+logstash -f logstash.conf
+```
+
+### Configuration for Logstash 8.0 - 9.1
+
+Starting from version 8.0, ILM (Index Lifecycle Management) and template management are enabled by default and must be explicitly disabled for compatibility with Manticore:
+
+```
+input {
+  file {
+    path => ["/var/log/dpkg.log"]
+    start_position => "beginning"
+    sincedb_path => "/dev/null"
+    mode => "read"
+    exit_after_read => "true"
+    file_completed_action => "log"
+    file_completed_log_path => "/dev/null"
+  }
+}
+
+output {
+  elasticsearch {
+    index => "dpkg_log"
+    hosts => ["http://localhost:9308"]
+    ilm_enabled => false
+    manage_template => false
+  }
+}
+```
+
+For versions 9.0 and 9.1, Logstash requires running as a superuser. Set the environment variable before starting:
+
+```bash
+export ALLOW_SUPERUSER=1
+logstash -f logstash.conf
+```
+
+### Configuration for Logstash 9.2+
+
+From version 9.2, the recommended approach is to configure the superuser setting via a configuration file instead of using environment variables. This provides a more permanent and manageable solution.
+
+Configuration file (e.g., `logstash.conf`):
+```
+input {
+  file {
+    path => ["/var/log/dpkg.log"]
+    start_position => "beginning"
+    sincedb_path => "/dev/null"
+    mode => "read"
+    exit_after_read => "true"
+    file_completed_action => "log"
+    file_completed_log_path => "/dev/null"
+  }
+}
+
+output {
+  elasticsearch {
+    index => "dpkg_log"
+    hosts => ["http://localhost:9308"]
+    ilm_enabled => false
+    manage_template => false
+  }
+}
+```
+
+Create `/etc/logstash/logstash.yml`:
+```yaml
+allow_superuser: true
+```
+
+Run with:
+```bash
+logstash --path.settings=/etc/logstash -f logstash.conf
+```
 
 ## Logstash results
 

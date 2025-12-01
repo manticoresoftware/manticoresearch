@@ -182,7 +182,7 @@ void PersistentConnectionsPool_c::ReInit ( int iPoolSize )
 int PersistentConnectionsPool_c::Step ( int* pVar )
 {
 	assert ( pVar );
-	int iRes = *pVar++;
+	int iRes = (*pVar)++;
 	if ( *pVar>=m_dSockets.GetLength () )
 		*pVar = 0;
 	return iRes;

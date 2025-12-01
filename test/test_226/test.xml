@@ -145,6 +145,27 @@ index multi1
 	path              = <data_path/>/multi1
 }
 
+index dist_fs1
+{
+	type              = distributed
+	agent             = <my_address/>:fs1
+}
+
+source src_fs2
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_fs2
+	sql_attr_json     = j
+}
+
+
+index fs2
+{
+	source            = src_fs2
+	path              = <data_path/>/fs2
+}
+
 
 </config>
 
@@ -223,6 +244,25 @@ insert into table_multi1 (id,title,brand_id,j) values
 (2,'Product 2', 12, '{a:13, b:12}'),
 (3,'Product 3', 13, '{a:11, b:13}')
 </db_insert>
+
+<db_create>
+CREATE TABLE `table_fs2` (
+  `id` int(11),
+  `title` varchar(255),
+  `j` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `table_fs2`;</db_drop>
+
+<db_insert>
+insert into table_fs2 (id,title,j) values
+(1,'Product 1', '{"key": [1,2,3]}'),
+(2,'Product 2', '{"key": [2,3,4]}'),
+(3,'Product 3', '{"key": [4,5,2147483647]}'),
+(4,'Product 4', '{"key": [4,5,2147483648]}')
+</db_insert>
+
 
 <queries><sphinxql>
 
@@ -349,6 +389,14 @@ select * from multi1 order by j.b asc;;
 select * from multi1 order by bigint(j.b) asc;;
 select *, bigint(j.b) as c from multi1 order by c asc facet id limit 0;;
 select *, j.b as c from multi1 order by c asc facet id limit 0;;
+
+<!-- facet with json.field vs alias -->
+select id, j from fs1 where id &lt; 3 facet j.x order by FACET() asc facet j.x as x_val order by FACET() asc;;
+select id, j from dist_fs1 where id &lt; 3 facet j.x order by FACET() asc facet j.x as x_val order by FACET() asc;;
+select id, j from fs1 where id &lt; 3 facet j['x'] as x_val order by FACET() asc;;
+
+select id, j from fs2 facet j.key order by FACET() asc;;
+select id, j from fs2 facet j.key as k order by FACET() asc;;
 
 </sphinxql></queries>
 

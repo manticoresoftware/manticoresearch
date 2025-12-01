@@ -1,9 +1,5 @@
-––– block: ../../base/start-searchd-with-buddy –––
 ––– input –––
-set -b
-––– output –––
-––– input –––
-export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+set -e
 ––– output –––
 ––– input –––
 apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1; echo $?
@@ -34,10 +30,12 @@ TESTED_VERSIONS="7.17
 8.18
 8.19
 9.0
-9.1"
+9.1
+9.2"
 
 # Check for NEW versions (after latest tested)
-LATEST_TESTED_VERSION="9.1"
+# WARNING: Also update LOGSTASH_LATEST below when changing this!
+LATEST_TESTED_VERSION="9.2"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size=100" \
 | jq -r ".results[].name" \
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
@@ -54,9 +52,14 @@ function version_compare(v1, v2) {
 version_compare($0, latest) > 0')
 
 if [ -n "$NEW_VERSIONS" ]; then
-    echo "🆕 NEW Logstash versions detected:"
-    echo "$NEW_VERSIONS"
-    echo "❌ Need to test new versions and update the list!"
+    echo "🆕 NEW Logstash versions detected: $NEW_VERSIONS"
+    echo ""
+    echo "📝 Update required:"
+    echo "  1. test-integrations-check-logstash-versions.rec - Update TESTED_VERSIONS and LATEST_TESTED_VERSION"
+    echo "  2. test-integrations-test-logstash-versions.rec - Add test for new version"
+    echo "  3. manual/english/Integration/Logstash.md - Update version range (e.g., 7.6-[NEW_VERSION])"
+    echo "  4. site repo: blog/integration-of-manticore-with-logstash-filebeat/index.md"
+    echo ""
     exit 1
 else
     echo "✅ No new versions found after $LATEST_TESTED_VERSION"
@@ -67,6 +70,96 @@ echo "Using tested versions:"
 echo "$TESTED_VERSIONS"
 SCRIPT
 ––– output –––
-🆕 NEW Logstash versions detected:
+✅ No new versions found after 9.2
+Using tested versions:
+7.17
+8.0
+8.1
+8.2
+8.3
+8.4
+8.5
+8.6
+8.7
+8.8
+8.9
+8.10
+8.11
+8.12
+8.13
+8.14
+8.15
+8.16
+8.17
+8.18
+8.19
+9.0
+9.1
 9.2
-❌ Need to test new versions and update the list!
+––– input –––
+bash << 'SCRIPT'
+# Check documentation versions for Logstash
+echo "Checking Logstash version references in documentation..."
+echo ""
+
+# Must match LATEST_TESTED_VERSION above
+LOGSTASH_LATEST="9.2"
+
+# 1. Check manual documentation (local file mounted via workflow)
+echo "=== Checking manual documentation ==="
+LOGSTASH_MANUAL="/manual/english/Integration/Logstash.md"
+if [ -f "$LOGSTASH_MANUAL" ]; then
+    echo "✓ Checking $LOGSTASH_MANUAL"
+    FOUND_VERSION=$(grep -o "versions [0-9.–-]* are supported" "$LOGSTASH_MANUAL" | head -1)
+    if echo "$FOUND_VERSION" | grep -q "${LOGSTASH_LATEST}"; then
+        echo "✅ Manual: $FOUND_VERSION"
+    else
+        echo "❌ Manual must contain version ${LOGSTASH_LATEST}" >&2
+        echo "   Current: $FOUND_VERSION" >&2
+        echo "   Update to: versions 7.6-${LOGSTASH_LATEST} are supported" >&2
+        exit 1
+    fi
+else
+    echo "❌ Manual not found at $LOGSTASH_MANUAL" >&2
+    echo "Manual must be mounted via workflow: -v \$(pwd)/manual:/manual" >&2
+    exit 1
+fi
+
+echo ""
+echo "=== Checking website blog post ==="
+
+# 2. Check website blog post
+BLOG_URL="https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/"
+echo "✓ Fetching $BLOG_URL"
+
+# Try curl first, fallback to wget
+if command -v curl > /dev/null 2>&1; then
+    BLOG_CONTENT=$(curl -s "$BLOG_URL")
+elif command -v wget > /dev/null 2>&1; then
+    BLOG_CONTENT=$(wget -qO- "$BLOG_URL")
+else
+    echo "❌ Neither curl nor wget available" >&2
+    exit 1
+fi
+if [ -z "$BLOG_CONTENT" ]; then
+    echo "⚠️  WARNING: Blog fetch failed - skipping" >&2
+elif echo "$BLOG_CONTENT" | grep -E "Logstash versions.*(up to |-|–)${LOGSTASH_LATEST}" > /dev/null; then
+    echo "✅ Blog: contains ${LOGSTASH_LATEST}"
+else
+    BLOG_VERSION=$(echo "$BLOG_CONTENT" | grep -o "Logstash versions [0-9.–-]* " | head -1 | sed 's/Logstash versions //')
+    echo "⚠️  WARNING: Blog does NOT contain ${LOGSTASH_LATEST} (found: ${BLOG_VERSION})" >&2
+    echo "   Update: site/content/english/blog/integration-of-manticore-with-logstash-filebeat/index.md" >&2
+fi
+
+echo ""
+echo "✅ Documentation validation complete"
+SCRIPT
+––– output –––
+Checking Logstash version references in documentation...
+=== Checking manual documentation ===
+✓ Checking /manual/english/Integration/Logstash.md
+✅ Manual: versions 7.6-9.2 are supported
+=== Checking website blog post ===
+✓ Fetching https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/
+✅ Blog: contains 9.2
+✅ Documentation validation complete

@@ -1264,7 +1264,7 @@ class SearchFailuresLog_c;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails );
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails, CSphString * pWarning = nullptr );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 
 enum class EHTTP_STATUS : BYTE
@@ -1391,7 +1391,19 @@ void LogToConsole(const char* szKind, const char* szMsg) noexcept;
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
 EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml );
+
+struct HttpReplyTrait_t
+{
+	EHTTP_STATUS m_eCode = EHTTP_STATUS::_503;
+	Str_t m_sBody;
+	bool m_bHtml = false;
+	bool m_bHeadReply = false;
+	const char * m_sContentType = nullptr;
+};
+
+void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 

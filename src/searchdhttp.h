@@ -79,8 +79,6 @@ private:
 	http_parser m_tParser;
 };
 
-void HttpBuildReply ( CSphVector<BYTE>& dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml );
-
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
 class CharStream_c
@@ -117,7 +115,6 @@ struct HttpProcessResult_t
 	CSphString m_sError;
 };
 
-void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
 
 namespace bson {

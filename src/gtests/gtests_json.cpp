@@ -594,10 +594,18 @@ TEST_F ( TJson, bson_rawblob )
 	for (int i=0; i<4; ++i)
 		ASSERT_EQ ( pValues[i], i);
 
-	// blob of mixed (must not work)
+	// blob of mixed work to convert to wides type
 	tst = Bson ( "[0,1,2,300000000000000,4]" );
 	dBlob = bson::RawBlob ( tst );
-	ASSERT_EQ ( dBlob.second, 0 ); // since values are different, Bson is mixed vector, which can't be blob
+	ASSERT_EQ ( dBlob.second, 5 ); // since values are different, Bson is mixed vector, with widest type \ int64
+	{
+		auto pValues64 = ( int64_t * ) dBlob.first;
+		ASSERT_EQ ( pValues64[0], 0);
+		ASSERT_EQ ( pValues64[1], 1 );
+		ASSERT_EQ ( pValues64[2], 2 );
+		ASSERT_EQ ( pValues64[3], 300000000000000 );
+		ASSERT_EQ ( pValues64[4], 4 );
+	}
 
 	// blob of int64
 	tst = Bson ( "[100000000000,100000000001,100000000002,100000000003,100000000004]" );

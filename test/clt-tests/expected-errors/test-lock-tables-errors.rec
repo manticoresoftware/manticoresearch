@@ -50,6 +50,12 @@ mysql -h0 -P9306 -e "LOCK TABLES test_locks READ WRITE;"
 ––– output –––
 ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks READ WRITE'
 ––– comment –––
+Error: LOCK TABLES without READ or WRITE mode
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks'
+––– comment –––
 Valid: Lock same table twice with different aliases (should work)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ, test_locks READ;"
@@ -77,6 +83,28 @@ mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; INSERT INTO test_locks VALUES 
 ERROR 1064 (42000) at line 1: table 'test_locks' is locked
 ––– comment –––
 Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Test modifying locked table from another session (background)
+Start a background session that locks the table
+––– input –––
+(mysql -h0 -P9306 -e "LOCK TABLES test_locks WRITE; SELECT SLEEP(3); UNLOCK TABLES;" > /dev/null 2>&1 &) && sleep 0.5 && mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1 | grep -E "(locked|ERROR)" || echo "Insert succeeded or no lock detected"
+––– output –––
+#!/.*(locked|ERROR).*/!#
+––– comment –––
+Wait for background lock to release and verify table state
+––– input –––
+sleep 3; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– comment –––
+Release any remaining locks
 ––– input –––
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––

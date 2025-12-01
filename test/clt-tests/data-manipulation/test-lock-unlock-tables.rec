@@ -49,6 +49,16 @@ Lock table with WRITE lock
 mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
 ––– output –––
 ––– comment –––
+Check for warnings after WRITE lock (should show warning about table locking)
+––– input –––
+mysql -h0 -P9306 -e "SHOW WARNINGS;"
+––– output –––
++-------+------+---------------------------------------+
+| Level | Code | Message                               |
++-------+------+---------------------------------------+
+| Note  | 1000 | table 'products' locked for writing   |
++-------+------+---------------------------------------+
+––– comment –––
 Insert new record under WRITE lock
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"

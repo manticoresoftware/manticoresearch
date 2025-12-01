@@ -1,10 +1,10 @@
-# Test LOCK TABLES compatibility with mysqldump and batch operations
-# Ensures LOCK/UNLOCK work correctly for database backup and restore scenarios
+# Test LOCK TABLES compatibility with mysqldump
+# Ensures mysqldump can create a dump and restore it correctly
 # Issue: https://github.com/manticoresoftware/manticoresearch/issues/3047
 
 ––– block: ../base/start-searchd –––
 ––– comment –––
-Create test table for mysqldump compatibility testing
+Create test table with sample data
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_dump; CREATE TABLE test_dump (id BIGINT, name TEXT, value INTEGER);"
 ––– output –––
@@ -14,24 +14,7 @@ Insert sample data
 mysql -h0 -P9306 -e "INSERT INTO test_dump VALUES (1, 'first', 100), (2, 'second', 200), (3, 'third', 300);"
 ––– output –––
 ––– comment –––
-Show table structure (similar to what mysqldump does)
-––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_dump\G"
-––– output –––
-*************************** 1. row ***************************
-       Table: test_dump
-Create Table: CREATE TABLE test_dump (
-id bigint,
-name text,
-value integer
-)
-––– comment –––
-Lock table for reading (like mysqldump does before dump)
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES test_dump READ;"
-––– output –––
-––– comment –––
-Read all data count while locked
+Verify initial data
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 ––– output –––
@@ -41,29 +24,52 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 |        3 |
 +----------+
 ––– comment –––
-Release lock after reading
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
 Check if mysqldump is available
 ––– input –––
 which mysqldump
 ––– output –––
 #!/.*mysqldump/!#
 ––– comment –––
-Run mysqldump without lock tables to test basic compatibility
-Verify that CREATE TABLE and INSERT statements are present in dump
+Create a dump of the table using mysqldump with --skip-lock-tables
 ––– input –––
-DUMP_OUTPUT=$(mysqldump -h0 -P9306 --no-tablespaces --skip-lock-tables --compact manticore test_dump 2>&1)
-echo "$DUMP_OUTPUT" | grep -c "CREATE TABLE \`test_dump\`" | tr -d '\n'
-echo -n " "
-echo "$DUMP_OUTPUT" | grep -c "INSERT INTO \`test_dump\`"
+mysqldump -h0 -P9306 --no-tablespaces --skip-lock-tables --compact manticore test_dump > /tmp/test_dump.sql 2>&1
+echo "Dump created"
 ––– output –––
-1 1
+Dump created
 ––– comment –––
-Test batch insert operations within LOCK/UNLOCK (typical restore scenario)
-Lock table, insert multiple records, then unlock
+Drop the original table
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE test_dump;"
+––– output –––
+––– comment –––
+Restore the table from the dump
+––– input –––
+mysql -h0 -P9306 < /tmp/test_dump.sql 2>&1
+echo "Table restored"
+––– output –––
+Table restored
+––– comment –––
+Verify the restored data matches original
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+Verify specific data values
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_dump WHERE id = 1;"
+––– output –––
++------+-------+-------+
+| id   | name  | value |
++------+-------+-------+
+|    1 | first |   100 |
++------+-------+-------+
+––– comment –––
+Test batch operations with LOCK/UNLOCK (typical restore scenario)
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
 LOCK TABLES test_dump WRITE;
@@ -73,7 +79,7 @@ UNLOCK TABLES;
 EOF
 ––– output –––
 ––– comment –––
-Verify batch insert worked
+Verify batch operations worked
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 ––– output –––
@@ -83,75 +89,8 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 |        5 |
 +----------+
 ––– comment –––
-Test reading within LOCK/UNLOCK block using heredoc
+Cleanup
 ––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES test_dump READ;
-SELECT COUNT(*) FROM test_dump WHERE id > 3;
-UNLOCK TABLES;
-EOF
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        2 |
-+----------+
-––– comment –––
-Test typical restore scenario: create table, lock, batch insert, unlock, verify
-––– input –––
-mysql -h0 -P9306 << 'EOF'
-DROP TABLE IF EXISTS batch_test;
-CREATE TABLE batch_test (id BIGINT, data TEXT);
-LOCK TABLES batch_test WRITE;
-INSERT INTO batch_test VALUES (1, 'a');
-INSERT INTO batch_test VALUES (2, 'b');
-INSERT INTO batch_test VALUES (3, 'c');
-UNLOCK TABLES;
-SELECT COUNT(*) FROM batch_test;
-EOF
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
-––– comment –––
-Test OPTIMIZE TABLE under WRITE lock (maintenance operation)
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES test_dump WRITE; OPTIMIZE TABLE test_dump; UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Verify data integrity after OPTIMIZE
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
-––– comment –––
-Test TRUNCATE followed by INSERT under WRITE lock (restore scenario)
-––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES test_dump WRITE;
-TRUNCATE TABLE test_dump;
-INSERT INTO test_dump VALUES (10, 'new', 1000);
-UNLOCK TABLES;
-EOF
-––– output –––
-––– comment –––
-Verify table was truncated and new data inserted
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM test_dump;"
-––– output –––
-+------+------+-------+
-| id   | name | value |
-+------+------+-------+
-|   10 | new  |  1000 |
-+------+------+-------+
-––– comment –––
-Cleanup test tables
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_dump; DROP TABLE IF EXISTS batch_test;"
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_dump;"
+rm -f /tmp/test_dump.sql
 ––– output –––

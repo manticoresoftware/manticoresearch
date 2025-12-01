@@ -14,14 +14,33 @@ Solution: Added SST progress variables to SHOW STATUS:
 - cluster_<name>_node_state: Node state (donor/joiner/synced)
 
 This test validates that SST progress variables exist and show real values during transfer.
+Uses pre-generated test data (~883MB compressed, ~1.5GB uncompressed) with full-text stored fields.
+500K documents with 27 fields ensures SST takes enough time to capture progress values.
 ––– input –––
-apt-get update -y > /dev/null; echo $?
+apt-get update -y > /dev/null; apt-get install -y wget iproute2 procps > /dev/null; echo $?
 ––– output –––
 0
+––– comment –––
+Download pre-generated test data (~883MB compressed, ~1.5GB uncompressed)
+Contains 1 table (sst_heavy) with 500K documents, 27 fields including 4 stored text fields
 ––– input –––
-apt-get install -y iproute2 procps > /dev/null; echo $?
+wget -q http://dev2.manticoresearch.com/sst_heavy_500k.tar.gz -O /tmp/sst_data.tar.gz && echo "Download OK" || echo "Download FAILED"
 ––– output –––
-0
+Download OK
+––– input –––
+mkdir -p /tmp/sst_data && tar -xzf /tmp/sst_data.tar.gz -C /tmp/sst_data && echo "Extract OK" || echo "Extract FAILED"
+––– output –––
+Extract OK
+––– comment –––
+Check actual structure after extraction
+––– input –––
+ls /tmp/sst_data/
+––– output –––
+sst_heavy_data
+––– input –––
+ls /tmp/sst_data/sst_heavy_data/
+––– output –––
+sst_heavy
 ––– comment –––
 Add watchdog = 0 to base config if not already present
 ––– input –––
@@ -60,74 +79,35 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_status'\G"
 Counter: cluster_sst_test_status
   Value: primary
 ––– comment –––
-Create table with MANY fields to make it large on disk
+Import pre-generated table (much faster than INSERT)
+Syntax: IMPORT TABLE table_name FROM 'path'
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE test_table (id bigint, title text, content text, description text, tags text, author text, category text, summary text, attr1 int, attr2 int, attr3 int, attr4 int, attr5 int, attr6 int, attr7 int, attr8 int, attr9 int, attr10 int, price float, rating float, created bigint, json_data json, str1 string, str2 string, str3 string, str4 string, str5 string)"
+mysql -h0 -P1306 -e "IMPORT TABLE sst_heavy FROM '/tmp/sst_data/sst_heavy_data/sst_heavy/sst_heavy'"
 ––– output –––
+––– comment –––
+Add table to cluster
 ––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER sst_test ADD test_table"
+mysql -h0 -P1306 -e "ALTER CLUSTER sst_test ADD sst_heavy"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_sst_test_indexes
-  Value: test_table
+  Value: sst_heavy
 ––– comment –––
-Insert LARGE amount of data with many fields to create big disk chunks
-Insert 120000 documents in 20000 batches of 6 documents each to make SST slower
-With 2x larger dataset SST will take ~1 second allowing us to reliably catch progress values
-Each document has lots of text fields and attributes to make it large on disk
+Verify data was imported and check table structure/size (should have indexed_bytes > 0)
 ––– input –––
-for batch in $(seq 1 20000); do mysql -h0 -P1306 -e "INSERT INTO sst_test:test_table(title,content,description,tags,author,category,summary,attr1,attr2,attr3,attr4,attr5,attr6,attr7,attr8,attr9,attr10,price,rating,created,json_data,str1,str2,str3,str4,str5) VALUES('Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor','Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor','Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum','web development programming software engineering technology computer science artificial intelligence machine learning data science cloud computing devops','John Smith','Technology',  'Summary of the article about modern technology and software development practices in the current era',1,2,3,4,5,6,7,8,9,10,99.99,4.5,1234567890,'{\"key\":\"value\",\"items\":[1,2,3],\"metadata\":{\"type\":\"article\"}}','category1','tag1','attribute1','metadata1','value1'),('Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore','Tempor incididunt ut labore et dolore magna aliqua Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat Duis aute irure dolor in reprehenderit','In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum sed ut','database architecture cloud computing devops kubernetes docker containers microservices serverless functions','Jane Doe','Engineering','Deep dive into cloud architecture and modern deployment strategies for scalable systems',11,12,13,14,15,16,17,18,19,20,149.99,4.8,1234567891,'{\"type\":\"article\",\"tags\":[\"tech\",\"cloud\"],\"author\":\"Jane\"}','category2','tag2','attribute2','metadata2','value2'),('Sed do eiusmod tempor incididunt ut labore et dolore magna','Et dolore magna aliqua Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat Duis aute irure dolor in reprehenderit in voluptate velit esse','Velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum sed ut perspiciatis unde omnis','api rest graphql websockets realtime communication protocols networking infrastructure distributed systems','Bob Johnson','Architecture','Understanding modern API design patterns and best practices for distributed applications',21,22,23,24,25,26,27,28,29,30,199.99,4.2,1234567892,'{\"format\":\"json\",\"version\":1,\"schema\":\"v2\"}','category3','tag3','attribute3','metadata3','value3'),('Magna aliqua Ut enim ad minim veniam quis nostrud','Quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur','Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum sed ut perspiciatis unde omnis iste natus error','microservices architecture patterns best practices design principles solid clean code','Alice Williams','Development','Comprehensive guide to microservices architecture and implementation strategies',31,32,33,34,35,36,37,38,39,40,249.99,4.7,1234567893,'{\"service\":\"microservice\",\"version\":\"1.0\"}','category4','tag4','attribute4','metadata4','value4'),('Exercitation ullamco laboris nisi ut aliquip ex ea','Ex ea commodo consequat Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident','Sunt in culpa qui officia deserunt mollit anim id est laborum sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque','performance optimization monitoring observability metrics logging tracing debugging profiling','Charlie Brown','Performance','Advanced performance optimization techniques for modern web applications',41,42,43,44,45,46,47,48,49,50,179.99,4.6,1234567894,'{\"perf\":\"optimization\",\"tools\":[\"prometheus\"]}','category5','tag5','attribute5','metadata5','value5'),('Commodo consequat Duis aute irure dolor in reprehenderit','Dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit','Anim id est laborum sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium totam rem aperiam eaque','security authentication authorization encryption cryptography oauth jwt tokens session','David Miller','Security','Essential security practices and authentication mechanisms for web services',51,52,53,54,55,56,57,58,59,60,299.99,4.9,1234567895,'{\"security\":\"critical\",\"level\":\"high\"}','category6','tag6','attribute6','metadata6','value6')"; done > /dev/null 2>&1; echo "Insert completed"
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM sst_heavy" | grep -oE '[0-9]+' | head -1
 ––– output –––
-Insert completed
-––– comment –––
-Verify data was inserted
+#!/[0-9]+/!#
 ––– input –––
-count=$(mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM sst_test:test_table" | grep -oE '[0-9]+' | head -1); echo "Documents inserted: $count"
+mysql -h0 -P1306 -e "SHOW TABLE sst_heavy STATUS" | grep -E 'indexed_documents|indexed_bytes|disk_bytes|disk_chunks'
 ––– output –––
-#!/Documents inserted: [0-9]+/!#
-––– comment –––
-Create second table to increase SST transfer time
-––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE test_table2 (id bigint, title text, content text, description text, attr1 int, attr2 int, attr3 int, str1 string, str2 string)"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER sst_test ADD test_table2"
-––– output –––
-––– input –––
-for batch in $(seq 1 10000); do mysql -h0 -P1306 -e "INSERT INTO sst_test:test_table2(title,content,description,attr1,attr2,attr3,str1,str2) VALUES('Second table document $batch','Large content field with lots of text to make documents bigger on disk for slower transfer during SST process','Description field also with substantial text content to increase document size',1,2,3,'string1','string2')"; done > /dev/null 2>&1; echo "Insert to table2 completed"
-––– output –––
-Insert to table2 completed
-––– comment –––
-Create third table to further increase SST transfer time
-––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE test_table3 (id bigint, title text, content text, attr1 int, attr2 int)"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER sst_test ADD test_table3"
-––– output –––
-––– input –––
-for batch in $(seq 1 10000); do mysql -h0 -P1306 -e "INSERT INTO sst_test:test_table3(title,content,attr1,attr2) VALUES('Third table document $batch','Content for third table with moderate text size',1,2)"; done > /dev/null 2>&1; echo "Insert to table3 completed"
-––– output –––
-Insert to table3 completed
-––– comment –––
-Force flush RAM chunks to disk for all tables to increase SST transfer time
-––– input –––
-mysql -h0 -P1306 -e "FLUSH RAMCHUNK test_table"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "FLUSH RAMCHUNK test_table2"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "FLUSH RAMCHUNK test_table3"
-––– output –––
-––– comment –––
-Wait briefly to allow flush operations to complete
-––– input –––
-sleep 2
-––– output –––
+#!/.*indexed_documents.*/!#
+#!/.*indexed_bytes.*/!#
+#!/.*disk_bytes.*/!#
+#!/.*disk_chunks.*/!#
 ––– comment –––
 Start node 2 with SST progress logging enabled
 ––– input –––
@@ -150,43 +130,71 @@ if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore
 ––– output –––
 Buddy started!
 ––– comment –––
-Join node 2 to cluster in background - this triggers SST
-Then use a loop to wait until SST starts and capture REAL values (not "-")
-This approach guarantees we catch actual progress values regardless of timing
-Start checking immediately after JOIN to catch SST from the beginning
+Join node 2 to cluster and capture SST progress with REAL values (not "-")
+Start polling in background, then JOIN, capture values during SST transfer
+SST takes several minutes to transfer ~9GB of data - enough time to catch progress
+The polling checks if sst_stage contains text (not just "-") indicating active SST
+We capture multiple snapshots to show progress changing over time
 ––– input –––
-mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'" > /dev/null 2>&1 & sleep 0.2
+rm -f /tmp/sst_best.txt; (while true; do mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_%'\G" 2>/dev/null > /tmp/sst_check.txt; stage=$(grep -A1 "sst_stage$" /tmp/sst_check.txt | grep "Value:" | sed 's/.*Value: //'); if [ -n "$stage" ] && [ "$stage" != "-" ] && [ ! -f /tmp/sst_best.txt ]; then cp /tmp/sst_check.txt /tmp/sst_best.txt; fi; sleep 0.02; done) & poll_pid=$!; mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'"; kill $poll_pid 2>/dev/null; wait $poll_pid 2>/dev/null; if [ -f /tmp/sst_best.txt ]; then grep -E "(Counter|Value):" /tmp/sst_best.txt | head -10; else echo "ERROR: No SST progress captured"; fi
 ––– output –––
+Counter: cluster_sst_test_sst_total
+  Value: #!/(100|[1-9]?[0-9])/!#
+Counter: cluster_sst_test_sst_stage
+  Value: #!/(await nodes sync|block checksum calculate|analyze remote|send files|activate tables)/!#
+Counter: cluster_sst_test_sst_stage_total
+  Value: #!/(100|[1-9]?[0-9])/!#
+Counter: cluster_sst_test_sst_table
+  Value: #!/[0-9]+ \([a-z0-9_]+\)/!#
+Counter: cluster_sst_test_sst_tables
+  Value: #!/[1-9][0-9]*/!#
 ––– comment –––
-Wait for SST to start and capture all 5 metrics with REAL values
-Loop polls sst_total until it shows a number (not "-"), then captures all metrics
-This guarantees we verify actual SST progress, not just that variables exist
-Uses regex to check if total is a number (0-100)
+Verify SST progress was logged (MANTICORE_LOG_SST_PROGRESS=1 on node 2)
+Check for SST progress entries in joiner node log
 ––– input –––
-bash -c 'end=$((SECONDS+60)); while [ $SECONDS -lt $end ]; do total=$(mysql -h0 -P1306 -sN -e "SHOW STATUS LIKE '\''cluster_sst_test_sst_total'\''" 2>/dev/null | awk '\''{print $2}'\''); if echo "$total" | grep -qE "^[0-9]+$"; then mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_sst_test_sst_%'\'';" | grep -E "cluster_sst_test_sst_(total|stage|stage_total|tables|table)[^_]" | sed '\''s/|//g; s/^[[:space:]]*//; s/[[:space:]]*$//'\'' | awk '\''{name=$1; $1=""; gsub(/^[[:space:]]+/, "", $0); print name, $0}'\''; exit 0; fi; sleep 0.1; done; echo "TIMEOUT: SST not captured"'
+grep "\[SST\]" /var/log/manticore-2/searchd.log | head -3
 ––– output –––
-cluster_sst_test_sst_total #!/[0-9]+/!#
-cluster_sst_test_sst_stage #!/.+/!#
-cluster_sst_test_sst_stage_total #!/[0-9]+/!#
-cluster_sst_test_sst_table #!/[0-2] .test_table.?./!#
-cluster_sst_test_sst_tables 3
+#!/.*\[SST\].*/!#
+#!/.*\[SST\].*/!#
+#!/.*\[SST\].*/!#
+––– comment –––
+Verify SST variables exist (values are "-" after SST completed)
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_%'\G" | grep -E "(Counter|Value):" | head -10
+––– output –––
+Counter: cluster_sst_test_sst_total
+  Value: #!/.+/!#
+Counter: cluster_sst_test_sst_stage
+  Value: #!/.+/!#
+Counter: cluster_sst_test_sst_stage_total
+  Value: #!/.+/!#
+Counter: cluster_sst_test_sst_table
+  Value: #!/.+/!#
+Counter: cluster_sst_test_sst_tables
+  Value: #!/.+/!#
 ––– comment –––
 Verify SST completed and both nodes are synced
 ––– input –––
-bash -c 'end=$((SECONDS+60)); while [ $SECONDS -lt $end ]; do all_synced=true; for port in 1306 2306; do mysql -h0 -P$port -e "SHOW STATUS LIKE '\''cluster_sst_test_status'\''\G" > /tmp/status_$port.log 2>/dev/null && grep -q "Value: primary" /tmp/status_$port.log || { all_synced=false; break; }; done; if $all_synced; then for port in 1306 2306; do echo "Port $port: Node synced"; done; exit 0; fi; sleep 1; done; echo "Timeout waiting for nodes to sync!"; exit 1'
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do all_synced=true; for port in 1306 2306; do mysql -h0 -P$port -e "SHOW STATUS LIKE '\''cluster_sst_test_status'\''\G" > /tmp/status_$port.log 2>/dev/null && grep -q "Value: primary" /tmp/status_$port.log || { all_synced=false; break; }; done; if $all_synced; then for port in 1306 2306; do echo "Port $port: Node synced"; done; exit 0; fi; sleep 1; done; echo "Timeout waiting for nodes to sync!"; exit 1'
 ––– output –––
 Port 1306: Node synced
 Port 2306: Node synced
 ––– comment –––
-Verify all tables exist on both nodes
+Verify table exists on both nodes
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G" | grep "Value:"
 ––– output –––
-#!/.*Value:.*test_table.*test_table2.*test_table3.*/!#
+  Value: sst_heavy
 ––– input –––
 mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G" | grep "Value:"
 ––– output –––
-#!/.*Value:.*test_table.*test_table2.*test_table3.*/!#
+  Value: sst_heavy
+––– comment –––
+Verify data replicated correctly - check counts match on both nodes
+––– input –––
+c1=$(mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM sst_heavy" | grep -oE '[0-9]+'); c2=$(mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM sst_heavy" | grep -oE '[0-9]+'); if [ "$c1" = "$c2" ]; then echo "sst_heavy: OK ($c1 docs)"; else echo "sst_heavy: MISMATCH ($c1 vs $c2)"; fi
+––– output –––
+sst_heavy: OK (#!/[0-9]+/!# docs)
 ––– comment –––
 Verify SST actually happened by checking for SST messages in logs
 ––– input –––
@@ -198,10 +206,15 @@ grep -q "\[SST\]" /var/log/manticore-2/searchd.log && echo "Node 2: SST messages
 ––– output –––
 Node 2: SST messages found
 ––– comment –––
-Debug: Show SST related log entries if test fails
+Debug: Show SST related log entries
 ––– input –––
 echo "=== Node 1 SST logs ==="; grep -i "sst\|state transfer" /var/log/manticore-1/searchd.log | tail -5
 ––– output –––
+=== Node 1 SST logs ===
+#!/.*/!#
+#!/.*/!#
+#!/.*/!#
+#!/.*/!#
 #!/.*/!#
 ––– comment –––
 Cleanup: Remove watchdog from base config to avoid affecting other tests

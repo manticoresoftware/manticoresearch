@@ -64,7 +64,6 @@ private:
 	CSphVector<CSphRowitem>			m_dStatic;
 	CSphMatchComparatorState		m_tState;
 	ScrollSettings_t				m_tScroll;
-	CSphVector<BYTE*>				m_dAllocatedPtrs; // Track allocated pointer values directly
 
 	FORCE_INLINE bool PushMatch ( const CSphMatch & tEntry );
 	void	SetupRefMatch();
@@ -163,8 +162,6 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 			{
 				BYTE * pPacked = sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } );
 				sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)pPacked );
-				// Track the allocated pointer value directly
-				m_dAllocatedPtrs.Add(pPacked);
 			}
 			break;
 
@@ -182,16 +179,36 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 template <typename COMP>
 void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 {
-	// Free all pointers we allocated directly
-	// We store the pointer values themselves, not the attributes, so we don't need
-	// to access m_tRefMatch which might have been reset
-	for ( auto pPacked : m_dAllocatedPtrs )
+	if ( !m_tRefMatch.m_pDynamic )
+		return;
+
+	const ISphSchema * pSchema = m_pSorter->GetSchema();
+	assert(pSchema);
+
+	for ( const auto & i : m_tScroll.m_dAttrs )
 	{
-		if ( pPacked )
-			sphDeallocatePacked(pPacked);
+		if ( i.m_sSortAttr=="weight()" || !sphIsDataPtrAttr(i.m_eType) )
+			continue;
+
+		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
+		if ( !pAttr )
+			continue;
+
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// use the remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				pAttr = pRemapped;
+		}
+
+		auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
+		if ( pData )
+			sphDeallocatePacked(pData);
 	}
-	
-	m_dAllocatedPtrs.Resize(0);
 }
 
 /////////////////////////////////////////////////////////////////////

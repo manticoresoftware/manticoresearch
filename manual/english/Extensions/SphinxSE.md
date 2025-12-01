@@ -84,6 +84,65 @@ mysql> show engines;
 13 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "show engines;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Engine": {
+          "type": "string"
+        }
+      },
+      {
+        "Support": {
+          "type": "string"
+        }
+      },
+      {
+        "Comment": {
+          "type": "string"
+        }
+      },
+      {
+        "Transactions": {
+          "type": "string"
+        }
+      },
+      {
+        "XA": {
+          "type": "string"
+        }
+      },
+      {
+        "Savepoints": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Engine": "MyISAM",
+        "Support": "DEFAULT",
+        "Comment": "MyISAM storage engine",
+        "Transactions": "NO",
+        "XA": "NO",
+        "Savepoints": "NO"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 ## Using SphinxSE

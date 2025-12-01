@@ -2,6 +2,17 @@
 
 ## SQL
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(id bigint, age int, name string);
+INSERT INTO tbl (id, age, name) VALUES
+(1, 25, 'joe'),
+(2, 25, 'mary'),
+(3, 33, 'albert');
+-->
+
 <!-- example sql1 -->
 When you run a query via SQL over the MySQL protocol, you receive the requested columns as a result or an empty result set if nothing is found.
 
@@ -21,7 +32,73 @@ SELECT * FROM tbl;
 +------+------+--------+
 3 rows in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql -d "SELECT * FROM tbl;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "age": {
+          "type": "long"
+        }
+      },
+      {
+        "name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1,
+        "age": 25,
+        "name": "joe"
+      },
+      {
+        "id": 2,
+        "age": 25,
+        "name": "mary"
+      },
+      {
+        "id": 3,
+        "age": 33,
+        "name": "albert"
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+
+```
+
 <!-- end -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(story_author string, comment_author string);
+INSERT INTO hn_small(story_author, comment_author) VALUES
+('anewkid', 'skrtio'),
+('sasjri', 'samb'),
+('bks', 'jsjenkins168'),
+('joe', 'SwellJoe'),
+('joe', 'samb'),
+('joe', 'jsjenkins168');
+--> 
 
 <!-- example sql2 -->
 Additionally, you can use the [SHOW META](../Node_info_and_management/SHOW_META.md) call to see extra meta-information about the latest query.
@@ -52,10 +129,97 @@ SELECT id,story_author,comment_author FROM hn_small WHERE story_author='joe' LIM
 +----------------+-------+
 4 rows in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT id,f1,f2 FROM t WHERE f2=2 LIMIT 1; SHOW META;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "f1": {
+          "type": "string"
+        }
+      },
+      {
+        "f2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "gte"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.000"
+      }
+    ],
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example sql3 -->
 In some cases, such as when performing a [faceted search](../Searching/Faceted_search.md), you may receive multiple result sets as a response to your SQL query.
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(id bigint, age int, name string);
+INSERT INTO tbl (id, age, name) VALUES
+(1, 25, 'joe'),
+(2, 25, 'mary'),
+(3, 33, 'albert');
+-->
 
 <!-- request SQL -->
 ```sql
@@ -78,6 +242,75 @@ SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 +------+----------+
 1 row in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "f1": {
+          "type": "string"
+        }
+      },
+      {
+        "f2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      },
+      {
+        "id": 724024784404348900,
+        "f1": "b",
+        "f2": 2
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "f2": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "f2": 2,
+        "count(*)": 2
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example sql4 -->
@@ -103,7 +336,80 @@ SELECT * from tbl where match('"joe"/3'); show warnings;
 +---------+------+--------------------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT * from t where match('\"a\"/3'); show warnings;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "f2": {
+          "type": "long"
+        }
+      },
+      {
+        "f1": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [],
+    "total": 0,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Level": {
+          "type": "string"
+        }
+      },
+      {
+        "Code": {
+          "type": "decimal"
+        }
+      },
+      {
+        "Message": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Level": "warning",
+        "Code": "1000",
+        "Message": "table t: quorum threshold too high (words=1, thresh=3); replacing quorum operator with AND operator"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(name text);
+INSERT INTO t(name) VALUES
+('joe');
+-->
 
 <!-- example sql5 -->
 If your query fails, you will receive an error:
@@ -116,6 +422,18 @@ SELECT * from tbl where match('@surname joe');
 <!-- response SQL -->
 ```sql
 ERROR 1064 (42000): index idx: query error: no field 'surname' found in schema
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT * from t where match('@surname joe');"
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "error": "table t: query error: no field 'surname' found in schema"
+}
 ```
 
 <!-- end -->

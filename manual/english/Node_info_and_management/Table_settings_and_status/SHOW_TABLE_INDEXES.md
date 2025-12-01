@@ -18,6 +18,16 @@ The displayed properties include the following columns:
 
 > **Note:** For RT tables, secondary indexes are only created for disk chunks, not for data in RAM segments. When you first insert data into an RT table, it stays in RAM and no secondary indexes will be shown. The indexes become visible only after the data is flushed to disk chunks, which by default happens automatically when the table becomes active (receives both inserts and searches).
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(j json);
+INSERT INTO test(j) VALUES
+( '{"addresses": {"a1":{"id":"1","name":"a"},"a2":{"id":"2","name":"b"},"a3":{"id":"3","name":"c"},"a4":{"id":"4","name":"d"},"a5":{"id":"5","name":"e"},"a6":{"id":"6","name":"f"}},"factor":2,"int_arr":[1,2,3],"tags": ["1":{},"2":{},"3":{}],"arr":"a","str":"a","price":1.0 }' );
+FLUSH RAMCHUNK test;
+--> 
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
@@ -64,5 +74,224 @@ SHOW TABLE test INDEXES;
 +------------------------------+--------+---------+---------+
 29 rows in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE test INDEXES;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Enabled": {
+          "type": "string"
+        }
+      },
+      {
+        "Percent": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Name": "j['addresses']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['factor']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['int_arr']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "id",
+        "Type": "int64",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['price']",
+        "Type": "float",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['arr']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['str']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['1']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['2']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['3']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      }
+    ],
+    "total": 29,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+,
 <!-- end -->
 

@@ -547,6 +547,77 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, mva1 multi, mva2 multi);
+INSERT INTO test (title, gid, mva1, mva2) VALUES
+('test document', 1001, (101), (101)),
+('test document', 1002, (100,102), (101)),
+('test document', 1003, (207), (101)),
+('test document', 1004, (101,103), (101)),
+('test document', 1005, (207,208), (101));
+-->
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "DELETE FROM test WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) );"
+
+POST /sql?mode=raw -d "SELECT * FROM test;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "gid": {
+          "type": "long"
+        }
+      },
+      {
+        "mva1": {
+          "type": "long"
+        }
+      },
+      {
+        "mva2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "gid": "1001",
+        "mva1": 101,102,
+        "mva2": 101
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->

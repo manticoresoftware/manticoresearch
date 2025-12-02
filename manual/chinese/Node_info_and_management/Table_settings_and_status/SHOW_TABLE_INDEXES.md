@@ -1,7 +1,7 @@
 # SHOW TABLE INDEXES
 
 <!-- example SHOW TABLE INDEXES -->
-`SHOW TABLE INDEXES` SQL 语句显示指定表的可用二级索引及其属性。[二级索引](../../Server_settings/Searchd.md#secondary_indexes) 通过创建额外的数据结构来加速特定列的搜索，从而提升查询性能。
+`SHOW TABLE INDEXES` SQL语句显示指定表的可用二级索引及其属性。[二级索引](../../Server_settings/Searchd.md#secondary_indexes)通过创建额外的数据结构，加快对特定列的搜索，从而提高查询性能。
 
 语法如下：
 
@@ -11,12 +11,22 @@ SHOW TABLE table_name INDEXES
 
 显示的属性包括以下列：
 
-* **Name**：二级索引的名称。可用于[查询优化器提示](../../Searching/Options.md#Query-optimizer-hints)。
-* **Type**：二级索引中存储的数据类型。对于普通属性，类型与原始属性类型相同。对于从 JSON 属性生成的二级索引，类型通过扫描所有文档并确定所有 JSON 属性的类型来推断。
-* **Enabled**：指示索引当前是否启用，是否可用于提升搜索速度。当属性被更新时，该属性的二级索引会暂时禁用，直到索引重建。您可以使用[ALTER TABLE ... REBUILD SECONDARY](../../Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) 命令重建被禁用的索引。
-* **Percent**：在 RT 表中，不同的磁盘块可能包含不同的二级索引，尤其是在使用 JSON 属性时。此百分比显示有多少块包含具有相同名称、类型和启用状态的索引。
+* **Name**：二级索引的名称。可以在[查询优化器提示](../../Searching/Options.md#Query-optimizer-hints)中使用。
+* **Type**：二级索引中存储的数据类型。对于普通属性，类型与原始属性相同。对于从JSON属性生成的二级索引，类型则通过扫描所有文档并确定所有JSON属性的类型来推断。
+* **Enabled**：指示索引当前是否启用，是否可以用于提高搜索速度。当属性被更新时，该属性的二级索引会被暂时禁用，直到索引被重建。您可以使用[ALTER TABLE ... REBUILD SECONDARY](../../Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)命令重建已禁用的索引。
+* **Percent**：在RT表中，不同的磁盘块可能包含不同的二级索引，尤其是在使用JSON属性时。此百分比显示有多少块具有相同名称、类型和启用状态的索引。
 
-> **注意：** 对于 RT 表，二级索引仅为磁盘块创建，不为 RAM 段中的数据创建。当您首次向 RT 表插入数据时，数据保存在 RAM 中，二级索引不会显示。索引仅在数据刷新到磁盘块后可见，默认情况下，当表变为活动状态（同时接收插入和搜索）时会自动刷新。
+> **注意：** 对于RT表，二级索引仅为磁盘块创建，而不会为RAM段中的数据创建。当您首次向RT表插入数据时，数据保存在RAM中，二级索引不会显示。只有当数据刷新到磁盘块后，索引才会可见，默认情况下，当表变为活动状态（同时接收插入和搜索）时会自动发生刷新。
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(j json);
+INSERT INTO test(j) VALUES
+( '{"addresses": {"a1":{"id":"1","name":"a"},"a2":{"id":"2","name":"b"},"a3":{"id":"3","name":"c"},"a4":{"id":"4","name":"d"},"a5":{"id":"5","name":"e"},"a6":{"id":"6","name":"f"}},"factor":2,"int_arr":[1,2,3],"tags": ["1":{},"2":{},"3":{}],"arr":"a","str":"a","price":1.0 }' );
+FLUSH RAMCHUNK test;
+--> 
 
 <!-- intro -->
 ##### SQL:
@@ -64,5 +74,224 @@ SHOW TABLE test INDEXES;
 +------------------------------+--------+---------+---------+
 29 rows in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE test INDEXES;"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Enabled": {
+          "type": "string"
+        }
+      },
+      {
+        "Percent": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Name": "j['addresses']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['factor']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['int_arr']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "id",
+        "Type": "int64",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['price']",
+        "Type": "float",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['arr']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['str']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['1']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['2']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['3']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      }
+    ],
+    "total": 29,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+,
 <!-- end -->
 

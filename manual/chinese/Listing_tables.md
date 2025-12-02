@@ -2,7 +2,7 @@
 
 Manticore Search 对表只有单层层级结构。
 
-与其他数据库管理系统不同，Manticore 中没有将表分组到数据库中的概念。然而，为了与 SQL 方言的互操作性，Manticore 接受 `SHOW DATABASES` 语句，但该语句不会返回任何结果。
+与其他数据库管理系统不同，Manticore 中没有将表分组到数据库中的概念。然而，为了与 SQL 方言的互操作性，Manticore 接受 `SHOW DATABASES` 语句，但该语句不返回任何结果。
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -13,7 +13,7 @@ Manticore Search 对表只有单层层级结构。
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` 语句列出所有当前活动的表及其类型。现有的表类型有 `local`、`distributed`、`rt`、`percolate` 和 `template`。
+`SHOW TABLES` 语句列出所有当前活动的表及其类型。现有的表类型包括 `local`、`distributed`、`rt`、`percolate` 和 `template`。
 
 
 <!-- intro -->
@@ -38,6 +38,56 @@ SHOW TABLES;
 | template | template    |
 +----------+-------------+
 5 rows in set (0.00 sec)
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW TABLES"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "dist",
+        "Type": "distributed"
+      },
+      {
+        "Table": "plain",
+        "Type": "local"
+      },
+      {
+        "Table": "pq",
+        "Type": "percolate"
+      },{
+        "Table": "rt",
+        "Type": "rt"
+      },{
+        "Table": "template",
+        "Type": "template"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+
 ```
 
 <!-- request PHP -->
@@ -157,8 +207,14 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 
 <!-- end -->
 
+<!--
+数据用于以下示例：
+
+CREATE TABLE products type='distributed' local='products' agent='127.0.0.1:9312:products'
+-->
+
 <!-- example Example_2 -->
-支持可选的 LIKE 子句，用于按名称过滤表。
+支持可选的 LIKE 子句用于按名称过滤表。
 
 
 <!-- intro -->
@@ -179,6 +235,41 @@ SHOW TABLES LIKE 'pro%';
 | products | distributed |
 +----------+-------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLES LIKE 'pro%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "products",
+        "Type": "distributed"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request PHP -->
@@ -302,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句中字段和属性的预期顺序相匹配。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列的类型为 `bigint`。示例：
+`DESCRIBE` 语句列出表的列及其对应类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句中字段和属性的预期顺序相匹配。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列类型为 `bigint`。示例：
 
 ```sql
 mysql> DESC rt;
@@ -317,13 +408,20 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-支持可选的 LIKE 子句。语法详情请参阅
-[SHOW META](Node_info_and_management/SHOW_META.md)。
+支持可选的 LIKE 子句。具体语法详情请参见
+[SHOW META](Node_info_and_management/SHOW_META.md) 。
 
 ### SELECT FROM name.@table
 
+<!--
+数据用于以下示例：
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
+--> 
+
 <!-- example name_table -->
-你也可以通过执行查询 `select * from <table_name>.@table` 来查看表结构。此方法的好处是可以使用 `WHERE` 子句进行过滤：
+也可以通过执行查询 `select * from <table_name>.@table` 来查看表的架构。该方法的优点是可以使用 `WHERE` 子句进行过滤：
 
 <!-- request SQL -->
 ```sql
@@ -340,11 +438,29 @@ select * from tbl.@table where type='text';
 1 row in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+```sql
+POST /sql?mode=raw -d "select * from tbl.@table where type='text';"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"id":{"type":"long long"}},{"field":{"type":"string"}},{"type":{"type":"string"}},{"properties":{"type":"string"}}],
+"data":[
+{"id":2,"field":"title","type":"text","properties":"indexed stored"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 <!-- example name_table2 -->
 
-你还可以对 `<your_table_name>.@table` 执行许多其他操作，将其视为具有整数和字符串属性列的常规 Manticore 表。
+你还可以对 `<your_table_name>.@table` 执行许多其他操作，将其视作一个具有整数和字符串属性列的常规 Manticore 表。
 
 <!-- request SQL -->
 
@@ -381,11 +497,33 @@ f text indexed stored
 ) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl;"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"Table":{"type":"string"}},{"Create Table":{"type":"string"}}],
+"data":[
+{"Table":"tbl","Create Table":"CREATE TABLE tbl (\nf text)"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 ### Percolate 表结构
 
-如果你对 percolate 表使用 `DESC` 语句，它将显示外部表结构，即存储查询的结构。此结构是静态的，所有本地 percolate 表相同：
+如果对 percolate 表使用 `DESC` 语句，它将显示外部表结构，即存储查询的结构。该结构是静态的，所有本地 percolate 表相同：
 
 ```sql
 mysql> DESC pq;
@@ -415,7 +553,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-同时支持 `desc pq table like ...`，其工作方式如下：
+还支持 `desc pq table like ...`，其工作方式如下：
 
 ```sql
 mysql> desc pq table like '%title%';

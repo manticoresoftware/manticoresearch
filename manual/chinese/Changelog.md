@@ -2,45 +2,46 @@
 
 ## 版本 14.1.0
 
-**发布于**：2025年11月7日
+**发布**：2025年11月7日
 
-❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 在 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 中的工作——解决了关于 `HAVING` 总计数和 `filter with empty name` 错误的问题——以及感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 的贡献，改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
+❤️ 我们衷心感谢 [@ricardopintottrdata](https://github.com/ricardopintottrdata) 对 [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) 和 [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 的贡献 —— 解决了关于 `HAVING` 总数统计和 `filter with empty name` 错误的问题 —— 以及感谢 [@jdelStrother](https://github.com/jdelStrother) 通过 [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) 的贡献，改进了在没有 Jieba 支持时对 `ParseCJKSegmentation` 的处理。
 
-你们的努力让项目更加强大——非常感谢！
+您的努力使项目更加强大 —— 非常感谢！
 
-### 推荐库
+### 推荐的库
 - 推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.1.0
 - 推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.37.0
 
-如果你遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此事。
+如果您遵循官方的[安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
 
-### ⚠️ 重要
-版本 [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.0) 更新了复制协议。如果你正在运行复制集群，需要：
-  - 首先，干净地停止所有节点
-  - 然后，使用 Linux 下的工具 `manticore_new_cluster`，以 `--new-cluster` 参数启动最后停止的节点。
-  - 详细信息请阅读关于 [重启集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) 的内容。
+### ⚠️ 重要通知
+版本 [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.0) 更新了复制协议。如果您正在运行复制集群，您需要：
+  - 先干净地停止所有节点
+  - 然后，使用 Linux 下的工具 `manticore_new_cluster` 以 `--new-cluster` 参数启动最后停止的节点。
+  - 更多详情请阅读关于 [重新启动集群](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) 的内容。
 
-### 新功能和改进
-* 🆕 [v14.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.1.0) [ Issue #3047](https://github.com/manticoresoftware/manticoresearch/issues/3047) 增加了对 mysqldump 生成的 `LOCK TABLES` 语句的支持，提高逻辑备份的安全性。
-* ⚠️ [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.0) [ PR #3896](https://github.com/manticoresoftware/manticoresearch/pull/3896) 为复制 SST 中的捐赠者和加入者节点添加了 [进度计量器](../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md#SST-Progress-Metrics)，显示在 SHOW STATUS 中。
-* 🆕 [v13.16.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.16.0) [ PR #3894](https://github.com/manticoresoftware/manticoresearch/pull/3894) 将 buddy 从 3.36.1 更新到 3.37.0，新增了“quorum”选项。
-* 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [ PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) 为模糊和自动完成插件添加了 [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling) 选项。
+### 新功能与改进
+* 🆕 [v14.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.1.0) [问题 #3047](https://github.com/manticoresoftware/manticoresearch/issues/3047) 新增支持 mysqldump 生成的 `LOCK TABLES` 语句，提升逻辑备份的安全性。
+* ⚠️ [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.0) [PR #3896](https://github.com/manticoresoftware/manticoresearch/pull/3896) 在 SHOW STATUS 中为复制 SST 的捐赠者和加入者节点增加了[进度计量器](../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md#SST-Progress-Metrics)。
+* 🆕 [v13.16.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.16.0) [PR #3894](https://github.com/manticoresoftware/manticoresearch/pull/3894) 将 buddy 从 3.36.1 更新到 3.37.0，新增了 "quorum" 选项。
+* 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) 为 fuzzy 和 autocomplete 插件添加了 [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling) 选项。
 
 ### Bug 修复
-* 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [ Issue #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) 修复了使用 `max(ft field)` 导致的崩溃。
-* 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [ PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 修复了使用空过滤器名称时的错误。
-* 🪲 [v13.15.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.12) [ PR #3873](https://github.com/manticoresoftware/manticoresearch/pull/3873) 将 buddy 从 3.36.0 更新到 3.36.1，增加了 EmulateElastic 插件中的 RT 模式检查。
-* 🪲 [v13.15.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.11) [ PR #3857](https://github.com/manticoresoftware/manticoresearch/pull/3857) 添加了对 Filebeat 9.2 版本的测试。
-* 🪲 [v13.15.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.10) [ PR #3880](https://github.com/manticoresoftware/manticoresearch/pull/3880) 修复后测试了自动文档翻译。
-* 🪲 [v13.15.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.9) [ Issue #3783](https://github.com/manticoresoftware/manticoresearch/issues/3783) 修复了阻止本地 FreeBSD 编译的问题。
-* 🪲 [v13.15.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.8) 修复了文档翻译。
-* 🪲 [v13.15.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.7) [ PR #3868](https://github.com/manticoresoftware/manticoresearch/pull/3868) 将 executor 从 1.3.5 更新到 1.3.6，增加了对 iconv 扩展的支持。
-* 🪲 [v13.15.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.6) 修复了与 [issue 3817](https://github.com/manticoresoftware/manticoresearch/issues/3817) 相关的模糊测试构建问题。
-* 🪲 [v13.15.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.5) [ Issue #3644](https://github.com/manticoresoftware/manticoresearch/issues/3644) 修复了由特定全文查询导致的崩溃。
-* 🪲 [v13.15.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.4) [ Issue #3686](https://github.com/manticoresoftware/manticoresearch/issues/3686) 修复了全文查询 `"(abc|def)"` 无法正常工作的情况。
-* 🪲 [v13.15.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.3) [ Issue #3428](https://github.com/manticoresoftware/manticoresearch/issues/3428) 增加了使用 `HAVING` 查询时获取结果总数的功能。
-* 🪲 [v13.15.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.2) [ Issue #3817](https://github.com/manticoresoftware/manticoresearch/issues/3817) 增加了选项 [searchd.expansion_phrase_warning](../Server_settings/Searchd.md#expansion_phrase_warning)。
-* 🪲 [v13.15.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.1) [ PR #3848](https://github.com/manticoresoftware/manticoresearch/pull/3848) 修复了复制事务密钥生成和冲突事务处理。
+* 🪲 [问题 #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) 新增对 Grafana 版本 12.3 的测试。
+* 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [问题 #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) 修复使用 `max(ft field)` 时导致的崩溃。
+* 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 修复使用空过滤器名称时的错误。
+* 🪲 [v13.15.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.12) [PR #3873](https://github.com/manticoresoftware/manticoresearch/pull/3873) 将 buddy 从 3.36.0 更新到 3.36.1，包含 EmulateElastic 插件中的 RT 模式检查。
+* 🪲 [v13.15.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.11) [PR #3857](https://github.com/manticoresoftware/manticoresearch/pull/3857) 增加对 Filebeat 版本 9.2 的测试。
+* 🪲 [v13.15.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.10) [PR #3880](https://github.com/manticoresoftware/manticoresearch/pull/3880) 修复后测试自动文档翻译。
+* 🪲 [v13.15.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.9) [问题 #3783](https://github.com/manticoresoftware/manticoresearch/issues/3783) 修复阻碍原生 FreeBSD 编译的问题。
+* 🪲 [v13.15.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.8) 修正文档翻译。
+* 🪲 [v13.15.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.7) [PR #3868](https://github.com/manticoresoftware/manticoresearch/pull/3868) 将 executor 从 1.3.5 更新到 1.3.6，新增对 iconv 扩展的支持。
+* 🪲 [v13.15.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.6) 修复与[问题 3817](https://github.com/manticoresoftware/manticoresearch/issues/3817)相关的模糊测试构建问题。
+* 🪲 [v13.15.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.5) [问题 #3644](https://github.com/manticoresoftware/manticoresearch/issues/3644) 修复由特定全文查询导致的崩溃。
+* 🪲 [v13.15.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.4) [问题 #3686](https://github.com/manticoresoftware/manticoresearch/issues/3686) 修复全文查询 `"(abc|def)"` 不按预期工作的情况。
+* 🪲 [v13.15.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.3) [问题 #3428](https://github.com/manticoresoftware/manticoresearch/issues/3428) 新增支持获取使用 `HAVING` 查询的结果总数。
+* 🪲 [v13.15.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.2) [问题 #3817](https://github.com/manticoresoftware/manticoresearch/issues/3817) 新增选项 [searchd.expansion_phrase_warning](../Server_settings/Searchd.md#expansion_phrase_warning)。
+* 🪲 [v13.15.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.1) [PR #3848](https://github.com/manticoresoftware/manticoresearch/pull/3848) 修复复制事务键生成和冲突事务处理。
 * 🪲 [v13.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.14.0) [ Issue #3806](https://github.com/manticoresoftware/manticoresearch/issues/3806) 修复了 `CALL SUGGEST` 无法匹配三元组的问题。
 * 🪲 [v13.13.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.8) [ PR #3839](https://github.com/manticoresoftware/manticoresearch/pull/3839) 将 buddy 从 3.35.4 更新到 3.35.5，以修正 SQL 查询中匹配连接的正则表达式。
 * 🪲 [v13.13.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.7) [ Issue #3815](https://github.com/manticoresoftware/manticoresearch/issues/3815) 将 buddy 从 3.35.3 更新到 3.35.4，修复 REPLACE 中负 ID 的问题。

@@ -1543,13 +1543,15 @@ bool QueueCreator_c::AddKNNDistColumn()
 	m_pSorterSchema->AddAttr ( tKNNDist, true );
 	m_hQueryColumns.Add ( tKNNDist.m_sName );
 
-	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
-	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
-	tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+	if ( tKNN.m_bRescore )
+	{
+		CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
+		tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
+		tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
 
-	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
-	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
-
+		m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
+		m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
+	}
 
 	return true;
 }

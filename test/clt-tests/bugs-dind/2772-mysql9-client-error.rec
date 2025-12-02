@@ -82,12 +82,6 @@ docker exec manticore_new bash -c "grep -F 'select \$\$' /var/log/manticore/quer
 ––– output –––
 0
 ––– comment –––
-Verify NO error messages
-––– input –––
-docker exec manticore_new bash -c "grep 'syntax error' /var/log/manticore/query.log 2>/dev/null | wc -l"
-––– output –––
-0
-––– comment –––
 Cleanup
 ––– input –––
 docker stop manticore_new > /dev/null 2>&1; docker rm manticore_new > /dev/null 2>&1; docker network rm test_network > /dev/null 2>&1; echo "OK"

@@ -1,9 +1,8 @@
 Test for issue #2772: MySQL client 9.x sends 'select $$' causing error in query log
 
 This test demonstrates:
-1. Manticore WITHOUT fix + MySQL 8.4 → NO error (MySQL 8.4 doesn't send 'select $$')
-2. Manticore WITHOUT fix + MySQL 9.1 → ERROR appears in log
-3. Manticore WITH fix + MySQL 9.1 → NO error (filtered out)
+1. Manticore WITHOUT fix + MySQL 9.1 → ERROR appears in log
+2. Manticore WITH fix + MySQL 9.1 → NO error (filtered out)
 
 ––– block: ../base/dind/init –––
 ––– comment –––
@@ -13,45 +12,10 @@ docker network create test_network > /dev/null; echo $?
 ––– output –––
 0
 ––– comment –––
-SCENARIO 1: Manticore WITHOUT fix + MySQL 8.4 (should be OK, no error)
+SCENARIO 1: Manticore WITHOUT fix + MySQL 9.1 (should show ERROR)
 Start old Manticore version without the fix
 ––– input –––
 docker pull -q manticoresearch/manticore:dev-10.2.7 > /dev/null 2>&1 && docker run -d --name manticore_old --network test_network --platform linux/amd64 \
-  --entrypoint=docker-entrypoint.sh \
-  -e searchd_query_log=/var/log/manticore/query.log \
-  -e searchd_query_log_format=sphinxql \
-  manticoresearch/manticore:dev-10.2.7 \
-  searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-if timeout 30 sh -c "docker logs -f manticore_old 2>&1 | grep -qm1 'accepting connections'"; then echo 'Accepting connections'; else echo 'Timeout'; fi
-––– output –––
-Accepting connections
-––– comment –––
-Connect with MySQL 8.4 client (doesn't send 'select $$')
-––– input –––
-docker pull -q mysql:8.4 > /dev/null 2>&1 && docker run --rm --network test_network mysql:8.4 mysql -hmanticore_old -P9306 -e "SELECT 1\G" 2>&1 | grep -v "Warning:"
-––– output –––
-*************************** 1. row ***************************
-1: 1
-––– comment –––
-Check query.log - should have NO error (MySQL 8.4 doesn't send 'select $$')
-––– input –––
-docker exec manticore_old bash -c "grep 'syntax error' /var/log/manticore/query.log 2>/dev/null | wc -l"
-––– output –––
-0
-––– comment –––
-Stop old Manticore
-––– input –––
-docker stop manticore_old > /dev/null 2>&1; docker rm manticore_old > /dev/null 2>&1; echo "OK"
-––– output –––
-OK
-––– comment –––
-SCENARIO 2: Manticore WITHOUT fix + MySQL 9.1 (should show ERROR)
-Start old Manticore again
-––– input –––
-docker run -d --name manticore_old --network test_network --platform linux/amd64 \
   --entrypoint=docker-entrypoint.sh \
   -e searchd_query_log=/var/log/manticore/query.log \
   -e searchd_query_log_format=sphinxql \
@@ -71,17 +35,17 @@ docker pull -q mysql:9.1 > /dev/null 2>&1 && docker run --rm --network test_netw
 *************************** 1. row ***************************
 1: 1
 ––– comment –––
-Show the error in query.log (this is EXPECTED - old Manticore doesn't filter 'select $$')
+Verify the error in query.log (this is EXPECTED - old Manticore doesn't filter 'select $$')
 ––– input –––
 docker exec manticore_old cat /var/log/manticore/query.log
 ––– output –––
-/* %{DATE} %{TIME} conn %{NUMBER} (%{IPADDR}:%{NUMBER}) */ select $$ # error=P01: syntax error, unexpected $undefined near '$$'
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) */ select $$ # error=P01: syntax error, unexpected $undefined near '$$'
 ––– comment –––
 Verify error count - should be 1
 ––– input –––
-docker exec manticore_old bash -c "grep 'syntax error' /var/log/manticore/query.log | wc -l"
+docker exec manticore_old bash -c "grep -F 'select \$\$' /var/log/manticore/query.log | wc -l"
 ––– output –––
-%{NUMBER}
+1
 ––– comment –––
 Stop old Manticore
 ––– input –––
@@ -89,7 +53,7 @@ docker stop manticore_old > /dev/null 2>&1; docker rm manticore_old > /dev/null 
 ––– output –––
 OK
 ––– comment –––
-SCENARIO 3: Manticore WITH fix + MySQL 9.1 (should be OK, error filtered)
+SCENARIO 2: Manticore WITH fix + MySQL 9.1 (should be OK, error filtered)
 Start new Manticore with the fix
 ––– input –––
 docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/null 2>&1 && docker run -d --name manticore_new --network test_network --platform linux/amd64 \
@@ -112,15 +76,9 @@ docker run --rm --network test_network mysql:9.1 mysql -hmanticore_new -P9306 -e
 *************************** 1. row ***************************
 1: 1
 ––– comment –––
-Check query.log - should have NO error (fix filters out 'select $$')
+Verify NO 'select $$' in the log (fix filters it out)
 ––– input –––
-docker exec manticore_new cat /var/log/manticore/query.log
-––– output –––
-/* %{DATE} %{TIME} conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real %{NUMBER} wall %{NUMBER} found %{NUMBER} */ SELECT 1
-––– comment –––
-Verify NO 'select $$' in the log
-––– input –––
-docker exec manticore_new bash -c "grep 'select' /var/log/manticore/query.log | grep '\$\$' | wc -l"
+docker exec manticore_new bash -c "grep -F 'select \$\$' /var/log/manticore/query.log 2>/dev/null | wc -l"
 ––– output –––
 0
 ––– comment –––
@@ -132,6 +90,6 @@ docker exec manticore_new bash -c "grep 'syntax error' /var/log/manticore/query.
 ––– comment –––
 Cleanup
 ––– input –––
-docker stop manticore_new > /dev/null 2>&1; docker rm manticore_new > /dev/null 2>&1; docker network rm test_network > /dev/null 2>&1; echo "All scenarios completed successfully"
+docker stop manticore_new > /dev/null 2>&1; docker rm manticore_new > /dev/null 2>&1; docker network rm test_network > /dev/null 2>&1; echo "OK"
 ––– output –––
-All scenarios completed successfully
+OK

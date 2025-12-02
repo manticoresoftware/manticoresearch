@@ -12,7 +12,9 @@ mysql -h0 -P9306 -e "CREATE TABLE buddy_test (id INT, name STRING, content TEXT)
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS" > /dev/null
-sleep 0.1; grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
 #!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"body":"SHOW BUDDY PLUGINS".*/!#
 ––– input –––
@@ -25,7 +27,9 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s "http://localhost:9308/cli_json?SHOW%20VERSION" > /dev/null
-sleep 0.1; grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
 #!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/cli_json.*"body":"SHOW VERSION".*/!#
 ––– input –––
@@ -46,7 +50,9 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s "http://localhost:9308/cli_json?SHOW%20FULL%20TABLES" > /dev/null
-sleep 0.1; grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
 #!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/cli_json.*"body":"SHOW FULL TABLES".*/!#
 ––– input –––
@@ -72,7 +78,9 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s "http://localhost:9308/cli_json?INSERT%20INTO%20auto_buddy_table%20(id,%20name)%20VALUES%20(1,%20'auto_test')" > /dev/null
-sleep 0.1; grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "Request has version 3 OK" || echo "Wrong version"
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "Request has version 3 OK" || echo "Wrong version"
 ––– output –––
 Request has version 3 OK
 ––– input –––
@@ -85,7 +93,9 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s "http://localhost:9308/cli?SHOW%20TABLES" > /dev/null
-sleep 0.1; grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
 #!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/cli.*"body":"SHOW TABLES".*/!#
 ––– input –––
@@ -98,7 +108,9 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "SHOW VERSION" > /dev/null
-sleep 0.1; grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
 #!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/sql".*"body":"SHOW VERSION".*/!#
 ––– input –––

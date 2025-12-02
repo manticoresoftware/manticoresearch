@@ -96,9 +96,6 @@ docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "INSERT INTO products (ti
     exit 1
 }
 
-# Wait a bit for table to be ready
-sleep 1
-
 # Verify information_schema.tables returns correct data
 TABLE_CHECK=$(docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='products'" 2>&1 | sed -n '2p' | tr -cd '0-9')
 if [ "$TABLE_CHECK" -ge "1" ]; then

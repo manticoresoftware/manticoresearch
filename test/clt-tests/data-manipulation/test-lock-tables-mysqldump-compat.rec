@@ -1,0 +1,96 @@
+# Test LOCK TABLES compatibility with mysqldump
+# Ensures mysqldump can create a dump and restore it correctly
+# Issue: https://github.com/manticoresoftware/manticoresearch/issues/3047
+
+––– block: ../base/start-searchd –––
+––– comment –––
+Create test table with sample data
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_dump; CREATE TABLE test_dump (id BIGINT, name TEXT, value INTEGER);"
+––– output –––
+––– comment –––
+Insert sample data
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_dump VALUES (1, 'first', 100), (2, 'second', 200), (3, 'third', 300);"
+––– output –––
+––– comment –––
+Verify initial data
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+Check if mysqldump is available
+––– input –––
+which mysqldump
+––– output –––
+#!/.*mysqldump/!#
+––– comment –––
+Create a dump of the table using mysqldump with --skip-lock-tables
+––– input –––
+mysqldump -h0 -P9306 --no-tablespaces --skip-lock-tables --compact manticore test_dump > /tmp/test_dump.sql 2>&1
+echo "Dump created"
+––– output –––
+Dump created
+––– comment –––
+Drop the original table
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE test_dump;"
+––– output –––
+––– comment –––
+Restore the table from the dump
+––– input –––
+mysql -h0 -P9306 < /tmp/test_dump.sql 2>&1
+echo "Table restored"
+––– output –––
+Table restored
+––– comment –––
+Verify the restored data matches original
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+Verify specific data values
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_dump WHERE id = 1;"
+––– output –––
++------+-------+-------+
+| id   | name  | value |
++------+-------+-------+
+|    1 | first |   100 |
++------+-------+-------+
+––– comment –––
+Test batch operations with LOCK/UNLOCK (typical restore scenario)
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES test_dump WRITE;
+INSERT INTO test_dump VALUES (4, 'fourth', 400);
+INSERT INTO test_dump VALUES (5, 'fifth', 500);
+UNLOCK TABLES;
+EOF
+––– output –––
+––– comment –––
+Verify batch operations worked
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+
+––– comment –––
+Cleanup
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_dump;"
+rm -f /tmp/test_dump.sql
+––– output –––

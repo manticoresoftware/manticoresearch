@@ -1,0 +1,138 @@
+# Test LOCK TABLES with replicated tables (cluster:table syntax)
+# Tests mysqldump behavior on replicated tables according to documentation:
+# 1. LOCK TABLES cluster:table fails (replicated tables don't support locks)
+# 2. mysqldump WITHOUT --skip-lock-tables fails with LOCK error
+# 3. mysqldump WITH --skip-lock-tables works (recommended way per docs)
+# 4. Regular tables work correctly with LOCK TABLES and mysqldump
+
+––– block: ../base/start-searchd –––
+––– comment –––
+Delete cluster if exists from previous tests
+––– input –––
+mysql -h0 -P9306 -e "DELETE CLUSTER test_cluster;" 2>&1 || echo "Cluster doesn't exist yet"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown cluster 'test_cluster'
+Cluster doesn't exist yet
+––– comment –––
+Create replication cluster
+––– input –––
+mysql -h0 -P9306 -e "CREATE CLUSTER test_cluster;"
+––– output –––
+––– comment –––
+Create table for replication
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS repl_table; CREATE TABLE repl_table (id BIGINT, data TEXT);"
+––– output –––
+––– comment –––
+Add table to cluster (makes it replicated)
+––– input –––
+mysql -h0 -P9306 -e "ALTER CLUSTER test_cluster ADD repl_table;"
+––– output –––
+––– comment –––
+Insert test data into replicated table using cluster:table syntax
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_cluster:repl_table (id, data) VALUES (1, 'replicated_data');"
+––– output –––
+––– comment –––
+Verify data was inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_cluster:repl_table;"
+––– output –––
++------+-----------------+
+| id   | data            |
++------+-----------------+
+|    1 | replicated_data |
++------+-----------------+
+––– comment –––
+BUG TEST: Try to LOCK cluster:table (expected to fail)
+This is the core bug - replicated tables don't support LOCK TABLES
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_cluster:repl_table READ;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: Table test_cluster:repl_table absent, or not suitable for lock
+––– comment –––
+Release lock if it was somehow acquired
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;" 2>&1
+––– output –––
+––– comment –––
+Check if mysqldump is available
+––– input –––
+which mysqldump
+––– output –––
+#!/.*/mysqldump/!#
+––– comment –––
+Test mysqldump on cluster:table WITHOUT --skip-lock-tables (should fail with LOCK error)
+––– input –––
+mysqldump -h0 -P9306 -ucluster --no-tablespaces -t manticore test_cluster:repl_table 2>&1 | grep "Got error"
+––– output –––
+mysqldump: Got error: 1064: Table test_cluster:repl_table absent, or not suitable for lock when doing LOCK TABLES
+––– comment –––
+Test mysqldump WITH --skip-lock-tables (should work according to docs)
+Required flags: -ucluster, -t, --skip-lock-tables
+––– input –––
+mysqldump -h0 -P9306 -ucluster --no-tablespaces --skip-lock-tables -t --compact manticore test_cluster:repl_table 2>&1 | grep "INSERT INTO"
+––– output –––
+INSERT INTO `test_cluster:repl_table` VALUES ('1','replicated_data');
+––– comment –––
+Test regular (non-replicated) table for comparison
+Create regular table
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS regular_table; CREATE TABLE regular_table (id BIGINT, data TEXT);"
+––– output –––
+––– comment –––
+Insert data into regular table
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO regular_table VALUES (1, 'regular_data');"
+––– output –––
+––– comment –––
+Lock regular table (should work fine unlike cluster:table)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES regular_table READ;"
+––– output –––
+––– comment –––
+Verify regular table can be read under lock
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM regular_table;"
+––– output –––
++------+--------------+
+| id   | data         |
++------+--------------+
+|    1 | regular_data |
++------+--------------+
+––– comment –––
+Release lock on regular table
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Verify mysqldump works on regular table (should include INSERT statement)
+––– input –––
+mysqldump -h0 -P9306 --no-tablespaces --compact manticore regular_table 2>&1 | grep -E "INSERT" | head -1
+––– output –––
+INSERT INTO `regular_table` VALUES ('1','regular_data');
+––– comment –––
+Test SHOW LOCKS with regular table (must be in same session)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES regular_table READ; SHOW LOCKS; UNLOCK TABLES;"
+––– output –––
++------+---------------+-----------+-----------------+
+| Type | Name          | Lock Type | Additional Info |
++------+---------------+-----------+-----------------+
+| rt   | regular_table | read      | Count: 1        |
++------+---------------+-----------+-----------------+
+––– comment –––
+Cleanup - remove table from cluster first
+––– input –––
+mysql -h0 -P9306 -e "ALTER CLUSTER test_cluster DROP repl_table;" 2>&1 || echo "Already removed"
+––– output –––
+––– comment –––
+Delete cluster
+––– input –––
+mysql -h0 -P9306 -e "DELETE CLUSTER test_cluster;" 2>&1
+––– output –––
+––– comment –––
+Drop tables
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS repl_table; DROP TABLE IF EXISTS regular_table;"
+––– output –––

@@ -65,6 +65,11 @@ Testing version: mysql:5.6
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:5.6 completed successfully
+Testing cluster:table with mysql:5.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:5.7
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -91,6 +96,11 @@ Testing version: mysql:5.7
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:5.7 completed successfully
+Testing cluster:table with mysql:5.7...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -117,6 +127,11 @@ Testing version: mysql:8.0
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:8.0 completed successfully
+Testing cluster:table with mysql:8.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -143,6 +158,11 @@ Testing version: mysql:8.2
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:8.2 completed successfully
+Testing cluster:table with mysql:8.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.3
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -169,6 +189,11 @@ Testing version: mysql:8.3
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:8.3 completed successfully
+Testing cluster:table with mysql:8.3...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -195,6 +220,11 @@ Testing version: mysql:8.4
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:8.4 completed successfully
+Testing cluster:table with mysql:8.4...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -221,6 +251,11 @@ Testing version: mysql:9.0
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:9.0 completed successfully
+Testing cluster:table with mysql:9.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.1
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -247,6 +282,11 @@ Testing version: mysql:9.1
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:9.1 completed successfully
+Testing cluster:table with mysql:9.1...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -273,6 +313,11 @@ Testing version: mysql:9.2
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:9.2 completed successfully
+Testing cluster:table with mysql:9.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.3
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -299,6 +344,11 @@ Testing version: mysql:9.3
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:9.3 completed successfully
+Testing cluster:table with mysql:9.3...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -325,6 +375,11 @@ Testing version: mysql:9.4
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:9.4 completed successfully
+Testing cluster:table with mysql:9.4...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.5
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -351,6 +406,11 @@ Testing version: mysql:9.5
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:9.5 completed successfully
+Testing cluster:table with mysql:9.5...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:latest
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -377,6 +437,11 @@ Testing version: mysql:latest
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mysql:latest completed successfully
+Testing cluster:table with mysql:latest...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 All MySQL versions tested successfully!
 Checking documentation versions...
 Checking documentation file...

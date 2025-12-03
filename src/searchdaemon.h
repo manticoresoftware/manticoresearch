@@ -1399,6 +1399,7 @@ struct HttpReplyTrait_t
 	bool m_bHtml = false;
 	bool m_bHeadReply = false;
 	const char * m_sContentType = nullptr;
+	bool m_bSendHeaders = true;
 };
 
 void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );

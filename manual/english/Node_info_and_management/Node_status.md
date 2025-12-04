@@ -16,12 +16,12 @@ The easiest way to view high-level information about your Manticore node is by r
 * Number of jobs in queue and number of tasks, normalized by the number of threads
 
 <!-- request SQL -->
-```sql
+```mysql
 mysql> status
 ```
 
 <!-- response SQL -->
-```sql
+```mysql
 --------------
 mysql  Ver 14.14 Distrib 5.7.30, for Linux (x86_64) using  EditLine wrapper
 
@@ -151,6 +151,339 @@ SHOW STATUS;
 +-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW STATUS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Counter": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Counter": "uptime",
+        "Value": "107191"
+      },
+      {
+        "Counter": "connections",
+        "Value": "214577"
+      },
+      {
+        "Counter": "maxed_out",
+        "Value": "0"
+      },
+      {
+        "Counter": "version",
+        "Value": "13.13.4 0bc5a9641@25101507 dev (columnar 8.1.0 e1522a2@25100213) (secondary 8.1.0 e1522a2@25100213) (knn 8.1.0 e1522a2@25100213) (embeddings 1.0.1) (buddy v3.35.1+25090418-41d9811f-dev)"
+      },
+      {
+        "Counter": "mysql_version",
+        "Value": "13.13.4 0bc5a9641@25101507 dev (columnar 8.1.0 e1522a2@25100213) (secondary 8.1.0 e1522a2@25100213) (knn 8.1.0 e1522a2@25100213) (embeddings 1.0.1)"
+      },
+      {
+        "Counter": "command_search",
+        "Value": "47"
+      },
+      {
+        "Counter": "command_excerpt",
+        "Value": "3"
+      },
+      {
+        "Counter": "command_update",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_keywords",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_persist",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_status",
+        "Value": "361"
+      },
+      {
+        "Counter": "command_flushattrs",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_sphinxql",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_ping",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_delete",
+        "Value": "1"
+      },
+      {
+        "Counter": "command_set",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_insert",
+        "Value": "13"
+      },
+      {
+        "Counter": "command_replace",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_commit",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_suggest",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_json",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_callpq",
+        "Value": "8"
+      },
+      {
+        "Counter": "command_cluster",
+        "Value": "0"
+      },
+      {
+        "Counter": "command_getfield",
+        "Value": "0"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "agent_connect",
+        "Value": "0"
+      },
+      {
+        "Counter": "agent_tfo",
+        "Value": "0"
+      },
+      {
+        "Counter": "agent_retry",
+        "Value": "0"
+      },
+      {
+        "Counter": "queries",
+        "Value": "44"
+      },
+      {
+        "Counter": "dist_queries",
+        "Value": "0"
+      },
+      {
+        "Counter": "workers_total",
+        "Value": "8"
+      },
+      {
+        "Counter": "workers_active",
+        "Value": "3"
+      },
+      {
+        "Counter": "workers_clients",
+        "Value": "1"
+      },
+      {
+        "Counter": "workers_clients_vip",
+        "Value": "0"
+      },
+      {
+        "Counter": "workers_clients_buddy",
+        "Value": "1"
+      },
+      {
+        "Counter": "work_queue_length",
+        "Value": "8"
+      },
+      {
+        "Counter": "load",
+        "Value": "0.00 0.00 0.00"
+      },
+      {
+        "Counter": "load_primary",
+        "Value": "0.00 0.00 0.00"
+      },
+      {
+        "Counter": "load_secondary",
+        "Value": "0.00 0.00 0.00"
+      },
+      {
+        "Counter": "query_wall",
+        "Value": "0.007"
+      },
+      {
+        "Counter": "query_cpu",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "dist_wall",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "dist_local",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "dist_wait",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "query_reads",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "query_readkb",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "query_readtime",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "avg_query_wall",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "avg_query_cpu",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "avg_dist_wall",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "avg_dist_local",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "avg_dist_wait",
+        "Value": "0.000"
+      },
+      {
+        "Counter": "avg_query_reads",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "avg_query_readkb",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "avg_query_readtime",
+        "Value": "OFF"
+      },
+      {
+        "Counter": "qcache_max_bytes",
+        "Value": "16777216"
+      },
+      {
+        "Counter": "qcache_thresh_msec",
+        "Value": "3000"
+      },
+      {
+        "Counter": "qcache_ttl_sec",
+        "Value": "60"
+      },
+      {
+        "Counter": "qcache_cached_queries",
+        "Value": "0"
+      },
+      {
+        "Counter": "qcache_used_bytes",
+        "Value": "0"
+      },
+      {
+        "Counter": "qcache_hits",
+        "Value": "0"
+      }
+    ],
+    "total": 75,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example show status like -->
@@ -175,6 +508,61 @@ SHOW STATUS LIKE 'qcache%';
 | qcache_used_bytes     | 0     |
 | qcache_hits           | 0     |
 +-----------------------+-------+
+```
+
+<!-- request qcache(JSON) -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW STATUS LIKE 'qcache%'"
+```
+
+<!-- response qcache(JSON) -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Counter": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Counter": "qcache_max_bytes",
+        "Value": "16777216"
+      },
+      {
+        "Counter": "qcache_thresh_msec",
+        "Value": "3000"
+      },
+      {
+        "Counter": "qcache_ttl_sec",
+        "Value": "60"
+      },
+      {
+        "Counter": "qcache_cached_queries",
+        "Value": "0"
+      },
+      {
+        "Counter": "qcache_used_bytes",
+        "Value": "0"
+      },
+      {
+        "Counter": "qcache_hits",
+        "Value": "0"
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request perf_stats -->
@@ -204,6 +592,97 @@ SHOW STATUS LIKE '%stats_ms%';
 | update_stats_ms_pct95         | N/A 0.042 0.042   |
 | update_stats_ms_pct99         | N/A 0.042 0.042   |
 +-------------------------------+-------------------+
+```
+
+<!-- request perf_stats(JSON) -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
+```
+
+<!-- response perf_stats(JSON) -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Counter": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Counter": "insert_replace_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      }
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->
@@ -256,6 +735,97 @@ SHOW STATUS LIKE '%stats_ms%';
 +-------------------------------+-------------------+
 ```
 
+<!-- request perf_stats(JSON) -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
+```
+
+<!-- response perf_stats(JSON) -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Counter": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Counter": "insert_replace_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "insert_replace_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "search_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Counter": "update_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      }
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## SHOW SETTINGS
@@ -296,6 +866,83 @@ SHOW SETTINGS;
 | common.lemmatizer_base   | /usr/share/manticore/morph/         |
 +--------------------------+-------------------------------------+
 13 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW SETTINGS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Setting_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Setting_name": "configuration_file",
+        "Value": "/etc/manticoresearch/manticore.conf.sh"
+      },
+      {
+        "Setting_name": "worker_pid",
+        "Value": 1
+      },
+      {
+        "Setting_name": "searchd.listen",
+        "Value": "9306:mysql41"
+      },
+      {
+        "Setting_name": "searchd.listen",
+        "Value": "/var/run/mysqld/mysqld.sock:mysql41"
+      },
+      {
+        "Setting_name": "searchd.listen",
+        "Value": "9308:http"
+      },
+      {
+        "Setting_name": "searchd.listen",
+        "Value": "172.17.0.2:9312"
+      },
+      {
+        "Setting_name": "searchd.listen",
+        "Value": "172.17.0.2:9315-9325:replication"
+      },
+      {
+        "Setting_name": "searchd.pid_file",
+        "Value": "/run/manticore/searchd.pid"
+      },
+      {
+        "Setting_name": "searchd.data_dir",
+        "Value": "/var/lib/manticore"
+      },
+      {
+        "Setting_name": "searchd.binlog_path",
+        "Value": "/var/lib/manticore/binlog"
+      },
+      {
+        "Setting_name": "common.plugin_dir",
+        "Value": "/usr/local/lib/manticore"
+      }
+    ],
+    "total": 11,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->
@@ -376,6 +1023,43 @@ SHOW AGENT STATUS;
 | ag_1_5periods_msecsperquery        | 230.85                     |
 +------------------------------------+----------------------------+
 50 rows in set (0.01 sec)
+```
+
+```JSON
+POST /sql?mode=raw -d "SHOW AGENT STATUS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Key": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Key": "status_period_seconds",
+        "Value": "60"
+      },
+      {
+        "Key": "status_stored_periods",
+        "Value": "15"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- intro -->
@@ -1045,6 +1729,51 @@ SHOW AGENT STATUS LIKE '%5period%msec%';
 ```
 
 <!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW AGENT STATUS LIKE '%5period%msec%'"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Key": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Key": "ag_0_5periods_msecsperquery",
+        "Value": "234.72"
+      },
+      {
+        "Key": "ag_1_5periods_msecsperquery",
+        "Value": "234.72"
+      },
+      {
+        "Key": "ag_2_5periods_msecsperquery",
+        "Value": "234.72"
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!-- intro -->
 ##### PHP:
 
 <!-- request PHP -->
@@ -1613,6 +2342,91 @@ SHOW AGENT dist_index STATUS;
 | dstindex_1mirror3_is_persistent      | 0                              |
 +--------------------------------------+--------------------------------+
 13 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW AGENT dist_index STATUS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Key": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Key": "dstindex_1_is_ha",
+        "Value": "1"
+      },
+      {
+        "Key": "dstindex_1mirror1_id",
+        "Value": "192.168.0.202:6713:loc"
+      },
+      {
+        "Key": "dstindex_1mirror1_probability_weight",
+        "Value": "0.372864"
+      },
+      {
+        "Key": "dstindex_1mirror1_is_blackhole",
+        "Value": "0"
+      },
+      {
+        "Key": "dstindex_1mirror1_is_persistent",
+        "Value": "0"
+      },
+      {
+        "Key": "dstindex_1mirror2_id",
+        "Value": "192.168.0.202:6714:loc"
+      },
+      {
+        "Key": "dstindex_1mirror2_probability_weight",
+        "Value": "0.3746350"
+      },
+      {
+        "Key": "dstindex_1mirror2_is_blackhole",
+        "Value": "0"
+      },
+      {
+        "Key": "dstindex_1mirror2_is_persistent",
+        "Value": "0"
+      },
+      {
+        "Key": "dstindex_1mirror3_id",
+        "Value": "dev1.manticoresearch.com:6714:loc"
+      },
+      {
+        "Key": "dstindex_1mirror3_probability_weight",
+        "Value": "0.252501"
+      },
+      {
+        "Key": "dstindex_1mirror3_is_blackhole",
+        "Value": "0"
+      },
+      {
+        "Key": "dstindex_1mirror3_is_persistent",
+        "Value": "0"
+      }
+    ],
+    "total": 13,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- intro -->

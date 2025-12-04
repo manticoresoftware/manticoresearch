@@ -2569,6 +2569,25 @@ CREATE TABLE products_all_fields (
 );
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+```
+
+Using OpenAI model (requires API_KEY parameter)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>')"
+```
+
+Using all text fields for embeddings (FROM is empty)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+```
+
 <!-- end -->
 
 #### FROM parameter usage

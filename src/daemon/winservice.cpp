@@ -26,6 +26,7 @@ bool WinService () noexcept
 #include "searchdaemon.h"
 
 #include "winsvc.h"
+#include <shellapi.h>
 
 
 static bool				g_bServiceStop 	= false;
@@ -299,6 +300,7 @@ void WinSetConsoleCtrlHandler () noexcept
 }
 
 static StrVec_t g_dArgs;
+static CSphVector<char *> g_dArgPtrs;
 
 bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunction )
 {
@@ -335,9 +337,33 @@ bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunctio
 	return true;
 }
 
-void SetupWinService ( int argc, char ** argv )
+// when windows service starts it does not pass cli arguments
+// lets get full cli from OS
+static void GetArgs ( StrVec_t & dArgs )
 {
-	CSphVector<char *> dArgs;
+	LPWSTR pCli = GetCommandLineW();
+	int iArgc = 0;
+	LPWSTR * pArgv = CommandLineToArgvW ( pCli, &iArgc );
+	if ( pArgv )
+	{
+		// wide-char arguments > multibyte
+		dArgs.Resize ( iArgc );
+		for ( int i=0; i<iArgc; i++ )
+		{
+			int iSize = WideCharToMultiByte ( CP_UTF8, 0, pArgv[i], -1, nullptr, 0, nullptr, nullptr );
+			if ( iSize>0 )
+			{
+				CSphString & sArg = dArgs[i];
+				sArg.Reserve ( iSize );
+				WideCharToMultiByte ( CP_UTF8, 0, pArgv[i], -1, (char *)sArg.cstr(), iSize, nullptr, nullptr );
+			}
+		}
+		LocalFree ( pArgv );
+	}
+}
+
+void SetupWinService ( int& argc, char **& argv )
+{
 	if ( WinService() )
 	{
 		g_ssHandle = RegisterServiceCtrlHandler ( g_sServiceName, ServiceControl );
@@ -349,12 +375,13 @@ void SetupWinService ( int argc, char ** argv )
 
 		if ( argc <= 1 )
 		{
-			dArgs.Resize ( g_dArgs.GetLength() );
+			GetArgs ( g_dArgs );
+			g_dArgPtrs.Resize ( g_dArgs.GetLength() );
 			ARRAY_FOREACH ( i, g_dArgs )
-				dArgs[i] = (char *) g_dArgs[i].cstr();
+				g_dArgPtrs[i] = (char *) g_dArgs[i].cstr();
 
 			argc = g_dArgs.GetLength();
-			argv = &dArgs[0];
+			argv = &g_dArgPtrs[0];
 		}
 	}
 

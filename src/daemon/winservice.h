@@ -29,7 +29,7 @@ void EventLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf );
 
 bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunction );
 
-void SetupWinService ( int argc, char ** argv );
+void SetupWinService ( int& argc, char **& argv );
 
 void SetWinServiceStopped ();
 

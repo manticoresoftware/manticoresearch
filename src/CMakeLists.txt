@@ -333,7 +333,7 @@ INSTALL ( TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT 
 if (NOT STATIC_BINARY)
 	INSTALL ( TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT tools )
 	INSTALL ( TARGETS index_converter RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT converter )
-	INSTALL ( FILES sphinxudf.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manticore COMPONENT devel )
+	INSTALL ( FILES sphinxudf.h udfexample.c DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manticore COMPONENT devel )
 endif ()
 
 # install windows runtime libraries - for final targets, and also for immediate testing

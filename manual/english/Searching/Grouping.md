@@ -82,7 +82,7 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year FROM films GROUP BY release_year LIMIT 5;"
+POST /sql?mode=raw -d "SELECT release_year FROM films GROUP BY release_year LIMIT 5"
 ```
 <!-- response JSON -->
 ```JSON
@@ -566,7 +566,7 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5;"
+POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
 ```
 <!-- response JSON -->
 ```JSON
@@ -661,7 +661,7 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5;"
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5"
 ```
 <!-- response JSON -->
 ```JSON
@@ -855,7 +855,7 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6;"
+POST /sql?mode=raw -d "SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6"
 ```
 <!-- response JSON -->
 ```JSON
@@ -940,7 +940,7 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5;"
+POST /sql?mode=raw -d "SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1024,7 +1024,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3;"
+POST /sql?mode=raw -d "SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1098,7 +1098,7 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002);"
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002)"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1895,7 +1895,7 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major;"
+POST /sql?mode=raw - d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
 ```
 <!-- response JSON -->
 ```JSON
@@ -2053,7 +2053,7 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg FROM films GROUP BY release_year ORDER BY year asc LIMIT 5;"
+POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg FROM films GROUP BY release_year ORDER BY year asc LIMIT 5"
 ```
 <!-- response JSON -->
 ```JSON
@@ -2186,7 +2186,7 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5;"
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5"
 [
   {
     "columns": [

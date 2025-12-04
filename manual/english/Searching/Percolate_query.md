@@ -2321,7 +2321,7 @@ CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);"
+POST /sql?mode=raw -d "CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs)"
 ```
 <!-- response JSON -->
 
@@ -2420,11 +2420,11 @@ JSON:
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));"
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'))"
 
-POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));"
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));
 
-POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);"
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json)"
 ```
 <!-- response JSON -->
 

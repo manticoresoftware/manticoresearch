@@ -83,8 +83,7 @@ show meta;
 <!-- request JSON -->
 
 ```JSON
-SELECT id, story_author FROM hn_small WHERE MATCH('one|two|three') and comment_ranking > 2 limit 5;
-show meta;
+POST /sql?mode=raw -d "SELECT id, story_author FROM hn_small WHERE MATCH('one|two|three') and comment_ranking > 2 limit 5; SHOW META"
 ```
 
 <!-- response JSON -->
@@ -290,7 +289,7 @@ SHOW META;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT id,channel_id FROM records WHERE MATCH('one|two|three') limit 5; SHOW META;"
+POST /sql?mode=raw -d "SELECT id,channel_id FROM records WHERE MATCH('one|two|three') limit 5; SHOW META"
 ```
 
 <!-- response JSON -->
@@ -536,7 +535,7 @@ mysql> show meta;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100; SHOW META;"
+POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100; SHOW META"
 ```
 
 <!-- response JSON -->
@@ -736,7 +735,7 @@ SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW 
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW META;"
+POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW META"
 ```
 
 <!-- response JSON -->
@@ -888,7 +887,7 @@ SHOW META LIKE 'total%';
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW META LIKE 'total%';"
+POST /sql?mode=raw -d "SHOW META LIKE 'total%'"
 ```
 
 <!-- response JSON -->
@@ -999,7 +998,7 @@ SHOW META LIKE 'multiplier';
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier';"
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier'"
 ```
 
 <!-- response JSON -->
@@ -1161,7 +1160,7 @@ SHOW META;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT count(*) FROM taxi1 WHERE tip_amount = 5; SHOW META;"
+POST /sql?mode=raw -d "SELECT count(*) FROM taxi1 WHERE tip_amount = 5; SHOW META"
 ```
 
 <!-- response JSON -->

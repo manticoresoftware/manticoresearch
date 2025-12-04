@@ -34,7 +34,7 @@ mysql> SHOW QUERIES;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SHOW QUERIES;"
+POST /sql?mode=raw -d "SHOW QUERIES"
 ```
 
 <!-- response JSON -->

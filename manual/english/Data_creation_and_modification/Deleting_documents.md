@@ -564,9 +564,9 @@ INSERT INTO test (title, gid, mva1, mva2) VALUES
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "DELETE FROM test WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) );"
+POST /sql?mode=raw -d "DELETE FROM test WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) )"
 
-POST /sql?mode=raw -d "SELECT * FROM test;"
+POST /sql?mode=raw -d "SELECT * FROM test"
 ```
 
 <!-- response JSON -->

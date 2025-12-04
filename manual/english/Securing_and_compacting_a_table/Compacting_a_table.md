@@ -28,7 +28,7 @@ OPTIMIZE TABLE rt;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "OPTIMIZE TABLE rt;"
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
 ```
 
 <!-- end -->
@@ -62,7 +62,7 @@ OPTIMIZE TABLE rt OPTION cutoff=4;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4;"
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
 ```
 
 <!-- end -->
@@ -88,7 +88,7 @@ OPTIMIZE TABLE rt OPTION sync=1;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1;"
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 ```
 
 <!-- end -->
@@ -115,7 +115,7 @@ ALTER CLUSTER mycluster DROP myindex;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex;"
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
 ```
 
 <!-- end -->
@@ -128,7 +128,7 @@ OPTIMIZE TABLE myindex;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "OPTIMIZE TABLE myindex;"
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex"
 ```
 
 <!-- end -->
@@ -141,7 +141,7 @@ ALTER CLUSTER mycluster ADD myindex;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex;"
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex"
 ```
 
 <!-- end -->

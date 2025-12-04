@@ -21,7 +21,7 @@ select NOW();
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select NOW();"
+POST /sql?mode=raw -d "select NOW()"
 ```
 <!-- response JSON -->
 ```JSON
@@ -69,7 +69,7 @@ select CURTIME();
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select CURTIME();"
+POST /sql?mode=raw -d "select CURTIME()"
 ```
 <!-- response JSON -->
 ```JSON
@@ -115,7 +115,7 @@ select curdate();
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select CURDATE();"
+POST /sql?mode=raw -d "select CURDATE()"
 ```
 <!-- response JSON -->
 ```JSON
@@ -162,7 +162,7 @@ select UTC_TIME();
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select UTC_TIME();"
+POST /sql?mode=raw -d "select UTC_TIME()"
 ```
 <!-- response JSON -->
 ```JSON
@@ -207,7 +207,7 @@ select UTC_TIMESTAMP();
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select UTC_TIMESTAMP();"
+POST /sql?mode=raw -d "select UTC_TIMESTAMP()"
 ```
 <!-- response JSON -->
 ```JSON
@@ -252,7 +252,7 @@ select second(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select second(now());"
+POST /sql?mode=raw -d "select second(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -297,7 +297,7 @@ select minute(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select minute(now());"
+POST /sql?mode=raw -d "select minute(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -387,7 +387,7 @@ select day(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select day(now());"
+POST /sql?mode=raw -d "select day(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -432,7 +432,7 @@ select month(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select month(now());"
+POST /sql?mode=raw -d "select month(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -477,7 +477,7 @@ select quarter(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select quarter(now());"
+POST /sql?mode=raw -d "select quarter(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -522,7 +522,7 @@ select year(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select year(now());"
+POST /sql?mode=raw -d "select year(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -567,7 +567,7 @@ select dayname(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select dayname(now());"
+POST /sql?mode=raw -d "select dayname(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -748,7 +748,7 @@ select yearweek(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select yearweek(now());"
+POST /sql?mode=raw -d "select yearweek(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -792,7 +792,7 @@ select yearmonth(now());
 ```
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select yearmonth(now());"
+POST /sql?mode=raw -d "select yearmonth(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -837,7 +837,7 @@ select yearmonthday(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select yearmonthday(now());"
+POST /sql?mode=raw -d "select yearmonthday(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -882,7 +882,7 @@ select timediff(1615787586, 1613787583);
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select timediff(1615787586, 1613787583);"
+POST /sql?mode=raw -d "select timediff(1615787586, 1613787583)"
 ```
 <!-- response JSON -->
 ```JSON
@@ -927,7 +927,7 @@ select datediff(1615787586, 1613787583);
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select datediff(1615787586, 1613787583);"
+POST /sql?mode=raw -d "select datediff(1615787586, 1613787583)"
 ```
 <!-- response JSON -->
 ```JSON
@@ -973,7 +973,7 @@ select date(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select date(now());"
+POST /sql?mode=raw -d "select date(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1018,7 +1018,7 @@ select time(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select time(now());"
+POST /sql?mode=raw -d "select time(now())"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1073,7 +1073,7 @@ SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select DATE_FORMAT(NOW(), 'year %Y and time %T');"
+POST /sql?mode=raw -d "select DATE_FORMAT(NOW(), 'year %Y and time %T')"
 ```
 <!-- response JSON -->
 ```JSON

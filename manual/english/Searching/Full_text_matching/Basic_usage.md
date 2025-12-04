@@ -66,7 +66,7 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT * FROM myindex WHERE MATCH('"find me fast"/2');"
+POST /sql?mode=raw -d "SELECT * FROM myindex WHERE MATCH('"find me fast"/2')"
 ```
 <!-- response JSON -->
 

@@ -35,7 +35,7 @@ SELECT * FROM tbl;
 
 <!-- request JSON -->
 ```JSON
-POST /sql -d "SELECT * FROM tbl;"
+POST /sql -d "SELECT * FROM tbl"
 ```
 
 <!-- response JSON -->
@@ -132,7 +132,7 @@ SELECT id,story_author,comment_author FROM hn_small WHERE story_author='joe' LIM
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT id,f1,f2 FROM t WHERE f2=2 LIMIT 1; SHOW META;"
+POST /sql?mode=raw -d "SELECT id,f1,f2 FROM t WHERE f2=2 LIMIT 1; SHOW META"
 ```
 
 <!-- response JSON -->
@@ -245,7 +245,7 @@ SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2;"
+POST /sql?mode=raw -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
 ```
 
 <!-- response JSON -->
@@ -339,7 +339,7 @@ SELECT * from tbl where match('"joe"/3'); show warnings;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT * from t where match('\"a\"/3'); show warnings;"
+POST /sql?mode=raw -d "SELECT * from t where match('\"a\"/3'); show warnings"
 ```
 
 <!-- response JSON -->
@@ -426,7 +426,7 @@ ERROR 1064 (42000): index idx: query error: no field 'surname' found in schema
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT * from t where match('@surname joe');"
+POST /sql?mode=raw -d "SELECT * from t where match('@surname joe')"
 ```
 
 <!-- response JSON -->

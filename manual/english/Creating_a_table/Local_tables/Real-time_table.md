@@ -269,14 +269,14 @@ create table products LIKE old_products WITH DATA;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "create table products LIKE old_products;"
+POST /sql?mode=raw -d "create table products LIKE old_products"
 ```
 
 <!-- intro -->
 ##### JSON example (WITH DATA):
 <!-- request JSON example (WITH DATA) -->
 ```JSON
-POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA;"
+POST /sql?mode=raw -d "create table products LIKE old_products WITH DATA"
 ```
 
 <!-- end -->

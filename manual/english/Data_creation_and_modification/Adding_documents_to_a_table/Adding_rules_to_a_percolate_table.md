@@ -392,9 +392,9 @@ CREATE TABLE pq(title text, meta json) type='pq';
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', '', '');"
-POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', 'Louis Vuitton', '');"
-POST /sql?mode=raw -d "SELECT * FROM pq;"
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', '', '')"
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', 'Louis Vuitton', '')"
+POST /sql?mode=raw -d "SELECT * FROM pq"
 ```
 
 <!-- response JSON -->

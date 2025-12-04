@@ -80,7 +80,7 @@ SHOW TABLE test INDEXES;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW TABLE test INDEXES;"
+POST /sql?mode=raw -d "SHOW TABLE test INDEXES"
 ```
 
 <!-- response JSON -->

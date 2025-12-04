@@ -33,7 +33,7 @@ Query OK, 0 rows affected (0.05 sec)
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "FLUSH TABLE rt;"
+POST /sql?mode=raw -d "FLUSH TABLE rt"
 ```
 <!-- response JSON -->
 ```JSON

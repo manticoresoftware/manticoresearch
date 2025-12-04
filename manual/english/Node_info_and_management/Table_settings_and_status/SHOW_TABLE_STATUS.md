@@ -134,7 +134,7 @@ mysql> SHOW TABLE statistic STATUS;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW TABLE t STATUS;"
+POST /sql?mode=raw -d "SHOW TABLE t STATUS"
 ```
 
 <!-- response JSON -->

@@ -818,7 +818,7 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id;"
+POST /sql?mode=raw -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
 ```
 
 <!-- response JSON -->
@@ -1663,7 +1663,7 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo FACET price_range AS price_range,brand_name ORDER BY brand_name asc;"
+POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo FACET price_range AS price_range,brand_name ORDER BY brand_name asc"
 ```
 
 <!-- response JSON -->
@@ -3051,7 +3051,7 @@ SHOW META LIKE 'multiplier';
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier';"
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier'"
 ```
 
 <!-- response JSON -->

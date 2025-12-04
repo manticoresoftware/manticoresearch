@@ -44,7 +44,7 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW TABLE forum SETTINGS;"
+POST /sql?mode=raw -d "SHOW TABLE forum SETTINGS"
 ```
 
 <!-- response JSON -->
@@ -106,8 +106,8 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 ##### JSON:
 <!-- request JSON -->
 
-```sql
-POST /sql?mode=raw -d "SHOW TABLE forum CHUNK 0 SETTINGS;"
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE forum CHUNK 0 SETTINGS"
 ```
 
 <!-- response JSON -->

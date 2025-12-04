@@ -326,11 +326,11 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select * from t where match('-d');"
+POST /sql?mode=raw -d "select * from t where match('-d')"
 {
   "error": "table t: query error: query is non-computable (single NOT operator)"
 }
-POST /sql?mode=raw -d "select * from t where match('-d')  option not_terms_only_allowed=1;"
+POST /sql?mode=raw -d "select * from t where match('-d')  option not_terms_only_allowed=1"
 [
   {
     "columns": [

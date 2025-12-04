@@ -87,7 +87,7 @@ mysql> show engines;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "show engines;"
+POST /sql?mode=raw -d "show engines"
 ```
 
 <!-- response JSON -->

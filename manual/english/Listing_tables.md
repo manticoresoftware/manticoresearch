@@ -503,7 +503,7 @@ f text indexed stored
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SHOW CREATE TABLE tbl;"
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl"
 ```
 
 <!-- response JSON -->

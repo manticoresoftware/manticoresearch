@@ -156,7 +156,7 @@ SHOW STATUS;
 <!-- request JSON -->
 
 ```JSON
-SHOW STATUS;
+POST /sql?mode=raw -d "SHOW STATUS"
 ```
 
 <!-- response JSON -->
@@ -513,7 +513,7 @@ SHOW STATUS LIKE 'qcache%';
 <!-- request qcache(JSON) -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW STATUS LIKE 'qcache%';"
+POST /sql?mode=raw -d "SHOW STATUS LIKE 'qcache%'"
 ```
 
 <!-- response qcache(JSON) -->
@@ -597,7 +597,7 @@ SHOW STATUS LIKE '%stats_ms%';
 <!-- request perf_stats(JSON) -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%';"
+POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
 ```
 
 <!-- response perf_stats(JSON) -->
@@ -738,7 +738,7 @@ SHOW STATUS LIKE '%stats_ms%';
 <!-- request perf_stats(JSON) -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%';"
+POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
 ```
 
 <!-- response perf_stats(JSON) -->
@@ -873,7 +873,7 @@ SHOW SETTINGS;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW SETTINGS;"
+POST /sql?mode=raw -d "SHOW SETTINGS"
 ```
 
 <!-- response JSON -->
@@ -1026,7 +1026,7 @@ SHOW AGENT STATUS;
 ```
 
 ```JSON
-POST /sql?mode=raw -d "SHOW AGENT STATUS;"
+POST /sql?mode=raw -d "SHOW AGENT STATUS"
 ```
 
 <!-- response JSON -->
@@ -1733,7 +1733,7 @@ SHOW AGENT STATUS LIKE '%5period%msec%';
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW AGENT STATUS LIKE '%5period%msec%';"
+POST /sql?mode=raw -d "SHOW AGENT STATUS LIKE '%5period%msec%'"
 ```
 
 <!-- response JSON -->
@@ -2349,7 +2349,7 @@ SHOW AGENT dist_index STATUS;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SHOW AGENT dist_index STATUS;"
+POST /sql?mode=raw -d "SHOW AGENT dist_index STATUS"
 ```
 
 <!-- response JSON -->

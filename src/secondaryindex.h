@@ -91,4 +91,6 @@ std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const 
 
 void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp );
 
+void ReportDisabledHints ( const VecTraits_T<IndexHint_t> & dHints, CSphString & sWarning );
+
 #endif // _secondaryindex_

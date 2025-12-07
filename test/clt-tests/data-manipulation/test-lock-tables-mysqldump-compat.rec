@@ -30,26 +30,68 @@ which mysqldump
 ––– output –––
 #!/.*mysqldump/!#
 ––– comment –––
-Create a dump of the table using mysqldump with --skip-lock-tables
+Test 1: mysqldump WITH LOCK TABLES (default behavior - lock-tables is ON by default)
+This tests that LOCK TABLES works correctly with mysqldump
 ––– input –––
-mysqldump -h0 -P9306 --no-tablespaces --skip-lock-tables --compact manticore test_dump > /tmp/test_dump.sql 2>&1
-echo "Dump created"
+mysqldump -h0 -P9306 --no-tablespaces --compact manticore test_dump > /tmp/test_dump_with_locks.sql 2>&1
+echo "Dump with locks created"
 ––– output –––
-Dump created
+Dump with locks created
 ––– comment –––
-Drop the original table
+Verify the dump file was created and contains expected data
+––– input –––
+grep -c "INSERT INTO" /tmp/test_dump_with_locks.sql
+––– output –––
+1
+––– comment –––
+Drop the table and restore from dump created WITH locks
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE test_dump;"
 ––– output –––
 ––– comment –––
-Restore the table from the dump
+Restore from dump that was created WITH LOCK TABLES
+––– input –––
+mysql -h0 -P9306 < /tmp/test_dump_with_locks.sql 2>&1
+echo "Table restored from dump with locks"
+––– output –––
+Table restored from dump with locks
+––– comment –––
+Verify data after restore from dump WITH locks
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+Cleanup first dump file
+––– input –––
+rm -f /tmp/test_dump_with_locks.sql
+––– output –––
+––– comment –––
+Test 2: mysqldump WITHOUT LOCK TABLES (using --skip-lock-tables)
+This tests the recommended approach for Manticore
+––– input –––
+mysqldump -h0 -P9306 --no-tablespaces --skip-lock-tables --compact manticore test_dump > /tmp/test_dump.sql 2>&1
+echo "Dump without locks created"
+––– output –––
+Dump without locks created
+––– comment –––
+Drop the table again and restore from dump WITHOUT locks
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE test_dump;"
+––– output –––
+––– comment –––
+Restore from dump that was created WITHOUT LOCK TABLES
 ––– input –––
 mysql -h0 -P9306 < /tmp/test_dump.sql 2>&1
-echo "Table restored"
+echo "Table restored from dump without locks"
 ––– output –––
-Table restored
+Table restored from dump without locks
 ––– comment –––
-Verify the restored data matches original
+Verify data after restore from dump WITHOUT locks
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 ––– output –––
@@ -68,26 +110,6 @@ mysql -h0 -P9306 -e "SELECT * FROM test_dump WHERE id = 1;"
 +------+-------+-------+
 |    1 | first |   100 |
 +------+-------+-------+
-––– comment –––
-Test batch operations with LOCK/UNLOCK (typical restore scenario)
-––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES test_dump WRITE;
-INSERT INTO test_dump VALUES (4, 'fourth', 400);
-INSERT INTO test_dump VALUES (5, 'fifth', 500);
-UNLOCK TABLES;
-EOF
-––– output –––
-––– comment –––
-Verify batch operations worked
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
 ––– comment –––
 Cleanup
 ––– input –––

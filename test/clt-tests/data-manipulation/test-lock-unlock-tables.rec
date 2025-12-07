@@ -44,20 +44,15 @@ Release READ lock
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Lock table with WRITE lock
+Lock table with WRITE lock and check warnings (should show warning that WRITE lock is not implemented)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 ––– output –––
-––– comment –––
-Check for warnings after WRITE lock (should show warning about table locking)
-––– input –––
-mysql -h0 -P9306 -e "SHOW WARNINGS;"
-––– output –––
-+-------+------+---------------------------------------+
-| Level | Code | Message                               |
-+-------+------+---------------------------------------+
-| Note  | 1000 | table 'products' locked for writing   |
-+-------+------+---------------------------------------+
++---------+------+--------------------------------+
+| Level   | Code | Message                        |
++---------+------+--------------------------------+
+| warning | 1000 | Write lock is not implemented. |
++---------+------+--------------------------------+
 ––– comment –––
 Insert new record under WRITE lock
 ––– input –––

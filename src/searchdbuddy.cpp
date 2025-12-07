@@ -830,7 +830,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	dResult.Resize ( 0 );
 
 	HttpReplyTrait_t tReplyBuf { eHttpStatus, sDump };
-	tReplyBuf.m_bHtml = bNeedHttpResponse;
+	tReplyBuf.m_bSendHeaders = bNeedHttpResponse;
 	tReplyBuf.m_sContentType = tReplyParsed.m_sContentType.cstr();
 	ReplyBuf ( tReplyBuf, dResult );
 

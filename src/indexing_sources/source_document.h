@@ -171,7 +171,7 @@ public:
 	virtual void			PostIndex () {}
 
 	// returns false when there are no more documents
-	void					BuildHits ( CSphString & sError, bool bSkipEndMarker );
+	void					BuildHits ( CSphString & sError );
 
 	/// field data getter
 	/// to be implemented by descendants

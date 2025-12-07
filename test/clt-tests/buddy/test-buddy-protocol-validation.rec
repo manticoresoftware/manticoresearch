@@ -65,6 +65,8 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s "http://localhost:9308/cli_json?SELECT%20*%20FROM%20buddy_test%20WHERE%20MATCH('tset')%20OPTION%20fuzzy=1" > /dev/null
+––– output –––
+––– input –––
 grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "Request has version 3 OK" || echo "Wrong version"
 ––– output –––
 Request has version 3 OK
@@ -123,11 +125,15 @@ grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"versio
 Protocol version 3 OK
 ––– input –––
 curl -s "http://localhost:9308/cli_json?SELECT%20*%20FROM%20buddy_test;%20SHOW%20META" > /dev/null
+––– output –––
+––– input –––
 grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "Protocol version 3 OK" || echo "Invalid version"
 ––– output –––
 Protocol version 3 OK
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql" -d "SELECT * FROM buddy_test; SHOW META" > /dev/null
+––– output –––
+––– input –––
 grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "Protocol version 3 OK" || echo "Invalid version"
 ––– output –––
 Protocol version 3 OK

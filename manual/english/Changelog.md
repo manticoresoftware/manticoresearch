@@ -10,7 +10,7 @@
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
 
 ## Breaking Changes
-* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Updated MCL requirement to 9.0.0, bringing uncompressed float-vector storage, block-size change for KNN vectors, and non-buffered reads. This update doesn't change the data format but increases the Manticore Search / MCL API version. This update changes the data format. Older MCL versions won’t be able to read it, but the new version can still read your existing columnar tables without any issues.
+* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Updated MCL requirement to 9.0.0, bringing uncompressed float-vector storage, block-size change for KNN vectors, and non-buffered reads. This update changes the data format. Older MCL versions won’t be able to read it, but the new version can still read your existing columnar tables without any issues.
 
 ### New Features and Improvements
 * 🆕 [v15.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.0) [ PR #3990](https://github.com/manticoresoftware/manticoresearch/pull/3990) Improved disk chunk flushing log records by breaking the total time into clearer parts.

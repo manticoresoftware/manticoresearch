@@ -258,7 +258,15 @@ Note: When using this operator with queries containing more than 31 keywords, ra
 ```sql
 Church NOTNEAR/3 street
 ```
-The `NOTNEAR` operator serves as a negative assertion. It matches a document when the left argument is present and either the right argument is absent from the document or the right argument is a specified distance away from the end of the left matched argument. The distance is denoted in words. The syntax is `NOTNEAR/N`, which is case-sensitive and does not permit spaces between the `NOTNEAR` keyword, slash sign, and distance value. Both arguments of this operator can be terms or any operators or group of operators.
+
+The `NOTNEAR` operator serves as a negative assertion and functions as the logical inverse of the `NEAR` operator. It matches a document when the left argument is present, provided that the right argument is either absent from the document or is located **more than** the specified distance away from the left argument.
+
+The syntax is `NOTNEAR/N`, which is case-sensitive and does not permit spaces between the `NOTNEAR` keyword, slash sign, and distance value.
+
+Key behaviors include:
+*   **Symmetry**: Like `NEAR`, the `NOTNEAR` operator applies regardless of the order of terms in the text. It will exclude a match if the right argument is found within the specified distance either **before** or **after** the left argument.
+*   **Distance Threshold**: The distance `N` represents the nearby range (inclusive). If the words are separated by `N` words or fewer, the match is discarded. The right argument must be `N + 1` or more words away.
+*   **Arguments**: Both arguments of this operator can be terms, phrases, or groups of operators.
 
 ### SENTENCE and PARAGRAPH operators
 

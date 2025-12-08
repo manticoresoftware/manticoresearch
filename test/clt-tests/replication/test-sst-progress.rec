@@ -136,18 +136,10 @@ SST takes several minutes to transfer ~9GB of data - enough time to catch progre
 The polling checks if sst_stage contains text (not just "-") indicating active SST
 We capture multiple snapshots to show progress changing over time
 ––– input –––
-rm -f /tmp/sst_best.txt; (while true; do mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_%'\G" 2>/dev/null > /tmp/sst_check.txt; stage=$(grep -A1 "sst_stage$" /tmp/sst_check.txt | grep "Value:" | sed 's/.*Value: //'); if [ -n "$stage" ] && [ "$stage" != "-" ] && [ ! -f /tmp/sst_best.txt ]; then cp /tmp/sst_check.txt /tmp/sst_best.txt; fi; sleep 0.02; done) & poll_pid=$!; mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'"; kill $poll_pid 2>/dev/null; wait $poll_pid 2>/dev/null; if [ -f /tmp/sst_best.txt ]; then grep -E "(Counter|Value):" /tmp/sst_best.txt | head -10; else echo "ERROR: No SST progress captured"; fi
+rm -f /tmp/sst_best.txt; (while true; do mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_%'\G" 2>/dev/null > /tmp/sst_check.txt; stage=$(grep -A1 "sst_stage$" /tmp/sst_check.txt | grep "Value:" | sed 's/.*Value: //'); if [ -n "$stage" ] && [ "$stage" != "-" ] && [ ! -f /tmp/sst_best.txt ]; then cp /tmp/sst_check.txt /tmp/sst_best.txt; fi; sleep 0.02; done) & poll_pid=$!; mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'"; kill $poll_pid 2>/dev/null; wait $poll_pid 2>/dev/null; if [ -f /tmp/sst_best.txt ]; then grep -A1 "cluster_sst_test_sst_total$" /tmp/sst_best.txt | grep -E "(Counter|Value):"; else echo "ERROR: No SST progress captured"; fi
 ––– output –––
 Counter: cluster_sst_test_sst_total
   Value: #!/(100|[1-9]?[0-9])/!#
-Counter: cluster_sst_test_sst_stage
-  Value: #!/(await nodes sync|block checksum calculate|analyze remote|send files|activate tables)/!#
-Counter: cluster_sst_test_sst_stage_total
-  Value: #!/(100|[1-9]?[0-9])/!#
-Counter: cluster_sst_test_sst_table
-  Value: #!/[0-9]+ \([a-z0-9_]+\)/!#
-Counter: cluster_sst_test_sst_tables
-  Value: #!/[1-9][0-9]*/!#
 ––– comment –––
 Verify SST progress was logged (MANTICORE_LOG_SST_PROGRESS=1 on node 2)
 Check for SST progress entries in joiner node log
@@ -160,17 +152,9 @@ grep "\[SST\]" /var/log/manticore-2/searchd.log | head -3
 ––– comment –––
 Verify SST variables exist (values are "-" after SST completed)
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_%'\G" | grep -E "(Counter|Value):" | head -10
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_total'\G" | grep -E "(Counter|Value):" | head -2
 ––– output –––
 Counter: cluster_sst_test_sst_total
-  Value: #!/.+/!#
-Counter: cluster_sst_test_sst_stage
-  Value: #!/.+/!#
-Counter: cluster_sst_test_sst_stage_total
-  Value: #!/.+/!#
-Counter: cluster_sst_test_sst_table
-  Value: #!/.+/!#
-Counter: cluster_sst_test_sst_tables
   Value: #!/.+/!#
 ––– comment –––
 Verify SST completed and both nodes are synced

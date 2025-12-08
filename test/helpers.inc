@@ -881,12 +881,6 @@ function RandomWords ( $n, $seed )
 
 function RoundFloatValues ( &$values, $roundoff )
 {
-	global $g_disable_float_tolerance;
-	
-	// If float tolerance is disabled, don't round values
-	if ( $g_disable_float_tolerance )
-		return;
-	
 	if ( !is_array ( $values ) )
 		return;
 

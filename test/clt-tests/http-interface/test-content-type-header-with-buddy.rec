@@ -120,6 +120,36 @@ curl -i -s -X POST "http://localhost:9308/autocomplete" -d '{"table":"test_ct","
 ––– output –––
 Content-Type: application/json; charset=UTF-8
 ––– comment –––
+Test /metrics endpoint (Prometheus exporter - Buddy plugin) - should return text/plain
+––– input –––
+curl -i -s "http://localhost:9308/metrics" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: text/plain; charset=UTF-8
+––– comment –––
+Test /_search endpoint (Elasticsearch-compatible search) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/_search" -d '{"query":{"match_all":{}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /<table>/_search endpoint (Elasticsearch table-specific search) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/test_ct/_search" -d '{"query":{"match_all":{}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /_cat/indices endpoint (Elasticsearch cat API - Buddy EmulateElastic) - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/_cat/indices" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /_nodes endpoint (Elasticsearch nodes info - Buddy EmulateElastic) - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/_nodes" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
 Test /index.html - should return text/html
 ––– input –––
 curl -i -s "http://localhost:9308/index.html" 2>&1 | grep -i "Content-Type:"

@@ -389,6 +389,17 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 	return pNode->dChildren().all_of ( [&] ( XQNode_t * pChild ) { return CheckQuorumProximity(pChild); } );
 }
 
+bool XQParseHelper_c::CheckNear ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return true;
+
+	if ( pNode->GetOp()==SPH_QUERY_NEAR && pNode->m_iOpArg<1 )
+		return Error ( "NEAR distance too low (%d)", pNode->m_iOpArg );
+
+	return pNode->dChildren().all_of ( [&] ( XQNode_t * pChild ) { return CheckNear ( pChild ); } );
+}
+
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
 	constexpr bool bDump = false;
@@ -413,7 +424,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	}
 	if constexpr ( bDump ) Dump ( pRoot, "FixupNots" );
 
-	if ( !CheckQuorumProximity ( pRoot ) )
+	if ( !CheckQuorumProximity ( pRoot ) || !CheckNear ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;

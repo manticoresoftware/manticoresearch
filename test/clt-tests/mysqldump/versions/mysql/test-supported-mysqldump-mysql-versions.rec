@@ -64,6 +64,9 @@ Testing version: mysql:5.6
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:5.6 - only expected query logged
 Dump mysql:5.6 completed successfully
 Testing version: mysql:5.7
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -90,6 +93,9 @@ Testing version: mysql:5.7
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:5.7 - only expected query logged
 Dump mysql:5.7 completed successfully
 Testing version: mysql:8.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -116,6 +122,9 @@ Testing version: mysql:8.0
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:8.0 - only expected query logged
 Dump mysql:8.0 completed successfully
 Testing version: mysql:8.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -142,6 +151,9 @@ Testing version: mysql:8.2
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:8.2 - only expected query logged
 Dump mysql:8.2 completed successfully
 Testing version: mysql:8.3
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -168,6 +180,9 @@ Testing version: mysql:8.3
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:8.3 - only expected query logged
 Dump mysql:8.3 completed successfully
 Testing version: mysql:8.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -194,6 +209,9 @@ Testing version: mysql:8.4
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:8.4 - only expected query logged
 Dump mysql:8.4 completed successfully
 Testing version: mysql:9.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -220,6 +238,9 @@ Testing version: mysql:9.0
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:9.0 - only expected query logged
 Dump mysql:9.0 completed successfully
 Testing version: mysql:9.1
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -246,6 +267,9 @@ Testing version: mysql:9.1
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:9.1 - only expected query logged
 Dump mysql:9.1 completed successfully
 Testing version: mysql:9.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -272,6 +296,9 @@ Testing version: mysql:9.2
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:9.2 - only expected query logged
 Dump mysql:9.2 completed successfully
 Testing version: mysql:9.3
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -298,6 +325,9 @@ Testing version: mysql:9.3
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:9.3 - only expected query logged
 Dump mysql:9.3 completed successfully
 Testing version: mysql:9.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -324,6 +354,9 @@ Testing version: mysql:9.4
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:9.4 - only expected query logged
 Dump mysql:9.4 completed successfully
 Testing version: mysql:9.5
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -350,6 +383,9 @@ Testing version: mysql:9.5
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:9.5 - only expected query logged
 Dump mysql:9.5 completed successfully
 Testing version: mysql:latest
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
@@ -376,6 +412,9 @@ Testing version: mysql:latest
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content (should be only 1 line):
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
+✅ Query log check passed for mysql:latest - only expected query logged
 Dump mysql:latest completed successfully
 All MySQL versions tested successfully!
 Checking documentation versions...
@@ -383,3 +422,4 @@ Checking documentation file...
 Script version: MySQL 9.5
 Documentation version: MySQL 9.5
 ✅ Documentation MySQL version matches script version
+––– duration: 552274ms (91.31%) –––

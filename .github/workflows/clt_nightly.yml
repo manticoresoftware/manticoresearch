@@ -133,9 +133,6 @@ jobs:
           - name: Drop sharded table
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/sharding/drop/test-drop-sharded-table
-          - name: MySQL 9.x query log error
-            image: manticoresearch/dind:v1
-            test_prefix: test/clt-tests/bugs-dind/2772-mysql9-client-error
 
 # Disabled as it works unstable.
 #          - name: Tests performance JSON vs SQL

@@ -63,7 +63,42 @@ for version in "${versions[@]}"; do
 
     # Restore dump
     docker exec -i db-test $db_type -hmanticore -P9306 manticore < dump.sql
-    docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
+    restore_status=$?
+    
+    # Clear query log before test query
+    docker exec manticore bash -c "> /var/log/manticore/query.log" 2>/dev/null || true
+    
+    # Execute test query (only if restore succeeded)
+    if [ $restore_status -eq 0 ]; then
+        docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
+    else
+        echo "⚠️ Warning: Restore failed for $version, skipping query log check"
+    fi
+    
+    # Check query log contains only the expected query and nothing extra (only if restore succeeded)
+    if [ $restore_status -eq 0 ]; then
+        log_content=$(docker exec manticore cat /var/log/manticore/query.log 2>/dev/null || echo "")
+        select_count=$(echo "$log_content" | grep -i "select \* from t" | wc -l | tr -d ' ')
+        total_lines=$(echo "$log_content" | grep -v "^$" | wc -l | tr -d ' ')
+        
+        # Always show log content for verification
+        echo "   Query log content (should be only 1 line):"
+        if [ -n "$log_content" ]; then
+            echo "$log_content" | head -5
+        else
+            echo "   (empty)"
+        fi
+        
+        if [ -n "$log_content" ] && [ "$select_count" -eq 1 ] && [ "$total_lines" -eq 1 ]; then
+            echo "✅ Query log check passed for $version - only expected query logged"
+        elif [ -z "$log_content" ]; then
+            echo "⚠️ Query log is empty for $version (query logging may not be enabled)"
+        else
+            echo "❌ Query log check FAILED for $version"
+            echo "   Expected: 1 'select * from t' query, got $select_count"
+            echo "   Total lines in log: $total_lines"
+        fi
+    fi
 
     # Checking for errors
     if [ -s dump.sql ]; then

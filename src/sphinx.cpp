@@ -11341,6 +11341,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( bCollectPredictionCounters )
 		tTermSetup.m_pStats = &tQueryStats;
 
+	if ( HasForceHints ( tQuery.m_dIndexHints ) )
+		tCtx.m_bSkipQCache = true;
+
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
@@ -11404,15 +11407,25 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
-	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
-	if ( tSpawned.second )
-		return false;
-
-	if ( pIterator )
+	
+	// skip SI create if cache ranker used
+	bool bIsCacheRanker = pRanker->IsCache();
+	std::pair<RowidIterator_i *, bool>  tSpawned = {nullptr, false};
+	std::unique_ptr<RowidIterator_i> pIterator;
+	
+	if ( !bIsCacheRanker )
 	{
-		auto pIter = pIterator.get();
-		pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
+		// Not using cache - spawn SI iterators if needed
+		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
+		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
+		if ( tSpawned.second )
+			return false;
+
+		if ( pIterator )
+		{
+			auto pIter = pIterator.get();
+			pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
+		}
 	}
 
 	//////////////////////////////////////

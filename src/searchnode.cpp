@@ -5792,29 +5792,69 @@ void ExtNotNear_c::DebugDump ( int iLevel )
 	DebugDumpT ( "ExtNotNear_c", iLevel );
 }
 
-
 bool ExtNotNear_c::FilterHits ( RowID_t tRowID, const ExtHit_t * & pMust, const ExtHit_t * & pNot )
 {
-	assert ( pMust && pNot && HasHits(pMust) && HasHits(pNot) );
+	assert ( pMust && pNot && HasHits ( pMust ) && HasHits ( pNot ) );
 
 	const int iWasHits = m_dMyHits.GetLength();
-	bool bRightEmpty = false;
-
-	// any hits stream over might have tail hits
+	
 	while ( pMust->m_tRowID==tRowID )
 	{
-		// get NOT next after current MUST
-		while ( pNot->m_tRowID==tRowID && HITMAN::GetPosWithField ( pNot->m_uHitpos ) < HITMAN::GetPosWithField ( pMust->m_uHitpos ) )
-			pNot++;
+		DWORD uMustField = HITMAN::GetField ( pMust->m_uHitpos );
+		DWORD uMustPos = HITMAN::GetPosWithField ( pMust->m_uHitpos ); 
+		
+		// pNot sliding window start pos
+		//( notEnd + dist ) < mustStart means Not very far left and safe to move
+		while ( pNot->m_tRowID==tRowID )
+		{
+			DWORD uNotField = HITMAN::GetField ( pNot->m_uHitpos );
+			if ( uNotField<uMustField ) 
+			{
+				pNot++;
+				continue;
+			}
+			
+			if ( uNotField>uMustField )
+				break;
 
-		if ( !HasHits(pNot) )
+			DWORD uNotPos = HITMAN::GetPosWithField ( pNot->m_uHitpos );
+			
+			// ( notEnd + dist ) < mustStart
+			if ( ( uNotPos + pNot->m_uMatchlen - 1 + m_iDist )<uMustPos )
+			{
+				pNot++;
+				continue;
+			}
+
+			// pNot is inside backward traking
 			break;
+		}
 
-		bRightEmpty = ( pNot->m_tRowID!=tRowID );
-		DWORD uPosMust = HITMAN::GetPosWithField ( pMust->m_uHitpos );
+		bool bWindowHit = false;
+		const ExtHit_t * pScan = pNot;
+		while ( pScan->m_tRowID==tRowID )
+		{
+			DWORD uScanField = HITMAN::GetField ( pScan->m_uHitpos );
+			
+			if ( uScanField>uMustField )
+				break;
 
-		// field is top 8 bytes that is why it safe to add distance straight to GetPosWithField and compare these without checking both fields are eq
-		if ( bRightEmpty || uPosMust + pMust->m_uMatchlen - 1 + m_iDist<HITMAN::GetPosWithField ( pNot->m_uHitpos ) )
+			if ( uScanField<uMustField )
+			{
+				pScan++;
+				continue;
+			}
+
+			DWORD uScanPos = HITMAN::GetPosWithField ( pScan->m_uHitpos );
+			// ( mustEnd + dist ) < scanStart
+			if ( ( uMustPos + pMust->m_uMatchlen - 1 + m_iDist )<uScanPos )
+				break; 
+
+			bWindowHit = true;
+			break;
+		}
+
+		if ( !bWindowHit )
 			m_dMyHits.Add ( *pMust );
 
 		pMust++;
@@ -5822,7 +5862,6 @@ bool ExtNotNear_c::FilterHits ( RowID_t tRowID, const ExtHit_t * & pMust, const 
 
 	return ( iWasHits<m_dMyHits.GetLength() );
 }
-
 
 const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 {

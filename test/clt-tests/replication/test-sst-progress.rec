@@ -1,0 +1,208 @@
+––– comment –––
+Test for SST (State Snapshot Transfer) progress monitoring during table replication
+Issue: https://github.com/manticoresoftware/effyis/issues/390
+
+Problem: When adding a large table to cluster via ALTER CLUSTER ADD, there was no way
+to track replication progress. Users couldn't determine how much was copied or remaining.
+
+Solution: Added SST progress variables to SHOW STATUS:
+- cluster_<name>_sst_total: Overall progress (0-100)
+- cluster_<name>_sst_stage: Current stage (e.g., "send files")
+- cluster_<name>_sst_stage_total: Progress of current stage (0-100)
+- cluster_<name>_sst_tables: Total tables being transferred
+- cluster_<name>_sst_table: Current table being transferred (e.g., "3 (products)")
+- cluster_<name>_node_state: Node state (donor/joiner/synced)
+
+This test validates that SST progress variables exist and show real values during transfer.
+Uses pre-generated test data (~883MB compressed, ~1.5GB uncompressed) with full-text stored fields.
+500K documents with 27 fields ensures SST takes enough time to capture progress values.
+––– input –––
+apt-get update -y > /dev/null; apt-get install -y wget iproute2 procps > /dev/null; echo $?
+––– output –––
+0
+––– comment –––
+Download pre-generated test data (~883MB compressed, ~1.5GB uncompressed)
+Contains 1 table (sst_heavy) with 500K documents, 27 fields including 4 stored text fields
+––– input –––
+wget -q http://dev2.manticoresearch.com/sst_heavy_500k.tar.gz -O /tmp/sst_data.tar.gz && echo "Download OK" || echo "Download FAILED"
+––– output –––
+Download OK
+––– input –––
+mkdir -p /tmp/sst_data && tar -xzf /tmp/sst_data.tar.gz -C /tmp/sst_data && echo "Extract OK" || echo "Extract FAILED"
+––– output –––
+Extract OK
+––– comment –––
+Check actual structure after extraction
+––– input –––
+ls /tmp/sst_data/
+––– output –––
+sst_heavy_data
+––– input –––
+ls /tmp/sst_data/sst_heavy_data/
+––– output –––
+sst_heavy
+––– comment –––
+Add watchdog = 0 to base config if not already present
+––– input –––
+grep -q "watchdog" test/clt-tests/base/searchd-with-flexible-ports.conf && echo "watchdog already exists" || { sed -i '/^searchd {/,/^}/ s/^\([[:space:]]*\)}$/\1\twatchdog = 0\n\1}/' test/clt-tests/base/searchd-with-flexible-ports.conf && echo "watchdog added"; }
+––– output –––
+#!/watchdog already exists|watchdog added/!#
+––– comment –––
+Start node 1
+Enable SST progress updates at maximum frequency (every 0ms instead of default 1000ms)
+This allows test to catch SST progress values during fast SST transfer
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+export MANTICORE_SST_PUSH_INTERVAL=0
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+Create cluster on node 1
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER sst_test"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_sst_test_status
+  Value: primary
+––– comment –––
+Import pre-generated table (much faster than INSERT)
+Syntax: IMPORT TABLE table_name FROM 'path'
+––– input –––
+mysql -h0 -P1306 -e "IMPORT TABLE sst_heavy FROM '/tmp/sst_data/sst_heavy_data/sst_heavy/sst_heavy'"
+––– output –––
+––– comment –––
+Add table to cluster
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER sst_test ADD sst_heavy"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_sst_test_indexes
+  Value: sst_heavy
+––– comment –––
+Verify data was imported and check table structure/size (should have indexed_bytes > 0)
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM sst_heavy" | grep -oE '[0-9]+' | head -1
+––– output –––
+#!/[0-9]+/!#
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE sst_heavy STATUS" | grep -E 'indexed_documents|indexed_bytes|disk_bytes|disk_chunks'
+––– output –––
+#!/.*indexed_documents.*/!#
+#!/.*indexed_bytes.*/!#
+#!/.*disk_bytes.*/!#
+#!/.*disk_chunks.*/!#
+––– comment –––
+Start node 2 with SST progress logging enabled
+––– input –––
+export INSTANCE=2
+––– output –––
+––– input –––
+export MANTICORE_LOG_SST_PROGRESS=1
+––– output –––
+––– input –––
+export MANTICORE_SST_PUSH_INTERVAL=0
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+Join node 2 to cluster and capture SST progress with REAL values (not "-")
+Start polling in background, then JOIN, capture values during SST transfer
+SST takes several minutes to transfer ~9GB of data - enough time to catch progress
+The polling checks if sst_stage contains text (not just "-") indicating active SST
+We capture multiple snapshots to show progress changing over time
+––– input –––
+rm -f /tmp/sst_best.txt; (while true; do mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_%'\G" 2>/dev/null > /tmp/sst_check.txt; stage=$(grep -A1 "sst_stage$" /tmp/sst_check.txt | grep "Value:" | sed 's/.*Value: //'); if [ -n "$stage" ] && [ "$stage" != "-" ] && [ ! -f /tmp/sst_best.txt ]; then cp /tmp/sst_check.txt /tmp/sst_best.txt; fi; sleep 0.02; done) & poll_pid=$!; mysql -h0 -P2306 -e "JOIN CLUSTER sst_test AT '127.0.0.1:1312'"; kill $poll_pid 2>/dev/null; wait $poll_pid 2>/dev/null; if [ -f /tmp/sst_best.txt ]; then grep -A1 "cluster_sst_test_sst_total$" /tmp/sst_best.txt | grep -E "(Counter|Value):"; else echo "ERROR: No SST progress captured"; fi
+––– output –––
+Counter: cluster_sst_test_sst_total
+  Value: #!/(100|[1-9]?[0-9])/!#
+––– comment –––
+Verify SST progress was logged (MANTICORE_LOG_SST_PROGRESS=1 on node 2)
+Check for SST progress entries in joiner node log
+––– input –––
+grep "\[SST\]" /var/log/manticore-2/searchd.log | head -3
+––– output –––
+#!/.*\[SST\].*/!#
+#!/.*\[SST\].*/!#
+#!/.*\[SST\].*/!#
+––– comment –––
+Verify SST variables exist (values are "-" after SST completed)
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_sst_total'\G" | grep -E "(Counter|Value):" | head -2
+––– output –––
+Counter: cluster_sst_test_sst_total
+  Value: #!/.+/!#
+––– comment –––
+Verify SST completed and both nodes are synced
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do all_synced=true; for port in 1306 2306; do mysql -h0 -P$port -e "SHOW STATUS LIKE '\''cluster_sst_test_status'\''\G" > /tmp/status_$port.log 2>/dev/null && grep -q "Value: primary" /tmp/status_$port.log || { all_synced=false; break; }; done; if $all_synced; then for port in 1306 2306; do echo "Port $port: Node synced"; done; exit 0; fi; sleep 1; done; echo "Timeout waiting for nodes to sync!"; exit 1'
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+––– comment –––
+Verify table exists on both nodes
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G" | grep "Value:"
+––– output –––
+  Value: sst_heavy
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_sst_test_indexes'\G" | grep "Value:"
+––– output –––
+  Value: sst_heavy
+––– comment –––
+Verify data replicated correctly - check counts match on both nodes
+––– input –––
+c1=$(mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM sst_heavy" | grep -oE '[0-9]+'); c2=$(mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM sst_heavy" | grep -oE '[0-9]+'); if [ "$c1" = "$c2" ]; then echo "sst_heavy: OK ($c1 docs)"; else echo "sst_heavy: MISMATCH ($c1 vs $c2)"; fi
+––– output –––
+sst_heavy: OK (#!/[0-9]+/!# docs)
+––– comment –––
+Verify SST actually happened by checking for SST messages in logs
+––– input –––
+grep -q "State transfer.*complete" /var/log/manticore-1/searchd.log && echo "Node 1: SST completed" || echo "Node 1: No SST found"
+––– output –––
+Node 1: SST completed
+––– input –––
+grep -q "\[SST\]" /var/log/manticore-2/searchd.log && echo "Node 2: SST messages found" || echo "Node 2: No SST found"
+––– output –––
+Node 2: SST messages found
+––– comment –––
+Debug: Show SST related log entries
+––– input –––
+echo "=== Node 1 SST logs ==="; grep -i "sst\|state transfer" /var/log/manticore-1/searchd.log | tail -5
+––– output –––
+=== Node 1 SST logs ===
+#!/.*/!#
+#!/.*/!#
+#!/.*/!#
+#!/.*/!#
+#!/.*/!#
+––– comment –––
+Cleanup: Remove watchdog from base config to avoid affecting other tests
+––– input –––
+sed -i '/watchdog = 0/d' test/clt-tests/base/searchd-with-flexible-ports.conf; echo $?
+––– output –––
+0

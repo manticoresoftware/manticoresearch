@@ -1017,7 +1017,7 @@ StmtErrorReporter_i * CreateHttpErrorReporter()
 
 void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 {
-	if ( tReply.m_bHtml )
+	if ( tReply.m_bSendHeaders )
 	{
 		HttpBuildReply ( tReply, dData );
 	}
@@ -1028,12 +1028,11 @@ void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 	}
 }
 
-
 void HttpHandler_c::SetErrorFormat ( bool bNeedHttpResponse )
 {
 	m_bNeedHttpResponse = bNeedHttpResponse;
 }
-	
+
 CSphVector<BYTE> & HttpHandler_c::GetResult()
 {
 	return m_dData;
@@ -1101,28 +1100,32 @@ void HttpHandler_c::ReportError ( const char * sError, HttpErrorType_e eType, EH
 void HttpHandler_c::BuildReply ( const CSphString & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	HttpReplyTrait_t tReply { eStatus, FromStr ( sResult ), m_bNeedHttpResponse };
+	HttpReplyTrait_t tReply { eStatus, FromStr ( sResult ) };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
 	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const char* szResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	HttpReplyTrait_t tReply { eStatus, FromSz( szResult ), m_bNeedHttpResponse };
+	HttpReplyTrait_t tReply { eStatus, FromSz( szResult ) };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
 	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	HttpReplyTrait_t tReply { eStatus, (Str_t)sResult, m_bNeedHttpResponse };
+	HttpReplyTrait_t tReply { eStatus, (Str_t)sResult };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
 	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( Str_t sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	HttpReplyTrait_t tReply { eStatus, sResult, m_bNeedHttpResponse };
+	HttpReplyTrait_t tReply { eStatus, sResult };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
 	ReplyBuf ( tReply, m_dData );
 }
 

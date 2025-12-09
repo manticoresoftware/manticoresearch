@@ -96,6 +96,17 @@ index pq1
 	rt_field = title
 }
 
+source src4 : src
+{
+	sql_query		= SELECT *, 11 as gid FROM test_table4
+}
+
+index idx4
+{
+	source			= src4
+	path			= <data_path/>/idx4
+}
+
 </config>
 
 <queries><sphinxql>
@@ -148,6 +159,18 @@ select * from idx3 where match ('beach NOTNEAR/1 hut') order by id asc;
 <!-- regression daemon infinite loop on fetching hits -->
 insert into pq1 (id, query) values(1, ' a1 NOTNEAR/1 z1 ');
 CALL PQ('pq1', ('[{"id":101, "title": "dummy1 a1 dummy2 dummy 2 dumm2 a1 dummy3 dummy3 dummy3 a1 dummy4 dummy4 dummy4 dummy4 z1 dummy5 dummy5 dummy5 a1 dummy6 dummy6 dummy6 z1 dummy7 dummy7 dummy7 a1 dummy8 dummy8 dummy8  a1 dummy8 dummy8 dummy8 dummy8 a1 dummy10 dummy10 "}]'), 1 AS docs_json, 1 as docs); ;
+
+<!-- NEAR vs NOTNEAR -->
+SELECT * FROM idx4 WHERE MATCH('a NOTNEAR/2 d') order by id asc;
+SELECT * FROM idx4 WHERE MATCH('a NOTNEAR/3 d') order by id asc;
+SELECT * FROM idx4 WHERE MATCH('a NOTNEAR/4 d') order by id asc;
+SELECT * FROM idx4 WHERE MATCH('a NOTNEAR/0 d') order by id asc;
+SELECT * FROM idx4 WHERE MATCH('a NEAR/2 d') order by id asc;
+SELECT * FROM idx4 WHERE MATCH('a NEAR/3 d') order by id asc;
+SELECT * FROM idx4 WHERE MATCH('a NEAR/4 d') order by id asc;
+<!-- NEAR/0 returns error message -->
+SELECT * FROM idx4 WHERE MATCH('a NEAR/0 d');
+
 </sphinxql></queries>
 
 <db_create>
@@ -225,5 +248,19 @@ CREATE TABLE test_table3
 	<repeat count="45" vars="i" init="15" inc="1"><var name="values" delimiter=",">(<i/>, '<doc/> hut')</var></repeat>
 	INSERT INTO `test_table3` VALUES <values/>
 </db_insert>
+
+<db_create>
+CREATE TABLE test_table4
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title TEXT NOT NULL
+) ENGINE=MYISAM;
+</db_create>
+<db_insert>
+INSERT INTO `test_table4` VALUES
+(1, 'a b с'),
+(2, 'a b c d')
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS `test_table4`</db_drop>
 
 </test>

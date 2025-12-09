@@ -251,16 +251,24 @@ hello NEAR/3 world NEAR/4 "my test"
 
 需要注意的是，`one NEAR/7 two NEAR/7 three` 不完全等同于 `"one two three"~7`。关键区别在于，邻近运算符允许在所有三个匹配词之间最多有6个非匹配词，而带有 `NEAR` 的版本限制较少：它允许 `one` 和 `two` 之间最多6个词，然后在该两词匹配和 `three` 之间再允许最多6个词。
 
-注意：当使用此运算符处理包含超过31个关键词的查询时，位置在31及以上的关键词的排名统计（如`tf`、`idf`、`bm25`）可能会被低估。这是由于内部使用了32位掩码来跟踪匹配项中的项目出现情况。匹配逻辑（查找文档）仍然正确，但对于非常长的查询，排名分数可能会受到影响。
+注意：在使用包含超过31个关键词的查询时，排名统计（如 `tf`、`idf`、`bm25`）可能会对位置在31及以上的关键词进行计数不足。这是由于内部使用了32位掩码来跟踪匹配中的术语出现次数。匹配逻辑（查找文档）仍然正确，但对于非常长的查询，排名得分可能会受到影响。
 
-### NOTNEAR运算符
+### NOTNEAR 操作符
 
 ```sql
 Church NOTNEAR/3 street
 ```
-`NOTNEAR`运算符作为一个负向断言。当左参数存在，且右参数要么在文档中不存在，要么距离左匹配参数末尾指定的单词数时，匹配一个文档。距离以单词数表示。语法为`NOTNEAR/N`，区分大小写，且不允许在`NOTNEAR`关键词、斜杠符号和距离值之间有空格。此运算符的两个参数可以是项或任何运算符或运算符组。
 
-### SENTENCE和PARAGRAPH运算符
+`NOTNEAR` 操作符作为一个否定断言，功能上相当于 `NEAR` 操作符的逻辑反面。当左侧参数出现时，若右侧参数要么在文档中不存在，要么距离左侧参数**超过**指定距离，则匹配该文档。
+
+语法为 `NOTNEAR/N`，区分大小写，并且 `NOTNEAR` 关键词、斜杠和距离值之间不允许有空格。
+
+主要行为包括：
+*   **对称性**：和 `NEAR` 一样，`NOTNEAR` 操作符无视文本中术语的顺序。如果右侧参数出现在指定距离内，无论是在左侧参数之前还是之后，匹配都会被排除。
+*   **距离阈值**：距离 `N` 表示附近范围（含）。如果两个词之间相隔 `N` 个词或更少，该匹配被丢弃。右侧参数必须距离左侧参数 `N + 1` 个词或更多。
+*   **参数**：该操作符的两个参数可以是术语、短语或操作符组。
+
+### SENTENCE 和 PARAGRAPH 操作符
 
 ```sql
 all SENTENCE words SENTENCE "in one sentence"
@@ -270,12 +278,12 @@ all SENTENCE words SENTENCE "in one sentence"
 ```sql
 "Bill Gates" PARAGRAPH "Steve Jobs"
 ```
-`SENTENCE`和`PARAGRAPH`运算符在两个参数位于同一句子或同一段落时匹配文档。这些参数可以是关键词、短语或相同运算符的实例。
+当两个参数都位于同一句子或同一段落内时，`SENTENCE` 和 `PARAGRAPH` 操作符分别匹配文档。这些参数可以是关键词、短语或相同操作符的实例。
 
-参数在句子或段落中的顺序无关紧要。这些运算符仅在使用[index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)（句子和段落索引功能）构建的表中有效，否则将恢复为简单的AND操作。关于什么构成句子和段落的信息，请参考[index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)指令文档。
+句子或段落内参数的顺序无关紧要。这些操作符仅在启用了 [index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)（句子和段落索引功能）的表中生效，否则退化为简单的 AND 操作。关于句子和段落的定义，请参阅 [index_sp](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp) 指令文档。
 
 
-### ZONE限制运算符
+### ZONE 限制操作符
 
 ```sql
 ZONE:(h3,h4)
@@ -283,7 +291,7 @@ ZONE:(h3,h4)
 only in these titles
 ```
 
-`ZONE限制`运算符与字段限制运算符非常相似，但限制匹配到指定的内部字段区域或区域列表。需要注意的是，后续子表达式不需要在给定区域的单一连续跨度内匹配，可以跨越多个跨度。例如，查询`(ZONE:th hello world)`将匹配以下示例文档：
+`ZONE limit` 操作符与字段限制操作符非常相似，但将匹配限制在指定的字段区段或区段列表中。需要注意的是，后续子表达式不必在给定区段的单个连续范围内匹配，也可以跨多个范围匹配。例如，查询 `(ZONE:th hello world)` 将匹配以下示例文档：
 
 ```html
 <th>Table 1. Local awareness of Hello Kitty brand.</th>
@@ -291,9 +299,9 @@ only in these titles
 <th>Table 2. World-wide brand awareness.</th>
 ```
 
-`ZONE`运算符影响查询直到下一个字段或`ZONE`限制运算符，或直到右括号。它仅在使用区域支持（参考[index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)）构建的表中有效，否则将被忽略。
+`ZONE` 操作符对查询的作用范围持续至下一个字段或 `ZONE` 限制操作符，或直至闭合括号。它仅在启用了区段支持的表中生效（参见 [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)），否则会被忽略。
 
-### ZONESPAN限制运算符
+### ZONESPAN 限制操作符
 
 ```sql
 ZONESPAN:(h2)
@@ -301,7 +309,7 @@ ZONESPAN:(h2)
 only in a (single) title
 ```
 
-`ZONESPAN`限制运算符类似于`ZONE`运算符，但要求匹配发生在单一连续跨度内。在前面的示例中，`ZONESPAN:th hello world`将不匹配该文档，因为"hello"和"world"未出现在同一跨度中。
+`ZONESPAN` 限制操作符类似于 `ZONE` 操作符，但要求匹配发生在单个连续范围内。在前述示例中，`ZONESPAN:th hello world` 将不会匹配该文档，因为“hello”和“world”不在同一范围内。
 
 <!-- proofread -->
 

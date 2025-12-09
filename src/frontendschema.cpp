@@ -378,6 +378,29 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	if ( !pGroupByCol )
 		return;
 
+	// JSON group by \ facet - 1st @groupbystr then @groupby
+	// @groupbystr has JSON items these grouped
+	// @groupby is the group key hash
+	const CSphColumnInfo * pGroupByStrCol = nullptr;
+	
+	// JSON path first - @groupbystr_j.field / @groupbystr_j['*']
+	if ( !sJsonGroupBy.IsEmpty() )
+	{
+		CSphString sGroupByStr;
+		sGroupByStr.SetSprintf ( "%s%s", GetInternalJsonPrefix(), sJsonGroupBy.cstr() );
+		pGroupByStrCol = m_tRes.m_tSchema.GetAttr ( sGroupByStr.cstr() );
+	}
+	
+	// if not found - plain attribute name - @groupbystr_j
+	if ( !pGroupByStrCol )
+	{
+		CSphString sGroupByStr;
+		sGroupByStr.SetSprintf ( "%s%s", GetInternalJsonPrefix(), sGroupBy.cstr() );
+		pGroupByStrCol = m_tRes.m_tSchema.GetAttr ( sGroupByStr.cstr() );
+	}
+
+	const CSphColumnInfo * pRemapCol = pGroupByStrCol ? pGroupByStrCol : pGroupByCol;
+
 	sph::StringSet hFacet;
 	hFacet.Add ( sGroupBy );
 	if ( !sJsonGroupBy.IsEmpty() )
@@ -391,11 +414,11 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
 		// checking _PTR attrs only because we should not have and non-ptr attr at this point
-		if ( hFacet[tFrontend.m_sName] && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		if ( hFacet[tFrontend.m_sName] && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 		{
-			tFrontend.m_tLocator = pGroupByCol->m_tLocator;
-			tFrontend.m_eAttrType = pGroupByCol->m_eAttrType;
-			tFrontend.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
+			tFrontend.m_tLocator = pRemapCol->m_tLocator;
+			tFrontend.m_eAttrType = pRemapCol->m_eAttrType;
+			tFrontend.m_eAggrFunc = pRemapCol->m_eAggrFunc;
 		}
 	}
 }

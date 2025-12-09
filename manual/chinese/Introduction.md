@@ -23,6 +23,9 @@ Manticore Search 是一个高性能、多存储的数据库，专为搜索和分
 #### 向量搜索功能
 Manticore Search 支持将机器学习模型生成的嵌入向量添加到每个文档中，然后对其进行[最近邻搜索](Searching/KNN.md)。这使您能够构建相似度搜索、推荐、语义搜索和基于自然语言处理算法的相关性排名等功能，还包括图像、视频和声音搜索。
 
+#### JOIN TEST
+Manticore Search 支持通过 SQL 和 JSON 进行的 [JOIN](Searching/Joining.md) 查询，允许您合并多个表的数据。
+
 #### JOIN
 Manticore Search 支持通过 SQL 和 JSON 进行的 [JOIN](Searching/Joining.md) 查询，允许您合并多个表的数据。
 

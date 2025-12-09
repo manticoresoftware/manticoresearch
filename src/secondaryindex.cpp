@@ -1494,28 +1494,7 @@ void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool
 	}
 }
 
-void ReportDisabledHints ( const VecTraits_T<IndexHint_t> & dHints, CSphString & sWarning )
+bool HasForceHints ( const VecTraits_T<IndexHint_t> & dHints )
 {
-	StringBuilder_c sIgnoredHints ( "," );
-	int iHintsCount = 0;
-
-	for ( const auto & tHint : dHints )
-	{
-		if ( tHint.m_bForce && tHint.m_eType==SecondaryIndexType_e::INDEX )
-		{
-			sIgnoredHints << tHint.m_sIndex.cstr();
-			iHintsCount++;
-		}
-	}
-
-	if ( !iHintsCount )
-		return;
-
-	if ( sWarning.IsEmpty() )
-	{
-		sWarning.SetSprintf ( "hint error: secondary index%s disabled due to query cache hit for '%s'", ( iHintsCount==1 ? "" : "(es)" ), sIgnoredHints.cstr() );
-	} else
-	{
-		sWarning.SetSprintf ( "%s; hint error: secondary index%s disabled due to query cache hit for '%s'", sWarning.cstr(), ( iHintsCount==1 ? "" : "(es)" ), sIgnoredHints.cstr() );
-	}
+	return dHints.any_of ( [] ( const auto & tHint ) { return ( tHint.m_bForce && tHint.m_eType==SecondaryIndexType_e::INDEX ); } );
 }

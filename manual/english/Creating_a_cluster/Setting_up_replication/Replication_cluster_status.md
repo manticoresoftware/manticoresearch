@@ -19,9 +19,9 @@ The output format for the cluster status variables is as follows:  `cluster_name
 * `local_index` - the node's index in the cluster.
 * `last_error` - the last recorded error message related to a cluster operation. The message provides a high-level summary of the problem. For more detailed context, you should consult the `searchd.log` file.
 
-### SST Progress Metrics
+### SST Progress Variables
 
-During a State Snapshot Transfer (SST), a node provisions another by transferring a full data copy. This happens when a new node joins the cluster [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) or when new tables are added [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). While an SST is active, the following additional status variables will be available on both the donor and joiner nodes, with their progress kept in sync.
+During a State Snapshot Transfer (SST), a node provisions another by transferring a full data copy. This happens when a new node joins the cluster [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) or when new tables are added [`ALTER CLUSTER ADD`](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). While an SST is active, the following additional status variables will be available on both the donor and joiner nodes, with their progress kept in sync.
 
 * `cluster_name_sst_total` - The overall progress of the entire SST operation, from 0 to 100. This is the primary counter to watch.
 * `cluster_name_sst_stage` - The name of the current work phase. The process cycles through these stages for each table being transferred:

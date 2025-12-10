@@ -27,11 +27,21 @@ jobs:
         GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
     steps:
+      - name: Check origin repository
+        id: repo-check
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            repo="${{ github.event.pull_request.head.repo.full_name }}"
+          else
+            repo="${{ github.repository }}"
+          fi
+          echo "repo=$repo" >> $GITHUB_OUTPUT
+
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          repository: ${{ github.event.pull_request.head.repo.owner.login }}/${{ github.event.pull_request.head.repo.name }}
+          repository: ${{ steps.repo-check.outputs.repo }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
           ref: ${{ github.head_ref }}
@@ -41,7 +51,7 @@ jobs:
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           # Update local master only if we're not currently on it
-          if [ "${{ github.ref_name }}" != "master" -a "${{ github.repository_owner }}" == "${{ github.event.pull_request.head.repo.owner.login }}" -a "${{ github.event.pull_request.head.repo.name }}" == "${{ github.event.repository.name }}" ]; then
+          if [ "${{ github.ref_name }}" != "master" -a "${{ github.event_name }}" != "pull_request" ]; then
             git fetch origin master:master
           fi
           git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs

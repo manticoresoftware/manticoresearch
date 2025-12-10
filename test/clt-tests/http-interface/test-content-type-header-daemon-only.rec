@@ -10,6 +10,11 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_ct; CREATE TABLE test_ct (title T
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_ct VALUES (1, 'Test Document', 2024);"
 ––– output –––
+––– comment –––
+Create PQ table for percolate testing
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS pq_test; CREATE TABLE pq_test (title TEXT, year INT) type='pq';"
+––– output –––
 ––– input –––
 echo '{"index":{"_index":"test_ct","_id":2}}
 {"title":"Bulk Document","year":2024}' > /tmp/bulk_test.ndjson
@@ -86,5 +91,17 @@ Content-Type: text/html; charset=UTF-8
 Test / root endpoint - should return application/json
 ––– input –––
 curl -i -s "http://localhost:9308/" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /pq/<table>/doc endpoint (add PQ rule) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/pq/pq_test/doc" -d '{"query":{"match":{"title":"test"}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /pq/<table>/search endpoint (percolate query) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/pq/pq_test/search" -d '{"query":{"percolate":{"document":{"title":"test document"}}}}' 2>&1 | grep -i "Content-Type:"
 ––– output –––
 Content-Type: application/json; charset=UTF-8

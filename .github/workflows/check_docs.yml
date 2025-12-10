@@ -49,7 +49,7 @@ jobs:
             git checkout master
             git merge origin/master
           fi
-          $(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)
+          git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
 
       - name: Get changed doc filepathes

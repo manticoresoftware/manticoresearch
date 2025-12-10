@@ -13,9 +13,6 @@ on:
 jobs:
   docs_check:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      pull-requests: read
     defaults:
       run:
         shell: bash

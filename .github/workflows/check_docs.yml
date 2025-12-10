@@ -44,6 +44,7 @@ jobs:
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           # Update local master only if we're not currently on it
           if [ "${{ github.ref_name }}" != "master" ]; then
+            git branch
             git checkout -b tmp-docs-check-branch
             git fetch origin master
             git checkout master

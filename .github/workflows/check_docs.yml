@@ -62,6 +62,7 @@ jobs:
               ;;
              esac  
           done
+          echo "$filepathes"
           echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
       - name: Run auto-translate
         run: |

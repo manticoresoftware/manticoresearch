@@ -48,6 +48,7 @@ jobs:
             git fetch origin master
             git checkout master
             git merge origin/master
+            git checkout ${{ github.ref_name }}
           fi
           git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT

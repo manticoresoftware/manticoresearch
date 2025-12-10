@@ -5,6 +5,7 @@ Manticore Search offers several ways to create tables, each designed for differe
 
 ## Table Types
 
+Test1
 Manticore supports different types of tables:
 
 - **Real-time tables** - For real-time updates and immediate searchability

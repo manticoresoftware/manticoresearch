@@ -44,7 +44,10 @@ jobs:
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           # Update local master only if we're not currently on it
           if [ "${{ github.ref_name }}" != "master" ]; then
-            git fetch origin master:master
+            git checkout -b tmp-docs-check-branch
+            git fetch origin master
+            git checkout master
+            git merge origin/master
           fi
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
 

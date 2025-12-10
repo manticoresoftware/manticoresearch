@@ -12,17 +12,20 @@
 
 #include "infix_builder.h"
 #include "sphinxint.h"
+#include "sphinxutils.h"
 
 #include "std/crc32.h"
 #include "fileio.h"
 
 #include <array>
+#include <cstring>
+#include <cstdint>
 
 //////////////////////////////////////////////////////////////////////////
 // KEYWORDS STORING DICTIONARY, INFIX HASH BUILDER
 //////////////////////////////////////////////////////////////////////////
 
-static constexpr int INFIX_ARENA_LENGTH = 1048576;
+static constexpr int INFIX_ARENA_LENGTH = 1 << 24; // 16M buckets provides better performance than 1M which was used previously
 
 template<int SIZE>
 struct Infix_t
@@ -41,6 +44,11 @@ struct Infix_t
 	bool operator== ( const Infix_t<SIZE>& rhs ) const noexcept
 	{
 		return m_Data == rhs.m_Data;
+	}
+
+	bool operator< ( const Infix_t<SIZE>& rhs ) const noexcept
+	{
+		return m_Data < rhs.m_Data;
 	}
 };
 
@@ -346,6 +354,110 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE* pWord, int iWordLength, int iCh
 	}
 }
 
+// Radix sort for fixed-size keys using LSD (Least Significant Digit) algorithm
+// Processes bytes from least significant (last) to most significant (first)
+// This ensures exact compatibility with std::array::operator< lexicographic comparison
+template<int SIZE>
+void RadixSortIndices ( CSphVector<int>& dIndex, const CSphSwapVector<InfixHashEntry_t<SIZE>>& dArena )
+{
+	int iCount = dIndex.GetLength();
+	if ( iCount < 2 )
+		return;
+
+	// Temporary arrays for radix sort
+	CSphVector<int> dTemp;
+	dTemp.Resize ( iCount );
+	int* pInput = dIndex.Begin();
+	int* pOutput = dTemp.Begin();
+
+	if constexpr ( SIZE == 2 )
+	{
+		// For SIZE=2: use std::sort fallback (SIZE=2 uses packed keys which need special handling)
+		dIndex.Sort ( Lesser ( [&dArena] ( int a, int b ) noexcept { 
+			return dArena[a].m_tKey.m_Data < dArena[b].m_tKey.m_Data; 
+		} ) );
+		return;
+	}
+	else
+	{
+		// For SIZE=3 (12 bytes) or SIZE=5 (20 bytes): use byte-by-byte LSD radix sort
+		constexpr int KEY_SIZE = SIZE * sizeof(DWORD);
+		
+		// Pre-extract all key bytes to improve cache locality
+		// This trades memory for better cache behavior by avoiding random dArena access
+		CSphVector<BYTE> dKeyBytes;
+		dKeyBytes.Resize ( iCount * KEY_SIZE );
+		BYTE* pKeyBytes = dKeyBytes.Begin();
+		
+		// Extract all key bytes in one sequential pass
+		for ( int i = 0; i < iCount; ++i )
+		{
+			int idx = pInput[i];
+			if ( idx >= 1 && idx < dArena.GetLength() )
+			{
+				const BYTE* pSrc = dArena[idx].m_tKey.m_Data.data();
+				memcpy ( pKeyBytes + ( i * KEY_SIZE ), pSrc, KEY_SIZE );
+			}
+			else
+			{
+				memset ( pKeyBytes + ( i * KEY_SIZE ), 0, KEY_SIZE );
+			}
+		}
+		
+		// Use heap-allocated arrays to avoid stack overflow
+		CSphVector<int> dCount, dPos;
+		dCount.Resize ( 256 );
+		dPos.Resize ( 256 );
+		int* aCount = dCount.Begin();
+		int* aPos = dPos.Begin();
+		
+		// Allocate temp key bytes buffer once outside the loop
+		CSphVector<BYTE> dKeyBytesTemp;
+		dKeyBytesTemp.Resize ( iCount * KEY_SIZE );
+		
+		// Process bytes from last (least significant) to first (most significant)
+		// This is LSD radix sort: stable and produces correct lexicographic ordering
+		for ( int iByte = KEY_SIZE - 1; iByte >= 0; --iByte )
+		{
+			// Clear count array
+			memset ( aCount, 0, 256 * sizeof(int) );
+			
+			// Count phase: sequential access to pre-extracted keys
+			for ( int i = 0; i < iCount; ++i )
+			{
+				BYTE uByte = pKeyBytes[i * KEY_SIZE + iByte];
+				++aCount[uByte];
+			}
+			
+			// Convert counts to starting positions (cumulative sum)
+			aPos[0] = 0;
+			for ( int i = 1; i < 256; ++i )
+				aPos[i] = aPos[i-1] + aCount[i-1];
+			
+			// Distribute phase: reorder indices and key bytes
+			// Get pointer to temp buffer - this will be swapped with pKeyBytes after distribution
+			BYTE* pKeyBytesTemp = ( pKeyBytes == dKeyBytes.Begin() ) ? dKeyBytesTemp.Begin() : dKeyBytes.Begin();
+			
+			for ( int i = 0; i < iCount; ++i )
+			{
+				BYTE uByte = pKeyBytes[i * KEY_SIZE + iByte];
+				int iNewPos = aPos[uByte]++;
+				pOutput[iNewPos] = pInput[i];
+				// Copy key bytes to new position for next pass
+				memcpy ( pKeyBytesTemp + ( iNewPos * KEY_SIZE ), pKeyBytes + ( i * KEY_SIZE ), KEY_SIZE );
+			}
+			
+			// Swap input/output buffers and key byte buffers for next iteration
+			std::swap ( pInput, pOutput );
+			std::swap ( pKeyBytes, pKeyBytesTemp );
+		}
+	}
+
+	// If final result is in temp buffer, copy back
+	if ( pInput == dTemp.Begin() )
+		memcpy ( dIndex.Begin(), dTemp.Begin(), iCount * sizeof(int) );
+}
+
 static inline int ZippedIntSize ( DWORD v ) noexcept
 {
 	if ( v < ( 1UL << 7 ) )
@@ -371,7 +483,8 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter& wrDict )
 	CSphVector<int> dIndex;
 	dIndex.Resize ( m_dArena.GetLength() - 1 );
 	dIndex.FillSeq(1);
-	dIndex.Sort ( Lesser ( [this] ( int a, int b ) noexcept { return m_dArena[a].m_tKey.m_Data < m_dArena[b].m_tKey.m_Data; } ) );
+	// Use radix sort for O(n) performance instead of O(n log n) which std::sort provides
+	RadixSortIndices<SIZE> ( dIndex, m_dArena );
 
 	m_dBlocksWords.Reserve ( m_dArena.GetLength() / INFIX_BLOCK_SIZE * sizeof ( DWORD ) * SIZE );
 	int iBlock = 0;

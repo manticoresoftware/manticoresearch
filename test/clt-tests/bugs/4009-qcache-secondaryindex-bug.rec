@@ -1,0 +1,96 @@
+––– comment –––
+Test for issue #4009: Query cache returns incorrect results with SecondaryIndex hint
+https://github.com/manticoresoftware/manticoresearch/issues/4009
+
+Bug: Query cache ignored SecondaryIndex hint in cache key, returning wrong cached results.
+Query with hint received results from different query without hint.
+
+Test verifies:
+- MATCH('hard') → 229322 results
+- MATCH('hard') AND type=5 WITH hint → 2252 results (was 183114 - bug)
+- Both WITH and WITHOUT cache return same results (cache works correctly)
+
+––– block: ../base/start-searchd –––
+––– comment –––
+Create 1M records: id (sequential), name (random text), type (random 1-100)
+––– input –––
+manticore-load \
+  --batch-size=1000 \
+  --threads=4 \
+  --total=1000000 \
+  --init="CREATE TABLE test(id bigint, name text, type int)" \
+  --load="INSERT INTO test(id,name,type) VALUES(<increment>,'<text/10/100>',<int/1/100>)" \
+  --quiet > /dev/null; echo $?
+––– output –––
+0
+––– comment –––
+Enable query cache (16MB, threshold 1ms, TTL 180s)
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL qcache_max_bytes=16000000; SET GLOBAL qcache_thresh_msec=1; SET GLOBAL qcache_ttl_sec=180;"
+––– output –––
+––– comment –––
+Baseline: count documents with MATCH('hard') - result will be cached
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard');"
+––– output –––
++----------+
+| count(*) |
++----------+
+|   229322 |
++----------+
+––– comment –––
+Critical: same MATCH + type=5 filter + SecondaryIndex hint
+Bug: returned 183114 (wrong cache hit), correct: 2252
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|     2252 |
++----------+
+––– comment –––
+Control: same filter WITHOUT hint - should return same result (2252)
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|     2252 |
++----------+
+––– comment –––
+Disable cache - verify queries return same results without caching
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL qcache_max_bytes=0;"
+––– output –––
+––– comment –––
+Re-run baseline without cache - expect 229322
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard');"
+––– output –––
++----------+
+| count(*) |
++----------+
+|   229322 |
++----------+
+––– comment –––
+Re-run with hint without cache - proves bug was in cache, not SecondaryIndex
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|     2252 |
++----------+
+––– comment –––
+Re-run without hint - verify consistency (2252)
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|     2252 |
++----------+

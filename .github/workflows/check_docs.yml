@@ -42,17 +42,9 @@ jobs:
       - name: Fetch master and get changed files
         id: changed-files
         run: |
-          echo "REPO ${{ github.event.pull_request.head.repo.name }} ${{ github.event.pull_request.head.repo.owner.login }}"
-          git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           # Update local master only if we're not currently on it
-          if [ "${{ github.ref_name }}" != "master" ]; then
-            echo "TEST ${{github.ref_name}} ${{ github.repository }} ${{ github.event.repository.name }}"
-            git branch
-            git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs
-            git checkout -b tmp-docs-check-branch
-            git fetch origin master
-            git checkout master
-            git merge origin/master
+          if [ "${{ github.ref_name }}" != "master" && "${{ github.repository_owner }}" == "${{ github.event.pull_request.head.repo.owner.login }}" && "${{ github.event.pull_request.head.repo.name }}" == "${{ github.event.repository.name }}"]; then
+            git fetch origin master:master
           fi
           git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs
           echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT

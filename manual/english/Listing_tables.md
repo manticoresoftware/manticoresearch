@@ -7,6 +7,7 @@ Unlike other DBMS, there is no concept of grouping tables into databases in Mant
 <!-- example listing -->
 ## SHOW TABLES
 
+Test1
 General syntax:
 
 ```sql

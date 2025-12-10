@@ -41,6 +41,7 @@ jobs:
       - name: Fetch master and get changed files
         id: changed-files
         run: |
+          echo "REPO ${{ github.event.pull_request.head.repo.name }} ${{ github.event.pull_request.head.repo.owner.login }}"
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           # Update local master only if we're not currently on it
           if [ "${{ github.ref_name }}" != "master" ]; then

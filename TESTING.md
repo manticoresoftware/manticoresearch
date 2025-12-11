@@ -1,6 +1,6 @@
 # Testing
 
-This is a comprehensive guide to the automated test suites included in Manticore Search. Testing ensures that new changes are stable, free of bugs, and don't introduce regressions. This document covers both traditional CTest-based tests and modern CLT (Command Line Testing) tests.
+This is a comprehensive guide to the automated test suites included in Manticore Search. Testing ensures that new changes are stable, free of bugs, and don't introduce regressions. This document covers the test frameworks used in Manticore Search: regression tests (PHP-based), Google Tests (C++ unit tests), and CLT (Command Line Testing) tests.
 
 ## Table of Contents
 
@@ -17,46 +17,35 @@ This is a comprehensive guide to the automated test suites included in Manticore
 
 ## Overview
 
-Manticore Search has two main test frameworks:
+Manticore Search uses several types of automated tests:
 
-1. **CTest Tests** - Traditional C++ unit and regression tests run via CMake's CTest
-2. **CLT Tests** - Modern command-line tests in `test/clt-tests/` using the [CLT framework](https://github.com/manticoresoftware/clt)
+1. **Regression Tests** - PHP-based functional tests located in `test/test_XXX/` directories, executed via `ubertest.php`
+2. **Google Tests** - C++ unit tests for core functionality located in `src/gtests/`
+3. **CLT Tests** - Command-line integration tests in `test/clt-tests/` using the [CLT framework](https://github.com/manticoresoftware/clt)
+
+CTest (CMake's testing tool) is used to run regression tests and Google Tests locally.
 
 ## Test Types
 
-### CTest Tests (Legacy)
-Located in `test/test_XXX/` directories. These tests verify core C++ functionality and are run via CMake/CTest.
+### Regression Tests
+PHP-based functional tests located in `test/test_XXX/` directories. These tests verify searchd functionality by comparing actual output against reference results. Executed via `ubertest.php` and run through CTest.
 
-### CLT Tests (Modern Approach)
-Located in `test/clt-tests/` and organized by functionality:
+### Google Tests
+C++ unit tests located in `src/gtests/`. These tests verify core C++ functionality, including tokenizers, JSON processing, filters, and internal data structures. Run via CTest.
+
+### CLT Tests
+Located in `test/clt-tests/` and organized by functionality. Key categories include:
 
 - **base/** - Reusable blocks for starting/stopping searchd
-- **buddy/** - Buddy plugin system tests
 - **buddy-plugins/** - Tests for Buddy plugins (fuzzy search, autocomplete, etc.)
-- **bugs/** - Regression tests for specific bug fixes
-- **core/** - Core searchd functionality tests
-- **data-manipulation/** - DDL/DML operations (ALTER, INSERT, REPLACE, etc.)
 - **expected-errors/** - Negative tests validating error handling
-- **fulltext-search/** - Full-text search functionality (MATCH, ranking, etc.)
-- **http-interface/** - HTTP API tests
-- **indexer/** - Indexer and data import tests
-- **indexing-error/** - Tests for indexing error conditions
-- **installation/** - Package installation and upgrade tests
-- **integrations/** - Integration tests with external services (Kafka, etc.)
-- **join/** - JOIN operations tests
-- **kibana/** - Kibana integration tests
-- **mcl/** - Manticore Columnar Library tests
-- **migration-es-ms/** - Elasticsearch to Manticore migration tests
-- **mysqldump/** - MySQL dump import/export tests
-- **opensearch/** - OpenSearch compatibility tests
+- **fulltext-search/** - Full-text search functionality tests
 - **performance/** - Performance benchmarks
-- **performance-nightly/** - Extended nightly performance tests
 - **replication/** - Replication and clustering tests
-- **scripts/** - Helper scripts for test data generation
 - **sharding/** - Distributed table and sharding tests
-- **tables-interaction/** - Tests for table-to-table interactions
-- **test-configuration/** - Configuration and settings tests
 - **vector-knn/** - Vector/KNN search tests
+
+See `test/clt-tests/` directory for complete list of test categories.
 
 ## Testing via GitHub Actions
 
@@ -65,10 +54,11 @@ Located in `test/clt-tests/` and organized by functionality:
 ### How it works:
 
 1. **Fork the repository** on GitHub
-2. **Create a branch** in your fork
-3. **Make your changes** and commit them
-4. **Push to your fork** - This automatically triggers GitHub Actions
-5. **Create a Pull Request** - Tests run automatically on PR creation and updates
+2. **Enable GitHub Actions** in your fork: Go to the "Actions" tab and click "I understand my workflows, go ahead and enable them"
+3. **Create a branch** in your fork
+4. **Make your changes** and commit them
+5. **Push to your fork** - This automatically triggers GitHub Actions
+6. **Create a Pull Request** - Tests run automatically on PR creation and updates
 
 GitHub Actions will run the full test suite across multiple platforms (Linux, macOS, Windows) and report results directly in your PR.
 
@@ -202,38 +192,55 @@ CLT tests are organized into test suites defined in `.github/workflows/clt_tests
 
 ### Running Locally
 
-For local CLT test execution, you need Docker and the CLT action. Tests run inside Docker containers to ensure consistent environment.
+CLT tests run inside Docker containers to ensure consistent environment. For local testing, you can use publicly available Docker images.
 
-**Using GitHub CLI and Act (for local GitHub Actions simulation):**
-
-```bash
-# Install act (GitHub Actions local runner)
-brew install act  # macOS
-# or
-curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash  # Linux
-
-# Run specific CLT test suite locally
-act -j clt --matrix test-suite:name:Buddy-plugins
-```
-
-**Direct Docker execution (manual approach):**
+**Quick testing with Docker:**
 
 ```bash
-# Build or pull Manticore image
+# Pull the latest Manticore image from Docker Hub
 docker pull manticoresearch/manticore:latest
 
-# Run test manually in container
-docker run --rm -v $(pwd):/manticore manticoresearch/manticore:latest bash -c "
-  cd /manticore &&
-  mysql -h127.0.0.1 -P9306 -e 'SHOW TABLES;'
-"
+# Or use the dev version with latest features
+docker pull manticoresearch/manticore:dev
+
+# Start Manticore container
+docker run -d --name manticore-test \
+  -p 9306:9306 -p 9308:9308 \
+  manticoresearch/manticore:latest
+
+# Test connection
+mysql -h127.0.0.1 -P9306 -e "SHOW TABLES;"
 ```
 
-**Note**: The CLT framework is integrated as a GitHub Action (`manticoresoftware/clt@0.7.3`), not as a standalone CLI tool. For full CLT capabilities, use GitHub Actions or the Act tool for local simulation.
+**Running CLT tests locally:**
+
+You can install CLT and run tests locally against any Docker image:
+
+```bash
+# Clone CLT repository
+git clone https://github.com/manticoresoftware/clt.git
+cd clt
+
+# Run a specific test
+./clt test -t /path/to/manticoresearch/test/clt-tests/buddy-plugins/test-fuzzy-search.rec \
+  -d manticoresearch/manticore:latest
+
+# Record a new test interactively
+./clt record manticoresearch/manticore:latest
+```
+
+See [CLT documentation](https://github.com/manticoresoftware/clt) for more details on test recording and replay.
+
+**Note**: GitHub Actions use special `test-kit` Docker images built from your PR changes. For local development, use public images from Docker Hub (`manticoresearch/manticore:latest` or `:dev`).
 
 ### CLT Test File Format
 
-CLT tests use `.rec` (test case) and `.recb` (reusable block) files:
+CLT uses two types of files:
+
+- **`.rec`** (test case) - Complete test file that CLT executes. Contains test steps and can include reusable blocks.
+- **`.recb`** (reusable block) - Shared test component that can be included in multiple `.rec` files using `––– block: path/to/block –––`
+
+**Example `.rec` file** (complete test):
 
 ```
 ––– block: ../base/start-searchd-with-buddy –––
@@ -248,7 +255,13 @@ mysql -h0 -P9306 -e "SELECT * FROM test;"
 +------+---------+
 ```
 
-See existing tests in `test/clt-tests/` for examples.
+The first line includes a reusable block from `../base/start-searchd-with-buddy.recb` which contains common setup steps (starting searchd and Buddy).
+
+**When to use each:**
+- Use `.rec` for your actual test cases
+- Use `.recb` for common setup/teardown steps that multiple tests need (see [Base Blocks](#base-blocks) section below)
+
+See existing tests in `test/clt-tests/` for more examples.
 
 ## Writing Tests
 
@@ -315,7 +328,7 @@ Reusable test components in `test/clt-tests/base/`:
 Tests are automatically run via GitHub Actions:
 
 - `.github/workflows/test.yml` - Main test workflow
-- `.github/workflows/clt_tests.yml` - CLT test workflow  
+- `.github/workflows/clt_tests.yml` - CLT test workflow
 - `.github/workflows/clt_nightly.yml` - Nightly extended tests
 
 ### Binary and File Locations
@@ -350,4 +363,3 @@ When submitting a pull request:
 5. Address any test failures before requesting review
 
 For more details, see [CONTRIBUTING.md](CONTRIBUTING.md).
-

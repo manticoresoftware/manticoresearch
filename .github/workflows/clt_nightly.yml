@@ -168,7 +168,7 @@ jobs:
       # Upload core dumps as artifacts for AlmaLinux 10 (issue #4040)
       - name: Upload core dumps (AlmaLinux 10 only)
         if: (failure() || cancelled()) && (matrix.name == 'Alma 10 upgrade to dev' || matrix.name == 'Alma 10 release installation')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coredump-alma10-${{ matrix.name }}-${{ github.run_id }}
           path: |
@@ -283,7 +283,7 @@ jobs:
       # Upload core dumps as artifacts for AlmaLinux 10 (issue #4040)
       - name: Upload core dumps (AlmaLinux 10 only)
         if: (failure() || cancelled()) && (matrix.name == 'Alma 10 upgrade to dev' || matrix.name == 'Alma 10 release installation')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coredump-alma10-arm64-${{ matrix.name }}-${{ github.run_id }}
           path: |

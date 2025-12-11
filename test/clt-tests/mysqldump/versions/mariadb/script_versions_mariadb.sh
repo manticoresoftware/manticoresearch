@@ -75,29 +75,10 @@ for version in "${versions[@]}"; do
         echo "⚠️ Warning: Restore failed for $version, skipping query log check"
     fi
     
-    # Check query log contains only the expected query and nothing extra (only if restore succeeded)
+    # Output query log content (only if restore succeeded) - CLT will validate against expected output
     if [ $restore_status -eq 0 ]; then
-        log_content=$(docker exec manticore cat /var/log/manticore/query.log 2>/dev/null || echo "")
-        select_count=$(echo "$log_content" | grep -i "select \* from t" | wc -l | tr -d ' ')
-        total_lines=$(echo "$log_content" | grep -v "^$" | wc -l | tr -d ' ')
-        
-        # Always show log content for verification
-        echo "   Query log content (should be only 1 line):"
-        if [ -n "$log_content" ]; then
-            echo "$log_content" | head -5
-        else
-            echo "   (empty)"
-        fi
-        
-        if [ -n "$log_content" ] && [ "$select_count" -eq 1 ] && [ "$total_lines" -eq 1 ]; then
-            echo "✅ Query log check passed for $version - only expected query logged"
-        elif [ -z "$log_content" ]; then
-            echo "⚠️ Query log is empty for $version (query logging may not be enabled)"
-        else
-            echo "❌ Query log check FAILED for $version"
-            echo "   Expected: 1 'select * from t' query, got $select_count"
-            echo "   Total lines in log: $total_lines"
-        fi
+        echo "   Query log content:"
+        docker exec manticore cat /var/log/manticore/query.log 2>/dev/null || echo "   (empty)"
     fi
 
     # Checking for errors

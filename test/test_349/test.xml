@@ -258,7 +258,7 @@ CREATE TABLE test_table4
 </db_create>
 <db_insert>
 INSERT INTO `test_table4` VALUES
-(1, 'a b с'),
+(1, 'a b c'),
 (2, 'a b c d')
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS `test_table4`</db_drop>

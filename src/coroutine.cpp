@@ -800,6 +800,15 @@ int64_t ATTRIBUTE_NO_SANITIZE_ADDRESS GetStackUsed ()
 	if ( !pStackTop )
 		return 0;
 	int64_t iHeight = pStackTop - &cStack;
+	
+	// Debug logging for issue #4040 - stack measurement crash on AlmaLinux 10
+	static bool bDebugLogged = false;
+	if ( !bDebugLogged ) {
+		sphLogDebugv ( "GetStackUsed() debug: pStackTop=%p, &cStack=%p, raw_diff=%lld",
+			pStackTop, &cStack, (long long)iHeight );
+		bDebugLogged = true;
+	}
+	
 	return ( iHeight >= 0 ) ? iHeight : -iHeight; // on different arch stack may grow in different directions
 }
 

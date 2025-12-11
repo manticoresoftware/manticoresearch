@@ -136,14 +136,32 @@ public:
 			sLog.Sprintf( "stack frame size %d, frames %d", pair.first, pair.second );
 		}
 
-		if ( dHistogram.IsEmpty() )
-		{
-			sphWarning ("Something wrong measuring stack. After %d tries, %d depth", i, uDepth );
-			sphWarning ("log: %s", sLog.cstr());
-		}
+	if ( dHistogram.IsEmpty() )
+	{
+		sphWarning ("Something wrong measuring stack. After %d tries, %d depth", i, uDepth );
+		sphWarning ("log: %s", sLog.cstr());
+		// Debug info for issue #4040
+		sphWarning ("Debug: uStartingStack=%u, uPreviousStack=%u, m_dMockStack.GetLengthBytes()=%d",
+			uStartingStack, uPreviousStack, m_dMockStack.GetLengthBytes());
+	}
 
-		auto iStack = dHistogram.First().first;
-		assert (iStack>0);
+	// Debug logging for issue #4040 - prevent crash if histogram is empty
+	if ( dHistogram.IsEmpty() ) {
+		sphWarning ("FATAL: dHistogram is empty, cannot continue stack measurement (issue #4040)");
+		return { (int)uStartingStack, 16 }; // return minimal safe value
+	}
+
+	auto iStack = dHistogram.First().first;
+	
+	// Debug check for issue #4040
+	if ( iStack <= 0 ) {
+		sphWarning ("FATAL: Invalid stack frame size %d (issue #4040), histogram dump:", iStack);
+		for ( const auto& pair : dHistogram )
+			sphWarning ("  frame_size=%d, count=%d", pair.first, pair.second );
+		return { (int)uStartingStack, 16 }; // return minimal safe value
+	}
+	
+	assert (iStack>0);
 
 		int iDelta = sphRoundUp ( iStack, 8 );
 		return { (int)uStartingStack, iDelta };

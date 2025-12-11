@@ -1299,14 +1299,19 @@ function RunCurl ( $curl_desc, &$rows )
 	return $http_code;
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+function CurlDesc ( $http_endpoint, $use_agent=0, $use_ssl=false )
 {
 	global $agents;
 
 	$ssl = $use_ssl ? "https://" : "";
 
 	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+	return array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+}
+
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+{
+	$curl_desc = CurlDesc ( $http_endpoint, $use_agent, $use_ssl );
 	if ( $http_method=="POST" )
     {
         $curl_desc[CURLOPT_POST] = 1;

@@ -1,0 +1,219 @@
+API_URL parameter testing for embeddings
+
+This test validates the API_URL parameter for embedding generation in CREATE TABLE statements. It tests various scenarios including default endpoint usage, empty string handling, invalid URL formats, inaccessible endpoints, and both default and custom endpoint configurations. The test uses a mock server for custom endpoint testing and real OpenAI API for default endpoint validation.
+
+––– comment –––
+MOCK SERVER SETUP FOR API_URL TESTING
+
+To test API_URL parameter with a local mock server:
+
+Start mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Use API_URL='http://localhost:8080/v1/embeddings' in CREATE TABLE statements
+The mock server returns deterministic random embeddings seeded by input text
+This allows testing API_URL functionality without making real API calls
+API Key Validation: All keys are valid except "wrong" (returns 401 error)
+Response Type Override: Use "response-type=TYPE" in input text to test invalid responses (html, invalid-json, wrong-structure)
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+MOCK SERVER STARTUP
+––– comment –––
+Start mock server for OpenAI provider on port 8080
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+MOCK_PID_8080=$!
+echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
+sleep 3
+––– output –––
+Mock server started on port 8080 (PID: #!/[0-9]+/!#)
+––– comment –––
+API_URL Not Specified
+
+Test: Create table without API_URL parameter
+Expected: Uses default provider endpoint (e.g., https://api.openai.com/v1/embeddings for OpenAI)
+Verify: Table creation succeeds, embeddings generated successfully, SHOW CREATE TABLE does NOT display api_url
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_not_specified (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE does not display api_url
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_not_specified" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_url_not_specified
+Create Table: CREATE TABLE test_api_url_not_specified (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+)
+––– comment –––
+API_URL Specified as Empty String
+
+Test: CREATE TABLE ... API_URL=''
+Expected: Treated as not specified, uses default endpoint
+Verify: Same as API_URL Not Specified test
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_empty (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE does not display api_url (treated as default)
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_empty" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_url_empty
+Create Table: CREATE TABLE test_api_url_empty (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+)
+––– comment –––
+API_URL with Invalid Format
+
+Test Cases: Various invalid URL formats
+Expected: Table creation fails during API key validation (validation makes a real API request which requires a valid URL)
+Note: API key validation happens at table creation time and makes an HTTP request, so invalid URLs are caught immediately
+
+Test Case 1: API_URL='not-a-url' (not a valid URL)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid1 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='not-a-url')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid1': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 2: API_URL='http://' (incomplete URL)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid2 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid2': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 3: API_URL='ftp://example.com' (wrong protocol, should be http/https)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid3 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='ftp://example.com')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid3': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 4: API_URL='http://example.com' (missing path)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid4 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://example.com')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid4': prealloc: Invalid API key for remote model (HTTP status code 403)
+––– comment –––
+Test Case 5: API_URL='http://example.com:99999' (invalid port)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid5 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://example.com:99999')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid5': prealloc: Failed to send request to remote model
+––– comment –––
+API_URL with Valid Format but Inaccessible
+
+Test Cases: Valid URL format but unreachable endpoints
+Expected: Table creation fails during API key validation with connection/timeout error
+
+Test Case 1: API_URL='http://192.0.2.0:8080/v1/embeddings' (RFC 3330 test address, unreachable)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_unreachable1 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://192.0.2.0:8080/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_unreachable1': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 2: API_URL='http://localhost:99999/v1/embeddings' (wrong port, nothing listening)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_unreachable2 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:99999/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_unreachable2': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 3: API_URL='http://nonexistent-domain-12345.example/v1/embeddings' (DNS failure)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_unreachable3 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://nonexistent-domain-12345.example/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_unreachable3': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 4: API_URL='https://api.openai.com:443/v1/embeddings' (correct but network down - comment only, requires network failure simulation)
+
+Note: This test case requires network failure simulation and may not be practical in automated tests
+
+API_URL Accessible but Wrong API Type
+
+Test Cases: Server accessible but returns wrong response format
+Expected: Table creation fails during API key validation (validation request fails to parse response)
+Test Method: Use response-type=TYPE in input text to override response format
+Note: The response-type=... parameter is removed from text before generating embeddings
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Test Case 1: Server returns HTML (not JSON) - use "response-type=html" in input text
+Note: This test requires inserting data with "response-type=html" in the text to trigger HTML response
+However, validation happens at table creation, so we need a different approach
+For now, document that this requires a custom HTTP server that returns HTML
+
+Test Case 2: Server returns malformed JSON - use "response-type=invalid-json" in input text
+Note: Similar to above, validation happens at table creation time
+
+Test Case 3: Server returns valid JSON but wrong structure - use "response-type=wrong-structure" in input text
+Note: Similar to above, validation happens at table creation time
+––– comment –––
+API_URL Valid and Working (Default Provider Endpoint)
+
+Test: API_URL='https://api.openai.com/v1/embeddings' with valid OpenAI key
+Expected: Table creation succeeds, embeddings generated successfully, SHOW CREATE TABLE displays api_url
+Note: This requires a valid OpenAI API key
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_default_endpoint (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_URL='https://api.openai.com/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE displays api_url
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_default_endpoint" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_url_default_endpoint
+Create Table: CREATE TABLE test_api_url_default_endpoint (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='https://api.openai.com/v1/embeddings'
+)
+––– comment –––
+Test data insertion
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_api_url_default_endpoint (id, title) VALUES (1, 'test document')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+API_URL Valid and Working (Custom Endpoint)
+
+Test: API_URL='http://localhost:8080/v1/embeddings' with mock server
+Expected: Table creation succeeds, embeddings generated successfully, SHOW CREATE TABLE displays api_url
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_custom_endpoint (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE displays api_url
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_custom_endpoint" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_url_custom_endpoint
+Create Table: CREATE TABLE test_api_url_custom_endpoint (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+)
+––– comment –––
+Test data insertion with custom API_URL (mock server should receive request)
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_api_url_custom_endpoint (id, title) VALUES (1, 'test document')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify data was inserted and embedding vector was generated
+––– input –––
+mysql -h0 -P9306 -E -e "SELECT id, embedding FROM test_api_url_custom_endpoint WHERE id=1" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       id: 1
+embedding: #!/[-0-9.,]+/!#

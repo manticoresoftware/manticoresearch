@@ -46,6 +46,8 @@ public:
 		bool			m_bHNSWSimilaritySpecified = false;
 		CSphString		m_sModelName;
 		CSphString		m_sAPIKey;
+		CSphString		m_sAPIUrl;
+		int				m_iAPITimeout = 0; // 0 means use default (10 seconds)
 		CSphString		m_sCachePath;
 		CSphString		m_sFrom;
 		bool			m_bUseGPU = false;
@@ -79,6 +81,8 @@ public:
 	bool	AddItemOptionFrom ( const SqlNode_t & tOption );
 	bool	AddItemOptionCachePath ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
+	bool	AddItemOptionAPIUrl ( const SqlNode_t & tOption );
+	bool	AddItemOptionAPITimeout ( const SqlNode_t & tOption );
 	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
 	bool	AddItemOptionQuantization ( const SqlNode_t & tOption );
 
@@ -174,6 +178,8 @@ knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
 
 	tModel.m_sModelName	= m_sModelName.scstr();
 	tModel.m_sAPIKey	= m_sAPIKey.scstr();
+	tModel.m_sAPIUrl	= m_sAPIUrl.scstr();
+	tModel.m_iAPITimeout = m_iAPITimeout;
 	tModel.m_sCachePath = m_sCachePath.scstr();
 	tModel.m_bUseGPU	= m_bUseGPU;
 
@@ -509,6 +515,48 @@ bool DdlParser_c::AddItemOptionFrom ( const SqlNode_t & tOption )
 bool DdlParser_c::AddItemOptionAPIKey ( const SqlNode_t & tOption )
 {
 	m_tItemOptions.m_sAPIKey = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionAPIUrl ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sAPIUrl = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionAPITimeout ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	
+	// Validate that the string is a valid integer
+	const char * p = sValue.cstr();
+	if ( !p || !*p )
+	{
+		m_sError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+		return false;
+	}
+	
+	// Check if all characters are digits
+	while ( *p )
+	{
+		if ( *p < '0' || *p > '9' )
+		{
+			m_sError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+			return false;
+		}
+		p++;
+	}
+	
+	int iTimeout = atoi(sValue.cstr());
+	if ( iTimeout < 0 )
+	{
+		m_sError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+		return false;
+	}
+	// 0 means use default timeout (10 seconds), positive value is timeout in seconds
+	m_tItemOptions.m_iAPITimeout = iTimeout;
 	return true;
 }
 

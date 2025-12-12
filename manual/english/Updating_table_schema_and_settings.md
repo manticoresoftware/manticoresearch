@@ -324,20 +324,29 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## Updating attribute API key (for embeddings generation) in RT mode
+## Updating attribute API parameters (for embeddings generation) in RT mode
 
 <!-- example api_key -->
 
-`ALTER` can be used to modify an API key when a remote model is used for auto-embeddings:
+`ALTER` can be used to modify API parameters when a remote model is used for auto-embeddings:
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
 ```
+
+**Notes:**
+- `API_KEY`: The new API key is validated during the ALTER operation by making a real API request.
+- `API_URL`: Set to an empty string (`''`) to revert to the default provider endpoint.
+- `API_TIMEOUT`: Set to `'0'` to use the default timeout (10 seconds). Must be a non-negative integer.
 
 <!-- end -->
 

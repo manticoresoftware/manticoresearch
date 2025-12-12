@@ -10124,7 +10124,9 @@ enum class Alter_e
 	ModifyColumn,
 	RebuildSI,
 	RebuildKNN,
-	ApiKey
+	ApiKey,
+	ApiUrl,
+	ApiTimeout
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10217,6 +10219,45 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 		case Alter_e::ApiKey:
 			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiUrl:
+			WIdx_c(pServed)->AlterApiUrl ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiTimeout:
+			{
+				// Validate that the string is a valid integer
+				const char * p = tStmt.m_sAlterOption.cstr();
+				if ( !p || !*p )
+				{
+					sAlterError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+					break;
+				}
+				
+				// Check if all characters are digits
+				while ( *p )
+				{
+					if ( *p < '0' || *p > '9' )
+					{
+						sAlterError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+						break;
+					}
+					p++;
+				}
+				
+				if ( !sAlterError.IsEmpty() )
+					break;
+				
+				int iTimeout = atoi ( tStmt.m_sAlterOption.cstr() );
+				if ( iTimeout < 0 )
+				{
+					sAlterError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+					break;
+				}
+				
+				WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
 			break;
 		}
 
@@ -11430,6 +11471,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_EMBEDDINGS_API_KEY:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_URL:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiUrl );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_TIMEOUT:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout );
 		return true;
 
 	case STMT_SHOW_PLAN:

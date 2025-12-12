@@ -391,7 +391,21 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 	const auto & tKNNModel = tAttr.m_tKNNModel;
 	knn::ModelSettings_t tDefaultModel;
 	if ( !tKNNModel.m_sModelName.empty() )
+	{
 		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
+		
+		// Add 'from' field if available
+		if ( !tAttr.m_sKNNFrom.IsEmpty() )
+			sRes << " from='" << tAttr.m_sKNNFrom.cstr() << "'";
+				
+		// Add API URL if provided (custom endpoint)
+		if ( !tKNNModel.m_sAPIUrl.empty() )
+			sRes << " api_url='" << tKNNModel.m_sAPIUrl.c_str() << "'";
+		
+		// Add API timeout if provided (non-default value)
+		if ( tKNNModel.m_iAPITimeout > 0 )
+			sRes << " api_timeout='" << tKNNModel.m_iAPITimeout << "'";
+	}
 
 	if ( !tKNNModel.m_sCachePath.empty() )
 		sRes << " cache_path='" << tKNNModel.m_sCachePath.c_str() << "'";
@@ -414,6 +428,8 @@ void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSet
 
 	tMS.m_sModelName	= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
 	tMS.m_sAPIKey		= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
+	tMS.m_sAPIUrl		= bson::String ( tRoot.ChildByName ( "api_url" ) ).cstr();
+	tMS.m_iAPITimeout	= (int) bson::Int ( tRoot.ChildByName ( "api_timeout" ), tMS.m_iAPITimeout );
 	tMS.m_sCachePath	= bson::String ( tRoot.ChildByName ( "cache_path" ) ).cstr();
 	tMS.m_bUseGPU		= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
 	sKNNFrom = bson::String ( tRoot.ChildByName ( "from" ) );
@@ -439,6 +455,10 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 		tOut.NamedString ( "from", sKNNFrom );
 		tOut.NamedString ( "cache_path", tMS.m_sCachePath.c_str() );
 		tOut.NamedString ( "api_key", tMS.m_sAPIKey.c_str() );
+		if ( !tMS.m_sAPIUrl.empty() )
+			tOut.NamedString ( "api_url", tMS.m_sAPIUrl.c_str() );
+		if ( tMS.m_iAPITimeout > 0 )
+			tOut.NamedVal ( "api_timeout", tMS.m_iAPITimeout );
 		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
 	}
 }
@@ -466,6 +486,10 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 			tObj.AddStr ( "from", i.m_sFrom.cstr() );
 			tObj.AddStr ( "cache_path", i.m_sCachePath.c_str() );
 			tObj.AddStr ( "api_key", i.m_sAPIKey.c_str() );
+			if ( !i.m_sAPIUrl.empty() )
+				tObj.AddStr ( "api_url", i.m_sAPIUrl.c_str() );
+			if ( i.m_iAPITimeout > 0 )
+				tObj.AddInt ( "api_timeout", i.m_iAPITimeout );
 			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
 		}
 
@@ -540,6 +564,8 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			if ( !i.FetchStrItem ( tParsed.m_sFrom, "from", sError, true ) ) return false;
 			if ( !i.FetchStrItem ( tParsed.m_sAPIKey, "api_key", sError, true ) ) return false;
 			if ( !i.FetchStrItem ( tParsed.m_sCachePath, "cache_path", sError, true ) ) return false;
+			if ( !i.FetchStrItem ( tParsed.m_sAPIUrl, "api_url", sError, true ) ) return false;
+			if ( !i.FetchIntItem ( tParsed.m_iAPITimeout, "api_timeout", sError, true ) ) return false;
 			if ( !i.FetchBoolItem ( tParsed.m_bUseGPU, "use_gpu", sError, true ) ) return false;
 		}
 	}

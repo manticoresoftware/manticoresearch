@@ -2527,12 +2527,13 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 When creating a table with auto embeddings, specify these additional parameters:
 - `MODEL_NAME`: The embedding model to use for automatic vector generation
 - `FROM`: Which fields to use for embedding generation (empty string means all text/string fields)
+- `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
+- `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
+- `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
 **Supported embedding models:**
 - **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
-- **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
-- **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='<API_KEY>'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
 
 <!-- intro -->
 ##### SQL:
@@ -2555,6 +2556,17 @@ CREATE TABLE products_openai (
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
+);
+```
+
+Using OpenAI with custom API URL and timeout (optional)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' 
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

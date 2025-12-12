@@ -30,7 +30,7 @@ manticoresearch/external_toolchain:vcpkg331_20250114 bash -c 'echo "SOURCE_DIR /
 fi
 
 # Build Docker image with compiled binaries
-cp ../../columnar/build/knn/lib_manticore_knn.so ../build/lib_manticore_knn.so
+cp ../../columnar/build/*/*.so ../build/
 cp ../../columnar/build/knn/embeddings/release/lib_manticore_knn_embeddings.so ../build/lib_manticore_knn_embeddings.so
 
 if [ -f ../build/src/searchd ] && [ -f ../build/src/indexer ] && [ -f ../build/src/indextool ]; then
@@ -41,6 +41,8 @@ COPY build/src/searchd /usr/bin/searchd
 COPY build/src/indexer /usr/bin/indexer
 COPY build/src/indextool /usr/bin/indextool
 COPY build/lib_manticore_knn.so /usr/share/manticore/modules/lib_manticore_knn.so
+COPY build/lib_manticore_columnar.so /usr/share/manticore/modules/lib_manticore_columnar.so
+COPY build/lib_manticore_secondary.so /usr/share/manticore/modules/lib_manticore_secondary.so
 COPY build/lib_manticore_knn_embeddings.so /usr/share/manticore/modules/lib_manticore_knn_embeddings.so
 EOF
 	docker build --load -t test-kit -f ../build/Dockerfile ..

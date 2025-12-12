@@ -929,29 +929,26 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 ##### JSON:
 <!-- request JSON -->
 ```json
-POST /sql?mode=raw -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one')"
+POST /sql -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one')"
 ```
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight()": {
-          "type": "string"
+        "_score": 1500,
+        "_source": {
+          "highlight()": "Book <b>one</b>"
         }
       }
-    ],
-    "data": [
-      {
-        "highlight()": "Book <b>one</b>"
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->

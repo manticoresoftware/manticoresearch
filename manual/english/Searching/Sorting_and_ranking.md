@@ -54,49 +54,26 @@ POST  /sql?mode=raw -d "SELECT *, a + b alias FROM test ORDER BY alias DESC"
 
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "a": {
-          "type": "long"
-        }
-      },
-      {
-        "b": {
-          "type": "long"
-        }
-      },
-      {
-        "f": {
-          "type": "string"
-        }
-      },
-      {
-        "alias": {
-          "type": "long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 1,
-        "a": 2,
-        "b": 3,
-        "f": document,
-        "alias": 5
-      }
-    ],
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
     "total": 1,
-    "error": "",
-    "warning": ""
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
   }
-]
+}
 ```
 
 <!-- end -->

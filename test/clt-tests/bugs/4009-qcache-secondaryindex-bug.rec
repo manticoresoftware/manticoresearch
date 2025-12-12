@@ -6,8 +6,9 @@ Bug: Query cache ignored SecondaryIndex hint in cache key, returning wrong cache
 Query with hint received results from different query without hint.
 
 Test verifies:
-- MATCH('hard') → 229322 results
-- MATCH('hard') AND type=5 WITH hint → 2252 results (was 183114 - bug)
+- Basic scenario: MATCH('hard') → 229322 results
+- With hint: MATCH('hard') AND type=5 /*+ SecondaryIndex */ → 2252 (was 183114 - bug)
+- Edge case: Query with timeout + hint doesn't use cached partial results
 - Both WITH and WITHOUT cache return same results (cache works correctly)
 
 ––– block: ../base/start-searchd –––
@@ -41,6 +42,7 @@ mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard');"
 ––– comment –––
 Critical: same MATCH + type=5 filter + SecondaryIndex hint
 Bug: returned 183114 (wrong cache hit), correct: 2252
+After fix: cache is disabled when hint is used
 ––– input –––
 mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */;"
 ––– output –––
@@ -50,7 +52,16 @@ mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*
 |     2252 |
 +----------+
 ––– comment –––
+Verify cache was NOT used for query with hint (qcache_hits should be 0)
+––– input –––
+mysql -h0 -P9306 -e "SHOW STATUS LIKE 'qcache_hits'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: qcache_hits
+  Value: 0
+––– comment –––
 Control: same filter WITHOUT hint - should return same result (2252)
+Query without hint SHOULD use cache
 ––– input –––
 mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5;"
 ––– output –––
@@ -59,6 +70,32 @@ mysql -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5;"
 +----------+
 |     2252 |
 +----------+
+––– comment –––
+Verify cache WAS used for query without hint (qcache_hits should increase)
+––– input –––
+mysql -h0 -P9306 -e "SHOW STATUS LIKE 'qcache_hits'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: qcache_hits
+  Value: %{NUMBER}
+––– comment –––
+Edge case: query with max_query_time timeout + SecondaryIndex hint
+Test that timed-out query result is not used for query with hint
+––– input –––
+mysql -h0 -P9306 -e "SELECT sum(type), count(*) FROM test WHERE MATCH('hard') AND type=5 OPTION max_query_time=1\G"
+––– output –––
+*************************** 1. row ***************************
+sum(type): %{NUMBER}
+ count(*): %{NUMBER}
+––– comment –––
+Query with hint should NOT use cached result from timed-out query
+After fix: cache is disabled when SecondaryIndex hint is used
+––– input –––
+mysql -h0 -P9306 -e "SELECT sum(type), count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */\G"
+––– output –––
+*************************** 1. row ***************************
+sum(type): 11260
+ count(*): 2252
 ––– comment –––
 Disable cache - verify queries return same results without caching
 ––– input –––

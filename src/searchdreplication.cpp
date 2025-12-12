@@ -2579,6 +2579,10 @@ CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluste
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( pCluster )
-		return pCluster->m_pSstProgress;
+	{
+		CSphRefcountedPtr<SstProgress_i> pProgress { pCluster->m_pSstProgress };
+		return pProgress;
+	}
+
 	return nullptr;
 }

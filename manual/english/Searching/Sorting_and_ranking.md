@@ -20,6 +20,15 @@ SELECT ... ORDER BY
 {attribute_name | expr_alias | weight() | random() } [ASC | DESC]
 ```
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(a int, b int, f text);
+INSERT INTO test (a, b, f) VALUES
+(2, 3, 'document');
+-->
+
 <!-- example alias -->
 
 In the sort clause, you can use any combination of up to 5 columns, each followed by `asc` or `desc`. Functions and expressions are not allowed as arguments for the sort clause, except for the `weight()` and `random()` functions (the latter can only be used via SQL in the form of `ORDER BY random()`). However, you can use any expression in the SELECT list and sort by its alias.
@@ -36,6 +45,35 @@ select *, a + b alias from test order by alias desc;
 +------+------+------+----------+-------+
 |    1 |    2 |    3 | document |     5 |
 +------+------+------+----------+-------+
+```
+
+<!-- request JSON -->
+```JSON
+POST  /sql?mode=raw -d "SELECT *, a + b alias FROM test ORDER BY alias DESC"
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->

@@ -1265,11 +1265,11 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 ##### Как насчёт нескольких документов?
 
-Обратите внимание, что с помощью `CALL PQ` вы можете предоставить несколько документов разными способами:
+Обратите внимание, что с помощью `CALL PQ` вы можете передавать несколько документов разными способами:
 
-* как массив простых документов в круглых скобках `('doc1', 'doc2')`. Для этого требуется `0 as docs_json`
-* как массив JSON в круглых скобках `('{doc1}', '{doc2}')`
-* или как стандартный JSON-массив `'[{doc1}, {doc2}]'`
+* в виде массива простых документов в круглых скобках `('doc1', 'doc2')`. Для этого требуется `0 as docs_json`
+* в виде массива JSON в круглых скобках `('{doc1}', '{doc2}')`
+* или в виде стандартного JSON-массива `'[{doc1}, {doc2}]'`
 
 <!-- intro -->
 SQL:
@@ -2281,11 +2281,20 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- example docs_id -->
 #### Статические идентификаторы
-По умолчанию идентификаторы совпадающих документов соответствуют их относительным номерам в списке, который вы предоставляете. Однако в некоторых случаях у каждого документа уже есть свой собственный идентификатор. Для этого случая существует опция `'id field name' as docs_id` для `CALL PQ`.
+По умолчанию идентификаторы совпадающих документов соответствуют их относительным номерам в списке, который вы предоставляете. Однако в некоторых случаях у каждого документа уже есть свой собственный идентификатор. Для этого случая есть опция `'id field name' as docs_id` для `CALL PQ`.
 
-Обратите внимание, что если идентификатор не может быть найден по указанному имени поля, правило PQ не будет отображено в результатах.
+Обратите внимание, что если идентификатор не будет найден по предоставленному имени поля, правило PQ не будет показано в результатах.
 
 Эта опция доступна только для `CALL PQ` через SQL.
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, color string) type='pq';
+INSERT INTO products(query, filters) VALUES ('@title shoes', 'color IN ("blue", "green")');
+INSERT INTO products(query, tags) VALUES ('@title bag', 'Louis Vuitton');
+-->
 
 <!-- intro -->
 ##### SQL:
@@ -2305,12 +2314,76 @@ CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"
 | 1657852401006149666 | 123       | @title shoes |      | color IN ('blue, 'green') |
 +---------------------+-----------+--------------+------+---------------------------+
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "documents": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149664,
+        "documents": 456,
+        "query": "@title bag",
+        "tags": "",
+        "filters": ""
+      },
+      {
+        "id": 1657852401006149666,
+        "documents": 123,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": "color IN ('blue, 'green')"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example invalid_json -->
-##### У меня могут быть некорректные JSON, пожалуйста, пропускайте их
+##### I may have invalid JSONs, please skip them
 
-При использовании CALL PQ с отдельными JSON можно использовать опцию 1 в качестве skip_bad_json, чтобы пропускать любые недопустимые JSON в вводе. В приведённом ниже примере второй запрос не выполняется из-за недопустимого JSON, но третий запрос избегает ошибки, используя 1 в качестве skip_bad_json. Имейте в виду, что эта опция недоступна при отправке JSON-запросов по HTTP, так как в этом случае весь JSON-запрос должен быть валидным.
+When using CALL PQ with separate JSONs, you can use the option 1 as skip_bad_json to skip any invalid JSONs in the input. In the example below, the 2nd query fails due to an invalid JSON, but the 3rd query avoids the error by using 1 as skip_bad_json. Keep in mind that this option is not available when sending JSON queries over HTTP, as the whole JSON query must be valid in that case.
 
 <!-- intro -->
 SQL:
@@ -2342,17 +2415,79 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 +---------------------+
 ```
 
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));"
+
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));"
+
+POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149635
+      },
+      {
+        "id": 1657852401006149637
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+
+{
+  "error": "Bad JSON objects in strings: 1"
+}
+
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149635
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
-##### Я хочу повысить производительность перколяционного запроса
-Перколяционные запросы разработаны с учётом высокой пропускной способности и больших объёмов данных. Чтобы оптимизировать производительность для снижения задержек и увеличения пропускной способности, рассмотрите следующее.
+##### I want higher performance of a percolate query
+Percolate queries are designed with high throughput and large data volumes in mind. To optimize performance for lower latency and higher throughput, consider the following.
 
-Существует два режима распределения для перколяционной таблицы и способа работы перколяционного запроса с ней:
+There are two modes of distribution for a percolate table and how a percolate query can work against it:
 
-* **Sparse (по умолчанию).** Идеально для: большого количества документов, зеркальных PQ таблиц. Когда ваш набор документов большой, но набор запросов, хранящихся в PQ таблице, мал, режим sparse будет полезен. В этом режиме пакет документов, который вы передаёте, будет разделён между количеством агентов, так что каждый узел обрабатывает только часть документов из вашего запроса. Manticore разбивает ваш набор документов и распределяет части между зеркалами. После того как агенты закончат обработку запросов, Manticore собирает и объединяет результаты, возвращая итоговый набор запросов, как если бы он пришёл из одной таблицы. Используйте [репликацию](../References.md#Replication) для поддержки процесса.
-* **Sharded.** Идеально для: большого количества правил PQ, правил, разделённых между PQ таблицами. В этом режиме весь набор документов транслируется всем таблицам распределённой PQ таблицы без первоначального разделения документов. Это полезно, когда вы отправляете относительно небольшой набор документов, но количество хранимых запросов велико. В этом случае более целесообразно хранить только часть правил PQ на каждом узле, а затем объединять результаты, возвращаемые узлами, которые обрабатывают один и тот же набор документов против разных наборов правил PQ. Этот режим должен быть установлен явно, так как он подразумевает увеличение сетевого трафика и ожидает таблицы с разными PQ, что [репликация](../References.md#Replication) не может сделать из коробки.
+* **Sparse (default).** Ideal for: many documents, mirrored PQ tables. When your document set is large but the set of queries stored in the PQ table is small, the sparse mode is beneficial. In this mode, the batch of documents you pass will be divided among the number of agents, so each node processes only a portion of the documents from your request. Manticore splits your document set and distributes chunks among the mirrors. Once the agents have finished processing the queries, Manticore collects and merges the results, returning a final query set as if it came from a single table. Use [replication](../References.md#Replication) to assist the process.
+* **Sharded.** Ideal for: many PQ rules, rules split among PQ tables. In this mode, the entire document set is broadcast to all tables of the distributed PQ table without initially splitting the documents. This is beneficial when pushing a relatively small set of documents, but the number of stored queries is large. In this case, it's more appropriate to store only a portion of PQ rules on each node and then merge the results returned from the nodes that process the same set of documents against different sets of PQ rules. This mode must be explicitly set, as it implies an increase in network payload and expects tables with different PQs, which [replication](../References.md#Replication) cannot do out-of-the-box.
 
-Предположим, у вас есть таблица `pq_d2`, определённая как:
+Assume you have table `pq_d2` defined as:
 
 ``` ini
 table pq_d2
@@ -2364,7 +2499,7 @@ table pq_d2
 ```
 
 <!-- example distributed pq modes 1 -->
-Каждая из 'pq' и 'ptitle' содержит:
+Each of 'pq' and 'ptitle' contains:
 
 
 <!-- intro -->
@@ -2755,7 +2890,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- example call_pq_example -->
 
-И вы выполняете `CALL PQ` на распределённой таблице с несколькими документами.
+And you execute `CALL PQ` on the distributed table with a couple of documents.
 
 
 <!-- intro -->
@@ -3212,7 +3347,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- end -->
 
-В предыдущем примере мы использовали режим по умолчанию — **sparse**. Чтобы продемонстрировать режим **sharded**, давайте создадим распределённую PQ таблицу, состоящую из 2 локальных PQ таблиц, и добавим 2 документа в "products1" и 1 документ в "products2":
+In the previous example, we used the default **sparse** mode. To demonstrate the **sharded** mode, let's create a distributed PQ table consisting of 2 local PQ tables and add 2 documents to "products1" and 1 document to "products2":
 ```sql
 create table products1(title text, color string) type='pq';
 create table products2(title text, color string) type='pq';
@@ -3224,7 +3359,7 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 ```
 
 <!-- example sharded -->
-Теперь, если вы добавите `'sharded' as mode` к `CALL PQ`, документы будут отправлены во все таблицы агента (в данном случае только локальные таблицы, но они могут быть удалёнными для использования внешнего оборудования). Этот режим недоступен через JSON-интерфейс.
+Now, if you add `'sharded' as mode` to `CALL PQ`, it will send the documents to all the agent's tables (in this case, just local tables, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
 
 <!-- intro -->
 SQL:
@@ -3244,13 +3379,66 @@ CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue
 +---------------------+--------------+------+---------------------------+
 ```
 
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149639,
+        "query": "@title bag",
+        "tags": "",
+        "filters": ""
+      },
+      {
+        "id": 1657852401006149643,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": "color IN ('blue, 'green')"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
-Обратите внимание, что синтаксис зеркал агентов в конфигурации (когда несколько хостов указаны в одной строке `agent`, разделённые `|`) не имеет никакого отношения к режиму запроса `CALL PQ`. Каждый `agent` всегда представляет **один** узел, независимо от количества HA-зеркал, указанных для этого агента.
+Обратите внимание, что синтаксис зеркал агентов в конфигурации (когда несколько хостов назначены одной строке `agent`, разделённой с помощью `|`) не имеет отношения к режиму запроса `CALL PQ`. Каждый `agent` всегда представляет **один** узел, независимо от количества HA-зеркал, указанных для этого агента.
 
 <!-- example verbose -->
-##### Как я могу узнать больше о производительности?
-В некоторых случаях вы можете захотеть получить более подробную информацию о производительности запроса percolate. Для этой цели существует опция `1 as verbose`, которая доступна только через SQL и позволяет сохранять больше метрик производительности. Вы можете просмотреть их с помощью запроса `SHOW META`, который можно выполнить после `CALL PQ`. Подробнее см. в разделе [SHOW META](../Node_info_and_management/SHOW_META.md).
+##### Как можно узнать больше о производительности?
+В некоторых случаях вы можете захотеть получить больше информации о производительности перколяционного запроса. Для этой цели существует опция `1 as verbose`, доступная только через SQL и позволяющая сохранять больше метрик производительности. Вы можете просмотреть их с помощью запроса `SHOW META`, который можно выполнить после `CALL PQ`. Подробнее см. в [SHOW META](../Node_info_and_management/SHOW_META.md).
 
 <!-- intro -->
 1 as verbose:

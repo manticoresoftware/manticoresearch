@@ -23,6 +23,17 @@ The included items are:
 * `hits[N]`: The total number of occurrences (or hits) of the n-th keyword across all documents.
 * `index`: Information about the utilized index (e.g., secondary index).
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(story_author text, comment_ranking int);
+INSERT INTO hn_small(story_author, comment_ranking) VALUES
+('anewkid', 4),
+('sasjri', 1),
+('bks', 5);
+--> 
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
@@ -67,7 +78,150 @@ show meta;
 14 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id, story_author FROM hn_small WHERE MATCH('one|two|three') and comment_ranking > 2 limit 5; SHOW META"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 151171,
+        "story_author": "anewkid"
+      },
+      {
+        "id": 302758,
+        "story_author": "bks"
+      },
+      {
+        "id": 805806,
+        "story_author": "drRoflol"
+      },
+      {
+        "id": 1099245,
+        "story_author": "tnorthcutt"
+      },
+      {
+        "id": 303252,
+        "story_author": "whiten"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "2308"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.001"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      },
+      {
+        "Variable_name": "index",
+        "Value": "comment_ranking:SecondaryIndex (100%)"
+      }
+    ],
+    "total": 14,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS records;
+CREATE TABLE records(content text, channel_id int);
+INSERT INTO records(story_author, channel_id) VALUES
+('record one', 4),
+('record two', 1),
+('record three', 3),
+('record four', 4),
+('record twenty one', 2),
+('record twenty two', 2),
+-->
 
 <!-- example show meta iostats cpustats -->
 `SHOW META` can display I/O and CPU counters, but they will only be available if searchd was started with the `--iostats` and `--cpustats` switches, respectively.
@@ -130,7 +284,199 @@ SHOW META;
 27 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id,channel_id FROM records WHERE MATCH('one|two|three') limit 5; SHOW META"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 300263,
+        "story_author": "throwaway37"
+      },
+      {
+        "id": 713503,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 716804,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 776906,
+        "story_author": "jimbokun"
+      },
+      {
+        "id": 753332,
+        "story_author": "foxhop"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.001"
+      },
+      {
+        "Variable_name": "cpu_time",
+        "Value": "18.004"
+      },
+      {
+        "Variable_name": "agents_cpu_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "io_read_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "io_read_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "io_read_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "io_write_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "io_write_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "io_write_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "agent_io_read_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "agent_io_read_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "agent_io_read_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "agent_io_write_time",
+        "Value": "0.000"
+      },
+      {
+        "Variable_name": "agent_io_write_ops",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "agent_io_write_kbytes",
+        "Value": "0.0"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      }
+    ],
+    "total": 27,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(story_author text, comment_ranking int);
+INSERT INTO hn_small(story_author, comment_ranking) VALUES
+('anewkid', 4),
+('sasjri', 1),
+('bks', 5);
+-->
 
 <!-- example show meta predicted_time -->
 Additional values, such as `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips`, and their respective `dist_fetched_*` counterparts, will only be available if `searchd` was configured with [predicted time costs](../Server_settings/Searchd.md#predicted_time_costs) and the query included `predicted_time` in the `OPTION` clause.
@@ -184,7 +530,159 @@ mysql> show meta;
 17 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100; SHOW META"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 300263,
+        "story_author": "throwaway37"
+      },
+      {
+        "id": 713503,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 716804,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 776906,
+        "story_author": "jimbokun"
+      },
+      {
+        "id": 753332,
+        "story_author": "foxhop"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.012"
+      },
+      {
+        "Variable_name": "local_fetched_docs",
+        "Value": "307212"
+      },
+      {
+        "Variable_name": "local_fetched_hits",
+        "Value": "407390"
+      },
+      {
+        "Variable_name": "local_fetched_skips",
+        "Value": "24"
+      },
+      {
+        "Variable_name": "predicted_time",
+        "Value": "56"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      }
+    ],
+    "total": 17,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(story_author text, comment_ranking int);
+INSERT INTO hn_small(story_author, comment_ranking) VALUES
+('anewkid', 4),
+('sasjri', 1),
+('bks', 5);
+-->
 
 <!-- example show meta single statement -->
 
@@ -232,6 +730,131 @@ SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW 
 13 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW META"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "story_author": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 300263,
+        "story_author": "throwaway37"
+      },
+      {
+        "id": 713503,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 716804,
+        "story_author": "mahmud"
+      },
+      {
+        "id": 776906,
+        "story_author": "jimbokun"
+      },
+      {
+        "id": 753332,
+        "story_author": "foxhop"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.011"
+      },
+      {
+        "Variable_name": "keyword[0]",
+        "Value": "one"
+      },
+      {
+        "Variable_name": "docs[0]",
+        "Value": "224387"
+      },
+      {
+        "Variable_name": "hits[0]",
+        "Value": "310327"
+      },
+      {
+        "Variable_name": "keyword[1]",
+        "Value": "three"
+      },
+      {
+        "Variable_name": "docs[1]",
+        "Value": "18181"
+      },
+      {
+        "Variable_name": "hits[1]",
+        "Value": "21102"
+      },
+      {
+        "Variable_name": "keyword[2]",
+        "Value": "two"
+      },
+      {
+        "Variable_name": "docs[2]",
+        "Value": "63251"
+      },
+      {
+        "Variable_name": "hits[2]",
+        "Value": "75961"
+      }
+    ],
+    "total": 13,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example SHOW META LIKE -->
@@ -259,9 +882,68 @@ SHOW META LIKE 'total%';
 3 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW META LIKE 'total%'"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "266385"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## SHOW META and facets
+
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS facetdemo;
+CREATE TABLE facetdemo(title text, brand_name string, brand_id int, categories multi, price float, j json, property string);
+INSERT INTO facetdemo(title, brand_name, brand_id, categories, price, j, property) VALUES
+('Product Ten Three', 'Brand One', 1, (1,2), 100,  '{"prop1":66,"prop2":91,"prop3":"One"}', 'Six_Ten'),
+('Product Ten Four', 'Brand One', 1, (2,3), 100,  '{"prop1":67,"prop2":92,"prop3":"Two"}', 'Six_Ten'),
+('Product Ten Nine', 'Brand Two', 2), (1,2), 120,  '{"prop1":67,"prop2":93,"prop3":"Nine"}', 'Six_Nine'),
+('Product Ten Ten', 'Brand Two', 2), (1,2), 150,  '{"prop1":66,"prop2":94,"prop3":"Ten"}', 'Six_Nine');
+--> 
 
 <!-- example show meta facets -->
 
@@ -311,6 +993,134 @@ SHOW META LIKE 'multiplier';
 1 row in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier'"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One"
+      }
+      ...
+    ],
+    "total": 1013,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_id": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_id": 1,
+        "count(*)": 1013
+      }
+      ...
+    ],
+    "total": 1013,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "price": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "price": 1,
+        "count(*)": 7
+      }
+      ...
+    ],
+    "total": 658,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "categories": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "categories": 10,
+        "count(*)": 2436
+      }
+      ...
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "multiplier",
+        "Value": "4"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## SHOW META and query optimizer
@@ -343,6 +1153,77 @@ SHOW META;
 | index          | tip_amount:SecondaryIndex (100%) |
 +----------------+----------------------------------+
 5 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT count(*) FROM taxi1 WHERE tip_amount = 5; SHOW META"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "count(*)": 1
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "total",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "total_found",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "total_relation",
+        "Value": "eq"
+      },
+      {
+        "Variable_name": "time",
+        "Value": "0.016"
+      },
+      {
+        "Variable_name": "index",
+        "Value": "tip_amount:SecondaryIndex (100%)"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

@@ -1,6 +1,6 @@
 # Функции даты и времени
 
-Обратите внимание, что `CURTIME()`, `UTC_TIME()`, `UTC_TIMESTAMP()`, и `TIMEDIFF()` могут быть преобразованы в числовые типы с помощью произвольных функций преобразования, таких как `BIGINT()`, `DOUBLE()` и т.д.
+Обратите внимание, что функции `CURTIME()`, `UTC_TIME()`, `UTC_TIMESTAMP()` и `TIMEDIFF()` могут быть преобразованы в числовые типы с помощью произвольных функций преобразования, таких как `BIGINT()`, `DOUBLE()` и др.
 
 ### NOW()
 <!-- example NOW -->
@@ -18,6 +18,35 @@ select NOW();
 | 1615788407 |
 +------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select NOW();"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "now()": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "now()": 1615788407
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+
 <!-- end -->
 
 ### CURTIME()
@@ -36,6 +65,35 @@ select CURTIME();
 | 07:06:30  |
 +-----------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select CURTIME();"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "CURTIME()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "CURTIME()": "07:06:30"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ### CURDATE()
@@ -54,6 +112,34 @@ select curdate();
 | 2023-08-02 |
 +------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select CURDATE();"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "CURDATE()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "CURDATE()": "2023-08-02"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ### UTC_TIME()
@@ -71,6 +157,34 @@ select UTC_TIME();
 +------------+
 | 06:06:18   |
 +------------+
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select UTC_TIME();"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "UTC_TIME()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "UTC_TIME()": "06:06:18"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -90,11 +204,38 @@ select UTC_TIMESTAMP();
 | 2021-03-15 06:06:03 |
 +---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select UTC_TIMESTAMP();"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "UTC_TIMESTAMP()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "UTC_TIMESTAMP()": "2021-03-15 06:06:0"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### SECOND()
 <!-- example SECOND -->
-Возвращает целочисленное значение секунд (в диапазоне 0..59) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер секунды (в диапазоне от 0 до 59) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -108,11 +249,38 @@ select second(now());
 | 52            |
 +---------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select second(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "second(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "second(now())": 52
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### MINUTE()
 <!-- example MINUTE -->
-Возвращает целочисленное значение минут (в диапазоне 0..59) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер минуты (в диапазоне от 0 до 59) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -126,11 +294,38 @@ select minute(now());
 | 5             |
 +---------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select minute(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "minute(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "minute(now())": 5
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### HOUR()
 <!-- example HOUR -->
-Возвращает целочисленное значение часов (в диапазоне 0..23) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер часа (в диапазоне от 0 до 23) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -144,11 +339,38 @@ select hour(now());
 | 7           |
 +-------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "hour(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "hour(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "hour(now())": 7
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DAY()
 <!-- example DAY -->
-Возвращает целочисленное значение дня месяца (в диапазоне 1..31) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер дня месяца (в диапазоне от 1 до 31) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -162,11 +384,38 @@ select day(now());
 | 15         |
 +------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select day(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "day(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "day(now())": 15
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### MONTH()
 <!-- example MONTH -->
-Возвращает целочисленное значение месяца (в диапазоне 1..12) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер месяца (в диапазоне от 1 до 12) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -180,11 +429,38 @@ select month(now());
 | 3            |
 +--------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select month(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "month(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "month(now())": 3
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### QUARTER()
 <!-- example QUARTER -->
-Возвращает целочисленное значение квартала года (в диапазоне 1..4) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер четверти года (в диапазоне от 1 до 4) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -198,11 +474,38 @@ select quarter(now());
 | 2              |
 +----------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select quarter(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "quarter(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "quarter(now())": 2
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### YEAR()
 <!-- example YEAR -->
-Возвращает целочисленное значение года (в диапазоне 1969..2038) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный год (в диапазоне от 1969 до 2038) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -215,6 +518,33 @@ select year(now());
 +-------------+
 | 2024        |
 +-------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select year(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "year(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year(now())": 2024
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -234,6 +564,33 @@ select dayname(now());
 | Wednesday      |
 +----------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select dayname(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "dayname(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "dayname(now())": "Wednesday"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### MONTHNAME()
@@ -252,11 +609,38 @@ select monthname(now());
 | August           |
 +------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select monthname(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "monthname(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "monthname(now())": "August"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DAYOFWEEK()
 <!-- example DAYOFWEEK -->
-Возвращает целочисленный индекс дня недели (в диапазоне 1..7) для заданного аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный индекс дня недели (в диапазоне от 1 до 7) для заданного аргумента метки времени, согласно текущему часовому поясу.
 Обратите внимание, что неделя начинается с воскресенья.
 
 <!-- request SQL -->
@@ -271,11 +655,38 @@ select dayofweek(now());
 | 5                |
 +------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select dayofweek(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "dayofweek(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "dayofweek(now())": 5
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DAYOFYEAR()
 <!-- example DAYOFYEAR -->
-Возвращает целочисленное значение дня года (в диапазоне 1..366) для заданного аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный номер дня года (в диапазоне от 1 до 366) для заданного аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -289,11 +700,38 @@ select dayofyear(now());
 |              214 |
 +------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select dayofyear(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "dayofyear(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "dayofyear(now())": 214
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### YEARWEEK()
 <!-- example YEARWEEK -->
-Возвращает целочисленное значение года и код дня первого дня текущей недели (в диапазоне 1969001..2038366) для заданного аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный код года и дня первого дня текущей недели (в диапазоне 1969001..2038366) для заданного аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -307,11 +745,38 @@ select yearweek(now());
 |         2023211 |
 +-----------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select yearweek(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "yearweek(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "yearweek(now())": 2023211
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### YEARMONTH()
 <!-- example YEARMONTH -->
-Возвращает целочисленное значение года и месяца (в диапазоне 196912..203801) из аргумента метки времени, согласно текущему часовому поясу.
+Возвращает целочисленный код года и месяца (в диапазоне 196912..203801) из аргумента метки времени, согласно текущему часовому поясу.
 
 <!-- request SQL -->
 ```sql
@@ -325,11 +790,37 @@ select yearmonth(now());
 | 202103           |
 +------------------+
 ```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select yearmonth(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "yearmonth(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "yearmonth(now())": 202103
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### YEARMONTHDAY()
 <!-- example YEARMONTHDAY -->
-Возвращает целочисленное значение года, месяца и дня (в диапазоне от 19691231 до 20380119) на основе текущего часового пояса.
+Возвращает целочисленный код года, месяца и даты (в диапазоне от 19691231 до 20380119) на основании текущего часового пояса.
 
 <!-- request SQL -->
 ```sql
@@ -343,11 +834,38 @@ select yearmonthday(now());
 | 20210315            |
 +---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select yearmonthday(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "yearmonthday(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "yearmonthday(now())": 20210315
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### TIMEDIFF()
 <!-- example TIMEDIFF -->
-Вычисляет разницу между двумя метками времени в формате `hh:ii:ss`.
+Calculates the difference between two timestamps in the format `hh:ii:ss`.
 
 <!-- request SQL -->
 ```sql
@@ -361,11 +879,38 @@ select timediff(1615787586, 1613787583);
 | 555:33:23                        |
 +----------------------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select timediff(1615787586, 1613787583);"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "timediff(1615787586, 1613787583)": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "timediff(1615787586, 1613787583)": "555:33:23"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DATEDIFF()
 <!-- example DATEDIFF -->
-Вычисляет количество дней между двумя заданными метками времени.
+Calculates the number of days between two given timestamps.
 
 <!-- request SQL -->
 ```sql
@@ -379,11 +924,38 @@ select datediff(1615787586, 1613787583);
 |                               23 |
 +----------------------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select datediff(1615787586, 1613787583);"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "datediff(1615787586, 1613787583)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "datediff(1615787586, 1613787583)": 23
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DATE()
 <!-- example DATE -->
-Форматирует часть даты из аргумента метки времени в строку в формате `YYYY-MM-DD`.
+Formats the date part from a timestamp argument as a string in `YYYY-MM-DD` format.
 
 <!-- request SQL -->
 ```sql
@@ -397,11 +969,39 @@ select date(now());
 | 2023-08-02  |
 +-------------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select date(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "date(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "date(now())": "2023-08-02"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### TIME()
 <!-- example TIME -->
-Форматирует часть времени из аргумента метки времени в строку в формате `HH:MM:SS`.
+Formats the time part from a timestamp argument as a string in `HH:MM:SS` format.
 
 <!-- request SQL -->
 ```sql
@@ -415,21 +1015,48 @@ select time(now());
 | 15:21:27    |
 +-------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select time(now());"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "time(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "time(now())": "15:21:27"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DATE_FORMAT()
 <!-- example DATE_FORMAT -->
-Возвращает отформатированную строку на основе предоставленных аргументов даты и формата. Аргумент формата использует те же спецификаторы, что и функция [strftime](https://man7.org/linux/man-pages/man3/strftime.3.html). Для удобства, вот некоторые распространённые спецификаторы формата:
+Returns a formatted string based on the provided date and format arguments. The format argument uses the same specifiers as the [strftime](https://man7.org/linux/man-pages/man3/strftime.3.html) function. For convenience, here are some common format specifiers:
 
-- `%Y` - Год из четырёх цифр
-- `%m` - Двухзначный месяц (01-12)
-- `%d` - Двухзначный день месяца (01-31)
-- `%H` - Двухзначный час (00-23)
-- `%M` - Двухзначная минута (00-59)
-- `%S` - Двухзначная секунда (00-59)
-- `%T` - Время в 24-часовом формате (`%H:%M:%S`)
+- `%Y` - Four-digit year
+- `%m` - Two-digit month (01-12)
+- `%d` - Two-digit day of the month (01-31)
+- `%H` - Two-digit hour (00-23)
+- `%M` - Two-digit minute (00-59)
+- `%S` - Two-digit second (00-59)
+- `%T` - Time in 24-hour format (`%H:%M:%S`)
 
-Обратите внимание, что это не полный список спецификаторов. Пожалуйста, обратитесь к документации по `strftime()` для вашей операционной системы, чтобы получить полный список.
+Note that this is not a complete list of the specifiers. Please consult the documentation for `strftime()` for your operating system to get the full list.
 
 <!-- request SQL -->
 ```sql
@@ -443,36 +1070,63 @@ SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
 | year 2023 and time 11:54:52              |
 +------------------------------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select DATE_FORMAT(NOW(), 'year %Y and time %T');"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "DATE_FORMAT(NOW(), 'year %Y and time %T')": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "DATE_FORMAT(NOW(), 'year %Y and time %T')": "year 2023 and time 11:54:52"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
-Этот пример форматирует текущие дату и время, отображая четырехзначный год и время в 24-часовом формате.
+This example formats the current date and time, displaying the four-digit year and the time in 24-hour format.
 
 ### DATE_HISTOGRAM()
 <!-- example DATE_HISTOGRAM -->
-`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` принимает размер корзины в виде названия единицы и возвращает номер корзины для значения. Значения округляются до ближайшей корзины. Ключевая функция:
+`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` Takes a bucket size as a unit name and returns the bucket number for the value. Values are rounded to the closest bucket. The key function is:
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
-Интервалы могут быть указаны с помощью названия единицы, например `week`, или как одна единица, например `1M`. Однако множественные единицы, такие как `2d`, не поддерживаются с `calendar_interval`, но разрешены с `fixed_interval`.
+Intervals can be specified using a unit name, like `week`, or as a single unit, such as `1M`. However, multiple units, like `2d`, are not supported with `calendar_interval` but are allowed with `fixed_interval`.
 
-Допустимые интервалы для `calendar_interval`:
+The valid intervals for `calendar_interval` are:
 
 - `minute`, `1m`
 - `hour`, `1h`
 - `day`, `1d`
-- `week`, `1w` (неделя — это интервал между начальным днем недели, часом, минутой, секундой и следующей неделей, но в тот же день и время недели)
+- `week`, `1w` (a week is the interval between the start day of the week, hour, minute, second and the next week but the same day and time of the week)
 - `month`, `1M`
-- `year`, `1y` (год — это интервал между начальным днем месяца, временем и следующим годом, но в тот же день месяца и время)
+- `year`, `1y` (a year is the interval between the start day of the month, time and the next year but the same day of the month, time)
 
-Допустимые интервалы для `fixed_interval`:
+The valid intervals for `fixed_interval` are:
 
 - `minute`, `2m`
 - `hour`, `3h`
 - `day`, `5d`
 
-Используется в агрегациях, `FACET` и группировках.
+Used in aggregation, `FACET`, and grouping.
 
-Пример:
+Example:
 
 ```sql
 SELECT COUNT(*),
@@ -483,13 +1137,13 @@ GROUP BY months ORDER BY months ASC;
 
 ### DATE_RANGE()
 <!-- example DATE_RANGE -->
-`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` принимает набор диапазонов и возвращает номер корзины для значения.
-Выражение включает значение `range_from` и исключает значение `range_to` для каждого диапазона. Диапазон может быть открытым — иметь только значение `range_from` или только `range_to`.
-Отличие от функции [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) в том, что значения `range_from` и `range_to` могут быть выражены в выражениях [Date math](../Functions/Date_and_time_functions.md#Date-math).
+`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` takes a set of ranges and returns the bucket number for the value.
+The expression includes the `range_from` value and excludes the `range_to` value for each range. The range can be open - having only the `range_from` or only the `range_to` value.
+The difference between this and the [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29) function is that the `range_from` and `range_to` values can be expressed in [Date math](../Functions/Date_and_time_functions.md#Date-math) expressions.
 
-Используется в агрегациях, `FACET` и группировках.
+Used in aggregation, `FACET`, and grouping.
 
-Пример:
+Example:
 
 ```sql
 SELECT COUNT(*),
@@ -500,30 +1154,30 @@ GROUP BY points ORDER BY points ASC;
 
 ##### Date math
 
-Date math позволяет работать с датами и временем непосредственно в ваших поисках. Это особенно полезно для обработки данных, которые меняются со временем. С помощью date math вы можете легко находить записи за определенный период, анализировать тенденции данных или управлять временем удаления информации. Это упрощает работу с датами, позволяя добавлять или вычитать время от заданной даты, округлять даты до ближайшей единицы времени и многое другое, всё это в рамках ваших поисковых запросов.
+Date math lets you work with dates and times directly in your searches. It's especially useful for handling data that changes over time. With date math, you can easily do things like find entries from a certain period, analyze data trends, or manage when information should be removed. It simplifies working with dates by letting you add or subtract time from a given date, round dates to the nearest time unit, and more, all within your search queries.
 
-Для использования date math вы начинаете с базовой даты, которая может быть:
-- `now` для текущей даты и времени,
-- или конкретной строкой даты, заканчивающейся на `||`.
+To use date math, you start with a base date, which can be:
+- `now` for the current date and time,
+- or a specific date string ending with `||`.
 
-Затем вы можете модифицировать эту дату операциями, такими как:
-- `+1y` чтобы добавить один год,
-- `-1h` чтобы вычесть один час,
-- `/m` чтобы округлить до ближайшего месяца.
+Then, you can modify this date with operations like:
+- `+1y` to add one year,
+- `-1h` to subtract one hour,
+- `/m` to round to the nearest month.
 
-Вы можете использовать следующие единицы в операциях:
-- `s` для секунд,
-- `m` для минут,
-- `h` (или `H`) для часов,
-- `d` для дней,
-- `w` для недель,
-- `M` для месяцев,
-- `y` для лет.
+You can use these units in your operations:
+- `s` for seconds,
+- `m` for minutes,
+- `h` (or `H`) for hours,
+- `d` for days,
+- `w` for weeks,
+- `M` for months,
+- `y` for years.
 
-Вот несколько примеров использования date math:
-- `now+4h` означает четыре часа от текущего момента.
-- `now-2d/d` — время два дня назад, округленное до ближайшего дня.
-- `2010-04-20||+2M/d` — 20 июня 2010 года, округленное до ближайшего дня.
+Here are some examples of how you might use date math:
+- `now+4h` means four hours from now.
+- `now-2d/d` is the time two days ago, rounded to the nearest day.
+- `2010-04-20||+2M/d` is June 20, 2010, rounded to the nearest day.
 
 <!-- proofread -->
 

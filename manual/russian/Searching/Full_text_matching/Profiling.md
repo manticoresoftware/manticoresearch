@@ -1,43 +1,43 @@
-# Поиск с профилированием
+# Профилирование поиска
 
 ## Как интерпретируется запрос
 
-Рассмотрим этот пример сложного запроса:
+Рассмотрим следующий сложный пример запроса:
 ```sql
 "hello world" @title "example program"~5 @body python -(php|perl) @* code
 ```
 Полное значение этого поиска:
 
-* Найти слова 'hello' и 'world' рядом друг с другом в любом поле документа;
-* Кроме того, в том же документе должны содержаться слова 'example' и 'program' в поле заголовка, с не более чем 5 словами между ними (не включая 5); (например, "example PHP program" подойдет, а "example script to introduce outside data into the correct context for your program" — нет, так как между двумя терминами 5 или более слов)
-* Более того, в том же документе должно быть слово 'python' в поле body, при этом исключая 'php' или 'perl';
-* Наконец, в том же документе должно содержаться слово 'code' в любом поле.
+* Найти слова 'hello' и 'world' расположенные рядом в любом поле документа;
+* Кроме того, тот же документ должен содержать слова 'example' и 'program' в поле title, с максимум, но не включая, 5 словами между ними; (например, "example PHP program" подойдет, но "example script to introduce outside data into the correct context for your program" не подойдет, так как между двумя словами 5 или более слов)
+* Более того, тот же документ должен содержать слово 'python' в поле body, при этом исключая 'php' или 'perl';
+* Наконец, в том же документе должно быть слово 'code' в любом поле.
 
 Оператор OR имеет приоритет над AND, поэтому "looking for cat | dog | mouse" означает "looking for (cat | dog | mouse)", а не "(looking for cat) | dog | mouse".
 
-Чтобы понять, как будет выполняться запрос, Manticore Search предоставляет инструменты профилирования запросов для изучения дерева запроса, сгенерированного выражением запроса.
+Чтобы понять, как будет выполняться запрос, Manticore Search предоставляют инструменты профилирования запросов для изучения дерева запроса, созданного выражением запроса.
 
 <!-- example profiling -->
 
 ## Профилирование дерева запроса в SQL
 
-Чтобы включить профилирование полнотекстового запроса с помощью SQL-запроса, необходимо активировать его перед выполнением нужного запроса:
+Чтобы включить профилирование полнотекстового запроса с помощью SQL-запроса, нужно активировать его перед выполнением нужного запроса:
 
 ```sql
 SET profiling =1;
 SELECT * FROM test WHERE MATCH('@title abc* @body hey');
 ```
 
-Чтобы просмотреть дерево запроса, выполните команду `SHOW PLAN` сразу после выполнения запроса:
+Чтобы посмотреть дерево запроса, выполните команду `SHOW PLAN` сразу после выполнения запроса:
 
 ```sql
 SHOW PLAN;
 ```
 
-Эта команда вернет структуру выполненного запроса. Имейте в виду, что 3 оператора — SET profiling, сам запрос и SHOW — должны выполняться в одной сессии.
+Эта команда вернет структуру выполненного запроса. Учтите, что все 3 инструкции - SET profiling, сам запрос и SHOW - должны быть выполнены в одной сессии.
 
 
-## Профилирование запроса в HTTP JSON
+## Профилирование запроса через HTTP JSON
 
 При использовании протокола HTTP JSON можно просто включить `"profile":true`, чтобы получить в ответе структуру дерева полнотекстового запроса.
 
@@ -55,20 +55,20 @@ SHOW PLAN;
 
 Свойство `query` содержит преобразованное дерево полнотекстового запроса. Каждый узел состоит из:
 
-* `type`: тип узла, который может быть AND, OR, PHRASE, KEYWORD и т.д.
-* `description`: поддерево запроса для этого узла, представленное в виде строки (в формате `SHOW PLAN`)
+* `type`: тип узла, который может быть AND, OR, PHRASE, KEYWORD и др.
+* `description`: поддерево запроса для этого узла, представленное строкой (в формате `SHOW PLAN`)
 * `children`: дочерние узлы, если есть
-* `max_field_pos`: максимальная позиция в поле
+* `max_field_pos`: максимальная позиция внутри поля
 
-У узла ключевого слова дополнительно будут:
+У узла типа keyword дополнительно будут:
 
 * `word`: преобразованное ключевое слово.
 * `querypos`: позиция этого ключевого слова в запросе.
 * `excluded`: ключевое слово исключено из запроса.
 * `expanded`: ключевое слово добавлено расширением префикса.
-* `field_start`: ключевое слово должно появиться в начале поля.
-* `field_end`: ключевое слово должно появиться в конце поля.
-* `boost`: IDF ключевого слова будет умножен на это значение.
+* `field_start`: ключевое слово должно появляться в начале поля.
+* `field_end`: ключевое слово должно появляться в конце поля.
+* `boost`: ИДФ ключевого слова будет умножаться на это значение.
 
 
 <!-- intro -->
@@ -507,7 +507,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example SHOW PLAN EXPANSION -->
 
-В некоторых случаях оцениваемое дерево запроса может значительно отличаться от исходного из-за расширений и других преобразований.
+В некоторых случаях вычисленное дерево запроса может значительно отличаться от исходного из-за расширений и других преобразований.
 
 <!-- intro -->
 ##### SQL:
@@ -1177,7 +1177,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ## Профилирование без выполнения запроса
 
 <!-- Example Explain_query -->
-SQL-оператор `EXPLAIN QUERY` позволяет отобразить дерево выполнения для заданного полнотекстового запроса без фактического выполнения поискового запроса по таблице.
+SQL-инструкция `EXPLAIN QUERY` позволяет отобразить дерево выполнения для заданного полнотекстового запроса без фактического выполнения поиска по таблице.
 
 
 
@@ -1201,12 +1201,49 @@ Variable: transformed_tree
             AND(fields=(title), KEYWORD(running, querypos=1, morphed))))
   AND(fields=(body), KEYWORD(dog, querypos=2, morphed)))
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY t '@title a'"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "AND(fields=(title), KEYWORD(a, querypos=1))"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+
+```
+
 <!-- end -->
 
 <!-- Example Explain_query_dot -->
 `EXPLAIN QUERY ... option format=dot` позволяет отобразить дерево выполнения заданного полнотекстового запроса в иерархическом формате, подходящем для визуализации с помощью существующих инструментов, таких как https://dreampuf.github.io/GraphvizOnline:
 
-![EXPLAIN QUERY graphviz example](graphviz.png)
+![Пример EXPLAIN QUERY graphviz](graphviz.png)
 
 <!-- intro -->
 ##### SQL:
@@ -1236,23 +1273,93 @@ Variable: transformed_tree
 4 [shape=record label="me | { querypos=2 }"]
 }
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY tbl '@title a' option format=dot"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "digraph \"transformed_tree\" {\n\n0 [shape=record,style=filled label=\"AND | { fields=(title) }\"]\n0 -> 1\n1 [shape=record label=\"a | { qp=1 }\"]\n}"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT id, PACKEDFACTORS() FROM test1 WHERE MATCH('test one') OPTION ranker=expr('1')"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "packedfactors()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "packedfactors()": "bm25=500, bm25a=0.500000, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.000000, min_idf=0.000000, max_idf=0.000000, sum_idf=0.000000, min_hit_pos=1, min_best_span_pos=1, exact_hit=1, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.000000, atc=0.000000), word0=(tf=1, idf=0.000000)"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ## Просмотр значений факторов совпадения
 <!-- example factors -->
-При использовании ранжировщика выражений можно вывести значения вычисленных факторов с помощью функции [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
+При использовании ранжировщика выражений возможно вывести значения вычисленных факторов с помощью функции [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
 
 Функция возвращает:
 
-* Значения факторов на уровне документа (таких как bm25, field_mask, doc_word_count)
-* Список каждого поля, которое сгенерировало совпадение (включая lcs, hit_count, word_count, sum_idf, min_hit_pos и т.д.)
+* Значения факторов на уровне документа (такие как bm25, field_mask, doc_word_count)
+* Список каждого поля, которое сгенерировало совпадение (включая lcs, hit_count, word_count, sum_idf, min_hit_pos и др.)
 * Список каждого ключевого слова из запроса вместе с их значениями tf и idf
 
 
-Эти значения можно использовать для понимания, почему определённые документы получают более низкие или высокие оценки в поиске, или для уточнения существующего выражения ранжирования.
+Эти значения можно использовать, чтобы понять, почему определённые документы получают более низкие или более высокие оценки при поиске, или для уточнения существующего выражения ранжирования.
 
 <!-- intro -->
-Example:
+Пример:
 
 <!-- request SQL -->
 ```sql

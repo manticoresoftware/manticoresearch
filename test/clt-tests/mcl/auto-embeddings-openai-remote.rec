@@ -34,7 +34,7 @@ id bigint,
 title text,
 content text,
 description text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' FROM='title, content'
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title, content'
 )
 ––– comment –––
 Test data insertion with auto-generated vectors

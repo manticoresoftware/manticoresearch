@@ -875,7 +875,7 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 ##### JSON:
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('before');"
+POST /sql?mode=raw -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('before')"
 ```
 <!-- response JSON -->
 ```JSON
@@ -929,29 +929,26 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 ##### JSON:
 <!-- request JSON -->
 ```json
-POST /sql?mode=raw -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');"
+POST /sql -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one')"
 ```
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight()": {
-          "type": "string"
+        "_score": 1500,
+        "_source": {
+          "highlight()": "Book <b>one</b>"
         }
       }
-    ],
-    "data": [
-      {
-        "highlight()": "Book <b>one</b>"
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->
@@ -981,7 +978,7 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHERE MATCH('@title one');"
+POST /sql?mode=raw -d "SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHERE MATCH('@title one')"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1035,7 +1032,7 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');"
+POST /sql?mode=raw - d "SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots')"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1091,7 +1088,7 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');"
+POST /sql?mode=raw -d "SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one')"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1147,7 +1144,7 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');"
+POST /sql?mode=raw - d "SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one')"
 ```
 <!-- response JSON -->
 ```JSON
@@ -1202,7 +1199,7 @@ SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books WHERE MATCH('@title one');"
+POST /sql?mode=raw -d "SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books WHERE MATCH('@title one')"
 ```
 <!-- response JSON -->
 ```JSON
@@ -4007,7 +4004,7 @@ CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', '
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit);"
+POST /sql?mode=raw -d "CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit)"
 ```
 <!-- response JSON -->
 ```JSON
@@ -4071,7 +4068,7 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files);"
+POST /sql?mode=raw -d "CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files)"
 ```
 <!-- response JSON -->
 ```JSON

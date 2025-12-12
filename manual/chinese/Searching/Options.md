@@ -326,52 +326,45 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "select * from t where match('-d');"
+POST /sql -d "select * from t where match('-d')"
 {
   "error": "table t: query error: query is non-computable (single NOT operator)"
 }
-POST /sql?mode=raw -d "select * from t where match('-d')  option not_terms_only_allowed=1;"
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "f1": {
-          "type": "string"
-        }
-      },
-      {
-        "f2": {
-          "type": "long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 724024784404348900,
-        "f1": "b",
-        "f2": 2
-      },
-      {
-        "id": 724024784404348900,
-        "f1": "c",
-        "f2": 3
-      },
-      {
-        "id": 724024784404348900,
-        "f1": "b",
-        "f2": 2
-      }
-    ],
+POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
     "total": 3,
-    "error": "",
-    "warning": ""
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      },
+      {
+        "_id": 5912226830793834497,
+        "_score": 2500,
+        "_source": {
+          "f1": "c",
+          "f2": 3"
+        }
+      },
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      }
+    ]
   }
-]
+}
 ```
 
 <!-- end -->
@@ -454,7 +447,7 @@ mysql -P9306 -h0 --comments
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+POST /sql -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
 ```
 
 <!-- end -->

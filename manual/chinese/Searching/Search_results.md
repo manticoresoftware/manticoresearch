@@ -35,53 +35,45 @@ SELECT * FROM tbl;
 
 <!-- request JSON -->
 ```JSON
-POST /sql -d "SELECT * FROM tbl;"
+POST /sql -d "SELECT * FROM tbl"
 ```
 
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "age": {
-          "type": "long"
-        }
-      },
-      {
-        "name": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 1,
-        "age": 25,
-        "name": "joe"
-      },
-      {
-        "id": 2,
-        "age": 25,
-        "name": "mary"
-      },
-      {
-        "id": 3,
-        "age": 33,
-        "name": "albert"
-      }
-    ],
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
     "total": 3,
-    "error": "",
-    "warning": ""
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 2500,
+        "_source": {
+          "age": 25,
+          "name": "joe"
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 2500,
+        "_source": {
+          "age": 25,
+          "name": "mary"
+        }
+      },
+      {
+        "_id": 3,
+        "_score": 2500,
+        "_source": {
+          "age": 33,
+          "name": "albert"
+        }
+      }
+    ]
   }
-]
-
+}
 ```
 
 <!-- end -->
@@ -132,7 +124,7 @@ SELECT id,story_author,comment_author FROM hn_small WHERE story_author='joe' LIM
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT id,f1,f2 FROM t WHERE f2=2 LIMIT 1; SHOW META;"
+POST /sql?mode=raw -d "SELECT id,f1,f2 FROM t WHERE f2=2 LIMIT 1; SHOW META"
 ```
 
 <!-- response JSON -->
@@ -245,70 +237,43 @@ SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2;"
+POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
 ```
 
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "f1": {
-          "type": "string"
-        }
-      },
-      {
-        "f2": {
-          "type": "long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 724024784404348900,
-        "f1": "b",
-        "f2": 2
-      },
-      {
-        "id": 724024784404348900,
-        "f1": "b",
-        "f2": 2
-      }
-    ],
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
     "total": 2,
-    "error": "",
-    "warning": ""
-  },
-  {
-    "columns": [
+    "total_relation": "eq",
+    "hits": [
       {
-        "f2": {
-          "type": "long"
+        "_score": 2500,
+        "_source": {
+          "f1": "b"
         }
       },
       {
-        "count(*)": {
-          "type": "long long"
+        "_score": 2500,
+        "_source": {
+          "f1": "b"
         }
       }
-    ],
-    "data": [
-      {
-        "f2": 2,
-        "count(*)": 2
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
+  },
+  "aggregations": {
+    "rating": {
+      "buckets": [
+        {
+          "key": 2,
+          "doc_count": 2
+        }
+      ]
+    }
   }
-]
+}
 ```
 
 <!-- end -->
@@ -339,7 +304,7 @@ SELECT * from tbl where match('"joe"/3'); show warnings;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT * from t where match('\"a\"/3'); show warnings;"
+POST /sql?mode=raw -d "SELECT * from t where match('\"a\"/3'); show warnings"
 ```
 
 <!-- response JSON -->
@@ -426,7 +391,7 @@ ERROR 1064 (42000): index idx: query error: no field 'surname' found in schema
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT * from t where match('@surname joe');"
+POST /sql -d "SELECT * from t where match('@surname joe')"
 ```
 
 <!-- response JSON -->

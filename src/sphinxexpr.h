@@ -367,6 +367,7 @@ ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, 
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation );
 ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg );
 void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema );
+bool IsIndependentAttr ( const CSphString & sAttr, const ISphSchema & tSchema );
 bool CanAliasedExprSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bExclude );
 void SetExprNodeEvalStackItemSize ( std::pair<int,int> tStack );
 void SetMaxExprNodeEvalStackItemSize ( std::pair<int, int> tStack );

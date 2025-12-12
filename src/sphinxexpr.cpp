@@ -10948,3 +10948,23 @@ void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema )
 
 	dAttrNames.Uniq();
 }
+
+
+bool IsIndependentAttr ( const CSphString & sAttr, const ISphSchema & tSchema )
+{
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_sName==sAttr )
+			continue;
+
+		StrVec_t dDeps;
+		dDeps.Add ( tAttr.m_sName );
+		FetchAttrDependencies ( dDeps, tSchema );
+
+		if ( dDeps.any_of ( [&sAttr]( auto & sDep ){ return sDep==sAttr; } ) )
+			return false;
+	}
+
+	return true;
+}

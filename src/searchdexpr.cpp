@@ -697,7 +697,8 @@ void Expr_Highlight_c::MarkAllFields()
 
 	const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-		m_dRequestedFieldIds.Add(i);
+		if ( tSchema.IsFieldStored(i) )
+			m_dRequestedFieldIds.Add(i);
 }
 
 

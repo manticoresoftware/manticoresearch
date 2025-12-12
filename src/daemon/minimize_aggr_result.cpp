@@ -607,6 +607,12 @@ static void EvalPostlimitExprs ( CSphMatch & tMatch, const CSphColumnInfo * pCol
 		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) );
 		break;
 
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_INT64SET_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t)pCol->m_pExpr->Int64Eval(tMatch) );
+		break;
+
 	default:
 		tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval ( tMatch ) );
 		break;

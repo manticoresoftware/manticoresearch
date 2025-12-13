@@ -1,0 +1,201 @@
+API_TIMEOUT parameter testing for embeddings
+
+This test validates the API_TIMEOUT parameter for embedding generation in CREATE TABLE statements. It covers all timeout scenarios including default timeout behavior, zero timeout handling, negative values, non-integer values, very small timeouts, normal timeouts, very large timeouts, and timeout exceeded scenarios. The test uses both normal and slow mock servers to verify timeout behavior. Timeout during INSERT operations is implicitly tested through table creation validation, which uses the same timeout mechanism.
+
+––– comment –––
+MOCK SERVER SETUP FOR API_TIMEOUT TESTING
+
+To test API_TIMEOUT parameter with a local mock server:
+
+Start mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+For delay testing: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+Use delay=N in input text to override delay per request (e.g., "test delay=6.0")
+The mock server returns deterministic random embeddings seeded by input text
+API Key Validation: All keys are valid except "wrong" (returns 401 error)
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+MOCK SERVER STARTUP
+––– comment –––
+Start mock server for OpenAI provider on port 8080 (normal speed)
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+MOCK_PID_8080=$!
+echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
+sleep 1
+––– output –––
+Mock server started on port 8080 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start slow mock server for timeout testing on port 8084 (6 second delay)
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0 > /tmp/mock-server-8084.log 2>&1 &
+MOCK_PID_8084=$!
+echo "Slow mock server started on port 8084 (PID: $MOCK_PID_8084)"
+sleep 1
+––– output –––
+Slow mock server started on port 8084 (PID: #!/[0-9]+/!#)
+––– comment –––
+API_TIMEOUT Not Specified
+Test: Create table without API_TIMEOUT parameter
+Expected: Uses default timeout (10 seconds)
+Verify: Table creation succeeds, SHOW CREATE TABLE does NOT display api_timeout
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_not_specified (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE does not display api_timeout
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_not_specified" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_timeout_not_specified
+Create Table: CREATE TABLE test_api_timeout_not_specified (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+) 
+––– comment –––
+API_TIMEOUT = 0
+Test: CREATE TABLE ... API_TIMEOUT='0'
+Expected: Treated as not specified, uses default timeout (10 seconds)
+Verify: Table creation succeeds, SHOW CREATE TABLE does NOT display api_timeout
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_zero (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}' API_TIMEOUT='0')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE does not display api_timeout (treated as default)
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_zero" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_timeout_zero
+Create Table: CREATE TABLE test_api_timeout_zero (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+) 
+––– comment –––
+API_TIMEOUT Negative
+Test: CREATE TABLE ... API_TIMEOUT='-1'
+Expected: Table creation fails with validation error
+Verify: Error message: "API_TIMEOUT must be a non-negative integer"
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_negative (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='-1')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds) near ''-1')'
+––– comment –––
+API_TIMEOUT Non-Integer String
+Test Cases: Non-integer values
+Expected: Table creation fails with validation error
+Test Case 1: API_TIMEOUT='abc'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_nonint1 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='abc')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds) near ''abc')'
+––– comment –––
+Test Case 2: API_TIMEOUT='12.5' (float, not integer)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_nonint2 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='12.5')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds) near ''12.5')'
+––– comment –––
+Test Case 3: API_TIMEOUT='' (empty string)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_nonint3 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P03: API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds) near ''')'
+––– comment –––
+API_TIMEOUT Very Small (1 second)
+Test: CREATE TABLE ... API_TIMEOUT='1'
+Expected: Table creation succeeds, timeout set to 1 second, SHOW CREATE TABLE displays api_timeout='1'
+Verify: Works with fast responses, fails with slow responses (>1s)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_small (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='1')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE displays api_timeout='1'
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_small" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_timeout_small
+Create Table: CREATE TABLE test_api_timeout_small (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='1'
+)
+––– comment –––
+API_TIMEOUT Normal Value (30 seconds)
+Test: CREATE TABLE ... API_TIMEOUT='30'
+Expected: Table creation succeeds, timeout set to 30 seconds, SHOW CREATE TABLE displays api_timeout='30'
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_normal (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE displays api_timeout='30'
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_normal" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_timeout_normal
+Create Table: CREATE TABLE test_api_timeout_normal (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+)
+––– comment –––
+Test data insertion
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_api_timeout_normal (id, title) VALUES (1, 'test document')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+API_TIMEOUT Very Large (3600 seconds)
+Test: CREATE TABLE ... API_TIMEOUT='3600'
+Expected: Table creation succeeds, timeout set to 3600 seconds, SHOW CREATE TABLE displays api_timeout='3600'
+Verify: Works correctly (though impractical)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_large (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='3600')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE displays api_timeout='3600'
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_large" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_api_timeout_large
+Create Table: CREATE TABLE test_api_timeout_large (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='3600'
+)
+––– comment –––
+API_TIMEOUT Exceeded Scenario
+
+Test: CREATE TABLE ... API_TIMEOUT='5' with mock server delay=6.0
+Expected: Table creation fails with timeout error
+Verify: Clear timeout error message
+Test Method: Use delay=N in input text or --delay command line option
+Setup: Start server with 6 second delay: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+Alternative: Use "delay=6.0" in input text to override delay per request
+
+Test Case 1: Create table with 5 second timeout (should fail with 6s delay)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_exceeded (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8084/v1/embeddings' API_TIMEOUT='5')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_api_timeout_exceeded': prealloc: Failed to send request to remote model
+––– comment –––
+Test Case 2: Create table with 10 second timeout (should succeed with 6s delay)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_success (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8084/v1/embeddings' API_TIMEOUT='10')" 2>&1; echo $?
+––– output –––
+0

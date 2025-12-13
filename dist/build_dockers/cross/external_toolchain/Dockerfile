@@ -49,6 +49,13 @@ RUN cd / \
 && curl -k -L https://github.com/Kitware/CMake/releases/download/v${cmakever}/cmake-${cmakever}-linux-x86_64.tar.gz | tar -zx
 ENV PATH $PATH:/cmake-${cmakever}-linux-x86_64/bin
 
+# 4-th layer, rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable \
+&& rm -rf /root/.rustup/toolchains/*/share/doc \
+&& rm -rf /root/.cargo/registry/cache \
+&& rm -rf /root/.cargo/git
+ENV PATH $PATH:/root/.cargo/bin
+
 # last layer - vcpkg
 ENV VCPKG_ROOT=/vcpkg
 ENV VCPKG_DISABLE_METRICS=1
@@ -65,7 +72,8 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64 --push -t manticoresearch/external_toolchain:vcpkg331_20250114 .
+# docker buildx build --platform linux/amd64 --push -t manticoresearch/external_toolchain:20251210 .
+# old images: manticoresearch/external_toolchain:vcpkg331_20250114, manticoresearch/external_toolchain:clang16_cmake3263, manticoresearch/external_toolchain:clang15_cmake3263
 
 # deprecated:
 # on amd:

@@ -2485,60 +2485,61 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example float_vector_auto -->
 
-Атрибуты векторных чисел с плавающей запятой позволяют хранить списки переменной длины из чисел с плавающей запятой, преимущественно используемые для приложений машинного обучения и поиска по сходству. Этот тип отличается от [мультизначных атрибутов](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVA) по нескольким важным аспектам:
-- Сохраняет точный порядок значений (в отличие от MVA, которые могут менять порядок)
-- Сохраняет дублирующиеся значения (в отличие от MVA, которые удаляют дубликаты)
-- Нет дополнительной обработки при вставке (в отличие от MVA, которые сортируют и удаляют дубликаты)
+Атрибуты вектора с плавающей запятой позволяют хранить списки переменной длины из чисел с плавающей точкой, которые в первую очередь используются для задач машинного обучения и поиска по схожести. Этот тип отличается от [много значимых атрибутов](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVA) по нескольким важным признакам:
+- Сохраняет точный порядок значений (в отличие от MVA, которые могут изменять порядок)
+- Сохраняет дубликаты значений (в отличие от MVA, которые устраняют дубликаты)
+- Нет дополнительной обработки при вставке (в отличие от MVA, которые сортируют и устраняют дубликаты)
 
-Атрибуты векторных чисел с плавающей запятой позволяют хранить списки переменной длины из чисел с плавающей запятой, преимущественно используемые для приложений машинного обучения и поиска по сходству.
+Атрибуты вектора с плавающей запятой позволяют хранить списки переменной длины из чисел с плавающей точкой, которые в первую очередь используются для задач машинного обучения и поиска по схожести.
 
 ### Использование и ограничения
 - В настоящее время поддерживаются только в таблицах реального времени
-- Могут использоваться только в поисках KNN (k-ближайших соседей)
+- Могут использоваться только в поисках KNN (k ближайших соседей)
 - Не поддерживаются в обычных таблицах или других функциях/выражениях
-- При использовании с настройками KNN нельзя `UPDATE` значения `float_vector`. Используйте `REPLACE`
-- При использовании без настроек KNN можно `UPDATE` значения `float_vector`
+- При использовании с настройками KNN нельзя выполнять `UPDATE` значений `float_vector`. Используйте `REPLACE`
+- При использовании без настроек KNN можно выполнять `UPDATE` значений `float_vector`
 - Векторы с плавающей запятой нельзя использовать в обычных фильтрах или сортировке
-- Единственный способ фильтровать по значениям `float_vector` — через операции векторного поиска (KNN)
+- Единственный способ фильтрации по значениям `float_vector` — через операции векторного поиска (KNN)
 
-### Распространённые случаи использования
+### Типичные случаи использования
 - Текстовые эмбеддинги для семантического поиска
-- Векторы рекомендательных систем
+- Векторы систем рекомендаций
 - Эмбеддинги изображений для поиска по сходству
 - Векторы признаков для машинного обучения
 
-** Имейте в виду, что тип данных `float_vector` несовместим с механизмом [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). **
+** Имейте в виду, что тип данных `float_vector` не совместим с механизмом [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). **
 
-Для получения подробной информации о настройке векторов с плавающей запятой и их использовании в поисках смотрите [KNN search](../Searching/KNN.md).
+Для подробностей о настройке векторов с плавающей запятой и их использовании в поисках см. [KNN search](../Searching/KNN.md).
 
-### Автоматические эмбеддинги (рекомендуется)
+### Автоэмбеддинги (рекомендуется)
 
-Самый удобный способ работы с векторами с плавающей запятой — использование **автоматических эмбеддингов**. Эта функция автоматически генерирует эмбеддинги из ваших текстовых данных с помощью моделей машинного обучения, устраняя необходимость вручную вычислять и вставлять векторы.
+Самый удобный способ работать с векторами с плавающей запятой — использовать **автоэмбеддинги**. Эта функция автоматически генерирует эмбеддинги из ваших текстовых данных с помощью моделей машинного обучения, устраняя необходимость вручную вычислять и вставлять векторы.
 
-#### Преимущества автоматических эмбеддингов
-- **Упрощённый рабочий процесс**: Просто вставляйте текст, эмбеддинги генерируются автоматически
-- **Нет необходимости вручную вычислять векторы**: Не нужно запускать отдельные модели эмбеддингов
-- **Последовательные эмбеддинги**: Одна и та же модель обеспечивает согласованное представление векторов
-- **Поддержка нескольких моделей**: Выбор из моделей [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage и Jina
-- **Гибкий выбор полей**: Контроль над тем, какие поля используются для генерации эмбеддингов
+#### Преимущества автоэмбеддингов
+- **Упрощённый рабочий процесс**: Просто вставляйте текст, эмбеддинги создаются автоматически
+- **Нет необходимости вручную считать векторы**: Не нужно запускать отдельные модели эмбеддингов
+- **Последовательные эмбеддинги**: Одинаковая модель обеспечивает согласованное векторное представление
+- **Поддержка множества моделей**: Выбор из [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage и моделей Jina
+- **Гибкий выбор полей**: Контроль над тем, какие поля использовать для генерации эмбеддингов
 
-#### Создание таблиц с автоматическими эмбеддингами
+#### Создание таблиц с автоэмбеддингами
 
-При создании таблицы с автоматическими эмбеддингами укажите следующие дополнительные параметры:
-- `MODEL_NAME`: модель эмбеддингов для автоматической генерации векторов
-- `FROM`: какие поля использовать для генерации эмбеддингов (пустая строка означает все текстовые/строковые поля)
+При создании таблицы с автоэмбеддингами задайте следующие дополнительные параметры:
+- `MODEL_NAME`: Модель эмбеддингов для автоматической генерации векторов
+- `FROM`: Какие поля использовать для генерации эмбеддингов (пустая строка значит все текстовые/строковые поля)
+- `API_KEY`: Требуется для удалённых моделей (OpenAI, Voyage, Jina). API-ключ проверяется при создании таблицы реальным API-запросом.
+- `API_URL`: Опционально. URL кастомного API эндпоинта. Если не указано, используется стандартный эндпоинт провайдера (например, `https://api.openai.com/v1/embeddings` для OpenAI).
+- `API_TIMEOUT`: Опционально. Таймаут HTTP в секундах для API-запросов. По умолчанию 10 секунд. Значение `'0'` значит использовать таймаут по умолчанию. Применяется и к проверочным запросам при создании таблицы, и к генерации эмбеддингов при операциях INSERT.
 
 **Поддерживаемые модели эмбеддингов:**
-- **Sentence Transformers**: Любая [подходящая модель BERT на Hugging Face](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — API ключ не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI**: Модели эмбеддингов OpenAI, например `openai/text-embedding-ada-002` — требует параметр `API_KEY='<OPENAI_API_KEY>'`
-- **Voyage**: Модели эмбеддингов Voyage AI — требует параметр `API_KEY='<VOYAGE_API_KEY>'`
-- **Jina**: Модели эмбеддингов Jina AI — требует параметр `API_KEY='<JINA_API_KEY>'`
+- **Sentence Transformers**: Любая [подходящая BERT-модель Hugging Face](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — не требует API-ключа. Manticore скачивает модель при создании таблицы.
+- **OpenAI, Voyage, Jina**: Удалённые модели эмбеддингов (например, `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) — требуют параметра `API_KEY='<API_KEY>'`. По желанию можно указать `API_URL='<CUSTOM_URL>'` для кастомного API и `API_TIMEOUT='<SECONDS>'` для настройки таймаута HTTP (по умолчанию 10 секунд).
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Использование модели [sentence-transformers](https://huggingface.co/sentence-transformers/models) (API ключ не требуется)
+Использование модели [sentence-transformers](https://huggingface.co/sentence-transformers/models) (API-ключ не нужен)
 ```sql
 CREATE TABLE products (
     title TEXT,
@@ -2555,6 +2556,17 @@ CREATE TABLE products_openai (
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
+);
+```
+
+Использование OpenAI с кастомным API URL и таймаутом (опционально)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' 
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -2576,13 +2588,13 @@ CREATE TABLE products_all_fields (
 Параметр `FROM` контролирует, какие поля используются для генерации эмбеддингов:
 
 - **Конкретные поля**: `FROM='title'` — используется только поле title
-- **Несколько полей**: `FROM='title,description'` — объединяются и используются поля title и description
-- **Все текстовые поля**: `FROM=''` (пусто) — используются все поля типа `text` (полнотекстовые поля) и `string` (строковые атрибуты) в таблице
+- **Несколько полей**: `FROM='title,description'` — конкатенация title и description
+- **Все текстовые поля**: `FROM=''` (пустое значение) — используются все поля типа `text` (поле полнотекстового поиска) и `string` (строковый атрибут)
 - **Пустые векторы**: Можно вставлять пустые векторы с помощью `()`, чтобы исключить документы из векторного поиска
 
-#### Вставка данных с автоматическими эмбеддингами
+#### Вставка данных с автоэмбеддингами
 
-При использовании автоматических эмбеддингов **не указывайте поле вектора** в ваших операторах INSERT. Эмбеддинги автоматически генерируются из указанных текстовых полей:
+При использовании автоэмбеддингов **не указывайте векторное поле** в ваших запросах INSERT. Эмбеддинги автоматически генерируются из указанных текстовых полей:
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2598,7 +2610,7 @@ INSERT INTO products (title, description, embedding_vector) VALUES
 ### Ручное использование векторов с плавающей запятой
 
 <!-- example for creating float_vector -->
-В качестве альтернативы можно работать с вручную вычисленными векторами с плавающей запятой.
+В качестве альтернативы, вы можете работать с вручную вычисленными векторами с плавающей запятой.
 
 <!-- intro -->
 ##### SQL:
@@ -2704,11 +2716,11 @@ table products
 
 <!-- end -->
 
-## Мультизначное целое число (MVA)
+## Много значимый целочисленный атрибут (MVA)
 
 <!-- example for creating MVA32 -->
 
-Мультизначные атрибуты позволяют хранить списки переменной длины из 32-битных беззнаковых целых чисел. Это может быть полезно для хранения числовых значений один-ко-многим, таких как теги, категории продуктов и свойства.
+Мульти-значные атрибуты позволяют хранить списки переменной длины из 32-битных беззнаковых целых чисел. Это может быть полезно для хранения числовых значений «один-ко-многим», таких как теги, категории продуктов и свойства.
 
 <!-- intro -->
 ##### SQL:
@@ -2816,7 +2828,7 @@ table products
 
 
 <!-- example for any/all MVA -->
-It supports filtering and aggregation, but not sorting. Filtering can be done using a condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all elements ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)) to pass.
+Поддерживается фильтрация и агрегация, но не сортировка. Фильтрация может быть выполнена с условием, требующим прохождения хотя бы одного элемента (используя [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) или всех элементов ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)).
 
 
 <!-- intro -->
@@ -2925,7 +2937,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for least/greatest MVA -->
 
-Information like [least](../Functions/Mathematical_functions.md#LEAST%28%29) or [greatest](../Functions/Mathematical_functions.md#GREATEST%28%29) element and length of the list can be extracted. An example shows ordering by the least element of a multi-value attribute.
+Можно извлечь информацию, такую как [наименьший](../Functions/Mathematical_functions.md#LEAST%28%29) или [наибольший](../Functions/Mathematical_functions.md#GREATEST%28%29) элемент, а также длину списка. Пример показывает сортировку по наименьшему элементу мульти-значного атрибута.
 
 <!-- intro -->
 ##### SQL:
@@ -3039,7 +3051,7 @@ let search_res = search_api.search(search_req).await;
 <!-- end -->
 
 <!-- example for grouping by MVA -->
-When grouping by a multi-value attribute, a document will contribute to as many groups as there are different values associated with that document. For instance, if a collection contains exactly one document having a 'product_codes' multi-value attribute with values 5, 7, and 11, grouping on 'product_codes' will produce 3 groups with `COUNT(*)`equal to 1 and `GROUPBY()` key values of 5, 7, and 11, respectively. Also, note that grouping by multi-value attributes may lead to duplicate documents in the result set because each document can participate in many groups.
+При группировке по мульти-значному атрибуту документ будет участвовать в таком количестве групп, сколько различных значений связано с этим документом. Например, если коллекция содержит ровно один документ с мульти-значным атрибутом 'product_codes' со значениями 5, 7 и 11, группировка по 'product_codes' произведёт 3 группы с `COUNT(*)`, равным 1, и значениями ключей `GROUPBY()` соответственно 5, 7 и 11. Также обратите внимание, что группировка по мульти-значным атрибутам может привести к дублированию документов в результирующем наборе, поскольку каждый документ может участвовать во многих группах.
 
 <!-- intro -->
 ##### SQL:
@@ -3068,7 +3080,7 @@ Query OK, 1 row affected (0.00 sec)
 <!-- end -->
 
 <!-- example for MVA value order -->
-The order of the numbers inserted as values of multivalued attributes is not preserved. Values are stored internally as a sorted set.
+Порядок чисел, вставляемых в качестве значений мульти-значных атрибутов, не сохраняется. Значения хранятся внутри в виде отсортированного множества.
 
 <!-- intro -->
 ##### SQL:
@@ -3381,11 +3393,11 @@ class SearchResponse {
 <!-- end -->
 
 
-## Multi-value big integer
+## Мульти-значное большое целое число
 
 <!-- example for creating MVA64 -->
 
-A data type that allows storing variable-length lists of 64-bit signed integers. It has the same functionality as multi-value integer.
+Тип данных, позволяющий хранить списки переменной длины из 64-битных знаковых целых чисел. Обладает такой же функциональностью, как мульти-значное целое число.
 
 <!-- intro -->
 ##### SQL:
@@ -3491,14 +3503,14 @@ table products
 
 <!-- end -->
 
-## Columnar attribute properties
+## Свойства столбцовых атрибутов
 
-When you use the columnar storage you can specify the following properties for the attributes.
+При использовании столбцового хранения вы можете указать следующие свойства для атрибутов.
 
 <!-- example fast_fetch -->
 ### fast_fetch
 
-By default, Manticore Columnar storage stores all attributes in a columnar fashion, as well as in a special docstore row by row. This enables fast execution of queries like `SELECT * FROM ...`, especially when fetching a large number of records at once. However, if you are sure that you do not need it or wish to save disk space, you can disable it by specifying `fast_fetch='0'` when creating a table or (if you are defining a table in a config) by using `columnar_no_fast_fetch` as shown in the following example.
+По умолчанию, хранилище Manticore Columnar хранит все атрибуты в колоннарном виде, а также в специальном docstore построчно. Это обеспечивает быстрое выполнение запросов типа `SELECT * FROM ...`, особенно при выборке большого количества записей одновременно. Однако, если вы уверены, что это не нужно, или хотите сэкономить место на диске, вы можете отключить эту опцию, указав `fast_fetch='0'` при создании таблицы или (если вы определяете таблицу в конфигурации) используя `columnar_no_fast_fetch`, как показано в следующем примере.
 
 <!-- request RT mode -->
 ```sql

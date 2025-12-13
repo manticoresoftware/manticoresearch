@@ -25,19 +25,17 @@ mysql -h0 -P9306 -e "CREATE TABLE test_voyage_remote (title TEXT, content TEXT, 
 ––– comment –––
 Check that the table was created and not display API_KEY
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_voyage_remote"
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_voyage_remote"
 ––– output –––
-+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table              | Create Table                                                                                                                                                                                               |
-+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| test_voyage_remote | CREATE TABLE test_voyage_remote (
+*************************** 1. row ***************************
+       Table: test_voyage_remote
+Create Table: CREATE TABLE test_voyage_remote (
 id bigint,
 title text,
 content text,
 description text,
-embedding float_vector knn_type='hnsw' knn_dims='1024' hnsw_similarity='L2' model_name='voyage/voyage-3.5-lite'
-) |
-+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+embedding float_vector knn_type='hnsw' knn_dims='1024' hnsw_similarity='L2' model_name='voyage/voyage-3.5-lite' from='title, content'
+)
 ––– comment –––
 Test data insertion with auto-generated vectors
 ––– input –––

@@ -1,0 +1,15 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t(f text) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t(f) values('abcdef');"
+––– output –––
+––– input –––
+curl -s localhost:9308/cli_json -d "SELECT f from t where match('abczef') option fuzzy=1; show meta"
+––– output –––
+[{"total":1,"error":"","warning":"","columns":[{"f":{"type":"string"}}],"data":[{"f":"abcdef"}]}]
+––– input –––
+curl -s localhost:9308/cli_json -d "SELECT * from t where match('abczef') option fuzzy=1; show tables"
+––– output –––
+[{"total":1,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"f":{"type":"string"}}],"data":[{"id":%{NUMBER},"f":"abcdef"}]}]

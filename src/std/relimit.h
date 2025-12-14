@@ -28,7 +28,7 @@ class DefaultRelimit
 public:
 	static constexpr int64_t SANE_SIZE = INT_MAX / 2;
 	static constexpr int MAGIC_INITIAL_LIMIT = 8;
-	static inline int64_t Relimit ( int64_t iLimit, int64_t iNewLimit );
+	static constexpr int64_t Relimit ( int64_t iLimit, int64_t iNewLimit );
 };
 
 /// tight-vector policy
@@ -39,7 +39,7 @@ public:
 	static constexpr float GROW = 1.2f;
 	static constexpr int64_t SANE_SIZE = (double)INT_MAX / GROW; // double, since INT_MAX is not convertible to float precisely
 	static constexpr int SLOW_GROW_TRESHOLD = 1024;
-	static inline int64_t Relimit ( int64_t iLimit, int64_t iNewLimit );
+	static constexpr int64_t Relimit ( int64_t iLimit, int64_t iNewLimit );
 };
 
 } // namespace sph

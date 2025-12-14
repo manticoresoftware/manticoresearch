@@ -103,7 +103,6 @@ public:
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
 	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_dAnchor, m_tAttr ); }
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
-	bool		IsColumnar ( bool * pStored ) const final				{ return !m_pStart && m_tAttr.IsColumnar(); }
 
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
 
@@ -236,6 +235,7 @@ public:
 
 	float		Eval ( const CSphMatch & tMatch ) const override	{ return CalcDist(tMatch); }
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
+	bool		IsColumnar ( bool * pStored ) const final			{ return m_tAttr.IsColumnar(); }
 
 protected:
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;

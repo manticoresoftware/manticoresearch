@@ -1,6 +1,7 @@
 # Changelog
 
 ## Version 15.1.0
+**Released**: December 7th 2025
 
 ### Recommended Libraries
 - Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 9.0.0
@@ -9,7 +10,7 @@
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
 
 ## Breaking Changes
-* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Updated MCL requirement to 9.0.0, bringing uncompressed float-vector storage, block-size change for KNN vectors, and non-buffered reads. This update doesn't change the data format but increases the Manticore Search / MCL API version. This update changes the data format. Older MCL versions won’t be able to read it, but the new version can still read your existing columnar tables without any issues.
+* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Updated MCL requirement to 9.0.0, bringing uncompressed float-vector storage, block-size change for KNN vectors, and non-buffered reads. This update changes the data format. Older MCL versions won’t be able to read it, but the new version can still read your existing columnar tables without any issues.
 
 ### New Features and Improvements
 * 🆕 [v15.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.0) [ PR #3990](https://github.com/manticoresoftware/manticoresearch/pull/3990) Improved disk chunk flushing log records by breaking the total time into clearer parts.
@@ -42,7 +43,6 @@ If you follow the [official installation guide](https://manticoresearch.com/inst
 * 🪲 [v14.5.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.6) Fixed Windows build by correcting a type mismatch in `binlog.cpp`, ensuring `DoSaveMeta()` now compiles correctly for Windows platforms.
 * 🪲 [v14.5.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.5) [Issue #805](https://github.com/manticoresoftware/manticoresearch/issues/805) [Issue #807](https://github.com/manticoresoftware/manticoresearch/issues/807) [Issue #3924](https://github.com/manticoresoftware/manticoresearch/issues/3924) Fixed inconsistent behavior in JSON-attribute faceting: aliasing a JSON array in a FACET clause now behaves the same as faceting on the array directly.
 * 🪲 [v14.5.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.4) [ Issue #3927](https://github.com/manticoresoftware/manticoresearch/issues/3927) Fixed a crash in KNN vector search by skipping searches on empty HNSW indexes.
-
 * 🪲 [v14.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.2) [ Issue #3669](https://github.com/manticoresoftware/manticoresearch/issues/3669) Fixed `MATCH()` parsing so empty groups like `()` no longer trigger an error (e.g. queries such as `camera()` now work correctly).
 * 🪲 [v14.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.1) [ PR #3961](https://github.com/manticoresoftware/manticoresearch/pull/3961) Updated backup documentation for mysqldump replication mode: explained using `--skip-lock-tables` when dumping replicated tables, and fixed several broken manual links.
 * 🪲 [v14.3.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.3.2) [ Issue #2772](https://github.com/manticoresoftware/manticoresearch/issues/2772) Fixed a bug where some commands executed via MySQL client 9 caused a "unexpected $undefined near '$$'" error in the query log.

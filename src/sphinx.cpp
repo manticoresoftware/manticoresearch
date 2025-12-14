@@ -11341,6 +11341,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( bCollectPredictionCounters )
 		tTermSetup.m_pStats = &tQueryStats;
 
+	if ( HasForceHints ( tQuery.m_dIndexHints ) )
+		tCtx.m_bSkipQCache = true;
+
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
@@ -11423,11 +11426,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 			auto pIter = pIterator.get();
 			pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
 		}
-
-	} else
-	{
-		// using cache ranker - check if user forced SI hits these will be ignored
-		ReportDisabledHints ( tQuery.m_dIndexHints, tMeta.m_sWarning );
 	}
 
 	//////////////////////////////////////

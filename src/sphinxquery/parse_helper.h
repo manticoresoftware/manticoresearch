@@ -81,4 +81,5 @@ private:
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
 	void			FixupDestForms();
 	bool			CheckQuorumProximity ( const XQNode_t * pNode );
+	bool			CheckNear ( const XQNode_t * pNode );
 };

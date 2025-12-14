@@ -75,7 +75,7 @@ public:
 
 const char * SstGetStageName ( SstStage_e eStage );
 
-SstProgress_i * CreateProgress();
+CSphRefcountedPtr<SstProgress_i> CreateProgress();
 
 struct SyncSrc_t;
 void PrepareSendStage ( const SyncSrc_t & tSigSrc, const VecTraits_T<AgentConn_t*> & dNodes, SstProgress_i & tProgress );

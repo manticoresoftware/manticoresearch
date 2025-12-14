@@ -19,6 +19,8 @@ The stopwords setting is optional and by default empty. It allows you to specify
 
 The stop word file format is simple plain text with UTF-8 encoding. The file data will be tokenized with respect to the [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
 
+When [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) indexing is active, stopwords composed of characters falling under [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) are themselves tokenized into N-grams. Thus, each individual N-gram becomes a separate stopword. For example, with `ngram_len=1` and suitable `ngram_chars`, the stopword `test` will be interpreted as `t`, `e`, `s`, `t` as four distinct stopwords.
+
 Stop word files can be created manually or semi-automatically. The [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the table, sorted by the keyword frequency. Top keywords from that dictionary can usually be used as stop words. See [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
 
 

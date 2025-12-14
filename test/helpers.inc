@@ -1,7 +1,11 @@
 <?php
 
 ini_set ( "display_errors", 1 );
-ini_set ( "error_reporting", (E_ALL | E_STRICT) & ~E_USER_DEPRECATED );
+$error_reporting = E_ALL & ~E_USER_DEPRECATED;
+if ( defined ( 'E_STRICT' ) && PHP_VERSION_ID < 80400 ) {
+	$error_reporting |= E_STRICT;
+}
+ini_set ( "error_reporting", $error_reporting );
 ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
@@ -4047,7 +4051,7 @@ class SphinxConfig
 							else
 								$justcopy = true;
 							break;
-						case "source";
+						case "source":
 							{
 								$idxbody .= "\ttype\t= rt\n";
 								if ( $collectdata )

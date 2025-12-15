@@ -492,7 +492,7 @@ curl localhost:9308/sql -d 'mode=raw&query=SHOW TABLES'
 
 > 注意：`/cli` 端点设计用于使用 curl 或浏览器等工具手动与 Manticore 交互。不适合自动化脚本使用。请改用 `/sql` 端点。
 
-虽然 `/sql` 端点对于从您的应用程序以编程方式控制 Manticore 非常有用，但还有 `/cli` 端点。它使得使用 curl 或浏览器**手动维护 Manticore 实例**变得更容易。它接受 POST 和 GET 两种 HTTP 方法。`/cli?` 之后输入的所有内容都会被 Manticore 理解，即使没有通过 curl 手动转义或浏览器自动编码。无需 `query` 参数。重要的是，`+` 符号不会被转换为空格，消除了对其进行编码的需求。对于 POST 方法，Manticore 接受所有内容，完全不做任何更改。响应以表格格式返回，类似于您在 MySQL 客户端中看到的 SQL 结果集。
+尽管 `/sql` 端点对于从您的应用程序以编程方式控制 Manticore 非常有用，但还有 `/cli` 端点。它使得使用 curl 或您的浏览器**手动维护 Manticore 实例**更加简单。它接受 POST 和 GET 两种 HTTP 方法。所有输入在 `/cli?` 之后的内容都会被 Manticore 识别，即使没有用 curl 手动转义或浏览器自动编码也没关系。无需 `query` 参数。重要的是，`+` 符号不会被转换为空格，消除了对其编码的需求。对于 POST 方法，Manticore 会完全原样接受所有内容，不作任何更改。响应以表格格式返回，类似于您在 MySQL 客户端中看到的 SQL 结果集。
 
 <!-- request POST -->
 
@@ -558,13 +558,13 @@ curl 0:9308/cli -d 'desc test'
 <!-- end -->
 
 ### /cli_json
-> 注意：`/cli_json` 端点设计用于使用 curl 或浏览器等工具与 Manticore 进行手动交互。不适合用于自动化脚本。请改用 `/sql` 端点。
+> 注意：`/cli_json` 端点设计用于使用 curl 或浏览器等工具与 Manticore 进行手动交互。不建议用于自动化脚本，自动化脚本请使用 `/sql` 端点。
 
 <!-- example cli_json -->
 `/cli_json` 端点提供与 `/cli` 相同的功能，但响应格式为 JSON。它包括：
 - 描述模式的 `columns` 部分。
 - 包含实际数据的 `data` 部分。
-- 包含 “total”、“error” 和 “warning” 的摘要部分。
+- 总结部分，包括 "total"、"error" 和 "warning"。
 
 <!-- request POST -->
 
@@ -695,9 +695,28 @@ curl 0:9308/cli_json -d 'desc test'
 
 <!-- end -->
 
-### Keep-alive
+### 持久连接
 
-HTTP keep-alive 支持 `/sql`、`/sql?mode=raw` 和 `/cli_json` 端点，但不支持 `/cli` 端点。此功能使得通过 HTTP JSON 接口进行有状态交互成为可能，前提是客户端也支持 keep-alive。例如，使用 [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) 端点，您可以在执行 `SELECT` 查询后运行 `SHOW META` 命令，其行为类似于通过 MySQL 客户端与 Manticore 的交互。
+持久连接意味着客户端不仅发送一个查询然后断开连接，而是保持连接建立状态，并发送多个查询。因此，名称解析（如果有）只发生一次；TCP 窗口大小也得以维持。同时，守护进程可能为整个连接提供状态，比如前一个查询的元信息和配置文件。
 
-<!-- proofread -->
+如果你通过 HTTP 1.0 协议连接，需要添加 `connection: keep-alive` 头。
+
+如果你通过 HTTP 1.1 协议连接，连接默认是持久的。在终止查询时，建议添加头 `connection: close`，以明确表示你已完成操作，连接随后会被断开。
+
+### HTTP 状态
+
+在已建立的连接上，守护进程保持一些状态，并可为后续查询提供。
+状态会被保留在 `/sql`、`/sql?mode=raw` 和 `/cli_json` 端点，但不保留在 `/cli` 端点。此功能支持通过 HTTP JSON 接口进行有状态交互。例如，通过使用 [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) 端点，在进行 `SELECT` 查询后运行 `SHOW META` 命令，其行为类似于通过 MySQL 客户端与 Manticore 的交互。
+
+要通过 curl 使用单个连接运行多个 sphinxql 查询，需要使用 `--next` 关键字编写命令：
+
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
+```
+
+注意；下面的写法将不会工作：
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
+```
+因为这是一个特殊情况——查询批处理，或[多查询](../Searching/Multi-queries.md)，具有其自身的优点和局限。
 

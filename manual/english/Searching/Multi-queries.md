@@ -10,6 +10,12 @@ The primary reason is performance. By sending requests to Manticore in a batch i
 
 Multi-queries require all search queries in a batch to be independent, which isn't always the case. Sometimes query B depends on query A's results, meaning query B can only be set up after executing query A. For example, you might want to display results from a secondary index only if no results were found in the primary table, or you may want to specify an offset into the 2nd result set based on the number of matches in the 1st result set. In these cases, you'll need to use separate queries (or separate batches).
 
+When using connector libraries, like `mysqli` in php, you can add several queries, and then run all of them as single batch. That will work as single multi-query batch.
+
+Notice: if you use console mysql client, by default it interprets semicolon as delimiter itself, and then sends queries to the server one-by-one; that is NOT multi-query batch. To override this, redefine separator on client side to another character with internal command `delimiter`. After such operation, client will send whole string with semicolons unchanged, and so, multi-query magic can work.
+
+This aside behavior of console client often confuses, because you can notice, that one and same sequence of commands behaves differently from mysql client console, in opposite to another proto like sql-over-http. That is exactly because mysql console client itself divides queries by semicolon, but another proto may send whole sequence as single batch.
+
 <!-- example multi-query 1 -->
 You can run multiple search queries with SQL by separating them with a semicolon. When Manticore receives a query formatted like this from a client, all inter-statement optimizations will be applied.
 
@@ -23,6 +29,15 @@ Multi-queries don't support queries with `FACET`. The number of multi-queries in
 
 ```sql
 SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC
+```
+<!-- end -->
+
+From console mysql/mariadb client:
+<!-- request SQL -->
+
+```sql
+DELIMITER _
+SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC_
 ```
 <!-- end -->
 
@@ -78,5 +93,21 @@ For reference, this is how the regular log would look like if the queries were n
 
 Notice how the per-query time in the multi-query case improved by a factor of 1.5x to 2.3x, depending on the specific sorting mode.
 
-<!-- proofread -->
+## Multi-queries limitations and flow
 
+Multi-queries supported mainly for batching queries and receiving meta-info after such batches. Because of it, only small subset of statements allowed in batches. In one batch you can combine only `select`, `show`, and `set` statements.
+
+You can use `select` as usual; but notice, that they will be run all together in one pass. If queries are not related, there are no benefits from multi-query. Daemon will detect it, and run queries one-by-one.
+
+You can use `show` for processing warnings, status, agent status, meta, profile, and plan. All other `show` in batches
+will be silently ignored with no output. For example, you can't `show tables`, or `show threads`, or
+`show variables`, or whatever not mentioned above with batching.
+
+You can use `set` only for `set profiling`. All other `set` will be silently ignored.
+
+Order of execution is also differs. Daemon process batches in 2 passes.
+
+First, it collects all `select` statements, and at the same time run all `set` statements it sees. As a side effect, only last `set profiling` is effective. If you run multi-query as `set profiling=1; select...; show meta; show profile; set profiling=0`, you will not see any profile, because on the first pass daemon executes `set profiling=1`, and then, immediately, last `set profiling=0`.
+
+Second, daemon try to execute single batch query with all collected `select` statements. If statements are not related; it will execute them one-by-one.
+Finally, it iterates over initial batch sequence, and for each `select` and `show` returns it's sub-result data and meta from resultset. All `set` statements were already executed in the first pass, and so, on this second pass they are skipped. 

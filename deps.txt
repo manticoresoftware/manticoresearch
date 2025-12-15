@@ -1,5 +1,5 @@
 backup 1.9.6+25070510-5247d066
-buddy 3.40.3+25120822-53dd47df-dev
+buddy 3.40.4+25121514-ff33bb03-dev
 mcl 9.0.1+25121418-60baa521-dev
 executor 1.3.6+25102902-defbddd7-dev
 tzdata 1.0.1 250714 7eebffa

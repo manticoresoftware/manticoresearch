@@ -674,8 +674,8 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_TOKENCOUNT:	return "tokencount";
 		case SPH_ATTR_JSON:			return "json";
 
-		case SPH_ATTR_UINT32SET:	return "mva";
-		case SPH_ATTR_INT64SET:		return "mva64";
+		case SPH_ATTR_UINT32SET:	return "multi";
+		case SPH_ATTR_INT64SET:		return "multi64";
 		case SPH_ATTR_FLOAT_VECTOR:	return "float_vector";
 		default:					return "unknown";
 	}

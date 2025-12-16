@@ -192,9 +192,11 @@ CLT tests are organized into test suites defined in `.github/workflows/clt_tests
 
 ### Running Locally
 
-CLT tests run inside Docker containers to ensure consistent environment. For local testing, you can use publicly available Docker images.
+CLT tests run inside Docker containers to ensure consistent environment. There are two main scenarios for local testing:
 
-**Quick testing with Docker:**
+#### 1. Testing Against Public Images (Quick Verification)
+
+For quick testing of existing functionality using public Docker images:
 
 ```bash
 # Pull the latest Manticore image from Docker Hub
@@ -212,9 +214,7 @@ docker run -d --name manticore-test \
 mysql -h127.0.0.1 -P9306 -e "SHOW TABLES;"
 ```
 
-**Running CLT tests locally:**
-
-You can install CLT and run tests locally against any Docker image:
+**Running CLT tests against public images:**
 
 ```bash
 # Clone CLT repository
@@ -231,7 +231,49 @@ cd clt
 
 See [CLT documentation](https://github.com/manticoresoftware/clt) for more details on test recording and replay.
 
-**Note**: GitHub Actions use special `test-kit` Docker images built from your PR changes. For local development, use public images from Docker Hub (`manticoresearch/manticore:latest` or `:dev`).
+#### 2. Testing Your Own Code Changes
+
+When you've made changes to Manticore Search code and want to test them before creating a PR, use the [`build-local-test-kit.sh`](https://github.com/manticoresoftware/manticoresearch/blob/master/misc/build-local-test-kit.sh) script.
+
+**Usage:**
+
+```bash
+cd misc
+./build-local-test-kit.sh          # Build image with your changes (~10-30 min)
+./build-local-test-kit.sh --clean  # Clean build from scratch
+./build-local-test-kit.sh --help   # Show detailed help
+```
+
+**What it does:**
+
+1. Pulls base image `test-kit-latest` (contains latest dev from master)
+2. Compiles your code changes
+3. Creates Docker image `test-kit:local` ready for CLT testing
+
+**Example workflow:**
+
+```bash
+# 1. Make code changes
+vim src/searchdhttp.cpp
+
+# 2. Build test-kit with your changes
+cd misc && ./build-local-test-kit.sh
+
+# 3. Run CLT tests against your image
+cd /path/to/clt
+./clt test -t /path/to/test.rec -d test-kit:local
+
+# 4. Tests pass! Commit and push
+git add . && git commit -m "Add feature" && git push
+```
+
+**Options:**
+
+- `BUILD_TYPE=Debug ./build-local-test-kit.sh` - Build in Debug mode
+- Supports Linux, macOS (Intel/Apple Silicon), Windows (WSL2)
+- See `./build-local-test-kit.sh --help` for full documentation
+
+GitHub Actions will automatically build and test your PR the same way.
 
 ### CLT Test File Format
 
@@ -325,11 +367,15 @@ Reusable test components in `test/clt-tests/base/`:
 
 ### CI/CD Integration
 
-Tests are automatically run via GitHub Actions:
+Tests are automatically run via GitHub Actions when you create a pull request:
 
-- `.github/workflows/test.yml` - Main test workflow
-- `.github/workflows/clt_tests.yml` - CLT test workflow
-- `.github/workflows/clt_nightly.yml` - Nightly extended tests
+- `.github/workflows/test.yml` - Main test workflow (runs automatically on PR)
+- `.github/workflows/clt_tests.yml` - CLT tests (runs automatically on PR)
+- `.github/workflows/clt_nightly.yml` - Extended nightly tests
+
+**For contributors**: Simply add your tests to the appropriate directory in `test/clt-tests/`. When you create a PR, GitHub Actions will automatically run all relevant tests. Maintainers will determine if additional test coverage (e.g., nightly tests) is needed during code review.
+
+**You don't need to worry about which workflow runs your tests** - the CI/CD system handles this automatically based on your changes.
 
 ### Binary and File Locations
 

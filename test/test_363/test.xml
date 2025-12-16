@@ -21,10 +21,14 @@ searchd
 	<sphinxql>
 		create table t(i int, f float, s string, t text, b bigint, j json, m multi, m64 multi64, bl bool);
 		desc t;
+		create table tmva(i int, f float, s string, t text, b bigint, j json, m mva, m64 mva64, bl bool);
+		desc tmva;
 	</sphinxql>
 	<query endpoint="cli_json" method="post">select * from t</query>
+	<query endpoint="cli_json" method="post">select * from tmva</query>
 	<sphinxql>
 		drop table t;
+		drop table tmva;
 	</sphinxql>
 </queries>
 

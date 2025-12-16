@@ -3301,6 +3301,7 @@ class LazyNetEvents_c : ISphNoncopyable, protected NetEventsFlavour_c
 	int			m_iLastReportedErrno = -1;
 	volatile int	m_iTickNo = 1;
 	int64_t		m_iNextTimeoutUS = 0;
+	CSphVector<TaskNet_t*> m_dProcessingTasks GUARDED_BY (m_dActiveLock); // tasks protected while processing events
 
 private:
 	/// maps AgentConn_t -> Task_c for new/existing task
@@ -3326,10 +3327,35 @@ private:
 	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
 	{
 		assert ( pTask );
-		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d), release=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, bReleasePayload );
+		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d, fd=%d), release=%d", 
+			pTask, pTask->m_pPayload, pTask->m_uIOActive, pTask->m_ifd, bReleasePayload );
+		
+		// Defer delete if event processing is still in flight; epoll can still reference the task.
+		AgentConn_t * pConnection = nullptr;
+		{
+			ScopedMutex_t tLock ( m_dActiveLock );
+			if ( m_dProcessingTasks.Contains ( pTask ) )
+			{
+				sphLogDebugL ( "L DeleteTask for %p deferred: task is currently being processed from epoll_wait()", pTask );
+				pConnection = pTask->m_pPayload;
+				pTask->m_uIOChanged = TaskNet_t::NO;
+				events_change_io ( pTask );
+				pTask->m_ifd = -1;
+				pTask->m_pPayload = nullptr;
+
+				if ( pConnection && pConnection->m_pPollerTask==pTask )
+					pConnection->m_pPollerTask = nullptr;
+
+				if ( bReleasePayload )
+					SafeReleaseAndZero ( pConnection );
+
+				return pConnection;
+			}
+		}
+		
 		pTask->m_uIOChanged = TaskNet_t::NO;
 		events_change_io ( pTask );
-		auto pConnection = pTask->m_pPayload;
+		pConnection = pTask->m_pPayload; // reuse same pointer as deferred branch
 		pTask->m_pPayload = nullptr;
 
 		// if payload already invoked in another task (remember, we process deferred action!)
@@ -3337,8 +3363,10 @@ private:
 		if ( pConnection && pConnection->m_pPollerTask==pTask )
 			pConnection->m_pPollerTask = nullptr;
 
-#if _WIN32
+		// Invalidate task before deletion to prevent use-after-free in EventTick()
+		// This allows EventTick() to detect stale task pointers from events_wait()
 		pTask->m_ifd = -1;
+#if _WIN32
 		pTask = nullptr; // save from delete below
 #endif
 		SafeDelete ( pTask );
@@ -3552,6 +3580,33 @@ private:
 		sphLogDebugL ( "L poller wait returned %d events from %d", iEvents, m_iEvents );
 		m_dReady.Resize ( iEvents );
 
+		// Protect tasks returned from epoll before we start callbacks by snapshotting the
+		// task pointers from the ready list. This list is then used to mark every task as
+		// "processing" under the mutex so DeleteTask() can tell they must not be freed yet.
+		CSphVector<TaskNet_t*> dTasksToProcess;
+		dTasksToProcess.Reserve ( iEvents );
+		for ( int i = 0; i < iEvents; ++i )
+		{
+			auto tEvent = GetEvent (i);
+			if ( tEvent.IsSignaler () )
+				continue;
+			TaskNet_t * pTask = tEvent.GetTask ();
+			// Only add valid, non-invalidated tasks to processing set
+			if ( pTask && pTask->m_ifd != -1 )
+				dTasksToProcess.Add ( pTask );
+		}
+		
+		// Move tasks under protection before any callbacks fire.
+		{
+			ScopedMutex_t tLock ( m_dActiveLock );
+			for ( auto * pTask : dTasksToProcess )
+			{
+				// Double-check task is still valid (not deleted between collection and protection)
+				if ( pTask && pTask->m_ifd != -1 )
+					m_dProcessingTasks.Add ( pTask );
+			}
+		}
+
 		/// we have some events to speak about...
 		for ( int i = 0; i<iEvents; ++i )
 		{
@@ -3571,8 +3626,32 @@ private:
 #endif
 				continue;
 			}
-			else
-				sphLogDebugL ( "L event action for task %p(%d), %d", pTask, pTask->m_ifd, tEvent.GetEvents () );
+
+			// Validate task before accessing it to prevent use-after-free crashes.
+			// During index rotation (SIGHUP), tasks may be deleted while events_wait() has already
+			// returned events with stale task pointers. This is more likely on Linux/epoll than
+			// Mac/kqueue due to timing differences. We check m_ifd first (set to -1 before deletion)
+			// to detect invalid tasks without accessing other potentially freed members.
+			// Note: We read m_ifd first as it's a simple int field, minimizing risk if memory is freed.
+			int iFd = pTask->m_ifd;
+			if ( iFd == -1 )
+			{
+				sphLogDebugL ( "L event action for task %p skipped: task invalidated (fd=-1), events=%d", 
+					pTask, tEvent.GetEvents () );
+				continue;
+			}
+
+			// After fd validation, re-check payload; DeleteTask() nulls it before invalidating fd.
+			AgentConn_t * pConnRaw = pTask->m_pPayload;
+			AgentConn_t * pConn = pConnRaw;
+			if ( !pConnRaw )
+			{
+				sphLogDebugL ( "L event action for task %p skipped: task has no payload (fd=%d), events=%d", 
+					pTask, iFd, tEvent.GetEvents () );
+				continue;
+			}
+
+			sphLogDebugL ( "L event action for task %p(%d), %d", pTask, iFd, tEvent.GetEvents () );
 
 			bool bError = tEvent.IsError ();
 			bool bEof = tEvent.IsEof ();
@@ -3585,10 +3664,17 @@ private:
 					bError = false;
 				}
 			}
-
-			auto pConn = pTask->m_pPayload;
-			if ( pConn && pTask->m_uIOActive && !IsTickProcessed ( pTask ) )
+			// m_pPayload might flip to nullptr mid-loop; guard callbacks without relying on a stale pointer.
+			if ( pTask->m_uIOActive && !IsTickProcessed ( pTask ) )
 			{
+				// Last validation before callbacks to catch any races that happened mid-loop.
+				if ( pTask->m_ifd == -1 || pTask->m_pPayload != pConnRaw || pConn->m_pPollerTask != pTask )
+				{
+					sphLogDebugL ( "L event action for task %p skipped: invalidated right before callback (fd=%d), events=%d", 
+						pTask, iFd, tEvent.GetEvents () );
+					continue;
+				}
+
 				assert ( pTask );
 				pTask->m_iLastActivityTm = MonoMicroTimer();
 				if ( bError )
@@ -3621,6 +3707,22 @@ private:
 				}
 			}
 		} // 'for' loop over ready events
+		
+		// Drop protection (remove tasks from m_dProcessingTasks so DeleteTask() can free them)
+		// and clean up anything that was deferred while callbacks were running.
+		ScopedMutex_t tLock ( m_dActiveLock );
+		for ( auto * pTask : dTasksToProcess )
+		{
+			m_dProcessingTasks.RemoveValue ( pTask );
+			// If task was invalidated (m_ifd == -1) and has no payload, it was marked for deletion.
+			// Delete it now that we're done processing.
+			if ( pTask->m_ifd == -1 && !pTask->m_pPayload )
+			{
+				sphLogDebugL ( "L Cleaning up deferred deletion for task %p", pTask );
+				SafeDelete ( pTask );
+			}
+		}
+		
 		return true;
 	}
 
@@ -3866,4 +3968,3 @@ bool sphNBSockEof ( int iSock )
 		return true;
 	return false;
 }
-

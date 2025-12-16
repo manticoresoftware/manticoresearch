@@ -132,6 +132,7 @@ lrwxrwxrwx. 1 root root 27 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1
 ### Uploading your data
 
 <!-- example s3 -->
+
 To fix your bug, developers often need to reproduce it locally. To do this, they need your configuration file, table files, binlog (if present), and sometimes source data (such as data from external storages or XML/CSV files) and queries.
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`.

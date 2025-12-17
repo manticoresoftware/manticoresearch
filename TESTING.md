@@ -1,6 +1,6 @@
 # Testing
 
-This is a comprehensive guide to the automated test suites included in Manticore Search. Testing ensures that new changes are stable, free of bugs, and don't introduce regressions. This document covers the test frameworks used in Manticore Search: regression tests (PHP-based), Google Tests (C++ unit tests), and CLT (Command Line Testing) tests.
+This is a comprehensive guide to the automated test suites included in Manticore Search. Testing ensures that new changes are stable, free of bugs, and don't introduce regressions. This document covers the test frameworks used in Manticore Search: UberTest tests (PHP-based), Google Tests (C++ unit tests), and CLT (Command Line Testing) tests.
 
 ## Table of Contents
 
@@ -19,15 +19,15 @@ This is a comprehensive guide to the automated test suites included in Manticore
 
 Manticore Search uses several types of automated tests:
 
-1. **Regression Tests** - PHP-based functional tests located in `test/test_XXX/` directories, executed via `ubertest.php`
+1. **UberTest Tests** - PHP-based functional tests located in `test/test_XXX/` directories, executed via `ubertest.php`
 2. **Google Tests** - C++ unit tests for core functionality located in `src/gtests/`
 3. **CLT Tests** - Command-line integration tests in `test/clt-tests/` using the [CLT framework](https://github.com/manticoresoftware/clt)
 
-CTest (CMake's testing tool) is used to run regression tests and Google Tests locally.
+CTest (CMake's testing tool) is used to run UberTest tests and Google Tests locally.
 
 ## Test Types
 
-### Regression Tests
+### UberTest Tests
 PHP-based functional tests located in `test/test_XXX/` directories. These tests verify searchd functionality by comparing actual output against reference results. Executed via `ubertest.php` and run through CTest.
 
 ### Google Tests
@@ -53,7 +53,7 @@ See `test/clt-tests/` directory for complete list of test categories.
 
 ### How it works:
 
-1. **Fork the repository** on GitHub
+1. **Fork the [repository](https://github.com/manticoresoftware/manticoresearch)** on GitHub
 2. **Enable GitHub Actions** in your fork: Go to the "Actions" tab and click "I understand my workflows, go ahead and enable them"
 3. **Create a branch** in your fork
 4. **Make your changes** and commit them
@@ -135,21 +135,6 @@ For Windows, we strongly recommend using WSL2 (Windows Subsystem for Linux) and 
 
 Alternatively, use GitHub Actions for testing (see [Testing via GitHub Actions](#testing-via-github-actions)).
 
-### Custom MySQL Configuration
-
-If you need custom MySQL connection settings, create a `.sphinx` file in your home directory:
-
-```php
-<?php
-return array(
-    "db-host" => "127.0.0.1",
-    "db-user" => "myuser",
-    "db-name" => "mydb",
-    "db-password" => "mypass",
-    "lemmatizer_base" => "/path/to/aot_packs"
-);
-```
-
 ## Running CTest Tests
 
 Traditional test suite using CMake/CTest:
@@ -199,16 +184,13 @@ CLT tests run inside Docker containers to ensure consistent environment. There a
 For quick testing of existing functionality using public Docker images:
 
 ```bash
-# Pull the latest Manticore image from Docker Hub
-docker pull manticoresearch/manticore:latest
-
-# Or use the dev version with latest features
-docker pull manticoresearch/manticore:dev
+# Pull the test-kit image (contains latest dev from master)
+docker pull ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
 
 # Start Manticore container
 docker run -d --name manticore-test \
   -p 9306:9306 -p 9308:9308 \
-  manticoresearch/manticore:latest
+  ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
 
 # Test connection
 mysql -h127.0.0.1 -P9306 -e "SHOW TABLES;"
@@ -223,10 +205,10 @@ cd clt
 
 # Run a specific test
 ./clt test -t /path/to/manticoresearch/test/clt-tests/buddy-plugins/test-fuzzy-search.rec \
-  -d manticoresearch/manticore:latest
+  -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
 
 # Record a new test interactively
-./clt record manticoresearch/manticore:latest
+./clt record ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
 ```
 
 See [CLT documentation](https://github.com/manticoresoftware/clt) for more details on test recording and replay.
@@ -353,17 +335,7 @@ git push origin your-branch
 
 ### Base Blocks
 
-Reusable test components in `test/clt-tests/base/`:
-
-- `start-searchd.recb` - Start searchd without Buddy
-- `start-searchd-with-buddy.recb` - Start searchd with Buddy plugin system
-- `start-searchd-with-cpustats.recb` - Start with CPU monitoring
-- `start-kafka-kraft.recb` - Start Kafka for integration tests
-- `basic-initialization-manticore-kafka.recb` - Initialize Manticore with Kafka
-- `kafka-reset-consumer-offsets.recb` - Reset Kafka consumer offsets
-- `searchd-with-flexible-ports.conf` - Configuration with flexible port settings
-- `replication/` - Reusable blocks for replication tests
-- `dind/` - Docker-in-Docker configuration for nested container tests
+Reusable test components are located in [`test/clt-tests/base/`](https://github.com/manticoresoftware/manticoresearch/tree/master/test/clt-tests/base). These include common setup/teardown blocks for starting searchd, Kafka integration, replication tests, and more. See the directory for available blocks.
 
 ### CI/CD Integration
 
@@ -375,28 +347,11 @@ Tests are automatically run via GitHub Actions when you create a pull request:
 
 **For contributors**: Simply add your tests to the appropriate directory in `test/clt-tests/`. When you create a PR, GitHub Actions will automatically run all relevant tests. Maintainers will determine if additional test coverage (e.g., nightly tests) is needed during code review.
 
-**You don't need to worry about which workflow runs your tests** - the CI/CD system handles this automatically based on your changes.
+**You don't need to worry about which workflow runs your tests** - just add them to the appropriate directory and GitHub Actions will execute them as part of the standard test suite.
 
-### Binary and File Locations
+### Binary Location
 
-After building Manticore locally:
-
-**Linux:**
-- Binary: `build/src/searchd`
-- Config: `/etc/manticoresearch/manticore.conf`
-- Logs: `/var/log/manticore/searchd.log`
-- Data: `/var/lib/manticore/`
-
-**macOS:**
-- Binary: `build/src/searchd`
-- Config: `/usr/local/etc/manticoresearch/manticore.conf`
-- Logs: `/usr/local/var/log/manticore/searchd.log`
-- Data: `/usr/local/var/lib/manticore/`
-
-**Docker:**
-- Config: `/etc/manticoresearch/manticore.conf`
-- Logs: `/var/log/manticore/searchd.log`
-- Data: `/var/lib/manticore/`
+After building from source, the compiled binary is located at `<build_directory>/src/searchd`, where `<build_directory>` is where you ran cmake.
 
 ## Contributing
 

@@ -3323,7 +3323,7 @@ private:
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
 	// So, we can't just delete the task in the case. Instead, we invalidate it (set m_ifd=-1, nullify payload),
 	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
-	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
+	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true ) REQUIRES ( LazyThread )
 	{
 		assert ( pTask );
 		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d), release=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, bReleasePayload );
@@ -3356,7 +3356,7 @@ private:
 	}
 
 
-	void ProcessChanges ( TaskNet_t * pTask )
+	void ProcessChanges ( TaskNet_t * pTask ) REQUIRES ( LazyThread )
 	{
 		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
 
@@ -3481,7 +3481,7 @@ private:
 	}
 
 	/// abandon and release all events (on shutdown)
-	void AbortScheduled ()
+	void AbortScheduled () REQUIRES ( LazyThread )
 	{
 		while ( !m_dTimeouts.IsEmpty () )
 		{

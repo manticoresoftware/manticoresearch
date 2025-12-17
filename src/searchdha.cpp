@@ -1673,15 +1673,15 @@ bool AgentConn_t::Fatal ( AgentStats_e eStat, const char * sMessage, ... )
 /// correct way to close connection:
 void AgentConn_t::Finish ( bool bFail )
 {
+	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
+	LazyDeleteOrChange (); // remove timer and all callbacks, if any
+	m_pPollerTask = nullptr;
+
 	if ( m_iSock>=0 && ( bFail || !IsPersistent() ) )
 	{
 		sphLogDebugA ( "%d Socket %d closed and turned to -1", m_iStoreTag, m_iSock );
 		SafeCloseSocket ( m_iSock );
 	}
-
-	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-	LazyDeleteOrChange (); // remove timer and all callbacks, if any
-	m_pPollerTask = nullptr;
 
 	ReturnPersist ();
 	if ( m_iStartQuery )
@@ -3713,8 +3713,10 @@ public:
 		} else
 			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
-		
-		AddToQueue ( pTask, pConnection->InNetLoop () );
+		if ( !pConnection->InNetLoop () )
+			AddToQueue ( pTask, false );
+		else
+			events_change_io (pTask);
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )

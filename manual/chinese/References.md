@@ -427,43 +427,43 @@ index_converter {--config /path/to/config|--path}
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - 定义如何访问表的doclists文件
   * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - 定义如何访问表的hitlists文件
   * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - 定义搜索服务器如何访问表的普通属性
-  * [access_dict](Server_settings/Searchd.md#access_dict) - 定义如何访问表的字典文件
+  * [access_dict](Server_settings/Searchd.md#access_dict) - 定义表的字典文件的访问方式
   * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - 远程代理连接超时
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - 远程代理查询超时
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - 指定 Manticore 尝试连接和查询远程代理的次数
-  * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 指定在查询远程代理失败时重试的延迟时间
+  * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 指定在查询远程代理失败时重试前的延迟时间
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - 设置刷新更新属性到磁盘的时间间隔
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - 二进制日志事务刷新/同步模式
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - 最大二进制日志文件大小
-  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - 所有表的公共二进制日志文件
+  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - 所有表的通用二进制日志文件
   * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - 二进制日志文件名中的数字位数
   * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - 二进制日志刷新策略
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - 二进制日志文件路径
-  * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 使用持久连接时请求之间的最大等待时间
+  * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 使用持久连接时等待请求的最长时间
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - 服务器 libc 区域设置
   * [collation_server](Server_settings/Searchd.md#collation_server) - 默认服务器排序规则
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Manticore 存储所有内容的数据目录路径（[RT 模式](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)）
-  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - 如果没有写入，自动刷新内存块的超时时间
-  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - 如果表中没有搜索，防止自动刷新内存块的超时时间
-  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - 文档存储中内存中保存的文档块的最大大小
-  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - 单个通配符展开的最大关键字数量
-  * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - 启用使用 UTC 时区对时间字段进行分组
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Manticore 存储所有内容的数据目录路径 ([RT 模式](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - 如果没有写操作，自动刷新 RAM 块的超时时间
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - 如果表中没有搜索，则防止自动刷新 RAM 块的超时时间
+  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - 保存在内存中文档存储文档块的最大大小
+  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - 单个通配符展开的最大关键词数
+  * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - 启用对分组时间字段使用 UTC 时区
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - 代理镜像统计窗口大小
-  * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - 代理镜像 Ping 的间隔
+  * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - 代理镜像轮询间隔
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 主机名更新策略
   * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - 定义队列中允许的最大“作业”数量
   * [join_batch_size](Searching/Joining.md#Join-batching) - 定义表连接的批处理大小以平衡性能和内存使用
   * [join_cache_size](Searching/Joining.md#Join-caching) - 定义用于重用 JOIN 查询结果的缓存大小
-  * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – 服务器版本字符串，响应 Kibana 请求时发送
+  * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – 发送响应给 Kibana 请求的服务器版本字符串
   * [listen](Server_settings/Searchd.md#listen) - 指定 searchd 监听的 IP 地址和端口或 Unix 域套接字路径
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP 监听队列长度
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 为所有监听器启用 TCP_FASTOPEN 标志
   * [log](Server_settings/Searchd.md#log) - Manticore 服务器日志文件路径
-  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - 限制每批查询的数量
+  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - 限制每批查询的最大数量
   * [max_connections](Server_settings/Searchd.md#max_connections) - 最大活动连接数
   * [max_filters](Server_settings/Searchd.md#max_filters) - 每个查询允许的最大过滤器数量
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - 每个过滤器允许的最大值数量
-  * [max_open_files](Server_settings/Searchd.md#max_open_files) - 服务器允许打开的最大文件数
+  * [max_open_files](Server_settings/Searchd.md#max_open_files) - 服务器允许打开的最大文件数量
   * [max_packet_size](Server_settings/Searchd.md#max_packet_size) - 允许的最大网络数据包大小
   * [mysql_version_string](Server_settings/Searchd.md#mysql_version_string) - 通过 MySQL 协议返回的服务器版本字符串
   * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - 定义网络循环每次迭代接受的客户端数量
@@ -472,60 +472,61 @@ index_converter {--config /path/to/config|--path}
   * [net_workers](Server_settings/Searchd.md#net_workers) - 网络线程数量
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - 客户端请求的网络超时
   * [node_address](Server_settings/Searchd.md#node_address) - 指定节点的网络地址
-  * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 远程持久代理的最大同时持久连接数
-  * [pid_file](Server_settings/Searchd.md#pid_file) - Manticore 服务器 pid 文件路径
+  * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 同时连接到远程持久代理的最大持久连接数
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - OPTIMIZE 期间可并行运行的 RT 磁盘块合并数
+  * [pid_file](Server_settings/Searchd.md#pid_file) - Manticore 服务器 PID 文件路径
   * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - 查询时间预测模型的成本
-  * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - 决定是否在启动时强制预打开所有表
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 启用对普通表和实时表的搜索查询伪分片
-  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - 分配给缓存结果集的最大内存
-  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - 查询结果被缓存的最小墙时阈值
+  * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - 是否在启动时强制预先打开所有表
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 启用对普通和实时表的搜索查询的伪分片功能
+  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - 分配给缓存结果集的最大RAM
+  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - 查询结果缓存的最小实际时间阈值
   * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - 缓存结果集的过期时间
   * [query_log](Server_settings/Searchd.md#query_log) - 查询日志文件路径
   * [query_log_format](Server_settings/Searchd.md#query_log_format) - 查询日志格式
   * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - 防止记录过快的查询
   * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - 查询日志文件权限模式
-  * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - 每个关键字的文档列表读取缓冲区大小
-  * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - 每个关键字的命中列表读取缓冲区大小
-  * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - 未提示的读取大小
-  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Manticore 将实时表的内存块刷新到磁盘的频率
-  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - 实时块合并线程允许执行的最大 I/O 操作数（每秒）
-  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - 实时块合并线程允许执行的最大 I/O 操作大小
-  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - 防止在旋转大量数据的表以预缓存时 searchd 停顿
+  * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - 每关键词文档列表的读取缓冲区大小
+  * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - 每关键词命中列表的读取缓冲区大小
+  * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - 无提示读取大小
+  * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Manticore将实时表的RAM块刷新到磁盘的频率
+  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - 实时块合并线程允许执行的最大I/O操作数（每秒）
+  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - 实时块合并线程允许执行的单次最大I/O操作大小
+  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - 防止在轮换大量数据的表以预缓存时searchd停顿
   * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - 启用搜索查询使用二级索引
-  * [server_id](Server_settings/Searchd.md#server_id) - 用作生成唯一文档 ID 种子的服务器标识符
+  * [server_id](Server_settings/Searchd.md#server_id) - 作为生成唯一文档ID种子的服务器标识符
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` 超时时间
-  * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - 从 VIP SQL 连接调用 `shutdown` 命令所需密码的 SHA1 哈希
-  * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 在 `load_files` 模式生成片段时添加到本地文件名前缀
-  * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - 当前 SQL 状态序列化文件路径
-  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - MySQL 客户端请求之间的最大等待时间
-  * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - SSL 证书颁发机构证书文件路径
-  * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - 服务器的 SSL 证书路径
-  * [ssl_key](Server_settings/Searchd.md#ssl_key) - 服务器的 SSL 证书密钥路径
+  * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - 从VIP SQL连接调用 `shutdown` 命令所需的密码的SHA1哈希
+  * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 在`load_files`模式下生成片段时加在本地文件名前的前缀
+  * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - 存储当前SQL状态序列化文件的路径
+  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - MySQL客户端请求之间的最大等待时间
+  * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - SSL证书颁发机构证书文件路径
+  * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - 服务器的SSL证书路径
+  * [ssl_key](Server_settings/Searchd.md#ssl_key) - 服务器SSL证书密钥路径
   * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - 最大公共子树文档缓存大小
   * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - 每查询最大公共子树命中缓存大小
   * [timezone](Server_settings/Searchd.md#timezone) - 日期/时间相关函数使用的时区
-  * [thread_stack](Server_settings/Searchd.md#thread_stack) - 任务的最大堆栈大小
-  * [unlink_old](Server_settings/Searchd.md#unlink_old) - 是否在成功旋转时取消链接 .old 表副本
-  * [watchdog](Server_settings/Searchd.md#watchdog) - 是否启用或禁用 Manticore 服务器看门狗
+  * [thread_stack](Server_settings/Searchd.md#thread_stack) - 作业的最大栈大小
+  * [unlink_old](Server_settings/Searchd.md#unlink_old) - 是否在成功轮换时解除链接.old表副本
+  * [watchdog](Server_settings/Searchd.md#watchdog) - 是否启用或禁用Manticore服务器守护进程
 
-##### Searchd 启动参数
+##### Searchd启动参数
 ```bash
 searchd [OPTIONS]
 ```
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - 指定配置文件路径
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器以控制台模式运行
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 启用崩溃时保存核心转储
-* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用 CPU 时间报告
-* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从 Microsoft 管理控制台及其他服务注册位置移除 Manticore 服务
-* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 防止服务器在预读取表文件前服务传入连接
+* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用CPU时间报告
+* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从Microsoft管理控制台和其他服务注册位置移除Manticore服务
+* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 防止服务器在表文件预读完成前接受连接请求
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - 显示所有可用参数
-* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - 限制服务器仅服务指定表
-* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - 在 Microsoft 管理控制台安装 searchd 作为服务
+* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - 限制服务器只服务指定的表
+* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - 在Microsoft管理控制台安装searchd服务
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用输入/输出报告
-* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的 [listen](Server_settings/Searchd.md#listen)
+* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的[listen](Server_settings/Searchd.md#listen)设置
 * [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - 启用服务器日志中的额外调试输出
 * [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - 启用服务器日志中的额外复制调试输出
-* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并将服务器设置为带有 [集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 保护的参考节点
+* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并设置服务器为带有[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护的参考节点
 * [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并将服务器设置为参考节点，绕过[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
 * [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - 使 searchd 保持在前台运行
 * [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - 由 Microsoft 管理控制台用于在 Windows 平台上以服务方式启动 searchd
@@ -663,4 +664,3 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [安装页面](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [安装页面](https://manticoresearch.com/install-15.1.0/)
 <!-- proofread -->
-

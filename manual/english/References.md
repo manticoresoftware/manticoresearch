@@ -473,6 +473,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for client requests
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - How many RT disk chunk merges can run in parallel during OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
   * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Determines whether to forcibly preopen all tables on startup
@@ -663,4 +664,3 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Installation page](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Installation page](https://manticoresearch.com/install-15.1.0/)
 <!-- proofread -->
-

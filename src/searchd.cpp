@@ -107,6 +107,7 @@ static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
+static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
@@ -8609,6 +8610,12 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 		return true;
 	}
 
+	if ( sName == "parallel_chunk_merges" )
+	{
+		g_iParallelChunkMerges = Max ( 1, iSetValue );
+		return true;
+	}
+
 	if ( sName == "optimize_cutoff" )
 	{
 		if ( iSetValue < 1 )
@@ -9343,6 +9350,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		auto pVars = session::Info().GetClientSession();
 		dTable.MatchTuplet ( "autocommit", pVars->m_bAutoCommit ? "1" : "0" );
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
+		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
@@ -13687,6 +13695,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iMaxConnection = hSearchd.GetInt ( "max_connections", g_iMaxConnection );
 	auto iThreads = hSearchd.GetInt ( "threads", GetNumLogicalCPUs() );
 	SetMaxChildrenThreads ( iThreads );
+	int iDefaultParallelMerges = Max ( 1, Min ( 2, iThreads / 2 ) );
+	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");

@@ -1,8 +1,16 @@
 # SHOW TABLE SETTINGS
 
+
+<!--
+данные для следующих примеров:
+
+DROP TABLE IF EXISTS forum;
+CREATE TABLE forum(f text) min_prefix_len='3' charset_table='0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F';
+-->
+
 <!-- example SHOW TABLE SETTINGS -->
 
-`SHOW TABLE SETTINGS` — это SQL-запрос, который отображает настройки для каждой таблицы в формате, совместимом с конфигурационным файлом.
+`SHOW TABLE SETTINGS` — это SQL-запрос, который отображает настройки таблицы в формате, совместимом с конфигурационным файлом.
 
 Синтаксис:
 
@@ -10,7 +18,7 @@
 SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 ```
 
-Вывод похож на опцию [--dumpconfig](../../Miscellaneous_tools.md#indextool) утилиты [indextool](../../Miscellaneous_tools.md#indextool). Отчет предоставляет подробный разбор всех настроек таблицы, включая параметры токенизатора и словаря.
+Вывод похож на опцию [--dumpconfig](../../Miscellaneous_tools.md#indextool) утилиты [indextool](../../Miscellaneous_tools.md#indextool). В отчёте приводится подробное описание всех настроек таблицы, включая параметры токенизатора и словаря.
 
 <!-- intro -->
 ##### SQL:
@@ -31,11 +39,48 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 1 row in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE forum SETTINGS;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "settings",
+        "Value": "min_prefix_len = 3\ncharset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example SHOW TABLE SETTINGS N -->
 
-Вы также можете указать номер конкретного чанка, чтобы просмотреть настройки определенного чанка в RT-таблице. Нумерация начинается с 0.
+Вы также можете указать номер конкретного чанка, чтобы просмотреть настройки определённого чанка в RT-таблице. Нумерация начинается с 0.
 
 <!-- intro -->
 ##### SQL:
@@ -54,6 +99,44 @@ SHOW TABLE forum CHUNK 0 SETTINGS;
 charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F |
 +---------------+-----------------------------------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
+```
+
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLE forum CHUNK 0 SETTINGS;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "settings",
+        "Value": "min_prefix_len = 3\ncharset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

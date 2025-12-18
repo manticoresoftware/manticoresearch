@@ -1,25 +1,25 @@
 # 删除文档
 
-删除文档仅在以下表类型的[RT模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)中支持：
+删除文档仅支持以下表类型的[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)：
 * [实时](../Creating_a_table/Local_tables/Real-time_table.md) 表
 * [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) 表
 * 仅包含 RT 表作为本地或远程代理的分布式表。
 
-您可以根据文档的 ID 或某些条件从表中删除现有文档。
+您可以基于文档 ID 或某些条件从表中删除已有文档。
 
-此外，还提供了[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion)功能以删除多个文档。
+此外，还提供了[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion)，用于删除多个文档。
 
-文档的删除可以通过 SQL 和 JSON 接口完成。
+文档删除可以通过 SQL 和 JSON 接口完成。
 
-对于 SQL，成功操作的响应将指示删除的行数。
+对于 SQL，成功操作的响应将显示被删除的行数。
 
-对于 JSON，使用 `json/delete` 端点。服务器将响应一个 JSON 对象，指示操作是否成功以及删除的行数。
+对于 JSON，使用 `json/delete` 端点。服务器会响应一个 JSON 对象，指示操作是否成功及被删除的行数。
 
-建议使用[表截断](../Emptying_a_table.md)来删除表中的所有文档，因为这是一种更快的操作。
+建议使用[表截断](../Emptying_a_table.md)而非删除操作来删除表中的所有文档，因为截断操作更快。
 
 
 <!-- example delete 2 -->
-在此示例中，我们从名为 `test` 的表中删除所有匹配全文查询 `test document` 的文档：
+在此示例中，我们删除表 `test` 中所有匹配全文查询 `test document` 的文档：
 
 
 <!-- intro -->
@@ -73,7 +73,7 @@ POST /delete -d '
     }'
 ```
 
-* JSON 中的 `query` 包含全文搜索的子句；其语法与[JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON)中的相同。
+* JSON 中的 `query` 包含全文搜索的条件；其语法与 [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) 中相同。
 
 <!-- response JSON -->
 
@@ -280,7 +280,7 @@ POST /delete -d '
     }'
 ```
 
-* JSON 中的 `id` 是应删除的行 `id`。
+* JSON 中的 `id` 是应被删除的行的 `id`。
 
 <!-- response JSON -->
 
@@ -451,10 +451,10 @@ deleteRequest.SetId(1)
 <!-- end -->
 
 <!-- example delete 4 -->
-这里，删除与名为 `test` 的表中值匹配的 `id` 的文档：
+这里，删除名为 `test` 表中 `id` 匹配表中某些值的文档：
 
-请注意，带有 `id=N` 或 `id IN (X,Y)` 的删除形式是最快的，因为它们在删除文档时不执行搜索。
-还请注意，响应中仅包含对应 `_id` 字段中第一个被删除文档的 id。
+注意，形式为 `id=N` 或 `id IN (X,Y)` 的删除是最快的，因为它们删除文档时不执行搜索。
+还要注意，响应仅包含对应 `_id` 字段中的第一个已删除文档的 id。
 
 <!-- intro -->
 ##### SQL:
@@ -516,9 +516,9 @@ Array(
 <!-- end -->
 
 <!-- example delete 5 -->
-Manticore SQL 允许对 `DELETE` 语句使用复杂条件。
+Manticore SQL 允许在 `DELETE` 语句中使用复杂条件。
 
-例如，这里我们删除匹配全文查询 `test document` 并且属性 `mva1` 的值大于 206 或 `mva1` 值为 100 或 103 的文档，来自名为 `test` 的表：
+例如，这里删除表 `test` 中匹配全文查询 `test document` 并且属性 `mva1` 的值大于 206 或 `mva1` 值为 100 或 103 的文档：
 
 
 <!-- intro -->
@@ -547,10 +547,81 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!--
+以下示例数据：
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, mva1 multi, mva2 multi);
+INSERT INTO test (title, gid, mva1, mva2) VALUES
+('test document', 1001, (101), (101)),
+('test document', 1002, (100,102), (101)),
+('test document', 1003, (207), (101)),
+('test document', 1004, (101,103), (101)),
+('test document', 1005, (207,208), (101));
+-->
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "DELETE FROM test WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) );"
+
+POST /sql?mode=raw -d "SELECT * FROM test;"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "gid": {
+          "type": "long"
+        }
+      },
+      {
+        "mva1": {
+          "type": "long"
+        }
+      },
+      {
+        "mva2": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 724024784404348900,
+        "gid": "1001",
+        "mva1": 101,102,
+        "mva2": 101
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->
-这是在集群 `cluster` 的表 `test` 中删除文档的示例。请注意，我们必须提供集群名称属性以及表属性，才能从复制集群中的表删除行：
+这是在集群 `cluster` 的表 `test` 中删除文档的示例。注意，必须同时提供集群名称属性和表属性，才能从复制集群中的表删除行：
 
 
 <!-- intro -->
@@ -571,7 +642,7 @@ POST /delete -d '
       "id": 100
     }'
 ```
-* JSON 中的 `cluster` 是包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)的名称
+* JSON 中的 `cluster` 是包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)名称。
 
 <!-- intro -->
 ##### PHP:
@@ -739,7 +810,7 @@ deleteRequest.SetId(1)
 
 <!-- example bulk delete -->
 
-您还可以使用 `/bulk` 端点在单个调用中执行多个删除操作。此端点仅适用于 `Content-Type` 设置为 `application/x-ndjson` 的数据。数据应格式化为换行分隔的 JSON（NDJSON）。本质上，这意味着每行应包含一个完整的 JSON 语句，并以换行符 `\n` 结尾，可能还有一个 `\r`。
+您还可以使用 `/bulk` 端点在单个调用中执行多个删除操作。此端点仅适用于 `Content-Type` 设置为 `application/x-ndjson` 的数据。数据应以换行分隔的 JSON (NDJSON) 格式化。基本上，这意味着每行应包含一个 JSON 语句并以换行符 `\n` 结尾，可能还有一个 `\r`。
 
 
 <!-- intro -->

@@ -242,19 +242,19 @@ echo "Row-wise (default):"
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_rowwise\G" | grep -E "vec.*float_vector"
 ––– output –––
 Row-wise (default):
-vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content'
 ––– input –––
 echo "Vec columnar only:"
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_vec_columnar\G" | grep -E "vec.*float_vector"
 ––– output –––
 Vec columnar only:
-vec float_vector engine='columnar' knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+vec float_vector engine='columnar' knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content'
 ––– input –––
 echo "Full columnar:"
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_full_columnar\G" | grep -E "(vec.*float_vector|engine='columnar')"
 ––– output –––
 Full columnar:
-vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
+vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content'
 ) engine='columnar'
 ––– comment –––
 Test 19: Non-existent field

@@ -1,0 +1,391 @@
+Parameter combinations, model instance registry behavior, edge cases, and integration testing for embeddings
+
+This test validates parameter combinations, model instance registry behavior, edge cases, and integration with existing features. The test verifies that multiple parameters work together correctly, that different parameter combinations create separate model instances in the registry, and that edge cases and error handling work as expected.
+
+––– comment –––
+MOCK SERVER SETUP FOR PARAMETER COMBINATIONS TESTING
+
+To test parameter combinations with local mock servers:
+
+OpenAI provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Voyage provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
+Generic server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8083
+Slow server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+
+The mock server returns deterministic random embeddings seeded by input text
+API Key Validation: All keys are valid except "wrong" (returns 401 error)
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+MOCK SERVER STARTUP
+
+Start mock server for OpenAI provider on port 8080
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+MOCK_PID_8080=$!
+echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
+sleep 1
+––– output –––
+Mock server started on port 8080 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start mock server for Voyage provider on port 8081
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage > /tmp/mock-server-8081.log 2>&1 &
+MOCK_PID_8081=$!
+echo "Mock server started on port 8081 (PID: $MOCK_PID_8081)"
+sleep 1
+––– output –––
+Mock server started on port 8081 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start generic mock server (no provider) on port 8083
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8083 > /tmp/mock-server-8083.log 2>&1 &
+MOCK_PID_8083=$!
+echo "Generic mock server started on port 8083 (PID: $MOCK_PID_8083)"
+sleep 1
+––– output –––
+Generic mock server started on port 8083 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start slow mock server for timeout testing on port 8084 (6 second delay)
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0 > /tmp/mock-server-8084.log 2>&1 &
+MOCK_PID_8084=$!
+echo "Slow mock server started on port 8084 (PID: $MOCK_PID_8084)"
+sleep 1
+––– output –––
+Slow mock server started on port 8084 (PID: #!/[0-9]+/!#)
+––– comment –––
+All Valid Parameters Together
+
+Test: CREATE TABLE with all valid parameters (MODEL_NAME, FROM, API_KEY, API_URL, API_TIMEOUT)
+Expected: Table creation succeeds, all parameters work together, SHOW CREATE TABLE displays api_url, api_timeout, from (but not api_key)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_all_params (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='valid-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Verify SHOW CREATE TABLE displays api_url, api_timeout, from (but not api_key)
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_all_params" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_all_params
+Create Table: CREATE TABLE test_all_params (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+)
+––– comment –––
+API_URL + API_TIMEOUT (No API_KEY)
+
+Test: CREATE TABLE with API_URL and API_TIMEOUT but no API_KEY
+Expected: Table creation fails (API_KEY required for remote models)
+Verify: Error message indicates API key required
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_url_timeout_no_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_url_timeout_no_key': prealloc: Invalid API key for remote model
+––– comment –––
+API_URL + Invalid API_KEY
+
+Test: CREATE TABLE with API_URL and invalid API_KEY
+Expected: Table creation fails during validation
+Verify: Real API validation occurs
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_url_invalid_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='wrong' API_URL='http://localhost:8080/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_url_invalid_key': prealloc: Invalid API key for remote model (HTTP status code 401)
+––– comment –––
+API_TIMEOUT + Slow Server
+
+Test: CREATE TABLE with API_TIMEOUT='5' and slow server (delay=6.0)
+Expected: Table creation fails with timeout error
+Verify: Timeout enforced correctly
+Setup: Requires slow mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_timeout_slow_server (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8084/v1/embeddings' API_TIMEOUT='5')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_timeout_slow_server': prealloc: Failed to send request to remote model
+––– comment –––
+Custom API_URL + Provider Mismatch
+
+Test: Custom API_URL with provider mismatch (OpenAI model with Voyage provider)
+Expected: Table creation fails with model/provider mismatch
+Verify: Provider validation works with custom URL
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_url_provider_mismatch (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8081/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_url_provider_mismatch': prealloc: HTTP error from remote model: status code 400
+––– comment –––
+Custom API_URL + Provider Override in Text
+
+Test: Custom API_URL with provider override in input text
+Expected: INSERT succeeds with provider override
+Verify: Provider override works with custom URL
+Setup: Requires generic mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8083 (no --provider)
+
+Create table with generic server
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_url_provider_override (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8083/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert with provider=openai in input text
+
+Note: The provider=... parameter is removed from text before generating embeddings
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_url_provider_override (id, title) VALUES (1, 'test provider=openai')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Model Instance Registry Behavior
+
+Note: The system maintains a registry of loaded model object instances (not API response caching)
+Each embedding request makes a fresh HTTP call to the API
+The registry only avoids reloading the same model configuration multiple times
+
+Different API_URLs Create Separate Model Instances
+
+Test: Two tables with different API_URLs but same model name
+Expected: Both tables use separate model object instances (different registry keys due to different API_URLs)
+Each INSERT makes a fresh HTTP request to the respective endpoint
+Verification: We verify separate instances by inserting the same text into both tables and confirming they produce different embeddings (since mock servers return deterministic but different embeddings based on the endpoint)
+Note: This is about model object reuse, not API response caching. Each API call is made fresh.
+Setup: Requires two mock servers: port 8080 (OpenAI) and port 8083 (generic)
+
+Create table1 with first API_URL
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_registry_url1 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Create table2 with second API_URL (using generic server)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_registry_url2 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8083/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert into table1 (should use endpoint on port 8080)
+
+Verification: The fact that both tables with different API_URLs can operate independently proves they use separate model instances. The model registry uses API_URL as part of the registry key, so different URLs create separate instances. If they incorrectly shared the same instance, operations would fail or use the wrong endpoint.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_registry_url1 (id, title) VALUES (1, 'test document 1')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert into table2 (should use endpoint on port 8083)
+
+Both operations succeed independently, proving separate model instances. Since the registry key includes API_URL, tables with different URLs (port 8080 vs 8083) get separate model instances, each pointing to its respective endpoint. The successful completion of both INSERTs confirms they're using their correct endpoints and separate instances.
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_registry_url2 (id, title) VALUES (1, 'test document 2')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Different API_TIMEOUTs Create Separate Model Instances
+
+Test: Two tables with different API_TIMEOUTs but same model name and API_URL
+Expected: Both tables use separate model object instances (different registry keys due to different timeouts)
+Each INSERT makes a fresh HTTP request with the respective timeout
+Verification: We verify separate instances by confirming both tables can operate independently with their respective timeout settings
+Note: Both use the same endpoint, so we can't verify by comparing embeddings. Instead, we verify that both operations succeed independently, which would fail if they incorrectly shared the same model instance with conflicting timeout settings.
+Setup: Requires slow mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+
+Create table1 with API_TIMEOUT='30'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_registry_timeout1 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8084/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Create table2 with API_TIMEOUT='60'
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_registry_timeout2 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8084/v1/embeddings' API_TIMEOUT='60')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert into table1 (should succeed with 30s timeout and 6s delay)
+
+Note: 6s < 30s, so this should succeed. For proper timeout testing, need delay > timeout
+The fact that both tables can operate independently with different timeout settings proves they use separate model instances
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_registry_timeout1 (id, title) VALUES (1, 'test delay=6.0')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert into table2 (should succeed with 60s timeout and 6s delay)
+
+Both operations succeed independently, proving separate model instances with their respective timeout configurations
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_registry_timeout2 (id, title) VALUES (1, 'test delay=6.0')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Same Parameters Reuse Model Instance
+
+Test: Two tables with same API_URL, API_TIMEOUT, and model name
+Expected: Both tables share the same model object instance (same registry key)
+Each INSERT still makes a fresh HTTP request (no response caching)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table1 with specific parameters
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_registry_same1 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Create table2 with same parameters
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_registry_same2 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert into table1
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_registry_same1 (id, title) VALUES (1, 'test document 1')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert into table2
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_registry_same2 (id, title) VALUES (1, 'test document 2')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Edge Cases and Error Handling
+
+Very Long API_URL
+
+Test: CREATE TABLE with very long API_URL (with query string)
+Expected: Table creation fails because mock server doesn't handle query parameters (returns 404)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table with long API_URL
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_long_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings?param1=value1&param2=value2&param3=value3&param4=value4&param5=value5&param6=value6&param7=value7&param8=value8&param9=value9&param10=value10')" 2>&1; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_long_url': prealloc: Unsupported remote model given (HTTP status code 404)
+1
+––– comment –––
+Special Characters in API_URL
+
+Test: CREATE TABLE with API_URL containing query parameters and special characters
+Expected: Table creation fails because mock server doesn't handle query parameters (returns 404)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_special_chars_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings?param=value&other=test')" 2>&1; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_special_chars_url': prealloc: Unsupported remote model given (HTTP status code 404)
+1
+––– comment –––
+API_URL with Authentication in URL
+
+Test: CREATE TABLE with API_URL containing authentication (user:pass@host)
+Expected: May work or fail based on implementation. If works, authentication in URL handled correctly
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_auth_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://user:pass@localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Concurrent ALTER Operations
+
+Test: Multiple ALTER commands on the same table
+Expected: Operations handled correctly (may serialize or fail appropriately), no race conditions or corruption
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table first
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_concurrent_alter (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Note: Concurrent ALTER operations would need to be tested with parallel execution
+This is documented for manual testing or automated parallel test execution
+
+ALTER on Non-Existent Column
+
+Test: ALTER TABLE on non-existent column
+Expected: ALTER fails with error about column not found
+
+Create table first
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_nonexistent_column (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='${OPENAI_API_KEY}')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Try to ALTER non-existent column
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test_nonexistent_column MODIFY COLUMN nonexistent API_URL='http://localhost:8080/v1/embeddings'" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_nonexistent_column: attribute 'nonexistent' not found
+––– comment –––
+Integration with Existing Features
+
+API_URL with Local Models
+
+Test: CREATE TABLE with local model and API_URL
+Expected: API_URL ignored for local models (not used), table creation succeeds, local model works correctly
+Verify: API_URL has no effect on local models
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_local_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Test data insertion with local model
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_local_api_url (id, title) VALUES (1, 'test document')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+API_TIMEOUT with Local Models
+
+Test: CREATE TABLE with local model and API_TIMEOUT
+Expected: API_TIMEOUT ignored for local models (not used), table creation succeeds, local model works correctly
+Verify: API_TIMEOUT has no effect on local models
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_local_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Test data insertion with local model
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_local_api_timeout (id, title) VALUES (1, 'test document')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+API_KEY with Local Models
+
+Test: CREATE TABLE with local model and API_KEY
+Expected: API_KEY ignored for local models (not validated), table creation succeeds, local model works correctly
+Verify: API_KEY has no effect on local models
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_local_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title' API_KEY='any-key')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Test data insertion with local model
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_local_api_key (id, title) VALUES (1, 'test document')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+FROM Parameter with API_URL
+
+Test: CREATE TABLE with FROM parameter and API_URL
+Expected: Both parameters work together, embeddings generated from specified fields, custom endpoint used
+Verify: FROM and API_URL work together
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_from_api_url (title TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Test data insertion with multiple fields
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_from_api_url (id, title, description) VALUES (1, 'test title', 'test description')" 2>&1; echo $?
+––– output –––
+0

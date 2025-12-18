@@ -2485,60 +2485,61 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example float_vector_auto -->
 
-Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from [multi-valued attributes](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVAs) in several important ways:
-- Preserves the exact order of values (unlike MVAs which may reorder)
-- Retains duplicate values (unlike MVAs which deduplicate)
-- No additional processing during insertion (unlike MVAs which sort and deduplicate)
+浮点向量属性允许存储可变长度的浮点列表，主要用于机器学习应用和相似性搜索。此类型与[多值属性](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)（MVA）在几个重要方面有所不同：
+- 保留值的确切顺序（不像MVA可能会重新排序）
+- 保留重复值（不像MVA会去重）
+- 插入时无额外处理（不像MVA会排序和去重）
 
-Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. 
+浮点向量属性允许存储可变长度的浮点列表，主要用于机器学习应用和相似性搜索。
 
-### Usage and Limitations
-- Currently only supported in real-time tables
-- Can only be utilized in KNN (k-nearest neighbor) searches
-- Not supported in plain tables or other functions/expressions
-- When used with KNN settings, you cannot `UPDATE` `float_vector` values. Use `REPLACE` instead
-- When used without KNN settings, you can `UPDATE` `float_vector` values
-- Float vectors cannot be used in regular filters or sorting
-- The only way to filter by `float_vector` values is through vector search operations (KNN)
+### 用法和限制
+- 目前仅支持实时表
+- 只能用于KNN（k最近邻）搜索
+- 不支持普通表或其他函数/表达式
+- 使用KNN设置时，不能 `UPDATE` `float_vector` 值。请改用 `REPLACE`
+- 不使用KNN设置时，您可以 `UPDATE` `float_vector` 值
+- 浮点向量不能用于常规过滤或排序
+- 通过 `float_vector` 值过滤的唯一方式是通过向量搜索操作（KNN）
 
-### Common Use Cases
-- Text embeddings for semantic search
-- Recommendation system vectors
-- Image embeddings for similarity search
-- Feature vectors for machine learning
+### 常见用例
+- 语义搜索的文本嵌入
+- 推荐系统向量
+- 图像嵌入的相似性搜索
+- 机器学习的特征向量
 
-** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
+** 请注意，`float_vector` 数据类型与[自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)机制不兼容。**
 
-For more details on setting up float vectors and using them in searches, see [KNN search](../Searching/KNN.md).
+有关设置浮点向量及在搜索中使用的更多详细信息，请参见[KNN搜索](../Searching/KNN.md)。
 
-### Auto Embeddings (Recommended)
+### 自动嵌入（推荐）
 
-The most convenient way to work with float vectors is using **auto embeddings**. This feature automatically generates embeddings from your text data using machine learning models, eliminating the need to manually compute and insert vectors.
+处理浮点向量最方便的方式是使用**自动嵌入**。该功能使用机器学习模型自动从文本数据生成嵌入，无需手动计算和插入向量。
 
-#### Benefits of Auto Embeddings
-- **Simplified workflow**: Just insert text, embeddings are generated automatically
-- **No manual vector computation**: No need to run separate embedding models
-- **Consistent embeddings**: Same model ensures consistent vector representations
-- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage, and Jina models
-- **Flexible field selection**: Control which fields are used for embedding generation
+#### 自动嵌入的优点
+- **简化工作流程**：只需插入文本，嵌入会自动生成
+- **无需手动计算向量**：无需运行单独的嵌入模型
+- **嵌入一致性**：相同模型确保向量表示一致
+- **多模型支持**：可选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、OpenAI、Voyage 和 Jina 模型
+- **灵活的字段选择**：控制用于生成嵌入的字段
 
-#### Creating tables with auto embeddings
+#### 创建带自动嵌入的表
 
-When creating a table with auto embeddings, specify these additional parameters:
-- `MODEL_NAME`: The embedding model to use for automatic vector generation
-- `FROM`: Which fields to use for embedding generation (empty string means all text/string fields)
+创建带自动嵌入的表时，请指定以下额外参数：
+- `MODEL_NAME`：用于自动生成向量的嵌入模型
+- `FROM`：用于生成嵌入的字段（空字符串表示使用所有文本/字符串字段）
+- `API_KEY`：远程模型（OpenAI、Voyage、Jina）所必需。在创建表时会通过实际API请求验证API密钥。
+- `API_URL`：可选。自定义API端点URL。若未指定，使用默认提供者端点（例如OpenAI为 `https://api.openai.com/v1/embeddings`）。
+- `API_TIMEOUT`：可选。API请求的HTTP超时时间（秒）。默认为10秒。设置为 `'0'` 使用默认超时。适用于表创建时的验证请求和插入操作中的嵌入生成。
 
-**Supported embedding models:**
-- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
-- **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
-- **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+**支持的嵌入模型：**
+- **Sentence Transformers**：任何[合适的基于BERT的Hugging Face模型](https://huggingface.co/sentence-transformers/models)（例如：`sentence-transformers/all-MiniLM-L6-v2`）——无需API密钥。Manticore在创建表时会下载该模型。
+- **OpenAI、Voyage、Jina**：远程嵌入模型（例如：`openai/text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v2-base-en`）— 需要参数 `API_KEY='<API_KEY>'`。可选地指定 `API_URL='<CUSTOM_URL>'` 使用自定义API端点，以及 `API_TIMEOUT='<SECONDS>'` 配置HTTP超时（默认10秒）。
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Using [sentence-transformers model](https://huggingface.co/sentence-transformers/models) (no API key needed)
+使用[sentence-transformers模型](https://huggingface.co/sentence-transformers/models)（无需API密钥）
 ```sql
 CREATE TABLE products (
     title TEXT,
@@ -2548,7 +2549,7 @@ CREATE TABLE products (
 );
 ```
 
-Using OpenAI model (requires API_KEY parameter)
+使用OpenAI模型（需要API_KEY参数）
 ```sql
 CREATE TABLE products_openai (
     title TEXT,
@@ -2558,7 +2559,18 @@ CREATE TABLE products_openai (
 );
 ```
 
-Using all text fields for embeddings (FROM is empty)
+使用OpenAI并自定义API URL和超时（可选）
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' 
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+使用所有文本字段进行嵌入（FROM为空）
 ```sql
 CREATE TABLE products_all_fields (
     title TEXT,
@@ -2571,18 +2583,18 @@ CREATE TABLE products_all_fields (
 
 <!-- end -->
 
-#### FROM parameter usage
+#### FROM参数用法
 
-The `FROM` parameter controls which fields are used for embedding generation:
+`FROM` 参数控制用于生成嵌入的字段：
 
-- **Specific fields**: `FROM='title'` - only the title field is used
-- **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
-- **All text fields**: `FROM=''` (empty) - all `text` (full-text field) and `string` (string attribute) fields in the table are used
-- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+- **特定字段**：`FROM='title'` — 仅使用title字段
+- **多个字段**：`FROM='title,description'` — 将title和description连接使用
+- **所有文本字段**：`FROM=''`（空）— 使用表中的所有 `text`（全文字段）和 `string`（字符串属性）字段
+- **空向量**：您仍可使用 `()` 插入空向量，以在向量搜索中排除文档
 
-#### Inserting data with auto embeddings
+#### 使用自动嵌入插入数据
 
-When using auto embeddings, **do not specify the vector field** in your INSERT statements. The embeddings are automatically generated from the specified text fields:
+使用自动嵌入时，**不要在INSERT语句中指定向量字段**。嵌入会自动从指定文本字段生成：
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2595,10 +2607,10 @@ INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
 
-### Manual Float Vector Usage
+### 手动浮点向量用法
 
 <!-- example for creating float_vector -->
-Alternatively, you can work with manually computed float vectors. 
+或者，您也可以使用手动计算的浮点向量。
 
 <!-- intro -->
 ##### SQL:
@@ -2704,11 +2716,11 @@ table products
 
 <!-- end -->
 
-## Multi-value integer (MVA)
+## 多值整数（MVA）
 
 <!-- example for creating MVA32 -->
 
-Multi-value attributes allow storing variable-length lists of 32-bit unsigned integers. This can be useful for storing one-to-many numeric values, such as tags, product categories, and properties.
+多值属性允许存储可变长度的32位无符号整数列表。这对于存储一对多的数值非常有用，比如标签、产品类别和属性。
 
 <!-- intro -->
 ##### SQL:
@@ -2816,7 +2828,7 @@ table products
 
 
 <!-- example for any/all MVA -->
-It supports filtering and aggregation, but not sorting. Filtering can be done using a condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all elements ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)) to pass.
+它支持过滤和聚合，但不支持排序。过滤可以使用条件要求至少有一个元素通过（使用 [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)）或所有元素通过（[ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)）。
 
 
 <!-- intro -->
@@ -2925,7 +2937,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for least/greatest MVA -->
 
-Information like [least](../Functions/Mathematical_functions.md#LEAST%28%29) or [greatest](../Functions/Mathematical_functions.md#GREATEST%28%29) element and length of the list can be extracted. An example shows ordering by the least element of a multi-value attribute.
+可以提取如[最小](../Functions/Mathematical_functions.md#LEAST%28%29)或[最大](../Functions/Mathematical_functions.md#GREATEST%28%29)元素以及列表长度的信息。示例展示了按多值属性的最小元素排序。
 
 <!-- intro -->
 ##### SQL:
@@ -3039,7 +3051,7 @@ let search_res = search_api.search(search_req).await;
 <!-- end -->
 
 <!-- example for grouping by MVA -->
-When grouping by a multi-value attribute, a document will contribute to as many groups as there are different values associated with that document. For instance, if a collection contains exactly one document having a 'product_codes' multi-value attribute with values 5, 7, and 11, grouping on 'product_codes' will produce 3 groups with `COUNT(*)`equal to 1 and `GROUPBY()` key values of 5, 7, and 11, respectively. Also, note that grouping by multi-value attributes may lead to duplicate documents in the result set because each document can participate in many groups.
+当按多值属性进行分组时，一份文档将贡献给与该文档关联的不同值数量相同的多个分组。例如，如果一个集合包含恰好一个文档，该文档的“product_codes”多值属性包含值5、7和11，则按“product_codes”分组将生成3个分组，且`COUNT(*)`等于1，`GROUPBY()`键值分别为5、7和11。此外，注意按多值属性分组可能会导致结果集中出现重复文档，因为每个文档可能参与多个分组。
 
 <!-- intro -->
 ##### SQL:
@@ -3068,7 +3080,7 @@ Query OK, 1 row affected (0.00 sec)
 <!-- end -->
 
 <!-- example for MVA value order -->
-The order of the numbers inserted as values of multivalued attributes is not preserved. Values are stored internally as a sorted set.
+插入为多值属性的数字的顺序不会被保留。值在内部以排序集合的形式存储。
 
 <!-- intro -->
 ##### SQL:
@@ -3381,11 +3393,11 @@ class SearchResponse {
 <!-- end -->
 
 
-## Multi-value big integer
+## 多值大整数
 
 <!-- example for creating MVA64 -->
 
-A data type that allows storing variable-length lists of 64-bit signed integers. It has the same functionality as multi-value integer.
+一种允许存储可变长度64位有符号整数列表的数据类型。它具有多值整数相同的功能。
 
 <!-- intro -->
 ##### SQL:
@@ -3491,14 +3503,14 @@ table products
 
 <!-- end -->
 
-## Columnar attribute properties
+## 列式属性特性
 
-When you use the columnar storage you can specify the following properties for the attributes.
+当你使用列式存储时，可以为属性指定以下特性。
 
 <!-- example fast_fetch -->
 ### fast_fetch
 
-By default, Manticore Columnar storage stores all attributes in a columnar fashion, as well as in a special docstore row by row. This enables fast execution of queries like `SELECT * FROM ...`, especially when fetching a large number of records at once. However, if you are sure that you do not need it or wish to save disk space, you can disable it by specifying `fast_fetch='0'` when creating a table or (if you are defining a table in a config) by using `columnar_no_fast_fetch` as shown in the following example.
+默认情况下，Manticore 列存储会以列式方式存储所有属性，同时以特殊的文档存储逐行存储。这使得执行诸如 `SELECT * FROM ...` 这样的查询非常快速，尤其是在一次性获取大量记录时。然而，如果您确定不需要它，或者希望节省磁盘空间，可以在创建表时通过指定 `fast_fetch='0'` 来禁用，或者（如果您在配置中定义表）使用 `columnar_no_fast_fetch`，如下例所示。
 
 <!-- request RT mode -->
 ```sql

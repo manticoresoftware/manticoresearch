@@ -1646,6 +1646,8 @@ private:
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
 	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
+	bool						AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) override;
+	bool						AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
@@ -11384,6 +11386,115 @@ bool RtIndex_c::AlterApiKey ( const CSphString & sAttr, const CSphString & sKey,
 	{
 		// attempt to revert
 		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIKey = sOldKey;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
+}
+
+
+bool RtIndex_c::AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	std::string sOldUrl = pAttr->m_tKNNModel.m_sAPIUrl;
+	bool bWasCustomUrl = !sOldUrl.empty();
+	bool bIsRemovingCustomUrl = bWasCustomUrl && sUrl.IsEmpty();
+	
+	// Allow empty string to remove/reset API_URL (use default URL)
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sUrl.cstr();
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		// If we're removing a custom URL and validation fails due to API key format,
+		// provide a clear error message explaining that a valid API key is required
+		// to use the default endpoint. This is consistent with table creation errors.
+		const char * szError = sError.cstr();
+		if ( bIsRemovingCustomUrl && szError && ( strstr ( szError, "Invalid API key" ) || strstr ( szError, "API key" ) ) )
+		{
+			// Revert the change
+			const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
+			m_pEmbeddings.reset();
+			CSphString sRevertError;
+			LoadEmbeddingModels(sRevertError);
+			
+			// Return a clear error message explaining the situation
+			// The API key validation failed when trying to use the default endpoint
+			sError.SetSprintf ( "cannot remove API_URL: API key validation failed for the default endpoint. The API key may be invalid, expired, or not authorized for the default provider endpoint. To remove API_URL, first update the API key to a valid key that works with the default endpoint, or keep using a custom API_URL" );
+			return false;
+		}
+		else
+		{
+			// For other errors or when setting a custom URL, revert on failure
+			const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
+			m_pEmbeddings.reset();
+			CSphString sRevertError;
+			LoadEmbeddingModels(sRevertError);
+			return false;
+		}
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
+}
+
+
+bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	if ( iTimeout < 0 )
+	{
+		sError.SetSprintf ( "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)" );
+		return false;
+	}
+
+	// 0 means use default timeout (10 seconds), positive value is timeout in seconds
+	int iOldTimeout = pAttr->m_tKNNModel.m_iAPITimeout;
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iAPITimeout = iTimeout;
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		// Revert the change on failure
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iAPITimeout = iOldTimeout;
 		m_pEmbeddings.reset();
 		CSphString sRevertError;
 		LoadEmbeddingModels(sRevertError);

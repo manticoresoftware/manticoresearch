@@ -492,7 +492,7 @@ curl localhost:9308/sql -d 'mode=raw&query=SHOW TABLES'
 
 > ПРИМЕЧАНИЕ: Эндпоинт `/cli` предназначен для ручного взаимодействия с Manticore с помощью таких инструментов, как curl или браузер. Он не предназначен для использования в автоматизированных скриптах. Используйте вместо него эндпоинт `/sql`.
 
-While the `/sql` endpoint is useful for controlling Manticore programmatically from your application, there's also the `/cli` endpoint. This makes it easier to **manually maintain a Manticore instance** using curl or your browser. It accepts both POST and GET HTTP methods. Everything inputted after `/cli?` is understood by Manticore, even if it's not manually escaped with curl or automatically encoded by the browser. No `query` parameter is required. Importantly, the `+` sign is not changed to a space, eliminating the need for encoding it. For the POST method, Manticore accepts everything exactly as it is, without any changes. The response is in tabular format, similar to an SQL result set you might see in a MySQL client.
+Хотя конечная точка `/sql` полезна для программного управления Manticore из вашего приложения, существует также конечная точка `/cli`. Это облегчает **ручное управление экземпляром Manticore** с помощью curl или вашего браузера. Она принимает HTTP-методы POST и GET. Всё, что вводится после `/cli?`, понимается Manticore, даже если это не вручную экранировано с помощью curl или автоматически закодировано браузером. Параметр `query` не требуется. Важно, что знак `+` не преобразуется в пробел, исключая необходимость кодирования. Для метода POST Manticore принимает всё ровно так, как есть, без изменений. Ответ представлен в табличном формате, схожем с результатом SQL-запроса, который вы можете видеть в клиенте MySQL.
 
 <!-- request POST -->
 
@@ -558,13 +558,13 @@ curl 0:9308/cli -d 'desc test'
 <!-- end -->
 
 ### /cli_json
-> NOTE: The `/cli_json` endpoint is designed for manual interaction with Manticore using tools like curl or a browser. It is not intended for use in automated scripts. Use the `/sql` endpoint instead.
+> ПРИМЕЧАНИЕ: Конечная точка `/cli_json` предназначена для ручного взаимодействия с Manticore с помощью таких инструментов, как curl или браузер. Она не предназначена для использования в автоматизированных скриптах. Используйте вместо неё конечную точку `/sql`.
 
 <!-- example cli_json -->
-The `/cli_json` endpoint provides the same functionality as `/cli`, but the response format is JSON. It includes:
-- `columns` section describing the schema.
-- `data` section with the actual data.
-- Summary section with "total", "error", and "warning".
+Конечная точка `/cli_json` предоставляет тот же функционал, что и `/cli`, но ответ формируется в формате JSON. Он включает:
+- секцию `columns`, описывающую схему.
+- секцию `data` с самими данными.
+- раздел сводки с "total", "error" и "warning".
 
 <!-- request POST -->
 
@@ -695,9 +695,29 @@ curl 0:9308/cli_json -d 'desc test'
 
 <!-- end -->
 
-### Keep-alive
+### Постоянные соединения
 
-HTTP keep-alive is supported for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for the `/cli` endpoint. This feature enables stateful interactions via the HTTP JSON interface, provided the client also supports keep-alive. For example, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can run a `SHOW META` command after a `SELECT` query, and it will behave similarly to interactions with Manticore through a MySQL client.
+Постоянное соединение подразумевает, что клиент отправляет не только один запрос и затем закрывает соединение, а удерживает соединение открытым и отправляет несколько запросов подряд. В результате разрешение имён (если оно есть) происходит только один раз; также устанавливается размер TCP-окна. Более того, демон может предоставлять состояние на уровне соединения, такое как метаинформация и профайлы предыдущих запросов.
 
-<!-- proofread -->
+При подключении через протокол HTTP 1.0 необходимо добавить заголовок `Connection: keep-alive` для поддержания постоянного соединения.
+
+При подключении через протокол HTTP 1.1 соединение по умолчанию является постоянным. В этом случае рекомендуется добавить заголовок `Connection: close` в завершающий запрос, чтобы явно указать, что соединение закончено и будет закрыто.
+
+### Состояние HTTP
+
+На установленном соединении демон сохраняет некоторое состояние, которое может быть использовано для последующих запросов. Это состояние сохраняется для конечных точек `/sql`, `/sql?mode=raw` и `/cli_json`, но не для конечной точки `/cli`. Эта функция позволяет осуществлять сессионное взаимодействие через HTTP JSON интерфейс. Например, используя конечную точку [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json), вы можете выполнить команду `SHOW META` после запроса `SELECT`, и это будет работать аналогично взаимодействию с Manticore через клиент MySQL.
+
+Чтобы выполнять несколько запросов sphinxql через одно соединение с помощью `curl`, необходимо связывать команды с помощью ключа
+`--next`:
+
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
+```
+
+Обратите внимание, что следующий вариант НЕ будет работать:
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
+```
+
+Это связано с тем, что sphinxql использует специальный случай для пакетных запросов, или [multi-query](../Searching/Multi-queries.md), который обладает своими преимуществами и ограничениями.
 

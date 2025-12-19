@@ -606,10 +606,10 @@ source 字段指定在当前表索引期间将从哪个源获取文档。必须�
 
 killlist_target = main:kl
 
-此设置确定将应用 kill-list 的表。当前表中更新或删除的目标表中的匹配项将被抑制。在 `:kl` 模式下，要抑制的文档取自 [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)。在 `:id` 模式下，当前表中的所有文档 ID 都会在目标表中被抑制。如果两者都未指定，则两种模式都会生效。[在此了解有关 kill-list 的更多信息](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+此设置决定将 kill-list 应用于哪个表。针对目标表中，在当前表里被更新或删除的匹配项将被屏蔽。在 `:kl` 模式下，要屏蔽的文档来自于[kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)。在 `:id` 模式下，当前表中的所有文档 ID 会在目标表中被屏蔽。如果两者皆未指定，则两种模式都会生效。[了解更多关于 kill-list 的信息](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
 ```ini
-值：**未指定**（默认），target_table_name:kl，target_table_name:id，target_table_name。允许多个值
+取值：**未指定**（默认），target_table_name:kl，target_table_name:id，target_table_name。允许多个值
 ```
 
 #### columnar_attrs
@@ -619,17 +619,17 @@ columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 
 ```ini
-此配置设置确定哪些属性应存储在[列存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，而非行存储中。
-您可以设置 `columnar_attrs = *` 以将所有支持的数据类型存储在列存储中。
+此配置设置决定哪些属性应存储在[列存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，而非行存储中。
+您可以设置 `columnar_attrs = *` 来将所有支持的数据类型存储在列存储中。
 ```
 
-此外，`id` 是支持存储在列存储中的属性。
+此外，`id` 是一个支持存储在列存储中的属性。
 
 #### columnar_strings_no_hash
 
 columnar_strings_no_hash = attr1, attr2, attr3
 
-默认情况下，存储在列存储中的所有字符串属性都会存储预计算的哈希值。这些哈希用于分组和过滤。然而，它们占用额外空间，如果您不需要按该属性分组，可以通过禁用哈希生成来节省空间。
+默认情况下，存储在列存储中的所有字符串属性都会存储预先计算的哈希。这些哈希用于分组和过滤。但是它们占用额外空间，如果您不需要根据该属性分组，可以通过禁用哈希生成来节省空间。
 
 ```ini
 ### 通过 CREATE TABLE 在线创建实时表
@@ -643,43 +643,43 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 ##### 数据类型：
 
 ```sql
-有关数据类型的更多信息，请参见[此处关于数据类型的更多内容](../../Creating_a_table/Data_types.md)。
+关于数据类型的更多信息，请参见[这里的数据类型详情](../../Creating_a_table/Data_types.md)。
 ```
 
-| 类型 | 配置文件中的等价项 | 说明 | 别名 |
+| 类型 | 配置文件中的等效类型 | 说明 | 别名 |
 
 | - | - | - | - |
 
-| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | 选项：indexed, stored。默认：**两者**。若只想存储文本但不索引，指定 "stored"。若只想索引文本不存储，指定 "indexed"。 | string |
-| [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| 整数	 | int, uint |
+| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | 选项：indexed，stored。默认：**两者**都选。若只需存储但不索引，指定“stored”；仅索引不存储，指定“indexed”。 | string |
+| [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| 整数	 | int，uint |
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| 大整数	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | 浮点数  |   |
-| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点值向量  |   |
-| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | 多值整数 |   |
-| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多值大整数  |   |
-| [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔值 |   |
+| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点向量  |   |
+| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | 多值整数 | mva |
+| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多值大整数  | mva64 |
+| [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔型 |   |
 | [json](../../Creating_a_table/Data_types.md#JSON) | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON |   |
-| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | 字符串。选项 `indexed, attribute` 会使值同时具备全文索引、可过滤、可排序和可分组功能  |   |
+| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | 字符串。选项 `indexed, attribute` 可使该值既全文索引，又可过滤、排序与分组  |   |
 | [timestamp](../../Creating_a_table/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | 时间戳  |   |
-| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N 是要保留的最大位数  |   |
-##### 通过 CREATE TABLE 创建实时表的示例
+| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N 是最大位数  |   |
+##### 通过 CREATE TABLE 创建实时表示例
 CREATE TABLE products (title text, price float) morphology='stem_en'
 
 <!-- intro -->
-这将创建一个名为 "products" 的表，包含两个字段："title"（全文索引）和 "price"（浮点数），并将 "morphology" 设置为 "stem_en"。
+这将创建名为 "products" 的表，包含两个字段：“title”（全文索引）和“price”（浮点型），同时设置“morphology”为“stem_en”。
 <!-- request SQL -->
 
 ```sql
 CREATE TABLE products (title text indexed, description text stored, author text, price float)
 ```
 
-这将创建一个名为 "products" 的表，包含三个字段：
+这将创建名为 "products" 的表，包含三个字段：
 
 ```sql
-* "title" 被索引，但不存储。
+* “title” 被索引，但不存储。
 ```
-* "description" 被存储，但不索引。
-* "author" 同时被存储和索引。
+* “description” 被存储，但不索引。
+* “author” 同时存储和索引。
 ## 引擎
 create table ... engine='columnar';
 <!-- end -->
@@ -688,17 +688,17 @@ create table ... engine='columnar';
 create table ... engine='rowwise';
 
 ```ini
-engine 设置更改表中所有属性的默认[属性存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。您也可以为[每个属性单独指定 engine](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages)。
-有关如何为普通表启用列存储的信息，请参见 [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)。
+engine 设置更改表中所有属性的默认[属性存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)方式。您也可以[为每个属性单独指定 engine](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages)。
+关于如何为平面表启用列存储，详见 [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) 。
 ```
 
 取值：
 
-* columnar - 为所有表属性启用列存储，除了 [json](../../Creating_a_table/Data_types.md#JSON)
+* columnar - 为所有表属性启用列存储，除 [json](../../Creating_a_table/Data_types.md#JSON) 外
 
-* **rowwise（默认）** - 不做任何更改，使用传统的行存储。
+* **rowwise（默认）** - 不改变任何设置，使用传统的行存储。
 ## 其他设置
-以下设置适用于实时表和普通表，无论是在配置文件中指定还是通过 `CREATE` 或 `ALTER` 命令在线设置。
+以下设置适用于实时表和平面表，无论是在配置文件中指定，还是在线通过 `CREATE` 或 `ALTER` 命令设置。
 
 
 ### 性能相关

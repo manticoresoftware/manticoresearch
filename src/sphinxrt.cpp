@@ -77,17 +77,10 @@ using namespace Threads;
 #define RTDICT_CHECKPOINT_V5			48
 
 // rt-segments tuning
-
-// rate limit for flushing RAM chunk as disk chunk. Rate applied to rt_mem_limit, calculated value used as limit, when we start flushing
-constexpr double INITIAL_SAVE_RATE_LIMIT		= 0.5;		///< we start rate limiting from this value.
-constexpr double MIN_SAVE_RATE_LIMIT			= 0.333333;	///< minimal rate limit. Calculated value will never be less that that bound
-constexpr double MAX_SAVE_RATE_LIMIT			= 0.95;		///< maximal rate limit. It most probably may be reached with very low insertion rate
-constexpr double SAVE_RATE_LIMIT_EMERGENCY_STEP	= 0.05;		///< emergency back-off.
-constexpr int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a time
 constexpr int MAX_SEGMENTS						= 32;
 constexpr int MAX_PROGRESSION_SEGMENT			= 8;
 constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
-constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );	///< if on load N of segments exceedes this value - perform safe loading
+constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * 2;	///< if on load N of segments exceedes this value - perform safe loading (2x for safety margin)
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1483,8 +1476,6 @@ private:
 	friend class OptimizeGuard_c;
 
 	int64_t						m_iRtMemLimit;
-	int64_t						m_iSoftRamLimit;
-	double						m_fSaveRateLimit { INITIAL_SAVE_RATE_LIMIT };
 	bool						m_bPathStripped = false;
 	int							m_iLockFD = -1;
 
@@ -1611,7 +1602,6 @@ private:
 	void						SetSchema ( CSphSchema tSchema );
 
 	void						SetMemLimit ( int64_t iMemLimit );
-	void						RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent );
 	void						AlterSave ( bool bSaveRam );
 	bool 						BinlogCommit ( RtSegment_t * pSeg, const VecTraits_T<DocID_t> & dKlist, int64_t iAddTotalBytes, CSphString & sError );
 	bool						StopOptimize();
@@ -3241,25 +3231,18 @@ inline CheckMerge_e CheckSegmentsPair ( std::pair<const RtSegment_t*, const RtSe
 	return CheckMerge_e::MERGE;
 }
 
-inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, int64_t iSoftRamLeft, bool bNewAdded ) NO_THREAD_SAFETY_ANALYSIS
+inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecTraits_T<ConstRtSegmentRefPtf_t>& dSegments, int64_t iHardRamLeft, bool bNewAdded ) NO_THREAD_SAFETY_ANALYSIS
 {
 	const int iSegs = dSegments.GetLength ();
 
-	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram soft limit " << iSoftRamLeft << " bytes, ram hard limit " << iHardRamLeft << " bytes)";
+	RTLOGV << "CheckWeCanMerge(" << dSegments.GetLength() << " segs, ram hard limit " << iHardRamLeft << " bytes)";
 
 	if ( !bNewAdded && iSegs < MAX_SEGMENTS )
 		return CheckMerge_e::NOMERGE;
 
-	auto eFLUSH = CheckMerge_e::FLUSH;
-	if ( iHardRamLeft<iSoftRamLeft )
-	{
-		iSoftRamLeft = iHardRamLeft;
-		eFLUSH = CheckMerge_e::FLUSH_EM; // emergency flush. I.e. hard limit reached
-	}
-
-	// skip merging if no memory left
-	if ( iSoftRamLeft <= 0 )
-		return eFLUSH;
+	// skip merging if no memory left - emergency flush. I.e. hard limit reached
+	if ( iHardRamLeft <= 0 )
+		return CheckMerge_e::FLUSH_EM;
 
 	// if N of segments is not so big - no merge need
 	if ( iSegs < ( MAX_SEGMENTS - MAX_PROGRESSION_SEGMENT ) )
@@ -3275,7 +3258,8 @@ inline CheckMerge_e CheckWeCanMerge ( std::pair<int, int>& tSmallest, const VecT
 	if ( pB->GetMergeFactor() > pA->GetMergeFactor() * 2 && iSegs<MAX_SEGMENTS )
 		return CheckMerge_e::NOMERGE;
 
-	auto eDecision = CheckSegmentsPair ( {pA, pB}, iSoftRamLeft );
+	auto eFLUSH = CheckMerge_e::FLUSH;
+	auto eDecision = CheckSegmentsPair ( {pA, pB}, iHardRamLeft );
 	switch ( eDecision )
 	{
 	case CheckMerge_e::NOMERGE:
@@ -3327,25 +3311,20 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 	TRACE_SCHED ( "rt", "MergeSegmentsStep" );
 	// collect all RAM segments not occupied by any op (only ops we know is 'merge segments' and 'save ram chunk')
 	int64_t iHardRamLeft { m_iRtMemLimit };
-	int64_t iSoftRamLeft { m_iSoftRamLimit };
 	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
 	for ( const auto& dSeg : *m_tRtChunks.RamSegs() )
 	{
 		if ( !dSeg->m_iLocked )
-		{
 			dSegments.Add ( dSeg );
-			iSoftRamLeft -= dSeg->GetUsedRam();
-		}
 		iHardRamLeft -= dSeg->GetUsedRam();
 	}
 
-	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "SoftRamLeft", "bytes" ).set_unit_multiplier ( 1024 ), iSoftRamLeft >> 10 );
 	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "HardRamLeft", "bytes" ).set_unit_multiplier ( 1024 ), iHardRamLeft >> 10 );
 
 	RTLOGV << "Totally we have " << m_tRtChunks.GetRamSegmentsCount() << " segments onboard.";
 
 	std::pair<int, int> tSmallest;
-	auto eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, iSoftRamLeft, eVal == MergeSeg_e::NEWSEG );
+	auto eMergeAction = CheckWeCanMerge ( tSmallest, dSegments, iHardRamLeft, eVal == MergeSeg_e::NEWSEG );
 	RTLOGV << "CheckWeCanMerge returned " << eMergeAction;
 
 	if ( eMergeAction == CheckMerge_e::FLUSH || eMergeAction == CheckMerge_e::FLUSH_EM )
@@ -3353,7 +3332,7 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 		// here it might be no race, as we're in serial worker.
 		TRACE_SCHED ( "wait", "MergeSegmentsStep-wait-save" );
 		auto iOldGen = m_iSavedGeneration;
-		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
 
 		// if a save finished during wait - limits and conditions may be changed, will restart to check whether save is still necessary
 		if ( m_iSavedGeneration != iOldGen )
@@ -4512,7 +4491,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent " ) << ")";
 
-	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
 
 	// we're in serial worker - no concurrency, no race between wait() and modify()
 	m_tNSavesNow.ModifyValue ( [] ( int& iVal ) { ++iVal; } );
@@ -4715,12 +4694,11 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	// calculate DoubleBuf percent using current save/insert rate
 	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );
-	RecalculateRateLimit ( iMyOpRAM, iInserted, bEmergent );
 
 	RTSAVELOG << sInfo.cstr() << ", op " << iSaveOp << " RAM saved/new " << iMyOpRAM << "/" << iInserted
-			<< " Insert ratio is " << m_fSaveRateLimit << " (soft ram limit " << m_iSoftRamLimit << ", rt mem limit " << m_iRtMemLimit << ")";
+			<< "(rt mem limit " << m_iRtMemLimit << ")";
 
-	sInfo << ", RAM saved/new " << iMyOpRAM << "/" << iInserted << " ratio " << m_fSaveRateLimit << " (soft limit " << m_iSoftRamLimit << ", conf limit " << m_iRtMemLimit << ")";
+	sInfo << ", RAM saved/new " << iMyOpRAM << "/" << iInserted << " (conf limit " << m_iRtMemLimit << ")";
 
 	sphInfo ( "%s", sInfo.cstr() );
 
@@ -5290,10 +5268,6 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	// set up values for on timer save
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
-
-	// neet to set m_iSoftRamLimit more than iUsedRam to prevent flush of disk chunk right after index load
-	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
-	RecalculateRateLimit ( iUsedRam, 1, false );
 
 	RunMergeSegmentsWorker();
 	return m_bPreallocPassedOk;
@@ -10661,7 +10635,6 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
 	pRes->m_iMemLimit = m_iRtMemLimit;
-	pRes->m_fSaveRateLimit = m_fSaveRateLimit;
 
 	CSphString sError;
 	for ( const char * szExt : { "meta", "ram" } )
@@ -11310,27 +11283,6 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 void RtIndex_c::SetMemLimit ( int64_t iMemLimit )
 {
 	m_iRtMemLimit = iMemLimit;
-	m_iSoftRamLimit = m_iRtMemLimit;
-}
-
-void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent )
-{
-	if ( ( iSaved + iInserted ) > 0 )
-	{
-		auto fRate = (double)iSaved / ( iSaved + iInserted );
-		if ( bEmergent ) // emergent save happened
-		{
-			m_fSaveRateLimit -= SAVE_RATE_LIMIT_EMERGENCY_STEP;
-			m_fSaveRateLimit = Min ( m_fSaveRateLimit, fRate );
-		} else
-			m_fSaveRateLimit = fRate;
-	}
-
-	m_fSaveRateLimit = Min ( MAX_SAVE_RATE_LIMIT, m_fSaveRateLimit );
-	m_fSaveRateLimit = Max ( MIN_SAVE_RATE_LIMIT, m_fSaveRateLimit );
-	m_iSoftRamLimit = m_iRtMemLimit;
-
-	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "Ratio", "%" ), m_fSaveRateLimit );
 }
 
 bool RtIndex_c::AlterRebuild ( AlterOp_fn && fnOp, CSphString & sError, const char * sTrace )

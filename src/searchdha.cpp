@@ -3713,7 +3713,7 @@ public:
 		} else
 			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
-		const bool bRemoveClosingFromEpoll = POLLING_EPOLL && (iTimeoutUS<0) && pConnection->InNetLoop ();
+		const bool bRemoveClosingFromEpoll = (NETPOLL_TYPE == NETPOLL_EPOLL) && (iTimeoutUS<0) && pConnection->InNetLoop ();
 
 		if ( bRemoveClosingFromEpoll )
 			events_change_io (pTask);

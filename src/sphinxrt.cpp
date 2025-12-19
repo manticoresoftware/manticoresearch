@@ -3513,6 +3513,9 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 	// We're going to modify segments, so fall into serial fiber. From here no concurrent changes may happen
 	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 
+	// double buffer disabled now waits for any active save operations to complete for any write operations
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
+
 	// for pure kills it is not necessary to wait, as it can't increase N of segments.
 	if ( pNewSeg )
 	{
@@ -11307,7 +11310,7 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 void RtIndex_c::SetMemLimit ( int64_t iMemLimit )
 {
 	m_iRtMemLimit = iMemLimit;
-	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
+	m_iSoftRamLimit = m_iRtMemLimit;
 }
 
 void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool bEmergent )
@@ -11325,7 +11328,7 @@ void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool b
 
 	m_fSaveRateLimit = Min ( MAX_SAVE_RATE_LIMIT, m_fSaveRateLimit );
 	m_fSaveRateLimit = Max ( MIN_SAVE_RATE_LIMIT, m_fSaveRateLimit );
-	m_iSoftRamLimit = m_iRtMemLimit * m_fSaveRateLimit;
+	m_iSoftRamLimit = m_iRtMemLimit;
 
 	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "Ratio", "%" ), m_fSaveRateLimit );
 }

@@ -697,26 +697,27 @@ curl 0:9308/cli_json -d 'desc test'
 
 ### Persistent connections
 
-Persistent connection imply, client send not only one query and then drop connection, but keep connection established, and send many queries. So, name resolving (if any) happened only once; tcp window size is also established. Also, daemon may provide connection-wide state, like meta-info and profile of previous queries.
+A persistent connection implies that the client sends not only one query and then drops the connection, but keeps the connection established and sends multiple queries. As a result, name resolution (if any) occurs only once; the TCP window size is also established. Moreover, a daemon may provide connection-wide state, such as meta-info and profiles of previous queries.
 
-If you connect via HTTP 1.0 proto, you need to add `connection: keep-alive` header.
+When connecting via HTTP 1.0 protocol, you need to add the `Connection: keep-alive` header to maintain the persistent connection.
 
-If you connect via HTTP 1.1 proto, connection will be persistent by default. In this case, in terminating query it is desirable to add header `connection: close`, to explicitly say that you've finished and connection then dropped.
+When connecting via HTTP 1.1 protocol, the connection is persistent by default. In this case, it is recommended to add the `Connection: close` header in the terminating query to explicitly signal that the connection has been finished and then dropped.
 
 ### HTTP state
 
-On established connection daemon keep some state and may provide it for later queries.
-State is kept for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for the `/cli` endpoint. This feature enables stateful interactions via the HTTP JSON interface. For example, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can run a `SHOW META` command after a `SELECT` query, and it will behave similarly to interactions with Manticore through a MySQL client.
+On an established connection, a daemon keeps some state that may be provided for later queries. The state is retained for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for the `/cli` endpoint. This feature enables stateful interactions via the HTTP JSON interface. For example, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can execute a `SHOW META` command after a `SELECT` query, and it will behave similarly to interacting with Manticore through a MySQL client.
 
-To run multiple queries using sphinxql via one connection with curl, you need to write your commands with `--next` key:
+To run multiple queries using sphinxql via one connection with `curl`, you need to chain your commands with the
+`--next` key:
 
 ```
 curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
 ```
 
-Notice; this will NOT work:
+Notice, however, that this will NOT work:
 ```
 curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
 ```
-Because it is special case, batch of queries, or  [multi-query](../Searching/Multi-queries.md), with its own benefits and limitations.
+
+This is because sphinxql uses a special case for batch queries, or  [multi-query](../Searching/Multi-queries.md), which has its own benefits and limitations.
 

@@ -1420,7 +1420,7 @@ public:
 	// helpers
 	struct MergeBuildResult_t;
 	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
-	ConstDiskChunkRefPtr_t	MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress );
+	ConstDiskChunkRefPtr_t	MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress, MergeTimings_t * pTimings );
 	MergeBuildResult_t		BuildMergedChunk ( const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB );
 	MergeBuildResult_t		BuildMergedChunkN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks );
 	bool					FinalizeMergedChunk ( const char* szParentAction, int iAID, int iBID, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, MergeBuildResult_t & tBuilt, int* pAffected, CSphString* sLog );
@@ -9852,7 +9852,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 	return pChunk;
 }
 
-ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress )
+ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress, MergeTimings_t * pTimings )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::MergeDiskChunksN" );
 	CSphString sError;
@@ -9866,7 +9866,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction,
 		dIndexes.Add ( &pChunk->Cidx() );
 
 	ConstDiskChunkRefPtr_t pChunk;
-	if ( !sphMergeN ( dIndexes, { nullptr, 0 }, tProgress, sError ) )
+	if ( !sphMergeN ( dIndexes, { nullptr, 0 }, tProgress, sError, pTimings ) )
 	{
 		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
 			sError = "interrupted because of shutdown";
@@ -10397,6 +10397,7 @@ struct RtIndex_c::MergeBuildResult_t
 	ConstDiskChunkRefPtr_t	m_pMerged;
 	std::shared_ptr<RTMergeCb_c> m_pMonitor;
 	bool					m_bInterrupted = false;
+	MergeTimings_t			m_tTimings;
 };
 
 namespace
@@ -10512,7 +10513,7 @@ RtIndex_c::MergeBuildResult_t RtIndex_c::BuildMergedChunkN ( const char* szParen
 	CSphIndexProgress tProgress ( pMonitor.get() );
 
 	MergeBuildResult_t tRes;
-	tRes.m_pMerged = MergeDiskChunksN ( szParentAction, dChunks, tProgress );
+	tRes.m_pMerged = MergeDiskChunksN ( szParentAction, dChunks, tProgress, &tRes.m_tTimings );
 	tRes.m_bInterrupted = pMonitor->NeedStop();
 	tRes.m_pMonitor = std::move ( pMonitor );
 
@@ -10922,6 +10923,7 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 
 			CSphString sLog;
 			bool bCanRun = MergeCanRun();
+			int64_t tmBuild = sphMicroTimer() - tJob.m_tmStart;
 			if ( !tBuilt.m_pMerged || tBuilt.m_bInterrupted )
 			{
 				for ( const auto & pChunk : tJob.m_dChunks )
@@ -10929,13 +10931,16 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 				bWork = false;
 				continue;
 			}
+			int64_t tmFinalizeStart = sphMicroTimer();
 			bool bFinalize = FinalizeMergedChunkN ( "common merge", tJob.m_dChunkIds, tJob.m_dChunks, tBuilt, &iAffected, &sLog );
+			int64_t tmFinalize = sphMicroTimer() - tmFinalizeStart;
 			bWork &= bFinalize && bCanRun;
 
 			if ( bFinalize && bCanRun )
 			{
 				auto tmPass = sphMicroTimer() - tJob.m_tmStart;
-				LogInfo ( "rt: table %s: merged chunks %s in %t (progressive mode). Remaining chunk count: %d", GetName (), sLog.cstr(), tmPass, m_tRtChunks.GetDiskChunksCount () );
+				LogInfo ( "rt: table %s: merged chunks %s in %t (build %t: attrs %t, words %t, finalize %t; publish %t, progressive mode). Remaining chunk count: %d",
+					GetName(), sLog.cstr(), tmPass, tmBuild, tBuilt.m_tTimings.m_tmAttrs, tBuilt.m_tTimings.m_tmWords, tBuilt.m_tTimings.m_tmFinalize, tmFinalize, m_tRtChunks.GetDiskChunksCount() );
 			}
 		}
 

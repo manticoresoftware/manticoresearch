@@ -1205,7 +1205,7 @@ public:
 	template <class QWORD>
 	static bool			MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, VecTraits_T<std::unique_ptr<CSphFixedVector<RowID_t>>> dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress );
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
-	static bool			DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress );
+	static bool			DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings );
 	std::unique_ptr<ISphFilter>		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
@@ -7108,10 +7108,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	return true;
 }
 
-bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress )
+bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::DoMergeN" );
 	auto & tMonitor = tProgress.GetMergeCb();
+
+	int64_t tmTotalStart = sphMicroTimer();
 
 	const int iIndexes = dIndexes.GetLength();
 	if ( iIndexes<2 )
@@ -7210,6 +7212,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	} );
 
 	{
+		int64_t tmAttrsStart = sphMicroTimer();
 		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
 		if ( !tAttrMerger.Prepare ( pBaseIndex, pBaseIndex ) )
 			return false;
@@ -7224,6 +7227,8 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 
 		if ( !tAttrMerger.FinishMergeAttributes ( pBaseIndex, tBuildHeader ) )
 			return false;
+		if ( pTimings )
+			pTimings->m_tmAttrs = sphMicroTimer() - tmAttrsStart;
 	}
 
 	const CSphIndex_VLN * pSettings = pBaseIndex;
@@ -7244,10 +7249,13 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
 
 	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists (N-way)" );
+	int64_t tmWordsStart = sphMicroTimer();
 	WITH_QWORD ( pBaseIndex, false, Qword,
 		if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
 			return false;
 	);
+	if ( pTimings )
+		pTimings->m_tmWords = sphMicroTimer() - tmWordsStart;
 	END_CORO ( "sph" );
 
 	if ( tMonitor.NeedStop () || !sError.IsEmpty() )
@@ -7262,6 +7270,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	tHitBuilder.cidxHit ( &tFlush );
 
 	int iMinInfixLen = pSettings->m_tSettings.m_iMinInfixLen;
+	int64_t tmFinalizeStart = sphMicroTimer();
 	if ( !tHitBuilder.cidxDone ( g_tMergeSettings.m_iBufferDict, iMinInfixLen, pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return false;
 
@@ -7274,6 +7283,11 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
 	IndexBuildDone ( tBuildHeader, tWriteHeader, pBaseIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
+	if ( pTimings )
+	{
+		pTimings->m_tmFinalize = sphMicroTimer() - tmFinalizeStart;
+		pTimings->m_tmTotal = sphMicroTimer() - tmTotalStart;
+	}
 
 	tDict.SetPersistent();
 	dDeleteOnInterrupt.Reset();
@@ -7292,7 +7306,7 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSph
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
 }
 
-bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError )
+bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings )
 {
 	TRACE_CORO ( "sph", "sphMergeN" );
 	if ( dIndexes.GetLength()<2 )
@@ -7308,7 +7322,7 @@ bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, VecTraits_T<CSphFilter
 
 	auto * pBaseIndex = dVlnIndexes[0];
 	std::unique_ptr<ISphFilter> pFilter = pBaseIndex->CreateMergeFilters ( dFilters );
-	return CSphIndex_VLN::DoMergeN ( dVlnIndexes, pFilter.get(), sError, tProgress );
+	return CSphIndex_VLN::DoMergeN ( dVlnIndexes, pFilter.get(), sError, tProgress, pTimings );
 }
 
 template < typename QWORD >

@@ -27,6 +27,7 @@
 class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
+using VisitChunkEx_fn = std::function<void ( const CSphIndex* pIndex, bool bOptimizing )>;
 
 class InsertDocData_c
 {
@@ -173,6 +174,7 @@ public:
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
 	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const {};
+	virtual void ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const {};
 
 	/// bind indexing accumulator
 	/// returns false if another index already uses it in an open txn

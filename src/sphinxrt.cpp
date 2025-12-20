@@ -1429,6 +1429,7 @@ public:
 	bool 				RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char * szParentAction );
 	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive, int* pAffected = nullptr );
 	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const final;
+	void				ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const final;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
 	template <typename VISITOR>
@@ -1821,6 +1822,18 @@ void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const
 		fnVisitor ( nullptr );
 	else
 		fnVisitor ( &( *pDiskChunks )[iChunk]->Cidx() );
+}
+
+void RtIndex_c::ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const
+{
+	auto pDiskChunks = m_tRtChunks.DiskChunks();
+	if ( iChunk < 0 || iChunk >= pDiskChunks->GetLength() )
+		fnVisitor ( nullptr, false );
+	else
+	{
+		const auto & tChunk = ( *pDiskChunks )[iChunk];
+		fnVisitor ( &tChunk->Cidx(), tChunk->m_bOptimizing.load ( std::memory_order_relaxed ) );
+	}
 }
 
 template<typename VISITOR>

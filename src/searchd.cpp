@@ -9775,6 +9775,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "disk_mapped_hitlists", MYSQL_COL_LONGLONG );
 	tOut.HeadColumn ( "disk_mapped_cached_hitlists", MYSQL_COL_LONGLONG );
 	tOut.HeadColumn ( "killed_documents", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "optimizing", MYSQL_COL_LONG );
 	if ( !tOut.HeadEnd () )
 		return;
 
@@ -9795,7 +9796,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		bool bKeepIteration = true;
 		while ( bKeepIteration )
 		{
-			pRtIndex->ProcessDiskChunk (iChunk,[&bKeepIteration, &tOut] (const CSphIndex* pChunk) {
+			pRtIndex->ProcessDiskChunkEx ( iChunk, [&bKeepIteration, &tOut] ( const CSphIndex* pChunk, bool bOptimizing ) {
 				if ( !pChunk )
 				{
 					bKeepIteration = false;
@@ -9803,6 +9804,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 				}
 				tOut.PutNumAsString ( pChunk->m_iChunk );
 				PutIndexStatus ( tOut, pChunk );
+				tOut.PutNumAsString ( bOptimizing ? 1 : 0 );
 				if ( !tOut.Commit () )
 				{
 					bKeepIteration = false;
@@ -9814,6 +9816,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	} else {
 		tOut.PutNumAsString ( 0 ); // dummy 'chunk' of non-rt
 		PutIndexStatus ( tOut, pIndex );
+		tOut.PutNumAsString ( 0 );
 		tOut.Commit ();
 	}
 	tOut.Eof();

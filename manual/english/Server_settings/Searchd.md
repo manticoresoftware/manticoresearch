@@ -135,6 +135,27 @@ parallel_chunk_merges = 4
 
 <!-- end -->
 
+### merge_chunks_per_job
+
+<!-- example conf merge_chunks_per_job -->
+This setting controls how many RT disk chunks are merged in a single OPTIMIZE job (N-way merge). If fewer than this number are available, the job will merge what it can (minimum 2).
+
+Lower values allow more jobs to be scheduled in parallel; higher values reduce the number of jobs but increase the size of each merge.
+
+Default is `2`.
+
+This value can be changed at runtime using `SET GLOBAL merge_chunks_per_job = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Increase -->
+```ini
+merge_chunks_per_job = 4
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->

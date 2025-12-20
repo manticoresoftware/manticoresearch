@@ -461,6 +461,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the number of queries per batch
   * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum number of active connections
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - How many RT disk chunks are merged per OPTIMIZE job
   * [max_filters](Server_settings/Searchd.md#max_filters) - Maximum allowed per-query filter count
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Maximum allowed per-filter values count
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Maximum number of files allowed to be opened by server

@@ -15,9 +15,9 @@
 # If no file found, it will try to fetch it from
 # https://snowballstem.org/dist/libstemmer_c.tgz
 
-set ( STEMMER_REMOTE "https://github.com/manticoresoftware/snowball/archive/refs/tags/v3.0.2.tar.gz" )
-set ( STEMMER_BUNDLEZIP "${LIBS_BUNDLE}/libstemmer_c_v302.tgz" )
-set ( STEMMER_SRC_MD5 "abe9b77f95ae3931ce688ba03158383b" )
+set ( STEMMER_REMOTE "https://github.com/manticoresoftware/snowball/archive/refs/tags/v3.0.3.tar.gz" )
+set ( STEMMER_BUNDLEZIP "${LIBS_BUNDLE}/libstemmer_c.tgz" )
+set ( STEMMER_SRC_MD5 "4fec9f845790b1758175bd16e06e4fe6" )
 
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 include ( update_bundle )

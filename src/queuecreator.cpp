@@ -2503,7 +2503,8 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 
 	// fixme! benchmark and maybe remove the >1 condition
 	const int MIN_POSTLIMIT_THRESH = 1;
-	if ( dStoredColumnarPostlimit.GetLength()>MIN_POSTLIMIT_THRESH )
+	bool bDirectQueue = m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer;
+	if ( dStoredColumnarPostlimit.GetLength()>MIN_POSTLIMIT_THRESH && !bDirectQueue )
 	{
 		for ( auto i : dStoredColumnarPostlimit )
 		{

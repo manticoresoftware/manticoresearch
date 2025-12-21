@@ -609,7 +609,7 @@ source = srcpart3
 killlist_target = main:kl
 
 ```ini
-Этот параметр определяет таблицу(ы), к которым будет применяться kill-list. Совпадения в целевой таблице, которые обновляются или удаляются в текущей таблице, будут подавлены. В режиме `:kl` документы для подавления берутся из [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). В режиме `:id` все идентификаторы документов из текущей таблицы подавляются в целевой. Если ни один из режимов не указан, будут применяться оба режима. [Подробнее о kill-list здесь](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+Этот параметр определяет таблицу(цы), к которой будет применен kill-list. Совпадения в целевой таблице, которые обновляются или удаляются в текущей таблице, будут подавлены. В режиме `:kl` документы для подавления берутся из [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). В режиме `:id` все ID документов из текущей таблицы подавляются в целевой. Если не указан ни один из режимов, будут действовать оба режима. [Узнайте больше о kill-list здесь](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 ```
 
 Значение: **не указано** (по умолчанию), target_table_name:kl, target_table_name:id, target_table_name. Допускается несколько значений
@@ -620,19 +620,19 @@ columnar_attrs = *
 
 ```ini
 columnar_attrs = id, attr1, attr2, attr3
-Этот параметр конфигурации определяет, какие атрибуты должны храниться в [колоночном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) вместо построчного хранилища.
+Этот параметр конфигурации определяет, какие атрибуты должны храниться в [колоночном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) вместо поколоночного хранения строчек.
 ```
 
-Вы можете установить `columnar_attrs = *`, чтобы хранить все поддерживаемые типы данных в колоночном хранилище.
+Вы можете установить `columnar_attrs = *`, чтобы сохранять все поддерживаемые типы данных в колоночном хранилище.
 
-Кроме того, `id` является поддерживаемым атрибутом для хранения в колоночном хранилище.
+Кроме того, поддерживается атрибут `id` для хранения в колоночном хранилище.
 
 #### columnar_strings_no_hash
 
 columnar_strings_no_hash = attr1, attr2, attr3
 
 ```ini
-По умолчанию все строковые атрибуты, хранящиеся в колоночном хранилище, сохраняют предварительно вычисленные хэши. Эти хэши используются для группировки и фильтрации. Однако они занимают дополнительное место, и если вам не нужно группировать по этому атрибуту, вы можете сэкономить место, отключив генерацию хэшей.
+По умолчанию все строковые атрибуты, хранящиеся в колоночном хранилище, хранят предварительно рассчитанные хеши. Эти хеши используются для группировки и фильтрации. Однако они занимают дополнительное место, и если вам не нужно группировать по этому атрибуту, вы можете сэкономить место, отключив генерацию хеша.
 ```
 
 ### Создание таблицы реального времени онлайн через CREATE TABLE
@@ -646,23 +646,23 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 ##### Типы данных:
 ```
 
-Для получения дополнительной информации о типах данных смотрите [подробнее о типах данных здесь](../../Creating_a_table/Data_types.md).
+Для более подробной информации о типах данных смотрите [подробно о типах данных здесь](../../Creating_a_table/Data_types.md).
 
 | Тип | Эквивалент в конфигурационном файле | Примечания | Псевдонимы |
 
 | - | - | - | - |
-| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | Опции: indexed, stored. По умолчанию: **оба**. Чтобы сохранить текст хранимым, но индексированным, укажите только "stored". Чтобы сохранить текст только индексированным, укажите только "indexed". | string |
-| [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| целое число	 | int, uint |
-| [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| большое целое число	 |   |
-| [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | число с плавающей точкой  |   |
-| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | вектор чисел с плавающей точкой  |   |
-| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | мульти-целое число |   |
-| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | мульти-большое целое число  |   |
-| [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | булево значение |   |
-| [json](../../Creating_a_table/Data_types.md#JSON) | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON |   |
-| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | строка. Опция `indexed, attribute` сделает значение полнотекстово индексируемым и одновременно фильтруемым, сортируемым и группируемым  |   |
-| [timestamp](../../Creating_a_table/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | временная метка  |   |
-| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N — максимальное количество бит для хранения  |   |
+| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field) | Опции: indexed, stored. По умолчанию: **оба**. Чтобы сохранить текст только в хранилище, но не индексировать, укажите только "stored". Чтобы индексировать только, укажите "indexed" только. | string |
+| [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | целое число | int, uint |
+| [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint) | большое целое число | |
+| [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float) | число с плавающей точкой | |
+| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | вектор значений с плавающей точкой | |
+| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi) | мультицелое число | mva |
+| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | мультибольшое целое | mva64 |
+| [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | булево | |
+| [json](../../Creating_a_table/Data_types.md#JSON) | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON | |
+| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | строка. Опция `indexed, attribute` сделает значение полнотекстово индексируемым и фильтруемым, сортируемым и группируемым одновременно | |
+| [timestamp](../../Creating_a_table/Data_types.md#Timestamps) | [rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | отметка времени | |
+| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N — макс. число бит для хранения | |
 ##### Примеры создания таблицы реального времени через CREATE TABLE
 
 <!-- intro -->
@@ -670,7 +670,7 @@ CREATE TABLE products (title text, price float) morphology='stem_en'
 <!-- request SQL -->
 
 ```sql
-Это создаёт таблицу "products" с двумя полями: "title" (полнотекстовый) и "price" (число с плавающей точкой), и устанавливает "morphology" в "stem_en".
+Это создаёт таблицу "products" с двумя полями: "title" (полнотекстовый) и "price" (число с плавающей точкой), а также устанавливает "morphology" как "stem_en".
 ```
 
 CREATE TABLE products (title text indexed, description text stored, author text, price float)
@@ -678,9 +678,9 @@ CREATE TABLE products (title text indexed, description text stored, author text,
 ```sql
 Это создаёт таблицу "products" с тремя полями:
 ```
-* "title" индексируется, но не хранится.
-* "description" хранится, но не индексируется.
-* "author" хранится и индексируется одновременно.
+* "title" индексируется, но не сохраняется.
+* "description" сохраняется, но не индексируется.
+* "author" и сохраняется и индексируется.
 ## Engine
 <!-- end -->
 
@@ -689,22 +689,22 @@ create table ... engine='columnar';
 
 ```ini
 create table ... engine='rowwise';
-Параметр engine изменяет стандартное [хранилище атрибутов](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) для всех атрибутов в таблице. Вы также можете указать `engine` [отдельно для каждого атрибута](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
+Параметр engine меняет значение по умолчанию [способа хранения атрибутов](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) для всех атрибутов таблицы. Вы также можете указать `engine` [для каждого атрибута отдельно](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
 ```
 
-Для информации о том, как включить колоночное хранилище для простой таблицы, смотрите [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs).
+Для информации о включении колоночного хранилища для простой таблицы смотрите [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs).
 
 Значения:
 
-* columnar - Включает колоночное хранилище для всех атрибутов таблицы, кроме [json](../../Creating_a_table/Data_types.md#JSON)
-* **rowwise (по умолчанию)** - Не изменяет ничего и использует традиционное построчное хранилище для таблицы.
+* columnar — Включает колоночное хранение для всех атрибутов таблицы, кроме [json](../../Creating_a_table/Data_types.md#JSON)
+* **rowwise (по умолчанию)** — Ничего не меняет и использует традиционное поколоночное хранение для таблицы.
 ## Другие настройки
 
 
-Следующие настройки применимы как для таблиц реального времени, так и для простых таблиц, независимо от того, указаны ли они в конфигурационном файле или установлены онлайн с помощью команды `CREATE` или `ALTER`.
+Следующие параметры применимы как к таблицам реального времени, так и к простым таблицам, независимо от того, указаны ли они в конфигурационном файле или установлены онлайн с помощью команды `CREATE` или `ALTER`.
 ### Связанные с производительностью
 
-#### Доступ к файлам таблицы
+#### Доступ к файлам таблиц
 
 Manticore поддерживает два режима доступа для чтения данных таблицы: seek+read и mmap.
 В режиме seek+read сервер использует системный вызов `pread` для чтения списков документов и позиций ключевых слов, представленных файлами `*.spd` и `*.spp`. Сервер использует внутренние буферы чтения для оптимизации процесса чтения, и размер этих буферов можно настроить с помощью опций [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) и [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). Также существует опция [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen), которая контролирует, как Manticore открывает файлы при запуске.

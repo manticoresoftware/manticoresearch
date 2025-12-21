@@ -2485,60 +2485,60 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example float_vector_auto -->
 
-Атрибуты векторных чисел с плавающей запятой позволяют хранить списки переменной длины из чисел с плавающей запятой, преимущественно используемые для приложений машинного обучения и поиска по сходству. Этот тип отличается от [мультизначных атрибутов](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVA) по нескольким важным аспектам:
+Атрибуты вектора с плавающей точкой позволяют хранить списки переменной длины из чисел с плавающей точкой, преимущественно используемые для задач машинного обучения и поиска по сходству. Этот тип отличается от [многозначных атрибутов](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVA) по нескольким важным аспектам:
 - Сохраняет точный порядок значений (в отличие от MVA, которые могут менять порядок)
-- Сохраняет дублирующиеся значения (в отличие от MVA, которые удаляют дубликаты)
+- Сохраняет дубликаты значений (в отличие от MVA, которые удаляют дубликаты)
 - Нет дополнительной обработки при вставке (в отличие от MVA, которые сортируют и удаляют дубликаты)
 
-Атрибуты векторных чисел с плавающей запятой позволяют хранить списки переменной длины из чисел с плавающей запятой, преимущественно используемые для приложений машинного обучения и поиска по сходству.
+Атрибуты вектора с плавающей точкой позволяют хранить списки переменной длины из чисел с плавающей точкой, преимущественно используемые для задач машинного обучения и поиска по сходству.
 
 ### Использование и ограничения
 - В настоящее время поддерживаются только в таблицах реального времени
-- Могут использоваться только в поисках KNN (k-ближайших соседей)
-- Не поддерживаются в обычных таблицах или других функциях/выражениях
+- Могут использоваться только в KNN-поисках (k-ближайших соседей)
+- Не поддерживаются в обычных таблицах или в других функциях/выражениях
 - При использовании с настройками KNN нельзя `UPDATE` значения `float_vector`. Используйте `REPLACE`
 - При использовании без настроек KNN можно `UPDATE` значения `float_vector`
-- Векторы с плавающей запятой нельзя использовать в обычных фильтрах или сортировке
+- Векторы с плавающей точкой нельзя использовать в обычных фильтрах или сортировках
 - Единственный способ фильтровать по значениям `float_vector` — через операции векторного поиска (KNN)
 
 ### Распространённые случаи использования
-- Текстовые эмбеддинги для семантического поиска
-- Векторы рекомендательных систем
-- Эмбеддинги изображений для поиска по сходству
+- Встраивания текста для семантического поиска
+- Векторы для систем рекомендаций
+- Встраивания изображений для поиска по сходству
 - Векторы признаков для машинного обучения
 
-** Имейте в виду, что тип данных `float_vector` несовместим с механизмом [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). **
+** Учтите, что тип данных `float_vector` несовместим с механизмом [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema). **
 
-Для получения подробной информации о настройке векторов с плавающей запятой и их использовании в поисках смотрите [KNN search](../Searching/KNN.md).
+Для подробностей по настройке векторов с плавающей точкой и использованию их в поисках смотрите [KNN search](../Searching/KNN.md).
 
-### Автоматические эмбеддинги (рекомендуется)
+### Автоматические встраивания (рекомендуется)
 
-Самый удобный способ работы с векторами с плавающей запятой — использование **автоматических эмбеддингов**. Эта функция автоматически генерирует эмбеддинги из ваших текстовых данных с помощью моделей машинного обучения, устраняя необходимость вручную вычислять и вставлять векторы.
+Самый удобный способ работы с векторами с плавающей точкой — использование **автоматических встраиваний**. Эта функция автоматически генерирует встраивания из текстовых данных с помощью моделей машинного обучения, избавляя от необходимости вручную вычислять и вставлять векторы.
 
-#### Преимущества автоматических эмбеддингов
-- **Упрощённый рабочий процесс**: Просто вставляйте текст, эмбеддинги генерируются автоматически
-- **Нет необходимости вручную вычислять векторы**: Не нужно запускать отдельные модели эмбеддингов
-- **Последовательные эмбеддинги**: Одна и та же модель обеспечивает согласованное представление векторов
-- **Поддержка нескольких моделей**: Выбор из моделей [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage и Jina
-- **Гибкий выбор полей**: Контроль над тем, какие поля используются для генерации эмбеддингов
+#### Преимущества автоматических встраиваний
+- **Упрощённый рабочий процесс**: просто вставляйте текст — встраивания генерируются автоматически
+- **Нет необходимости в ручном вычислении векторов**: не нужно запускать отдельные модели генерации векторов
+- **Постоянство встраиваний**: одна и та же модель обеспечивает согласованное представление векторов
+- **Поддержка нескольких моделей**: выбирайте из моделей [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage и Jina
+- **Гибкий выбор полей**: управлять тем, какие поля используются для генерации встраиваний
 
-#### Создание таблиц с автоматическими эмбеддингами
+#### Создание таблиц с автоматическими встраиваниями
 
-При создании таблицы с автоматическими эмбеддингами укажите следующие дополнительные параметры:
-- `MODEL_NAME`: модель эмбеддингов для автоматической генерации векторов
-- `FROM`: какие поля использовать для генерации эмбеддингов (пустая строка означает все текстовые/строковые поля)
+При создании таблицы с автоembedding укажите следующие дополнительные параметры:
+- `MODEL_NAME`: модель встраивания для автоматической генерации векторов
+- `FROM`: какие поля использовать для генерации встраиваний (пустая строка — все текстовые/строковые поля)
 
-**Поддерживаемые модели эмбеддингов:**
-- **Sentence Transformers**: Любая [подходящая модель BERT на Hugging Face](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — API ключ не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI**: Модели эмбеддингов OpenAI, например `openai/text-embedding-ada-002` — требует параметр `API_KEY='<OPENAI_API_KEY>'`
-- **Voyage**: Модели эмбеддингов Voyage AI — требует параметр `API_KEY='<VOYAGE_API_KEY>'`
-- **Jina**: Модели эмбеддингов Jina AI — требует параметр `API_KEY='<JINA_API_KEY>'`
+**Поддерживаемые модели встраиваний:**
+- **Sentence Transformers**: любая [подходящая модел ь Hugging Face на базе BERT](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — API ключ не нужен. Manticore загружает модель при создании таблицы.
+- **OpenAI**: модели встраивания OpenAI, например `openai/text-embedding-ada-002` — требует параметр `API_KEY='<OPENAI_API_KEY>'`
+- **Voyage**: модели встраивания Voyage AI — требует параметр `API_KEY='<VOYAGE_API_KEY>'`
+- **Jina**: модели встраивания Jina AI — требует параметр `API_KEY='<JINA_API_KEY>'`
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
-Использование модели [sentence-transformers](https://huggingface.co/sentence-transformers/models) (API ключ не требуется)
+Использование модели [sentence-transformers](https://huggingface.co/sentence-transformers/models) (API ключ не нужен)
 ```sql
 CREATE TABLE products (
     title TEXT,
@@ -2558,7 +2558,7 @@ CREATE TABLE products_openai (
 );
 ```
 
-Использование всех текстовых полей для эмбеддингов (FROM пустой)
+Использование всех текстовых полей для встраиваний (FROM пустой)
 ```sql
 CREATE TABLE products_all_fields (
     title TEXT,
@@ -2573,16 +2573,16 @@ CREATE TABLE products_all_fields (
 
 #### Использование параметра FROM
 
-Параметр `FROM` контролирует, какие поля используются для генерации эмбеддингов:
+Параметр `FROM` контролирует, какие поля используются для генерации встраиваний:
 
 - **Конкретные поля**: `FROM='title'` — используется только поле title
-- **Несколько полей**: `FROM='title,description'` — объединяются и используются поля title и description
-- **Все текстовые поля**: `FROM=''` (пусто) — используются все поля типа `text` (полнотекстовые поля) и `string` (строковые атрибуты) в таблице
-- **Пустые векторы**: Можно вставлять пустые векторы с помощью `()`, чтобы исключить документы из векторного поиска
+- **Несколько полей**: `FROM='title,description'` — поля title и description объединяются и используются
+- **Все текстовые поля**: `FROM=''` (пусто) — используются все поля `text` (поля полного текста) и `string` (строковые атрибуты) таблицы
+- **Пустые векторы**: можно вставлять пустые векторы с помощью `()`, чтобы исключить документы из векторного поиска
 
-#### Вставка данных с автоматическими эмбеддингами
+#### Вставка данных с автоматическими встраиваниями
 
-При использовании автоматических эмбеддингов **не указывайте поле вектора** в ваших операторах INSERT. Эмбеддинги автоматически генерируются из указанных текстовых полей:
+При использовании автоembedding **не указывайте векторное поле** в командах INSERT. Встраивания будут созданы автоматически из указанных текстовых полей:
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2595,10 +2595,10 @@ INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
 
-### Ручное использование векторов с плавающей запятой
+### Ручное использование векторов с плавающей точкой
 
 <!-- example for creating float_vector -->
-В качестве альтернативы можно работать с вручную вычисленными векторами с плавающей запятой.
+Кроме того, можно работать с вручную вычисленными векторами с плавающей точкой.
 
 <!-- intro -->
 ##### SQL:
@@ -2704,11 +2704,11 @@ table products
 
 <!-- end -->
 
-## Мультизначное целое число (MVA)
+## Многозначное целочисленное значение (MVA)
 
 <!-- example for creating MVA32 -->
 
-Мультизначные атрибуты позволяют хранить списки переменной длины из 32-битных беззнаковых целых чисел. Это может быть полезно для хранения числовых значений один-ко-многим, таких как теги, категории продуктов и свойства.
+Многозначные атрибуты позволяют хранить списки переменной длины из 32-битных беззнаковых целых чисел. Это может быть полезно для хранения значений один-ко-многим, таких как теги, категории товаров и свойства.
 
 <!-- intro -->
 ##### SQL:
@@ -2716,6 +2716,10 @@ table products
 
 ```sql
 CREATE TABLE products(title text, product_codes multi);
+```
+или
+```sql
+CREATE TABLE products(title text, product_codes mva);
 ```
 
 <!-- intro -->
@@ -2816,7 +2820,7 @@ table products
 
 
 <!-- example for any/all MVA -->
-It supports filtering and aggregation, but not sorting. Filtering can be done using a condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all elements ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)) to pass.
+Поддерживается фильтрация и агрегация, но не сортировка. Фильтрация может быть выполнена с помощью условия, требующего, чтобы хотя бы один элемент прошёл проверку (используя [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) или все элементы ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)) прошли проверку.
 
 
 <!-- intro -->
@@ -2925,7 +2929,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for least/greatest MVA -->
 
-Information like [least](../Functions/Mathematical_functions.md#LEAST%28%29) or [greatest](../Functions/Mathematical_functions.md#GREATEST%28%29) element and length of the list can be extracted. An example shows ordering by the least element of a multi-value attribute.
+Можно получить информацию, как [наименьший](../Functions/Mathematical_functions.md#LEAST%28%29), так и [наибольший](../Functions/Mathematical_functions.md#GREATEST%28%29) элемент, а также длину списка. В примере показана сортировка по наименьшему элементу множества значений атрибута.
 
 <!-- intro -->
 ##### SQL:
@@ -3039,7 +3043,7 @@ let search_res = search_api.search(search_req).await;
 <!-- end -->
 
 <!-- example for grouping by MVA -->
-When grouping by a multi-value attribute, a document will contribute to as many groups as there are different values associated with that document. For instance, if a collection contains exactly one document having a 'product_codes' multi-value attribute with values 5, 7, and 11, grouping on 'product_codes' will produce 3 groups with `COUNT(*)`equal to 1 and `GROUPBY()` key values of 5, 7, and 11, respectively. Also, note that grouping by multi-value attributes may lead to duplicate documents in the result set because each document can participate in many groups.
+При группировке по атрибуту с множественными значениями, документ будет участвовать в таком количестве групп, сколько у него различных значений этого атрибута. Например, если в коллекции есть ровно один документ с мультизначным атрибутом 'product_codes' со значениями 5, 7 и 11, группировка по 'product_codes' создаст 3 группы с `COUNT(*)` равным 1 и ключами `GROUPBY()` 5, 7 и 11 соответственно. Также стоит отметить, что группировка по многозначным атрибутам может привести к дублированию документов в результирующем наборе, поскольку один документ может участвовать во многих группах.
 
 <!-- intro -->
 ##### SQL:
@@ -3068,7 +3072,7 @@ Query OK, 1 row affected (0.00 sec)
 <!-- end -->
 
 <!-- example for MVA value order -->
-The order of the numbers inserted as values of multivalued attributes is not preserved. Values are stored internally as a sorted set.
+Порядок чисел, вставляемых как значения многозначных атрибутов, не сохраняется. Значения хранятся внутренне в виде отсортированного множества.
 
 <!-- intro -->
 ##### SQL:
@@ -3381,11 +3385,11 @@ class SearchResponse {
 <!-- end -->
 
 
-## Multi-value big integer
+## Многозначное большое целое число
 
 <!-- example for creating MVA64 -->
 
-A data type that allows storing variable-length lists of 64-bit signed integers. It has the same functionality as multi-value integer.
+Тип данных, позволяющий хранить списки переменной длины из 64-битных знаковых целых чисел. Имеет ту же функциональность, что и многозначное целое число.
 
 <!-- intro -->
 ##### SQL:
@@ -3393,6 +3397,10 @@ A data type that allows storing variable-length lists of 64-bit signed integers.
 
 ```sql
 CREATE TABLE products(title text, values multi64);
+```
+или
+```sql
+CREATE TABLE products(title text, values mva64);
 ```
 
 <!-- intro -->
@@ -3491,14 +3499,14 @@ table products
 
 <!-- end -->
 
-## Columnar attribute properties
+## Свойства колонно-ориентированных атрибутов
 
-When you use the columnar storage you can specify the following properties for the attributes.
+При использовании колоночного хранения для атрибутов можно задать следующие свойства.
 
 <!-- example fast_fetch -->
 ### fast_fetch
 
-By default, Manticore Columnar storage stores all attributes in a columnar fashion, as well as in a special docstore row by row. This enables fast execution of queries like `SELECT * FROM ...`, especially when fetching a large number of records at once. However, if you are sure that you do not need it or wish to save disk space, you can disable it by specifying `fast_fetch='0'` when creating a table or (if you are defining a table in a config) by using `columnar_no_fast_fetch` as shown in the following example.
+По умолчанию Manticore Columnar хранит все атрибуты и в колонно-ориентированном формате, и в специальном docstore построчно. Это обеспечивает быструю обработку запросов типа `SELECT * FROM ...`, особенно при выборке большого количества записей за один раз. Однако, если вы уверены, что это не нужно или хотите сэкономить пространство на диске, вы можете отключить данную возможность, указав `fast_fetch='0'` при создании таблицы или (если таблица определяется в конфиге) используя `columnar_no_fast_fetch`, как показано в следующем примере.
 
 <!-- request RT mode -->
 ```sql

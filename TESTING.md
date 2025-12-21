@@ -91,7 +91,7 @@ For contributors who need to run tests locally or develop new tests.
 
 * **Python**: For utility scripts
 * **jq**: For JSON processing in tests
-* **Kafka**: For integration tests (provided via Docker)
+* **External services**: For integration tests (provided via Docker)
 
 ### Platform-Specific Setup
 
@@ -100,7 +100,7 @@ For contributors who need to run tests locally or develop new tests.
 ```bash
 # Install build dependencies
 sudo apt-get update
-sudo apt-get install -y build-essential cmake libmysqlclient-dev php php-mysql php-curl php-xml php-mbstring mysql-server docker.io jq
+sudo apt-get install -y libmysqlclient-dev php php-mysql php-curl php-xml php-mbstring mysql-server docker.io jq
 
 # Configure MySQL for tests
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS test;"
@@ -116,7 +116,7 @@ sudo mysql -e "FLUSH PRIVILEGES;"
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Install dependencies
-brew install cmake mysql php jq
+brew install mysql php jq
 brew install --cask docker
 
 # Start MySQL
@@ -135,31 +135,26 @@ For Windows, we strongly recommend using WSL2 (Windows Subsystem for Linux) and 
 
 Alternatively, use GitHub Actions for testing (see [Testing via GitHub Actions](#testing-via-github-actions)).
 
-## Running CTest Tests
+## Running UberTest Tests
 
-Traditional test suite using CMake/CTest:
+UberTest tests are PHP-based functional tests located in `test/test_XXX/` directories.
 
 ```bash
-# Build Manticore
-mkdir build && cd build
-cmake ..
-make -j8
-
 # Run all tests
-ctest -C Debug
+cd test
+php ubertest.php t
 
-# Run specific test by name (regex)
-ctest -C Debug -R test_101
+# Run specific test
+php ubertest.php t test_101
 
-# Run range of tests
-ctest -C Debug -I 1,10,1
+# Run multiple tests by number or range
+php ubertest.php t 31 37 41 53-64
 
-# Run with verbose output
-ctest -C Debug -V
-
-# Run tests in parallel
-ctest -C Debug -j8
+# With MySQL credentials
+php ubertest.php t --user test --password test
 ```
+
+For more options, run `php ubertest.php` without arguments to see full usage.
 
 ## Running CLT Tests
 
@@ -215,7 +210,7 @@ See [CLT documentation](https://github.com/manticoresoftware/clt) for more detai
 
 #### 2. Testing Your Own Code Changes
 
-When you've made changes to Manticore Search code and want to test them before creating a PR, use the [`build-local-test-kit.sh`](https://github.com/manticoresoftware/manticoresearch/blob/master/misc/build-local-test-kit.sh) script.
+When you've made changes to Manticore Search code and want to test them with CLT tests before creating a PR, use the [`build-local-test-kit.sh`](https://github.com/manticoresoftware/manticoresearch/blob/master/misc/build-local-test-kit.sh) script.
 
 **Usage:**
 
@@ -251,7 +246,6 @@ git add . && git commit -m "Add feature" && git push
 
 **Options:**
 
-- `BUILD_TYPE=Debug ./build-local-test-kit.sh` - Build in Debug mode
 - Supports Linux, macOS (Intel/Apple Silicon), Windows (WSL2)
 - See `./build-local-test-kit.sh --help` for full documentation
 
@@ -289,7 +283,7 @@ See existing tests in `test/clt-tests/` for more examples.
 
 ## Writing Tests
 
-### Adding a CTest Test
+### Adding a UberTest Test
 
 1. Create a new directory: `test/test_XXX/`
 2. Add test data and configuration files
@@ -333,7 +327,7 @@ git push origin your-branch
 
 ## Test Structure
 
-### Base Blocks
+### CLT Base Blocks
 
 Reusable test components are located in [`test/clt-tests/base/`](https://github.com/manticoresoftware/manticoresearch/tree/master/test/clt-tests/base). These include common setup/teardown blocks for starting searchd, Kafka integration, replication tests, and more. See the directory for available blocks.
 
@@ -351,7 +345,7 @@ Tests are automatically run via GitHub Actions when you create a pull request:
 
 ### Binary Location
 
-After building from source, the compiled binary is located at `<build_directory>/src/searchd`, where `<build_directory>` is where you ran cmake.
+After building from source, the compiled binaries are located at `<build_directory>/src/` (searchd, indexer, indextool), where `<build_directory>` is where you ran cmake.
 
 ## Contributing
 

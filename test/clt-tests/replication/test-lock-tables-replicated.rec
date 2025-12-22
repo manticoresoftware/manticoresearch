@@ -44,8 +44,8 @@ mysql -h0 -P9306 -e "SELECT * FROM test_cluster:repl_table;"
 |    1 | replicated_data |
 +------+-----------------+
 ––– comment –––
-BUG TEST: Try to LOCK cluster:table (expected to fail)
-This is the core bug - replicated tables don't support LOCK TABLES
+Expected behavior: Replicated tables don't support LOCK TABLES (by design)
+LOCK TABLES only works for local real-time or percolate tables
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_cluster:repl_table READ;" 2>&1
 ––– output –––

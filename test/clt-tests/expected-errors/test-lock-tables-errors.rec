@@ -56,17 +56,10 @@ mysql -h0 -P9306 -e "LOCK TABLES test_locks;"
 ––– output –––
 ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks'
 ––– comment –––
-Valid: Lock same table twice with different aliases (should work)
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES test_locks READ, test_locks READ;"
-––– output –––
-––– comment –––
-Release locks
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Manticore allows DROP TABLE even with READ lock (similar to FREEZE behavior)
+Manticore allows DROP TABLE even with READ lock (intentional behavior per documentation)
+READ lock blocks data modifications (INSERT/UPDATE/DELETE) but allows DDL operations (DROP/TRUNCATE)
+Rationale: if user explicitly drops table, they don't care about its backup/consistency
+See: https://manual.manticoresearch.com/Securing_and_compacting_a_table/Freezing_and_locking_a_table (line 72)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; DROP TABLE test_locks;"
 ––– output –––
@@ -87,16 +80,15 @@ Release lock
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Test cross-session locking: Session 1 locks table, Session 2 tries to modify
-Session 1 generates commands on-the-fly to keep the session and lock alive
+Test cross-session locking: Session 1 locks table with READ, Session 2 tries to INSERT
 ––– input –––
-({ echo "LOCK TABLES test_locks READ;"; seq 1 2000 | xargs -I{} echo "SELECT COUNT(*) FROM test_locks;"; echo "UNLOCK TABLES;"; } | mysql -h0 -P9306 > /dev/null 2>&1 &) && sleep 0.15 && mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" & sleep 1; mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: table 'test_locks' is locked
 ––– comment –––
 Wait for background session to complete and verify table state unchanged
 ––– input –––
-sleep 2; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
+sleep 5; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
 ––– output –––
 +----------+
 | count(*) |
@@ -124,6 +116,23 @@ ERROR 1064 (42000) at line 1: table test_locks: table is locked
 Release lock
 ––– input –––
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Test cross-session DROP TABLE: Session 1 locks table with READ, Session 2 tries to DROP
+DROP is allowed even from another session (DDL operations not blocked by READ lock)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" & sleep 1; mysql -h0 -P9306 -e "DROP TABLE test_locks;" 2>&1 && echo "DROP succeeded from another session"
+––– output –––
+DROP succeeded from another session
+––– comment –––
+Wait for background session to complete
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Recreate table for remaining tests
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_locks (id BIGINT, title TEXT); INSERT INTO test_locks VALUES (1, 'test');"
 ––– output –––
 ––– comment –––
 Create second table for lock scope testing

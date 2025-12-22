@@ -514,10 +514,12 @@ struct KnnSearchSettings_t
 	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
 	int				m_iK = 0;				///< KNN K
 	int				m_iEf = 0;				///< KNN ef
-	bool			m_bRescore = false;		///< KNN rescoring
-	float			m_fOversampling = 1.0f;	///< KNN oversampling
+	bool			m_bRescore = true;		///< KNN rescoring
+	float			m_fOversampling = 3.0f;	///< KNN oversampling
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
+
+	int64_t			GetRequestedDocs() const;
 };
 
 /// search query. Pure struct, no member functions

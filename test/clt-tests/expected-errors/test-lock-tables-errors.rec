@@ -82,7 +82,7 @@ mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– comment –––
 Test cross-session locking: Session 1 locks table with READ, Session 2 tries to INSERT
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" & sleep 1; mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: table 'test_locks' is locked
 ––– comment –––
@@ -121,13 +121,13 @@ mysql -h0 -P9306 -e "UNLOCK TABLES;"
 Test cross-session DROP TABLE: Session 1 locks table with READ, Session 2 tries to DROP
 DROP is allowed even from another session (DDL operations not blocked by READ lock)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" & sleep 1; mysql -h0 -P9306 -e "DROP TABLE test_locks;" 2>&1 && echo "DROP succeeded from another session"
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "DROP TABLE test_locks;" 2>&1 && echo "DROP succeeded from another session"
 ––– output –––
 DROP succeeded from another session
 ––– comment –––
 Wait for background session to complete
 ––– input –––
-sleep 5
+sleep 4
 ––– output –––
 ––– comment –––
 Recreate table for remaining tests

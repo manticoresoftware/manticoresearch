@@ -1,5 +1,6 @@
 # Test LOCK TABLES and UNLOCK TABLES functionality
-# Validates MySQL-compatible table locking for read and write operations
+# Validates MySQL-compatible table locking for READ operations
+# NOTE: WRITE locks are not implemented - syntax accepted but shows warning and has no effect
 # Issue: https://github.com/manticoresoftware/manticoresearch/issues/3047
 
 ––– block: ../base/start-searchd –––
@@ -44,7 +45,8 @@ Release READ lock
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Lock table with WRITE lock and check warnings (should show warning that WRITE lock is not implemented)
+Test WRITE lock syntax (Manticore accepts syntax but does not implement WRITE locks)
+Manticore shows warning and treats WRITE lock as no-op (table remains unlocked)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 ––– output –––
@@ -54,7 +56,7 @@ mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 | warning | 1000 | Write lock is not implemented. |
 +---------+------+--------------------------------+
 ––– comment –––
-Insert new record under WRITE lock
+Verify WRITE lock has no effect: INSERT succeeds (table is not actually locked)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"
 ––– output –––
@@ -130,11 +132,12 @@ mysql -h0 -P9306 -e "INSERT INTO orders VALUES (1, 1, 2), (2, 2, 1);"
 ––– output –––
 ––– comment –––
 Lock multiple tables with different lock types (products READ, orders WRITE)
+NOTE: WRITE lock on 'orders' has no effect (not implemented), only READ lock on 'products' is active
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES products READ, orders WRITE;"
 ––– output –––
 ––– comment –––
-Read from READ-locked table
+Read from READ-locked table (works)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 ––– output –––
@@ -144,7 +147,7 @@ mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 |    1 | iPhone 15 | 999.989990 |
 +------+-----------+------------+
 ––– comment –––
-Insert into WRITE-locked table
+Insert into WRITE-locked table (succeeds because WRITE lock is not implemented)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO orders VALUES (3, 1, 5);"
 ––– output –––
@@ -164,17 +167,17 @@ Release all locks
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Lock table for write operations
+Test WRITE lock syntax (has no effect - not implemented)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
 ––– output –––
 ––– comment –––
-Update price under WRITE lock
+Verify UPDATE works (WRITE lock has no effect, table is not actually locked)
 ––– input –––
 mysql -h0 -P9306 -e "UPDATE products SET price = 1099.99 WHERE id = 1;"
 ––– output –––
 ––– comment –––
-Delete record under WRITE lock
+Verify DELETE works (WRITE lock has no effect, table is not actually locked)
 ––– input –––
 mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;"
 ––– output –––

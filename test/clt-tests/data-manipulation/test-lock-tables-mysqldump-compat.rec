@@ -30,19 +30,23 @@ which mysqldump
 ––– output –––
 #!/.*mysqldump/!#
 ––– comment –––
-Test 1: mysqldump WITH LOCK TABLES (default behavior - lock-tables is ON by default)
+Test 1: mysqldump WITH LOCK TABLES (default behavior)
 This tests that LOCK TABLES works correctly with mysqldump
 ––– input –––
-mysqldump -h0 -P9306 --no-tablespaces --compact manticore test_dump > /tmp/test_dump_with_locks.sql 2>&1
-echo "Dump with locks created"
+mysqldump -h0 -P9306 manticore test_dump > /tmp/test_dump_with_locks.sql 2>/dev/null
 ––– output –––
-Dump with locks created
 ––– comment –––
-Verify the dump file was created and contains expected data
+Verify the dump file was created and contains INSERT statements
 ––– input –––
 grep -c "INSERT INTO" /tmp/test_dump_with_locks.sql
 ––– output –––
 1
+––– comment –––
+Verify dump contains all three records
+––– input –––
+grep -o "first\|second\|third" /tmp/test_dump_with_locks.sql | wc -l
+––– output –––
+3
 ––– comment –––
 Drop the table and restore from dump created WITH locks
 ––– input –––
@@ -51,12 +55,10 @@ mysql -h0 -P9306 -e "DROP TABLE test_dump;"
 ––– comment –––
 Restore from dump that was created WITH LOCK TABLES
 ––– input –––
-mysql -h0 -P9306 < /tmp/test_dump_with_locks.sql 2>&1
-echo "Table restored from dump with locks"
+mysql -h0 -P9306 < /tmp/test_dump_with_locks.sql 2>/dev/null
 ––– output –––
-Table restored from dump with locks
 ––– comment –––
-Verify data after restore from dump WITH locks
+Verify count of restored records
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 ––– output –––
@@ -66,18 +68,40 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 |        3 |
 +----------+
 ––– comment –––
+Verify all data was restored correctly from dump WITH locks
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_dump;"
+––– output –––
++------+--------+-------+
+| id   | name   | value |
++------+--------+-------+
+|    1 | first  |   100 |
+|    2 | second |   200 |
+|    3 | third  |   300 |
++------+--------+-------+
+––– comment –––
 Cleanup first dump file
 ––– input –––
 rm -f /tmp/test_dump_with_locks.sql
 ––– output –––
 ––– comment –––
 Test 2: mysqldump WITHOUT LOCK TABLES (using --skip-lock-tables)
-This tests the recommended approach for Manticore
+This tests the alternative approach when LOCK TABLES is not desired
 ––– input –––
-mysqldump -h0 -P9306 --no-tablespaces --skip-lock-tables --compact manticore test_dump > /tmp/test_dump.sql 2>&1
-echo "Dump without locks created"
+mysqldump -h0 -P9306 --skip-lock-tables manticore test_dump > /tmp/test_dump.sql 2>/dev/null
 ––– output –––
-Dump without locks created
+––– comment –––
+Verify the dump file was created and contains INSERT statements
+––– input –––
+grep -c "INSERT INTO" /tmp/test_dump.sql
+––– output –––
+1
+––– comment –––
+Verify dump contains all three records
+––– input –––
+grep -o "first\|second\|third" /tmp/test_dump.sql | wc -l
+––– output –––
+3
 ––– comment –––
 Drop the table again and restore from dump WITHOUT locks
 ––– input –––
@@ -86,12 +110,10 @@ mysql -h0 -P9306 -e "DROP TABLE test_dump;"
 ––– comment –––
 Restore from dump that was created WITHOUT LOCK TABLES
 ––– input –––
-mysql -h0 -P9306 < /tmp/test_dump.sql 2>&1
-echo "Table restored from dump without locks"
+mysql -h0 -P9306 < /tmp/test_dump.sql 2>/dev/null
 ––– output –––
-Table restored from dump without locks
 ––– comment –––
-Verify data after restore from dump WITHOUT locks
+Verify count of restored records
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 ––– output –––
@@ -101,15 +123,17 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
 |        3 |
 +----------+
 ––– comment –––
-Verify specific data values
+Verify all data was restored correctly from dump WITHOUT locks
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM test_dump WHERE id = 1;"
+mysql -h0 -P9306 -e "SELECT * FROM test_dump;"
 ––– output –––
-+------+-------+-------+
-| id   | name  | value |
-+------+-------+-------+
-|    1 | first |   100 |
-+------+-------+-------+
++------+--------+-------+
+| id   | name   | value |
++------+--------+-------+
+|    1 | first  |   100 |
+|    2 | second |   200 |
+|    3 | third  |   300 |
++------+--------+-------+
 ––– comment –––
 Cleanup
 ––– input –––

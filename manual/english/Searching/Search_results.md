@@ -35,7 +35,11 @@ SELECT * FROM tbl;
 
 <!-- request JSON -->
 ```JSON
-POST /sql -d "SELECT * FROM tbl"
+POST /search
+{
+  "table": "tbl"
+}
+
 ```
 
 <!-- response JSON -->

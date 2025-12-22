@@ -82,41 +82,58 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT release_year FROM films GROUP BY release_year LIMIT 5"
+POST /search
+{
+  "table" : "films",
+  "limit": 0,
+  "aggs": {
+    "release_year": {
+      "terms":  {
+        "field": "release_year",
+        "size": 5
+      }
+    }
+  }
+}
 ```
+
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
-      {
-        "release_year": {
-          "type": "long"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "release_year": {
+      "buckets": [
+        {
+          "key": 2004,
+          "doc_count": 108
+        },
+        {
+          "key": 2002,
+          "doc_count": 108
+        },
+        {
+          "key": 2001,
+          "doc_count": 91
+        },
+        {
+          "key": 2005,
+          "doc_count": 119
+        },
+        {
+          "key": 2000,
+          "doc_count": 97
         }
-      }
-    ],
-    "data": [
-      {
-        "release_year": 2004
-      },
-            {
-        "release_year": 2002
-      },
-            {
-        "release_year": 2001
-      },
-            {
-        "release_year": 2005
-      },
-            {
-        "release_year": 2000
-      }
-    ],
-    "total": 5,
-    "error": "",
-    "warning": ""
+      ]
+    }
   }
-]
+}
 ```
 
 <!-- end -->
@@ -567,6 +584,10 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 <!-- request JSON -->
 ```JSON
 POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
+
+POST /search
+{
+}
 ```
 <!-- response JSON -->
 ```JSON

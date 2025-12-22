@@ -342,7 +342,7 @@ select hour(now());
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "hour(now())"
+POST /sql?mode=raw -d "select hour(now())"
 ```
 <!-- response JSON -->
 ```JSON

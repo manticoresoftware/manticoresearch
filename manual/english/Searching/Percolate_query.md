@@ -2420,61 +2420,63 @@ JSON:
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'))"
-
-POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));
-
-POST /sql?mode=raw -d "CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json)"
+POST /pq/products/search
+{
+  "query": {
+    "percolate": {
+      "documents": [
+        {"title": "nice pair of shoes", "color": "blue"},
+        {"title": "beautiful bag"}
+      ]
+    }
+  }
+}
 ```
 <!-- response JSON -->
 
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
       {
-        "id": {
-          "type": "long long"
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
         }
-      }
-    ],
-    "data": [
-      {
-        "id": 1657852401006149635
       },
       {
-        "id": 1657852401006149637
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-
-{
-  "error": "Bad JSON objects in strings: 1"
-}
-
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149646,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
         }
       }
-    ],
-    "data": [
-      {
-        "id": 1657852401006149635
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->

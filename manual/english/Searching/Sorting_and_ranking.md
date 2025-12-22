@@ -49,7 +49,14 @@ select *, a + b alias from test order by alias desc;
 
 <!-- request JSON -->
 ```JSON
-POST  /sql?mode=raw -d "SELECT *, a + b alias FROM test ORDER BY alias DESC"
+POST /search
+{
+  "table": "test",
+  "expressions": {
+    "alias": "a+b"
+  },
+  "sort": {"alias":"desc"}
+}
 ```
 
 <!-- response JSON -->

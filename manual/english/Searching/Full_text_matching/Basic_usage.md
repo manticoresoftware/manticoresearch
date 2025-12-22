@@ -66,47 +66,43 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT * FROM myindex WHERE MATCH('\"find me fast\"/2')"
+POST /search
+{
+  "table": "myindex",
+  "query": {
+    "match" : { "_all" : "\"find me fast\"/2" }
+  }
+}
 ```
 <!-- response JSON -->
 
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
       {
-        "id": {
-          "type": "long long"
+        "_id": 1,
+        "_score": 1500,
+        "_source": {
+          "gid": 11,
+          "title": "first find me"
         }
       },
       {
-        "gid": {
-          "type": "long"
-        }
-      },
-      {
-        "title": {
-          "type": "string"
+        "_id": 2,
+        "_score": 1500,
+        "_source": {
+          "gid": 12,
+          "title": "second find me"
         }
       }
-    ],
-    "data": [
-      {
-        "id": 1,
-        "gid": 11,
-        "title": "first find me"
-      },
-      {
-        "id": 1,
-        "gid": 12,
-        "title": "second find me"
-      },
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- request MATCH with filters -->

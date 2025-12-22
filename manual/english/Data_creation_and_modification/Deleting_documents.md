@@ -564,58 +564,68 @@ INSERT INTO test (title, gid, mva1, mva2) VALUES
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "DELETE FROM test WHERE MATCH ('test document') AND ( mva1>206 or mva1 in (100, 103) )"
+POST /delete
+{
+  "table":"test",
+  "query":
+    {
+      "bool": {
+        "must": [
+          {
+            "match": { "*": "test document" }
+          },
+          {
+            "bool": {
+              "should": [
+                {
+                  "range": {
+                    "mval": { "gt": 206 }
+                  }
+                },
+                {
+                  "in": {
+                    "mval": [100, 103]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+    }
+}
 
-POST /sql?mode=raw -d "SELECT * FROM test"
+POST /search 
+{
+  "table": "test"
+}
 ```
 
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "total": 4,
-    "error": "",
-    "warning": ""
-  }
-]
+{
+  "table": "test",
+  "deleted": 4
+}
 
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "gid": {
-          "type": "long"
-        }
-      },
-      {
-        "mva1": {
-          "type": "long"
-        }
-      },
-      {
-        "mva2": {
-          "type": "long"
-        }
-      }
-    ],
-    "data": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 0,
+    "total_relation": "eq",
+    "hits": [
       {
         "id": 724024784404348900,
-        "gid": "1001",
-        "mva1": 101,102,
-        "mva2": 101
+        "_score": 2500,
+        "_source": {
+          "gid": "1001",
+          "mva1": 101,102,
+          "mva2": 101
+        }
       }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->

@@ -1311,36 +1311,41 @@ POST /sql?mode=raw -d "EXPLAIN QUERY tbl '@title a' option format=dot"
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT id, PACKEDFACTORS() FROM test1 WHERE MATCH('test one') OPTION ranker=expr('1')"
+POST /search
+{
+  "table": "test1",
+  "_source": ["id", "packedfactors()"],
+  "query": {
+    "match": {"*": "test one"}
+  },
+  "expressions": {
+    "PACKEDFACTORS()": "PACKEDFACTORS()"
+  },
+  "options": {
+    "ranker": "expr('1')"
+  }
+}
 ```
 
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "packedfactors()": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
       {
         "id": 724024784404348900,
-        "packedfactors()": "bm25=500, bm25a=0.500000, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.000000, min_idf=0.000000, max_idf=0.000000, sum_idf=0.000000, min_hit_pos=1, min_best_span_pos=1, exact_hit=1, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.000000, atc=0.000000), word0=(tf=1, idf=0.000000)"
+        "_score": 2500,
+        "_source": {
+          "packedfactors()": "bm25=500, bm25a=0.500000, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.000000, min_idf=0.000000, max_idf=0.000000, sum_idf=0.000000, min_hit_pos=1, min_best_span_pos=1, exact_hit=1, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.000000, atc=0.000000), word0=(tf=1, idf=0.000000)"
+        }
       }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->

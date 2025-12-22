@@ -875,29 +875,38 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 ##### JSON:
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('before')"
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "before"}
+  },
+  "highlight": {},
+  "_source": ""
+}
 ```
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight()": {
-          "type": "string"
+        "_id": 1,
+        "_score": 1747,
+        "_source": {},
+        "highlight": {
+          "content": [
+            "A door opened <b>before</b> them, revealing a small room."
+          ]
         }
       }
-    ],
-    "data": [
-      {
-        "highlight()": "A door opened <b>before</b> them, revealing a small room."
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->
@@ -929,8 +938,17 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 ##### JSON:
 <!-- request JSON -->
 ```json
-POST /sql -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one')"
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"title": "one"}
+  },
+  "highlight": {},
+  "_source": [""]
+}
 ```
+
 <!-- response JSON -->
 ```JSON
 {
@@ -941,9 +959,13 @@ POST /sql -d "SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one')"
     "total_relation": "eq",
     "hits": [
       {
+        "_id": 1,
         "_score": 1500,
-        "_source": {
-          "highlight()": "Book <b>one</b>"
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>one</b>"
+          ]
         }
       }
     ]
@@ -978,29 +1000,42 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHERE MATCH('@title one')"
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"title": "one"}
+  },
+  "highlight": {
+    "before_match": "[match]",
+    "after_match": "[/match]"
+  },
+  "_source": [""]
+}
 ```
+
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight({before_match='[match]',after_match='[/match]'})": {
-          "type": "string"
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book [match]one[/match]"
+          ]
         }
       }
-    ],
-    "data": [
-      {
-        "highlight({before_match='[match]',after_match='[/match]'})": "Book [match]one[/match]"
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->
@@ -1032,32 +1067,57 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots')"
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "one|robots"}
+  },
+  "highlight": {
+    "fields": ["title", "content"]
+  },
+  "_source": [""]
+}
 ```
+
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight({},'title,content')": {
-          "type": "string"
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>one</b>"
+          ],
+          "content": [
+            "They followed Bander. The <b>robots</b> remained at a polite distance, but their presence was a constantly felt threat."
+          ]
         }
-      }
-    ],
-    "data": [
-      {
-        "highlight({},'title,content')": "Book <b>one</b> | They followed Bander. The <b>robots</b> remained at a polite distance, but their presence was a constantly felt threat."
       },
       {
-        "highlight({},'title,content')": "Bander ushered all three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander gestured the other <b>robots</b> away and entered itself. The door closed behind it."
+        "_id": 5,
+        "_score": 1557,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book five"
+          ],
+          "content": [
+            "Bander ushered all three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander gestured the other <b>robots</b> away and entered itself. The door closed behind it."
+          ]
+        }
       }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->
@@ -1088,32 +1148,41 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one')"
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "one"}
+  },
+  "highlight": {
+    "fields": ["title"]
+  },
+  "_source": [""]
+}
 ```
+
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight({},title)": {
-          "type": "string"
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>one</b>"
+          ]
         }
       }
-    ],
-    "data": [
-      {
-        "highlight({},title)": "Book <b>one</b>"
-      },
-      {
-        "highlight({},title)": "Book five"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->
@@ -1144,32 +1213,54 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one')"
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "one"}
+  },
+  "highlight": {
+    "fields": ["title"],
+    "highlight_query": {
+      "match": { "*": "five" }
+    }
+  },
+  "_source": [""]
+}
+
 ```
 <!-- response JSON -->
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
       {
-        "highlight({},'title', 'five')": {
-          "type": "string"
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book one"
+          ]
         }
-      }
-    ],
-    "data": [
-      {
-        "highlight({},'title', 'five')": "Book one"
       },
       {
-        "highlight({},'title', 'five')": "Book <b>five</b>"
+        "_id": 5,
+        "_score": 1557,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>five</b>"
+          ]
+        }
       }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
+    ]
   }
-]
+}
 ```
 
 <!-- end -->

@@ -1,17 +1,17 @@
 # Низкоуровневая токенизация
 
-Когда текст индексируется в Manticore, он разбивается на слова, и выполняется преобразование регистра, чтобы такие слова, как "Abc", "ABC" и "abc", рассматривались как одно и то же слово.
+Когда текст индексируется в Manticore, он разбивается на слова, и выполняется сведение регистра так, чтобы слова, такие как "Abc", "ABC" и "abc", рассматривались как одно и то же слово.
 
 Для правильного выполнения этих операций Manticore должен знать:
 * кодировку исходного текста (которая всегда должна быть UTF-8)
-* какие символы считаются буквами, а какие нет
-* какие буквы должны преобразовываться в другие буквы
+* какие символы считаются буквами, а какие — нет
+* какие буквы должны сводиться к другим буквам
 
-Вы можете настроить эти параметры для каждой таблицы отдельно, используя опцию [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table). charset_table задаёт массив, который отображает буквенные символы в их версии с приведённым регистром (или в любые другие символы по вашему выбору). Символы, отсутствующие в массиве, считаются не буквами и будут рассматриваться как разделители слов при индексировании или поиске в этой таблице.
+Вы можете настроить эти параметры для каждой таблицы с помощью опции [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table). charset_table задаёт массив, который сопоставляет буквенные символы с их версиями в приведённом к одному регистру виде (или с любыми другими предпочитаемыми символами). Символы, отсутствующие в массиве, считаются не буквами и будут обрабатываться как разделители слов при индексации или поиске в этой таблице.
 
-По умолчанию используется набор символов `non_cont`, который включает [большинство языков](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
+Набор символов по умолчанию — `non_cont`, который включает [большинство языков](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
 
-Вы также можете определить правила замены текстовых шаблонов. Например, с помощью следующих правил:
+Вы также можете определить правила замены текстовых шаблонов. Например, с такими правилами:
 
 ```ini
 regexp_filter = \**(\d+)\" => \1 inch
@@ -20,7 +20,7 @@ regexp_filter = (BLUE|RED) => COLOR
 
 Текст `RED TUBE 5" LONG` будет индексироваться как `COLOR TUBE 5 INCH LONG`, а `PLANK 2" x 4"` будет индексироваться как `PLANK 2 INCH x 4 INCH`. Эти правила применяются в указанном порядке. Правила также применяются к запросам, поэтому поиск по `BLUE TUBE` фактически будет искать `COLOR TUBE`.
 
-Подробнее о [regexp_filter можно узнать здесь](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
+Более подробно о [regexp_filter можно узнать здесь](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
 
 ## Опции конфигурации индекса
 
@@ -42,35 +42,35 @@ charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC
 ```
 
 <!-- example charset_table -->
-`charset_table` задаёт массив, который отображает буквенные символы в их версии с приведённым регистром (или в любые другие символы, если вы предпочитаете). По умолчанию используется набор символов `non_cont`, который включает большинство языков с [непрерывными](https://en.wikipedia.org/wiki/Scriptio_continua) скриптами.
+`charset_table` задаёт массив, который сопоставляет буквенные символы с их версиями в приведённом к одному регистру виде (или с любыми другими символами, если вы предпочитаете). Набор символов по умолчанию — `non_cont`, который включает большинство языков с [неконтинуальными](https://en.wikipedia.org/wiki/Scriptio_continua) сценариями письма.
 
-`charset_table` является основным элементом процесса токенизации Manticore, который извлекает ключевые слова из текста документа или текста запроса. Он контролирует, какие символы считаются допустимыми и как они должны преобразовываться (например, нужно ли убирать регистр).
+`charset_table` является ключевым элементом процесса токенизации в Manticore, который извлекает ключевые слова из текста документа или текста запроса. Он контролирует, какие символы считаются допустимыми и как они должны преобразовываться (например, следует ли удалять регистр или нет).
 
-По умолчанию каждый символ отображается в 0, что означает, что он не считается допустимым ключевым словом и рассматривается как разделитель. Как только символ упоминается в таблице, он отображается в другой символ (чаще всего либо в себя, либо в строчную букву) и считается допустимой частью ключевого слова.
+По умолчанию каждый символ отображается в 0, что означает, что он не считается допустимым ключевым словом и обрабатывается как разделитель. Как только символ упоминается в таблице, он отображается в другой символ (чаще всего в себя самого или в строчную букву) и считается допустимой частью ключевого слова.
 
-charset_table использует список отображений, разделённых запятыми, чтобы объявить символы допустимыми или отобразить их в другие символы. Доступны сокращения для отображения диапазонов символов сразу:
+charset_table использует список отображений, разделённых запятыми, чтобы объявить символы допустимыми или сопоставить их с другими символами. Существуют сокращённые синтаксисы для сопоставления диапазонов символов сразу:
 
-* Отображение одного символа: `A->a`. Объявляет исходный символ 'A' допустимым в ключевых словах и отображает его в символ 'a' (но не объявляет 'a' допустимым).
-* Отображение диапазона: `A..Z->a..z`. Объявляет все символы в исходном диапазоне допустимыми и отображает их в символы в целевом диапазоне. Не объявляет целевой диапазон допустимым. Проверяет длины обоих диапазонов.
-* Отображение одиночного символа: `a`. Объявляет символ допустимым и отображает его в себя. Эквивалентно отображению одного символа `a->a`.
-* Отображение одиночного диапазона: `a..z`. Объявляет все символы в диапазоне допустимыми и отображает их в себя. Эквивалентно отображению диапазона `a..z->a..z`.
-* Отображение с шагом 2: `A..Z/2`. Отображает каждую пару символов во второй символ. Например, `A..Z/2` эквивалентно `A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z`. Это сокращение полезно для блоков Unicode, где заглавные и строчные буквы идут в перемешку.
+* Отображение одного символа: `A->a`. Объявляет исходный символ 'A' допустимым в ключевых словах и сопоставляет его с символом назначения 'a' (но не объявляет 'a' как допустимый).
+* Отображение диапазона: `A..Z->a..z`. Объявляет все символы из исходного диапазона допустимыми и сопоставляет их с соответствующими символами из целевого диапазона. Не объявляет целевой диапазон как допустимый. Проверяется равенство длины диапазонов.
+* Отображение одиночного символа: `a`. Объявляет символ допустимым и сопоставляет его с самим собой. Эквивалентно отображению одного символа `a->a`.
+* Отображение одиночного диапазона: `a..z`. Объявляет все символы в диапазоне допустимыми и сопоставляет их сами с собой. Эквивалентно отображению диапазона `a..z->a..z`.
+* Отображение с шахматной доской: `A..Z/2`. Сопоставляет каждую пару символов со вторым символом в паре. Например, `A..Z/2` эквивалентно `A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z`. Этот сокращённый способ удобен для Unicode-блоков, где заглавные и прописные буквы чередуются.
 
-Для символов с кодами от 0 до 32, а также для символов в диапазоне от 127 до 8-битных ASCII и Unicode, Manticore всегда рассматривает их как разделители. Чтобы избежать проблем с кодировкой в конфигурационных файлах, 8-битные ASCII символы и Unicode символы должны указываться в форме `U+XXX`, где `XXX` — это шестнадцатеричный номер кода символа. Минимально допустимый код символа Unicode — `U+0021`.
+Для символов с кодами от 0 до 32 и символов в диапазоне от 127 до 8-битного ASCII и Unicode символов, Manticore всегда рассматривает их как разделители. Чтобы избежать проблем с кодировкой файла конфигурации, 8-битные ASCII и Unicode символы должны указываться в форме `U+XXX`, где `XXX` — шестнадцатеричный номер кода символа. Минимальный допустимый код Unicode — `U+0021`.
 
-Если стандартных отображений недостаточно, вы можете переопределить отображения символов, указав их заново с другим отображением. Например, если встроенный массив `non_cont` включает символы `Ä` и `ä` и отображает их обоих в ASCII символ `a`, вы можете переопределить эти символы, добавив их коды Unicode, например так:
+Если стандартных отображений недостаточно, вы можете переопределить отображения символов, указав их заново с другим отображением. Например, если встроенный массив `non_cont` включает символы `Ä` и `ä` и сопоставляет их обоих с ASCII символом `a`, вы можете переопределить эти символы, добавив их Unicode-коды, так:
 
 ```
 charset_table = non_cont,U+00E4,U+00C4
 ```
 
-для поиска с учётом регистра или
+для чувствительного к регистру поиска или
 
 ```
 charset_table = non_cont,U+00E4,U+00C4->U+00E4
 ```
 
-для поиска без учёта регистра.
+для нечувствительного к регистру поиска.
 
 <!-- request SQL -->
 
@@ -166,7 +166,7 @@ table products {
 <!-- end -->
 
 <!-- example charset_table 2 -->
-Помимо определения символов и отображений, доступны несколько встроенных псевдонимов, которые можно использовать. Текущие псевдонимы:
+Помимо определений символов и отображений, имеются несколько встроенных псевдонимов, которые можно использовать. Текущие псевдонимы:
 * `chinese`
 * `cjk`
 * `cont`
@@ -270,51 +270,52 @@ table products {
 ```
 <!-- end -->
 
-Если вы хотите поддерживать разные языки в поиске, определение наборов допустимых символов и правил свёртки для всех из них может быть трудоёмкой задачей. Мы упростили это для вас, предоставив таблицы символов по умолчанию — `non_cont` и `cont`, которые охватывают языки с прерывистыми и непрерывными (китайский, японский, корейский, тайский) письменностями соответственно. В большинстве случаев этих наборов символов будет достаточно для ваших нужд.
+Если вы хотите поддерживать различные языки в вашем поиске, определение наборов допустимых символов и правил свертки для всех языков может оказаться трудоемкой задачей. Мы упростили эту задачу для вас, предоставив стандартные таблицы наборов символов, `non_cont` и `cont`, которые охватывают языки с неконтинуальными и континуальными (китайский, японский, корейский, тайский) системами письма соответственно. В большинстве случаев этих наборов должно быть достаточно для ваших нужд.
 
 Обратите внимание, что следующие языки в настоящее время **не** поддерживаются:
-* Assamese
-* Bishnupriya
-* Buhid
-* Garo
-* Hmong
-* Ho
-* Komi
-* Large Flowery Miao
-* Maba
-* Maithili
-* Marathi
-* Mende
-* Mru
-* Myene
-* Ngambay
-* Odia
-* Santali
-* Sindhi
-* Sylheti
+* Ассамский
+* Бишнуприя
+* Бухид
+* Гаро
+* Хмонг
+* Хо
+* Коми
+* Большой Цветочный Мяо
+* Маба
+* Майтхили
+* Марати
+* Менде
+* Мру
+* Мьене
+* Нгамбай
+* Одиа
+* Сантали
+* Синдхи
+* Силхети
 
-Все остальные языки, перечисленные в [списке языков Unicode](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/), поддерживаются по умолчанию.
-Чтобы работать как с языками с непрерывной, так и с прерывистой письменностью, установите параметры в вашем конфигурационном файле, как показано ниже (с [исключением](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md) для китайского):
+Все остальные языки, перечисленные в [списке языков Unicode
+list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/), поддерживаются по умолчанию.
 
 <!-- example charset_table 3 -->
-CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'
+Чтобы работать с языками как с континуальным, так и с неконтинуальным письмом, установите опции в вашем конфигурационном файле, как показано ниже (с [исключением](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md) для китайского):
 
 <!-- request SQL -->
 
 ```sql
-POST /cli -d "
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'
 ```
 
 <!-- request JSON -->
 
 ```JSON
+POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'"
-$index = new \Manticoresearch\Index($client);
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
 $index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
@@ -324,136 +325,144 @@ $index->create([
              'ngram_len' => '1',
              'ngram_chars' => 'cont'
         ]);
-##### Python:
 ```
 <!-- intro -->
-utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
+##### Python:
 
 <!-- request Python -->
 
 ```python
-##### Python-asyncio:
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
 
 <!-- intro -->
-await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
 ```python
-##### Javascript:
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
 
 <!-- intro -->
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'');
+##### Javascript:
 
 <!-- request javascript -->
 
 ```javascript
-##### java:
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'');
 ```
 
 <!-- intro -->
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+##### java:
 
 <!-- request Java -->
 
 ```java
-##### C#:
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
 ```
 
 <!-- intro -->
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+##### C#:
 
 <!-- request C# -->
 
 ```clike
-##### Rust:
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
 ```
 
 <!-- intro -->
-utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", Some(true)).await;
+##### Rust:
 
 <!-- request Rust -->
 
 ```rust
-table products {
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
   charset_table       = non_cont
   ngram_len           = 1
   ngram_chars         = cont
-  type = rt
 
+  type = rt
   path = tbl
   rt_field = title
   rt_attr_uint = price
 }
-Если вам не нужна поддержка языков с непрерывной письменностью, вы можете просто исключить параметры [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) и [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars). Для получения дополнительной информации об этих параметрах обратитесь к соответствующим разделам документации.
 ```
 <!-- end -->
 
-Для отображения одного символа в несколько символов или наоборот может быть полезен [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
+Если вам не требуется поддержка языков с континуальным письмом, можно просто не включать параметры [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) и [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars).
+Для получения дополнительной информации об этих параметрах обратитесь к соответствующим разделам документации.
+
+Чтобы сопоставить один символ с несколькими или наоборот, можно использовать опцию [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
+
 ### blend_chars
 
-blend_chars = +, &, U+23
-
-blend_chars = +, &->+
-
 ```ini
-Список смешанных символов. Необязательно, по умолчанию пусто.
-Смешанные символы индексируются как разделители и как допустимые символы. Например, если `&` определён как смешанный символ и в индексируемом документе встречается `AT&T`, будут проиндексированы три разных ключевых слова: `at&t`, `at` и `t`.
+blend_chars = +, &, U+23
+blend_chars = +, &->+
 ```
 
 <!-- example blend_chars -->
-Кроме того, смешанные символы могут влиять на индексацию так, что ключевые слова индексируются так, как будто смешанные символы вообще не были введены. Такое поведение особенно заметно при указании `blend_mode = trim_all`. Например, фраза `some_thing` будет индексироваться как `some`, `something` и `thing` при `blend_mode = trim_all`.
+Список смешанных символов. Необязательно, по умолчанию пусто.
 
-При использовании смешанных символов следует быть осторожным, так как определение символа как смешанного означает, что он больше не является разделителем.
+Смешанные символы индексируются и как разделители, и как допустимые символы. Например, если `&` определён как смешанный символ и в индексируемом документе встречается `AT&T`, то будут проиндексированы три разных ключевых слова: `at&t`, `at` и `t`.
 
-* Поэтому, если вы добавите запятую в `blend_chars` и выполните поиск по `dog,cat`, это будет рассматриваться как один токен `dog,cat`. Если `dog,cat` **не** был проиндексирован как `dog,cat`, а остался как `dog cat`, совпадения не будет.
+Кроме того, смешанные символы могут влиять на индексацию так, что ключевые слова индексируются как если бы смешанных символов не было вовсе. Это особенно заметно, если задано `blend_mode = trim_all`. Например, фраза `some_thing` будет индексироваться как `some`, `something` и `thing` с `blend_mode = trim_all`.
 
-* Следовательно, это поведение следует контролировать с помощью настройки [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode).
-Позиции для токенов, полученных заменой смешанных символов на пробелы, назначаются как обычно, и обычные ключевые слова индексируются так, как если бы `blend_chars` вообще не было. Дополнительный токен, смешивающий смешанные и несмешанные символы, будет помещён на начальную позицию. Например, если в самом начале текстового поля встречается `AT&T company`, `at` получит позицию 1, `t` — позицию 2, `company` — позицию 3, а `AT&T` также получит позицию 1, смешиваясь с открывающим обычным ключевым словом. В результате запросы `AT&T` или просто `AT` найдут этот документ. Фразовый запрос `"AT T"` также совпадёт, как и фразовый запрос `"AT&T company"`.
-Смешанные символы могут пересекаться со специальными символами, используемыми в синтаксисе запросов, такими как `T-Mobile` или `@twitter`. По возможности парсер запросов будет обрабатывать смешанный символ как смешанный. Например, если `hello @twitter` находится в кавычках (оператор фразы), парсер запросов обработает символ `@` как смешанный. Однако если символ `@` не в кавычках, он будет обработан как оператор. Поэтому рекомендуется экранировать ключевые слова.
+Следует соблюдать осторожность при использовании смешанных символов, так как определение символа как смешанного означает, что он больше не считается разделителем.
+* Поэтому если добавить запятую в `blend_chars` и выполнить поиск по `dog,cat`, это будет считаться одним токеном `dog,cat`. Если `dog,cat` **не** был проиндексирован как `dog,cat`, а остался только как `dog cat`, то поисковый запрос не совпадёт.
+* Следовательно, это поведение следует регулировать с помощью параметра [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode).
 
-Смешанные символы могут быть переназначены так, чтобы несколько разных смешанных символов нормализовались в одну базовую форму. Это полезно при индексации нескольких альтернативных кодовых точек Unicode с эквивалентными глифами.
+Позиции для токенов, полученных путем замены смешанных символов пробелами, назначаются как обычно, и обычные ключевые слова будут индексироваться так, как если бы не было определено ни одного `blend_chars`. Дополнительно, токен, сочетающий смешанные и обычные символы, будет помещен в начальную позицию. Например, если `AT&T company` встречается в самом начале текстового поля, `at` получит позицию 1, `t` — позицию 2, `company` — позицию 3, а `AT&T` также будет иметь позицию 1, совпадая с обычным открывающим ключевым словом. В результате запросы по `AT&T` или просто `AT` совпадут с этим документом. Запрос-фраза `"AT T"` также даст совпадение, как и запрос-фраза `"AT&T company"`.
 
-CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'
+Смешанные символы могут совпадать со специальными символами, используемыми в синтаксисе запросов, такими как `T-Mobile` или `@twitter`. Где возможно, парсер запросов обработает смешанный символ как смешанный. Например, если `hello @twitter` заключено в кавычки (оператор фразы), парсер обработает символ `@` как смешанный. Однако если символ `@` находится вне кавычек, он будет рассматриваться как оператор. Поэтому рекомендуется экранировать ключевые слова.
 
-POST /cli -d "
+Смешанные символы могут быть отображены так, чтобы несколько разных смешанных символов нормализовались до одной базовой формы. Это полезно при индексации различных альтернативных Unicode-кодпоинтов с эквивалентными глифами.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
+CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'blend_chars' => '+, &, U+23, @->_'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
@@ -462,113 +471,106 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars =
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  blend_chars = +, &, U+23, @->_
+utils_api.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  blend_chars = +, &, U+23, @->_
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### blend_mode
-blend_mode = option [, option [, ...]]
 ```
 <!-- end -->
 
-option = trim_none | trim_head | trim_tail | trim_both | trim_all | skip_pure
+### blend_mode
 
 ```ini
-Режим индексации смешанных токенов включается директивой blend_mode.
-По умолчанию токены, смешивающие смешанные и несмешанные символы, индексируются полностью. Например, если в `blend_chars` включены символы @ и !, строка `@dude!` будет индексироваться как два токена: `@dude!` (со всеми смешанными символами) и `dude` (без них). В результате запрос `@dude` **не** найдёт совпадений.
+blend_mode = option [, option [, ...]]
+option = trim_none | trim_head | trim_tail | trim_both | trim_all | skip_pure
 ```
 
 <!-- example blend_mode -->
-`blend_mode` добавляет гибкости этому поведению индексации. Он принимает список опций, разделённых запятыми, каждая из которых задаёт вариант индексации токенов.
+Режим индексации смешанных токенов включается директивой blend_mode.
 
-Если указано несколько опций, будет проиндексировано несколько вариантов одного и того же токена. Обычные ключевые слова (полученные из этого токена путем замены смешанных символов на разделитель) всегда индексируются.
+По умолчанию токены, содержащие смешанные и обычные символы, индексируются полностью. Например, если и собачка, и восклицательный знак указаны в `blend_chars`, строка `@dude!` будет проиндексирована как два токена: `@dude!` (со всеми смешанными символами) и `dude` (без них). В результате запрос по `@dude` **не** совпадет.
+
+`blend_mode` добавляет гибкости этому поведению индексации. Он принимает список опций, разделённых запятыми, каждая из которых указывает вариант индексации токенов.
+
+Если указано несколько опций, будут проиндексированы несколько вариантов одного и того же токена. Обычные ключевые слова (получаемые из этого токена заменой смешанных символов на разделитель) всегда индексируются.
 
 Опции:
 
-* `trim_none` - Индексировать весь токен
-
-* `trim_head` - Обрезать начальные смешанные символы и индексировать полученный токен
-
-* `trim_tail` - Обрезать конечные смешанные символы и индексировать полученный токен
-* `trim_both` - Обрезать как начальные, так и конечные смешанные символы и индексировать полученный токен
-* `trim_all` - Обрезать начальные, конечные и средние смешанные символы и индексировать полученный токен
+* `trim_none` - Индексировать весь токен целиком
+* `trim_head` - Обрезать смешанные символы в начале и индексировать полученный токен
+* `trim_tail` - Обрезать смешанные символы в конце и индексировать полученный токен
+* `trim_both`- Обрезать смешанные символы и в начале, и в конце, и индексировать полученный токен
+* `trim_all` - Обрезать смешанные символы в начале, конце и середине, и индексировать полученный токен
 * `skip_pure` - Не индексировать токен, если он состоит только из смешанных символов
-Используя `blend_mode` с примером строки `@dude!` выше, настройка `blend_mode = trim_head, trim_tail` приведет к индексации двух токенов: `@dude` и `dude!`. Использование `trim_both` не даст эффекта, так как обрезка обоих смешанных символов приведет к `dude`, который уже индексируется как обычное ключевое слово. Индексация `@U.S.A.` с `trim_both` (при условии, что точка считается смешанным символом) приведет к индексации `U.S.A`. Наконец, `skip_pure` позволяет игнорировать последовательности, состоящие только из смешанных символов. Например, `one @@@ two` будет индексироваться как `one two` и будет соответствовать этой фразе. По умолчанию это не так, потому что полностью смешанный токен индексируется и смещает позицию второго ключевого слова.
-Поведение по умолчанию — индексировать весь токен, что эквивалентно `blend_mode = trim_none`.
 
-Учтите, что использование режимов смешивания ограничивает поиск, даже при режиме по умолчанию `trim_none`, если считать `.` смешанным символом:
+Использование `blend_mode` на примере строки `@dude!` выше, с настройкой `blend_mode = trim_head, trim_tail` приведет к индексации двух токенов: `@dude` и `dude!`. Использование `trim_both` не даст эффекта, потому что обрезка смешанных символов в начале и конце даёт `dude`, который уже индексируется как обычное ключевое слово. Индексация `@U.S.A.` с `trim_both` (с учетом, что точка – смешанный символ 2-го типа) приведет к индексации `U.S.A`. Наконец, `skip_pure` позволяет игнорировать последовательности только из смешанных символов. Например, `one @@@ two` будет индексироваться как `one two` и соответствовать этой фразе. По умолчанию так не происходит, так как полностью смешанный токен индексируется и смещает позицию второго ключевого слова.
 
-* `.dog.` будет индексироваться как `.dog. dog`
+Поведение по умолчанию - индексировать весь токен, что эквивалентно `blend_mode = trim_none`.
 
-* и вы не сможете найти его по запросу `dog.`.
-Использование большего количества режимов увеличивает вероятность совпадения вашего ключевого слова.
-CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'
+Учтите, что использование режимов смешивания ограничивает поиск, даже при стандартном режиме `trim_none`, если считать `.` смешанным символом:
+* `.dog.` при индексации превратится в `.dog. dog`
+* и вы не сможете найти это через `dog.`.
 
-POST /cli -d "
+Использование более чем одного режима повышает вероятность совпадения ключевого слова с чем-то.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
+CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -576,13 +578,20 @@ $index->create([
             'blend_mode' => 'trim_tail, skip_pure',
             'blend_chars' => '+, &'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
@@ -591,103 +600,103 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = 
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
-
-```python
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'');
-```
-
-<!-- intro -->
-##### java:
-
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'');
 ```
 <!-- intro -->
-##### C#:
+##### java:
 
 <!-- request Java -->
 
 ```java
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  blend_mode = trim_tail, skip_pure
+utils_api.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  blend_mode = trim_tail, skip_pure
   blend_chars = +, &
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### min_word_len
-min_word_len = length
 ```
 <!-- end -->
 
-min_word_len — это необязательная опция конфигурации индекса в Manticore, которая задает минимальную длину индексируемого слова. Значение по умолчанию — 1, что означает, что индексируются все слова.
+### min_word_len
 
 ```ini
-Индексируются только те слова, длина которых не меньше этого минимума. Например, если min_word_len равен 4, то слово 'the' индексироваться не будет, а 'they' — будет.
+min_word_len = length
 ```
 
 <!-- example min_word_len -->
 
-CREATE TABLE products(title text, price float) min_word_len = '4'
+min_word_len — это необязательная опция конфигурации индекса в Manticore, задающая минимальную длину индексируемого слова. Значение по умолчанию — 1, что означает, что индексируются все слова.
 
-POST /cli -d "
+Индексации подлежат только те слова, длина которых не короче этого минимального значения. Например, если min_word_len равен 4, слово 'the' индексироваться не будет, а слово 'they' — будет.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) min_word_len = '4'"
+CREATE TABLE products(title text, price float) min_word_len = '4'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) min_word_len = '4'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'min_word_len' => '4'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
@@ -696,95 +705,88 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len 
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  min_word_len = 4
+utils_api.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  min_word_len = 4
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### ngram_len
-ngram_len = 1
 ```
 <!-- end -->
 
-Длины N-грамм для индексирования N-граммами. Необязательно, значение по умолчанию 0 (отключить индексирование N-граммами). Известные значения — 0 и 1.
+### ngram_len
 
 ```ini
-N-граммы обеспечивают базовую поддержку языков с непрерывным письмом в неразмеченных текстах. Проблема поиска в языках с непрерывным письмом заключается в отсутствии четких разделителей между словами. В некоторых случаях вы можете не захотеть использовать сегментацию на основе словаря, например, [как для китайского языка](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md). В таких случаях сегментация N-граммами может работать хорошо.
+ngram_len = 1
 ```
 
 <!-- example ngram_len -->
-Когда эта функция включена, потоки таких языков (или любых других символов, определенных в [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) индексируются как N-граммы. Например, если входящий текст — "ABCDEF" (где A–F — символы какого-то языка), и ngram_len равен 1, он будет индексироваться как "A B C D E F". В настоящее время поддерживается только ngram_len=1. Только символы, перечисленные в таблице [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars), будут разбиваться таким образом; остальные не будут затронуты.
+Длины N-грамм для индексации N-граммами. Необязательно, значение по умолчанию 0 (отключить индексацию N-граммами). Известны значения 0 и 1.
 
-Обратите внимание, что если поисковый запрос сегментирован, то есть между отдельными словами есть разделители, то оборачивание слов в кавычки и использование расширенного режима приведет к правильному поиску совпадений, даже если текст **не** был сегментирован. Например, предположим, что исходный запрос — `BC DEF`. После оборачивания в кавычки на стороне приложения он должен выглядеть как `"BC" "DEF"` (*с* кавычками). Этот запрос будет передан в Manticore и внутренне также разбит на 1-граммы, что даст запрос `"B C" "D E F"`, все еще с кавычками, которые являются оператором поиска фразы. И он найдет совпадение в тексте, даже если в тексте не было разделителей.
+N-граммы обеспечивают базовую поддержку языков с непрерывной письменностью в неразмеченных текстах. Проблема поиска в языках с непрерывной письменностью — отсутствие четких разделителей между словами. В некоторых случаях может не подойти сегментация на основе словаря, например, [та, что доступна для китайского](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md). В таких случаях сегментация с помощью N-грамм может также хорошо работать.
 
-Даже если поисковый запрос не сегментирован, Manticore должен выдавать хорошие результаты благодаря ранжированию на основе фраз: он поднимет выше совпадения фраз (что в случае N-грамм может означать более близкие совпадения многосимвольных слов).
+Если эта возможность включена, потоки такого рода языков (или любые другие символы, определённые в таблице [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) индексируются как N-граммы. Например, если текст "ABCDEF" (где A–F — символы языка) и ngram_len равен 1, это будет проиндексировано как "A B C D E F". В настоящее время поддерживается только ngram_len=1. Только символы из таблицы [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) будут разбиваться таким образом; остальные останутся без изменений.
 
-CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
+Обратите внимание, что если поисковый запрос сегментирован, то есть между словами есть разделители, то обертывание слов в кавычки и использование расширенного режима приведёт к нахождению правильных совпадений, даже если текст **не был** сегментирован. Например, предположим исходный запрос `BC DEF`. После обёртки в кавычки на стороне приложения запрос будет выглядеть как `"BC" "DEF"` (*с* кавычками). Этот запрос передается в Manticore и внутри тоже разбивается на 1-граммы, задавая запрос `"B C" "D E F"`, при этом кавычки сохраняются как оператор фразового сопоставления. И он найдёт соответствия в тексте, даже если в тексте не было разделителей.
 
-POST /cli -d "
+Даже если поисковый запрос не сегментирован, Manticore должен давать хорошие результаты благодаря ранжированию с учётом фраз: он будет выводить ближайшие фразовые совпадения (что для слов из N-грамм означает совпадения с рядом идущими символами) выше в списке.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -792,13 +794,20 @@ $index->create([
              'ngram_chars' => 'cont',
              'ngram_len' => '1'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
@@ -807,92 +816,85 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars =
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  ngram_chars = cont
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  ngram_chars = cont
   ngram_len = 1
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### ngram_chars
-ngram_chars = cont
 ```
 <!-- end -->
 
-ngram_chars = cont, U+3000..U+2FA1F
+### ngram_chars
 
 ```ini
-Список символов для N-грамм. Необязательно, по умолчанию пустой.
+ngram_chars = cont
 
-Используется вместе с параметром [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), этот список определяет символы, последовательности которых подлежат извлечению N-грамм. Слова, состоящие из других символов, не будут затронуты функцией индексации N-грамм. Формат значения идентичен [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table). Символы N-грамм не могут присутствовать в [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table).
+ngram_chars = cont, U+3000..U+2FA1F
 ```
 
 <!-- example ngram_chars -->
-CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'
+Список символов для N-грамм. Необязательно, по умолчанию пусто.
 
-POST /cli -d "
+Используется вместе с параметром [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), этот список определяет символы, последовательности которых подвергаются извлечению N-грамм. Слова, состоящие из других символов, не будут затронуты функцией индексирования N-грамм. Формат значения идентичен [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table). Символы N-грамм не могут присутствовать в [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table).
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -900,13 +902,20 @@ $index->create([
              'ngram_chars' => 'U+3000..U+2FA1F',
              'ngram_len' => '1'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
@@ -915,17 +924,16 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars =
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```java
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 
-<!-- request javascript -->
-
+<!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
 ```
@@ -933,63 +941,57 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+30
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
-```java
+<!-- request C# -->
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  ngram_chars = U+3000..U+2FA1F
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  ngram_chars = U+3000..U+2FA1F
   ngram_len = 1
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-Также вы можете использовать псевдоним для нашей стандартной таблицы N-грамм, как в примере. Это будет достаточно в большинстве случаев.
-CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- end -->
 
 <!-- example ngram_chars 2 -->
-POST /cli -d "
+Также вы можете использовать псевдоним для нашей стандартной таблицы N-грамм, как в примере. В большинстве случаев этого будет достаточно.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -997,13 +999,20 @@ $index->create([
              'ngram_chars' => 'cont',
              'ngram_len' => '1'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
@@ -1012,103 +1021,103 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars =
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 
-<!-- request javascript -->
-
-```javascript
+<!-- request Java -->
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
-```java
+<!-- request C# -->
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  ngram_chars = cont
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  ngram_chars = cont
   ngram_len = 1
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### ignore_chars
-ignore_chars = U+AD
 ```
 <!-- end -->
 
-Список игнорируемых символов. Необязательно, по умолчанию пустой.
+### ignore_chars
 
 ```ini
-Полезно в случаях, когда некоторые символы, такие как мягкий перенос (U+00AD), должны не просто рассматриваться как разделители, а полностью игнорироваться. Например, если '-' просто отсутствует в charset_table, текст "abc-def" будет индексироваться как ключевые слова "abc" и "def". Напротив, если '-' добавлен в список ignore_chars, тот же текст будет индексироваться как одно ключевое слово "abcdef".
+ignore_chars = U+AD
 ```
 
 <!-- example ignore_chars -->
-Синтаксис такой же, как для [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), но разрешено объявлять только символы, без их отображения. Также игнорируемые символы не должны присутствовать в charset_table.
+Список игнорируемых символов. Необязательно, по умолчанию пусто.
 
-CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'
+Полезно в случаях, когда некоторые символы, например, мягкий перенос (U+00AD), следует не просто рассматривать как разделители, а полностью игнорировать. Например, если '-' просто отсутствует в charset_table, текст "abc-def" будет индексироваться как ключевые слова "abc" и "def". Напротив, если '-' добавлен в список ignore_chars, тот же текст будет индексироваться как одно ключевое слово "abcdef".
 
-POST /cli -d "
+Синтаксис такой же, как для [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), но разрешено объявлять только символы, а не сопоставлять их. Также игнорируемые символы не должны присутствовать в charset_table.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
+CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'ignore_chars' => 'U+AD'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
@@ -1117,99 +1126,92 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars 
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  ignore_chars = U+AD
+utils_api.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  ignore_chars = U+AD
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### bigram_index
-bigram_index = {none|all|first_freq|both_freq}
 ```
 <!-- end -->
 
-Режим индексации биграмм. Необязательно, по умолчанию отсутствует.
+### bigram_index
 
 ```ini
-Индексация биграмм — это функция для ускорения поиска фраз. При индексации в индекс сохраняется список документов для всех или некоторых пар соседних слов. Этот список затем может использоваться во время поиска для значительного ускорения сопоставления фраз или подфраз.
+bigram_index = {none|all|first_freq|both_freq}
 ```
 
 <!-- example bigram_index -->
-`bigram_index` управляет выбором конкретных пар слов. Известные режимы:
+Режим индексации биграмм. Необязательно, по умолчанию отсутствует.
+
+Индексация биграмм — это функция для ускорения поиска фраз. При индексации она сохраняет список документов для всех или некоторых пар соседних слов в индексе. Такой список затем может использоваться во время поиска для значительного ускорения поиска фраз или их частей.
+
+`bigram_index` управляет выбором конкретных пар слов. Известны следующие режимы:
 
 * `all` — индексировать каждую пару слов
+* `first_freq` — индексировать только пары слов, где *первое* слово находится в списке частотных слов (см. [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). Например, с `bigram_freq_words = the, in, i, a` при индексации текста "alone in the dark" будут сохранены пары "in the" и "the dark" как биграммы, потому что они начинаются с частого слова ("in" или "the"), а "alone in" не будет индексирована, так как "in" — второе слово в паре.
+* `both_freq` — индексировать только пары слов, где оба слова частотные. Продолжая тот же пример, в этом режиме при индексации "alone in the dark" будет сохранена только пара "in the" (самая плохая для поиска), остальные пары не будут индексированы.
 
-* `first_freq` — индексировать только пары слов, где *первое* слово находится в списке частотных слов (см. [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). Например, при `bigram_freq_words = the, in, i, a` индексация текста "alone in the dark" сохранит пары "in the" и "the dark" как биграммы, потому что они начинаются с частого слова ("in" или "the"), но "alone in" не будет индексироваться, так как "in" — второе слово в паре.
+Для большинства случаев лучший режим — `both_freq`, но всё зависит от ваших задач.
 
-* `both_freq` — индексировать только пары слов, где оба слова частые. Продолжая пример, в этом режиме при индексации "alone in the dark" будет сохранена только пара "in the" (самая плохая с точки зрения поиска), остальные пары не будут индексироваться.
-Для большинства случаев `both_freq` будет лучшим режимом, но результаты могут варьироваться.
-Важно отметить, что `bigram_index` работает только на уровне токенизации и не учитывает преобразования, такие как `morphology`, `wordforms` или `stopwords`. Это означает, что создаваемые токены очень просты, что делает поиск фраз более точным и строгим. Хотя это может улучшить точность сопоставления фраз, система становится менее способной распознавать разные формы слов или вариации их написания.
-
-CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'
-
-POST /cli -d "
+Важно отметить, что `bigram_index` работает только на уровне токенизации и не учитывает преобразования как `morphology`, `wordforms` или `stopwords`. Это означает, что создаваемые токены очень простые, что делает поиск фраз более точным и строгим. Хотя это может повысить точность фразового совпадения, система становится менее способной распознавать различные формы слов или вариации их появления.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -1217,13 +1219,20 @@ $index->create([
             'bigram_freq_words' => 'the, a, you, i',
             'bigram_index' => 'both_freq'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
@@ -1232,92 +1241,85 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_w
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  bigram_index = both_freq
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  bigram_index = both_freq
   bigram_freq_words = the, a, you, i
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### bigram_freq_words
-bigram_freq_words = the, a, you, i
 ```
 <!-- end -->
 
-Список ключевых слов, считающихся "частыми" при индексации биграмм. Необязательно, по умолчанию пустой.
+### bigram_freq_words
 
 ```ini
-Некоторые режимы индексации биграмм (см. [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) требуют определения списка часто встречающихся ключевых слов. Их **не следует** путать со стоп-словами. Стоп-слова полностью исключаются как при индексации, так и при поиске. Часто встречающиеся ключевые слова используются биграммами только для определения, индексировать ли текущую пару слов или нет.
+bigram_freq_words = the, a, you, i
 ```
 
 <!-- example bigram_freq_words -->
+Список ключевых слов, считаемых "частотными" при индексировании биграмм. Необязательно, по умолчанию пусто.
+
+Некоторые режимы индексирования биграмм (см. [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) требуют определения списка частых ключевых слов. Их **не** следует путать со стоп-словами. Стоп-слова полностью исключаются как при индексировании, так и при поиске. Частые ключевые слова используются биграммами только для определения необходимости индексировать текущую пару слов или нет.
+
 `bigram_freq_words` позволяет определить такой список ключевых слов.
-
-CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'
-
-POST /cli -d "
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -1325,13 +1327,20 @@ $index->create([
             'bigram_freq_words' => 'the, a, you, i',
             'bigram_index' => 'first_freq'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
@@ -1340,115 +1349,115 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_w
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  bigram_freq_words = the, a, you, i
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  bigram_freq_words = the, a, you, i
   bigram_index = first_freq
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### dict
-dict = {keywords|crc}
 ```
 <!-- end -->
 
-Тип словаря ключевых слов определяется одним из двух известных значений: 'crc' или 'keywords'. Это необязательно, по умолчанию используется 'keywords'.
+### dict
 
 ```ini
-Использование режима словаря ключевых слов (dict=keywords) может значительно снизить нагрузку на индексацию и обеспечить поиск подстрок в больших коллекциях. Этот режим можно использовать как для обычных, так и для RT таблиц.
+dict = {keywords|crc}
 ```
 
 <!-- example dict -->
-CRC-словари не хранят исходный текст ключевого слова в индексе. Вместо этого они заменяют ключевые слова контрольной суммой (вычисляемой с помощью FNV64) как при поиске, так и при индексации. Это значение используется внутри индекса. Такой подход имеет два недостатка:
+Тип словаря ключевых слов определяется одним из двух известных значений: 'crc' или 'keywords'. Это опционально, по умолчанию используется 'keywords'.
 
-* Во-первых, существует риск коллизий контрольных сумм между разными парами ключевых слов. Этот риск растет пропорционально количеству уникальных ключевых слов в индексе. Тем не менее, это незначительная проблема, так как вероятность одной коллизии FNV64 в словаре из 1 миллиарда записей примерно 1 к 16, или 6,25 процента. Большинство словарей будут содержать гораздо меньше миллиарда ключевых слов, учитывая, что типичный разговорный язык содержит от 1 до 10 миллионов словоформ.
+Использование режима словаря ключевых слов (dict=keywords) может значительно снизить нагрузку индексирования и позволить выполнять поиск подстрок в крупных коллекциях. Этот режим может применяться как для обычных, так и для RT таблиц.
 
-* Во-вторых, и что более важно, с контрольными суммами сложно выполнять поиск подстрок. Manticore решил эту проблему путем предварительной индексации всех возможных подстрок как отдельных ключевых слов (см. директивы [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)). Этот метод даже имеет дополнительное преимущество — максимально быстрый поиск подстрок. Однако предварительная индексация всех подстрок значительно увеличивает размер индекса (часто в 3-10 раз и более) и, соответственно, время индексации, что делает поиск подстрок в больших индексах довольно непрактичным.
-Словарь ключевых слов решает обе эти проблемы. Он хранит ключевые слова в индексе и выполняет расширение подстановочных знаков во время поиска. Например, поиск по префиксу `test*` может внутренне расширяться в запрос 'test|tests|testing' на основе содержимого словаря. Этот процесс расширения полностью прозрачен для приложения, за исключением того, что теперь также предоставляется отдельная статистика по каждому совпавшему ключевому слову.
-Для поиска подстрок (инфиксного поиска) можно использовать расширенные подстановочные знаки. Специальные символы, такие как `?` и `%`, совместимы с поиском подстрок (например, `t?st*`, `run%`, `*abc*`). Обратите внимание, что [операторы подстановочных знаков](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) и [оператор REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) работают только с `dict=keywords`.
+CRC-словари не хранят оригинальный текст ключевых слов в индексе. Вместо этого они заменяют ключевые слова на значение контрольной суммы (вычисляемой с помощью FNV64) как при поиске, так и при индексировании. Это значение используется внутри индекса. У этого подхода есть два недостатка:
+* Во-первых, существует риск коллизий контрольных сумм между разными парами ключевых слов. Этот риск растет пропорционально количеству уникальных ключевых слов в индексе. Тем не менее, эта проблема незначительна, поскольку вероятность одной коллизии FNV64 в словаре из 1 миллиарда записей примерно 1 из 16, или 6,25 процента. Большинство словарей содержит гораздо меньше ключевых слов, учитывая, что типичный живой язык имеет от 1 до 10 миллионов форм слов.
+* Во-вторых, и что важнее, с контрольными суммами сложно выполнять поиск подстрок. Manticore решила эту проблему предварительным индексированием всех возможных подстрок как отдельных ключевых слов (см. директивы [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)). Этот метод даже имеет дополнительное преимущество — поиск подстрок осуществляется максимально быстро. Однако предварительное индексирование всех подстрок значительно увеличивает размер индекса (часто в 3-10 раз и более) и, соответственно, время индексирования, что делает поиск подстрок в больших индексах малопрактичным.
 
-Индексация с использованием словаря ключевых слов примерно в 1.1-1.3 раза медленнее, чем обычная индексация без подстрок, но значительно быстрее, чем индексация подстрок (префиксная или инфиксная). Размер индекса должен быть лишь немного больше, чем у стандартной таблицы без подстрок, с общей разницей в 1..10%. Время обычного поиска по ключевым словам должно быть почти одинаковым или идентичным для всех трех типов индексов (CRC без подстрок, CRC с подстроками, keywords). Время поиска подстрок может значительно варьироваться в зависимости от того, сколько ключевых слов соответствует заданной подстроке (то есть во сколько ключевых слов расширяется поисковый термин). Максимальное количество совпавших ключевых слов ограничено директивой [expansion_limit](../../Server_settings/Searchd.md#expansion_limit).
+Словарь ключевых слов решает обе указанные проблемы. Он хранит ключевые слова в индексе и выполняет расширение подстановочных символов во время поиска. Например, поиск префикса `test*` может внутренне расшириться до запроса 'test|tests|testing' на основе содержимого словаря. Этот процесс расширения полностью прозрачен для приложения, за исключением того, что теперь также отображается отдельная статистика по каждому из совпавших ключевых слов.
 
-В итоге, словари keywords и CRC предлагают два разных компромисса для поиска подстрок. Вы можете либо пожертвовать временем индексации и размером индекса ради максимально быстрого худшего случая поиска (CRC словарь), либо минимально повлиять на время индексации, но пожертвовать временем худшего случая поиска, когда префикс расширяется в большое количество ключевых слов (keywords словарь).
+Для поиска подстрок (инфиксов) можно использовать расширенные шаблоны с подстановочными символами. Специальные символы, такие как `?` и `%`, совместимы с поиском подстрок (например, `t?st*`, `run%`, `*abc*`). Обратите внимание, что [операторы подстановок](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) и [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) работают только с `dict=keywords`.
 
-CREATE TABLE products(title text, price float) dict = 'keywords'
+Индексирование с использованием словаря ключевых слов примерно в 1.1-1.3 раза медленнее обычного индексирования без подстрок — но существенно быстрее индексирования с подстроками (как префиксными, так и инфиксными). Размер индекса должен быть лишь немного больше, чем у стандартной таблицы без подстрок, с общей разницей от 1 до 10%. Время обычного поиска по ключевым словам должно быть почти одинаковым во всех трёх рассмотренных типах индексов (CRC без подстрок, CRC с подстроками, keywords). Время поиска подстрок может значительно варьироваться в зависимости от количества ключевых слов, совпадающих с данной подстрокой (то есть насколько сильно поисковый термин расширяется). Максимальное число совпадающих ключевых слов ограничено директивой [expansion_limit](../../Server_settings/Searchd.md#expansion_limit).
 
-POST /cli -d "
+В итоге, словари ключевых слов и CRC предлагают два разных варианта компромиссов для поиска подстрок. Вы можете либо пожертвовать временем и размером индексирования ради максимально быстрого в худшем случае поиска (CRC-словарь), либо минимально повлиять на время индексирования, но пожертвовать скоростью в худших случаях, когда префикс расширяется до большого числа ключевых слов (словарь ключевых слов).
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) dict = 'keywords'"
+CREATE TABLE products(title text, price float) dict = 'keywords'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) dict = 'keywords'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
              'dict' => 'keywords'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
@@ -1457,135 +1466,135 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keyw
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  dict = keywords
+utils_api.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  dict = keywords
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### embedded_limit
-embedded_limit = size
 ```
 <!-- end -->
 
-Лимит размера встроенных исключений, словоформ или стоп-слов. Необязательно, по умолчанию 16K.
+### embedded_limit
 
 ```ini
-При создании таблицы вышеуказанные файлы могут быть либо сохранены внешне вместе с таблицей, либо встроены непосредственно в таблицу. Файлы размером меньше `embedded_limit` сохраняются в таблице. Для больших файлов сохраняются только имена файлов. Это также упрощает перенос файлов таблицы на другой компьютер; зачастую достаточно просто скопировать один файл.
+embedded_limit = size
 ```
 
 <!-- example embedded_limit -->
-С меньшими файлами такое встраивание уменьшает количество внешних файлов, от которых зависит таблица, и облегчает обслуживание. Но в то же время нет смысла встраивать словарь wordforms размером 100 МБ в крошечную дельта-таблицу. Поэтому необходим порог по размеру, и `embedded_limit` — это тот самый порог.
+Лимит размера файла встроенных исключений, форм слов или стоп-слов. Опционально, по умолчанию 16К.
 
-table products {
+При создании таблицы указанные выше файлы могут сохраняться либо внешне вместе с таблицей, либо непосредственно в самой таблице. Файлы размером меньше `embedded_limit` сохраняются внутри таблицы. Для больших файлов сохраняются только имена файлов. Это также упрощает перенос файлов таблицы на другой компьютер; зачастую достаточно просто скопировать один файл.
 
-  embedded_limit = 32K
+При небольших файлах такое встраивание уменьшает количество внешних файлов, от которых зависит таблица, и упрощает обслуживание. Однако в то же время нет смысла встраивать словарь словоформ размером 100 МБ в крошечную дельта-таблицу. Поэтому необходим порог размера, и `embedded_limit` является этим порогом.
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  embedded_limit = 32K
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### global_idf
-global_idf = /path/to/global.idf
 ```
 <!-- end -->
 
-Путь к файлу с глобальными (по всему кластеру) IDF ключевых слов. Необязательно, по умолчанию пусто (использовать локальные IDF).
+### global_idf
 
 ```ini
-В многотабличном кластере частоты ключевых слов, скорее всего, будут отличаться в разных таблицах. Это означает, что когда функция ранжирования использует значения на основе TF-IDF, такие как факторы семейства BM25, результаты могут ранжироваться немного по-разному в зависимости от того, на каком узле кластера они находятся.
+global_idf = /path/to/global.idf
 ```
 
 <!-- example global_idf -->
-Самый простой способ исправить эту проблему — создать и использовать глобальный словарь частот, или сокращённо глобальный IDF-файл. Эта директива позволяет указать расположение этого файла. Рекомендуется (но не обязательно) использовать расширение .idf. Когда для данной таблицы указан IDF-файл *и* [OPTION global_idf](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#global_idf) установлен в 1, движок будет использовать частоты ключевых слов и количество документов коллекции из файла global_idf, а не только из локальной таблицы. Таким образом, IDF и значения, зависящие от них, будут оставаться согласованными по всему кластеру.
+Путь к файлу с глобальными (для всего кластера) IDF ключевых слов. Необязательный параметр, по умолчанию пустой (используются локальные IDF).
 
-IDF-файлы могут использоваться несколькими таблицами. Только одна копия IDF-файла будет загружена `searchd`, даже если многие таблицы ссылаются на этот файл. Если содержимое IDF-файла изменится, новые данные можно загрузить с помощью SIGHUP.
+В кластере с несколькими таблицами частоты ключевых слов, скорее всего, будут различаться в разных таблицах. Это означает, что когда функция ранжирования использует значения на основе TF-IDF, такие как семейство факторов BM25, результаты могут ранжироваться немного по-разному в зависимости от того, на каком узле кластера они находятся.
 
-Вы можете создать .idf файл с помощью утилиты [indextool](../../Miscellaneous_tools.md#indextool), сначала выгрузив словари с помощью переключателя `--dumpdict dict.txt --stats`, затем преобразовав их в формат .idf с помощью `--buildidf`, а затем объединив все .idf файлы по всему кластеру с помощью `--mergeidf`.
+Самый простой способ решить эту проблему — создать и использовать глобальный словарь частот или, сокращённо, глобальный файл IDF. Эта директива позволяет указать расположение этого файла. Рекомендуется (но не обязательно) использовать расширение .idf. Когда для данной таблицы указан файл IDF *и* параметр [OPTION global_idf](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#global_idf) установлен в 1, движок будет использовать частоты ключевых слов и количество документов коллекции из файла global_idf, а не только локальной таблицы. Таким образом, IDF и зависящие от них значения останутся согласованными по всему кластеру.
 
-CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'
+Файлы IDF могут использоваться несколькими таблицами совместно. `searchd` загрузит только одну копию файла IDF, даже если на него ссылаются многие таблицы. Если содержимое файла IDF изменится, новое содержимое можно загрузить с помощью SIGHUP.
 
-POST /cli -d "
+Вы можете создать файл .idf с помощью утилиты [indextool](../../Miscellaneous_tools.md#indextool), сначала сдампив словари с использованием ключа `--dumpdict dict.txt --stats`, затем преобразовав их в формат .idf с помощью `--buildidf`, а затем объединив все файлы .idf по кластеру с помощью `--mergeidf`.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'"
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
              'global_idf' => '/usr/local/manticore/var/global.idf'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
@@ -1594,111 +1603,111 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = 
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
-
-```python
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'');
-```
-
-<!-- intro -->
-##### java:
-
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'');
 ```
 <!-- intro -->
-##### C#:
+##### java:
 
 <!-- request Java -->
 
 ```java
+utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  global_idf = /usr/local/manticore/var/global.idf
+utils_api.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  global_idf = /usr/local/manticore/var/global.idf
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### hitless_words
-hitless_words = {all|path/to/file}
 ```
 <!-- end -->
 
-Список слов без позиций (hitless words). Необязательно, допустимые значения — 'all' или имя файла со списком.
+### hitless_words
 
 ```ini
-По умолчанию полнотекстовый индекс Manticore хранит не только список документов, соответствующих каждому ключевому слову, но и список его позиций в документе (известный как hitlist). Hitlist позволяет выполнять поиск по фразам, близости, строгому порядку и другие продвинутые типы поиска, а также ранжирование по близости фраз. Однако hitlist для некоторых часто встречающихся ключевых слов (которые по каким-то причинам нельзя исключить, несмотря на их частоту) может стать очень большим и, следовательно, замедлять обработку запросов. Кроме того, в некоторых случаях нам может быть важен только булевый поиск по ключевым словам, и позиционные операторы поиска (например, поиск по фразам) и ранжирование по фразам не нужны.
+hitless_words = {all|path/to/file}
 ```
 
 <!-- example hitless_words -->
-`hitless_words` позволяет создавать индексы, которые либо вообще не содержат позиционной информации (hitlist), либо пропускают её для определённых ключевых слов.
+Список слов без позиций. Необязательный параметр, допустимые значения: 'all' или имя файла со списком.
 
-Индекс без позиций обычно занимает меньше места, чем соответствующий обычный полнотекстовый индекс (ожидается примерно в 1.5 раза меньше). Индексация и поиск должны быть быстрее, но при этом отсутствует поддержка позиционных запросов и ранжирования.
+По умолчанию полнотекстовый индекс Manticore хранит не только список соответствующих документов для каждого заданного ключевого слова, но и список его позиций в документе (известный как хитлист). Хитлисты позволяют выполнять фразовый, proximity, строгий порядок и другие расширенные типы поиска, а также ранжирование по близости фраз. Однако хитлисты для определённых частых ключевых слов (которые по какой-то причине не могут быть стоп-словами, несмотря на частоту) могут становиться огромными и, следовательно, медленно обрабатываться при выполнении запросов. Кроме того, в некоторых случаях нас может интересовать только булево соответствие ключевых слов, и никогда не потребуются операторы поиска на основе позиций (такие как фразовый поиск) или ранжирование по фразам.
 
-Если такие слова используются в позиционных запросах (например, в запросах по фразам), то слова без позиций исключаются из них и используются как операнды без позиции. Например, если "hello" и "world" — слова без позиций, а "simon" и "says" — с позициями, то фразовый запрос `"simon says hello world"` будет преобразован в `("simon says" & hello & world)`, что означает поиск "hello" и "world" в любом месте документа и точной фразы "simon says".
+`hitless_words` позволяет создавать индексы, которые либо вообще не имеют позиционной информации (хитлистов), либо пропускают её для определённых ключевых слов.
 
-Позиционный запрос, содержащий только слова без позиций, приведёт к пустому узлу фразы, поэтому весь запрос вернёт пустой результат и предупреждение. Если весь словарь без позиций (используется `all`), то на соответствующем индексе можно использовать только булевый поиск.
+Индекс без позиций, как правило, будет занимать меньше места, чем соответствующий обычный полнотекстовый индекс (можно ожидать примерно в 1,5 раза меньше). И индексирование, и поиск должны быть быстрее, за счёт отсутствия поддержки позиционных запросов и ранжирования.
 
-CREATE TABLE products(title text, price float) hitless_words = 'all'
+Если слова без позиций используются в позиционных запросах (например, фразовых запросах), они извлекаются из них и используются как операнд без позиции. Например, если "hello" и "world" являются словами без позиций, а "simon" и "says" — нет, то фразовый запрос `"simon says hello world"` будет преобразован в `("simon says" & hello & world)`, где "hello" и "world" могут находиться в любом месте документа, а "simon says" — как точная фраза.
 
-POST /cli -d "
+Позиционный запрос, содержащий только слова без позиций, приведёт к созданию пустого фразового узла, поэтому весь запрос вернёт пустой результат и предупреждение. Если весь словарь состоит из слов без позиций (с использованием `all`), то в соответствующем индексе можно использовать только булев поиск.
 
 
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) hitless_words = 'all'"
+CREATE TABLE products(title text, price float) hitless_words = 'all'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) hitless_words = 'all'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'hitless_words' => 'all'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
@@ -1707,107 +1716,107 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  hitless_words = all
+utils_api.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  hitless_words = all
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### index_field_lengths
-index_field_lengths = {0|1}
 ```
 <!-- end -->
 
-Включает вычисление и сохранение длин полей (как для каждого документа, так и средних значений по индексу) в полнотекстовом индексе. Необязательно, по умолчанию 0 (не вычислять и не сохранять).
+### index_field_lengths
 
 ```ini
-Когда `index_field_lengths` установлен в 1, Manticore будет:
+index_field_lengths = {0|1}
 ```
 
 <!-- example index_field_lengths -->
-* создавать соответствующий атрибут длины для каждого полнотекстового поля с тем же именем, но с суффиксом `__len`
+Включает вычисление и сохранение длин полей (как для каждого документа, так и средних значений по индексу) в полнотекстовый индекс. Необязательный параметр, по умолчанию 0 (не вычислять и не сохранять).
 
-* вычислять длину поля (в количестве ключевых слов) для каждого документа и сохранять в соответствующий атрибут
-* вычислять средние значения по индексу. Атрибуты длины будут иметь специальный тип TOKENCOUNT, но их значения на самом деле являются обычными 32-битными целыми числами, и к ним обычно можно получить доступ.
-[BM25A()](../../Functions/Searching_and_ranking_functions.md#BM25A%28%29) и [BM25F()](../../Functions/Searching_and_ranking_functions.md#BM25F%28%29) функции в ранжировщике выражений основаны на этих длинах и требуют включения `index_field_lengths`. Исторически Manticore использовал упрощённый, урезанный вариант BM25, который, в отличие от полной функции, **не** учитывал длину документа. Также поддерживается как полный вариант BM25, так и его расширение для нескольких полей, называемое BM25F. Они требуют длины на документ и длины на поле соответственно. Отсюда и дополнительная директива.
-CREATE TABLE products(title text, price float) index_field_lengths = '1'
+Когда `index_field_lengths` установлен в 1, Manticore будет:
+* создавать соответствующий атрибут длины для каждого полнотекстового поля, используя то же имя, но с суффиксом `__len`
+* вычислять длину поля (в количестве ключевых слов) для каждого документа и сохранять её в соответствующий атрибут
+* вычислять средние значения по индексу. Атрибуты длин будут иметь специальный тип TOKENCOUNT, но их значения фактически являются обычными 32-битными целыми числами, и их значения, как правило, доступны.
 
-POST /cli -d "
+[BM25A()](../../Functions/Searching_and_ranking_functions.md#BM25A%28%29) и [BM25F()](../../Functions/Searching_and_ranking_functions.md#BM25F%28%29) функции в ранжировщике выражений основаны на этих длинах и требуют включения `index_field_lengths`. Исторически Manticore использовал упрощённый, урезанный вариант BM25, который, в отличие от полной функции, **не** учитывал длину документа. Также поддерживаются как полный вариант BM25, так и его расширение для нескольких полей, называемое BM25F. Они требуют длину на документ и длины на поле соответственно. Отсюда и дополнительная директива.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) index_field_lengths = '1'"
+CREATE TABLE products(title text, price float) index_field_lengths = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) index_field_lengths = '1'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'index_field_lengths' => '1'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
@@ -1816,101 +1825,101 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_l
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
-
-```python
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'');
-```
-
-<!-- intro -->
-##### java:
-
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'');
 ```
 <!-- intro -->
-##### C#:
+##### java:
 
 <!-- request Java -->
 
 ```java
+utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  index_field_lengths = 1
+utils_api.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  index_field_lengths = 1
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### index_token_filter
-index_token_filter = my_lib.so:custom_blend:chars=@#&
 ```
 <!-- end -->
 
-Фильтр токенов во время индексации для полнотекстового индексирования. Опционально, по умолчанию пусто.
+### index_token_filter
 
 ```ini
-Директива index_token_filter задаёт опциональный фильтр токенов во время индексации для полнотекстового индексирования. Эта директива используется для создания пользовательского токенизатора, который формирует токены согласно пользовательским правилам. Фильтр создаётся индексатором при индексации исходных данных в обычную таблицу или RT-таблицей при обработке операторов `INSERT` или `REPLACE`. Плагины определяются в формате `имя_библиотеки:имя_плагина:опциональная_строка_настроек`. Например, `my_lib.so:custom_blend:chars=@#&`.
+index_token_filter = my_lib.so:custom_blend:chars=@#&
 ```
 
 <!-- example index_token_filter -->
-CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'
+Фильтр токенов во время индексации для полнотекстового индексирования. Необязательно, по умолчанию пусто.
 
-POST /cli -d "
+Директива index_token_filter задаёт необязательный фильтр токенов во время индексации для полнотекстового индексирования. Эта директива используется для создания кастомного токенизатора, который формирует токены по заданным правилам. Фильтр создаётся индексатором при индексации исходных данных в обычную таблицу или RT таблицей при обработке операторов `INSERT` или `REPLACE`. Плагины задаются в формате `имя_библиотеки:имя_плагина:опциональная_строка_настроек`. Например, `my_lib.so:custom_blend:chars=@#&`.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
+CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'index_token_filter' => 'my_lib.so:custom_blend:chars=@#&'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
@@ -1919,99 +1928,99 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_f
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
-
-```python
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'');
-```
-
-<!-- intro -->
-##### java:
-
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'');
 ```
 <!-- intro -->
-##### C#:
+##### java:
 
 <!-- request Java -->
 
 ```java
+utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  index_token_filter = my_lib.so:custom_blend:chars=@#&
+utils_api.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  index_token_filter = my_lib.so:custom_blend:chars=@#&
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### overshort_step
-overshort_step = {0|1}
 ```
 <!-- end -->
 
-Инкремент позиции для слишком коротких (меньше [min_word_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)) ключевых слов. Опционально, допустимые значения 0 и 1, по умолчанию 1.
+### overshort_step
 
 ```ini
-CREATE TABLE products(title text, price float) overshort_step = '1'
+overshort_step = {0|1}
 ```
 
 <!-- example overshort_step -->
-POST /cli -d "
+Приращение позиции при слишком коротких (меньше [min_word_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)) ключевых словах. Необязательно, допустимые значения — 0 и 1, по умолчанию 1.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) overshort_step = '1'"
+CREATE TABLE products(title text, price float) overshort_step = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) overshort_step = '1'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'overshort_step' => '1'
         ]);
+```
+<!-- intro -->
 ##### Python:
+
+<!-- request Python -->
+
+```python
 utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
 ```
+
 <!-- intro -->
 ##### Python-asyncio:
 
-<!-- request Python -->
+<!-- request Python-asyncio -->
 
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
@@ -2020,93 +2029,86 @@ utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  overshort_step = 1
+utils_api.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  overshort_step = 1
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### phrase_boundary
-phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 ```
 <!-- end -->
 
-Список символов границ фраз. Опционально, по умолчанию пусто.
+### phrase_boundary
 
 ```ini
-Этот список контролирует, какие символы будут рассматриваться как границы фраз, чтобы корректировать позиции слов и включить эмуляцию поиска на уровне фраз через поиск по близости. Синтаксис похож на [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), но отображения не разрешены, и символы границ не должны пересекаться с чем-либо ещё.
+phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 ```
 
 <!-- example phrase_boundary -->
-На границе фразы к текущей позиции слова будет добавлен дополнительный инкремент позиции слова (указанный в [phrase_boundary_step](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)). Это позволяет выполнять поиск на уровне фраз через запросы по близости: слова из разных фраз гарантированно будут находиться на расстоянии больше phrase_boundary_step друг от друга; таким образом, поиск по близости в пределах этого расстояния будет эквивалентен поиску на уровне фраз.
+Список символов границ фразы. Необязательно, по умолчанию пусто.
 
-Условие границы фразы будет срабатывать только если за таким символом следует разделитель; это сделано, чтобы избежать обработки сокращений типа S.T.A.L.K.E.R или URL как нескольких фраз.
+Этот список контролирует, какие символы будут рассматриваться как границы фразы, чтобы корректировать позиции слов и позволить эмулировать поиск по фразам через поиск по близости. Синтаксис похож на [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), но отображения не разрешены, и символы границ не должны пересекаться с другими символами.
 
-CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'
+При обнаружении границы фразы к текущей позиции слова будет добавлено дополнительное приращение позиции (указывается директивой [phrase_boundary_step](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)). Это позволяет выполнять поиск по фразам посредством запросов по близости: слова в разных фразах гарантированно будут отстоять друг от друга на расстояние больше, чем phrase_boundary_step; соответственно, поиск по близости в этом диапазоне будет эквивалентен поиску по фразам.
 
-POST /cli -d "
+Условие границы фразы будет выполнено только если за таким символом следует разделитель; это сделано для предотвращения разбиения сокращений типа S.T.A.L.K.E.R или URL на несколько фраз.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
+CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -2114,14 +2116,21 @@ $index->create([
              'phrase_boundary' => '., ?, !, U+2026',
              'phrase_boundary_step' => '10'
         ]);
-##### Python:
-utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
 
 ```
 <!-- intro -->
-##### Pytho-asyncio:
+##### Python:
 
 <!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
+```
+
+<!-- intro -->
+##### Pytho-asyncio:
+
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
@@ -2130,89 +2139,82 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_bounda
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
-
-```python
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'');
-```
-
-<!-- intro -->
-##### java:
-
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'');
 ```
 <!-- intro -->
-##### C#:
+##### java:
 
 <!-- request Java -->
 
 ```java
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  phrase_boundary = ., ?, !, U+2026
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  phrase_boundary = ., ?, !, U+2026
   phrase_boundary_step = 10
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### phrase_boundary_step
-phrase_boundary_step = 100
 ```
 <!-- end -->
 
-Инкремент позиции слова на границе фразы. Опционально, по умолчанию 0.
+### phrase_boundary_step
 
 ```ini
-На границе фразы текущая позиция слова будет дополнительно увеличена на это число.
+phrase_boundary_step = 100
 ```
 
 <!-- example phrase_boundary_step -->
-CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'
+Приращение позиции слова на границе фразы. Необязательно, по умолчанию 0.
 
-POST /cli -d "
+При попадании на границу фразы текущая позиция слова дополнительно увеличится на это число.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
+CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
@@ -2220,14 +2222,21 @@ $index->create([
              'phrase_boundary_step' => '100',
              'phrase_boundary' => '., ?, !, U+2026'
         ]);
-##### Python:
-utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
 
 ```
 <!-- intro -->
-##### Python-asyncio:
+##### Python:
 
 <!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
@@ -2236,111 +2245,111 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_bounda
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
-
-```python
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'');
-```
-
-<!-- intro -->
-##### java:
-
 <!-- request javascript -->
 
 ```javascript
-utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'');
 ```
 <!-- intro -->
-##### C#:
+##### java:
 
 <!-- request Java -->
 
 ```java
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  phrase_boundary_step = 100
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  phrase_boundary_step = 100
   phrase_boundary = ., ?, !, U+2026
+
   type = rt
   path = tbl
-
   rt_field = title
   rt_attr_uint = price
 }
-### regexp_filter
-# index '13"' as '13inch'
 ```
 <!-- end -->
 
-regexp_filter = \b(\d+)\" => \1inch
+### regexp_filter
 
 ```ini
+# index '13"' as '13inch'
+regexp_filter = \b(\d+)\" => \1inch
+
 # index 'blue' or 'red' as 'color'
 regexp_filter = (blue|red) => color
-
-Регулярные выражения (regexps), используемые для фильтрации полей и запросов. Эта директива является необязательной, может принимать несколько значений, и по умолчанию представляет собой пустой список регулярных выражений. Движок регулярных выражений, используемый в Manticore Search, — это RE2 от Google, известный своей скоростью и безопасностью. Для подробной информации о синтаксисе, поддерживаемом RE2, вы можете посетить [руководство по синтаксису RE2](https://github.com/google/re2/wiki/Syntax).
-В некоторых приложениях, таких как поиск товаров, может быть много способов обозначить продукт, модель или свойство. Например, `iPhone 3gs` и `iPhone 3 gs` (или даже `iPhone3 gs`) с большой вероятностью относятся к одному и тому же продукту. Другой пример — различные способы указания размера экрана ноутбука, такие как `13-inch`, `13 inch`, `13"`, или `13in`.
 ```
 
 <!-- example regexp_filter -->
-Регулярные выражения предоставляют механизм для задания правил, адаптированных для обработки таких случаев. В первом примере вы могли бы использовать файл wordforms для обработки нескольких моделей iPhone, но во втором примере лучше задать правила, которые нормализуют "13-inch" и "13in" к одному и тому же виду.
+Регулярные выражения (регекспы), используемые для фильтрации полей и запросов. Эта директива является необязательной, много значной, и по умолчанию содержит пустой список регулярных выражений. Механизм регулярных выражений, используемый Manticore Search, — это Google's RE2, известный своей скоростью и безопасностью. Для подробной информации о поддерживаемом синтаксисе RE2 вы можете посетить [руководство по синтаксису RE2](https://github.com/google/re2/wiki/Syntax).
 
-Регулярные выражения, перечисленные в `regexp_filter`, применяются в том порядке, в котором они указаны, на самом раннем этапе, до любой другой обработки (включая [исключения](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)), даже до токенизации. То есть, регулярные выражения применяются к исходным полям при индексации и к исходному тексту поискового запроса при поиске.
+В некоторых приложениях, таких как поиск товаров, может быть множество способов указать продукт, модель или характеристику. Например, `iPhone 3gs` и `iPhone 3 gs` (или даже `iPhone3 gs`) с большой вероятностью относятся к одному и тому же продукту. Другой пример — различные способы обозначения размера экрана ноутбука, такие как `13-inch`, `13 inch`, `13"`, или `13in`.
 
-CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'
+Регулярные выражения предоставляют механизм для задания правил, адаптированных к таким случаям. В первом примере возможно использовать файл wordforms для обработки нескольких моделей iPhone, а во втором примере лучше задать правила, которые нормализуют "13-inch" и "13in" к чему-то одинаковому.
 
-POST /cli -d "
+Регулярные выражения, перечисленные в `regexp_filter`, применяются в том порядке, в каком они перечислены, на самом раннем этапе, до любой другой обработки (включая [исключения](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)), даже до токенизации. То есть, регекспы применяются к исходным полям при индексации и к исходному тексту поискового запроса при поиске.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'"
+CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'
 ```
 
 <!-- request JSON -->
 
 ```JSON
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
+POST /cli -d "
+CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'"
 ```
 
 <!-- request PHP -->
 
 ```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
 $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
             'regexp_filter' => '(blue|red) => color'
         ]);
-##### Python:
-utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
 
 ```
 <!-- intro -->
-##### Python-asyncio:
+##### Python:
 
 <!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
 
 ```python
 await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
@@ -2349,61 +2358,52 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter
 <!-- intro -->
 ##### Javascript:
 
-<!-- request Python-asyncio -->
+<!-- request javascript -->
 
-```python
+```javascript
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'');
 ```
 
 <!-- intro -->
 ##### java:
 
-<!-- request javascript -->
+<!-- request Java -->
 
-```javascript
+```java
 utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 
-<!-- request Java -->
+<!-- request C# -->
 
-```java
+```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
 ```
 
 <!-- intro -->
 ##### Rust:
 
-<!-- request C# -->
-
-```clike
-utils_api.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", Some(true)).await;
-```
-
-<!-- intro -->
-table products {
-
 <!-- request Rust -->
 
 ```rust
-  # index '13"' as '13inch'
+utils_api.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
+table products {
+  # index '13"' as '13inch'
   regexp_filter = \b(\d+)\" => \1inch
+
   # index 'blue' or 'red' as 'color'
   regexp_filter = (blue|red) => color
 
   type = rt
   path = tbl
-
   rt_field = title
-  rt_attr_uint = price
-}
   rt_attr_uint = price
 }
 ```

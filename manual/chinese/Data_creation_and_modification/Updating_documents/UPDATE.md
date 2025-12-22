@@ -2,15 +2,15 @@
 
 <!-- example update -->
 
-`UPDATE` 命令用于将指定表中现有文档的[行式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)属性值更改为新值。请注意，您不能更新全文字段或列式属性的内容。如果有此类需求，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
+`UPDATE` 命令用于更改指定表中现有文档的[行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)属性值。请注意，您无法更新全文字段或列式存储属性的内容。如果有此需求，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
 
-属性更新支持 RT、PQ 和普通表。只要属性存储在[行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，所有属性类型都可以更新。
+RT、PQ 和普通表均支持属性更新。只要属性存储在[行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，所有属性类型都可以更新。
 
-请注意，文档 ID 不能被更新。
+请注意，文档 ID 无法更新。
 
-需要注意的是，更新属性会禁用其[二级索引](../../Server_settings/Searchd.md#secondary_indexes)。如果维护二级索引的连续性至关重要，请考虑完全或[部分替换](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET)文档。
+需要特别注意的是，更新属性会禁用其[二级索引](../../Server_settings/Searchd.md#secondary_indexes)。如果保持二级索引的连续性至关重要，请考虑完全或[部分替换](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET)文档。
 
-关于 `UPDATE` 与部分 `REPLACE` 的更多信息，请参见[这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
+有关 `UPDATE` 与部分 `REPLACE` 的更多信息，请阅读[此处](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
 
 <!-- intro -->
 ##### SQL:
@@ -223,7 +223,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- example update multiple attributes -->
 
-单条语句中可以更新多个属性。示例：
+可以在单个语句中更新多个属性。例如：
 
 <!-- intro -->
 ##### SQL:
@@ -474,11 +474,11 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- end -->
 
-当给 32 位属性赋予超出范围的值时，它们会被截断为其低 32 位，且不会有提示。例如，如果您尝试用值 4294967297 更新 32 位无符号整数，实际存储的值将是 1，因为 4294967297（十六进制为 0x100000001）的低 32 位是 1（十六进制为 0x00000001）。
+当为 32 位属性分配超出范围的值时，这些值将被静默截断为其低 32 位。例如，如果您尝试用值 4294967297 更新 32 位无符号整数，实际存储的值将是 1，因为 4294967297（十六进制为 0x100000001）的低 32 位等于 1（十六进制为 0x00000001）。
 
 <!-- example partial JSON update -->
 
-`UPDATE` 可用于对数值数据类型或数值数据类型数组执行部分 JSON 更新。只需确保不要用浮点数值更新整数值，因为浮点数会被四舍五入。
+`UPDATE` 可用于对数值数据类型或数值数据类型的数组执行部分 JSON 更新。只需确保不要用浮点值更新整数值，因为它会被四舍五入。
 
 <!-- intro -->
 ##### SQL:
@@ -1076,7 +1076,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- example cluster update -->
 
-When using replication, the table name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP, you should set a `cluster` property. See [setting up replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more information.
+当使用复制时，表名应在 SQL 中以 `cluster_name:` 前缀，以便更新将传播到集群中的所有节点。对于通过 HTTP 的查询，应设置一个 `cluster` 属性。有关更多详细信息，请参阅 [设置复制](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)。
 
 ```json
 {
@@ -1214,20 +1214,20 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- end -->
 
 
-## Updates via SQL
+## 通过 SQL 更新
 
-Here is the syntax for the SQL `UPDATE` statement:
+以下是 SQL `UPDATE` 语句的语法：
 
 ```sql
 UPDATE table SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]] [FORCE|IGNORE INDEX(id)]
 ```
 
 
-`where_condition` has the same syntax as in the [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement.
+`where_condition` 的语法与 [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) 语句相同。
 
 <!-- example MVA empty update -->
 
-Multi-value attribute value sets must be specified as comma-separated lists in parentheses. To remove all values from a multi-value attribute, just assign `()` to it.
+多值属性值集必须作为逗号分隔的列表在括号中指定。要从多值属性中删除所有值，只需将其设置为 `()`。
 
 <!-- intro -->
 ##### SQL:
@@ -1441,27 +1441,27 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- end -->
 
 
-`OPTION` clause is a Manticore-specific extension that lets you control a number of per-update options. The syntax is:
+`OPTION` 子句是 Manticore 特定的扩展，允许您控制每次更新的选项。语法如下：
 
 ```sql
 OPTION <optionname>=<value> [ , ... ]
 ```
 
-The options are the same as for the [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for the `UPDATE` statement, you can use these options:
+选项与 [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) 语句相同。特别是对于 `UPDATE` 语句，您可以使用这些选项：
 
-*   'ignore_nonexistent_columns' - If set to **1**, it indicates that the update will silently ignore any warnings about trying to update a column which does not exist in the current table schema. The default value is **0**.
-*   'strict' - This option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will result in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0, if multiple properties are updated and some are not allowed, the `UPDATE` will not result in an error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` re permitted, the command will result in an error even with strict=0.
+*   'ignore_nonexistent_columns' - 如果设置为 **1**，则表示更新将静默忽略任何关于尝试更新当前表模式中不存在的列的警告。默认值为 **0**。
+*   'strict' - 此选项用于部分 JSON 属性更新。默认情况下（strict=1），`UPDATE` 将在 `UPDATE` 查询尝试对非数值属性进行更新时导致错误。strict=0 时，如果多个属性被更新且某些属性不允许更新，则 `UPDATE` 将不会导致错误，而是仅对允许的属性进行更改（其余属性将被忽略）。如果 `UPDATE` 的 `SET` 变化中没有任何允许的更改，则即使 strict=0，命令也会导致错误。
 
-### Query optimizer hints
+### 查询优化器提示
 
-In rare cases, Manticore's built-in query analyzer may be incorrect in understanding a query and determining whether a table by ID should be used. This can result in poor performance for queries like `UPDATE ... WHERE id = 123`.
-For information on how to force the optimizer to use a docid index, see [Query optimizer hints](../../Searching/Options.md#Query optimizer hints).
+在极少数情况下，Manticore 的内置查询分析器可能无法正确理解查询并确定是否应使用 ID 表。这可能导致类似 `UPDATE ... WHERE id = 123` 的查询性能不佳。
+有关如何强制优化器使用 docid 索引的信息，请参阅 [查询优化器提示](../../Searching/Options.md#Query optimizer hints)。
 
-## Updates via HTTP JSON
+## 通过 HTTP JSON 更新
 
-Updates using HTTP JSON protocol are performed via the `/update` endpoint. The syntax is similar to the [/insert endpoint](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but this time the `doc` property is mandatory.
+使用 HTTP JSON 协议的更新是通过 `/update` 端点执行的。语法类似于 [/insert 端点](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)，但这次 `doc` 属性是必需的。
 
-The server will respond with a JSON object stating if the operation was successful or not.
+服务器将返回一个 JSON 对象，说明操作是否成功。
 
 <!-- example JSON update -->
 
@@ -1496,7 +1496,7 @@ POST /update
 
 <!-- example JSON Example_2 -->
 
-The ID of the document that needs to be updated can be set directly using the `id` property, as shown in the previous example, or you can update documents by query and apply the update to all the documents that match the query:
+需要更新的文档的 ID 可以直接使用 `id` 属性设置，如上一个示例所示，或者可以通过查询更新文档，并将更新应用于匹配查询的所有文档：
 
 <!-- intro -->
 ##### JSON:
@@ -1530,7 +1530,7 @@ POST /update
 
 <!-- end -->
 
-查询语法与[/search endpoint](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)中的相同。请注意，不能同时指定`id`和`query`。
+查询语法与 [/search 端点](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 相同。请注意，您不能同时指定 `id` 和 `query`。
 
 ## 刷新属性
 
@@ -1538,7 +1538,7 @@ POST /update
 FLUSH ATTRIBUTES
 ```
 
-FLUSH ATTRIBUTES命令确保所有活动表中内存中的属性更新都被刷新到磁盘。它返回一个标记，标识结果的磁盘状态，该标记表示自服务器启动以来实际执行的磁盘属性保存次数。
+The FLUSH ATTRIBUTES 命令确保所有活动表中的内存属性更新都被刷新到磁盘。它返回一个标识结果磁盘状态的标签，该状态代表自服务器启动以来实际执行的磁盘属性保存次数。
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1552,18 +1552,18 @@ mysql> FLUSH ATTRIBUTES;
 +------+
 1 row in set (0.19 sec)
 ```
-另请参见[attr_flush_period](../../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period)设置。
+参见 [attr_flush_period](../../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) 设置。
 
 
 ## 批量更新
 
 <!-- example bulk update -->
 
-您可以使用`/bulk`端点在一次调用中执行多个更新操作。此端点仅适用于`Content-Type`设置为`application/x-ndjson`的数据。数据应格式化为换行分隔的JSON（NDJSON）。本质上，这意味着每行应包含一个JSON语句，并以换行符`\n`结束，可能还有`\r`。
+您可以使用 `/bulk` 端点在一个调用中执行多个更新操作。此端点仅适用于 `Content-Type` 设置为 `application/x-ndjson` 的数据。数据应格式化为新行分隔的 JSON（NDJSON）。这意味着每行应包含恰好一个 JSON 语句，并以新行 `\n` 结尾，可能还有 `\r`。
 
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON --Content-type=application/x-ndjson -->
 
@@ -1603,21 +1603,21 @@ POST /bulk
 
 <!-- end -->
 
-`/bulk`端点支持插入、替换和删除。每个语句以操作类型开始（此处为`update`）。以下是支持的操作列表：
+`/bulk` 端点支持插入、替换和删除。每个语句以动作类型开始（在这种情况下，`update`）。以下是受支持的动作列表：
 
-* `insert`：插入文档。语法与[/insert endpoint](../../Quick_start_guide.md#Add-documents)相同。
-* `create`：`insert`的同义词
-* `replace`：替换文档。语法与[/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md)相同。
-* `index`：`replace`的同义词
-* `update`：更新文档。语法与[/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON)相同。
-* `delete`：删除文档。语法与[/delete endpoint](../../Data_creation_and_modification/Deleting_documents.md)相同。
+* `insert`：插入文档。语法与 [/insert 端点](../../Quick_start_guide.md#Add-documents) 相同。
+* `create`：`insert` 的同义词
+* `replace`：替换文档。语法与 [/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 相同。
+* `index`：`replace` 的同义词
+* `update`：更新文档。语法与 [/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) 相同。
+* `delete`：删除文档。语法与 [/delete 端点](../../Data_creation_and_modification/Deleting_documents.md) 相同。
 
-也支持通过查询进行更新和删除。
+还支持通过查询进行更新和通过查询进行删除。
 
 <!-- example bulk by query -->
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON --Content-type=application/x-ndjson -->
 
@@ -1653,7 +1653,7 @@ POST /bulk
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -1706,7 +1706,7 @@ Array(
 
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -1725,7 +1725,7 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -1744,7 +1744,7 @@ await indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request javascript -->
 ``` javascript
@@ -1761,7 +1761,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- intro -->
-##### java:
+##### Java：
 
 <!-- request Java -->
 ``` java
@@ -1780,7 +1780,7 @@ class BulkResponse {
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -1799,7 +1799,7 @@ class BulkResponse {
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -1904,7 +1904,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 
 
 
-请注意，批量操作将在遇到第一个错误的查询时停止。
+请记住，如果批量操作在导致错误的第一个查询处停止。
 
 ## 与更新相关的设置
 
@@ -1915,15 +1915,15 @@ attr_update_reserve=size
 ```
 
 <!-- example attr_update_reserve -->
-`attr_update_reserve`是每个表的设置，用于确定为blob属性更新保留的空间。此设置是可选的，默认值为128k。
+`attr_update_reserve` 是一个针对每个表的设置，用于确定为二进制大对象属性更新保留的空间。此设置是可选的，默认值为 128k。
 
-当blob属性（MVAs、字符串、JSON）被更新时，其长度可能会变化。如果更新后的字符串（或MVA，或JSON）比旧的短，则会覆盖`.spb`文件中的旧内容。然而，如果更新后的字符串更长，更新将写入`.spb`文件的末尾。该文件是内存映射的，这意味着根据操作系统对内存映射文件的实现，调整其大小可能是一个相当缓慢的过程。
+当二进制大对象属性（MVA、字符串、JSON）更新时，它们的长度可能会改变。如果更新后的字符串（或 MVA 或 JSON）比旧字符串短，则会覆盖 `.spb` 文件中的旧字符串。但是，如果更新后的字符串更长，则更新将写入 `.spb` 文件的末尾。此文件是内存映射的，这意味着调整其大小可能是一个相当慢的过程，具体取决于操作系统实现的内存映射文件。
 
-为了避免频繁调整大小，您可以使用此选项指定在`.spb`文件末尾保留的额外空间。
+为了避免频繁调整大小，可以使用此选项指定在 `.spb` 文件末尾保留的额外空间。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -1957,7 +1957,7 @@ $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -1966,7 +1966,7 @@ utilsApi.sql('create table products(title text, price float) attr_update_reserve
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -1975,7 +1975,7 @@ await utilsApi.sql('create table products(title text, price float) attr_update_r
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request javascript -->
 
@@ -1984,28 +1984,28 @@ res = await utilsApi.sql('create table products(title text, price float) attr_up
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 <!-- request Java -->
 ```java
 utilsApi.sql("create table products(title text, price float) attr_update_reserve = '1M'", true);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 <!-- request C# -->
 ```clike
 utilsApi.Sql("create table products(title text, price float) attr_update_reserve = '1M'", true);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 <!-- request Rust -->
 ```rust
 utils_api.sql("create table products(title text, price float) attr_update_reserve = '1M'", Some(true)).await;
 ```
 
 <!-- intro -->
-##### TypeScript:
+##### TypeScript：
 
 <!-- request TypeScript -->
 
@@ -2014,7 +2014,7 @@ utilsApi.sql("create table test(content text, name string, cat int) attr_update_
 ```
 
 <!-- intro -->
-##### Go:
+##### Go：
 
 <!-- request Go -->
 
@@ -2042,7 +2042,7 @@ table products {
 attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 
-更新属性时，变更首先写入属性的内存副本。此设置允许设置刷新更新到磁盘的间隔。默认值为0，表示禁用周期性刷新，但在正常关闭时仍会进行刷新。
+在更新属性时，更改首先被写入属性的内存副本。此设置允许设置将更新刷新到磁盘之间的间隔。默认值为 0，这禁用了周期性刷新，但刷新仍会在正常关闭时发生。
 
 <!-- proofread -->
 

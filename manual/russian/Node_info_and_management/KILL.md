@@ -5,7 +5,7 @@
 KILL <query id>
 ```
 
-`KILL` завершает выполнение запроса по его ID, который вы можете найти в [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).
+`KILL` завершает выполнение запроса по его идентификатору, который вы можете найти в [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).
 
 <!-- request SQL -->
 ```sql

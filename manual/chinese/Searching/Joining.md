@@ -1,6 +1,6 @@
-# 连接表
+# Joining tables
 
-Manticore Search 中的表连接使您能够通过匹配相关列来组合两个表中的文档。此功能允许更复杂的查询和跨多个表的增强数据检索。
+表连接在Manticore Search中允许您通过匹配相关列将两个表中的文档合并。此功能允许执行更复杂的查询并增强跨多个表的数据检索。
 
 ## 通用语法
 
@@ -18,7 +18,7 @@ join_condition: {
 	left_table.attr = right_table.attr
 	| left_table.json_attr.string_id = string(right_table.json_attr.string_id)
 	| left_table.json_attr.int_id = int(right_table.json_attr.int_id)
-	| [..右表属性上的过滤器]
+	| [..filters on right table attributes]
 }
 ```
 
@@ -26,7 +26,7 @@ join_condition: {
 
 <!--example join_sql_json_type -->
 
-当通过 JSON 属性中的值进行连接时，您需要使用 `int()` 或 `string()` 函数显式指定该值的类型。
+当通过JSON属性的值进行连接时，您需要显式指定该值的类型，使用`int()`或`string()`函数。
 
 <!-- request String JSON attribute -->
 ```sql
@@ -82,7 +82,7 @@ on.type: {
 	| string
 }
 ```
-注意，`left` 操作数部分中有一个 `type` 字段，当使用 json 属性连接两个表时应使用。允许的值为 `string` 和 `int`。
+注意，在`left`操作数部分有`type`字段，您应该在使用json属性连接两个表时使用它。允许的值为`string`和`int`。
 
 ## 连接类型
 
@@ -90,7 +90,7 @@ Manticore Search 支持两种类型的连接：
 
 <!-- example inner_basic -->
 
-1. **INNER JOIN**：仅返回两个表中都有匹配的行。例如，该查询在 `orders` 和 `customers` 表之间执行 INNER JOIN，仅包含具有匹配客户的订单。
+1. **INNER JOIN**：仅返回在两个表中都有匹配的行。例如，查询在`orders`和`customers`表之间执行INNER JOIN，仅包括匹配的订单。
 
 <!-- request SQL -->
 ```sql
@@ -184,7 +184,7 @@ POST /search
 
 <!-- example left_basic -->
 
-2. **LEFT JOIN**：返回左表中的所有行以及右表中匹配的行。如果没有匹配，则右表的列返回 NULL 值。例如，此查询使用 LEFT JOIN 检索所有客户及其对应的订单。如果不存在对应订单，则显示 NULL 值。结果按客户的电子邮件排序，仅选择客户的姓名和订单数量。
+2. **LEFT JOIN**：返回左表的所有行以及右表的匹配行。如果没有匹配，则右表的列返回NULL值。例如，此查询使用LEFT JOIN检索所有客户及其相应的订单。如果没有相应的订单，则会出现NULL值。结果按客户的电子邮件排序，并仅选择客户的姓名和订单数量。
 
 <!-- request SQL -->
 ```sql
@@ -360,11 +360,11 @@ POST /search
 
 ## 跨连接表的全文匹配
 
-Manticore Search 表连接的强大功能之一是能够同时对左表和右表执行全文搜索。这允许您创建基于多个表中文本内容过滤的复杂查询。
+Manticore Search 中表连接的一个强大功能是能够在连接的两个表中同时执行全文搜索。这允许您创建基于多个表中的文本内容的复杂查询。
 
 <!-- example fulltext_basic -->
 
-您可以在 JOIN 查询中为每个表使用单独的 `MATCH()` 函数。查询基于两个表中的文本内容过滤结果。
+您可以为 JOIN 查询中的每个表单独使用 `MATCH()` 函数。查询根据两个表中的文本内容过滤结果。
 
 <!-- request SQL -->
 ```sql
@@ -445,15 +445,15 @@ POST /search
 
 <!-- end -->
 
-### 连接的 JSON 查询结构
+### 连接的JSON查询结构
 
-在 JSON API 查询中，特定表的全文匹配结构与 SQL 不同：
+在JSON API查询中，表特定的全文匹配与SQL不同：
 
 <!-- example fulltext_json_structure -->
 
-**主表查询**：根级别的 `"query"` 字段应用于主表（在 `"table"` 中指定）。
+**主表查询**：根级别上的 `"query"` 字段应用于主表（在 `"table"` 中指定）。
 
-**连接表查询**：每个连接定义可以包含其自己的 `"query"` 字段，专门应用于该连接表。
+**连接表查询**：每个连接定义可以包括其自己的 `"query"` 字段，专门应用于该连接表。
 
 <!-- request JSON -->
 ```json
@@ -517,11 +517,11 @@ POST /search
 
 <!-- end -->
 
-### 理解 JOIN 操作中的查询行为
+### 理解连接操作中的查询行为
 
 <!-- example fulltext_json_behavior -->
 
-**1. 仅主表查询**：返回主表中所有匹配的行。对于未匹配的连接记录（LEFT JOIN），SQL 返回 NULL 值，而 JSON API 返回默认值（数字为 0，文本为空字符串）。
+**1. 仅在主表上查询**：返回主表中所有匹配的行。对于未匹配的连接记录（LEFT JOIN），SQL返回NULL值，而JSON API返回默认值（数字为0，文本为空字符串）。
 
 <!-- request SQL -->
 ```sql
@@ -648,36 +648,36 @@ POST /search
 ```
 <!-- end -->
 
-**3. JOIN 类型影响过滤**：INNER JOIN 需要同时满足连接和查询条件，而 LEFT JOIN 即使右表条件不满足，也返回匹配的左表行。
+**3. 连接类型影响过滤**：INNER JOIN 要求同时满足连接和查询条件，而LEFT JOIN即使右表条件失败也会返回匹配的左表行。
 
 
-### JOIN 中全文匹配的重要注意事项
+### 使用连接中的全文匹配的重要注意事项
 
-使用连接进行全文匹配时，请注意以下几点：
+在使用连接中的全文匹配时，请注意以下几点：
 
-1. **特定表匹配**：
-   - **SQL**：每个 `MATCH()` 函数应指定搜索的表：`MATCH('term', table_name)`
-   - **JSON**：主表使用根级 `"query"`，连接表使用各自连接定义内的 `"query"`
+1. **表特定匹配**：
+   - **SQL**：每个 `MATCH()` 函数应指定要搜索的表：`MATCH('term', table_name)`
+   - **JSON**：使用根级的 `"query"` 用于主表，并在每个连接定义中的 `"query"` 用于连接表
 
-2. **查询语法灵活性**：JSON API 支持全文查询的 `"query_string"` 和 `"match"` 语法
+2. **查询语法灵活性**：JSON API 支持 `"query_string"` 和 `"match"` 两种全文查询语法
 
-3. **性能影响**：对两个表进行全文匹配可能影响查询性能，尤其是大数据集。请考虑使用适当的索引和批处理大小。
+3. **性能影响**：在两个表上执行全文匹配可能会影响查询性能，特别是在大数据集上。考虑使用适当的索引和批次大小。
 
-4. **NULL/默认值处理**：使用 LEFT JOIN 时，如果右表无匹配记录，查询优化器会根据性能决定先评估全文条件还是过滤条件。SQL 返回 NULL 值，JSON API 返回默认值（数字为 0，文本为空字符串）。
+4. **NULL/默认值处理**：使用LEFT JOIN时，如果右表中没有匹配记录，查询优化器将根据性能决定是否先评估全文条件还是过滤条件。SQL返回NULL值，而JSON API返回默认值（数字为0，文本为空字符串）。
 
-5. **过滤行为**：连接表上的查询作为过滤器——限制结果为同时满足连接和查询条件的记录。
+5. **过滤行为**：连接表上的查询作为过滤器 - 它们限制结果为同时满足连接和查询条件的记录。
 
-6. **全文操作符支持**：JOIN 查询支持所有[全文操作符](../Searching/Full_text_matching/Operators.md)，包括短语、邻近、字段搜索、NEAR、法定人数匹配和高级操作符。
+6. **全文运算符支持**：所有[全文运算符](../Searching/Full_text_matching/Operators.md)都支持在连接查询中使用，包括短语、接近、字段搜索、NEAR、共识匹配和高级运算符。
 
-7. **评分计算**：每个表维护自己的相关性评分，可通过 SQL 中的 `table_name.weight()` 或 JSON 响应中的 `table_name._score` 访问。
+7. **评分计算**：每个表都维护自己的相关性评分，可通过SQL中的 `table_name.weight()` 或JSON响应中的 `table_name._score` 访问。
 
-## 示例：带分面功能的复杂 JOIN
+## 示例：复杂的连接与分面
 
-基于前面的示例，让我们探索一个更高级的场景，将表连接与分面和跨多个表的全文匹配结合起来。这展示了 Manticore JOIN 功能在复杂过滤和聚合中的全部威力。
+在前面的示例基础上，让我们探索一个更高级的场景，其中我们将表连接与跨多个表的全文匹配和分面结合。这展示了Manticore连接功能的全部力量，包括复杂的过滤和聚合。
 
 <details>
 
-以下示例的初始化查询：
+初始化以下示例的查询：
 
 ```
 drop table if exists customers; drop table if exists orders; create table customers(name text, email text, address text); create table orders(product text, customer_id int, quantity int, order_date string, tags multi, details json); insert into customers values (1, 'Alice Johnson', 'alice@example.com', '123 Maple St'), (2, 'Bob Smith', 'bob@example.com', '456 Oak St'), (3, 'Carol White', 'carol@example.com', '789 Pine St'), (4, 'John Smith', 'john@example.com', '15 Barclays St'); insert into orders values (1, 'Laptop Computer', 1, 1, '2023-01-01', (101,102), '{"price":1200,"warranty":"2 years"}'), (2, 'Smart Phone', 2, 2, '2023-01-02', (103), '{"price":800,"warranty":"1 year"}'), (3, 'Tablet Device', 1, 1, '2023-01-03', (101,104), '{"price":450,"warranty":"1 year"}'), (4, 'Monitor Display', 3, 1, '2023-01-04', (105), '{"price":300,"warranty":"1 year"}');
@@ -687,7 +687,7 @@ drop table if exists customers; drop table if exists orders; create table custom
 
 <!-- example basic_complex -->
 
-该查询演示了跨 `customers` 和 `orders` 两个表的全文匹配，结合范围过滤和分面搜索。它搜索名为 "Alice" 或 "Bob" 的客户及其包含 "laptop"、"phone" 或 "tablet" 且价格高于 500 美元的订单。结果按订单 ID 排序，并按保修条款进行分面。
+该查询演示了在 `customers` 和 `orders` 表上进行全文匹配，并结合范围过滤和分面功能。它搜索名为 "Alice" 或 "Bob" 的客户及其包含 "laptop"、"phone" 或 "tablet" 且价格高于 $500 的订单。结果按订单 ID 排序，并按保修条款进行分面。
 
 <!-- request SQL -->
 ```sql
@@ -842,15 +842,15 @@ POST /search
 
 <!-- end -->
 
-## 搜索选项和匹配权重
+## 搜索选项与匹配权重
 
-可以为连接中的查询分别指定选项：左表和右表。语法为 SQL 查询中的 `OPTION(<table_name>)`，以及 JSON 查询中 `"options"` 下的一个或多个子对象。
+可以为连接查询中的左表和右表分别指定不同的选项。SQL 查询的语法是 `OPTION(<table_name>)`，JSON 查询则是在 `"options"` 下使用一个或多个子对象。
 
 
 <!-- example join_options -->
 
-下面是如何为右表的全文查询指定不同字段权重的示例。要通过 SQL 获取匹配权重，请使用 `<table_name>.weight()` 表达式。
-在 JSON 查询中，该权重表示为 `<table_name>._score`。
+以下示例展示了如何为右表的全文查询指定不同的字段权重。要通过 SQL 获取匹配权重，请使用 `<table_name>.weight()` 表达式。
+在 JSON 查询中，此权重表示为 `<table_name>._score`。
 
 <!-- request SQL -->
 ```sql
@@ -952,83 +952,83 @@ POST /search
 
 ## 连接批处理
 
-执行表连接时，Manticore Search 会批量处理结果以优化性能和资源使用。工作原理如下：
+在执行表连接时，Manticore Search 会以批处理方式处理结果，以优化性能和资源使用。其工作原理如下：
 
-- **批处理工作原理**：
+- **批处理如何工作**：
   - 首先执行左表的查询，并将结果累积到一个批次中。
-  - 然后将该批次用作右表查询的输入，右表查询作为单次操作执行。
-  - 这种方法减少了发送到右表的查询次数，提高了效率。
+  - 然后，该批次作为右表查询的输入，右表查询作为单个操作执行。
+  - 这种方法最大限度地减少了发送到右表的查询次数，提高了效率。
 
 - **配置批次大小**：
-  - 可以使用 `join_batch_size` 搜索选项调整批次大小。
-  - 也可以在配置文件的 `searchd` 部分通过 [join_batch_size](../Server_settings/Searchd.md#join_batch_size) 进行配置。
-  - 默认批次大小为 `1000`，您可以根据使用场景增大或减小。
-  - 设置 `join_batch_size=0` 可完全禁用批处理，这在调试或特定场景下可能有用。
+  - 可以使用 `join_batch_size` 搜索选项调整批次的大小。
+  - 也可以在配置文件的 `searchd` 部分中[配置](../Server_settings/Searchd.md#join_batch_size)此选项。
+  - 默认批次大小为 `1000`，但您可以根据您的用例增加或减少它。
+  - 设置 `join_batch_size=0` 将完全禁用批处理，这可能对调试或特定场景有用。
 
 - **性能考虑**：
-  - 较大的批次大小可以通过减少右表查询次数来提升性能。
-  - 但较大的批次可能会消耗更多内存，尤其是对于复杂查询或大数据集。
-  - 通过尝试不同批次大小，找到性能和资源使用的最佳平衡点。
+  - 较大的批次大小可以通过减少在右表上执行的查询次数来提高性能。
+  - 但是，较大的批次可能会消耗更多内存，特别是对于复杂查询或大型数据集。
+  - 尝试不同的批次大小，以找到性能和资源使用之间的最佳平衡点。
 
 ## 连接缓存
 
-为了进一步优化连接操作，Manticore Search 对右表执行的查询采用缓存机制。您需要了解以下内容：
+为了进一步优化连接操作，Manticore Search 对右表执行的查询采用了缓存机制。以下是您需要了解的内容：
 
-- **缓存工作原理**：
-  - 右表的每个查询由 `JOIN ON` 条件定义。
-  - 如果多个查询中重复相同的 `JOIN ON` 条件，结果会被缓存并重用。
-  - 这避免了冗余查询，加快了后续连接操作。
+- **缓存如何工作**：
+  - 右表的每个查询都由 `JOIN ON` 条件定义。
+  - 如果相同的 `JOIN ON` 条件在多个查询中重复出现，结果将被缓存并重复使用。
+  - 这避免了冗余查询，并加快了后续连接操作的速度。
 
 - **配置缓存大小**：
-  - 可以通过配置文件 `searchd` 部分的 [join_cache_size](../Server_settings/Searchd.md#join_cache_size) 选项配置连接缓存大小。
-  - 默认缓存大小为 `20MB`，您可以根据工作负载和可用内存调整。
-  - 设置 `join_cache_size=0` 可完全禁用缓存。
+  - 连接缓存的大小可以通过配置文件 `searchd` 部分中的 [join_cache_size](../Server_settings/Searchd.md#join_cache_size) 选项进行配置。
+  - 默认缓存大小为 `20MB`，但您可以根据工作负载和可用内存进行调整。
+  - 设置 `join_cache_size=0` 将完全禁用缓存。
 
 - **内存考虑**：
-  - 每个线程维护自己的缓存，因此总内存使用取决于线程数和缓存大小。
-  - 确保服务器有足够内存以容纳缓存，尤其是在高并发环境下。
+  - 每个线程维护自己的缓存，因此总内存使用量取决于线程数量和缓存大小。
+  - 请确保您的服务器有足够的内存来容纳缓存，特别是在高并发环境中。
 
 ## 连接分布式表
 
-仅包含本地表的分布式表支持作为连接查询的左侧和右侧表。然而，包含远程表的分布式表不被支持。
+仅由本地表组成的分布式表在连接查询的左侧和右侧都受支持。但是，包含远程表的分布式表不受支持。
 
-## 注意事项和最佳实践
+## 注意事项与最佳实践
 
-在 Manticore Search 中使用 JOIN 时，请注意以下几点：
+在 Manticore Search 中使用 JOIN 时，请记住以下几点：
 
-1. **字段选择**：在 JOIN 中选择两个表的字段时，不要为左表字段加前缀，但要为右表字段加前缀。例如：
+1. **字段选择**：在 JOIN 中选择两个表的字段时，不要为左表的字段添加前缀，但需要为右表的字段添加前缀。例如：
    ```sql
    SELECT field_name, right_table.field_name FROM ...
    ```
 
-2. **JOIN 条件**：始终在 JOIN 条件中显式指定表名：
+2. **JOIN 条件**：始终在 JOIN 条件中明确指定表名：
    ```sql
    JOIN ON table_name.some_field = another_table_name.some_field
    ```
 
-3. **带 JOIN 的表达式**：当使用结合两个连接表字段的表达式时，为表达式结果设置别名：
+3. **使用 JOIN 的表达式**：当使用组合了连接表中两个字段的表达式时，请为表达式的结果设置别名：
    ```sql
    SELECT *, (nums2.n + 3) AS x, x * n FROM nums LEFT JOIN nums2 ON nums2.id = nums.num2_id
    ```
 
-4. **基于别名表达式的过滤**：不能在 WHERE 子句中使用涉及两个表字段的表达式别名。
+4. **对带别名的表达式进行过滤**：不能在 WHERE 子句中使用涉及两个表字段的表达式的别名。
 
-5. **JSON 属性**：连接 JSON 属性时，必须显式将值转换为适当类型：
+5. **JSON 属性**：在 JSON 属性上进行连接时，必须将值显式转换为适当的类型：
    ```sql
-   -- 正确：
+   -- Correct:
    SELECT * FROM t1 LEFT JOIN t2 ON int(t1.json_attr.id) = t2.json_attr.id
 
-   -- 错误：
+   -- Incorrect:
    SELECT * FROM t1 LEFT JOIN t2 ON t1.json_attr.id = t2.json_attr.id
    ```
 
-6. **NULL 处理**：可以对连接字段使用 IS NULL 和 IS NOT NULL 条件：
+6. **NULL 处理**：可以在连接字段上使用 IS NULL 和 IS NOT NULL 条件：
    ```sql
    SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id WHERE t2.name IS NULL
    SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id WHERE t2.name IS NOT NULL
    ```
 
-7. **使用带 MVA 的 ANY**：在 JOIN 中使用带多值属性的 `ANY()` 函数时，为连接表的多值属性设置别名：
+7. **在 MVA 中使用 ANY**：在 JOIN 中对多值属性使用 `ANY()` 函数时，请为连接表中的多值属性设置别名：
    ```sql
    SELECT *, t2.m AS alias
    FROM t
@@ -1036,7 +1036,7 @@ POST /search
    WHERE ANY(alias) IN (3, 5)
    ```
 
-遵循这些指南，您可以有效地使用 Manticore Search 中的 JOIN 来组合多个索引的数据并执行复杂查询。
+遵循这些指南，您可以有效地在 Manticore Search 中使用 JOIN 来组合来自多个索引的数据并执行复杂查询。
 
 <!-- proofread -->
 

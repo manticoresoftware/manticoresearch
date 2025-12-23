@@ -56,10 +56,8 @@ mysql -h0 -P9306 -e "LOCK TABLES test_locks;"
 ––– output –––
 ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks'
 ––– comment –––
-Manticore allows DROP TABLE even with READ lock (intentional behavior per documentation)
-READ lock blocks data modifications (INSERT/UPDATE/DELETE) but allows DDL operations (DROP/TRUNCATE)
-Rationale: if user explicitly drops table, they don't care about its backup/consistency
-See: https://manual.manticoresearch.com/Securing_and_compacting_a_table/Freezing_and_locking_a_table (line 72)
+DROP TABLE with READ lock is allowed (intentional, differs from MySQL)
+READ lock only blocks data modifications (INSERT/UPDATE/DELETE), not DDL operations
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; DROP TABLE test_locks;"
 ––– output –––
@@ -80,7 +78,7 @@ Release lock
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Test cross-session locking: Session 1 locks table with READ, Session 2 tries to INSERT
+Cross-session INSERT: Session 1 locks, Session 2 tries INSERT (blocked)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1
 ––– output –––
@@ -96,7 +94,49 @@ sleep 5; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
 |        1 |
 +----------+
 ––– comment –––
-Error: Try to UPDATE READ-locked table
+After session 1 closed, lock is released - modifications from session 2 should succeed
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'session_2_after_lock_released');"
+––– output –––
+––– comment –––
+Verify the insert succeeded
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+––– comment –––
+Cleanup - delete the inserted row for next tests
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_locks WHERE id = 2;"
+––– output –––
+––– comment –––
+Cross-session UPDATE: Session 1 locks, Session 2 tries UPDATE (blocked)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "UPDATE test_locks SET title = 'blocked' WHERE id = 1;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_locks: table is locked
+––– comment –––
+Wait for background session to complete
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Cross-session DELETE: Session 1 locks, Session 2 tries DELETE (blocked)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "DELETE FROM test_locks WHERE id = 1;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_locks: table is locked
+––– comment –––
+Wait for background session to complete
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Error: Try to UPDATE READ-locked table (same session test)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; UPDATE test_locks SET title = 'new' WHERE id = 1;"
 ––– output –––
@@ -107,7 +147,7 @@ Release lock
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Error: Try to DELETE from READ-locked table
+Error: Try to DELETE from READ-locked table (same session test)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; DELETE FROM test_locks WHERE id = 1;"
 ––– output –––
@@ -118,8 +158,7 @@ Release lock
 mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– output –––
 ––– comment –––
-Test cross-session DROP TABLE: Session 1 locks table with READ, Session 2 tries to DROP
-DROP is allowed even from another session (DDL operations not blocked by READ lock)
+Cross-session DROP TABLE: Session 1 locks, Session 2 drops (allowed - DDL not blocked)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "DROP TABLE test_locks;" 2>&1 && echo "DROP succeeded from another session"
 ––– output –––

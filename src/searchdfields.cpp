@@ -10,6 +10,7 @@
 
 #include "sphinxstd.h"
 #include "searchdha.h"
+#include "auth/auth.h"
 
 struct FieldRequest_t
 {
@@ -301,6 +302,7 @@ static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash
 		pDistReply = std::make_unique<GetFieldReplyParser_t>();
 
 		pDistReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 		ScheduleDistrJobs ( dRemotes, pDistReq.get(), pDistReply.get(), pDistReporter.Ptr() );
 	}
 
@@ -601,6 +603,9 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		return;
 	}
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tRequest.m_sIndexes, tOut ) )
+		return;
+
 	// fetch stored fields
 	DocHash_t tFetched ( tRequest.m_dDocs.GetLength() );
 	FieldBlob_t tRes;
@@ -647,6 +652,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// connect to remote agents and query them
 	GetFieldRequestBuilder_t tBuilder ( dFieldCols );
 	GetFieldReplyParser_t tParser;
+	SetSessionAuth ( dAgents );
 	PerformRemoteTasks ( dAgents, &tBuilder, &tParser );
 
 	StringBuilder_c sError { "," };

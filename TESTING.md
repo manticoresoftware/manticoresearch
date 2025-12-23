@@ -10,7 +10,7 @@ This is a comprehensive guide to the automated test suites included in Manticore
 - [Local Testing Setup](#local-testing-setup)
   - [Requirements](#requirements)
   - [Platform-Specific Setup](#platform-specific-setup)
-- [Running CTest Tests](#running-ctest-tests)
+- [Running UberTest Tests](#running-ubertest-tests)
 - [Running CLT Tests](#running-clt-tests)
 - [Writing Tests](#writing-tests)
 - [Test Structure](#test-structure)

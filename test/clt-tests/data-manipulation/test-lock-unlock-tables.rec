@@ -326,6 +326,16 @@ mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; SHOW LOCKS; UNLO
 | rt   | products2 | read      | Count: 1        |
 +------+-----------+-----------+-----------------+
 ––– comment –––
+Duplicate table names are allowed (increment lock counter, aliases not supported)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products READ; SHOW LOCKS; UNLOCK TABLES;"
+––– output –––
++------+----------+-----------+-----------------+
+| Type | Name     | Lock Type | Additional Info |
++------+----------+-----------+-----------------+
+| rt   | products | read      | Count: 2        |
++------+----------+-----------+-----------------+
+––– comment –––
 Final cleanup - drop all test tables
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products; DROP TABLE IF EXISTS products2; DROP TABLE IF EXISTS orders; DROP TABLE IF EXISTS dist_products;"

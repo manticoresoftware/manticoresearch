@@ -682,6 +682,23 @@ This creates the "products" table with three fields:
 * "title" is indexed, but not stored.
 * "description" is stored, but not indexed.
 * "author" is both stored and indexed.
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text, price float) morphology='stem_en'"
+```
+
+This creates the "products" table with two fields: "title" (full-text) and "price" (float), and sets the "morphology" to "stem_en".
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text indexed, description text stored, author text, price float)"
+```
+This creates the "products" table with three fields:
+* "title" is indexed, but not stored.
+* "description" is stored, but not indexed.
+* "author" is both stored and indexed.
+
 <!-- end -->
 
 

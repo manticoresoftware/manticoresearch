@@ -547,6 +547,87 @@ Query OK, 4 rows affected (0.00 sec)
 +------+------+-------------+------+
 6 rows in set (0.00 sec)
 ```
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, mva1 multi, mva2 multi);
+INSERT INTO test (title, gid, mva1, mva2) VALUES
+('test document', 1001, (101), (101)),
+('test document', 1002, (100,102), (101)),
+('test document', 1003, (207), (101)),
+('test document', 1004, (101,103), (101)),
+('test document', 1005, (207,208), (101));
+-->
+
+<!-- request JSON -->
+
+```JSON
+POST /delete
+{
+  "table":"test",
+  "query":
+    {
+      "bool": {
+        "must": [
+          {
+            "match": { "*": "test document" }
+          },
+          {
+            "bool": {
+              "should": [
+                {
+                  "range": {
+                    "mval": { "gt": 206 }
+                  }
+                },
+                {
+                  "in": {
+                    "mval": [100, 103]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+    }
+}
+
+POST /search 
+{
+  "table": "test"
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "table": "test",
+  "deleted": 4
+}
+
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 0,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "gid": "1001",
+          "mva1": 101,102,
+          "mva2": 101
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example delete 6 -->

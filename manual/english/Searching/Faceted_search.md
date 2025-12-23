@@ -764,6 +764,18 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 Data can be faceted by aggregating another attribute or expression. For example if the documents contain both the brand id and name, we can return in facet the brand names, but aggregate the brand ids. This can be done by using `FACET {expr1} BY {expr2}`
 
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS facetdemo;
+CREATE TABLE facetdemo(price float, brand_id int, title text, brand_name string, brand_id int, j json, categories multi);
+INSERT INTO facetdemo(price, brand_id, title, brand_name, brand_id, j, categories) VALUES
+(306, 1, 'Product Ten Three', 'Brand One', 'Six_Ten', {"prop1":66,"prop2":91,"prop3":"One"}, (10,11)),
+(400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', {"prop1":69,"prop2":19,"prop3":"One"}, (13,14)),
+(855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', {"prop1":63,"prop2":78,"prop3":"One"}, (10,11,12)),
+(31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', {"prop1":79,"prop2":42,"prop3":"One"}, '(12,13,14));
+--> 
+
 <!-- intro -->
 ##### SQL:
 
@@ -801,6 +813,90 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 | Brand Seven |      965 |
 +-------------+----------+
 10 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "brand_id": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "brand_id": 1
+      },
+      {
+        "brand_name": "Brand Ten",
+        "brand_id": 10
+      },
+      ...
+      {
+        "brand_name": "Brand One",
+        "brand_id": 1
+      },
+      {
+        "brand_name": "Brand Nine",
+        "brand_id": 9
+      }
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "count(*)": 1013
+      },
+      {
+        "brand_name": "Brand Ten",
+        "count(*)": 998
+      },
+      {
+        "brand_name": "Brand Eight",
+        "count(*)": 1033
+      },
+      {
+        "brand_name": "Brand Seven",
+        "count(*)": 965
+      }
+    ],
+    "total": 10,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->
@@ -1562,6 +1658,88 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            0 | Brand Five  |      183 |
 |            1 | Brand Four  |      195 |
 ...
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo FACET price_range AS price_range,brand_name ORDER BY brand_name asc"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "price_range": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "price_range": 1
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "fprice_range": {
+          "type": "long"
+        }
+      },
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Eight",
+        "count(*)": 197
+      },
+      {
+        "fprice_range": 4,
+        "brand_name": "Brand Eight",
+        "count(*)": 235
+      },
+      ...
+      {
+        "fprice_range": 0,
+        "brand_name": "Brand Five",
+        "count(*)": 183
+      },
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Four",
+        "count(*)": 195
+      }
+    ],
+    "total": 10,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -2868,6 +3046,132 @@ SHOW META LIKE 'multiplier';
 | multiplier    | 4     |
 +---------------+-------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier'"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One"
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_id": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_id": 1,
+        "count(*)": 1013
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "price": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "price": 306,
+        "count(*)": 7
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "categories": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "categories": "10,11",
+        "count(*)": 2436
+      },
+      ...
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "multiplier",
+        "Value": "4"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

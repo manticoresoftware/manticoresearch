@@ -328,7 +328,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 					"<b>Text 1</b>"
 				]
 			}
-		]}
+		}]
 	}
 }
 ```
@@ -838,6 +838,17 @@ The `HIGHLIGHT()` function can be used to highlight search results. Here's the s
 HIGHLIGHT([options], [field_list], [query] )
 ```
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS books;
+CREATE TABLE books(title text, content text);
+INSERT INTO books(title, content) VALUES
+('Book one', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.'),
+('Book two', 'A door opened before them, revealing a small room.'),
+('Book five', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.');
+-->
+
 <!-- example highlight() no args -->
 By default, it works with no arguments.
 
@@ -858,6 +869,44 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 | A door opened <b>before</b> them, revealing a small room. |
 +-----------------------------------------------------------+
 1 row in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "before"}
+  },
+  "highlight": {},
+  "_source": ""
+}
+```
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1747,
+        "_source": {},
+        "highlight": {
+          "content": [
+            "A door opened <b>before</b> them, revealing a small room."
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -885,6 +934,45 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 1 row in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"title": "one"}
+  },
+  "highlight": {},
+  "_source": [""]
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>one</b>"
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example highlight() options -->
@@ -907,6 +995,47 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 | Book [match]one[/match]                                    |
 +------------------------------------------------------------+
 1 row in set (0.00 sec)
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"title": "one"}
+  },
+  "highlight": {
+    "before_match": "[match]",
+    "after_match": "[/match]"
+  },
+  "_source": [""]
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book [match]one[/match]"
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -935,6 +1064,62 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 2 rows in set (0.00 sec)
 ```
 
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "one|robots"}
+  },
+  "highlight": {
+    "fields": ["title", "content"]
+  },
+  "_source": [""]
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>one</b>"
+          ],
+          "content": [
+            "They followed Bander. The <b>robots</b> remained at a polite distance, but their presence was a constantly felt threat."
+          ]
+        }
+      },
+      {
+        "_id": 5,
+        "_score": 1557,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book five"
+          ],
+          "content": [
+            "Bander ushered all three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander gestured the other <b>robots</b> away and entered itself. The door closed behind it."
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example highlight() string attr -->
@@ -959,6 +1144,45 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 | Book five           |
 +---------------------+
 2 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "one"}
+  },
+  "highlight": {
+    "fields": ["title"]
+  },
+  "_source": [""]
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>one</b>"
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -987,6 +1211,58 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 2 rows in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "books",
+  "query": {
+    "match": {"*": "one"}
+  },
+  "highlight": {
+    "fields": ["title"],
+    "highlight_query": {
+      "match": { "*": "five" }
+    }
+  },
+  "_source": [""]
+}
+
+```
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book one"
+          ]
+        }
+      },
+      {
+        "_id": 5,
+        "_score": 1557,
+        "_source": {},
+        "highlight": {
+          "title": [
+            "Book <b>five</b>"
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example HIGHLIGHT TO_STRING -->
@@ -1010,6 +1286,33 @@ SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books
 | some text to <b>highlight</b>                                  |
 +----------------------------------------------------------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books WHERE MATCH('@title one')"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        " highlight({},TO_STRING('some text to highlight'), 'highlight')": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        " highlight({},TO_STRING('some text to highlight'), 'highlight')": "some text to <b>highlight</b>"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->
@@ -3790,6 +4093,36 @@ CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', '
 2 rows in set (0.02 sec)
 ```
 
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit)"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "snippet": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "snippet": "this <b>is</b> my document <b>text</b>"
+      },
+      {
+        "snippet": "this <b>is</b> my another <b>text</b>"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 Most options are the same as in the [HIGHLIGHT() function](../Searching/Highlighting.md). There are, however, several options that can only be used with `CALL SNIPPETS`.
@@ -3822,6 +4155,36 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 | this <b>is</b> my another <b>text</b>  |
 +----------------------------------------+
 2 rows in set (0.02 sec)
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files)"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "snippet": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "snippet": "this <b>is</b> my document <b>text</b>"
+      },
+      {
+        "snippet": "this <b>is</b> my another <b>text</b>"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

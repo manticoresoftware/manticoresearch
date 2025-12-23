@@ -70,7 +70,7 @@ POST /search
 {
   "table": "myindex",
   "query": {
-    "match" : { "_all" : "\"find me fast\"/2" }
+    "query_string" : "\"find me fast\"/2"
   }
 }
 ```

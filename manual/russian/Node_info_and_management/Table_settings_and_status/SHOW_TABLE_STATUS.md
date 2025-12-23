@@ -45,13 +45,13 @@ SHOW TABLE table_name STATUS
 * `max_stack_need`: объём стека, необходимый для вычисления самых сложных из сохранённых перколяторных запросов. Это динамическое значение, зависящее от деталей сборки, таких как компилятор, оптимизация, оборудование и т.д.
 * `average_stack_base`: объём стека, обычно занимаемый в начале вычисления перколяторного запроса.
 * `desired_thread_stack`: сумма вышеуказанных значений, округлённая до ближайшего значения, кратного 128 байтам. Если это значение больше `thread_stack`, выполнение `call pq` по этой таблице может быть невозможно, так как некоторые сохранённые запросы завершатся с ошибкой. Значение `thread_stack` по умолчанию — 1M (1048576); другие значения должны быть настроены.
-* `tid` и `tid_saved`: представляют состояние сохранения таблицы. `tid` увеличивается с каждым изменением (транзакцией). `tid_saved` показывает максимальный `tid` состояния, сохраненного в RAM-чанк в файле `<table>.ram`. Когда числа отличаются, некоторые изменения существуют только в RAM и также поддерживаются binlog (если включен). Выполнение `FLUSH TABLE` или планирование периодической очистки сохраняет эти изменения. После очистки binlog очищается, и `tid_saved` представляет новое актуальное состояние.
-* `query_time_*`, `exact_query_time_*`: статистика времени выполнения запросов за последние 1 минуту, 5 минут, 15 минут и всего с момента запуска сервера; данные инкапсулированы в JSON-объект, включая количество запросов и минимальные, максимальные, средние, 95-й и 99-й перцентильные значения.
-* `found_rows_*`: статистика найденных строк по запросам; предоставляется за последние 1 минуту, 5 минут, 15 минут и всего с момента запуска сервера; данные инкапсулированы в JSON-объект, включая количество запросов и минимальные, максимальные, средние, 95-й и 99-й перцентильные значения.
+* `tid` и `tid_saved`: представляют состояние сохранения таблицы. `tid` увеличивается при каждом изменении (транзакции). `tid_saved` показывает максимальный `tid` состояния, сохраненного в блоке ОЗУ в файле `<table>.ram`. Когда числа отличаются, некоторые изменения существуют только в ОЗУ и также поддерживаются binlog (если включен). Выполнение `FLUSH TABLE` или планирование периодической очистки сохраняет эти изменения. После очистки binlog очищается, и `tid_saved` представляет новое актуальное состояние.
+* `query_time_*`, `exact_query_time_*`: статистика времени выполнения запросов за последние 1 минуту, 5 минут, 15 минут и всего с момента запуска сервера; данные инкапсулированы как JSON-объект, включающий количество запросов и минимальные, максимальные, средние, 95-й и 99-й перцентили.
+* `found_rows_*`: статистика найденных строк по запросам; предоставляется за последние 1 минуту, 5 минут, 15 минут и всего с момента запуска сервера; данные инкапсулированы как JSON-объект, включающий количество запросов и минимальные, максимальные, средние, 95-й и 99-й перцентили.
 * `command_*`: счетчики общего количества успешных выполнений конкретной команды для этой таблицы.
-* `search_stats_ms_*`: статистика времени выполнения (в миллисекундах) поисковых запросов. * обозначает временное окно (например, 1min, 5min, 15min, total). Эти статистики рассчитываются за скользящие окна 1, 5 и 15 минут, показывая средние, минимальные, максимальные и 95-й/99-й перцентильные значения времени запросов.
-* `insert_replace_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов вставки и замены. * обозначает временное окно (например, 1min, 5min, 15min, total). Эти статистики рассчитываются за скользящие окна 1, 5 и 15 минут, показывая средние, минимальные, максимальные и 95-й/99-й перцентильные значения времени запросов.
-* `update_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов обновления. * обозначает временное окно (например, 1min, 5min, 15min, total). Эти статистики рассчитываются за скользящие окна 1, 5 и 15 минут, показывая средние, минимальные, максимальные и 95-й/99-й перцентильные значения времени запросов.
+* `search_stats_ms_*`: статистика времени выполнения (в миллисекундах) поисковых запросов. Звездочка (*) указывает временной интервал (например, 1min, 5min, 15min, total). Эти статистики рассчитываются по скользящим окнам 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й перцентили времени запросов.
+* `insert_replace_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов вставки и замены. Звездочка (*) указывает временной интервал (например, 1min, 5min, 15min, total). Эти статистики рассчитываются по скользящим окнам 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й перцентили времени запросов.
+* `update_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов обновления. Звездочка (*) указывает временной интервал (например, 1min, 5min, 15min, total). Эти статистики рассчитываются по скользящим окнам 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й перцентили времени запросов.
 
 <!-- intro -->
 ##### SQL:
@@ -127,6 +127,271 @@ mysql> SHOW TABLE statistic STATUS;
 | update_stats_ms_pct99         | 0.530 0.530 0.530                                                        |
 +-------------------------------+--------------------------------------------------------------------------+
 29 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE t STATUS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "table_type",
+        "Value": "rt"
+      },
+      {
+        "Variable_name": "indexed_documents",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "indexed_bytes",
+        "Value": "28"
+      },
+      {
+        "Variable_name": "ram_bytes",
+        "Value": "23400"
+      },
+      {
+        "Variable_name": "disk_bytes",
+        "Value": "1969"
+      },
+      {
+        "Variable_name": "disk_mapped",
+        "Value": "196"
+      },
+      {
+        "Variable_name": "disk_mapped_cached",
+        "Value": "16384"
+      },
+      {
+        "Variable_name": "disk_mapped_doclists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_mapped_cached_doclists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_mapped_hitlists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_mapped_cached_hitlists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "killed_documents",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "killed_rate",
+        "Value": "0.00%"
+      },
+      {
+        "Variable_name": "ram_chunk",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "ram_chunk_segments_count",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_chunks",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "mem_limit",
+        "Value": "134217728"
+      },
+      {
+        "Variable_name": "mem_limit_rate",
+        "Value": "95.00%"
+      },
+      {
+        "Variable_name": "ram_bytes_retired",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "optimizing",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "locked",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "tid",
+        "Value": "7"
+      },
+      {
+        "Variable_name": "tid_saved",
+        "Value": "7"
+      },
+      {
+        "Variable_name": "query_time_1min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "query_time_5min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "query_time_15min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "query_time_total",
+        "Value": "{\"queries\":30, \"avg_sec\":0.324, \"min_sec\":0.051, \"max_sec\":1.718, \"pct95_sec\":1.017, \"pct99_sec\":1.718}"
+      },
+      {
+        "Variable_name": "found_rows_1min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "found_rows_5min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "found_rows_15min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "found_rows_total",
+        "Value": "{\"queries\":30, \"avg\":2, \"min\":0, \"max\":5, \"pct95\":5, \"pct99\":5}"
+      },
+      {
+        "Variable_name": "command_search",
+        "Value": "30"
+      },
+      {
+        "Variable_name": "command_excerpt",
+        "Value": "3"
+      },
+      {
+        "Variable_name": "command_update",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_keywords",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_status",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "command_delete",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "command_insert",
+        "Value": "6"
+      },
+      {
+        "Variable_name": "command_replace",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_commit",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_suggest",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_callpq",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_getfield",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      }
+    ],
+    "total": 58,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- intro -->

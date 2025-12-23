@@ -1,19 +1,19 @@
 # Listing tables
 
-Manticore Search имеет один уровень иерархии для таблиц.
+Manticore Search имеет однорівневу иєрархію таблиць.
 
-В отличие от других СУБД, в Manticore нет концепции группировки таблиц в базы данных. Однако, для совместимости с диалектами SQL, Manticore принимает операторы `SHOW DATABASES` для совместимости с диалектом SQL, но оператор не возвращает никаких результатов.
+На відміну від інших СУБД, у Manticore немає поняття групування таблиць у бази даних. Проте для сумісності з SQL-діалектами Manticore підтримує оператори `SHOW DATABASES` для сумісності з SQL-діалектом, але цей оператор не повертає жодних результатів.
 
 <!-- example listing -->
 ## SHOW TABLES
 
-Общий синтаксис:
+Загальний синтаксис:
 
 ```sql
 SHOW TABLES [ LIKE pattern ]
 ```
 
-Оператор `SHOW TABLES` выводит список всех активных в данный момент таблиц вместе с их типами. Существующие типы таблиц: `local`, `distributed`, `rt`, `percolate` и `template`.
+Оператор `SHOW TABLES` показує всі активні таблиці разом з їх типами. Існуючі типи таблиць — `local`, `distributed`, `rt`, `percolate` і `template`.
 
 
 <!-- intro -->
@@ -38,6 +38,56 @@ SHOW TABLES;
 | template | template    |
 +----------+-------------+
 5 rows in set (0.00 sec)
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW TABLES"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "dist",
+        "Type": "distributed"
+      },
+      {
+        "Table": "plain",
+        "Type": "local"
+      },
+      {
+        "Table": "pq",
+        "Type": "percolate"
+      },{
+        "Table": "rt",
+        "Type": "rt"
+      },{
+        "Table": "template",
+        "Type": "template"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+
 ```
 
 <!-- request PHP -->
@@ -157,8 +207,14 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+CREATE TABLE products type='distributed' local='products' agent='127.0.0.1:9312:products'
+-->
+
 <!-- example Example_2 -->
-Поддерживается необязательный оператор LIKE для фильтрации таблиц по имени.
+Підтримується необов’язковий оператор LIKE для фільтрування таблиць за іменем.
 
 
 <!-- intro -->
@@ -179,6 +235,41 @@ SHOW TABLES LIKE 'pro%';
 | products | distributed |
 +----------+-------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLES LIKE 'pro%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "products",
+        "Type": "distributed"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request PHP -->
@@ -302,7 +393,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-Оператор `DESCRIBE` выводит столбцы таблицы и их соответствующие типы. Столбцы включают ID документа, полнотекстовые поля и атрибуты. Порядок соответствует порядку, в котором поля и атрибуты ожидаются в операторах `INSERT` и `REPLACE`. Типы столбцов включают `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string` и `mva`. Столбец ID будет иметь тип `bigint`. Пример:
+Оператор `DESCRIBE` показує стовпці таблиці та їхні типи. Стовпці — це ID документа, повнотекстові поля й атрибути. Порядок збігається з порядком, у якому поля та атрибути очікуються у операторах `INSERT` і `REPLACE`. Типи стовпців включають `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string` та `mva`. Стовпець ID буде типу `bigint`. Приклад:
 
 ```sql
 mysql> DESC rt;
@@ -317,13 +408,20 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-Поддерживается необязательный оператор LIKE. Обратитесь к
-[SHOW META](Node_info_and_management/SHOW_META.md) для деталей синтаксиса.
+Підтримується необов’язковий оператор LIKE. Деталі синтаксису дивіться у
+[SHOW META](Node_info_and_management/SHOW_META.md).
 
 ### SELECT FROM name.@table
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
+--> 
+
 <!-- example name_table -->
-Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать оператор `WHERE` для фильтрации:
+Також можна переглянути схему таблиці, виконавши запит `select * from <table_name>.@table`. Перевага цього способу в тому, що можна застосувати оператор `WHERE` для фільтрування:
 
 <!-- request SQL -->
 ```sql
@@ -340,11 +438,29 @@ select * from tbl.@table where type='text';
 1 row in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+```sql
+POST /sql?mode=raw -d "select * from tbl.@table where type='text';"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"id":{"type":"long long"}},{"field":{"type":"string"}},{"type":{"type":"string"}},{"properties":{"type":"string"}}],
+"data":[
+{"id":2,"field":"title","type":"text","properties":"indexed stored"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 <!-- example name_table2 -->
 
-Вы также можете выполнять многие другие действия с `<your_table_name>.@table`, рассматривая её как обычную таблицу Manticore с колонками, состоящими из целочисленных и строковых атрибутов.
+Також можна виконувати багато інших операцій над `<your_table_name>.@table`, розглядаючи її як звичайну таблицю Manticore зі стовпцями, що містять цілочисельні та строкові атрибути.
 
 <!-- request SQL -->
 
@@ -363,7 +479,7 @@ select * from tbl.@table where properties any ('stored');
 SHOW CREATE TABLE table_name
 ```
 
-Выводит оператор `CREATE TABLE`, использованный для создания указанной таблицы.
+Виводить оператор `CREATE TABLE`, яким створено вказану таблицю.
 
 <!-- intro -->
 ##### SQL:
@@ -381,11 +497,33 @@ f text indexed stored
 ) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"Table":{"type":"string"}},{"Create Table":{"type":"string"}}],
+"data":[
+{"Table":"tbl","Create Table":"CREATE TABLE tbl (\nf text)"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
-### Схемы таблиц Percolate
+### Схеми таблиць перколейту
 
-Если вы используете оператор `DESC` для таблицы percolate, он отобразит схему внешней таблицы, которая является схемой сохранённых запросов. Эта схема статична и одинакова для всех локальных таблиц percolate:
+Якщо виконати оператор `DESC` для таблиці перколейту, буде показана зовнішня схема таблиці, яка є схемою збережених запитів. Ця схема статична і однакова для всіх локальних таблиць перколейту:
 
 ```sql
 mysql> DESC pq;
@@ -400,7 +538,7 @@ mysql> DESC pq;
 4 rows in set (0.00 sec)
 ```
 
-Если вы хотите просмотреть ожидаемую схему документа, используйте следующую команду:
+Якщо потрібно переглянути очікувану схему документа, використовуйте команду:
 `DESC <pq table name> table`:
 
 ```sql
@@ -415,7 +553,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-Также поддерживается `desc pq table like ...` и работает следующим образом:
+Також підтримується `desc pq table like ...` і працює наступним чином:
 
 ```sql
 mysql> desc pq table like '%title%';

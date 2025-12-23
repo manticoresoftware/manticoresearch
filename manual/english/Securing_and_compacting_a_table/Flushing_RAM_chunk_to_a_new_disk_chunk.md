@@ -24,6 +24,26 @@ FLUSH RAMCHUNK rt;
 ```sql
 Query OK, 0 rows affected (0.05 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "FLUSH RAMCHUNK rt"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
 

@@ -2485,21 +2485,21 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example float_vector_auto -->
 
-浮点向量属性允许存储可变长度的浮点列表，主要用于机器学习应用和相似性搜索。这种类型与[多值属性](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) （MVA）在几个重要方面不同：
-- 保留值的准确顺序（不同于可能重新排序的MVA）
-- 保留重复值（不同于去重的MVA）
-- 插入时无额外处理（不同于排序和去重的MVA）
+浮点向量属性允许存储变长的浮点数列表，主要用于机器学习应用和相似性搜索。该类型与[多值属性](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)（MVA）有几个重要区别：
+- 保留值的精确顺序（不像MVA可能重新排序）
+- 保留重复值（不像MVA会去重）
+- 插入时无额外处理（不像MVA会排序和去重）
 
-浮点向量属性允许存储可变长度的浮点列表，主要用于机器学习应用和相似性搜索。 
+浮点向量属性允许存储变长的浮点数列表，主要用于机器学习应用和相似性搜索。
 
-### 用法和限制
+### 使用和限制
 - 目前仅支持实时表
 - 只能用于KNN（k近邻）搜索
-- 不支持在普通表或其他函数/表达式中使用
+- 不支持普通表或其他函数/表达式
 - 使用KNN设置时，不能`UPDATE` `float_vector`值。请使用`REPLACE`
 - 不使用KNN设置时，可以`UPDATE` `float_vector`值
 - 浮点向量不能用于常规过滤或排序
-- 通过`float_vector`值过滤唯一方式是向量搜索操作（KNN）
+- 过滤`float_vector`值的唯一方式是通过向量搜索操作（KNN）
 
 ### 常见用例
 - 用于语义搜索的文本嵌入
@@ -2507,29 +2507,29 @@ let search_res = search_api.search(search_req).await;
 - 用于相似性搜索的图像嵌入
 - 机器学习的特征向量
 
-** 请记住，`float_vector`数据类型不兼容[自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)机制。**
+** 请注意，`float_vector`数据类型与[自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)机制不兼容。**
 
-有关设置浮点向量和在搜索中使用的更多详细信息，请参见[KNN搜索](../Searching/KNN.md)。
+有关设置浮点向量及搜索使用的更多细节，请参见[KNN搜索](../Searching/KNN.md)。
 
 ### 自动嵌入（推荐）
 
-使用**自动嵌入**是操作浮点向量最方便的方式。此功能使用机器学习模型自动从文本数据生成嵌入，无需手动计算和插入向量。
+使用**自动嵌入**是处理浮点向量的最便捷方式。该功能使用机器学习模型自动从文本生成嵌入，省去了手动计算和插入向量的步骤。
 
-#### 自动嵌入的好处
-- **简化流程**：只需插入文本，嵌入自动生成
-- **无需手动计算向量**：无需运行单独的嵌入模型
-- **嵌入一致性**：同一模型确保向量表示一致
-- **多模型支持**：可选择[sentence-transformers](https://huggingface.co/sentence-transformers/models)、OpenAI、Voyage 和 Jina 模型
+#### 自动嵌入的优势
+- **简化工作流**：只需插入文本，自动生成嵌入
+- **无需手动计算向量**：不必运行单独的嵌入模型
+- **嵌入一致性**：同一模型保证向量表示一致
+- **多模型支持**：可选择[sentence-transformers](https://huggingface.co/sentence-transformers/models)、OpenAI、Voyage和Jina模型
 - **灵活字段选择**：可控制用于生成嵌入的字段
 
-#### 创建带自动嵌入的表
+#### 使用自动嵌入创建表
 
-创建使用自动嵌入的表时，指定以下附加参数：
-- `MODEL_NAME`：用于自动生成向量的嵌入模型
-- `FROM`：用于生成嵌入的字段（空字符串表示所有文本/字符串字段）
+创建使用自动嵌入的表时，指定以下参数：
+- `MODEL_NAME`：用于自动向量生成的嵌入模型
+- `FROM`：用来生成嵌入的字段（空字符串表示使用所有文本/字符串字段）
 
 **支持的嵌入模型：**
-- **Sentence Transformers**：任何[合适的基于BERT的Hugging Face模型](https://huggingface.co/sentence-transformers/models)（如`sentence-transformers/all-MiniLM-L6-v2`）— 无需API密钥。Manticore在创建表时下载模型。
+- **Sentence Transformers**：任何[适用的基于BERT的Hugging Face模型](https://huggingface.co/sentence-transformers/models)（例如`sentence-transformers/all-MiniLM-L6-v2`）——无需API密钥。创建表时 Manticore 会自动下载模型。
 - **OpenAI**：OpenAI嵌入模型，如`openai/text-embedding-ada-002` - 需要`API_KEY='<OPENAI_API_KEY>'`参数
 - **Voyage**：Voyage AI嵌入模型 - 需要`API_KEY='<VOYAGE_API_KEY>'`参数
 - **Jina**：Jina AI嵌入模型 - 需要`API_KEY='<JINA_API_KEY>'`参数
@@ -2569,20 +2569,39 @@ CREATE TABLE products_all_fields (
 );
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+使用[sentence-transformers模型](https://huggingface.co/sentence-transformers/models)（无需API密钥）
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+```
+
+使用OpenAI模型（需要API_KEY参数）
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>')"
+```
+
+使用所有文本字段作为嵌入（FROM为空）
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+```
+
 <!-- end -->
 
-#### FROM 参数用法
+#### FROM参数用法
 
-`FROM`参数控制哪些字段用于生成嵌入：
+`FROM`参数控制用于生成嵌入的字段：
 
-- **特定字段**：`FROM='title'` - 仅使用标题字段
-- **多个字段**：`FROM='title,description'` - 标题和描述拼接后使用
-- **所有文本字段**：`FROM=''`（为空） - 使用表中所有`text`（全文字段）和`string`（字符串属性）字段
+- **具体字段**：`FROM='title'` - 仅使用title字段
+- **多个字段**：`FROM='title,description'` - 将title和description字段连接后使用
+- **所有文本字段**：`FROM=''`（空） - 使用表中所有`text`（全文字段）和`string`（字符串属性）字段
 - **空向量**：仍可使用`()`插入空向量，以排除文档参与向量搜索
 
 #### 使用自动嵌入插入数据
 
-使用自动嵌入时，**请勿在INSERT语句中指定向量字段**。嵌入会自动从指定的文本字段生成：
+使用自动嵌入时，**不要在INSERT语句中指定向量字段**。嵌入会自动根据指定文本字段生成：
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2595,10 +2614,10 @@ INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
 
-### 手动浮点向量使用
+### 手动使用浮点向量
 
 <!-- example for creating float_vector -->
-或者，您可以使用手动计算的浮点向量。 
+另一种方式是手动计算浮点向量。
 
 <!-- intro -->
 ##### SQL:
@@ -2708,7 +2727,7 @@ table products
 
 <!-- example for creating MVA32 -->
 
-多值属性允许存储可变长度的32位无符号整数列表。这对于存储一对多的数值非常有用，例如标签、产品类别和属性。
+多值属性允许存储变长的32位无符号整数列表。这适用于存储一对多的数值，如标签、产品分类和属性。
 
 <!-- intro -->
 ##### SQL:
@@ -2717,7 +2736,7 @@ table products
 ```sql
 CREATE TABLE products(title text, product_codes multi);
 ```
-或者
+或
 ```sql
 CREATE TABLE products(title text, product_codes mva);
 ```
@@ -2820,7 +2839,7 @@ table products
 
 
 <!-- example for any/all MVA -->
-它支持过滤和聚合，但不支持排序。过滤可以使用条件进行，该条件要求至少有一个元素通过（使用 [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)）或所有元素通过（[ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)）。
+它支持过滤和聚合，但不支持排序。过滤可以使用一个条件，该条件要求至少有一个元素通过（使用 [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)）或所有元素通过（[ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)）。
 
 
 <!-- intro -->
@@ -2929,7 +2948,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for least/greatest MVA -->
 
-可以提取诸如 [least](../Functions/Mathematical_functions.md#LEAST%28%29) 或 [greatest](../Functions/Mathematical_functions.md#GREATEST%28%29) 元素以及列表长度等信息。示例显示了按多值属性的最小元素进行排序。
+可以提取诸如[最小](../Functions/Mathematical_functions.md#LEAST%28%29)或[最大](../Functions/Mathematical_functions.md#GREATEST%28%29)元素及列表长度的信息。一个示例展示了如何按照多值属性的最小元素进行排序。
 
 <!-- intro -->
 ##### SQL:
@@ -3043,7 +3062,7 @@ let search_res = search_api.search(search_req).await;
 <!-- end -->
 
 <!-- example for grouping by MVA -->
-当按多值属性分组时，一个文档将贡献给与该文档关联的不同值数量相等的多个组。例如，如果集合中恰有一个文档具有“product_codes”多值属性，其值为5、7和11，则按“product_codes”分组将生成3个组，每个组的 `COUNT(*)` 为1，`GROUPBY()` 键值分别是5、7和11。另请注意，按多值属性分组可能导致结果集中出现重复文档，因为每个文档可以参与多个组。
+当按多值属性分组时，一份文档会贡献多个组数，这取决于与该文档关联的不同值的数量。例如，如果一个集合中恰好有一份文档，其 'product_codes' 多值属性包含值 5、7 和 11，则对 'product_codes' 分组会生成 3 个组，且 `COUNT(*)` 等于 1，`GROUPBY()` 键值分别为 5、7 和 11。另请注意，按多值属性分组可能导致结果集中存在重复文档，因为每个文档可以参与多个组。
 
 <!-- intro -->
 ##### SQL:
@@ -3072,7 +3091,7 @@ Query OK, 1 row affected (0.00 sec)
 <!-- end -->
 
 <!-- example for MVA value order -->
-作为多值属性值插入的数字的顺序不会被保留。值内部以排序集合的形式存储。
+多值属性中插入值的顺序不会被保留。值在内部以排序集合形式存储。
 
 <!-- intro -->
 ##### SQL:
@@ -3389,7 +3408,7 @@ class SearchResponse {
 
 <!-- example for creating MVA64 -->
 
-一种允许存储可变长度64位有符号整数列表的数据类型。它具有与多值整数相同的功能。
+一种允许存储可变长度 64 位有符号整数列表的数据类型。它具有与多值整数相同的功能。
 
 <!-- intro -->
 ##### SQL:
@@ -3398,7 +3417,7 @@ class SearchResponse {
 ```sql
 CREATE TABLE products(title text, values multi64);
 ```
-or
+或
 ```sql
 CREATE TABLE products(title text, values mva64);
 ```
@@ -3499,14 +3518,14 @@ table products
 
 <!-- end -->
 
-## 列存属性属性
+## 列式属性属性
 
-当您使用列存储时，您可以为属性指定以下属性。
+当你使用列存储时，可以为属性指定以下属性。
 
 <!-- example fast_fetch -->
 ### fast_fetch
 
-默认情况下，Manticore 列存储以列的方式存储所有属性，同时也以特殊的文档存储逐行存储。这使得像 `SELECT * FROM ...` 这样的查询能够快速执行，尤其是在一次获取大量记录时。但如果您确定不需要它或者想节省磁盘空间，可以在创建表时通过指定 `fast_fetch='0'` 禁用它，或者（如果您在配置中定义表）使用 `columnar_no_fast_fetch`，如下例所示。
+默认情况下，Manticore 列式存储以列方式存储所有属性，同时也在一个特殊的 docstore 里按行存储。这使得像 `SELECT * FROM ...` 这样的查询执行快速，特别是在一次获取大量记录时。然而，如果你确定不需要此功能或想节省磁盘空间，可以在创建表时指定 `fast_fetch='0'` 来禁用，或者（如果你是在配置中定义表）使用 `columnar_no_fast_fetch`，如下例所示。
 
 <!-- request RT mode -->
 ```sql

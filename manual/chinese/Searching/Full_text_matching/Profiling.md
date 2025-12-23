@@ -2,44 +2,44 @@
 
 ## 查询的解释方式
 
-考虑以下复杂查询示例：
+考虑这个复杂的查询示例：
 ```sql
 "hello world" @title "example program"~5 @body python -(php|perl) @* code
 ```
-该搜索的完整含义是：
+此搜索的完整含义是：
 
-* 在文档的任何字段中定位相邻的单词 'hello' 和 'world'；
-* 此外，同一文档的标题字段中必须包含单词 'example' 和 'program'，两者之间最多有但不包括 5 个单词；（例如，“example PHP program” 会匹配，但“example script to introduce outside data into the correct context for your program” 不会匹配，因为两个词之间有 5 个或更多单词）
-* 此外，同一文档的正文字段中必须包含单词 'python'，同时排除 'php' 或 'perl'；
-* 最后，同一文档的任何字段中必须包含单词 'code'。
+* 在文档的任意字段中相邻定位单词 'hello' 和 'world'；
+* 此外，同一文档中标题字段必须包含单词 'example' 和 'program'，两词之间最多不超过 5 个单词（不包括 5 个）；（例如，"example PHP program" 会匹配，但 "example script to introduce outside data into the correct context for your program" 不会匹配，因为两词之间有 5 个或更多单词）
+* 另外，同一文档的正文字段必须包含单词 'python'，同时排除 'php' 或 'perl'；
+* 最后，同一文档的任何字段必须包含单词 'code'。
 
-OR 运算符优先于 AND，因此“looking for cat | dog | mouse” 意味着“looking for (cat | dog | mouse)”，而不是“(looking for cat) | dog | mouse”。
+OR 操作符优先于 AND，所以 "looking for cat | dog | mouse" 意味着 "looking for (cat | dog | mouse)"，而不是 "(looking for cat) | dog | mouse"。
 
-为了理解查询将如何执行，Manticore Search 提供了查询分析工具，用于检查由查询表达式生成的查询树。
+为了理解查询如何被执行，Manticore Search 提供了查询分析工具，用于检查查询表达式生成的查询树。
 
 <!-- example profiling -->
 
-## 在 SQL 中分析查询树
+## SQL 中的查询树分析
 
-要启用带有 SQL 语句的全文查询分析，必须在执行所需查询之前激活它：
+要通过 SQL 语句启用全文查询分析，必须在执行目标查询之前激活它：
 
 ```sql
 SET profiling =1;
 SELECT * FROM test WHERE MATCH('@title abc* @body hey');
 ```
 
-要查看查询树，请在运行查询后立即执行 `SHOW PLAN` 命令：
+要查看查询树，执行查询后立即运行 `SHOW PLAN` 命令：
 
 ```sql
 SHOW PLAN;
 ```
 
-该命令将返回已执行查询的结构。请记住，3 个语句 - SET profiling、查询和 SHOW - 必须在同一会话中执行。
+该命令将返回已执行查询的结构。请记住，3 个语句 - SET profiling、查询语句和 SHOW - 必须在同一会话内执行。
 
 
-## 在 HTTP JSON 中分析查询
+## HTTP JSON 中的查询分析
 
-使用 HTTP JSON 协议时，只需启用 `"profile":true`，即可在响应中获得全文查询树结构。
+使用 HTTP JSON 协议时，我们只需启用 `"profile":true`，即可在响应中获取全文查询树结构。
 
 ```json
 {
@@ -51,24 +51,24 @@ SHOW PLAN;
   }
 }
 ```
-响应将包含一个 `profile` 对象，其中包含一个 `query` 成员。
+响应将包含一个 `profile` 对象，其中包含 `query` 成员。
 
-`query` 属性保存转换后的全文查询树。每个节点包括：
+`query` 属性包含转换后的全文查询树。每个节点由以下部分组成：
 
 * `type`：节点类型，可以是 AND、OR、PHRASE、KEYWORD 等。
-* `description`：该节点的查询子树，以字符串形式表示（`SHOW PLAN` 格式）
-* `children`：任何子节点（如果存在）
-* `max_field_pos`：字段内的最大位置
+* `description`：该节点表示的查询子树的字符串形式（采用 `SHOW PLAN` 格式）
+* `children`：子节点（如果有）
+* `max_field_pos`：字段中的最大位置
 
-关键词节点还将包括：
+关键字节点还包括：
 
-* `word`：转换后的关键词。
-* `querypos`：该关键词在查询中的位置。
-* `excluded`：关键词是否被排除在查询之外。
-* `expanded`：关键词是否由前缀扩展添加。
-* `field_start`：关键词必须出现在字段开头。
-* `field_end`：关键词必须出现在字段结尾。
-* `boost`：关键词的 IDF 将乘以此值。
+* `word`：转换后的关键字。
+* `querypos`：该关键字在查询中的位置。
+* `excluded`：关键字是否被排除在查询之外。
+* `expanded`：关键字是否通过前缀扩展添加。
+* `field_start`：关键字必须出现在字段开头。
+* `field_end`：关键字必须出现在字段结尾。
+* `boost`：关键字的 IDF（逆文档频率）将乘以此值。
 
 
 <!-- intro -->
@@ -507,7 +507,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example SHOW PLAN EXPANSION -->
 
-在某些情况下，由于扩展和其他转换，评估后的查询树可能与原始查询树有显著差异。
+在某些情况下，评估后的查询树可能因扩展和其他变换而与原始查询树有显著不同。
 
 <!-- intro -->
 ##### SQL:
@@ -1174,7 +1174,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 
-## 不运行查询时的分析
+## 不执行查询的分析
 
 <!-- Example Explain_query -->
 SQL 语句 `EXPLAIN QUERY` 允许显示给定全文查询的执行树，而无需对表执行实际的搜索查询。
@@ -1201,10 +1201,47 @@ Variable: transformed_tree
             AND(fields=(title), KEYWORD(running, querypos=1, morphed))))
   AND(fields=(body), KEYWORD(dog, querypos=2, morphed)))
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY t '@title a'"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "AND(fields=(title), KEYWORD(a, querypos=1))"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+
+```
+
 <!-- end -->
 
 <!-- Example Explain_query_dot -->
-`EXPLAIN QUERY ... option format=dot` 允许以分层格式显示提供的全文查询的执行树，适合使用现有工具进行可视化，例如 https://dreampuf.github.io/GraphvizOnline：
+`EXPLAIN QUERY ... option format=dot` 允许以适合现有工具（如 https://dreampuf.github.io/GraphvizOnline）可视化的层次格式显示给定全文查询的执行树：
 
 ![EXPLAIN QUERY graphviz example](graphviz.png)
 
@@ -1236,23 +1273,98 @@ Variable: transformed_tree
 4 [shape=record label="me | { querypos=2 }"]
 }
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY tbl '@title a' option format=dot"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "digraph \"transformed_tree\" {\n\n0 [shape=record,style=filled label=\"AND | { fields=(title) }\"]\n0 -> 1\n1 [shape=record label=\"a | { qp=1 }\"]\n}"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test1",
+  "_source": ["id", "packedfactors()"],
+  "query": {
+    "match": {"*": "test one"}
+  },
+  "expressions": {
+    "PACKEDFACTORS()": "PACKEDFACTORS()"
+  },
+  "options": {
+    "ranker": "expr('1')"
+  }
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "packedfactors()": "bm25=500, bm25a=0.500000, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.000000, min_idf=0.000000, max_idf=0.000000, sum_idf=0.000000, min_hit_pos=1, min_best_span_pos=1, exact_hit=1, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.000000, atc=0.000000), word0=(tf=1, idf=0.000000)"
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
-## 查看匹配因子值
+## 查看匹配因子的值
 <!-- example factors -->
-使用表达式排序器时，可以通过 [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) 函数显示计算出的因子值。
+当使用表达式排序器时，可以使用 [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) 函数显示计算因子的值。
 
 该函数返回：
 
-* 文档级别因素的值（例如 bm25、field_mask、doc_word_count）
+* 文档级因子的值（例如 bm25、field_mask、doc_word_count）
 * 生成命中的每个字段的列表（包括 lcs、hit_count、word_count、sum_idf、min_hit_pos 等）
-* 查询中每个关键词及其 tf 和 idf 值的列表
+* 查询中每个关键字及其 tf 和 idf 值的列表
 
 
-这些值可用于理解为什么某些文档在搜索中获得较低或较高的分数，或用于优化现有的排名表达式。
+这些值可以用来理解为什么某些文档在搜索中获得较低或较高的分数，或用来优化现有的排序表达式。
 
 <!-- intro -->
-Example:
+示例：
 
 <!-- request SQL -->
 ```sql

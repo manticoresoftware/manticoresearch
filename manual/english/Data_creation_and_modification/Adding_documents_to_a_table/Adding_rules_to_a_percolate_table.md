@@ -381,6 +381,67 @@ SELECT * FROM pq;
 | 2810855531667783689 | @title shoes | Louis Vuitton |         |
 +---------------------+--------------+---------------+---------+
 ```
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS pq;
+CREATE TABLE pq(title text, meta json) type='pq';
+-->
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', '', '')"
+POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', 'Louis Vuitton', '')"
+POST /sql -d "SELECT * FROM pq"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "id": 724024784404348900,
+        "_score": 1,
+        "_source": {
+          "query": "@title shoes",
+          "tags": "Louis Vuitton",
+          "filters": ""
+        }
+      },
+      {
+        "id": 724024784404348900,
+        "_score": 1,
+        "_source": {
+          "query": "@title shoes",
+          "tags": "",
+          "filters": ""
+        }
+      }
+    ]
+}
+```
+
 <!-- end -->
 
 <!-- example replace -->

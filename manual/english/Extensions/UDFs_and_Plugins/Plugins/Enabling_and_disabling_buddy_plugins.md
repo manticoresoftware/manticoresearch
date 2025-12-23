@@ -16,12 +16,21 @@ ENABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 This command reactivates a previously disabled Buddy plugin, allowing it to process your requests again.
 
 <!-- intro -->
-### Example
+### SQL Example
 
 <!-- request SQL -->
 ```sql
 ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
+
+<!-- intro -->
+### JSON Example
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
 <!-- end -->
 
 <!-- example disable_buddy_plugin -->
@@ -39,6 +48,14 @@ This command deactivates an active Buddy plugin, preventing it from processing a
 <!-- request SQL -->
 ```sql
 DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
+```
+
+<!-- intro -->
+### JSON Example
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
 ```
 
 After disabling, if you try the `SHOW QUERIES` command, you'll encounter an error because the plugin is disabled.

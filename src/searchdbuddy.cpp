@@ -693,6 +693,17 @@ static void ProcessBuddyLogs ( const BuddyReply_t & tReply )
 	}
 }
 
+static void ParseBuddyLog ( const JsonObj_c & tItem, BuddyReply_t & tParsed, CSphString & sError )
+{
+	if ( !tItem.IsObj() )
+		return;
+
+	auto & tEntry = tParsed.m_dLogs.Add();
+	tItem.FetchStrItem ( tEntry.m_sType, "type", sError, false );
+	tItem.FetchStrItem ( tEntry.m_sSeverity, "severity", sError, false );
+	tItem.FetchStrItem ( tEntry.m_sMessage, "message", sError, false );
+}
+
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
 {
 	tParsed.m_tRoot = JsonObj_c ( sReplyRaw );
@@ -737,17 +748,16 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 
 	// optional log array with object items
 	JsonObj_c tLogs = tParsed.m_tRoot.GetItem ( "log" );
-	if ( tLogs && tLogs.IsArray() )
+	if ( tLogs )
 	{
-		for ( const auto & tLog : tLogs )
+		if ( tLogs.IsArray() )
 		{
-			if ( !tLog.IsObj() )
-				continue;
+			for ( const auto & tItem : tLogs )
+				ParseBuddyLog ( tItem, tParsed, sError );
 
-			auto & tEntry = tParsed.m_dLogs.Add();
-			tLog.FetchStrItem ( tEntry.m_sType, "type", sError, false );
-			tLog.FetchStrItem ( tEntry.m_sSeverity, "severity", sError, false );
-			tLog.FetchStrItem ( tEntry.m_sMessage, "message", sError, false );
+		} else if ( tLogs.IsObj() )
+		{
+			ParseBuddyLog ( tLogs, tParsed, sError );
 		}
 	}
 
@@ -876,6 +886,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
+
+	ProcessBuddyLogs ( tReplyParsed );
+
 	if ( ( bHttpEndpoint && tReplyParsed.m_sType!="json response" ) || ( !bHttpEndpoint && tReplyParsed.m_sType!="sql response" ) )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), tReplyParsed.m_sType.cstr(), tReplyRaw.second.cstr() );
@@ -910,8 +923,6 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
-
-	ProcessBuddyLogs ( tReplyParsed );
 
 	return true;
 }
@@ -956,6 +967,9 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
+
+	ProcessBuddyLogs ( tReplyParsed );
+
 	if ( tReplyParsed.m_sType!="sql response" )
 	{
 		LogSphinxqlError ( sSrcQuery.first, tError );
@@ -983,7 +997,6 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
 
-	ProcessBuddyLogs ( tReplyParsed );
 }
 
 #ifdef _WIN32

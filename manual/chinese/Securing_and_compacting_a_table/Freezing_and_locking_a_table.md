@@ -137,9 +137,9 @@ Manticore 仅支持**读（共享）**锁。不支持**写（独占）**锁。
 2. 检查表是否可以被锁定。它必须是本地的实时或 percolate 表，且不能是复制集群的一部分。
 3. 自动释放会话已持有的任何锁。
 4. 等待表上所有正在进行的插入、替换、更新或删除操作完成。
-5. 增加表的读锁计数器（参见 [SHOW LOCKS](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS)）。
+5. 增加表的读取锁计数器（参见 [SHOW LOCKS](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS)）。
 
-任何修改语句（insert/replace/update/delete）首先检查表是否被读锁定。如果是，语句将失败并返回错误 `table is locked`。
+任何修改语句（DML），如 `INSERT`、`REPLACE`、`UPDATE`、`DELETE` 和 `TRUNCATE`，首先会检查表是否被读取锁定。如果是，语句将以错误 `table is locked` 失败。DDL 语句（例如 `CREATE`、`ALTER`、`DROP`）不会被读取锁阻止。
 
 
 <!-- request Example -->
@@ -176,45 +176,45 @@ SHOW WARNINGS
 <!-- example unlock -->
 `UNLOCK TABLES` 命令显式释放当前 SQL 会话持有的任何表锁。
 
-如果客户端会话的连接终止，无论是正常还是异常，守护进程都会隐式释放该会话持有的所有表锁。如果客户端重新连接，这些锁将不再生效。
-UNLOCK TABLES;
+如果客户端会话的连接终止，无论是正常还是异常，守护进程都会隐式释放该会话持有的所有
+表锁。如果客户端重新连接，锁将不再生效。
 
 <!-- request Example -->
 
 ```sql
-## SHOW LOCKS
+UNLOCK TABLES;
 ```
 
 <!-- end -->
 
 
-`SHOW LOCKS` 命令列出当前被锁定或冻结的所有表。
+## SHOW LOCKS
 
 <!-- example show_locks -->
 
-每行显示表类型、表名、锁的类型以及一个计数器，指示该锁被应用的次数。
-**锁类型** 可以是：
+`SHOW LOCKS` 命令列出当前被锁定或冻结的所有表。  
+每一行显示表类型、表名、锁的类型以及指示该锁被应用次数的计数器。
 
-- `read` — 表被读锁保护。修改语句将在锁释放之前失败。
-- `freeze` — 表被冻结。这会阻止任何将数据写入磁盘的操作，直到表被解冻。
-SHOW LOCKS;
+**锁类型** 可以是：
+- `read` — 表被读取锁保护。修改语句将在锁释放前失败。
+- `freeze` — 表被冻结。这会阻止任何写入磁盘数据的操作，直到表被解冻。
 
 <!-- request Example -->
 
 ```sql
-+-----------+------+-----------+-----------------+
+SHOW LOCKS;
 ```
 
 <!-- response Example -->
 
 ```sql
++-----------+------+-----------+-----------------+
 | Type      | Name | Lock Type | Additional Info |
 +-----------+------+-----------+-----------------+
 | rt        | a    | read      | Count: 1        |
 | percolate | bar  | freeze    | Count: 3        |
 | rt        | foo  | freeze    | Count: 2        |
 +-----------+------+-----------+-----------------+
-3 rows in set (0,01 sec)
 3 rows in set (0,01 sec)
 ```
 

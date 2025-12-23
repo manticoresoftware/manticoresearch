@@ -25,14 +25,9 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 |        3 |
 +----------+
 ––– comment –––
-Lock table with READ lock
+Lock table with READ lock and read from it (should work in same session)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ;"
-––– output –––
-––– comment –––
-Read from locked table (should work)
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
+mysql -h0 -P9306 -e "LOCK TABLES products READ; SELECT * FROM products WHERE id = 1;"
 ––– output –––
 +------+-----------+------------+
 | id   | title     | price      |

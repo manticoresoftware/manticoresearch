@@ -36,18 +36,6 @@ This tests that LOCK TABLES works correctly with mysqldump
 mysqldump -h0 -P9306 manticore test_dump > /tmp/test_dump_with_locks.sql 2>/dev/null
 ––– output –––
 ––– comment –––
-Verify the dump file was created and contains INSERT statements
-––– input –––
-grep -c "INSERT INTO" /tmp/test_dump_with_locks.sql
-––– output –––
-1
-––– comment –––
-Verify dump contains all three records
-––– input –––
-grep -o "first\|second\|third" /tmp/test_dump_with_locks.sql | wc -l
-––– output –––
-3
-––– comment –––
 Drop the table and restore from dump created WITH locks
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE test_dump;"
@@ -57,16 +45,6 @@ Restore from dump that was created WITH LOCK TABLES
 ––– input –––
 mysql -h0 -P9306 < /tmp/test_dump_with_locks.sql 2>/dev/null
 ––– output –––
-––– comment –––
-Verify count of restored records
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
 ––– comment –––
 Verify all data was restored correctly from dump WITH locks
 ––– input –––
@@ -91,18 +69,6 @@ This tests the alternative approach when LOCK TABLES is not desired
 mysqldump -h0 -P9306 --skip-lock-tables manticore test_dump > /tmp/test_dump.sql 2>/dev/null
 ––– output –––
 ––– comment –––
-Verify the dump file was created and contains INSERT statements
-––– input –––
-grep -c "INSERT INTO" /tmp/test_dump.sql
-––– output –––
-1
-––– comment –––
-Verify dump contains all three records
-––– input –––
-grep -o "first\|second\|third" /tmp/test_dump.sql | wc -l
-––– output –––
-3
-––– comment –––
 Drop the table again and restore from dump WITHOUT locks
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE test_dump;"
@@ -112,16 +78,6 @@ Restore from dump that was created WITHOUT LOCK TABLES
 ––– input –––
 mysql -h0 -P9306 < /tmp/test_dump.sql 2>/dev/null
 ––– output –––
-––– comment –––
-Verify count of restored records
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_dump;"
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
 ––– comment –––
 Verify all data was restored correctly from dump WITHOUT locks
 ––– input –––

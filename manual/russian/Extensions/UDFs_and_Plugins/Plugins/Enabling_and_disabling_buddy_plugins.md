@@ -1,8 +1,8 @@
 # Включение и отключение плагинов Buddy
 
-Для упрощения управления плагинами Buddy, особенно при разработке нового или изменении существующего, предоставлены команды включения и отключения плагинов Buddy. Эти команды действуют временно во время выполнения и сбрасываются к значениям по умолчанию после перезапуска демона или выполнения сброса Buddy. Для постоянного отключения плагина его необходимо удалить.
+Для упрощения управления плагинами Buddy, особенно при разработке нового плагина или изменении существующего, предоставлены команды включения и отключения плагина Buddy. Эти команды действуют временно во время работы и сбрасываются к значениям по умолчанию после перезапуска демона или выполнения сброса Buddy. Чтобы навсегда отключить плагин, его необходимо удалить.
 
-Для включения или отключения плагина требуется полное квалифицированное имя пакета плагина. Чтобы его найти, можно выполнить запрос `SHOW BUDDY PLUGINS` и посмотреть полное квалифицированное имя в поле `package`. Например, плагин `SHOW` имеет полное квалифицированное имя `manticoresoftware/buddy-plugin-show`.
+Вам необходимо полное квалифицированное имя пакета плагина, чтобы включить или отключить его. Чтобы найти его, вы можете выполнить запрос `SHOW BUDDY PLUGINS` и посмотреть полное квалифицированное имя в поле `package`. Например, плагин `SHOW` имеет полное квалифицированное имя `manticoresoftware/buddy-plugin-show`.
 
 <!-- example enable_buddy_plugin -->
 ## ENABLE BUDDY PLUGIN
@@ -16,12 +16,21 @@ ENABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 Эта команда повторно активирует ранее отключённый плагин Buddy, позволяя ему снова обрабатывать ваши запросы.
 
 <!-- intro -->
-### Пример
+### Пример на SQL
 
 <!-- request SQL -->
 ```sql
 ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
+
+<!-- intro -->
+### Пример на JSON
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
 <!-- end -->
 
 <!-- example disable_buddy_plugin -->
@@ -31,7 +40,7 @@ ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 DISABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 ```
 
-Эта команда деактивирует активный плагин Buddy, предотвращая его обработку дальнейших запросов.
+Эта команда деактивирует активный плагин Buddy, предотвращая обработку им дальнейших запросов.
 
 <!-- intro -->
 ### Пример
@@ -41,6 +50,14 @@ DISABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 ```
 
-После отключения, если вы попробуете выполнить команду `SHOW QUERIES`, вы получите ошибку, так как плагин отключён.
+<!-- intro -->
+### Пример на JSON
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+```
+
+После отключения, если попробовать выполнить команду `SHOW QUERIES`, вы столкнётесь с ошибкой, так как плагин отключён.
 <!-- end -->
 

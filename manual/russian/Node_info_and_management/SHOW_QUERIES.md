@@ -1,4 +1,4 @@
-# SHOW QUERIES
+# ПОКАЗАТЬ ЗАПРОСЫ
 
 <!-- example SHOW QUERIES -->
 ```sql
@@ -11,7 +11,7 @@ SHOW QUERIES
 
 - `id`: ID запроса, который можно использовать в [KILL](../Node_info_and_management/KILL.md) для завершения запроса
 - `query`: Текст запроса или его часть
-- `time`: Время выполнения команды или сколько времени назад был выполнен запрос (в этом случае значение будет содержать `ago`)
+- `time`: Время выполнения команды или как давно был выполнен запрос (в этом случае значение будет содержать `ago`)
 - `protocol`: [Протокол соединения](../Server_settings/Searchd.md#listen), возможные значения: `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication` или их комбинации (например, `http,ssl` или `compressed,mysql`)
 - `host`: `ip:port` клиента
 
@@ -30,6 +30,66 @@ mysql> SHOW QUERIES;
 |   96 | SHOW QUERIES | 255us   | mysql    | 127.0.0.1:33616 |
 +------+--------------+---------+----------+-----------------+
 2 rows in set (0.61 sec)
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW QUERIES"
+```
+
+<!-- response JSON -->
+```
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 111,
+        "query": "select",
+        "time": "5ms ago",
+        "protocol": "http",
+        "host": "127.0.0.1:58986"
+      },
+      {
+        "id": 96,
+        "query": "SHOW QUERIES",
+        "time": "255us",
+        "protocol": "mysql",
+        "host": "127.0.0.1:33616"
+      }
+    ]
+  }
+]
+
 ```
 
 <!-- end -->

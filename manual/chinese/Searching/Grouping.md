@@ -1,14 +1,14 @@
-# 结果分组搜索
+# 分组搜索结果
 
 <!-- example general -->
-结果分组搜索通常有助于获取每个分组的匹配计数或其他聚合信息。例如，它对生成按月份显示匹配博客文章数量的图表有用，或者将网页搜索结果按网站分组，论坛帖子按作者分组等。
+分组搜索结果通常有助于获取每组的匹配数量或其他聚合。例如，它对于创建说明每月匹配博客文章数量的图表，或按站点分组网页搜索结果，或按作者分组论坛帖子等非常有用。
 
-Manticore 支持按单列或多列以及计算表达式进行搜索结果分组。结果可以：
+Manticore 支持按单个或多个列以及计算表达式对搜索结果进行分组。结果可以：
 
-* 在分组内排序
-* 每个分组返回多行
-* 对分组进行筛选
-* 对分组进行排序
+* 在组内排序
+* 每组返回多行
+* 对组进行过滤
+* 对组进行排序
 * 使用[聚合函数](../Searching/Grouping.md#Aggregation-functions)进行聚合
 
 <!-- intro -->
@@ -29,7 +29,7 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 <!-- request JSON -->
-JSON 查询格式目前支持基本分组，可以检索聚合值及其 count(*)。
+JSON 查询格式当前支持基本分组，可以检索聚合值及其 count(*)。
 
 ```json
 {
@@ -46,22 +46,22 @@ JSON 查询格式目前支持基本分组，可以检索聚合值及其 count(*)
 }
 ```
 
-标准查询输出返回未分组的结果集，可以使用 `limit` (或 `size`) 隐藏。
-聚合操作需要设置分组结果集的 `size`。
+标准查询输出返回未分组的结果集，可以使用 `limit`（或 `size`）隐藏。
+聚合需要设置分组结果集大小的 `size`。
 
 <!-- end -->
 
 <!-- example group1 -->
-### 仅进行分组
-分组非常简单，只需在 `SELECT` 查询结尾添加 "GROUP BY smth" 。这里的 "something" 可以是：
+### 仅分组
+分组非常简单——只需在 `SELECT` 查询末尾添加 "GROUP BY smth"。这里的内容可以是：
 
-* 表中的任何非全文字段：整数、浮点数、字符串、多值属性 (MVA)
-* 或者，如果您在 `SELECT` 列表中使用了别名，也可以按别名进行分组
+* 表中的任何非全文字段：整数、浮点数、字符串、多值属性（MVA）
+* 或者，如果在 `SELECT` 列表中使用了别名，也可以对其进行 GROUP BY
 
-您可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#Aggregation-functions)，依然有效：
+你可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#Aggregation-functions)，分组依然有效：
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -79,17 +79,74 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 |         2000 |
 +--------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table" : "films",
+  "limit": 0,
+  "aggs": {
+    "release_year": {
+      "terms":  {
+        "field": "release_year",
+        "size": 5
+      }
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "release_year": {
+      "buckets": [
+        {
+          "key": 2004,
+          "doc_count": 108
+        },
+        {
+          "key": 2002,
+          "doc_count": 108
+        },
+        {
+          "key": 2001,
+          "doc_count": 91
+        },
+        {
+          "key": 2005,
+          "doc_count": 119
+        },
+        {
+          "key": 2000,
+          "doc_count": 97
+        }
+      ]
+    }
+  }
+}
+```
+
 <!-- end -->
 <!-- example group2 -->
-然而，大多数情况下，您可能想要获取每个分组的一些聚合数据，例如：
+然而，在大多数情况下，你会希望为每个组获取一些聚合数据，例如：
 
-* `COUNT(*)` 用于简单获取每个分组中的元素数量
-* 或者 `AVG(field)` 用于计算组内某字段的平均值
+* 使用 `COUNT(*)` 仅获取每组的元素数量
+* 或者使用 `AVG(field)` 计算组内字段的平均值
 
-对于 HTTP JSON 请求，在主查询级别使用带有 `limit=0` 的单个 `aggs` 桶，效果类似于带有 `GROUP BY` 和 `COUNT(*)` 的 SQL 查询，具有等效的行为和性能。
+对于 HTTP JSON 请求，在主查询级别使用带有 `limit=0` 的单个 `aggs` 桶，作用类似于带有 `GROUP BY` 和 `COUNT(*)` 的 SQL 查询，提供等效的行为和性能。
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL1 -->
 ```sql
@@ -501,11 +558,11 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 <!-- example sort1 -->
-##### 对分组排序
-默认情况下，分组不排序，通常您接下来想做的就是按某些内容排序，比如按您分组的字段：
+##### 对组进行排序
+默认情况下，组不会排序，通常下一步你会希望按某个字段排序，比如你用于分组的字段：
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -523,16 +580,70 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 |         2004 |      108 |
 +--------------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
+
+POST /search
+{
+}
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2000,
+        "count(*)": 97
+      },
+      {
+        "release_year": 2001,
+        "count(*)": 91
+      },
+      {
+        "release_year": 2002,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2003,
+        "count(*)": 106
+      },
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example sort2 -->
-另一种方式是按聚合排序：
+或者，你可以按聚合排序：
 
-* 按 `count(*)` 显示元素最多的分组优先
-* 按 `avg(rental_rate)` 显示评分最高的电影优先。示例中通过别名实现：`avg(rental_rate)` 先映射为 `avg` 在 `SELECT` 列表中，然后直接使用 `ORDER BY avg`
+* 按 `count(*)` 排序，以显示元素最多的组优先
+* 按 `avg(rental_rate)` 排序，以显示评分最高的电影优先。注意，在示例中是通过别名完成的：`avg(rental_rate)` 首先映射为 `avg`，然后简单执行 `ORDER BY avg`
 
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL1 -->
 ```sql
@@ -567,14 +678,65 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 |         2008 | 2.99000049 |
 +--------------+------------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2003,
+        "count(*)": 106
+      },
+      {
+        "release_year": 2006,
+        "count(*)": 103
+      },
+      {
+        "release_year": 2008,
+        "count(*)": 102
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group3 -->
-##### 同时按多个字段分组
-有时，您可能想不仅按单字段分组，而是同时按多个字段，比如电影的类别和年份：
+##### 同时按多个字段 GROUP BY
+有时你可能希望不仅按一个字段分组，而是按多个字段一起分组，比如电影的分类和年份：
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -687,11 +849,11 @@ POST /search -d '
 <!-- end -->
 
 <!-- example group4 -->
-##### 返回每组 N 行
-有时您想看到每个分组的不止一个元素。使用 `GROUP N BY` 可以轻松实现。例如，下面的例子显示每年两部电影，而不是简单 `GROUP BY release_year` 只返回一部电影。
+##### 给我 N 条记录
+有时不仅需要每组的单个元素，而是多个。这可以使用 `GROUP N BY` 轻松实现。例如，下面的情况中，我们为每个年份获取两部电影，而不是简单的 `GROUP BY release_year` 返回的一部。
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -710,20 +872,75 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 |         2007 | ARACHNOPHOBIA ROLLERCOASTER |
 +--------------+-----------------------------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2009,
+        "title": "ALICE FANTASIA"
+      },
+      {
+        "release_year": 2009,
+        "title": "ALIEN CENTER"
+      },
+      {
+        "release_year": 2008,
+        "title": "AMADEUS HOLY"
+      },
+      {
+        "release_year": 2008,
+        "title": "ANACONDA CONFESSIONS"
+      },
+      {
+        "release_year": 2007,
+        "title": "ANGELS LIFE"
+      },
+      {
+        "release_year": 2007,
+        "title": "ARACHNOPHOBIA ROLLERCOASTER"
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group5 -->
-##### 分组内排序
-另一个重要的分析需求是对组内元素排序。实现方式是使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，获取每年评分最高的电影。注意它和普通的 `ORDER BY` 是并行工作的：
+##### 组内排序
+另一个关键的分析需求是对组内元素排序。为此，使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，让我们获取每年评分最高的电影。注意，这与仅使用 `ORDER BY` 并行工作：
 
-* `WITHIN GROUP ORDER BY` 排序**组内的结果**
-* 而普通的 `GROUP BY` 排序**分组本身**
+* `WITHIN GROUP ORDER BY` 对结果**组内排序**
+* 仅 `GROUP BY` **对组本身排序**
 
-这两者相互独立地工作。
+这两者完全独立工作。
 
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -741,11 +958,71 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 |         2005 | AIRPLANE SIERRA  |    4.990000 |
 +--------------+------------------+-------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      },
+      {
+        "rental_rate": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2009,
+        "title": "AMERICAN CIRCUS",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2009,
+        "title": "ANTHEM LUKE",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2008,
+        "title": "ATTACKS HATE",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2008,
+        "title": "ALADDIN CALENDAR",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2007,
+        "title": "AIRPLANE SIERRA",
+        "rental_rate": 4.990000
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group6 -->
-##### 筛选分组
-`HAVING expression` 是用来筛选分组的有用子句。`WHERE` 在分组前应用，而 `HAVING` 是针对分组进行过滤。例如，保留那些该年电影平均租金价格超过 3 的年份。结果只得到四个年份：
+##### 过滤组
+`HAVING expression` 是一个用于过滤分组的有用子句。虽然 `WHERE` 应用于分组之前，`HAVING` 则作用于分组。例如，我们只保留那些该年份电影的平均租赁价格高于 3 的年份。结果只得到四个年份：
 
 <!-- intro -->
 ##### 示例：
@@ -765,17 +1042,63 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 |         2006 | 3.26184368 |
 +--------------+------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "avg": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2002,
+        "avg": 3.08259249
+      },
+      {
+        "release_year": 2001,
+        "avg": 3.09989142
+      },
+      {
+        "release_year": 2000,
+        "avg": 3.17556739
+      },
+      {
+        "release_year": 2006,
+        "avg": 3.26184368
+      }
+    ],
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
-**注意：** [搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的`total_found`值反映了符合`HAVING`条件的分组数量。这使得在使用`HAVING`子句和`GROUP BY`时能够实现正确的分页。
+**注意：** 在[搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中，`total_found` 值反映了符合 `HAVING` 条件的分组数量。这使得在使用带有 `GROUP BY` 的 `HAVING` 子句时能够实现正确的分页。
 
 <!-- example group7 -->
 ##### GROUPBY()
-有一个函数`GROUPBY()`，返回当前分组的键。在许多情况下都很有用，尤其是在你[按MVA分组](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29)或按[JSON值分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)时。
+有一个函数 `GROUPBY()`，它返回当前分组的键。它在很多情况下都很有用，尤其是在你[按 MVA 分组](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29)或[按 JSON 值分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)时。
 
-它也可以用于`HAVING`，例如，只保留年份2000和2002。
+它也可以用在 `HAVING` 中，例如，只保留年份 2000 和 2002。
 
-注意，当你同时按多个字段GROUP BY时，不建议使用`GROUPBY()`。它仍然可以工作，但由于此时分组键是字段值的复合，可能不会以你期望的方式展示。
+注意，当你同时按多个字段进行分组时，不推荐使用 `GROUPBY()`。尽管它仍将起作用，但由于此时分组键是字段值的复合，结果可能不会符合你的预期。
 
 <!-- intro -->
 ##### 示例：
@@ -793,15 +1116,53 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 |         2000 |       97 |
 +--------------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002)"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2002,
+        "count": 108
+      },
+      {
+        "release_year": 2000,
+        "count": 97
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example mva -->
-##### 按MVA（多值属性）分组
-Manticore支持按[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)分组。为了演示其工作方式，我们创建一个名为"shoes"且带有MVA "sizes"的表，并插入几个文档：
+##### 按多值属性 (MVA) 分组
+Manticore 支持按[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)分组。为演示其工作原理，创建一个包含 MVA 字段 "sizes" 的表 "shoes" 并插入几个文档：
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
 ```
-所以我们有：
+得到以下数据：
 ```sql
 SELECT * FROM shoes;
 +---------------------+----------+---------+
@@ -812,7 +1173,7 @@ SELECT * FROM shoes;
 | 1657851069130080267 | 42,43    | reebook |
 +---------------------+----------+---------+
 ```
-如果现在我们按"sizes"分组，它会处理所有我们的多值属性，并为每个返回聚合结果，在本例中仅是计数：
+如果现在按 "sizes" 进行分组，它将处理所有多值属性并为每个值返回聚合，这里只是计数：
 
 <!-- intro -->
 ##### 示例：
@@ -1495,10 +1856,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 ## 聚合函数
-除了返回每个分组元素个数的 `COUNT(*)` 外，你还可以使用各种其他聚合函数：
+除了返回每组元素数量的 `COUNT(*)` 外，你还可以使用各种其他聚合函数：
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
-虽然 `COUNT(*)` 返回组内所有元素的数量，`COUNT(DISTINCT field)` 返回该组内字段的唯一值数量，这可能与总数完全不同。例如，你可能有100个元素，但某个字段的值全部相同。`COUNT(DISTINCT field)` 有助于判断这一点。为了说明这一点，我们创建一个包含学生姓名、年龄和专业的表 "students"：
+虽然 `COUNT(*)` 返回组中所有元素的数量，`COUNT(DISTINCT field)` 返回组内该字段唯一值的数量，可能与总计数完全不同。例如，一个组中可能有100个元素，但某个字段的值全部相同。`COUNT(DISTINCT field)` 可以帮助确定这种情况。为此，我们创建一个包含学生姓名、年龄和专业的 "students" 表：
 ```sql
 CREATE TABLE students(name text, age int, major string);
 INSERT INTO students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
@@ -1519,21 +1880,21 @@ MySQL [(none)]> SELECT * from students;
 +---------------------+------+----------+---------+
 ```
 
-在这个例子中，你可以看到，如果我们按照专业分组并显示 `COUNT(*)` 和 `COUNT(DISTINCT age)`，很明显，有两个选择了专业 "cs" 的学生，且年龄各不相同，但对专业 "arts" 来说，同样是两个学生，却只有一个唯一的年龄。
+在这个例子中，你可以看到，如果按专业分组并同时显示 `COUNT(*)` 和 `COUNT(DISTINCT age)`，就能清楚发现选择专业为 "cs" 的学生有两个，且年龄有两个不同值，而选择 "arts" 专业的学生也是两个，但只有一个唯一年龄。
 
 每个查询最多只能有一个 `COUNT(DISTINCT)`。
 
-** 默认情况下，计数是近似的 **
+**默认情况下，计数是近似值**
 
-实际上，有些计数是精确的，有些是近似的。下面会详细介绍。
+实际上，有些是精确的，有些是近似的。下面将详细说明。
 
-Manticore 支持两种计算不同值计数的算法。一种是传统算法，使用大量内存且通常较慢。它收集 `{group; value}` 对，进行排序，并定期去除重复项。这种方法的优点是在普通表中保证计数的精确。你可以通过将 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置为 `0` 来启用它。
+Manticore 支持两种计算唯一值计数的算法。一种是使用大量内存且通常较慢的旧算法。它收集 `{group; value}` 对，排序后定期去重。该方法的优点是保证普通表中的计数是精确的。通过将 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置为 `0` 可以启用该算法。
 
-另一种算法（默认启用）将计数加载到哈希表中，并返回其大小。如果哈希表过大，其内容会被转移到 `HyperLogLog` 中。此时计数变为近似，因为 `HyperLogLog` 是一种概率算法。优势是每个组的最大内存使用量是固定的，取决于 `HyperLogLog` 的精度。总体内存使用也取决于反映组数的 [max_matches](../Searching/Options.md#max_matches) 设置。
+另一种算法（默认启用）将计数加载到哈希表中并返回哈希表大小。如果哈希表变得过大，其内容会被移入 `HyperLogLog`。这时计数变为近似，因为 `HyperLogLog` 是一种概率算法。其优势是每个组的最大内存使用量固定，取决于 `HyperLogLog` 的精度。整体内存使用还取决于反映组数的 [max_matches](../Searching/Options.md#max_matches) 设置。
 
-[distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置了保证计数精确的阈值。`HyperLogLog` 的精度设置和“从哈希表转为 HyperLogLog”的阈值均由该设置决定。此选项需谨慎使用，因为其值加倍会使计算计数的最大内存需求加倍。内存最大使用量可以通过公式大致估算：`64 * max_matches * distinct_precision_threshold`。注意，这是最坏情况，通常计数计算所用内存远低于此值。
+[distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置保证计数精确的阈值。`HyperLogLog` 的精度设置和“哈希表转换为 HyperLogLog”的阈值都从此选项中派生。使用该选项时需谨慎，因为其值加倍将使计数所需的最大内存加倍。最大内存使用可以粗略估算为：`64 * max_matches * distinct_precision_threshold`。请注意，这只是最坏情况，大多数情况下计数计算所用 RAM 会远低于该值。
 
-** 对于分布式表或多个磁盘块组成的实时表，`COUNT(DISTINCT)` 可能返回不准确结果 **，但对于由本地普通表或实时表（具有相同架构，即字段集/顺序相同，但可能分词设置不同）组成的分布式表，应返回准确结果。
+**针对分布式表或由多个磁盘块组成的实时表，`COUNT(DISTINCT)` 可能返回不准确的结果**，但对于由本地普通表或实时表（具有相同模式，即字段集合/顺序相同，但可能有不同的分词设置）组成的分布式表，结果应是准确的。
 
 <!-- intro -->
 ##### 示例：
@@ -1552,14 +1913,64 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 | cs       |        2 |                   2 |
 +----------+----------+---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw - d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "major": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(distinct age)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "major": "arts",
+        "count(*)": 2,
+        "count(distinct age)": 1
+      },
+      {
+        "major": "business",
+        "count(*)": 1,
+        "count(distinct age)": 1
+      },
+      {
+        "major": "cs",
+        "count(*)": 2,
+        "count(distinct age)": 2
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-通常，你希望更好地理解每个分组的内容。你可以使用 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 实现，但会返回你可能不想要的额外行。`GROUP_CONCAT()` 通过将组内指定字段的值连接，丰富了分组信息。我们以上一个例子为例，改进为显示每个组内所有年龄。
+通常，你想更好地了解每个组的内容。可以使用 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 实现，但它会返回你可能不希望出现在结果中的额外行。`GROUP_CONCAT()` 通过将组中特定字段的值连接起来丰富你的分组。以之前的示例为例，改进显示每组中的所有年龄。
 
-`GROUP_CONCAT(field)` 返回以逗号分隔的值列表。
+`GROUP_CONCAT(field)` 返回逗号分隔的值列表。
 
 <!-- intro -->
 ##### 示例：
@@ -1578,10 +1989,68 @@ SELECT major, count(*), count(distinct age), group_concat(age) FROM students GRO
 | cs       |        2 |                   2 | 21,22             |
 +----------+----------+---------------------+-------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age), group_concat(age) FROM students GROUP BY major"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "major": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(distinct age)": {
+          "type": "long long"
+        }
+      },
+      {
+        "group_concat(age)": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "major": "arts",
+        "count(*)": 2,
+        "count(distinct age)": 1,
+        "group_concat(age)": 21,21
+      },
+      {
+        "major": "business",
+        "count(*)": 1,
+        "count(distinct age)": 1,
+        "group_concat(age)": 22
+      },
+      {
+        "major": "cs",
+        "count(*)": 2,
+        "count(distinct age)": 2,
+        "group_concat(age)": 21,22
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example sum -->
 ##### SUM(), MIN(), MAX(), AVG()
-当然，你也可以获取组内的和、平均值、最小值和最大值。
+当然，你还可以获得组内的总和、平均值、最小值和最大值。
 
 <!-- intro -->
 ##### 示例：
@@ -1602,18 +2071,98 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 | 2004 | 300.920044 | 0.990000 | 4.990000 | 2.78629661 |
 +------+------------+----------+----------+------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg FROM films GROUP BY release_year ORDER BY year asc LIMIT 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "sum": {
+          "type": "long long"
+        }
+      },
+      {
+        "min": {
+          "type": "long long"
+        }
+      },
+      {
+        "max": {
+          "type": "long long"
+        }
+      },
+      {
+        "avg": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2000,
+        "sum": 308.030029,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 3.17556739
+      },
+      {
+        "year": 2001,
+        "sum": 282.090118,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 3.09989142
+      },
+      {
+        "year": 2002,
+        "sum": 332.919983,
+        "min": 0.99,
+        "max": 4.990000,
+        "avg": 3.08259249
+      },
+      {
+        "year": 2003,
+        "sum": 310.940063,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 2.93339682
+      },
+      {
+        "year": 2004,
+        "sum": 300.920044,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 2.78629661
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example accuracy -->
 ## 分组准确性
 
-分组操作使用固定内存，大小由 [max_matches](../Searching/Options.md#max_matches) 设置决定。如果 `max_matches` 允许存储所有找到的组，结果将是100%准确的。但如果 `max_matches` 过小，结果将不够准确。
+分组操作是在固定内存中完成的，该内存依赖于 [max_matches](../Searching/Options.md#max_matches) 设置。如果 `max_matches` 足够存储所有找到的组，结果将是 100% 准确的。但是，如果 `max_matches` 设定较低，结果的准确性会降低。
 
-当涉及并行处理时，情况会更复杂。当启用 `pseudo_sharding` 和/或使用多个磁盘块的 RT 表时，每个块或伪分片返回的结果集大小均不超过 `max_matches`，这可能导致多个线程的结果集合并时聚合和分组计数不准确。解决方法是增大 `max_matches` 或禁用并行处理。
+当涉及并行处理时，情况可能变得更加复杂。当启用 `pseudo_sharding` 和/或使用具有多个磁盘块的 RT 表时，每个块或伪分片都会得到一个不超过 `max_matches` 的结果集。这在不同线程的结果集合并时，可能导致聚合和分组计数的不准确。为了解决这个问题，可以使用更大的 `max_matches` 值或禁用并行处理。
 
-如果 Manticore 侦测到分组可能返回不准确结果，会尝试将 `max_matches` 增加到 [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold)。侦测基于从辅助索引（如存在）获取的分组属性唯一值数量。
+如果检测到 groupby 可能返回不准确的结果，Manticore 会尝试将 `max_matches` 提高到 [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) 以进行修正。检测基于从二级索引（如果存在）检索的 groupby 属性的唯一值数量。
 
-当使用 RT 表或 `pseudo_sharding` 时，为确保聚合和分组计数准确，可启用 `accurate_aggregation`。该选项将尝试将 `max_matches` 提升到阈值，若阈值不足以保证准确，则禁用查询的并行处理。
+为了在使用 RT 表或 `pseudo_sharding` 时确保聚合和/或分组计数的准确，可以启用 `accurate_aggregation`。这将尝试将 `max_matches` 提高到阈值，如果阈值不足够高，Manticore 将为查询禁用并行处理。
 
 <!-- intro -->
 ##### 示例：
@@ -1655,6 +2204,143 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 | 2001 |       91 |
 +------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 108
+      },
+      {
+        "year": 2002,
+        "count(*)": 108
+      },
+      {
+        "year": 2001,
+        "count(*)": 91
+      },
+      {
+        "year": 2005,
+        "count(*)": 93
+      },
+      {
+        "year": 2000,
+        "count(*)": 97
+      },
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=1;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 76
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=2;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 76
+      },
+      {
+        "year": 2002,
+        "count(*)": 74
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=3;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 108
+      },
+      {
+        "year": 2002,
+        "count(*)": 108
+      },
+      {
+        "year": 2001,
+        "count(*)": 91
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
 

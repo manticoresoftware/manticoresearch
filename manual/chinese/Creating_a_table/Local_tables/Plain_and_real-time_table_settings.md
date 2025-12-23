@@ -606,10 +606,10 @@ source 字段指定在当前表索引期间将从哪个源获取文档。必须�
 
 killlist_target = main:kl
 
-此设置决定将 kill-list 应用于哪个表。针对目标表中，在当前表里被更新或删除的匹配项将被屏蔽。在 `:kl` 模式下，要屏蔽的文档来自于[kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)。在 `:id` 模式下，当前表中的所有文档 ID 会在目标表中被屏蔽。如果两者皆未指定，则两种模式都会生效。[了解更多关于 kill-list 的信息](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+该设置确定将应用杀名单的表。目标表中在当前表中被更新或删除的匹配项将被抑制。在 `:kl` 模式下，要抑制的文档来自[杀名单](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)。在 `:id` 模式下，当前表中的所有文档ID都会在目标表中被抑制。如果两者都未指定，则两种模式都将生效。[点击这里了解更多关于杀名单的信息](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
 ```ini
-取值：**未指定**（默认），target_table_name:kl，target_table_name:id，target_table_name。允许多个值
+取值：**未指定**（默认），target_table_name:kl，target_table_name:id，target_table_name。允许多个值。
 ```
 
 #### columnar_attrs
@@ -619,23 +619,23 @@ columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 
 ```ini
-此配置设置决定哪些属性应存储在[列存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，而非行存储中。
-您可以设置 `columnar_attrs = *` 来将所有支持的数据类型存储在列存储中。
+此配置设置确定哪些属性应存储在[列式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，而不是行式存储中。
+您可以设置 `columnar_attrs = *` 将所有支持的数据类型存储在列式存储中。
 ```
 
-此外，`id` 是一个支持存储在列存储中的属性。
+此外，`id` 是支持存储在列式存储中的属性。
 
 #### columnar_strings_no_hash
 
 columnar_strings_no_hash = attr1, attr2, attr3
 
-默认情况下，存储在列存储中的所有字符串属性都会存储预先计算的哈希。这些哈希用于分组和过滤。但是它们占用额外空间，如果您不需要根据该属性分组，可以通过禁用哈希生成来节省空间。
+默认情况下，存储在列式存储中的所有字符串属性都会存储预先计算的哈希值。这些哈希用于分组和过滤。但是，它们占用额外的空间，如果您不需要按该属性分组，可以通过禁用哈希生成节省空间。
 
 ```ini
 ### 通过 CREATE TABLE 在线创建实时表
 ```
 
-##### CREATE TABLE 的通用语法
+##### CREATE TABLE 的一般语法
 
 CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type options] [, ...]) [table_options]
 
@@ -643,62 +643,79 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 ##### 数据类型：
 
 ```sql
-关于数据类型的更多信息，请参见[这里的数据类型详情](../../Creating_a_table/Data_types.md)。
+有关数据类型的更多信息，请参见[这里的数据类型介绍](../../Creating_a_table/Data_types.md)。
 ```
 
-| 类型 | 配置文件中的等效类型 | 说明 | 别名 |
+| 类型 | 配置文件中的等价项 | 备注 | 别名 |
 
 | - | - | - | - |
 
-| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | 选项：indexed，stored。默认：**两者**都选。若只需存储但不索引，指定“stored”；仅索引不存储，指定“indexed”。 | string |
-| [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| 整数	 | int，uint |
+| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | 选项：indexed, stored。默认：**两者皆有**。如果只想存储文本但不索引，请指定 "stored"。如果只想索引文本但不存储，请指定 "indexed"。 | string |
+| [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| 整数	 | int, uint |
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| 大整数	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | 浮点数  |   |
-| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点向量  |   |
+| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点值向量  |   |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | 多值整数 | mva |
 | [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多值大整数  | mva64 |
-| [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔型 |   |
+| [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔值 |   |
 | [json](../../Creating_a_table/Data_types.md#JSON) | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON |   |
-| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | 字符串。选项 `indexed, attribute` 可使该值既全文索引，又可过滤、排序与分组  |   |
+| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | 字符串。选项 `indexed, attribute` 将使该值同时具备全文索引且可过滤、排序和分组  |   |
 | [timestamp](../../Creating_a_table/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | 时间戳  |   |
-| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N 是最大位数  |   |
-##### 通过 CREATE TABLE 创建实时表示例
+| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N 是最大保留的位数  |   |
+##### 通过 CREATE TABLE 创建实时表的示例
 CREATE TABLE products (title text, price float) morphology='stem_en'
 
 <!-- intro -->
-这将创建名为 "products" 的表，包含两个字段：“title”（全文索引）和“price”（浮点型），同时设置“morphology”为“stem_en”。
+这将创建 "products" 表，包含两个字段："title"（全文索引）和 "price"（浮点数），并将 "morphology" 设置为 "stem_en"。
 <!-- request SQL -->
 
 ```sql
 CREATE TABLE products (title text indexed, description text stored, author text, price float)
 ```
 
-这将创建名为 "products" 的表，包含三个字段：
+这将创建 "products" 表，包含三个字段：
 
 ```sql
-* “title” 被索引，但不存储。
+* "title" 是索引字段，但不存储。
 ```
-* “description” 被存储，但不索引。
-* “author” 同时存储和索引。
+* "description" 是存储字段，但不索引。
+* "author" 既存储又索引。
+POST /sql?mode=raw -d "CREATE TABLE products (title text, price float) morphology='stem_en'"
+这将创建 "products" 表，包含两个字段："title"（全文索引）和 "price"（浮点数），并将 "morphology" 设置为 "stem_en"。
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text indexed, description text stored, author text, price float)"
+```
+
+这将创建 "products" 表，包含三个字段：
+
+```JSON
+* "title" 是索引字段，但不存储。
+```
+* "description" 是存储字段，但不索引。
+* "author" 既存储又索引。
 ## 引擎
 create table ... engine='columnar';
+
 <!-- end -->
 
 
 create table ... engine='rowwise';
 
 ```ini
-engine 设置更改表中所有属性的默认[属性存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)方式。您也可以[为每个属性单独指定 engine](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages)。
-关于如何为平面表启用列存储，详见 [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) 。
+engine 设置更改表中所有属性的默认[属性存储方式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。您也可以为[每个属性单独指定 engine](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages)。
+有关如何为普通表启用列式存储的信息，请参见[columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)。
 ```
 
 取值：
 
-* columnar - 为所有表属性启用列存储，除 [json](../../Creating_a_table/Data_types.md#JSON) 外
+* columnar - 为除[json](../../Creating_a_table/Data_types.md#JSON)外的所有表属性启用列式存储
 
-* **rowwise（默认）** - 不改变任何设置，使用传统的行存储。
+* **rowwise（默认）** - 不改变任何设置，使用传统的行式存储方式
 ## 其他设置
-以下设置适用于实时表和平面表，无论是在配置文件中指定，还是在线通过 `CREATE` 或 `ALTER` 命令设置。
+以下设置适用于实时和普通表，无论它们是指定在配置文件中，还是通过 `CREATE` 或 `ALTER` 命令在线设置。
 
 
 ### 性能相关
@@ -706,71 +723,71 @@ engine 设置更改表中所有属性的默认[属性存储](../../Creating_a_ta
 
 Manticore 支持两种读取表数据的访问模式：seek+read 和 mmap。
 
-在 seek+read 模式下，服务器使用 `pread` 系统调用读取文档列表和关键字位置，这些由 `*.spd` 和 `*.spp` 文件表示。服务器使用内部读取缓冲区来优化读取过程，这些缓冲区的大小可以通过选项 [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) 和 [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) 进行调整。还有一个选项 [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) 用于控制 Manticore 启动时如何打开文件。
-在 mmap 访问模式下，搜索服务器使用 `mmap` 系统调用将表文件映射到内存中，操作系统缓存文件内容。选项 [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) 和 [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) 对该模式下的相应文件无效。mmap 读取器还可以使用特权调用 `mlock` 锁定表数据在内存中，防止操作系统将缓存数据交换到磁盘。
+在 seek+read 模式下，服务器使用 `pread` 系统调用读取文档列表和关键词位置，由 `*.spd` 和 `*.spp` 文件表示。服务器使用内部读缓冲区来优化读取过程，这些缓冲区的大小可以通过选项[read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) 和 [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) 进行调整。还有一个选项 [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) 用于控制 Manticore 启动时如何打开文件。
+在 mmap 访问模式中，搜索服务器使用 `mmap` 系统调用将表的文件映射到内存，并由操作系统缓存文件内容。选项 [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) 和 [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) 对此模式下的相应文件无效。mmap 读取器还可以使用特权调用 `mlock` 将表的数据锁定在内存中，防止操作系统将缓存的数据交换出磁盘。
 
-为了控制使用哪种访问模式，提供了选项 **access_plain_attrs**、**access_blob_attrs**、**access_doclists**、**access_hitlists** 和 **access_dict**，其取值如下：
+要控制使用哪种访问模式，可以使用选项 **access_plain_attrs**、**access_blob_attrs**、**access_doclists**、**access_hitlists** 和 **access_dict**，支持以下值：
 
 | 值 | 描述 |
 
 | - | - |
 
-| file | 服务器使用内部缓冲区通过 seek+read 从磁盘读取表文件 |
-| mmap | 服务器将表文件映射到内存，操作系统缓存其内容 |
-| mmap_preread | 服务器将表文件映射到内存，后台线程会读取一次以预热缓存 |
-| mlock | 服务器将表文件映射到内存，然后执行 mlock() 系统调用缓存文件内容并锁定在内存中，防止被交换出去 |
-| 设置 | 取值 | 描述 |
+| file | 服务器使用带内部缓冲区的 seek+read 从磁盘读取表文件 |
+| mmap | 服务器将表文件映射到内存，操作系统缓存文件内容 |
+| mmap_preread | 服务器将表文件映射到内存，且有后台线程预读缓存文件 |
+| mlock | 服务器将表文件映射到内存，然后执行 mlock() 系统调用，将文件内容缓存并锁定在内存，防止交换出内存 |
+| 设置 | 值 | 描述 |
 | - | - | - |
 
 
-| access_plain_attrs  | mmap, **mmap_preread** (默认), mlock | 控制如何读取 `*.spa`（普通属性）、`*.spe`（跳跃列表）、`*.spt`（查找表）、`*.spm`（已删除文档） |
-| access_blob_attrs   | mmap, **mmap_preread** (默认), mlock  | 控制如何读取 `*.spb`（blob 属性）（字符串、多值和 json 属性） |
+| access_plain_attrs  | mmap, **mmap_preread** (默认), mlock | 控制如何读取 `*.spa`（普通属性）、`*.spe`（跳跃列表）、`*.spt`（查找表）、`*.spm`（已杀文档） |
+| access_blob_attrs   | mmap, **mmap_preread** (默认), mlock  | 控制如何读取 `*.spb`（BLOB 属性）（字符串、多值和 JSON 属性） |
 | access_doclists   | **file** (默认), mmap, mlock  | 控制如何读取 `*.spd`（文档列表）数据 |
 | access_hitlists   | **file** (默认), mmap, mlock  | 控制如何读取 `*.spp`（命中列表）数据 |
 | access_dict   | mmap, **mmap_preread** (默认), mlock  | 控制如何读取 `*.spi`（字典） |
-下面的表格可以帮助您选择所需的模式：
-| 表部分 |	保留在磁盘 |	保留在内存 |	服务器启动时缓存到内存 | 锁定在内存 |
+以下表格可以帮助您选择所需模式：
+| 表部分 |	保留在磁盘 |	保留在内存 |	服务器启动时缓存于内存 | 在内存中锁定 |
 
 | - | - | - | - | - |
 
-| [行存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列存储）的普通属性、跳跃列表、词表、查找表、已删除文档 | 	mmap | mmap |	**mmap_preread** (默认) | mlock |
-| 行存储的字符串、多值属性（MVA）和 json 属性 | mmap | mmap | **mmap_preread** (默认) | mlock |
-| [列存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 的数值、字符串和多值属性 | 始终 | 仅通过操作系统 | 否 | 不支持 |
-| 文档列表 | **file** (默认) | mmap | 否	| mlock |
-| 命中列表 | **file** (默认) | mmap | 否	| mlock |
+| [行式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列式）存储的普通属性、跳跃列表、词列表、查找表、已杀文档 | 	mmap | mmap |	**mmap_preread** (默认) | mlock |
+| 行式字符串、多值属性（MVA）和 JSON 属性 | mmap | mmap | **mmap_preread** (默认) | mlock |
+| [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 数值、字符串和多值属性 | 始终 | 仅通过操作系统 | 无 | 不支持 |
+| 文档列表 | **file** (默认) | mmap | 无 | mlock |
+| 命中列表 | **file** (默认) | mmap | 无 | mlock |
 | 字典 | mmap | mmap | **mmap_preread** (默认) | mlock |
-##### 推荐如下：
-* 若追求 **最快的搜索响应时间** 且内存充足，使用 [行存储](../../Creating_a_table/Data_types.md#JSON) 属性并通过 `mlock` 锁定在内存中。同时，对文档列表/命中列表也使用 mlock。
+##### 推荐：
+* 若需**最快的搜索响应时间**且有充足内存，使用[行式](../../Creating_a_table/Data_types.md#JSON)属性并使用 `mlock` 将其锁定在内存中。此外，对文档列表和命中列表也使用 mlock。
 
-* 如果优先考虑 **启动后不允许性能下降**，且愿意接受更长的启动时间，可使用 [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options) 选项。若希望更快的 searchd 重启，则保持默认的 `mmap_preread` 选项。
+* 如果您优先考虑**启动后性能不能降低**，且愿意接受较长启动时间，可使用 [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options) 选项。如果希望搜索守护进程快速重启，则保持默认的 `mmap_preread` 选项。
 
-* 若希望 **节省内存**，但仍有足够内存容纳所有属性，则跳过使用 `mlock`。操作系统将根据频繁的磁盘读取决定保留哪些内容在内存中。
-* 如果行存储属性 **无法全部放入内存**，则选择 [列存储属性](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。
-* 如果全文搜索 **性能不是重点**，且希望节省内存，则使用 `access_doclists/access_hitlists=file`。
-默认模式提供了以下平衡：
+* 如果您想**节省内存**，但仍确保所有属性有足够的内存，请跳过使用 `mlock`。操作系统会根据频繁的磁盘读取决定保留哪些数据在内存。
+* 如果行式属性**无法全部放入内存**，请选择[列式属性](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。
+* 如果全文搜索的**性能不是重点**，且想节省内存，使用 `access_doclists/access_hitlists=file`。
+默认模式在以下方面达到平衡：
 * mmap，
 
-* 预读非列存储属性，
-* 对列存储属性无预读的 seek+read，
-* 对文档列表/命中列表无预读的 seek+read。
-这在大多数场景下提供了良好的搜索性能、内存利用率和更快的 searchd 重启。
+* 预读非列式属性，
+* 对列式属性无预读地进行 seek 和读取，
+* 对文档列表/命中列表无预读地进行 seek 和读取。
+这提供了良好的搜索性能、优化的内存利用率以及大多数场景下搜索守护进程更快的重启速度。
 ### 其他性能相关设置
 
 #### attr_update_reserve
 
 attr_update_reserve = 256k
 
-此设置为更新 blob 属性（如多值属性 MVA、字符串和 JSON）预留额外空间。默认值为 128k。更新这些属性时，其长度可能变化。如果更新后的字符串比之前短，则会覆盖 `*.spb` 文件中的旧数据；如果更新后的字符串更长，则写入 `*.spb` 文件末尾。该文件是内存映射的，调整其大小可能较慢，具体取决于操作系统的内存映射文件实现。为避免频繁调整大小，可使用此设置在 .spb 文件末尾预留额外空间。
+此设置用于为多值属性（MVA）、字符串和 JSON 等 blob 属性的更新保留额外空间。默认值为 128k。更新这些属性时，其长度可能变化。如果更新后的字符串比之前短，会覆盖 `*.spb` 文件中的旧数据；如果更新后的字符串更长，则写入 `*.spb` 文件的末尾。该文件是内存映射的，文件大小调整可能很慢，具体取决于操作系统的内存映射文件实现。为避免频繁调整大小，可使用此设置在 .spb 文件末尾预留额外空间。
 
 ```ini
-取值：大小，默认 **128k**。
+值：大小，默认 **128k**。
 ```
 
 #### docstore_block_size
 
 docstore_block_size = 32k
 
-此设置控制文档存储使用的块大小。默认值为16kb。当使用stored_fields或stored_only_fields存储原始文档文本时，文本存储在表内并进行压缩以提高效率。为了优化小文档的磁盘访问和压缩比，这些文档会被连接成块。索引过程会收集文档，直到它们的总大小达到此选项指定的阈值。此时，文档块会被压缩。可以调整此选项以实现更好的压缩比（通过增加块大小）或更快的文档文本访问速度（通过减小块大小）。
+此设置控制文档存储使用的块大小。默认值为16kb。当原始文档文本通过stored_fields或stored_only_fields存储时，它会存储在表内并进行压缩以提高效率。为了优化小文档的磁盘访问和压缩率，这些文档会被连接成块。索引过程会收集文档，直到它们的总大小达到此选项指定的阈值。此时，文档块会被压缩。可以调整此选项以实现更好的压缩率（通过增加块大小）或更快的文档文本访问速度（通过减小块大小）。
 
 ```ini
 值：大小，默认 **16k**。
@@ -780,27 +797,27 @@ docstore_block_size = 32k
 
 docstore_compression = lz4hc
 
-此设置决定用于压缩存储在文档存储中的文档块的压缩类型。如果指定了stored_fields或stored_only_fields，文档存储会存储压缩的文档块。‘lz4’提供快速的压缩和解压速度，而‘lz4hc’（高压缩）牺牲部分压缩速度以获得更好的压缩比。‘none’完全禁用压缩。
+此设置决定用于压缩存储在文档存储中的文档块的压缩类型。如果指定了stored_fields或stored_only_fields，文档存储会存储压缩的文档块。'lz4' 提供快速的压缩和解压缩速度，而 'lz4hc'（高压缩）则以牺牲部分压缩速度为代价获得更好的压缩比。'none' 完全禁用压缩。
 
 ```ini
-值：**lz4**（默认），lz4hc，none。
+值：**lz4**（默认）、lz4hc、none。
 ```
 
 #### docstore_compression_level
 
 docstore_compression_level = 12
 
-当文档存储中使用‘lz4hc’压缩时使用的压缩级别。通过调整压缩级别，可以在使用‘lz4hc’压缩时找到性能和压缩比之间的平衡。请注意，此选项在使用‘lz4’压缩时不适用。
+当文档存储中使用 'lz4hc' 压缩时所采用的压缩级别。通过调整压缩级别，可以在使用 'lz4hc' 压缩时找到性能与压缩比之间的平衡。请注意，此选项在使用 'lz4' 压缩时无效。
 
 ```ini
-值：1到12之间的整数，默认值为 **9**。
+值：1到12之间的整数，默认为 **9**。
 ```
 
 #### preopen
 
 preopen = 1
 
-此设置指示searchd在启动或轮换时应打开所有表文件，并在运行时保持打开状态。默认情况下，文件不会预先打开。预先打开的表每个表需要几个文件描述符，但它们消除了每次查询调用open()的需求，并且在高负载下表轮换时不会发生竞争条件。然而，如果您服务许多表，按查询打开它们可能更有效以节省文件描述符。
+此设置表示searchd应在启动或轮换时打开所有表文件，并在运行时保持打开状态。默认情况下，文件不会被预先打开。预先打开的表每个表需要几个文件描述符，但它们消除了每次查询调用open()的需要，并且不会受高负载下表轮换期间可能发生的竞态条件影响。然而，如果您服务大量表，为了节省文件描述符，按查询打开文件可能更高效。
 
 ```ini
 值：**0**（默认），或1。
@@ -810,7 +827,7 @@ preopen = 1
 
 read_buffer_docs = 1M
 
-用于存储每个关键字文档列表的缓冲区大小。增加此值将在查询执行期间导致更高的内存使用，但可能减少I/O时间。
+用于存储每个关键词的文档列表的缓冲区大小。增加此值将在查询执行期间增加内存使用，但可能减少I/O时间。
 
 ```ini
 值：大小，默认 **256k**，最小值为8k。
@@ -820,7 +837,7 @@ read_buffer_docs = 1M
 
 read_buffer_hits = 1M
 
-用于存储每个关键字命中列表的缓冲区大小。增加此值将在查询执行期间导致更高的内存使用，但可能减少I/O时间。
+用于存储每个关键词的命中列表的缓冲区大小。增加此值将在查询执行期间增加内存使用，但可能减少I/O时间。
 
 ```ini
 值：大小，默认 **256k**，最小值为8k。
@@ -837,12 +854,12 @@ inplace_enable = {0|1}
 <!-- example inplace_enable -->
 
 ```ini
-`inplace_enable`选项在索引纯表时减少磁盘占用，同时略微降低索引速度（它使用大约2倍更少的磁盘，但性能约为原始的90-95%）。
+`inplace_enable` 选项减少纯表索引时的磁盘占用，同时稍微减慢索引速度（它使用的磁盘大约是原来的2倍少，但性能保持在90-95%左右）。
 ```
 
-索引由两个主要阶段组成。第一阶段，收集文档，处理并按关键字部分排序，中间结果写入临时文件（.tmp*）。第二阶段，文档完全排序并创建最终表文件。在线重建生产表大约需要3倍峰值磁盘占用：首先是中间临时文件，其次是新构建的副本，第三是同时为生产查询服务的旧表。（中间数据大小与最终表相当。）对于大型数据集合，这可能占用过多磁盘，`inplace_enable`选项可用于减少它。启用时，它重用临时文件，将最终数据写回这些文件，并在完成时重命名它们。但这可能需要额外的临时数据块重定位，这就是性能影响的来源。
+索引过程包含两个主要阶段。第一阶段，文档被收集、处理并部分按关键词排序，临时结果写入临时文件（.tmp*）。第二阶段，文档被完全排序并创建最终的表文件。在在线重建生产表时，需要大约3倍的峰值磁盘空间：首先是临时中间文件，其次是新构建的副本，最后是仍在为生产查询服务的旧表。（中间数据与最终表大小相当。）这对于大型数据集合可能磁盘占用过高，可以使用 `inplace_enable` 选项来减少。当启用时，它会重用临时文件，将最终数据输出回它们，并在完成后重命名它们。然而，这可能需要额外的临时数据块重定位，这是性能影响的来源。
 
-此指令对[searchd](../../Starting_the_server/Manually.md)无效，仅影响[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)。
+该指令对[searchd](../../Starting_the_server/Manually.md)没有影响，仅影响[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)。
 
 ##### CONFIG:
 
@@ -864,12 +881,12 @@ inplace_hit_gap = size
 ```
 <!-- end -->
 
-[就地反转](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable)的微调选项。控制预分配的命中列表间隙大小。可选，默认值为0。
+[就地反转](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable)的微调选项。控制预分配命中列表间隙大小。可选，默认值为0。
 
 <!-- example inplace_hit_gap -->
 
 ```ini
-此指令仅影响[searchd](../../Starting_the_server/Manually.md)工具，对[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)无影响。
+该指令只影响[searchd](../../Starting_the_server/Manually.md)工具，对于[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)无影响。
 ```
 
 ##### CONFIG:
@@ -892,12 +909,12 @@ inplace_reloc_factor = 0.1
 ```
 <!-- end -->
 
-inplace_reloc_factor设置决定索引期间内存区域中重定位缓冲区的大小。默认值为0.1。
+inplace_reloc_factor 设置决定索引期间内存区域内重定位缓冲区的大小。默认值为0.1。
 
 <!-- example inplace_reloc_factor -->
 
 ```ini
-此选项为可选，仅影响[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)工具，不影响[searchd](../../Starting_the_server/Manually.md)服务器。
+此选项是可选的，仅影响[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)工具，不影响[searchd](../../Starting_the_server/Manually.md)服务器。
 ```
 
 ##### CONFIG:
@@ -920,12 +937,12 @@ inplace_write_factor = 0.1
 ```
 <!-- end -->
 
-控制索引期间就地写入使用的缓冲区大小。可选，默认值为0.1。
+控制索引期间就地写入所用缓冲区的大小。可选，默认值为0.1。
 
 <!-- example inplace_write_factor -->
 
 ```ini
-请注意，此指令仅影响[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)工具，不影响[searchd](../../Starting_the_server/Manually.md)服务器。
+需要注意的是，该指令仅影响[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)工具，不影响[searchd](../../Starting_the_server/Manually.md)服务器。
 ```
 
 ##### CONFIG:

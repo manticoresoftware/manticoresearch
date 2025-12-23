@@ -818,85 +818,65 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
+POST /sql -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
 ```
 
 <!-- response JSON -->
-
 ```JSON
-[
-  {
-    "columns": [
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": [
       {
-        "brand_name": {
-          "type": "string"
+        "_id": 1,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand One",
+          "brand_id": 1
         }
       },
       {
-        "brand_id": {
-          "type": "long"
+        "_id": 2,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand Ten",
+          "brand_id": 10
         }
-      }
-    ],
-    "data": [
-      {
-        "brand_name": "Brand One",
-        "brand_id": 1
-      },
-      {
-        "brand_name": "Brand Ten",
-        "brand_id": 10
       },
       ...
       {
-        "brand_name": "Brand One",
-        "brand_id": 1
+        "_id": 20,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand Nine",
+          "brand_id": 9
+        }
       },
-      {
-        "brand_name": "Brand Nine",
-        "brand_id": 9
-      }
-    ],
-    "total": 20,
-    "error": "",
-    "warning": ""
+    ]
   },
-  {
-    "columns": [
-      {
-        "brand_name": {
-          "type": "string"
-        }
-      },
-      {
-        "count(*)": {
-          "type": "long long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "brand_name": "Brand One",
-        "count(*)": 1013
-      },
-      {
-        "brand_name": "Brand Ten",
-        "count(*)": 998
-      },
-      {
-        "brand_name": "Brand Eight",
-        "count(*)": 1033
-      },
-      {
-        "brand_name": "Brand Seven",
-        "count(*)": 965
-      }
-    ],
-    "total": 10,
-    "error": "",
-    "warning": ""
+  "aggregations": {
+    "brand_name": {
+      "buckets": [
+        {
+          "key": "Brand One",
+          "doc_count": 1013
+        },
+        {
+          "key": "Brand Ten",
+          "doc_count": 998
+        },
+        ...
+        {
+          "key": "Brand Seven",
+          "doc_count": 965
+        },
+      ]
+    }
   }
-]
+}
 ```
 
 <!-- end -->

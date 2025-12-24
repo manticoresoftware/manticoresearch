@@ -22,7 +22,7 @@ To run KNN searches, you must first configure your table. Float vectors and KNN 
   
   **Note:** When using `COSINE` similarity, vectors are automatically normalized upon insertion. This means the stored vector values may differ from the original input values, as they will be converted to unit vectors (vectors with a mathematical length/magnitude of 1.0) to enable efficient cosine similarity calculations. This normalization preserves the direction of the vector while standardizing its length.
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.
-* `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off.
+* `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off. The default is 200.
 
 <!-- intro -->
 ##### SQL
@@ -331,7 +331,7 @@ The parameters are:
   - Vector array: Works the same as `query_vector`.
 * `query_vector`: (Legacy parameter) The search vector as an array of numbers. Still supported for backward compatibility.
   **Note:** Use either `query` or `query_vector`, not both in the same request.
-* `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search.
+* `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search. The default is 10.
 * `rescore`: Enables KNN rescoring (disabled by default). Set to `1` in SQL or `true` in JSON to enable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. No oversampling is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
 

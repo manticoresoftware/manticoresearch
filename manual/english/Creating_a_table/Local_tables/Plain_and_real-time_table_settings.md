@@ -584,11 +584,9 @@ In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influ
 
 * [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
 
-* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has
-  reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
 
-* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192),
-  the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192), the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 

@@ -1,11 +1,11 @@
 # 连接到服务器
 
 <!-- example connect -->
-在默认配置下，Manticore 正在等待您的连接：
+使用默认配置，Manticore 正在等待您的连接：
 
-  * 端口 9306 用于 MySQL 客户端
-  * 端口 9308 用于 HTTP/HTTPS 连接
-  * 端口 9312 用于 HTTP/HTTPS，以及来自其他 Manticore 节点和基于 Manticore 二进制 API 的客户端的连接
+  * 为 MySQL 客户端开放端口 9306
+  * 为 HTTP/HTTPS 连接开放端口 9308
+  * 为 HTTP/HTTPS 以及来自其他 Manticore 节点和基于 Manticore 二进制 API 的客户端开放端口 9312
 
 <!-- intro -->
 ##### 通过 MySQL 连接：
@@ -132,7 +132,7 @@ async fn maticore_connect {
 
 <!-- intro -->
 ##### 通过 Docker 连接
-如果您熟悉 Docker，可以使用 Manticore 的[官方 Docker 镜像](https://github.com/manticoresoftware/docker)来运行 Manticore。以下是如何通过 MySQL 连接到 Manticore 的 Docker：
+如果您熟悉 Docker，可以使用 Manticore 的[官方 Docker 镜像](https://github.com/manticoresoftware/docker)来运行 Manticore。下面是如何通过 MySQL 连接到 Manticore 的 docker：
 <!-- request docker -->
 运行 Manticore 容器并使用内置的 MySQL 客户端连接到节点。
 ```bash

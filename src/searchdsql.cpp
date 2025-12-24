@@ -416,6 +416,7 @@ public:
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
 	void			FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
+	void			FilterNot ( SqlNode_t & tNode, const SqlNode_t & tExpr );
 	void			SetOp ( SqlNode_t & tNode );
 
 	bool			SetOldSyntax();
@@ -457,6 +458,7 @@ private:
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
+	void			NegateFilterTree ( int iNode );
 };
 
 using YYSTYPE = SqlNode_t;
@@ -1968,6 +1970,41 @@ void SqlParser_c::FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const S
 	tElem.m_bOr = true;
 	tElem.m_iLeft = tLeft.m_iParsedOp;
 	tElem.m_iRight = tRight.m_iParsedOp;
+}
+
+void SqlParser_c::NegateFilterTree ( int iNode )
+{
+	if ( iNode<0 || iNode>=m_dFilterTree.GetLength() )
+		return;
+
+	FilterTreeItem_t & tItem = m_dFilterTree[iNode];
+	if ( tItem.m_iFilterItem >= 0 )
+	{
+		// leaf - negate the filter
+		if ( tItem.m_iFilterItem<m_pQuery->m_dFilters.GetLength() )
+		{
+			CSphFilterSettings & tFilter = m_pQuery->m_dFilters[tItem.m_iFilterItem];
+			tFilter.m_bExclude = !tFilter.m_bExclude;
+		}
+
+	} else
+	{
+		// branch - apply de morgan
+		// NOT (A OR B)  > (NOT A) AND (NOT B)
+		// NOT (A AND B) > (NOT A) OR (NOT B)
+		tItem.m_bOr = !tItem.m_bOr;
+		if ( tItem.m_bOr )
+			m_bGotFilterOr = true;
+
+		NegateFilterTree ( tItem.m_iLeft );
+		NegateFilterTree ( tItem.m_iRight );
+	}
+}
+
+void SqlParser_c::FilterNot ( SqlNode_t & tNode, const SqlNode_t & tExpr )
+{
+	tNode.m_iParsedOp = tExpr.m_iParsedOp;
+	NegateFilterTree ( tNode.m_iParsedOp );
 }
 
 

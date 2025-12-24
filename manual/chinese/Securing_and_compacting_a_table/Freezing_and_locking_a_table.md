@@ -132,14 +132,14 @@ lock tables tbl1 read[, tbl2 read, ...]
 
 Manticore 只支持 **读（共享）** 锁。 **写（独占）** 锁不支持。
 
-当一个会话请求读锁时，Manticore：  
-1. 检查连接是否使用 MySQL 协议。  
-2. 检查表是否可以被锁定。它必须是本地的实时表或 percolate 表，并且不能是复制集群的一部分。  
-3. 自动释放该会话已持有的任何锁。  
-4. 等待表上所有正在进行的插入、替换、更新或删除操作完成。  
-5. 增加该表的读锁计数器（参见[SHOW LOCKS](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS)）。  
+当会话请求读锁时，Manticore：
+1. 检查连接是否使用 MySQL 协议。
+2. 检查表是否可以被锁定。它必须是本地的实时或 percolate 表，且不能是复制集群的一部分。
+3. 自动释放会话已持有的任何锁。
+4. 等待表上所有正在进行的插入、替换、更新或删除操作完成。
+5. 增加表的读取锁计数器（参见 [SHOW LOCKS](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS)）。
 
-任何修改语句（insert/replace/update/delete）首先会检查表是否被读锁定。如果是，语句将失败并报错 `table is locked`。  
+任何修改语句（DML），如 `INSERT`、`REPLACE`、`UPDATE`、`DELETE` 和 `TRUNCATE`，首先会检查表是否被读取锁定。如果是，语句将以错误 `table is locked` 失败。DDL 语句（例如 `CREATE`、`ALTER`、`DROP`）不会被读取锁阻止。
 
 
 <!-- request Example -->
@@ -176,8 +176,8 @@ SHOW WARNINGS
 <!-- example unlock -->
 `UNLOCK TABLES` 命令显式释放当前 SQL 会话持有的任何表锁。  
 
-如果客户端会话的连接终止，无论是正常还是异常，守护进程都会隐式释放该会话持有的所有  
-表锁。如果客户端重新连接，锁将不再生效。  
+如果客户端会话的连接终止，无论是正常还是异常，守护进程都会隐式释放该会话持有的所有
+表锁。如果客户端重新连接，锁将不再生效。
 
 <!-- request Example -->
 
@@ -192,12 +192,12 @@ UNLOCK TABLES;
 
 <!-- example show_locks -->
 
-`SHOW LOCKS` 命令列出当前所有被锁定或冻结的表。  
-每行显示表类型、表名、锁类型，以及表示该锁被应用次数的计数器。  
+`SHOW LOCKS` 命令列出当前被锁定或冻结的所有表。  
+每一行显示表类型、表名、锁的类型以及指示该锁被应用次数的计数器。
 
-**锁类型** 可以为：  
-- `read` — 表被读锁定保护。修改语句在锁释放之前会失败。  
-- `freeze` — 表已被冻结。这阻止任何将数据写入磁盘的操作，直到表被解冻。  
+**锁类型** 可以是：
+- `read` — 表被读取锁保护。修改语句将在锁释放前失败。
+- `freeze` — 表被冻结。这会阻止任何写入磁盘数据的操作，直到表被解冻。
 
 <!-- request Example -->
 

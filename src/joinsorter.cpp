@@ -1648,6 +1648,22 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 
 	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( m_tQuery.m_dFilters, *m_pSorterSchema, GetJoinedIndexName().cstr() );
 	bool bLeftJoin = m_tQuery.m_eJoinType==JoinType_e::LEFT;
+	
+	// Validate: left table should not be prefixed in WHERE clause filters
+	CSphString sLeftTableName = m_pIndex->GetName();
+	CSphString sLeftPrefix;
+	sLeftPrefix.SetSprintf ( "%s.", sLeftTableName.cstr() );
+	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
+	{
+		const auto & tFilter = m_tQuery.m_dFilters[i];
+		if ( tFilter.m_sAttrName.Begins ( sLeftPrefix.cstr() ) )
+		{
+			CSphString sAttrName = tFilter.m_sAttrName.SubString ( sLeftPrefix.Length(), tFilter.m_sAttrName.Length() - sLeftPrefix.Length() );
+			sError.SetSprintf ( "table %s: unknown column: %s (do not prefix left table attributes in JOIN queries, use '%s' instead of '%s')", sLeftTableName.cstr(), sAttrName.cstr(), sAttrName.cstr(), tFilter.m_sAttrName.cstr() );
+			return false;
+		}
+	}
+	
 	if ( bLeftJoin || m_tQuery.m_dFilterTree.GetLength() )
 	{
 		if ( !dRightFilters.GetLength() )

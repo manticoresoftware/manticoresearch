@@ -179,7 +179,7 @@ CLT tests run inside Docker containers to ensure consistent environment. There a
 For quick testing of existing functionality using public Docker images:
 
 ```bash
-# Pull the test-kit image (contains latest dev from master)
+# Pull the test-kit image (contains latest development build from the main/master branch)
 docker pull ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
 
 # Start Manticore container
@@ -223,7 +223,7 @@ cd misc
 
 **What it does:**
 
-1. Pulls base image `test-kit-latest` (contains latest dev from master)
+1. Pulls base image `test-kit-latest` (contains latest development build from the main/master branch)
 2. Compiles your code changes
 3. Creates Docker image `test-kit:local` ready for CLT testing
 

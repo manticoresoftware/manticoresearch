@@ -1,17 +1,17 @@
-# 主+增量方案
+# 主增量模式
 
 <!-- example maindelta -->
-在许多情况下，整个数据集过大，无法频繁地从头重建，而新增记录的数量相对较少。例如，一个论坛可能有1,000,000条存档帖子，但每天只收到1,000条新帖子。
+在许多情况下，整个数据集太大，无法频繁从头重建，而新记录的数量相对较小。例如，一个论坛可能有1,000,000条存档帖子，但每天只收到1,000条新帖子。
 
-在这种情况下，可以使用“主+增量”方案实现“实时”（近实时）表更新。
+在这种情况下，可以使用“主增量”方案来实现“实时”（近乎实时）的表更新。
 
-该概念涉及设置两个源和两张表，一张“主”表用于存储很少变化（如果有的话）的数据，另一张“增量”表用于存储新文档。在示例中，1,000,000条存档帖子存储在主表中，而每天新增的1,000条帖子存储在增量表中。增量表可以频繁重建，使文档在几秒或几分钟内可供搜索。确定哪些文档属于哪张表以及重建主表可以完全自动化。一种方法是创建一个计数器表，跟踪用于划分文档的ID，并在主表重建时更新它。
+该方案涉及设置两个数据源和两个表，一个“主”表用于存储很少变化（如果有的话）的数据，一个“增量”表用于存储新文档。在示例中，1,000,000条存档帖子将存储在主表中，而每天的1,000条新帖子将放在增量表中。增量表可以频繁重建，使文档在几秒或几分钟内可供搜索。确定哪些文档属于哪个表以及重建主表可以完全自动化。一种方法是创建一个计数器表来跟踪用于拆分文档的ID，并在重建主表时更新它。
 
-使用时间戳列作为划分变量比使用ID更有效，因为时间戳不仅可以跟踪新文档，还可以跟踪被修改的文档。
+使用时间戳列作为拆分变量比使用ID更有效，因为时间戳不仅可以跟踪新文档，还可以跟踪修改过的文档。
 
-对于可能包含被修改或删除文档的数据集，增量表应提供受影响文档的列表，确保它们被屏蔽并从搜索查询中排除。这是通过称为“杀死列表”的功能实现的。要杀死的文档ID可以在辅助查询中指定，该查询由[sql_query_killlist](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)定义。增量表必须使用[killlist_target](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target)指令指明杀死列表将应用于的目标表。杀死列表对目标表的影响是永久性的，这意味着即使在没有增量表的情况下执行搜索，被屏蔽的文档也不会出现在搜索结果中。
+对于可能包含修改或删除文档的数据集，增量表应提供受影响文档的列表，确保它们被抑制并从搜索查询中排除。这通过使用名为Kill Lists的功能来实现。要被杀死的文档ID可以在由[sql_query_killlist](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)定义的辅助查询中指定。增量表必须使用[killlist_target](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target)指令来指示将应用Kill Lists的目标表。Kill Lists对目标表的影响是永久性的，这意味着即使在没有增量表的情况下执行搜索，被抑制的文档也不会出现在搜索结果中。
 
-注意我们在增量源中重写了`sql_query_pre`。我们必须显式包含此重写。如果不这样做，`REPLACE`查询也会在增量源构建期间执行，从而使其无效。
+注意我们如何在增量源中覆盖`sql_query_pre`。我们必须显式地包含这个覆盖。如果不这样做，`REPLACE`查询将在增量源的构建过程中执行，从而使它变得毫无用处。
 
 <!-- request Example -->
 ```ini

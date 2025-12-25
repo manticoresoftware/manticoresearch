@@ -467,7 +467,7 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 		}
 		else if ( sName=="must_not" )
 		{
-			std::tie ( bOk, pMustNotTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustNotQI, false );
+			std::tie ( bOk, pMustNotTreeRoot ) = ConstructBoolNodeFilters ( tClause, dMustNotQI, true );
 			if ( !bOk )
 				return { false, nullptr };
 		} else if ( sName=="filter" )
@@ -495,8 +495,16 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 
 	if ( pMustNotTreeRoot )
 	{
-		// fixme! this may not work as expected; better add a NOT node
-		WalkTree ( pMustNotTreeRoot, []( auto & pNode ) { if ( pNode->m_pFilter ) pNode->m_pFilter->m_bExclude = !pNode->m_pFilter->m_bExclude; } );
+		// also de morgan laws transform
+		// NOT (A AND B) > (NOT A) OR (NOT B)
+		// and NOT (A OR B) > (NOT A) AND (NOT B).
+		WalkTree ( pMustNotTreeRoot, []( auto & pNode )
+		{
+			if ( pNode->m_pFilter )
+				pNode->m_pFilter->m_bExclude = !pNode->m_pFilter->m_bExclude;
+			else
+				pNode->m_bOr = !pNode->m_bOr;
+		});
 
 		for ( auto & i : dMustNotQI )
 			dMustQI.Add(i);

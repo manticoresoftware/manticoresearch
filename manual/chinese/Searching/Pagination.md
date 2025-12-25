@@ -2,15 +2,15 @@
 
 <!-- example general -->
 
-Manticore Search 默认返回结果集中排名前20的匹配文档。
+Manticore Search 默认返回结果集中匹配度最高的前20个文档。
 
 #### SQL
-在 SQL 中，可以使用 `LIMIT` 子句来导航结果集。
+在 SQL 中，可以使用 `LIMIT` 子句来遍历结果集。
 
-`LIMIT` 可以接受一个数字作为返回集的大小（偏移量为零），也可以接受一对偏移量和大小的值。
+`LIMIT` 可以接受一个数字作为返回集的大小，或者一个偏移量和大小的配对值。
 
 #### HTTP JSON
-使用 HTTP JSON 时，节点 `offset` 和 `limit` 控制结果集的偏移量和返回集的大小。或者，也可以使用 `size` 和 `from` 这对参数。
+使用 HTTP JSON 时，节点 `offset` 和 `limit` 控制结果集的偏移量和返回集的大小。或者，可以使用配对 `size` 和 `from`。
 
 <!-- intro -->
 
@@ -46,13 +46,13 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 <!-- example maxMatches -->
 ### 结果集窗口
 
-默认情况下，Manticore Search 使用一个包含1000个最佳排名文档的结果集窗口，这些文档可以返回在结果集中。如果结果集分页超出此值，查询将以错误结束。
+Manticore Search 默认使用一个结果集窗口，最多返回1000个最佳排名的文档。如果结果集分页超过这个值，查询将出错。
 
-此限制可以通过查询选项 [max_matches](../Searching/Options.md#max_matches) 进行调整。
+这个限制可以通过查询选项 [max_matches](../Searching/Options.md#max_matches) 进行调整。
 
-只有在需要导航到如此深的位置时，才应将 `max_matches` 增加到非常高的值。较高的 `max_matches` 值需要更多内存，并可能增加查询响应时间。处理深度结果集的一种方法是将 `max_matches` 设置为偏移量和限制的总和。
+将 `max_matches` 增加到非常高值，只有在导航到这些点时才需要。高 `max_matches` 值需要更多的内存，并且会增加查询响应时间。处理深层结果集的一种方法是将 `max_matches` 设置为偏移量和限制之和。
 
-将 `max_matches` 降低到1000以下的好处是减少查询使用的内存。它也可以减少查询时间，但在大多数情况下，这种提升可能不明显。
+将 `max_matches` 降低到1000以下的好处是可以减少查询使用的内存。这也可以减少查询时间，但在大多数情况下，这可能不会带来明显的改进。
 
 <!-- intro -->
 
@@ -82,16 +82,16 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 
 ## 滚动搜索选项
 
-滚动搜索选项提供了一种高效且可靠的方式来分页浏览大型结果集。与传统的基于偏移量的分页不同，滚动搜索在深度分页时性能更好，并且实现分页更简单。
-虽然它使用与基于偏移量分页相同的 `max_matches` 窗口，但滚动搜索**可以通过使用滚动令牌在多次请求中检索结果，返回超过 `max_matches` 值的文档**。
-使用滚动分页时，无需同时使用 `offset` 和 `limit` —— 这是多余的，通常被认为是过度设计。只需指定 `limit` 和 `scroll` 令牌即可获取每个后续页面。
+滚动搜索选项提供了一种高效且可靠的方式来分页遍历大量结果集。与传统的基于偏移量的分页不同，滚动搜索为深度分页提供了更好的性能，并提供了一种更简单的分页实现方式。
+虽然它使用与基于偏移量的分页相同的 `max_matches` 窗口，但滚动搜索可以通过使用滚动令牌在多次请求中检索结果，**可以返回比 `max_matches` 值更多的文档**。
+使用滚动分页时，不需要一起使用 `offset` 和 `limit` — 这是多余的，通常被认为是过度工程。相反，只需指定 `limit` 以及 `scroll` 令牌来获取每一页。
 
 #### 通过 SQL 滚动
 
 <!-- example scroll_sql_init -->
-**带排序条件的初始查询**
+**初始查询带有排序条件**
 
-首先执行带有所需排序条件的初始查询。唯一要求是 `id` 必须包含在 ORDER BY 子句中，以确保分页的一致性。查询将返回结果和用于后续页面的滚动令牌。
+首先执行一个带有您所需排序条件的初始查询。唯一的要求是 `id` 必须包含在 ORDER BY 子句中，以确保分页的一致性。查询将返回您的结果和用于后续页面的滚动令牌。
 
 ```sql
 SELECT ... ORDER BY [... ,] id {ASC|DESC};
@@ -121,8 +121,8 @@ SELECT weight(), id FROM test WHERE match('hello') ORDER BY weight() desc, id as
 **获取滚动令牌**
 
 执行初始查询后，通过执行 `SHOW SCROLL` 命令获取滚动令牌。
-必须在滚动序列中的**每次**查询后调用 `SHOW SCROLL`，以获取下一页的更新滚动令牌。
-每次查询都会生成一个反映最新滚动位置的新令牌。
+在滚动序列中的每次查询后都必须调用 `SHOW SCROLL` 以获取用于下一页的更新滚动令牌。
+每次查询都会生成一个新的令牌，反映最新的滚动位置。
 
 ```sql
 SHOW SCROLL;
@@ -156,16 +156,16 @@ SHOW SCROLL;
 <!-- end -->
 
 <!-- example scroll_sql_paginated -->
-**使用 scroll 的分页查询**
+**使用 scroll 进行分页查询**
 
-要获取下一页结果，在后续查询中将滚动令牌作为选项包含。当提供 `scroll` 选项时，指定排序条件是可选的。
-记得在此查询后再次调用 `SHOW SCROLL`，以获取下一页所需的新令牌。
+要检索下一页的结果，请在后续查询中包含滚动令牌作为选项。当提供 `scroll` 选项时，指定排序条件是可选的。
+记住，在此查询后再次调用 `SHOW SCROLL` 以获取用于下一页的新令牌。
 
 ```sql
 SELECT ... [ORDER BY [... ,] id {ASC|DESC}] OPTION scroll='<base64 encoded scroll token>'[, ...];
 ```
 
-这确保分页无缝继续，保持初始查询中建立的排序上下文。
+这确保了分页可以无缝继续，保持初始查询建立的排序上下文。
 
 <!-- intro -->
 示例：
@@ -194,7 +194,7 @@ OPTION scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ie
 <!-- example scroll_json_init -->
 **初始请求**
 
-在初始请求中，在选项中指定 `"scroll": true` 和所需的排序条件。注意，`id` 必须出现在 `sort` 数组中。响应将包含滚动令牌，可用于后续请求的分页。
+在初始请求中，在选项中指定 `"scroll": true` 并包含所需的排序条件。注意 `id` 必须在 `sort` 数组中。响应将包括一个滚动令牌，该令牌可以在后续请求中用于分页。
 
 ```json
 POST /search
@@ -285,9 +285,9 @@ POST /search
 <!-- end -->
 
 <!-- example scroll_json_paginated -->
-**使用 scroll 的分页请求**
+**使用 scroll 进行分页请求**
 
-要继续分页，在下一次请求的选项对象中包含从上一次响应获得的滚动令牌。指定排序条件是可选的。
+要继续分页，请在下一个请求的选项对象中包含从上一个响应中获得的滚动令牌。指定排序条件是可选的。
 
 ```json
 POST /search

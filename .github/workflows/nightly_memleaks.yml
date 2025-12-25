@@ -9,7 +9,13 @@ on:
       - '**'
     paths:
       - '.github/workflows/nightly_memleaks.yml'    
-      
+      - 'test/valgrind.supp'      
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/nightly_memleaks.yml'    
+      - 'test/valgrind.supp'      
   
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

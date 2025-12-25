@@ -62,6 +62,8 @@
 }
 
 # wsrep (galera)
+# Suppressions for reachable allocations inside the wsrep/galera provider.
+# These are provider-owned buffers left reachable at process exit.
 {
    galera_internal_reachable
    Memcheck:Leak
@@ -78,6 +80,36 @@
    fun:malloc
    ...
    fun:asio_handler_allocate
+}
+
+# Galera Monitor allocates large buffers that remain reachable on shutdown.
+{
+   galera_monitor_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:operator new[]
+   ...
+   fun:galera::Monitor*
+}
+
+# Galera GCS state machine allocates internal buffers that stay reachable.
+{
+   galera_gcs_sm_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:gcs_sm_create
+}
+
+# OpenSSL init inside galera/asio leaves tiny reachable allocations.
+{
+   galera_openssl_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:operator new
+   ...
+   fun:asio::ssl::detail::openssl_init_base::instance
 }
 
 #cctz

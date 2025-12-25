@@ -84,9 +84,6 @@ void SetupKNNLimit ( CSphQuery & tQuery )
 
 	if ( tKNN.m_iK < 0 )
 		tKNN.m_iK = tQuery.m_iLimit;
-
-	if ( !tKNN.m_sAttr.IsEmpty() && tQuery.m_iLimit > tKNN.m_iK )
-		tQuery.m_iLimit = tKNN.m_iK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

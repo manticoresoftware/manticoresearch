@@ -1610,6 +1610,7 @@ uint64_t FilterTreeItem_t::GetHash() const
 
 int64_t KnnSearchSettings_t::GetRequestedDocs() const
 {
+	assert ( m_iK>=0 );
 	return m_bRescore ? int64_t ( m_fOversampling * m_iK ) : m_iK;
 }
 

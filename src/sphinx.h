@@ -512,7 +512,7 @@ struct ScrollSettings_t
 struct KnnSearchSettings_t
 {
 	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
-	int				m_iK = 0;				///< KNN K
+	int				m_iK = 0;				///< KNN K (-1 means auto)
 	int				m_iEf = 0;				///< KNN ef
 	bool			m_bRescore = true;		///< KNN rescoring
 	float			m_fOversampling = 3.0f;	///< KNN oversampling

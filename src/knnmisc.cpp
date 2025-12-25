@@ -77,6 +77,18 @@ bool IsKnnDist ( const CSphString & sExpr )
 	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
 }
 
+
+void SetupKNNLimit ( CSphQuery & tQuery )
+{
+	auto & tKNN = tQuery.m_tKnnSettings;
+
+	if ( tKNN.m_iK < 0 )
+		tKNN.m_iK = tQuery.m_iLimit;
+
+	if ( !tKNN.m_sAttr.IsEmpty() && tQuery.m_iLimit > tKNN.m_iK )
+		tQuery.m_iLimit = tKNN.m_iK;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void NormalizeVec ( VecTraits_T<float> & dData )

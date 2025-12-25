@@ -38,16 +38,16 @@ mysql -h0 -P9306 -e "SELECT * FROM test_having ORDER BY id ASC LIMIT 10000;" > /
 ––– input –––
 md5sum /tmp/test_having_data.txt
 ––– output –––
-e499c54e1ba655eb1e93a51e3e424d5f  /tmp/test_having_data.txt
+9b2930342c90b8f4c4812792e35ba70f  /tmp/test_having_data.txt
 ––– comment –––
-TEST 1: Get total_found WITH HAVING filter (cnt > 30)
-Expected: 199 groups (one category has ≤30 rows)
+TEST 1: Get total_found WITH HAVING filter (cnt > 32)
+Expected: 199 groups (one category has ≤32 rows)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 30 ORDER BY category ASC LIMIT 1\G; SHOW META LIKE 'total_found'\G"
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 32 ORDER BY category ASC LIMIT 1\G; SHOW META LIKE 'total_found'\G"
 ––– output –––
 *************************** 1. row ***************************
 category: 1
-     cnt: 62
+     cnt: 50
 *************************** 1. row ***************************
 Variable_name: total_found
         Value: 199
@@ -59,7 +59,7 @@ mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY 
 ––– output –––
 *************************** 1. row ***************************
 category: 1
-     cnt: 62
+     cnt: 50
 *************************** 1. row ***************************
 Variable_name: total_found
         Value: 200
@@ -67,23 +67,23 @@ Variable_name: total_found
 TEST 3: Pagination page 1 (OFFSET 0) - verify total_found
 Expected: 199 groups (same as TEST 1)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 30 ORDER BY category ASC LIMIT 5 OFFSET 0\G; SHOW META LIKE 'total_found'\G"
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 32 ORDER BY category ASC LIMIT 5 OFFSET 0\G; SHOW META LIKE 'total_found'\G"
 ––– output –––
 *************************** 1. row ***************************
 category: 1
-     cnt: 62
+     cnt: 50
 *************************** 2. row ***************************
 category: 2
      cnt: 51
 *************************** 3. row ***************************
 category: 3
-     cnt: 50
+     cnt: 58
 *************************** 4. row ***************************
 category: 4
-     cnt: 38
+     cnt: 40
 *************************** 5. row ***************************
 category: 5
-     cnt: 53
+     cnt: 47
 *************************** 1. row ***************************
 Variable_name: total_found
         Value: 199
@@ -92,23 +92,23 @@ TEST 4: Pagination page 2 (OFFSET 5) - verify total_found stable
 CRITICAL: total_found must be same as page 1 (main issue #3428 complaint)
 Expected: 199 groups (same as page 1)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 30 ORDER BY category ASC LIMIT 5 OFFSET 5\G; SHOW META LIKE 'total_found'\G"
+mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 32 ORDER BY category ASC LIMIT 5 OFFSET 5\G; SHOW META LIKE 'total_found'\G"
 ––– output –––
 *************************** 1. row ***************************
 category: 6
-     cnt: 52
+     cnt: 47
 *************************** 2. row ***************************
 category: 7
-     cnt: 47
+     cnt: 43
 *************************** 3. row ***************************
 category: 8
-     cnt: 59
+     cnt: 50
 *************************** 4. row ***************************
 category: 9
-     cnt: 59
+     cnt: 64
 *************************** 5. row ***************************
 category: 10
-     cnt: 42
+     cnt: 34
 *************************** 1. row ***************************
 Variable_name: total_found
         Value: 199
@@ -123,13 +123,13 @@ Variable_name: total_found
         Value: 0
 ––– comment –––
 TEST 6: Stricter HAVING filter (cnt > 60)
-Expected: fewer groups than cnt > 30 (exactly 15 groups)
+Expected: fewer groups than cnt > 30 (exactly 19 groups)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT category, COUNT(*) as cnt FROM test_having GROUP BY category HAVING cnt > 60 ORDER BY category ASC LIMIT 1\G; SHOW META LIKE 'total_found'\G"
 ––– output –––
 *************************** 1. row ***************************
-category: 1
-     cnt: 62
+category: 9
+     cnt: 64
 *************************** 1. row ***************************
 Variable_name: total_found
-        Value: 15
+        Value: 19

@@ -305,7 +305,7 @@ POST /insert
 
 Now, you can perform a KNN search using the `knn` clause in either SQL or JSON format. Both interfaces support the same essential parameters, ensuring a consistent experience regardless of the format you choose:
 
-- SQL: `select ... from <table name> where knn ( <field>, <k>, <query vector> [,<options>] )`
+- SQL: `select ... from <table name> where knn ( <field>, <query vector> [,<options>] )`
 - JSON:
   ```
   POST /search
@@ -315,7 +315,6 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
       {
           "field": "<field>",
           "query": "<text or vector>",
-          "k": <k>,
           "ef": <ef>,
 		  "rescore": <rescore>,
 		  "oversampling": <oversampling>
@@ -325,15 +324,15 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
 
 The parameters are:
 * `field`: This is the name of the float vector attribute containing vector data.
-* `k`: This represents the number of documents to return and is a key parameter for Hierarchical Navigable Small World (HNSW) indexes. It specifies the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
+* `k`: Deprecated option. Use query `limit` instead. It was used to specify the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
 * `query`: (Recommended parameter) The search query, which can be either:
   - Text string: Automatically converted to embeddings if the field has auto-embeddings configured. Will return an error if the field doesn't have auto-embeddings.
   - Vector array: Works the same as `query_vector`.
 * `query_vector`: (Legacy parameter) The search vector as an array of numbers. Still supported for backward compatibility.
   **Note:** Use either `query` or `query_vector`, not both in the same request.
 * `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search. The default is 10.
-* `rescore`: Enables KNN rescoring (disabled by default). Set to `1` in SQL or `true` in JSON to enable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
-* `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. No oversampling is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
+* `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
+* `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -343,7 +342,7 @@ Documents are always sorted by their distance to the search vector. Any addition
 <!-- request SQL -->
 
 ```sql
-select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), { ef=2000, oversampling=3.0, rescore=1 } );
+select id, knn_dist() from test where knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=2000, oversampling=3.0, rescore=1 } );
 ```
 <!-- response SQL -->
 
@@ -370,7 +369,6 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5,
 		"ef": 2000, 
 		"rescore": true,
 		"oversampling": 3.0

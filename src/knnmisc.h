@@ -42,6 +42,7 @@ private:
 bool							IsKnnDist ( const CSphString & sExpr );
 const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
+void							SetupKNNLimit ( CSphQuery & tQuery );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );

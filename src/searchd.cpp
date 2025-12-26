@@ -175,6 +175,7 @@ bool					g_bIOStats		= false;
 static auto&			g_bCpuStats 	= sphGetbCpuStat ();
 static bool				g_bOptNoDetach	= false; // whether to detach from console, or work in front
 static bool				g_bOptNoLock	= false; // whether to lock indexes (with .spl) or not
+static bool				g_bOptQuiet		= false; // suppress startup output except errors
 static bool				g_bStripPath	= false;
 
 static auto& g_bGotSighup		= sphGetGotSighup();	// we just received SIGHUP; need to log
@@ -13265,6 +13266,7 @@ void ShowHelp ()
 		"Options are:\n"
 		"-h, --help\t\tdisplay this help message\n"
 		"-v, --version\t\tdisplay version information\n"
+		"-q, --quiet\t\tonly print errors on startup\n"
 		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
@@ -13311,6 +13313,15 @@ void ShowHelp ()
 		"searchd --install --config c:\\sphinx\\manticore.conf\n"
 #endif
 		);
+}
+
+static bool HasQuietFlag ( int argc, char ** argv )
+{
+	for ( int i = 1; i < argc; ++i )
+		if ( !strcmp ( argv[i], "-q" ) || !strcmp ( argv[i], "--quiet" ) )
+			return true;
+
+	return false;
 }
 
 
@@ -14140,8 +14151,11 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	case ADD_NEEDLOAD:
 	{
 		assert ( pJustLoadedLocal );
-		fprintf ( stdout, "precaching table '%s'\n", szIndexName );
-		fflush ( stdout );
+		if ( !g_bOptQuiet )
+		{
+			fprintf ( stdout, "precaching table '%s'\n", szIndexName );
+			fflush ( stdout );
+		}
 
 		IndexFiles_c dJustAddedFiles ( pJustLoadedLocal->m_sIndexPath );
 
@@ -14253,7 +14267,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 	if ( !iValidIndexes )
 		sphLogDebug ( "no valid tables to serve" );
 	else
-		fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
+		if ( !g_bOptQuiet )
+			fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
 // if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
@@ -14474,7 +14489,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	InitBanner();
 
-	if ( !WinService() )
+	g_bOptQuiet = HasQuietFlag ( argc, argv );
+	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
+	if ( g_bOptQuiet )
+		g_eLogLevel = SPH_LOG_FATAL;
+
+	if ( !WinService() && !g_bOptQuiet )
 		fprintf ( stdout, "%s",  g_sBanner.cstr() );
 
 	if ( bColumnarError )
@@ -14529,6 +14549,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
+	auto UpdateLogLevel = [&eQuietRestoreLevel] ( ESphLogLevel eLevel )
+	{
+		if ( g_bOptQuiet )
+			eQuietRestoreLevel = Max ( eQuietRestoreLevel, eLevel );
+		else
+			g_eLogLevel = Max ( g_eLogLevel, eLevel );
+	};
+
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
@@ -14539,6 +14567,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
 		OPT ( "-v", "--version" )	{ return 0; }
+		OPT ( "-q", "--quiet" )		g_bOptQuiet = true;
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
@@ -14554,10 +14583,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
-		OPT1 ( "--logdebug" )		g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_DEBUG );
-		OPT1 ( "--logdebugv" )		g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_VERBOSE_DEBUG );
-		OPT1 ( "--logdebugvv" )		g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_VERY_VERBOSE_DEBUG );
-		OPT1 ( "--logreplication" )	g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_RPL_DEBUG );
+		OPT1 ( "--logdebug" )		UpdateLogLevel ( SPH_LOG_DEBUG );
+		OPT1 ( "--logdebugv" )		UpdateLogLevel ( SPH_LOG_VERBOSE_DEBUG );
+		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
+		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
@@ -15146,6 +15175,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// disable startup logging to stdout
 	if ( !g_bOptNoDetach )
 		StopLogStdout();
+
+	if ( g_bOptQuiet )
+		g_eLogLevel = eQuietRestoreLevel;
 
 	while (true)
 	{

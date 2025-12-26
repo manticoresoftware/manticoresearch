@@ -36,6 +36,7 @@ jobs:
         DIAGNOSTIC: 1
         VERBOSE: 1
         CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
+        CTEST_REGEX: "rt_383"
         UNITY_BUILD: 1
         CACHEB: "../cache"
     steps:

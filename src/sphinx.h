@@ -1189,6 +1189,7 @@ public:
 	void						SetupQueryTokenizer();
 	TokenizerRefPtr_c			GetTokenizer () const;
 	TokenizerRefPtr_c			GetQueryTokenizer () const;
+	void						ReleaseTokenizersForShutdown() noexcept;
 	TokenizerRefPtr_c&			ModifyTokenizer ();
 	void						SetDictionary ( DictRefPtr_c pDict );
 	DictRefPtr_c				GetDictionary () const;

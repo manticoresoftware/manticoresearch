@@ -372,6 +372,14 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 				/ 1000000 ), (int) ( ( tmDelta / 1000 ) % 1000 ) );
 	}
 
+	SHUTINFO << "Release tokenizer caches ...";
+	{
+		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+		for ( const auto& tIt : *hLocal )
+			// Free tokenizer/lowercaser memory before shutdown so valgrind doesn't flag it as still reachable.
+			WIdx_c ( tIt.second )->ReleaseTokenizersForShutdown();
+	}
+
 	// unlock indexes and release locks if needed
 	SHUTINFO << "Unlock tables ...";
 	{

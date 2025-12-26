@@ -2028,6 +2028,14 @@ TokenizerRefPtr_c CSphIndex::GetQueryTokenizer() const
 	return m_pQueryTokenizer;
 }
 
+void CSphIndex::ReleaseTokenizersForShutdown() noexcept
+{
+	// Drop tokenizer caches before process exit to avoid "still reachable" reports in memcheck.
+	m_pQueryTokenizerJson = nullptr;
+	m_pQueryTokenizer = nullptr;
+	m_pTokenizer = nullptr;
+}
+
 TokenizerRefPtr_c&	CSphIndex::ModifyTokenizer ()
 {
 	return m_pTokenizer;

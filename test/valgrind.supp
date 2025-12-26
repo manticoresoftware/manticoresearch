@@ -87,7 +87,7 @@
    galera_monitor_reachable
    Memcheck:Leak
    match-leak-kinds: reachable
-   fun:operator new[]
+   fun:operator new[]*
    ...
    fun:galera::Monitor*
 }
@@ -102,12 +102,22 @@
    fun:gcs_sm_create
 }
 
+# Galera GCS init path allocates internal buffers that stay reachable.
+{
+   galera_gcs_create_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:gcs_create
+}
+
 # OpenSSL init inside galera/asio leaves tiny reachable allocations.
 {
    galera_openssl_reachable
    Memcheck:Leak
    match-leak-kinds: reachable
-   fun:operator new
+   fun:operator new*
    ...
    fun:asio::ssl::detail::openssl_init_base::instance
 }

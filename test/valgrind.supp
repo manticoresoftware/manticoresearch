@@ -91,6 +91,14 @@
    ...
    fun:galera::Monitor*
 }
+{
+   galera_monitor_reachable_mangled
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znam
+   ...
+   fun:_ZN6galera7Monitor*
+}
 
 # Galera GCS state machine allocates internal buffers that stay reachable.
 {
@@ -130,6 +138,22 @@
    ...
    fun:gcache::*
 }
+{
+   galera_gcache_new_reachable_mangled
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN6gcache*
+}
+{
+   galera_gcache_new_array_reachable_mangled
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znam
+   ...
+   fun:_ZN6gcache*
+}
 
 # Galera IST sender allocations stay reachable on shutdown.
 {
@@ -140,6 +164,14 @@
    ...
    fun:galera::ist::Sender*
 }
+{
+   galera_ist_sender_reachable_mangled
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN6galera3ist6Sender*
+}
 
 # OpenSSL init inside galera/asio leaves tiny reachable allocations.
 {
@@ -149,6 +181,14 @@
    fun:operator new*
    ...
    fun:asio::ssl::detail::openssl_init_base::instance
+}
+{
+   galera_openssl_reachable_mangled
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN4asio3ssl6detail17openssl_init_base8instance*
 }
 
 #cctz

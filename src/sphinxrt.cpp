@@ -9859,6 +9859,8 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction,
 
 	if ( dChunks.GetLength()<2 )
 		return {};
+	if ( dChunks.GetLength()==2 )
+		return MergeDiskChunks ( szParentAction, dChunks[0], dChunks[1], tProgress, { nullptr, 0 } );
 
 	CSphVector<const CSphIndex*> dIndexes;
 	dIndexes.Reserve ( dChunks.GetLength() );
@@ -10837,6 +10839,9 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 			CSphVector<int>					m_dChunkIds;
 			CSphVector<ConstDiskChunkRefPtr_t> m_dChunks;
 			std::shared_ptr<MergeGuardMulti_c>	m_pGuard;
+			int								m_iA { -1 };
+			int								m_iB { -1 };
+			bool							m_bPair { false };
 			int64_t							m_tmStart { 0 };
 		};
 
@@ -10858,12 +10863,14 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 
 				CSphVector<int> dChosenIds;
 				CSphVector<ConstDiskChunkRefPtr_t> dChosenChunks;
+				CSphVector<int> dSkipIds;
 				dChosenIds.Reserve ( iMergeChunksPerJob );
 				dChosenChunks.Reserve ( iMergeChunksPerJob );
+				dSkipIds.Reserve ( iMergeChunksPerJob );
 
 				while ( dChosenIds.GetLength() < iMergeChunksPerJob )
 				{
-					auto chNext = GetNextSmallestChunkByID ( *pChunks, dChosenIds );
+					auto chNext = GetNextSmallestChunkByID ( *pChunks, dSkipIds );
 					if ( chNext.m_iId < 0 )
 						break;
 
@@ -10871,6 +10878,7 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 					{
 						RTDLOG << "Optimize: drop chunk " << chNext.m_iId;
 						DropDiskChunk ( chNext.m_iId, &iAffected );
+						dSkipIds.Add ( chNext.m_iId );
 						continue;
 					}
 
@@ -10883,6 +10891,7 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 
 					dChosenIds.Add ( chNext.m_iId );
 					dChosenChunks.Add ( pChunk );
+					dSkipIds.Add ( chNext.m_iId );
 				}
 
 				if ( !bWork || dChosenIds.GetLength() < 2 )
@@ -10897,13 +10906,22 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 				tJob.m_pGuard.reset ( new MergeGuardMulti_c ( dChosenChunks ) );
 				tJob.m_tFuture = pPromise->get_future();
 				tJob.m_tmStart = sphMicroTimer();
+				tJob.m_bPair = ( dChosenIds.GetLength()==2 );
+				if ( tJob.m_bPair )
+				{
+					tJob.m_iA = dChosenIds[0];
+					tJob.m_iB = dChosenIds[1];
+				}
 
-				auto fnMerge = [this, dChunks = dChosenChunks, dIds = dChosenIds, pPromise ] () mutable {
+				auto fnMerge = [this, dChunks = dChosenChunks, dIds = dChosenIds, pPromise, bPair = tJob.m_bPair ] () mutable {
 					Threads::MyThd().m_pTaskInfo.store ( nullptr, std::memory_order_release );
 					ScopedMiniInfo_t _ ( new MiniTaskInfo_t );
 					myinfo::SetCommand ( "SYSTEM" );
 					myinfo::SetTaskInfo ( "OPTIMIZE merge %s", Vec2Str ( dIds ).cstr() );
-					pPromise->set_value ( BuildMergedChunkN ( "common merge", dChunks ) );
+					if ( bPair )
+						pPromise->set_value ( BuildMergedChunk ( "common merge", dChunks[0], dChunks[1] ) );
+					else
+						pPromise->set_value ( BuildMergedChunkN ( "common merge", dChunks ) );
 				};
 				Threads::StartJob ( std::move ( fnMerge ), m_tWorkers.MergeWorker() );
 
@@ -10932,7 +10950,9 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 				continue;
 			}
 			int64_t tmFinalizeStart = sphMicroTimer();
-			bool bFinalize = FinalizeMergedChunkN ( "common merge", tJob.m_dChunkIds, tJob.m_dChunks, tBuilt, &iAffected, &sLog );
+			bool bFinalize = tJob.m_bPair
+				? FinalizeMergedChunk ( "common merge", tJob.m_iA, tJob.m_iB, tJob.m_dChunks[0], tJob.m_dChunks[1], tBuilt, &iAffected, &sLog )
+				: FinalizeMergedChunkN ( "common merge", tJob.m_dChunkIds, tJob.m_dChunks, tBuilt, &iAffected, &sLog );
 			int64_t tmFinalize = sphMicroTimer() - tmFinalizeStart;
 			bWork &= bFinalize && bCanRun;
 

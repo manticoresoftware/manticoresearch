@@ -3,14 +3,14 @@
 Manticore Buddy — это сайдкар для Manticore Search, написанный на PHP, который помогает с различными задачами. Типичный рабочий процесс таков: перед тем как вернуть ошибку пользователю, Manticore Search спрашивает Buddy, может ли он обработать проблему для демона. PHP-код Buddy облегчает реализацию высокоуровневых функций, которые не требуют чрезвычайно высокой производительности.
 
 Для более глубокого понимания Buddy ознакомьтесь с этими статьями:
-- [Introducing Buddy: the PHP sidecar for Manticore Search](https://manticoresearch.com/blog/manticoresearch-buddy-intro/)
-- [Manticore Buddy: challenges and solutions](https://manticoresearch.com/blog/manticoresearch-buddy-challenges-and-solutions/)
-- [Manticore Buddy: pluggable design](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/)
-- [Manticore Buddy GitHub repository](https://github.com/manticoresoftware/manticoresearch-buddy)
+- [Введение в Buddy: PHP-сайдкар для Manticore Search](https://manticoresearch.com/blog/manticoresearch-buddy-intro/)
+- [Manticore Buddy: задачи и решения](https://manticoresearch.com/blog/manticoresearch-buddy-challenges-and-solutions/)
+- [Manticore Buddy: плагинная архитектура](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/)
+- [Репозиторий Manticore Buddy на GitHub](https://github.com/manticoresoftware/manticoresearch-buddy)
 
 ## Установка Manticore Buddy
 
-Если вы следуете инструкциям по установке выше или [на сайте](https://manticoresearch.com/install), вам не нужно беспокоиться об установке или запуске Manticore Buddy: он устанавливается автоматически при установке пакета `manticore-extra`, а Manticore Search запускает его автоматически при старте.
+Если вы следуете инструкциям по установке выше или [на сайте](https://manticoresearch.com/install), вам не нужно беспокоиться об установке или запуске Manticore Buddy: он устанавливается автоматически при установке пакета `manticore-extra`, и Manticore Search автоматически запускает его при старте.
 
 ## Отключение Manticore Buddy
 

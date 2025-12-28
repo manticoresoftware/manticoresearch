@@ -1,12 +1,12 @@
 # 忽略停用词
 
-停用词是在索引和搜索过程中被忽略的词，通常由于它们出现频率高且对搜索结果价值低。
+停用词是在索引和搜索过程中被忽略的词语，通常是因为它们出现频率高但对搜索结果价值低。
 
-Manticore Search 默认对停用词应用[词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以通过使用[stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)关闭此功能。
+Manticore Search 默认对停用词应用[词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以通过 [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed) 选项关闭此功能。
 
-小型停用词文件存储在表头中，嵌入的文件大小有限制，该限制由[embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)选项定义。
+小的停用词文件存储在表头中，可嵌入的文件大小有限制，由 [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) 选项定义。
 
-停用词不会被索引，但它们会影响关键词的位置。例如，如果“the”是停用词，文档1包含短语“in office”，而文档2包含短语“in the office”，那么搜索“in office”作为精确短语只会返回第一个文档，即使第二个文档中的“the”被跳过作为停用词。此行为可以通过[stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)指令进行修改。
+停用词不会被索引，但它们会影响关键词的位置。例如，如果 "the" 是一个停用词，文档1包含短语 "in office"，而文档2包含短语 "in the office"，那么将 "in office" 作为精确短语搜索时，只会返回第一个文档，尽管第二个文档中的 "the" 作为停用词被跳过。此行为可以通过 [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step) 指令修改。
 
 ## stopwords
 
@@ -15,13 +15,13 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 ```
 
 <!-- example stopwords -->
-stopwords 设置是可选的，默认为空。它允许你指定一个或多个停用词文件的路径，文件路径用空格分隔。所有文件都会被加载。在实时模式下，只允许使用绝对路径。
+stopwords 设置是可选的，默认为空。它允许您指定一个或多个停用词文件的路径，用空格分隔。所有文件都将被加载。在实时模式下，只允许绝对路径。
 
-停用词文件格式是简单的 UTF-8 编码的纯文本。文件数据将根据[charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)设置进行分词，因此你可以使用与索引数据中相同的分隔符。
+停用词文件格式是简单的纯文本，采用 UTF-8 编码。文件数据将根据 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 设置进行分词，因此您可以使用与索引数据相同的分隔符。
 
-当[ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)索引生效时，由归入[ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)的字符组成的停用词本身会被分解成N-gram。因此，每个单独的N-gram成为一个独立的停用词。例如，对于`ngram_len=1`和合适的`ngram_chars`，停用词`test`将被解释为`t`、`e`、`s`、`t`四个不同的停用词。
+当 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 索引激活时，由属于 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 范围内的字符组成的停用词本身会被分词为 N-gram。因此，每个单独的 N-gram 成为一个独立的停用词。例如，在 `ngram_len=1` 和合适的 `ngram_chars` 设置下，停用词 `test` 将被解释为 `t`、`e`、`s`、`t` 四个不同的停用词。
 
-停用词文件可以手工创建或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供了一个模式，可以创建按关键词频率排序的频率词典。通常可以使用该词典中的高频关键词作为停用词。详情请参见[--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)和[--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)开关。通常可以使用该词典中的高频关键词作为停用词。
+停用词文件可以手动或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供了一种模式，可以创建表的频率词典，按关键词频率排序。该词典中的高频词通常可以用作停用词。详情请参见 [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 和 [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 开关。该词典中的高频词通常可以用作停用词。
 
 
 <!-- intro -->
@@ -117,61 +117,61 @@ table products {
 ```
 <!-- end -->
 
-或者，你可以使用 Manticore 自带的默认停用词文件。目前已有50种语言的停用词可用。以下是它们的别名完整列表：
+或者，您可以使用 Manticore 自带的默认停用词文件。目前支持 50 种语言的停用词。以下是它们的完整别名列表：
 
-* af - 南非荷兰语（Afrikaans）
-* ar - 阿拉伯语（Arabic）
-* bg - 保加利亚语（Bulgarian）
-* bn - 孟加拉语（Bengali）
-* ca - 加泰罗尼亚语（Catalan）
-* ckb - 库尔德语（Kurdish）
-* cz - 捷克语（Czech）
-* da - 丹麦语（Danish）
-* de - 德语（German）
-* el - 希腊语（Greek）
-* en - 英语（English）
-* eo - 世界语（Esperanto）
-* es - 西班牙语（Spain）
-* et - 爱沙尼亚语（Estonian）
-* eu - 巴斯克语（Basque）
-* fa - 波斯语（Persian）
-* fi - 芬兰语（Finnish）
-* fr - 法语（French）
-* ga - 爱尔兰语（Irish）
-* gl - 加利西亚语（Galician）
-* hi - 印地语（Hindi）
-* he - 希伯来语（Hebrew）
-* hr - 克罗地亚语（Croatian）
-* hu - 匈牙利语（Hungarian）
-* hy - 亚美尼亚语（Armenian）
-* id - 印度尼西亚语（Indonesian）
-* it - 意大利语（Italian）
-* ja - 日语（Japanese）
-* ko - 韩语（Korean）
-* la - 拉丁语（Latin）
-* lt - 立陶宛语（Lithuanian）
-* lv - 拉脱维亚语（Latvian）
-* mr - 马拉地语（Marathi）
-* nl - 荷兰语（Dutch）
-* no - 挪威语（Norwegian）
-* pl - 波兰语（Polish）
-* pt - 葡萄牙语（Portuguese）
-* ro - 罗马尼亚语（Romanian）
-* ru - 俄语（Russian）
-* sk - 斯洛伐克语（Slovak）
-* sl - 斯洛文尼亚语（Slovenian）
-* so - 索马里语（Somali）
-* st - 索托语（Sotho）
-* sv - 瑞典语（Swedish）
-* sw - 斯瓦希里语（Swahili）
-* th - 泰语（Thai）
-* tr - 土耳其语（Turkish）
-* yo - 约鲁巴语（Yoruba）
-* zh - 中文（Chinese）
-* zu - 祖鲁语（Zulu）
+* af - 南非荷兰语
+* ar - 阿拉伯语
+* bg - 保加利亚语
+* bn - 孟加拉语
+* ca - 加泰罗尼亚语
+* ckb- 库尔德语
+* cz - 捷克语
+* da - 丹麦语
+* de - 德语
+* el - 希腊语
+* en - 英语
+* eo - 世界语
+* es - 西班牙语
+* et - 爱沙尼亚语
+* eu - 巴斯克语
+* fa - 波斯语
+* fi - 芬兰语
+* fr - 法语
+* ga - 爱尔兰语
+* gl - 加利西亚语
+* hi - 印地语
+* he - 希伯来语
+* hr - 克罗地亚语
+* hu - 匈牙利语
+* hy - 亚美尼亚语
+* id - 印度尼西亚语
+* it - 意大利语
+* ja - 日语
+* ko - 韩语
+* la - 拉丁语
+* lt - 立陶宛语
+* lv - 拉脱维亚语
+* mr - 马拉地语
+* nl - 荷兰语
+* no - 挪威语
+* pl - 波兰语
+* pt - 葡萄牙语
+* ro - 罗马尼亚语
+* ru - 俄语
+* sk - 斯洛伐克语
+* sl - 斯洛文尼亚语
+* so - 索马里语
+* st - 索托语
+* sv - 瑞典语
+* sw - 斯瓦希里语
+* th - 泰语
+* tr - 土耳其语
+* yo - 约鲁巴语
+* zh - 中文
+* zu - 祖鲁语
 
 <!-- example stopwords 1 -->
-例如，若要使用意大利语的停用词，只需在配置文件中添加以下行：
+例如，要使用意大利语的停用词，只需在配置文件中添加以下行：
 
 
 <!-- intro -->
@@ -267,7 +267,7 @@ table products {
 <!-- end -->
 
 <!-- example stopwords 2 -->
-如果需要使用多种语言的停用词，应将所有语言别名列出，用逗号（RT模式）或空格（普通模式）分隔：
+如果您需要使用多种语言的停用词，应列出所有语言的别名，用逗号（RT 模式）或空格（普通模式）分隔：
 
 
 <!-- intro -->
@@ -369,11 +369,11 @@ stopword_step={0|1}
 ```
 
 <!-- example stopword_step -->
-[stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) 上的 position_increment 设置是可选的，允许的值为 0 和 1，默认值为 1。
+The position_increment setting on [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) is optional, and the allowed values are 0 and 1, with the default being 1.
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -402,7 +402,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -411,7 +411,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' 
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -420,7 +420,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -429,21 +429,21 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", true);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 <!-- request C# -->
 ```clike
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", true);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -473,14 +473,14 @@ stopwords_unstemmed={0|1}
 ```
 
 <!-- example stopwords_unstemmed -->
-是否在词干提取之前或之后应用停用词。可选，默认值为 0（在词干提取之后应用停用词过滤器）。
+Whether to apply stop words before or after stemming. Optional, default is 0 (apply stop word filter after stemming).
 
-默认情况下，停用词本身会被词干化，然后应用于词干化（或其他形态处理）之后的标记。这意味着当 stem(token) 等于 stem(stopword) 时，该标记会被停用。这个默认行为可能会导致当一个标记被错误地词干化到一个被停用的词根时出现意外结果。例如，“Andes” 可能会被词干化为 “and”，所以当 “and” 是停用词时，“Andes” 也会被跳过。
+By default, stop words are stemmed themselves, and then applied to tokens *after* stemming (or any other morphology processing). This means that a token is stopped when stem(token) is equal to stem(stopword). This default behavior can lead to unexpected results when a token is erroneously stemmed to a stopped root. For example, "Andes" might get stemmed to "and", so when "and" is a stopword, "Andes" is also skipped.
 
-然而，你可以通过启用 `stopwords_unstemmed` 指令来改变这种行为。当启用此功能时，停用词会在词干提取之前应用（因此作用于原始单词形式），当标记等于停用词时会被跳过。
+However, you can change this behavior by enabling the `stopwords_unstemmed` directive. When this is enabled, stop words are applied before stemming (and therefore to the original word forms), and the tokens are skipped when the token is equal to the stopword.
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -509,7 +509,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -518,7 +518,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' 
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -527,7 +527,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -536,21 +536,21 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", true);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", true);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 

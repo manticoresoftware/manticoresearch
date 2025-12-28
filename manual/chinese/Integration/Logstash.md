@@ -1,12 +1,12 @@
 # 与 Logstash 的集成
 
-> 注意：与 Logstash 的集成需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果集成不工作，请确保 Buddy 已安装。
+> 注意：与 Logstash 的集成需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法正常工作，请确保已安装 Buddy。
 
-[Logstash](https://www.elastic.co/logstash) 是一种日志管理工具，它从各种来源收集数据，实时转换数据，并发送到您想要的目标。它通常用作 Elasticsearch（一个开源分析和搜索引擎）的数据管道。
+[Logstash](https://www.elastic.co/logstash) 是一个日志管理工具，可以收集来自多种来源的数据，实时转换并发送到您期望的目标。它通常用作 Elasticsearch 的数据管道，Elasticsearch 是一个开源的分析和搜索引擎。
 
-现在，Manticore 支持使用 Logstash 作为处理管道。这允许收集和转换后的数据像发送给 Elasticsearch 一样发送给 Manticore。目前，支持的版本是 7.6 到 9.2。
+现在，Manticore 支持将 Logstash 用作处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前支持的版本为 7.6-9.2。
 
-让我们来看看一个用于索引 `dpkg.log` 的简单 Logstash 配置文件示例，`dpkg.log` 是 Debian 包管理器的标准日志文件。该日志本身结构简单，如下所示：
+让我们查看一个用于索引 `dpkg.log` 的简单 Logstash 配置文件示例，`dpkg.log` 是 Debian 包管理器的标准日志文件。该日志本身结构简单，如下所示：
 
 ```
 2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
@@ -18,7 +18,7 @@
 
 ## Logstash 配置
 
-下面是一个 Logstash 配置示例：
+以下是一个 Logstash 配置示例：
 
 ```
 input {
@@ -43,15 +43,15 @@ output {
 }
 ```
 
-请注意，在继续之前，需要强调一个关键注意事项：Manticore 不支持 Elasticsearch 的日志模板管理和索引生命周期管理功能。由于这些功能在 Logstash 中默认启用，必须在配置中显式禁用它们。此外，output 配置段中的 hosts 选项必须对应 Manticore 的 HTTP 监听端口（默认是 localhost:9308）。
+请注意，在继续之前，需要解决一个关键的注意事项：Manticore 不支持 Elasticsearch 的日志模板管理和索引生命周期管理功能。由于这些功能在 Logstash 中默认启用，因此必须在配置中显式禁用它们。此外，输出配置部分的 hosts 选项必须对应 Manticore 的 HTTP 监听端口（默认是 localhost:9308）。
 
-## 针对不同版本的配置
+## 不同版本的配置
 
-配置根据您使用的 Logstash 版本而有所不同。
+配置因所使用的 Logstash 版本而异。
 
 ### Logstash 7.17 的配置
 
-对于 Logstash 7.17，基本配置相当简单，不需要额外的 ILM 设置：
+对于 Logstash 7.17，基本配置比较简单，不需要额外的 ILM 设置：
 
 ```
 input {
@@ -113,9 +113,9 @@ export ALLOW_SUPERUSER=1
 logstash -f logstash.conf
 ```
 
-### Logstash 9.2+ 的配置
+### Logstash 9.2 及以后版本的配置
 
-从 9.2 版本开始，推荐通过配置文件来配置超级用户设置，而不是使用环境变量，提供了更持久和便于管理的方案。
+自 9.2 版本起，建议通过配置文件而非环境变量来配置超级用户设置，这提供了更持久且易于管理的解决方案。
 
 配置文件（例如 `logstash.conf`）：
 ```
@@ -153,9 +153,9 @@ logstash --path.settings=/etc/logstash -f logstash.conf
 
 ## Logstash 结果
 
-按照上述方式调整配置后，您可以运行 Logstash，dpkg 日志中的数据将传递给 Manticore 并正确索引。
+按上述方法调整配置后，您可以运行 Logstash，dpkg 日志中的数据将传递到 Manticore 并被正确索引。
 
-下面是创建的表的结果模式以及插入文档的示例：
+以下是创建的表的最终架构和插入文档的示例：
 
 ```
 mysql> DESCRIBE dpkg_log;

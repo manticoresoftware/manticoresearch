@@ -1302,8 +1302,9 @@ static bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<ch
 
 		execv ( pExecLine, (char**)dArgv.begin() );
 		exit ( 1 );
+	}
 
-	} else if ( iChild==-1 )
+	if ( iChild==-1 )
 		return Err ( "fork failed: [%d] %s", errno, strerrorm(errno) );
 
 	close ( iWrite );

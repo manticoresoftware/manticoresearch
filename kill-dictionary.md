@@ -68,7 +68,7 @@ The kill dictionary stores one entry per unique token found in the killed docs:
 
 So the in-memory structure has 3 entries total. If 10,000 killed docs all share the same 100 distinct tokens, the kill dictionary still has ~100 entries. If every killed doc has unique tokens, the map grows with that unique-token count.
 
-Approximate RAM cost for this example (64-bit build):
+Approximate RAM cost for this example:
 
 - Per entry: ~40 bytes raw (8-byte word ID + 8 bytes of counters + 24 bytes of pointers), typically ~48–64 bytes after allocator overhead/alignment.
 - 3 entries: ~120–192 bytes total.
@@ -82,7 +82,7 @@ So the example above would cost roughly ~2.1–2.3 KB of extra RAM. With 100 uni
   - Dictionary (`.spi`, `.spd`, etc.)
   - Dead-row map (`.spm`)
   - Docstore files
-- On restart or index reload, the in-memory kill dictionary cache is empty and rebuilt lazily when needed.
+- On restart or table reload, the in-memory kill dictionary cache is empty and rebuilt lazily when needed.
 
 ## Tooling Notes (indextool)
 - `indextool --dumpdict` always outputs raw `docs`/`hits` plus extra columns `docs_eff`/`hits_eff` and `chunk_id`.

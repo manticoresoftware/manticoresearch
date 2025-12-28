@@ -694,6 +694,23 @@ kibana_version_string = 1.2.3
 ```
 <!-- end -->
 
+### kill_dictionary
+
+<!-- example conf kill_dictionary -->
+Enables or disables the kill dictionary for RT disk chunks. When enabled, Manticore rebuilds per-killed-doc word stats from docstore and subtracts them at query time, so `docs`/`hits` and ranking weights reflect killed rows. This is enabled by default.
+
+If disabled, queries use raw chunk dictionary stats (no correction for killed rows).
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+kill_dictionary = 0
+```
+<!-- end -->
+
 ### listen
 
 <!-- example conf listen -->

@@ -8657,6 +8657,12 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 		return true;
 	}
 
+	if ( sName == "kill_dictionary" )
+	{
+		g_bKillDictionary = !!iSetValue;
+		return true;
+	}
+
 	if ( sName == "threads_ex" )
 	{
 		if ( !THREAD_EX_NEEDS_VIP || tSess.GetVip() )
@@ -9373,6 +9379,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]  { return GetLastInsertId ( pVars ); } );
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
+	dTable.MatchTuplet ( "kill_dictionary", g_bKillDictionary ? "1" : "0" );
 
 	switch ( GetSecondaryIndexDefault() )
 	{
@@ -13962,6 +13969,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
+	g_bKillDictionary = hSearchd.GetBool ( "kill_dictionary", g_bKillDictionary );
 
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );

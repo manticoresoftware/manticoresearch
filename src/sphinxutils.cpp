@@ -1071,6 +1071,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
+	{ "kill_dictionary",		0, nullptr },
 	{ "engine",					0, nullptr },
 	{ "join_cache_size",		0, nullptr },
 	{ "replication_connect_timeout",	0, NULL },

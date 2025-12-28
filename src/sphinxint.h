@@ -65,6 +65,7 @@ extern int g_iPredictorCostMatch;
 extern bool g_bJsonStrict;
 extern bool g_bJsonAutoconvNumbers;
 extern bool g_bJsonKeynamesToLowercase;
+extern bool g_bKillDictionary;
 
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC

@@ -11793,7 +11793,7 @@ void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
 
 	if ( !bDumpOnly )
-		fprintf ( fp, "keyword,docs,hits,offset\n" );
+		fprintf ( fp, "keyword,docs,hits,offset,docs_eff,hits_eff,chunk_id\n" );
 
 	auto tGuard = RtGuard();
 
@@ -11801,7 +11801,7 @@ void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 	{
 		RtWordReader_c tRdWord ( pSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 		while ( tRdWord.UnzipWord() )
-			fprintf ( fp, "%s,%u,%u,0\n", tRdWord->m_sWord, tRdWord->m_uDocs, tRdWord->m_uHits );
+			fprintf ( fp, "%s,%u,%u,0,%u,%u,%d\n", tRdWord->m_sWord, tRdWord->m_uDocs, tRdWord->m_uHits, tRdWord->m_uDocs, tRdWord->m_uHits, -1 );
 
 	}
 

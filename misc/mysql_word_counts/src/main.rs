@@ -58,7 +58,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         for line in input.lines() {
             let line = line?;
             if !in_data {
-                if line.trim() == "keyword,docs,hits,offset" {
+                if line.trim() == "keyword,docs,hits,offset,docs_eff,hits_eff,chunk_id"
+                    || line.trim() == "keyword,docs,hits,offset"
+                {
                     in_data = true;
                 }
                 continue;
@@ -78,13 +80,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Some(v) => v,
                 None => continue,
             };
-            let hits: u64 = match hits.parse() {
+            let mut hits_val: u64 = match hits.parse() {
                 Ok(v) => v,
                 Err(_) => continue,
             };
+            let _offset = parts.next();
+            if let Some(docs_eff) = parts.next() {
+                let _hits_eff = match parts.next() {
+                    Some(v) => v,
+                    None => continue,
+                };
+                if let Ok(parsed) = _hits_eff.parse::<u64>() {
+                    hits_val = parsed;
+                }
+                let _chunk_id = parts.next();
+                let _ = docs_eff;
+                let _ = _chunk_id;
+            }
 
             let key = keyword.to_ascii_lowercase();
-            *counts.entry(key).or_insert(0) += hits;
+            *counts.entry(key).or_insert(0) += hits_val;
 
             processed_rows += 1;
             if progress_every > 0 && processed_rows % progress_every == 0 {

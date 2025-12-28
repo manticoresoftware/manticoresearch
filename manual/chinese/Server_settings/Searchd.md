@@ -195,11 +195,11 @@ binlog_max_log_size = 16M
 <!-- example conf binlog_path -->
 此设置确定二进制日志（也称为事务日志）文件的路径。它是可选的，默认值为构建时配置的数据目录（例如，Linux中为`/var/lib/manticore/data/binlog.*`）。
 
-二进制日志用于RT表数据的崩溃恢复，以及属性更新的普通磁盘索引，否则这些数据只会存储在RAM中直到刷新。当启用日志记录时，每个提交到RT表的事务都会被写入日志文件。日志会在非正常关机后启动时自动重放，从而恢复已记录的更改。
+二进制日志用于 RT 表数据的崩溃恢复，以及普通磁盘索引的属性更新，这些属性更新否则将仅存储在 RAM 中直到刷新。当启用日志记录时，每个提交到 RT 表的事务都会被写入日志文件。在不干净关闭后启动时，日志会自动重放，恢复记录的更改。
 
-`binlog_path` 指令指定二进制日志文件的位置。它只应包含路径；`searchd`将在该目录下根据需要创建和解除链接多个 `binlog.*` 文件（包括binlog数据、元数据以及锁文件等）。
+`binlog_path` 指令指定二进制日志文件的位置。它应仅包含路径；`searchd` 会根据需要在目录中创建和删除多个 `binlog.*` 文件（包括二进制日志数据、元数据和锁文件等）。
 
-设为空值会禁用二进制日志，这可以提升性能，但会使RT表数据处于风险中。
+空值会禁用二进制日志记录，这会提高性能但会使 RT 表数据面临风险。
 
 
 <!-- intro -->
@@ -216,9 +216,9 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 ### boolean_simplify
 
 <!-- example conf boolean_simplify -->
-此设置控制 [boolean_simplify](../Searching/Options.md#boolean_simplify) 搜索选项的默认值。它是可选的，默认值为1（启用）。
+此设置控制 [boolean_simplify](../Searching/Options.md#boolean_simplify) 搜索选项的默认值。它是可选的，默认值为 1（启用）。
 
-当设置为1时，服务器会自动应用 [布尔查询优化](../Searching/Full_text_matching/Boolean_optimization.md) 来提升查询性能。当设置为0时，默认不进行优化执行查询。此默认值可以通过对应的搜索选项 `boolean_simplify` 按每个查询进行覆盖。
+当设置为 1 时，服务器将自动应用 [布尔查询优化](../Searching/Full_text_matching/Boolean_optimization.md) 以提高查询性能。当设置为 0 时，默认情况下查询将不进行优化。此默认值可以通过使用相应的搜索选项 `boolean_simplify` 在每个查询的基础上覆盖。
 
 <!-- request Example -->
 ```ini
@@ -231,9 +231,9 @@ searchd {
 ### buddy_path
 
 <!-- example conf buddy_path -->
-此设置决定 Manticore Buddy 可执行文件的路径。它是可选的，默认值为构建时配置的路径，在不同操作系统之间可能不同。通常情况下，无需修改此设置。但如果你希望以调试模式运行 Manticore Buddy、修改 Manticore Buddy 或实现新插件，此设置将很有用。对于后一种情形，你可以从 https://github.com/manticoresoftware/manticoresearch-buddy 克隆Buddy，向 `./plugins/` 目录添加新插件，并在切换至Buddy源代码目录后运行 `composer install --prefer-source` 便于开发。
+此设置确定 Manticore Buddy 二进制文件的路径。它是可选的，默认值是构建时配置的路径，这在不同操作系统上会有所不同。通常，您不需要修改此设置。但是，如果您希望在调试模式下运行 Manticore Buddy、对 Manticore Buddy 进行更改或实现新插件，这可能会很有用。在后一种情况下，您可以从 https://github.com/manticoresoftware/manticoresearch-buddy 克隆 Buddy，将新插件添加到目录 `./plugins/` 中，并在更改目录到 Buddy 源代码后运行 `composer install --prefer-source`，以便更轻松地进行开发。
 
-为确保你可以运行 `composer`，你的机器必须安装PHP 8.2或更高，并包含以下扩展：
+为了确保您可以运行 `composer`，您的机器必须安装了 PHP 8.2 或更高版本，并包含以下扩展：
 
 ```
 --enable-dom
@@ -251,11 +251,11 @@ searchd {
 --enable-mysqlnd
 ```
 
-你也可以选择releases中的Linux amd64专用 `manticore-executor-dev` 版本，例如：https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
+您也可以选择使用 Linux amd64 平台上的特殊 `manticore-executor-dev` 版本，例如：https://github.com/manticoresoftware/executor/releases/tag/v1.0.13
 
-如果采用此方法，请记住将manticore executor的dev版本链接至 `/usr/bin/php`。
+如果您选择此方法，请记住将 manticore executor 的开发版本链接到 `/usr/bin/php`。
 
-要禁用 Manticore Buddy，只需如示例所示将值设为空即可。
+要禁用 Manticore Buddy，请将值设置为空，如示例所示。
 
 <!-- intro -->
 ##### 示例：
@@ -276,7 +276,7 @@ buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/
 ### client_timeout
 
 <!-- example conf client_timeout -->
-此设置用于指定使用持久连接时两次请求之间的最大等待时间（以秒或[特殊后缀](../Server_settings/Special_suffixes.md)为单位）。它是可选的，默认值为五分钟。
+此设置确定在使用持久连接时等待请求之间的最大时间（以秒或 [special_suffixes](../Server_settings/Special_suffixes.md) 为单位）。它是可选的，默认值为五分钟。
 
 
 <!-- intro -->
@@ -293,9 +293,9 @@ client_timeout = 1h
 ### collation_libc_locale
 
 <!-- example conf collation_libc_locale -->
-服务器libc区域设置。可选，默认是C。
+服务器 libc 本地化设置。可选，默认为 C。
 
-指定libc区域设置，影响基于libc的排序规则。详情请参阅 [collations](../Searching/Collations.md) 部分。
+指定 libc 本地化设置，影响基于 libc 的排序规则。有关详细信息，请参阅 [排序规则](../Searching/Collations.md) 部分。
 
 
 <!-- intro -->
@@ -312,9 +312,9 @@ collation_libc_locale = fr_FR
 ### collation_server
 
 <!-- example conf collation_server -->
-服务器默认排序规则。可选，默认是libc_ci。
+默认服务器排序规则。可选，默认为 libc_ci。
 
-指定用于传入请求的默认排序规则。排序规则可以在每个查询上单独覆盖。有关可用排序规则及其它详细信息，请参阅 [collations](../Searching/Collations.md) 部分。
+指定用于传入请求的默认排序规则。可以在每个查询的基础上覆盖排序规则。有关可用排序规则和其他详细信息的列表，请参阅 [排序规则](../Searching/Collations.md) 部分。
 
 
 <!-- intro -->
@@ -331,8 +331,8 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-当指定此设置后，会启用[实时模式](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)，这是管理数据模式的一种命令式方式。该值应为你希望存储所有表、二进制日志及Manticore Search在此模式下正常运行所需所有内容的目录路径。
-当指定 `data_dir` 时，不允许为[普通表](../Creating_a_table/Local_tables/Plain_table.md)建立索引。关于RT模式与普通模式的区别，请参见[本节](../Read_this_first.md#Real-time-table-vs-plain-table)。
+当指定此设置时，它会启用 [实时模式](../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)，这是一种管理数据模式的强制方法。值应为存储所有表、二进制日志以及此模式下 Manticore Search 正常运行所需所有其他内容的目录路径。
+当指定 `data_dir` 时，不允许对 [普通表](../Creating_a_table/Local_tables/Plain_table.md) 进行索引。有关 RT 模式和普通模式之间差异的更多信息，请参阅 [此部分](../Read_this_first.md#Real-time-table-vs-plain-table)。
 
 <!-- intro -->
 ##### 示例：
@@ -344,13 +344,37 @@ data_dir = /var/lib/manticore
 ```
 <!-- end -->
 
+### attr_autoconv_strict
+
+<!-- example conf attr_autoconv_strict -->
+此设置控制在 INSERT 和 REPLACE 操作期间字符串到数字类型转换的严格验证模式。可选，默认为 0（非严格模式，向后兼容）。
+
+当设置为 1（严格模式）时，无效的字符串到数字转换（例如，将空字符串 `''` 或非数字字符串 `'a'` 转换为 bigint 属性）将返回错误，而不是静默转换为 0。这有助于在数据插入期间尽早发现数据质量问题。
+
+当设置为 0（非严格模式，默认）时，无效的转换将静默转换为 0，保持与旧版本的向后兼容性。
+
+严格模式验证以下情况：
+* 空字符串或无法转换的字符串
+* 以非数字字符结尾的字符串（例如，`'123abc'`）
+* 超出类型范围的数值（溢出/下溢）
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Example -->
+
+```ini
+attr_autoconv_strict = 1  # enable strict conversion mode
+```
+<!-- end -->
+
 ### diskchunk_flush_search_timeout
 
 <!-- example conf diskchunk_flush_search_timeout -->
-用于防止在表内无搜索时自动刷新RAM块的超时时间。可选，默认30秒。
+防止在表中没有搜索时自动刷新 RAM 块的超时时间。可选，默认为 30 秒。
 
-用于在自动刷新前检测表中有无搜索的时间。
-只有在最近 `diskchunk_flush_search_timeout` 秒内表中至少有一次搜索，才会自动刷新。该设置与 [diskchunk_flush_write_timeout](../Server_settings/Searchd.md#diskchunk_flush_write_timeout) 联合工作。对应的[每表设置](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout)具有更高优先级，并将覆盖该实例级默认值，为你带来更细致的控制。
+检查在确定是否自动刷新之前进行搜索的时间。  
+只有在表中最近 `diskchunk_flush_search_timeout` 秒内至少有一次搜索时，才会发生自动刷新。与 [diskchunk_flush_write_timeout](../Server_settings/Searchd.md#diskchunk_flush_write_timeout) 配合使用。对应的 [每表设置](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) 优先级更高，将覆盖此全局默认值，提供更细粒度的控制。
 
 <!-- intro -->
 ##### 示例：
@@ -365,9 +389,9 @@ diskchunk_flush_search_timeout = 120s
 ### diskchunk_flush_write_timeout
 
 <!-- example conf diskchunk_flush_write_timeout -->
-在没有写入的情况下等待多少秒后自动将RAM块刷新到磁盘。可选，默认值为1秒。
+等待没有写入操作后自动将 RAM 块刷新到磁盘的秒数。可选，默认值为 1 秒。
 
-如果在 `diskchunk_flush_write_timeout` 秒内没有写入发生，该 RAM 块将被刷新到磁盘。此设置与 [diskchunk_flush_search_timeout](../Server_settings/Searchd.md#diskchunk_flush_search_timeout) 配合使用。要禁用自动刷新，请在配置中显式设置 `diskchunk_flush_write_timeout = -1`。相应的[每表设置](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout)优先级更高，会覆盖此实例范围的默认值，提供更细粒度的控制。
+如果在 `diskchunk_flush_write_timeout` 秒内 RAM 块中没有写入操作，该块将被刷新到磁盘。与 [diskchunk_flush_search_timeout](../Server_settings/Searchd.md#diskchunk_flush_search_timeout) 配合使用。要禁用自动刷新，请在配置中显式设置 `diskchunk_flush_write_timeout = -1`。对应的 [每表设置](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) 优先级更高，将覆盖此全局默认值，提供更细粒度的控制。
 
 <!-- intro -->
 ##### 示例：
@@ -382,9 +406,9 @@ diskchunk_flush_write_timeout = 60s
 ### docstore_cache_size
 
 <!-- example conf docstore_cache_size -->
-此设置指定了文档存储中保存在内存中的文档块的最大大小。此项为可选，默认值为 16m（16 兆字节）。
+此设置指定从文档存储中保留在内存中的文档块的最大大小。可选，默认值为 16m（16 兆字节）。
 
-当使用 `stored_fields` 时，会从磁盘读取并解压文档块。由于每个块通常包含多个文档，因此在处理下一个文档时可以重用该块。为此，块被保存在服务器范围的缓存中。缓存中保存的是未压缩的块。
+当使用 `stored_fields` 时，文档块会从磁盘读取并解压缩。由于每个块通常包含多个文档，处理下一个文档时可能会重复使用该块。为此，块会保留在一个全局缓存中。缓存保存的是未压缩的块。
 
 
 <!-- intro -->
@@ -400,7 +424,7 @@ docstore_cache_size = 8m
 ### engine
 
 <!-- example conf engine -->
-在 RT 模式创建表时使用的默认属性存储引擎。可以是 `rowwise`（默认）或者 `columnar`。
+在 RT 模式下创建表时默认使用的属性存储引擎。可以是 `rowwise`（默认）或 `columnar`。
 
 <!-- intro -->
 ##### 示例：
@@ -416,9 +440,9 @@ engine = columnar
 ### expansion_limit
 
 <!-- example conf expansion_limit -->
-此设置决定单个通配符展开的最大关键字数。可选，默认值为 0（无限制）。
+此设置确定单个通配符的扩展关键字的最大数量。可选，默认值为 0（无限制）。
 
-当对启用了 `dict = keywords` 的表执行子字符串搜索时，单个通配符可能会匹配成千上万甚至数百万个关键字（比如匹配整个牛津词典中的 `a*`）。该指令允许限制此类展开的影响。设置 `expansion_limit = N` 可限制每个通配符在查询中最多展开为 N 个出现频率最高的匹配关键字。
+当对使用 `dict = keywords` 启用的表执行子字符串搜索时，单个通配符可能会导致匹配数千甚至数百万个关键字（例如，将 `a*` 与整个牛津词典匹配）。此指令允许您限制此类扩展的影响。设置 `expansion_limit = N` 会将扩展限制为每个查询中的通配符最多匹配 N 个最常用的关键字。
 
 <!-- intro -->
 ##### 示例：
@@ -433,9 +457,9 @@ expansion_limit = 16
 ### expansion_merge_threshold_docs
 
 <!-- example conf expansion_merge_threshold_docs -->
-此设置决定允许合并所有此类关键字的扩展关键字中的最大文档数。可选，默认值为 32。
+此设置确定扩展关键字中允许合并所有此类关键字的最大文档数。可选，默认值为 32。
 
-当对启用了 `dict = keywords` 的表执行子字符串搜索时，单个通配符可能会匹配成千上万甚至数百万个关键字。此指令允许你增加允许合并的关键字数目，以加快匹配速度，但会使用更多内存。
+当对使用 `dict = keywords` 启用的表执行子字符串搜索时，单个通配符可能会导致匹配数千甚至数百万个关键字。此指令允许您增加合并的关键字数量限制以加快匹配速度，但会增加搜索时的内存使用。
 
 <!-- intro -->
 ##### 示例：
@@ -450,9 +474,9 @@ expansion_merge_threshold_docs = 1024
 ### expansion_merge_threshold_hits
 
 <!-- example conf expansion_merge_threshold_hits -->
-此设置决定允许合并所有此类关键字的扩展关键字中的最大命中数。可选，默认值为 256。
+此设置确定扩展关键字中允许合并所有此类关键字的最大命中数。可选，默认值为 256。
 
-当对启用了 `dict = keywords` 的表执行子字符串搜索时，单个通配符可能会匹配成千上万甚至数百万个关键字。此指令允许你增加允许合并的关键字数目，以加快匹配速度，但会使用更多内存。
+当对使用 `dict = keywords` 启用的表执行子字符串搜索时，单个通配符可能会导致匹配数千甚至数百万个关键字。此指令允许您增加合并的关键字数量限制以加快匹配速度，但会增加搜索时的内存使用。
 
 <!-- intro -->
 ##### 示例：
@@ -467,14 +491,14 @@ expansion_merge_threshold_hits = 512
 ### expansion_phrase_limit
 
 <!-- example conf expansion_phrase_limit -->
-此设置控制由于 `PHRASE`、`PROXIMITY` 和 `QUORUM` 操作符内部的 `OR` 运算符所生成的最大替代短语变体数。可选，默认值为 1024。
+此设置控制由于 `PHRASE`、`PROXIMITY` 和 `QUORUM` 操作符内部的 `OR` 操作符而生成的替代短语变体的最大数量。可选，默认值为 1024。
 
-当在类似短语的操作符中使用 `|`（或）运算符时，展开的总组合数可能会根据指定的替代项数量呈指数增长。该设置通过限制查询处理期间考虑的排列数，有助于防止过度的查询展开。
+在短语类操作符中使用 `|`（OR）操作符时，根据指定的替代项数量，扩展组合的总数可能会呈指数级增长。此设置通过限制查询处理过程中考虑的排列数来防止过度的查询扩展。
 
-如果生成的变体数超过此限制，查询将：
+如果生成的变体数量超过此限制，查询将：
 
-- 失败并返回错误（默认行为）
-- 如果启用 `expansion_phrase_warning`，则返回带有警告的部分结果
+- 默认情况下以错误失败  
+- 如果启用了 `expansion_phrase_warning`，则返回部分结果并附带警告
 
 <!-- intro -->
 ##### 示例：
@@ -489,9 +513,9 @@ expansion_phrase_limit = 4096
 ### expansion_phrase_warning
 
 <!-- example conf expansion_phrase_warning -->
-此设置控制当查询展开限制由 `expansion_phrase_limit` 超过时的行为。
+此设置控制当 `expansion_phrase_limit` 定义的查询扩展限制被超过时的行为。
 
-默认情况下，查询将失败并返回错误信息。当 `expansion_phrase_warning` 设置为 1 时，搜索会继续使用短语的部分转换（直到配置限制），并且服务器会向用户返回带有警告信息的结果集。这样，过于复杂而无法完全展开的查询仍能返回部分结果而不会完全失败。
+默认情况下，查询将以错误消息失败。当 `expansion_phrase_warning` 设置为 1 时，搜索将继续使用短语的部分转换（最多达到配置的限制），并返回警告消息给用户，同时附带结果集。这允许过于复杂无法完全扩展的查询仍能返回部分结果，而不会完全失败。
 
 <!-- intro -->
 ##### 示例：
@@ -505,32 +529,32 @@ expansion_phrase_warning = 1
 
 ### grouping_in_utc
 
-此设置指定 API 和 SQL 中基于时间的分组计算是使用本地时区还是 UTC。可选，默认值为 0（表示‘本地时区’）。
+此设置指定在 API 和 SQL 中的定时分组是使用本地时区还是 UTC 进行计算。它是可选的，默认值为 0（表示“本地时区”）。
 
-By default，所有“按时间分组”表达式（例如在API中的按日、周、月、年分组，以及在SQL中的按日、月、年、年月、年月日分组）均使用本地时间进行计算。例如，若您拥有文档属性时间标记为`13:00 utc`与`15:00 utc`，在分组操作时，它们都将依据您的本地时区设置归入相应的分组。若您位于`utc`时区，它们将归入同一日期；但若您位于`utc+10`时区，则这些文档将被匹配到不同的`按日分组`分组（因为13:00 utc在UTC+10时区为23:00本地时间，而15:00则为次日01:00）。有时，这种行为不被接受，且期望时间分组不依赖于时区。您可运行服务器并定义全局TZ环境变量，但这不仅影响分组，亦影响日志时间标记，此亦可能不期望。启用此选项（于配置或使用SQL中的[SET global](../Server_settings/Setting_variables_online.md#SET)语句）将导致所有时间分组表达式以UTC计算，而其余时间相关函数（例如服务器日志）仍使用本地TZ。
+默认情况下，所有“按时间分组”的表达式（如 API 中的 group by day、week、month、year，以及 SQL 中的 group by day、month、year、yearmonth、yearmonthday）均使用本地时间进行计算。例如，如果您有属性时间为 `13:00 utc` 和 `15:00 utc` 的文档，在分组的情况下，它们将根据您的本地时区设置归入设施组。如果您位于 `utc`，则为同一天，但如果您位于 `utc+10`，则这些文档将被匹配到不同的 `group by day` 设施组（因为 UTC+10 时区的 13:00 utc 是 23:00 本地时间，而 15:00 是第二天的 01:00）。有时这种行为是不可接受的，希望时间分组不依赖于时区。您可以使用定义的全局 TZ 环境变量运行服务器，但这会影响分组以外的其他功能，例如日志中的时间戳，这可能也不理想。将此选项切换为“开启”（在配置中或使用 SQL 中的 [SET global](../Server_settings/Setting_variables_online.md#SET) 语句）将导致所有时间分组表达式以 UTC 计算，而其余时间相关函数（即服务器日志）则使用本地时区。
 
 
 ### timezone
 
-此设置指定日期/时间相关函数使用时区。默认使用本地时区，但您可指定不同时区于IANA格式（例如`Europe/Amsterdam`）。
+此设置指定与日期/时间相关的函数使用的时区。默认情况下使用本地时区，但您可以使用 IANA 格式（例如 `Europe/Amsterdam`）指定不同的时区。
 
-注意此设置不影响日志，日志始终使用本地时区。
+请注意，此设置对日志没有影响，日志始终以本地时区运行。
 
-同时注意若使用`grouping_in_utc`，则“按时间分组”函数仍使用UTC，而其余日期/时间相关函数使用指定时区。总体，不建议混合使用`grouping_in_utc`与`timezone`。
+另外请注意，如果使用了 `grouping_in_utc`，则“按时间分组”功能仍将使用 UTC，而其他日期/时间相关函数将使用指定的时区。总体而言，不建议将 `grouping_in_utc` 和 `timezone` 混合使用。
 
-您可配置此选项于配置或使用SQL中的[SET global](../Server_settings/Setting_variables_online.md#SET)语句。
+您可以在配置中或通过在 SQL 中使用 [SET global](../Server_settings/Setting_variables_online.md#SET) 语句配置此选项。
 
 
 ### ha_period_karma
 
 <!-- example conf ha_period_karma -->
-此设置指定代理镜像统计窗口大小，单位为秒（或[特殊后缀](../Server_settings/Special_suffixes.md)）。此选项可选，默认值为60秒。
+此设置指定代理镜像统计窗口大小，以秒为单位（或 [special_suffixes](../Server_settings/Special_suffixes.md)）。它是可选的，默认值为 60 秒。
 
-对于包含代理镜像的分布式表（详见[代理](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)），主节点跟踪多个不同每镜像计数器。这些计数器随后用于故障转移与平衡（主节点基于计数器选择最佳镜像使用）。计数器累积于`ha_period_karma`秒区块。
+对于包含代理镜像的分布式表（更多信息请参见 [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)），主节点会跟踪每个镜像的多个不同计数器。这些计数器随后用于故障转移和平衡（主节点根据计数器选择最佳镜像使用）。计数器以 `ha_period_karma` 秒为块进行累积。
 
-开始新区块后，主节点仍可使用前区块累积值直至新区块半满。因此，任何前历史最多于1.5倍ha_period_karma秒后停止影响镜像选择。
+在开始新的块后，主节点仍可能使用前一个块的累积值，直到新块填充一半。因此，任何之前的记录最多在 1.5 倍 ha_period_karma 秒后将不再影响镜像选择。
 
-尽管最多两区块用于镜像选择，为诊断目的存储至15最近区块。这些区块可通过[SHOW AGENT STATUS](../Node_info_and_management/Node_status.md#SHOW-AGENT-STATUS)语句检查。
+尽管最多使用两个块进行镜像选择，但最多存储 15 个最近的块用于仪器目的。这些块可以通过 [SHOW AGENT STATUS](../Node_info_and_management/Node_status.md#SHOW-AGENT-STATUS) 语句进行检查。
 
 
 <!-- intro -->
@@ -547,9 +571,9 @@ ha_period_karma = 2m
 ### ha_ping_interval
 
 <!-- example conf ha_ping_interval -->
-此设置配置代理镜像ping间隔，单位为毫秒（或[特殊后缀](../Server_settings/Special_suffixes.md)）。此选项可选，默认值为1000毫秒。
+此设置配置代理镜像 ping 间隔，以毫秒为单位（或 [special_suffixes](../Server_settings/Special_suffixes.md)）。它是可选的，默认值为 1000 毫秒。
 
-对于包含代理镜像的分布式表（详见[代理](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)），主节点于空闲期间向所有镜像发送ping命令。此用于跟踪当前代理状态（存活或死亡，网络往返等）。此类ping间隔由此指令定义。为禁用ping，设置ha_ping_interval为0。
+对于包含代理镜像的分布式表（更多信息请参见 [agent](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)），主节点在空闲期间会向所有镜像发送 ping 命令。这是为了跟踪当前代理状态（存活或死亡、网络往返时间等）。此类 ping 的间隔由此指令定义。要禁用 ping，请将 ha_ping_interval 设置为 0。
 
 
 <!-- intro -->
@@ -565,21 +589,21 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-`hostname_lookup`选项定义更新主机名策略。默认，代理主机名IP地址于服务器启动缓存以避免过度DNS访问。然而，于某些情况，IP可动态更改（例如云主机）且可能期望不缓存IP。设置此选项为`request`禁用缓存且每查询查询DNS。IP地址亦可手动更新使用`FLUSH HOSTNAMES`命令。
+`hostname_lookup` 选项定义了更新主机名的策略。默认情况下，服务器启动时会缓存代理主机名的 IP 地址，以避免对 DNS 的过度访问。然而，在某些情况下，IP 可能会动态更改（例如云托管），此时可能不希望缓存 IP。将此选项设置为 `request` 会禁用缓存，并对每个查询查询 DNS。也可以使用 `FLUSH HOSTNAMES` 命令手动更新 IP 地址。
 
 ### jobs_queue_size
 
-jobs_queue_size设置定义同时队列可容纳多少“任务”。默认无限制。
+jobs_queue_size 设置定义了队列中可以同时存在的“任务”数量。默认情况下是无限的。
 
-于多数情况，“任务”意味对单个本地表（普通表或实时表磁盘块）一查询。例如，若您拥有包含2本地表的分布式表或实时表拥有2磁盘块，搜索查询对任一将多数放置2任务于队列。随后，线程池（其大小定义于[线程](../Server_settings/Searchd.md#threads)）将处理它们。然而，于某些情况，若查询过于复杂，更多任务可创建。调整此设置建议当[最大连接](../Server_settings/Searchd.md#max_connections)与[线程](../Server_settings/Searchd.md#threads)不足以平衡期望性能。
+在大多数情况下，“任务”意味着对单个本地表（普通表或实时表的磁盘块）的一个查询。例如，如果您有一个由 2 个本地表组成的分布式表或一个包含 2 个磁盘块的实时表，对其中任何一个的搜索查询通常会在队列中放入 2 个任务。然后，线程池（其大小由 [threads](../Server_settings/Searchd.md#threads) 定义）会处理它们。然而，在某些情况下，如果查询过于复杂，可能会生成更多任务。当 [max_connections](../Server_settings/Searchd.md#max_connections) 和 [threads](../Server_settings/Searchd.md#threads) 不足以在所需性能之间找到平衡时，建议更改此设置。
 
 ### join_batch_size
 
-表连接工作通过累积匹配批次，这些是左表查询执行结果。此批次随后作为右表单一查询处理。
+表连接通过累积一批匹配项来工作，这些匹配项是左表上执行的查询结果。然后，该批处理作为右表上的单个查询进行处理。
 
-此选项允许您调整批次大小。默认值为`1000`，设置此选项为`0`禁用批次。
+此选项允许您调整批处理大小。默认值为 `1000`，将此选项设置为 `0` 会禁用批处理。
 
-更大批次大小可能提升性能；然而，对于某些查询，可能导致过度内存消耗。
+较大的批处理大小可能会提高性能；然而，对于某些查询，它可能导致内存消耗过多。
 
 <!-- intro -->
 ##### 示例：
@@ -593,13 +617,13 @@ join_batch_size = 2000
 
 ### join_cache_size
 
-每右表执行查询定义特定JOIN ON条件，这些决定右表获取结果集。
+每个在右侧表上执行的查询都由特定的 JOIN ON 条件定义，这些条件决定了从右侧表检索的结果集。
 
-如果只有少数几个唯一的 JOIN ON 条件，重用结果比反复对右表执行查询更有效。为实现这一点，结果集会存储在缓存中。
+如果只有少量唯一的 JOIN ON 条件，重用结果可能比反复在右侧表上执行查询更高效。为此，结果集会被存储在缓存中。
 
-此选项允许您配置该缓存的大小。默认值为 `20 MB`，将此选项设为 0 则禁用缓存。
+此选项允许您配置此缓存的大小。默认值为 `20 MB`，将此选项设置为 0 会禁用缓存。
 
-请注意，每个线程维护自己的缓存，因此在估算总内存使用时，应考虑执行查询的线程数量。
+请注意，每个线程维护自己的缓存，因此在估算总内存使用量时，应考虑执行查询的线程数量。
 
 <!-- intro -->
 ##### 示例：
@@ -614,8 +638,8 @@ join_cache_size = 10M
 ### listen_backlog
 
 <!-- example conf listen_backlog -->
-listen_backlog 设置决定了 TCP 监听传入连接的队列长度。这对于逐个处理请求的 Windows 版本尤为重要。当连接队列达到限制时，新进入的连接将被拒绝。
-对于非 Windows 版本，默认值通常即可，通常无需调整此设置。
+listen_backlog 设置决定了传入连接的 TCP 监听队列长度。这对于逐个处理请求的 Windows 构建版本尤其相关。当连接队列达到其限制时，新的传入连接将被拒绝。
+对于非 Windows 构建版本，默认值应该可以正常工作，通常无需调整此设置。
 
 
 <!-- intro -->
@@ -631,9 +655,9 @@ listen_backlog = 20
 ### kibana_version_string
 
 <!-- example conf kibana_version_string -->
-返回给 Kibana 或 OpenSearch Dashboards 的服务器版本字符串。可选——默认设置为 `7.6.0`。
+返回给 Kibana 或 OpenSearch Dashboards 的服务器版本字符串。可选 — 默认设置为 `7.6.0`。
 
-某些版本的 Kibana 和 OpenSearch Dashboards 期望服务器报告特定的版本号，且根据版本号可能表现不同。为解决此类问题，可以使用此设置，让 Manticore 向 Kibana 或 OpenSearch Dashboards 报告自定义版本。
+某些版本的 Kibana 和 OpenSearch Dashboards 期望服务器报告特定的版本号，并且行为可能根据版本号有所不同。为解决此类问题，您可以使用此设置，使 Manticore 向 Kibana 或 OpenSearch Dashboards 报告自定义版本。
 
 <!-- intro -->
 ##### 示例：
@@ -648,39 +672,39 @@ kibana_version_string = 1.2.3
 ### listen
 
 <!-- example conf listen -->
-该设置允许您指定 Manticore 接受连接的 IP 地址及端口，或 Unix 域套接字路径。
+此设置允许您指定 Manticore 将接受连接的 IP 地址和端口，或 Unix 域套接字路径。
 
-`listen` 的通用语法是：
+`listen` 的通用语法为：
 
 ```ini
 listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol [ "_vip" ] [ "_readonly" ] ]
 ```
 
 您可以指定：
-* IP 地址（或主机名）和端口号
-* 或仅端口号
-* 或 Unix 套接字路径（Windows 不支持）
-* 或 IP 地址和端口范围
+* 一个 IP 地址（或主机名）和端口号
+* 仅端口号
+* 一个 Unix 套接字路径（Windows 不支持）
+* 一个 IP 地址和端口范围
 
-如果您指定端口号但未指定地址，`searchd` 将监听所有网络接口。Unix 路径以斜杠开头标识。端口范围只能为复制协议设置。
+如果您指定了端口号但未指定地址，`searchd` 将监听所有网络接口。Unix 路径以斜杠开头。端口范围只能为复制协议设置。
 
-您还可以指定用于该套接字连接的协议处理程序（监听器）。监听器包括：
+您还可以指定用于此套接字连接的协议处理程序（监听器）。监听器包括：
 
-* **未指定** - Manticore 将接受此端口上传入连接，来源于：
-  - 其他 Manticore 代理（例如远程分布式表）
+* **未指定** - Manticore 将在此端口接受来自以下来源的连接：
+  - 其他 Manticore 代理（即远程分布式表）
   - 通过 HTTP 和 HTTPS 的客户端
-  - [Manticore Buddy](https://manticoresearch.com/blog/manticoresearch-buddy-intro/)。**确保您有此类监听器（或如下面提及的 `http` 监听器）以避免 Manticore 功能受限。**
-* `mysql` MySQL 协议，供 MySQL 客户端连接。注意：
+  - [Manticore Buddy](https://manticoresearch.com/blog/manticoresearch-buddy-intro/)。**确保您有此类监听器（或如下面提到的 `http` 监听器），以避免 Manticore 功能的限制。**
+* `mysql` - 用于来自 MySQL 客户端的连接的 MySQL 协议。注意：
   - 也支持压缩协议。
-  - 如果启用了 [SSL](../Security/SSL.md#SSL)，可以进行加密连接。
-* `replication` - 用于节点间通信的复制协议。更多细节见[复制](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)部分。您可以指定多个复制监听器，但它们必须监听相同的 IP，只能端口不同。若您定义带端口范围的复制监听器（如 `listen = 192.168.0.1:9320-9328:replication`），Manticore 不会立即监听这些端口，而是在开始使用复制时，从指定范围内随机选取空闲端口监听。为保证复制正常工作，端口范围内至少要有 2 个端口。
-* `http` - 同 **未指定**。Manticore 将接受远程代理及通过 HTTP 和 HTTPS 的客户端连接。
-* `https` - HTTPS 协议。Manticore 将 **仅** 在此端口接受 HTTPS 连接。更多细节见[SSL](../Security/SSL.md)章节。
-* `sphinx` - 传统二进制协议。用于接受远程 [SphinxSE](../Extensions/SphinxSE.md) 客户端连接。某些 Sphinx API 客户端实现（如 Java 客户端）需要显式声明监听器。
+  - 如果启用了 [SSL](../Security/SSL.md#SSL)，您可以建立加密连接。
+* `replication` - 用于节点通信的复制协议。更多细节请参见 [复制](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) 部分。您可以指定多个复制监听器，但它们都必须监听相同的 IP；端口可以不同。当您定义一个带有端口范围的复制监听器（例如 `listen = 192.168.0.1:9320-9328:replication`）时，Manticore 不会立即在这些端口上开始监听。相反，它会在您开始使用复制时，从指定范围内随机选择空闲端口。复制正常工作至少需要范围内的 2 个端口。
+* `http` - 与 **未指定** 相同。Manticore 将在此端口接受来自远程代理和通过 HTTP/HTTPS 的客户端的连接。
+* `https` - HTTPS 协议。Manticore 将在此端口**仅**接受 HTTPS 连接。更多细节请参见 [SSL](../Security/SSL.md) 部分。
+* `sphinx` - 旧版二进制协议。用于为远程 [SphinxSE](../Extensions/SphinxSE.md) 客户端提供服务。某些 Sphinx API 客户端实现（例如 Java）需要显式声明监听器。
 
-对客户端协议添加后缀 `_vip`（即除 `replication` 外的所有，例如 `mysql_vip`、`http_vip` 或仅 `_vip`）会强制为该连接创建专用线程，以绕过各种限制。在节点维护或严重过载时服务器可能挂起或无法通过普通端口连接时，此功能很有用。
+在客户端协议后添加后缀 `_vip`（即所有协议，除了 `replication`，例如 `mysql_vip` 或 `http_vip` 或仅 `_vip`）会强制为连接创建专用线程，以绕过不同限制。这在服务器严重过载时进行节点维护很有用，因为在这种情况下，服务器可能会停滞或无法通过常规端口连接。
 
-后缀 `_readonly` 会为监听器设置[只读模式](../Security/Read_only.md)，并限制仅接受读取查询。
+后缀 `_readonly` 会为监听器设置 [只读模式](../Security/Read_only.md)，并限制其仅接受只读查询。
 
 <!-- intro -->
 ##### 示例：
@@ -703,19 +727,19 @@ listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from Sp
 ```
 <!-- end -->
 
-可以配置多个 `listen` 指令。`searchd` 会在所有指定的端口和套接字上监听客户端连接。Manticore 包中的默认配置定义了监听端口：
-* `9308` 和 `9312`，用于来自远程代理及非 MySQL 客户端的连接
-* 以及端口 `9306`，用于 MySQL 连接。
+可以有多个 `listen` 指令。`searchd` 将在所有指定的端口和套接字上监听客户端连接。Manticore 包中提供的默认配置定义了监听端口：
+* `9308` 和 `9312` 用于来自远程代理和非 MySQL 基础客户端的连接
+* 以及端口 `9306` 用于 MySQL 连接。
 
-如果配置文件中完全未指定 `listen`，Manticore 会默认等待以下连接：
+如果您在配置中完全未指定任何 `listen`，Manticore 将等待连接：
 * `127.0.0.1:9306` 用于 MySQL 客户端
-* `127.0.0.1:9312` 用于 HTTP/HTTPS 及来自其他 Manticore 节点和基于 Manticore 二进制 API 的客户端连接
+* `127.0.0.1:9312` 用于 HTTP/HTTPS 和来自其他 Manticore 节点和基于 Manticore 二进制 API 的客户端的连接。
 
 #### 监听特权端口
 
-默认情况下，Linux 不允许您让 Manticore 监听 1024 以下的端口（例如 `listen = 127.0.0.1:80:http` 或 `listen = 127.0.0.1:443:https`），除非您以 root 用户运行 searchd。如果您仍想在非 root 用户下启动 Manticore，让其监听 1024 以下端口，可以考虑以下任一方法（任选一项即可）：
-* 执行命令 `setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/searchd`
-* 在 Manticore 的 systemd 单元中添加 `AmbientCapabilities=CAP_NET_BIND_SERVICE`，然后重新加载守护进程（`systemctl daemon-reload`）。
+默认情况下，Linux 不允许您让 Manticore 监听低于 1024 的端口（例如 `listen = 127.0.0.1:80:http` 或 `listen = 127.0.0.1:443:https`），除非您以 root 身份运行 searchd。如果您仍然希望能够在非 root 用户下启动 Manticore，使其监听低于 1024 的端口，请考虑以下任一方法（任一方法都应有效）：
+* 运行命令 `setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/searchd`
+* 将 `AmbientCapabilities=CAP_NET_BIND_SERVICE` 添加到 Manticore 的 systemd 单元并重新加载守护进程 (`systemctl daemon-reload`)。
 
 #### 技术细节关于Sphinx API协议和TFO
 <details>
@@ -750,7 +774,7 @@ listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from Sp
 <!-- example conf log -->
 日志设置指定所有`searchd`运行时事件将记录的日志文件名。如果没有指定，默认名称为'searchd.log'。
 
-或者，您可以使用 'syslog' 作为文件名。在这种情况下，事件将被发送到 syslog 守护进程。要使用 syslog 选项，您需要在构建期间使用 `-–with-syslog` 选项配置 Manticore。
+或者，您可以将文件名设为 'syslog'。在这种情况下，事件将被发送到 syslog 守护进程。要使用 syslog 选项，您需要在构建时使用 `-–with-syslog` 选项配置 Manticore。
 
 
 <!-- intro -->
@@ -767,9 +791,9 @@ log = /var/log/searchd.log
 ### max_batch_queries
 
 <!-- example conf max_batch_queries -->
-限制每批查询的数量。可选，默认值为 32。
+限制每个批次的查询数量。可选，默认值为 32。
 
-当使用 [multi-queries](../Searching/Multi-queries.md) 时，使 searchd 对单个批处理中提交的查询数量进行合理性检查。设置为 0 可跳过检查。
+使 searchd 在使用 [多查询](../Searching/Multi-queries.md) 时对单个批次提交的查询数量执行合理性检查。将其设置为 0 以跳过检查。
 
 
 <!-- intro -->
@@ -785,7 +809,7 @@ max_batch_queries = 256
 ### max_connections
 
 <!-- example max_connections -->
-最大同时客户端连接数。默认无限制。通常只有在使用任何类型的持久连接时才会显著影响，如 cli mysql 会话或来自远程分布式表的持久远程连接。超过限制后，您仍然可以使用 [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection) 连接到服务器。VIP 连接不计入限制。
+最大同时客户端连接数。默认情况下是无限的。通常只有在使用任何类型的持久连接时才会注意到这一点，例如 cli mysql 会话或远程分布式表的持久远程连接。当超过限制时，您仍然可以使用 [VIP 连接](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection) 连接到服务器。VIP 连接不会计入限制。
 
 <!-- request Example -->
 ```ini
@@ -797,11 +821,11 @@ max_connections = 10
 ### max_threads_per_query
 
 <!-- example max_threads_per_query -->
-一个操作可使用的线程实例范围限制。默认情况下，适当的操作可以占用所有 CPU 核心，导致没有空间给其他操作。例如，对一个相当大的 percolate 表执行 `call pq` 可以使用所有线程持续几十秒。将 `max_threads_per_query` 设置为比如说 [threads](../Server_settings/Searchd.md#threads) 的一半，将确保您可以并行运行几个这样的 `call pq` 操作。
+实例范围内单个操作可以使用的线程数。默认情况下，适当的操作可以占用所有 CPU 核心，从而没有其他操作的余地。例如，对一个相当大的 percolate 表执行 `call pq` 可能会利用所有线程数十秒。将 `max_threads_per_query` 设置为例如 [threads](../Server_settings/Searchd.md#threads) 的一半，可以确保您能够并行运行几个这样的 `call pq` 操作。
 
-您还可以在运行时作为会话或全局变量设置此配置。
+您还可以在运行时将此设置作为会话或全局变量进行设置。
 
-此外，您还可以借助 [threads OPTION](../Searching/Options.md#threads) 对单个查询进行控制。
+此外，您可以使用 [threads OPTION](../Searching/Options.md#threads) 在每个查询的基础上控制行为。
 
 <!-- intro -->
 ##### 示例：
@@ -816,7 +840,7 @@ max_threads_per_query = 4
 ### max_filters
 
 <!-- example conf max_filters -->
-单查询允许的最大过滤器数量。此设置仅用于内部合理性检查，不直接影响内存使用或性能。可选，默认值为 256。
+每个查询允许的最大过滤器数量。此设置仅用于内部合理性检查，不会直接影响 RAM 使用或性能。可选，默认值为 256。
 
 
 <!-- intro -->
@@ -833,7 +857,7 @@ max_filters = 1024
 ### max_filter_values
 
 <!-- example conf max_filter_values -->
-单个过滤器允许的最大值数量。此设置仅用于内部合理性检查，不直接影响内存使用或性能。可选，默认值为 4096。
+每个过滤器允许的最大值数量。此设置仅用于内部合理性检查，不会直接影响 RAM 使用或性能。可选，默认值为 4096。
 
 
 <!-- intro -->
@@ -850,9 +874,9 @@ max_filter_values = 16384
 ### max_open_files
 
 <!-- example conf max_open_files -->
-服务器允许打开的最大文件数称为“软限制”。请注意，服务大型碎片化实时表可能需要将此限制设置得较高，因为每个磁盘块可能占用十几个或更多文件。例如，一个有 1000 个块的实时表可能需要同时打开数千个文件。如果您在日志中遇到“Too many open files”错误，请尝试调整此选项，因为它可能有助于解决该问题。
+服务器允许打开的最大文件数称为“软限制”。请注意，服务大型碎片化实时表可能需要将此限制设置得较高，因为每个磁盘块可能占用十几个或更多的文件。例如，一个包含 1000 个块的实时表可能需要同时打开数千个文件。如果您在日志中遇到“Too many open files”错误，请尝试调整此选项，因为它可能有助于解决问题。
 
-还有一个“硬限制”是选项无法超越的限制。此限制由系统定义，可以在 Linux 的 `/etc/security/limits.conf` 文件中更改。其他操作系统可能有不同的方法，具体请查询相关手册。
+还有一个“硬限制”，该限制无法通过选项超过。此限制由系统定义，可以在 Linux 上的文件 `/etc/security/limits.conf` 中更改。其他操作系统可能有不同的方法，因此请参阅相关手册以获取更多信息。
 
 <!-- intro -->
 ##### 示例：
@@ -865,7 +889,7 @@ max_open_files = 10000
 <!-- end -->
 
 <!-- example conf max_open_files max -->
-除了直接的数字值，您还可以使用魔法字 'max' 将限制设置为当前可用的硬限制。
+除了直接的数字值外，您还可以使用“max”这个魔法词将限制设置为当前可用的硬限制。
 
 <!-- intro -->
 ##### 示例：
@@ -881,7 +905,7 @@ max_open_files = max
 ### max_packet_size
 
 <!-- example conf max_packet_size -->
-允许的最大网络包大小。本设置限制分布式环境中客户端的查询包和远程代理的响应包。仅用于内部合理性检查，不直接影响内存使用或性能。可选，默认值为 128M。
+最大允许的网络数据包大小。此设置限制了客户端的查询数据包和分布式环境中远程代理的响应数据包。仅用于内部合理性检查，不会直接影响 RAM 使用或性能。可选，默认值为 128M。
 
 
 <!-- intro -->
@@ -900,7 +924,7 @@ max_packet_size = 32M
 <!-- example conf mysql_version_string -->
 通过 MySQL 协议返回的服务器版本字符串。可选，默认为空（返回 Manticore 版本）。
 
-某些挑剔的 MySQL 客户端库依赖 MySQL 使用的特定版本号格式，而且有时根据报告的版本号（而非指示的功能标志）选择不同的执行路径。例如，Python MySQLdb 1.2.2 当版本号不符合 X.Y.ZZ 格式时会抛出异常；MySQL .NET 连接器 6.3.x 对版本号为 1.x 并且带有某些组合标志时会内部失败，等等。为了解决这些问题，您可以使用 `mysql_version_string` 指令，让 `searchd` 向通过 MySQL 协议连接的客户端报告不同的版本号。（默认情况下，它报告自己的版本。）
+一些挑剔的 MySQL 客户端库依赖于 MySQL 使用的特定版本号格式，而且有时会根据报告的版本号（而不是指示的能力标志）选择不同的执行路径。例如，Python MySQLdb 1.2.2 在版本号不是 X.Y.ZZ 格式时会抛出异常；MySQL .NET 连接器 6.3.x 在版本号为 1.x 并且与某些标志组合时会内部失败等。为了解决这个问题，您可以使用 `mysql_version_string` 指令，并让 `searchd` 向通过 MySQL 协议连接的客户端报告不同的版本号。（默认情况下，它会报告自己的版本。）
 
 
 <!-- intro -->
@@ -918,33 +942,33 @@ mysql_version_string = 5.0.37
 
 网络线程数，默认为 1。
 
-此设置对于极高查询速率时非常有用，当只有一个线程无法管理所有传入查询时。
+当仅一个线程不足以处理所有传入查询时，此设置在极高查询率的情况下非常有用。
 
 
 ### net_wait_tm
 
-控制网络线程的忙循环间隔。默认值为 -1，可设置为 -1、0 或正整数。
+控制网络线程的繁忙循环间隔。默认值为 -1，可以设置为 -1、0 或正整数。
 
-当服务器配置为纯主服务器，仅将请求路由到代理时，必须无延迟地处理请求且不能让网络线程睡眠。为此存在忙循环。在接收到请求后，如果 `net_wait_tm` 是正数，则网络线程使用 CPU 轮询 `10 * net_wait_tm` 毫秒；如果 `net_wait_tm` 为 0，则只使用 CPU 轮询。若将 `net_wait_tm` 设为 -1，则会禁用忙循环——在这种情况下，轮询器在系统调用中设置超时时间为代理的实际超时。
+当服务器配置为纯主服务器并仅将请求路由到代理时，重要的是要无延迟地处理请求，并且不允许网络线程睡眠。为此有一个繁忙循环。如果 `net_wait_tm` 是正数，则在传入请求后，网络线程使用 CPU 轮询 `10 * net_wait_tm` 毫秒；如果 `net_wait_tm` 为 0，则仅使用 CPU 轮询。此外，可以通过 `net_wait_tm = -1` 禁用繁忙循环 - 在这种情况下，轮询器在系统轮询调用中将超时设置为实际代理的超时。
 
-> **警告：** CPU忙循环实际上会加载CPU核心，因此将此值设置为任何非默认值都会导致明显的CPU使用率，即使服务器处于空闲状态。
+> **警告：** CPU繁忙循环实际上会加载CPU核心，因此将此值设置为任何非默认值即使在空闲服务器上也会导致明显的CPU使用率。
 
 
 ### net_throttle_accept
 
-定义在网络循环的每次迭代中接受多少个客户端。默认值为0（无限制），这对大多数用户来说应该没问题。这是一个微调选项，用于在高负载场景下控制网络循环的吞吐量。
+定义在每次网络循环迭代中接受的客户端数量。默认值为0（无限制），对大多数用户来说应该没问题。这是一个微调选项，用于在高负载场景下控制网络循环的吞吐量。
 
 
 ### net_throttle_action
 
-定义在网络循环的每次迭代中处理多少个请求。默认值为0（无限制），这对大多数用户来说应该没问题。这是一个微调选项，用于在高负载场景下控制网络循环的吞吐量。
+定义在每次网络循环迭代中处理的请求数量。默认值为0（无限制），对大多数用户来说应该没问题。这是一个微调选项，用于在高负载场景下控制网络循环的吞吐量。
 
 ### network_timeout
 
 <!-- example conf network_timeout -->
-网络客户端请求读/写超时，单位为秒（或[特殊后缀](../Server_settings/Special_suffixes.md)）。可选，默认值为5秒。`searchd` 将强制关闭在此超时时间内未能发送查询或读取结果的客户端连接。
+网络客户端请求读写超时时间，以秒为单位（或使用 [special_suffixes](../Server_settings/Special_suffixes.md)）。可选，默认为5秒。`searchd`将强制关闭在超时时间内未能发送查询或读取结果的客户端连接。
 
-另请注意 [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) 参数。此参数将 `network_timeout` 的行为从应用于整个 `query` 或 `result` 更改为应用于单个数据包。通常，一个查询/结果适合在一个或两个数据包内。但是，在需要大量数据的情况下，此参数对于保持操作活动非常宝贵。
+还要注意 [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) 参数。此参数会改变 `network_timeout` 的行为，使其从应用于整个 `query` 或 `result` 改为应用于单个数据包。通常，一个查询/结果会包含在一个或两个数据包中。然而，在需要大量数据的情况下，此参数在保持操作活跃性方面可能非常有价值。
 
 <!-- request Example -->
 
@@ -956,11 +980,11 @@ network_timeout = 10s
 ### node_address
 
 <!-- example conf node_address -->
-此设置允许您指定节点的网络地址。默认情况下，它设置为复制 [listen](../Server_settings/Searchd.md#listen) 地址。在大多数情况下这是正确的；但是，在某些情况下您必须手动指定它：
+此设置允许您指定节点的网络地址。默认情况下，它设置为复制的 [listen](../Server_settings/Searchd.md#listen) 地址。这在大多数情况下是正确的；但是，有些情况下您必须手动指定它：
 
-* 节点位于防火墙后面
+* 节点位于防火墙后
 * 启用了网络地址转换（NAT）
-* 容器部署，例如 Docker 或云部署
+* 容器部署，如Docker或云部署
 * 节点分布在多个区域的集群
 
 
@@ -977,7 +1001,7 @@ node_address = 10.101.0.10
 ### not_terms_only_allowed
 
 <!-- example conf not_terms_only_allowed -->
-此设置决定是否允许仅包含[否定](../Searching/Full_text_matching/Operators.md#Negation-operator)全文运算符的查询。可选，默认值为0（使仅包含NOT运算符的查询失败）。
+此设置确定是否允许仅使用 [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) 全文操作符的查询。可选，默认为0（仅使用NOT操作符的查询将失败）。
 
 
 <!-- intro -->
@@ -993,7 +1017,7 @@ not_terms_only_allowed = 1
 ### optimize_cutoff
 
 <!-- example conf optimize_cutoff -->
-设置默认的表压缩阈值。在此处阅读更多信息 - [优化磁盘块数](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks)。此设置可以通过每个查询选项 [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 覆盖。也可以通过 [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET) 动态更改。
+设置默认的表压缩阈值。更多信息请参见 - [Number of optimized disk chunks](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks)。此设置可以通过每个查询选项 [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 覆盖。也可以通过 [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET) 动态更改。
 
 <!-- intro -->
 ##### 示例：
@@ -1008,7 +1032,7 @@ optimize_cutoff = 4
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-此设置确定到远程[持久代理](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)的最大同时持久连接数。每次连接到 `agent_persistent` 下定义的代理时，我们尝试重用现有连接（如果有），或者连接并保存该连接以供将来使用。但是，在某些情况下，限制此类持久连接的数量是有意义的。此指令定义了该限制。它影响跨所有分布式表到每个代理主机的连接数。
+此设置确定到远程 [persistent agents](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md) 的最大同时持久连接数。每次连接在 `agent_persistent` 下定义的代理时，我们尝试重用现有连接（如果有的话），或者连接并保存连接以供将来使用。然而，在某些情况下，限制此类持久连接的数量是有意义的。此指令定义了限制。它会影响所有分布式表中每个代理主机的连接数。
 
 将此值设置为等于或小于代理配置中的 [max_connections](../Server_settings/Searchd.md#max_connections) 选项是合理的。
 
@@ -1026,10 +1050,10 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file 是 Manticore 搜索中的一个必需配置选项，它指定存储 `searchd` 服务器进程ID的文件路径。
+pid_file 是 Manticore 搜索中必填的配置选项，指定存储 `searchd` 服务器进程ID的文件路径。
 
-searchd 进程ID文件在启动时重新创建并锁定，并在服务器运行时包含主服务器进程ID。在服务器关闭时取消链接。
-此文件的目的是使 Manticore 能够执行各种内部任务，例如检查是否已有正在运行的 `searchd` 实例、停止 `searchd` 以及通知它应该轮换表。该文件也可用于外部自动化脚本。
+searchd 进程ID文件在启动时会被重新创建并锁定，并在服务器运行时包含主服务器进程ID。服务器关闭时会解除链接。
+此文件的目的是让 Manticore 执行各种内部任务，例如检查是否已经有运行中的 `searchd` 实例，停止 `searchd`，并通知它应该轮换表。该文件也可用于外部自动化脚本。
 
 
 <!-- intro -->
@@ -1046,7 +1070,7 @@ pid_file = /run/manticore/searchd.pid
 ### predicted_time_costs
 
 <!-- example conf predicted_time_costs -->
-查询时间预测模型的成本，单位为纳秒。可选，默认值为 `doc=64, hit=48, skip=2048, match=64`。
+查询时间预测模型的成本，以纳秒为单位。可选，默认为 `doc=64, hit=48, skip=2048, match=64`。
 
 <!-- intro -->
 ##### 示例：
@@ -1059,7 +1083,7 @@ predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 <!-- end -->
 
 <!-- example conf predicted_time_costs 1 -->
-基于执行时间（通过最大查询时间设置）在完成前终止查询是一个很好的安全网，但它有一个固有的缺点：非确定性（不稳定）的结果。也就是说，如果您多次重复执行相同的（复杂）搜索查询并设置时间限制，时间限制将在不同阶段被触发，并且您将得到*不同的*结果集。
+基于执行时间（使用最大查询时间设置）在查询完成前终止查询是一个不错的安全网，但有一个固有的缺点：结果不确定（不稳定）。也就是说，如果您多次重复执行完全相同的（复杂）搜索查询并设置时间限制，时间限制将在不同的阶段被触发，您将得到*不同的*结果集。
 
 <!-- intro -->
 ##### SQL：
@@ -1076,7 +1100,7 @@ SetMaxQueryTime()
 ```
 <!-- end -->
 
-有一个选项，[SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time)，可以让您限制查询时间*并*获得稳定、可重复的结果。它不是定期检查评估查询时的实际当前时间（这是非确定性的），而是使用一个简单的线性模型来预测当前运行时间：
+有一个选项 [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time)，它允许您限制查询时间*并*获得稳定、可重复的结果。与其在评估查询时定期检查实际当前时间（这会导致不确定的结果），它使用一个简单的线性模型来预测当前运行时间：
 
 ```ini
 predicted_time =
@@ -1086,21 +1110,21 @@ predicted_time =
     match_cost * found_matches
 ```
 
-然后，当 `predicted_time` 达到给定限制时，查询会提前终止。
+当 `predicted_time` 达到给定限制时，查询将提前终止。
 
-当然，这并非对实际耗时（但确实是对*处理*工作量的硬性限制）的硬性限制，而且简单的线性模型也绝非理想精确的模型。因此，挂钟时间*可能*低于或超过目标限制。然而，误差范围是相当可接受的：例如，在我们以100毫秒为目标限制的实验中，大多数测试查询落在95到105毫秒的范围内，而*所有*查询都在80到120毫秒的范围内。此外，作为一个不错的副作用，使用建模的查询时间而非测量实际运行时间，也会略微减少gettimeofday()的调用次数。
+当然，这并不是实际所花时间的硬性限制（不过，它确实是处理工作量的硬性限制），而且一个简单的线性模型远非理想精确。因此，墙钟时间*可能*低于或超过目标限制。然而，误差范围是相当可接受的：例如，在我们以100毫秒为目标限制的实验中，大多数测试查询落在95到105毫秒的范围内，*所有*查询都在80到120毫秒的范围内。此外，作为一项不错的副作用，使用建模的查询时间而不是测量实际运行时间，也会减少一些gettimeofday()调用。
 
-没有两台服务器的品牌和型号是完全相同的，因此`predicted_time_costs`指令允许您为上述模型配置成本值。为了方便起见，这些值是整数，以纳秒为单位计数。（max_predicted_time中的限制以毫秒为单位计数，而将成本值指定为0.000128毫秒而非128纳秒更容易出错。）不必一次性指定所有四个成本值，未指定的将采用默认值。然而，为了可读性，我们强烈建议指定所有值。
+没有两台服务器的型号和规格是完全相同的，因此`predicted_time_costs`指令允许您为上述模型配置成本。为了方便，它们是整数，以纳秒为单位计算。（max_predicted_time中的限制以毫秒计算，而需要将成本值指定为0.000128毫秒而不是128纳秒则更容易出错。）不需要一次性指定所有四个成本，未指定的将采用默认值。然而，我们强烈建议为了可读性而指定所有成本。
 
 
 ### preopen_tables
 
 <!-- example conf preopen_tables -->
-preopen_tables配置指令指定是否在启动时强制预打开所有表。默认值为1，这意味着无论每个表的[preopen](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Other-performance-related-settings)设置如何，所有表都将被预打开。如果设置为0，则每个表的设置可以生效，并且它们将默认为0。
+preopen_tables配置指令指定是否在启动时强制预打开所有表。默认值为1，这意味着无论每个表的[preopen](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Other-performance-related-settings)设置如何，所有表都将被预打开。如果设置为0，则每个表的设置可以生效，并且它们的默认值为0。
 
-预打开表可以防止搜索查询和轮换之间的竞争，这种竞争偶尔会导致查询失败。然而，它也会使用更多的文件句柄。在大多数场景中，建议预打开表。
+预打开表可以防止搜索查询和轮换之间的竞争，这可能导致查询偶尔失败。然而，它也会使用更多的文件句柄。在大多数情况下，建议预打开表。
 
-以下是一个配置示例：
+以下是一个示例配置：
 
 <!-- intro -->
 ##### 示例：
@@ -1115,15 +1139,15 @@ preopen_tables = 1
 ### pseudo_sharding
 
 <!-- example conf pseudo_sharding -->
-pseudo_sharding配置选项启用对本地普通表和实时表的搜索查询并行化，无论它们是直接查询还是通过分布式表查询。此功能将自动并行化查询，最多使用`searchd.threads`中指定的线程数。
+pseudo_sharding配置选项启用对本地普通表和实时表的搜索查询并行化，无论它们是直接查询还是通过分布式表查询。此功能将自动并行化查询，最多达到`searchd.threads`中指定的线程数。
 
-请注意，如果您的worker线程已经繁忙，因为您有以下情况：
+请注意，如果您的工作线程已经很忙，因为您有：
 * 高查询并发
-* 任何类型的物理分片：
+* 任何形式的物理分片：
   - 由多个普通/实时表组成的分布式表
-  - 包含过多磁盘块的实时表
+  - 由太多磁盘块组成的实时表
 
-那么启用pseudo_sharding可能不会带来任何好处，甚至可能导致吞吐量略有下降。如果您更看重高吞吐量而非低延迟，建议禁用此选项。
+那么启用pseudo_sharding可能不会带来任何好处，甚至可能导致吞吐量略有下降。如果您优先考虑更高的吞吐量而不是更低的延迟，建议禁用此选项。
 
 默认启用。
 
@@ -1140,31 +1164,31 @@ pseudo_sharding = 0
 
 ### replication_connect_timeout
 
-`replication_connect_timeout`指令定义了连接到远程节点的超时时间。默认情况下，该值假定以毫秒为单位，但可以具有[其他后缀](../Server_settings/Special_suffixes.md)。默认值为1000（1秒）。
+`replication_connect_timeout`指令定义连接到远程节点的超时时间。默认情况下，该值以毫秒为单位，但可以有[其他后缀](../Server_settings/Special_suffixes.md)。默认值为1000（1秒）。
 
-连接到远程节点时，Manticore将最多等待此时间以成功完成连接。如果达到超时但连接尚未建立，并且启用了`retries`，则将发起重试。
+在连接到远程节点时，Manticore将最多等待此时间以成功完成连接。如果超时已达到但连接尚未建立，并且启用了`retries`，将发起重试。
 
 
 ### replication_query_timeout
 
-`replication_query_timeout`设置searchd等待远程节点完成查询的时间量。默认值为3000毫秒（3秒），但可以添加`后缀`以表示不同的时间单位。
+`replication_query_timeout`设置searchd等待远程节点完成查询的时间量。默认值为3000毫秒（3秒），但可以使用[suffixed](../Server_settings/Special_suffixes.md)来表示不同的时间单位。
 
-建立连接后，Manticore将最多等待`replication_query_timeout`让远程节点完成。请注意，此超时与`replication_connect_timeout`是分开的，远程节点可能造成的总延迟将是这两个值的总和。
+在建立连接后，Manticore将等待最多`replication_query_timeout`时间以让远程节点完成。请注意，此超时与`replication_connect_timeout`是分开的，远程节点可能引起的总延迟将是这两个值的总和。
 
 
 ### replication_retry_count
 
-此设置是一个整数，指定Manticore在复制期间尝试连接和查询远程节点的次数，然后报告致命查询错误。默认值为3。
+此设置是一个整数，指定Manticore在复制过程中尝试连接和查询远程节点的次数，直到报告致命查询错误。默认值为3。
 
 
 ### replication_retry_delay
 
-此设置是一个以毫秒（或[special_suffixes](../Server_settings/Special_suffixes.md)）为单位的整数，指定Manticore在复制期间查询远程节点失败时重试前的延迟。仅当指定了非零值时，此值才相关。默认值为500。
+此设置是一个以毫秒为单位的整数（或[special_suffixes](../Server_settings/Special_suffixes.md)），指定Manticore在复制过程中查询远程节点失败后重试的延迟时间。此值仅在指定非零值时相关。默认值为500。
 
 ### qcache_max_bytes
 
 <!-- example conf qcache_max_bytes -->
-此配置设置用于缓存结果集的最大RAM量，单位为字节。默认值为16777216，相当于16兆字节。如果该值设置为0，则查询缓存被禁用。有关查询缓存的更多信息，请参阅[query cache](../Searching/Query_cache.md)了解详情。
+此配置设置分配给缓存结果集的最大RAM量（以字节为单位）。默认值为16777216，相当于16兆字节。如果将值设置为0，则禁用查询缓存。有关查询缓存的更多信息，请参阅[查询缓存](../Searching/Query_cache.md)。
 
 
 <!-- intro -->
@@ -1180,12 +1204,12 @@ qcache_max_bytes = 16777216
 
 ### qcache_thresh_msec
 
-整数，单位为毫秒。查询结果被缓存的最小挂钟时间阈值。默认为3000，即3秒。0表示缓存所有内容。详情请参阅[query cache](../Searching/Query_cache.md)。此值也可以用时间[special_suffixes](../Server_settings/Special_suffixes.md)表示，但请谨慎使用，不要与值本身的名称混淆，该名称包含'_msec'。
+整数，以毫秒为单位。查询结果被缓存的最小墙钟时间阈值。默认值为3000，即3秒。0表示缓存所有内容。有关详细信息，请参阅[查询缓存](../Searching/Query_cache.md)。此值也可以使用时间[special_suffixes](../Server_settings/Special_suffixes.md)表示，但使用时要小心，并不要与值本身包含的'_msec'名称混淆。
 
 
 ### qcache_ttl_sec
 
-整数，单位为秒。缓存结果集的过期期限。默认为60，即1分钟。最小可能值为1秒。详情请参阅[query cache](../Searching/Query_cache.md)。此值也可以用时间[special_suffixes](../Server_settings/Special_suffixes.md)表示，但请谨慎使用，不要与值本身的名称混淆，该名称包含'_sec'。
+整数，以秒为单位。缓存结果集的过期时间。默认值为60秒，即1分钟。最小可能值为1秒。有关详细信息，请参阅[查询缓存](../Searching/Query_cache.md)。此值也可以使用时间[special_suffixes](../Server_settings/Special_suffixes.md)表示，但使用时要小心，并不要与值本身包含的'_sec'名称混淆。
 
 
 ### query_log_format
@@ -1193,7 +1217,7 @@ qcache_max_bytes = 16777216
 <!-- example conf query_log_format -->
 查询日志格式。可选，允许的值为`plain`和`sphinxql`，默认为`sphinxql`。
 
-`sphinxql` 模式记录有效的 SQL 语句。`plain` 模式以纯文本格式记录查询（主要适用于纯全文本用例）。此指令允许您在搜索服务器启动时在这两种格式之间切换。日志格式也可以使用 `SET GLOBAL query_log_format=sphinxql` 语法动态更改。更多详细信息请参阅 [查询日志](../Logging/Query_logging.md)。
+`sphinxql` 模式记录有效的 SQL 语句。`plain` 模式以纯文本格式记录查询（主要适用于纯全文检索用例）。此指令允许您在搜索服务器启动时在两种格式之间切换。也可以通过 `SET GLOBAL query_log_format=sphinxql` 语法动态更改日志格式。有关更多详细信息，请参阅 [查询日志](../Logging/Query_logging.md)。
 
 
 <!-- intro -->
@@ -1208,12 +1232,12 @@ query_log_format = sphinxql
 
 ### query_log_min_msec
 
-防止查询被写入查询日志的时间限制（以毫秒为单位）。可选，默认值为 0（所有查询都会写入查询日志）。此指令指定只有执行时间超过所设置限制的查询才会被记录（该值也可以使用时间 [特殊后缀](../Server_settings/Special_suffixes.md) 表示，但请谨慎使用，不要将该值本身包含的 `_msec` 名称弄混）。
+限制（以毫秒为单位），防止查询被写入查询日志。可选，默认为 0（所有查询都会被写入查询日志）。此指令指定只有执行时间超过指定限制的查询才会被记录（此值也可以用时间 [特殊后缀](../Server_settings/Special_suffixes.md) 表示，但使用时要小心，不要被包含 `_msec` 的值名称本身所混淆）。
 
 ### query_log
 
 <!-- example conf query_log -->
-查询日志文件名。可选，默认为空（不记录查询）。所有搜索查询（如 SELECT ...，但不包括 INSERT/REPLACE/UPDATE 查询）都会记录在该文件中。格式描述见 [查询日志](../Logging/Query_logging.md)。在使用 'plain' 格式时，可以使用 'syslog' 作为日志文件路径。在这种情况下，所有搜索查询将以 `LOG_INFO` 优先级发送到 syslog 守护进程，前缀为 '[query]'，而不是时间戳。要使用 syslog 选项，Manticore 必须在构建时配置为 `--with-syslog`。
+查询日志文件名。可选，默认为空（不记录查询）。所有搜索查询（如 SELECT ... 但不包括 INSERT/REPLACE/UPDATE 查询）都会记录在此文件中。格式在 [查询日志](../Logging/Query_logging.md) 中描述。如果使用 'plain' 格式，可以将 'syslog' 作为日志文件的路径。在这种情况下，所有搜索查询将以 `LOG_INFO` 优先级发送到 syslog 守护进程，并以前缀 '[query]' 代替时间戳。要使用 syslog 选项，Manticore 必须在构建时使用 `-–with-syslog` 进行配置。
 
 
 <!-- intro -->
@@ -1230,8 +1254,8 @@ query_log = /var/log/query.log
 ### query_log_mode
 
 <!-- example conf query_log_mode -->
-query_log_mode 指令允许您为 searchd 和查询日志文件设置不同的权限。默认情况下，这些日志文件创建时权限为 600，意味着只有运行服务器的用户和 root 用户可以读取日志文件。
-如果您希望允许其他用户读取日志文件，比如在非 root 用户下运行的监控方案，这个指令非常有用。
+`query_log_mode` 指令允许您为 searchd 和查询日志文件设置不同的权限。默认情况下，这些日志文件以 600 权限创建，这意味着只有服务器运行的用户和 root 用户可以读取日志文件。
+如果希望允许其他用户读取日志文件（例如，以非 root 用户运行的监控解决方案），此指令会很有用。
 
 <!-- intro -->
 ##### 示例：
@@ -1246,11 +1270,11 @@ query_log_mode  = 666
 ### read_buffer_docs
 
 <!-- example conf read_buffer_docs -->
-read_buffer_docs 指令控制关键词文档列表的读取缓冲区大小。对于每个搜索查询中的每个关键词出现，都会有两个相关的读取缓冲区：一个用于文档列表，一个用于命中列表。此设置允许您控制文档列表的缓冲区大小。
+`read_buffer_docs` 指令控制每个关键字的文档列表读取缓冲区大小。对于每个搜索查询中的每个关键字出现，都有两个相关的读取缓冲区：一个用于文档列表，一个用于命中列表。此设置允许您控制文档列表缓冲区大小。
 
-更大的缓冲区大小可能增加每查询的内存使用，但可能减少 I/O 时间。对于慢速存储，设置较大值是合理的，但对于能够实现高 IOPS 的存储，应在较小值区域进行试验。
+更大的缓冲区大小可能会增加每个查询的 RAM 使用量，但可能会减少 I/O 时间。对于慢速存储，设置较大的值是有意义的，但对于能够处理高 IOPS 的存储，应在较低值范围内进行实验。
 
-默认值为 256K，最小值为 8K。您也可以在每个表级别设置 [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs)，它会覆盖服务器配置中的设置。
+默认值为 256K，最小值为 8K。您还可以在每个表的基础上设置 [read_buffer_docs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs)，这将覆盖服务器配置级别的任何设置。
 
 
 <!-- intro -->
@@ -1267,9 +1291,9 @@ read_buffer_docs = 128K
 ### read_buffer_hits
 
 <!-- example conf read_buffer_hits -->
-read_buffer_hits 指令指定关键词命中列表的读取缓冲区大小。默认大小为 256K，最小值为 8K。对于搜索查询中的每个关键词出现，都会有两个相关的读取缓冲区，一个用于文档列表，一个用于命中列表。增加缓冲区大小可以增加每查询的内存使用，但能减少 I/O 时间。对于慢速存储，较大的缓冲区大小是合理的，而对于高 IOPS 存储，则应在较小值区域进行试验。
+`read_buffer_hits` 指令指定搜索查询中每个关键字的命中列表读取缓冲区大小。默认大小为 256K，最小值为 8K。对于每个搜索查询中的每个关键字出现，都有两个相关的读取缓冲区，一个用于文档列表，一个用于命中列表。增加缓冲区大小可能会增加每个查询的 RAM 使用量，但会减少 I/O 时间。对于慢速存储，较大的缓冲区大小是有意义的，而对于能够处理高 IOPS 的存储，应在较低值范围内进行实验。
 
-该设置也可以通过在每个表级别使用 read_buffer_hits 选项在 [read_buffer_hits](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_hits) 中设置，从而覆盖服务器级别的设置。
+此设置也可以通过 [read_buffer_hits](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_hits) 中的 `read_buffer_hits` 选项在每个表的基础上指定，这将覆盖服务器级别的设置。
 
 <!-- intro -->
 ##### 示例：
@@ -1284,9 +1308,9 @@ read_buffer_hits = 128K
 ### read_unhinted
 
 <!-- example conf read_unhinted -->
-无提示读取大小。可选，默认值为 32K，最小值为 1K
+未提示的读取大小。可选，默认为 32K，最小为 1K
 
-在查询时，一些读取操作预先知道有多少数据要读，但有些尚未知晓。最明显的是，当前并不知道命中列表的大小。此设置让您控制在这种情况下要读取多少数据。它影响命中列表的 I/O 时间，对于大于无提示读取大小的列表可以减少 I/O 时间，但对于较小的列表则会增加。这**不**影响内存使用，因为读取缓冲区已经分配好。因此，它不应大于 read_buffer。
+在查询时，某些读取操作可以提前知道需要读取的数据量，但有些目前还不能。最明显的是命中列表的大小目前无法提前知道。此设置允许您控制在这些情况下读取多少数据。它会影响命中列表的 I/O 时间，对于大于未提示读取大小的列表会减少 I/O 时间，但对于较小的列表会增加 I/O 时间。它**不会**影响 RAM 使用，因为读取缓冲区已经分配。因此，它不应大于 read_buffer。
 
 
 <!-- intro -->
@@ -1302,14 +1326,14 @@ read_unhinted = 32K
 ### reset_network_timeout_on_packet
 
 <!-- example conf reset_network_timeout_on_packet -->
-细化网络超时行为（例如 `network_timeout` 和 `agent_query_timeout`）。
+细化网络超时行为（如 `network_timeout` 和 `agent_query_timeout`）。
 
-设置为 0 时，超时限制的是发送整个请求/查询的最大时间。
-设置为 1（默认）时，超时限制的是网络活动之间的最大间隔时间。
+当设置为 0 时，超时限制发送整个请求/查询的最大时间。
+当设置为 1（默认）时，超时限制网络活动之间的最大时间。
 
-在复制过程中，一个节点可能需要向另一个节点发送一个大文件（例如 100GB）。假设网络传输速度为 1GB/s，使用大小为 4-5MB 的一系列数据包。传输整个文件需要 100 秒。默认的 5 秒超时只允许传输 5GB 数据，之后连接会断开。增加超时可以作为一种解决办法，但这不具备可扩展性（例如，下一个文件可能是 150GB，同样会失败）。然而，默认 `reset_network_timeout_on_packet` 设置为 1 时，超时不是应用于整个传输，而是应用于单个数据包。只要传输在进行中（且在超时期间网络上有实际接收数据），连接就保持活跃。如果传输出现卡顿，在数据包之间发生超时，则连接会断开。
+在复制场景中，一个节点可能需要向另一个节点发送一个大文件（例如 100GB）。假设网络传输速率为 1GB/s，每个数据包大小为 4-5MB。要传输整个文件，需要 100 秒。默认超时为 5 秒，仅允许传输 5GB 后连接断开。增加超时可能是一个变通方法，但不可扩展（例如，下一个文件可能是 150GB，再次导致失败）。然而，当默认 `reset_network_timeout_on_packet` 设置为 1 时，超时不是应用于整个传输，而是应用于单个数据包。只要传输正在进行（在超时期间实际通过网络接收数据），连接就会保持活跃。如果传输卡住，导致数据包之间发生超时，则连接会被丢弃。
 
-请注意，如果设置了分布式表，则每个节点——包括主节点和代理节点——都应进行调整。在主节点方面，`agent_query_timeout` 受到影响；在代理节点方面，相关的是 `network_timeout`。
+注意，如果您设置了分布式表，每个节点（包括主节点和代理节点）都应进行调优。在主节点端，`agent_query_timeout` 会受到影响；在代理节点上，`network_timeout` 是相关的。
 
 <!-- intro -->
 
@@ -1327,9 +1351,9 @@ reset_network_timeout_on_packet = 0
 ### rt_flush_period
 
 <!-- example conf rt_flush_period -->
-RT 表的 RAM 块刷新检查周期，单位为秒（或 [special_suffixes](../Server_settings/Special_suffixes.md)）。可选，默认值为 10 小时。
+RT 表的 RAM 块刷新检查周期，以秒为单位（或 [特殊后缀](../Server_settings/Special_suffixes.md)）。可选，默认为 10 小时。
 
-完全适合于 RAM 块的主动更新的 RT 表仍可能导致不断增长的二进制日志，影响磁盘使用和崩溃恢复时间。使用此指令，搜索服务器执行定期的刷新检查，符合条件的 RAM 块可以被保存，从而实现相应的二进制日志清理。更多详情请参见 [Binary logging](../Logging/Binary_logging.md)。
+即使主动更新的 RT 表完全适合 RAM 块，仍可能导致 binlog 不断增长，影响磁盘使用和崩溃恢复时间。通过此指令，搜索服务器会定期执行刷新检查，符合条件的 RAM 块可以被保存，从而实现后续的 binlog 清理。有关详细信息，请参阅 [二进制日志](../Logging/Binary_logging.md)。
 
 <!-- intro -->
 ##### 示例：
@@ -1345,9 +1369,9 @@ rt_flush_period = 3600 # 1 hour
 ### rt_merge_iops
 
 <!-- example conf rt_merge_iops -->
-RT 块合并线程允许启动的最大 I/O 操作数（每秒）。可选，默认值为 0（无限制）。
+RT 块合并线程允许启动的最大 I/O 操作数（每秒）。可选，默认为 0（无限制）。
 
-此指令允许您限制由 `OPTIMIZE` 语句导致的 I/O 影响。保证所有 RT 优化活动产生的磁盘 IOPS（每秒 I/O 操作）不会超过配置的限制。限制 rt_merge_iops 可以减少合并操作引起的搜索性能下降。
+此指令允许您限制由 `OPTIMIZE` 语句引起的 I/O 影响。可以保证所有 RT 优化活动生成的磁盘 IOPS（每秒 I/O 操作数）不会超过配置的限制。限制 `rt_merge_iops` 可以减少合并操作引起的搜索性能下降。
 
 <!-- intro -->
 ##### 示例：
@@ -1362,9 +1386,9 @@ rt_merge_iops = 40
 ### rt_merge_maxiosize
 
 <!-- example conf rt_merge_maxiosize -->
-RT 块合并线程允许启动的最大单次 I/O 操作大小。可选，默认值为 0（无限制）。
+RT 块合并线程允许启动的单个 I/O 操作的最大大小。可选，默认为 0（无限制）。
 
-此指令允许您限制由 `OPTIMIZE` 语句导致的 I/O 影响。超过此大小的 I/O 操作将被拆分成两个或多个操作，随后按照 [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) 限制计算为多个 I/O 操作。因此，保证所有优化活动产生的磁盘 I/O 不会超过 (rt_merge_iops * rt_merge_maxiosize) 字节每秒。
+此指令允许您限制由 `OPTIMIZE` 语句引起的 I/O 影响。超过此限制的 I/O 操作将被拆分为两个或多个 I/O 操作，并将根据 [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) 限制分别计算为单独的 I/O 操作。因此，可以保证所有优化活动生成的磁盘 I/O 每秒字节数不会超过 (rt_merge_iops * rt_merge_maxiosize)。
 
 
 <!-- intro -->
@@ -1381,28 +1405,28 @@ rt_merge_maxiosize = 1M
 ### seamless_rotate
 
 <!-- example conf seamless_rotate -->
-防止在旋转包含大量数据的表以进行预缓存时 `searchd` 停顿。可选，默认值为 1（启用无缝旋转）。在 Windows 系统上，默认禁用无缝旋转。
+在旋转包含大量数据的表时防止 `searchd` 停滞，以进行预缓存。可选，默认为 1（启用无缝旋转）。在 Windows 系统上，默认禁用无缝旋转。
 
-表可能包含需要预先缓存到 RAM 的数据。目前，`.spa`、`.spb`、`.spi` 和 `.spm` 文件被完全预缓存（它们分别包含属性数据、blob 属性数据、关键字表和已删除行映射）。如果不使用无缝旋转，旋转表会尽可能少用内存，流程如下：
+表中可能包含需要预缓存到 RAM 的数据。目前，`.spa`、`.spb`、`.spi` 和 `.spm` 文件会被完全预缓存（它们分别包含属性数据、二进制属性数据、关键字表和已删除行映射）。如果没有启用无缝旋转，旋转表会尝试使用尽可能少的 RAM，并按以下步骤工作：
 
-1. 临时拒绝新查询（返回“重试”错误代码）；
-2. `searchd` 等待所有正在运行的查询完成；
+1. 新查询暂时被拒绝（返回“重试”错误代码）；
+2. `searchd` 等待所有当前运行的查询完成；
 3. 旧表被释放，其文件被重命名；
 4. 新表文件被重命名，并分配所需的 RAM；
-5. 新表的属性和字典数据预加载到 RAM；
-6. `searchd` 继续提供来自新表的查询服务。
+5. 新表的属性和字典数据被预加载到 RAM；
+6. `searchd` 恢复从新表提供查询服务。
 
-但是，如果属性或字典数据很多，预加载步骤可能需要显著时间——在预加载 1-5+ GB 的文件时，可能长达数分钟。
+然而，如果属性或字典数据很多，预加载步骤可能需要明显的时间——在预加载 1-5+ GB 文件的情况下，可能需要几分钟。
 
-启用无缝旋转后，旋转流程如下：
+启用无缝旋转后，旋转过程如下：
 
-1. 分配新表的 RAM 存储；
-2. 异步预加载新表的属性和字典数据至 RAM；
-3. 预加载成功后，释放旧表，同时重命名两个表的文件；
-4. 预加载失败时，释放新表；
-5. 在任何时刻，查询要么从旧表，要么从新表副本提供服务。
+1. 为新表分配 RAM 存储；
+2. 新表的属性和字典数据异步预加载到 RAM；
+3. 成功时，旧表被释放，两个表的文件被重命名；
+4. 失败时，新表被释放；
+5. 在任何时刻，查询都从旧表或新表副本中提供服务。
 
-无缝旋转代价是旋转期间更高的峰值内存使用（因为预加载新副本时，旧副本和新副本的 `.spa/.spb/.spi/.spm` 数据都必须保留在 RAM 中）。平均内存使用量保持不变。
+无缝旋转的代价是在旋转期间更高的峰值内存使用（因为预加载新副本时，旧和新副本的 `.spa/.spb/.spi/.spm` 数据都需要在 RAM 中）。平均使用量保持不变。
 
 
 <!-- intro -->
@@ -1418,22 +1442,22 @@ seamless_rotate = 1
 ### secondary_index_block_cache
 <!-- example conf secondary_index_block_cache -->
 
-此选项指定二级索引使用的块缓存大小。可选，默认值为 8 MB。当二级索引处理包含大量值的过滤器（例如 IN() 过滤器）时，它们会读取并处理这些值的元数据块。
-在联接查询中，这个过程会对左表的每个行批重复执行，每个批次可能在单个联接查询内多次重读相同的元数据。这会严重影响性能。元数据块缓存会把这些块保存在内存中，
-以便后续批次重用。
+此选项指定二级索引使用的块缓存大小。它是可选的，默认为 8 MB。当二级索引使用包含许多值的过滤器（例如，IN() 过滤器）时，它们会读取和处理这些值的元数据块。
+在连接查询中，此过程会针对左表的每一行批次重复进行，每个批次可能在单个连接查询中重新读取相同的元数据。这会严重影响性能。元数据块缓存将这些块保留在内存中，以便后续批次可以重复使用。
+缓存仅在连接查询中使用，对非连接查询没有影响。请注意，缓存大小限制是按属性和每个二级索引分别应用的。每个磁盘块中的每个属性都在此限制内运行。在最坏情况下，总内存使用量可以通过将限制乘以磁盘块数量和连接查询中使用的属性数量来估算。
 
-该缓存仅在联接查询中使用，对非联接查询无影响。请注意，缓存大小限制是针对每个属性和每个二级索引的。每个磁盘块中的每个属性都在这个限制范围内运行。在最坏情况下，总内存
-使用量可以估算为缓存大小限制乘以磁盘块数量和联接查询中使用的属性数量。
+设置 `secondary_index_block_cache = 0` 会禁用缓存。
+##### 示例：
 
-设置 `secondary_index_block_cache = 0` 将禁用缓存。
+secondary_index_block_cache = 16M
 
 <!-- intro -->
-##### 示例：
+### secondary_indexes
 
 <!-- request Example -->
 
 ```ini
-secondary_index_block_cache = 16M
+此选项启用或禁用搜索查询中使用二级索引。它是可选的，默认为 1（启用）。请注意，对于索引操作不需要启用它，只要安装了 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)，它就始终启用。后者也是在搜索时使用索引所必需的。有三种模式可用：
 ```
 
 <!-- end -->
@@ -1441,14 +1465,14 @@ secondary_index_block_cache = 16M
 ### secondary_indexes
 <!-- example conf secondary_indexes -->
 
-此选项启用或禁用搜索查询时使用二级索引。可选，默认值为 1（启用）。请注意，建立索引时无需启用它，只要安装了 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)，它始终启用。使用该索引搜索时也需要此库。提供三种模式：
+This option enables/disables the use of secondary indexes for search queries. It is optional, and the default is 1 (enabled). Note that you don't need to enable it for indexing as it is always enabled as long as the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) is installed. The latter is also required for using the indexes when searching. There are three modes available:
 
-* `0`: 禁用在搜索中使用二级索引。可以通过 [analyzer hints](../Searching/Options.md#Query-optimizer-hints) 为单个查询启用
-* `1`: 启用在搜索中使用二级索引。可以通过 [analyzer hints](../Searching/Options.md#Query-optimizer-hints) 为单个查询禁用
-* `force`: 与启用相同，但加载二级索引时的任何错误都会被报告，且整个索引不会加载到守护进程中。
+* `0`：禁用搜索时使用二级索引。可以通过 [analyzer hints](../Searching/Options.md#Query-optimizer-hints) 为单个查询启用它们  
+* `1`：启用搜索时使用二级索引。可以通过 [analyzer hints](../Searching/Options.md#Query-optimizer-hints) 为单个查询禁用它们  
+* `force`：与启用相同，但在加载二级索引时发生的任何错误将被报告，并且整个索引不会被加载到守护进程中  
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1458,14 +1482,14 @@ secondary_indexes = 1
 
 <!-- end -->
 
-### server_id
+### server_id  
 
 <!-- example conf server_id -->
-作为服务器标识符的整数，用于生成复制集群中节点唯一的短 UUID 种子。server_id 在集群的所有节点中必须唯一，且范围在 0 到 127 之间。如果未设置 server_id，则将其计算为 MAC 地址和 PID 文件路径的哈希，或使用随机数作为短 UUID 的种子。
+用作服务器标识符的整数，用于生成唯一短UUID的种子，该UUID用于标识属于复制集群的节点。server_id必须在集群的节点中唯一，并且范围在0到127之间。如果未设置server_id，它将被计算为MAC地址和PID文件路径的哈希值，或者使用随机数作为短UUID的种子。  
 
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1475,16 +1499,16 @@ server_id = 1
 <!-- end -->
 
 
-### shutdown_timeout
+### shutdown_timeout  
 
 <!-- example conf shutdown_timeout -->
-`searchd --stopwait` 的等待时间，单位为秒（或[特殊后缀](../Server_settings/Special_suffixes.md)）。可选，默认为 60 秒。
+`searchd --stopwait` 等待时间，以秒为单位（或 [special_suffixes](../Server_settings/Special_suffixes.md)）。可选，默认为60秒。  
 
-当你运行 `searchd --stopwait` 时，服务器需要执行一些操作后才能停止，例如完成查询、刷新 RT RAM 块、刷新属性和更新二进制日志。这些任务需要一定时间。`searchd --stopwait` 最多等待 `shutdown_time` 秒让服务器完成任务。合适的时间取决于你的表大小和负载。
+当你运行 `searchd --stopwait` 时，服务器需要在停止前执行一些操作，例如完成查询、刷新RT RAM块、刷新属性和更新binlog。这些任务需要一些时间。`searchd --stopwait` 将等待最多 `shutdown_time` 秒，直到服务器完成其任务。合适的时间取决于你的表大小和负载。  
 
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1494,36 +1518,36 @@ shutdown_timeout = 3m # wait for up to 3 minutes
 <!-- end -->
 
 
-### shutdown_token
+### shutdown_token  
 
-从 VIP Manticore SQL 连接调用“shutdown”命令所需的密码的 SHA1 哈希值。没有它，[debug](../Reporting_bugs.md#DEBUG) 的“shutdown”子命令永远不会导致服务器停止。请注意，这种简单的哈希不能被视为强保护，因为我们没有使用带盐哈希或任何现代哈希函数。它旨在作为局域网中维护守护进程的防呆措施。
+调用来自VIP Manticore SQL连接的 'shutdown' 命令所需的密码的SHA1哈希值。如果没有它，[debug](../Reporting_bugs.md#DEBUG) 'shutdown' 子命令将永远不会导致服务器停止。请注意，这种简单的哈希不应被视为强保护，因为我们没有使用加盐哈希或任何现代哈希函数。它旨在作为本地网络中管理守护进程的防呆措施。  
 
-### snippets_file_prefix
+### snippets_file_prefix  
 
 <!-- example conf snippets_file_prefix -->
-生成摘录时，预先添加到本地文件名的前缀。可选，默认是当前工作文件夹。
+生成片段时添加到本地文件名前的前缀。可选，默认为当前工作目录。  
 
-此前缀可与 `load_files` 或 `load_files_scattered` 选项一起用于分布式摘录生成。
+此前缀可以与 `load_files` 或 `load_files_scattered` 选项一起用于分布式片段生成。  
 
-注意，这个是前缀，而**不是**路径！这意味着，如果设置前缀为“server1”，且请求引用“file23”，`searchd` 会尝试打开“server1file23”（不含引号）。因此，如果需要它是路径，必须包含结尾的斜杠。
+请注意，这是一个前缀，**不是**路径！这意味着如果前缀设置为 "server1"，而请求引用了 "file23"，`searchd` 将尝试打开 "server1file23"（不带引号）。因此，如果你需要它作为路径，必须包含末尾的斜杠。  
 
-构造最终文件路径后，服务器会展开所有相对目录，并将结果与 `snippet_file_prefix` 值进行比较。如果结果不以该前缀开头，则此文件会被拒绝并显示错误消息。
+在构建最终文件路径后，服务器会解除所有相对目录，并将最终结果与 `snippet_file_prefix` 的值进行比较。如果结果不以该前缀开头，此类文件将被拒绝并显示错误消息。  
 
-例如，如果将其设置为 `/mnt/data`，有人用 `../../../etc/passwd` 作为源文件调用摘录生成时，将收到错误消息：
+例如，如果你将其设置为 `/mnt/data`，而有人使用 `../../../etc/passwd` 作为源文件调用片段生成，他们将收到错误消息：  
 
-`File '/mnt/data/../../../etc/passwd' escapes '/mnt/data/' scope`
+`File '/mnt/data/../../../etc/passwd' escapes '/mnt/data/' scope`  
 
-而不是文件内容。
+而不是文件内容。  
 
-此外，若参数未设置且读取 `/etc/passwd`，实际将读取 /daemon/working/folder/etc/passwd，因为参数的默认值是服务器的工作文件夹。
+另外，如果参数未设置且读取 `/etc/passwd`，实际上会读取 `/daemon/working/folder/etc/passwd`，因为该参数的默认值是服务器的工作目录。  
 
-还要注意这是一个本地选项；不会以任何方式影响代理。所以你可以安全地在主服务器上设置前缀。路由到代理的请求不会受到主服务器设置的影响，但会受代理自身设置的影响。
+还要注意，这是一个本地选项；它不会以任何方式影响代理。因此，你可以在主服务器上安全地设置前缀。路由到代理的请求不会受到主服务器设置的影响。但是，它们会受到代理自身的设置影响。  
 
-这在文档存储位置（无论是本地存储还是 NAS 挂载点）在服务器间不一致时非常有用。
+这在文档存储位置（无论是本地存储还是NAS挂载点）在服务器之间不一致时可能很有用。  
 
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1532,20 +1556,20 @@ snippets_file_prefix = /mnt/common/server1/
 ```
 <!-- end -->
 
-> **警告:** 如果你仍希望访问文件系统根目录的文件，必须明确将 `snippets_file_prefix` 设置为空值（通过 `snippets_file_prefix=` 行），或设置为根目录（通过 `snippets_file_prefix=/`）。
+> **警告**：如果你仍然想从文件系统根目录访问文件，必须显式地将 `snippets_file_prefix` 设置为空值（通过 `snippets_file_prefix=` 行），或设置为根目录（通过 `snippets_file_prefix=/`）。  
 
 
-### sphinxql_state
+### sphinxql_state  
 
 <!-- example conf sphinxql_state -->
-当前 SQL 状态序列化文件的路径。
+当前SQL状态将被序列化的文件路径。  
 
-服务器启动时，会重放此文件。在符合条件的状态更改（例如，SET GLOBAL）时，会自动重写此文件。这样可以防止难以诊断的问题：如果加载了 UDF 函数，但 Manticore 崩溃且自动重启时，UDF 和全局变量将不再可用。使用持久化状态有助于确保优雅恢复，无意外。
+在服务器启动时，此文件会被重放。在符合条件的状态更改（例如，`SET GLOBAL`）时，此文件会自动被重写。这可以防止难以诊断的问题：如果你加载了UDF函数但Manticore崩溃，当它（自动）重新启动时，你的UDF和全局变量将不再可用。使用持久状态有助于确保优雅的恢复，避免此类意外。  
 
-`sphinxql_state` 不能用于执行任意命令，如 `CREATE TABLE`。
+`sphinxql_state` 不能用于执行任意命令，例如 `CREATE TABLE`。  
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1555,14 +1579,14 @@ sphinxql_state = uservars.sql
 <!-- end -->
 
 
-### sphinxql_timeout
+### sphinxql_timeout  
 
 <!-- example conf sphinxql_timeout -->
-使用 SQL 接口时，两个请求之间最大等待时间（单位为秒，或[特殊后缀](../Server_settings/Special_suffixes.md)）。可选，默认为 15 分钟。
+使用SQL接口时，等待请求之间的最大时间（以秒为单位，或 [special_suffixes](../Server_settings/Special_suffixes.md)）。可选，默认为15分钟。  
 
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1572,15 +1596,15 @@ sphinxql_timeout = 15m
 <!-- end -->
 
 
-### ssl_ca
+### ssl_ca  
 
 <!-- example conf ssl_ca -->
-SSL 证书颁发机构 (CA) 证书文件（也称为根证书）的路径。可选，默认为空。不为空时，`ssl_cert` 中的证书应由此根证书签名。
+SSL证书颁发机构（CA）证书文件（也称为根证书）的路径。可选，默认为空。当不为空时，`ssl_cert` 中的证书应由该根证书签名。  
 
-服务器使用 CA 文件验证证书签名。文件必须是 PEM 格式。
+服务器使用CA文件验证证书上的签名。文件必须为PEM格式。  
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1590,16 +1614,16 @@ ssl_ca = keys/ca-cert.pem
 <!-- end -->
 
 
-### ssl_cert
+### ssl_cert  
 
 <!-- example conf ssl_cert -->
-服务器 SSL 证书的路径。可选，默认为空。
+服务器的SSL证书路径。可选，默认为空。  
 
-服务器使用此证书作为自签名公钥，来通过 SSL 加密 HTTP 流量。文件必须是 PEM 格式。
+服务器使用此证书作为自签名的公钥，通过SSL加密HTTP流量。文件必须为PEM格式。  
 
 
 <!-- intro -->
-##### 示例：
+##### 示例：  
 
 <!-- request Example -->
 
@@ -1609,10 +1633,10 @@ ssl_cert = keys/server-cert.pem
 <!-- end -->
 
 
-### ssl_key
+### ssl_key  
 
 <!-- example conf ssl_key -->
-SSL 证书密钥的路径。可选，默认为空。
+SSL证书密钥的路径。可选，默认为空。
 
 服务器使用此私钥通过SSL加密HTTP流量。文件必须为PEM格式。
 
@@ -1633,7 +1657,7 @@ ssl_key = keys/server-key.pem
 <!-- example conf subtree_docs_cache -->
 每个查询的最大公共子树文档缓存大小。可选，缺省值为0（禁用）。
 
-此设置限制公共子树优化器的RAM使用量（参见 [多查询](../Searching/Multi-queries.md)）。每个查询最多将使用此数量的RAM来缓存文档条目。将限制设为0会禁用优化器。
+此设置限制公共子树优化器的RAM使用量（参见 [多查询](../Searching/Multi-queries.md)）。每个查询最多将使用此数量的RAM来缓存文档条目。将限制设为0将禁用优化器。
 
 
 <!-- intro -->
@@ -1652,7 +1676,7 @@ subtree_docs_cache = 8M
 <!-- example conf subtree_hits_cache -->
 每个查询的最大公共子树命中缓存大小。可选，缺省值为0（禁用）。
 
-此设置限制公共子树优化器的RAM使用量（参见 [多查询](../Searching/Multi-queries.md)）。每个查询最多将使用此数量的RAM来缓存关键字出现次数（命中）。将限制设为0会禁用优化器。
+此设置限制公共子树优化器的RAM使用量（参见 [多查询](../Searching/Multi-queries.md)）。每个查询最多将使用此数量的RAM来缓存关键字出现次数（命中）。将限制设为0将禁用优化器。
 
 
 <!-- intro -->
@@ -1675,7 +1699,7 @@ Manticore守护进程的工作线程数（或线程池大小）。Manticore在�
 * 激活查询调用
 * 其他操作
 
-默认情况下，它设置为服务器上的CPU核心数。Manticore在启动时创建线程，并在停止时保留它们。每个子任务在需要时可以使用其中一个线程。当子任务完成时，它会释放线程，以便其他子任务可以使用它。
+默认情况下，它设置为服务器上的CPU核心数。Manticore在启动时创建线程，并在停止时保持它们直到停止。每个子任务在需要时可以使用其中一个线程。当子任务完成时，它会释放线程，以便其他子任务可以使用它。
 
 在I/O密集型负载的情况下，将该值设置为高于CPU核心数可能有意义。
 
@@ -1693,9 +1717,9 @@ threads = 10
 
 每个任务都有自己的128K堆栈。当您运行查询时，会检查它需要多少堆栈。如果默认的128K足够，它将直接处理。如果需要更多，将安排另一个堆栈增加的任务，继续处理。这种高级堆栈的最大大小受此设置限制。
 
-将值设置为合理高的数值有助于处理非常深的查询，而不会导致整体RAM消耗过高。例如，将其设置为1G并不意味着每个新任务都会占用1G的RAM，但如果我们看到它需要比如说100M堆栈，我们只需为该任务分配100M。同时，其他任务将使用默认的128K堆栈。同样，我们可以运行甚至更复杂的查询，这些查询需要500M。只有当我们**内部看到**任务需要超过1G的堆栈时，才会失败并报告thread_stack过低。
+将值设置为合理高的数值有助于处理非常深的查询，而不会导致整体RAM消耗过高。例如，将其设置为1G并不意味着每个新任务都会占用1G的RAM，但如果我们看到它需要比如说100M堆栈，我们只需为该任务分配100M。同时，其他任务将使用默认的128K堆栈运行。同样，我们甚至可以运行更复杂的查询，这些查询需要500M。只有当我们**内部看到**任务需要超过1G的堆栈时，才会失败并报告thread_stack过低。
 
-然而，实际上，即使一个查询需要16M的堆栈，通常对于解析来说也过于复杂，会消耗过多时间和资源。因此，守护进程会处理它，但通过`thread_stack`设置限制此类查询看起来非常合理。
+然而，在实践中，即使需要16M堆栈的查询，通常对于解析来说也过于复杂，会消耗过多时间和资源。因此，守护进程将处理它，但通过`thread_stack`设置限制此类查询看起来非常合理。
 
 
 <!-- intro -->
@@ -1729,7 +1753,7 @@ unlink_old = 0
 ### watchdog
 
 <!-- example conf watchdog -->
-线程式服务器看门狗。可选，缺省值为1（启用看门狗）。
+线程服务器看门狗。可选，缺省值为1（启用看门狗）。
 
 当Manticore查询崩溃时，可能会导致整个服务器崩溃。启用看门狗功能后，`searchd`还会维护一个独立的轻量级进程，监控主服务器进程，并在发生异常终止时自动重新启动它。看门狗默认是启用的。
 

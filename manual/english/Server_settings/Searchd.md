@@ -393,6 +393,30 @@ data_dir = /var/lib/manticore
 ```
 <!-- end -->
 
+### attr_autoconv_strict
+
+<!-- example conf attr_autoconv_strict -->
+This setting controls strict validation mode for string-to-number type conversions during INSERT and REPLACE operations. Optional, default is 0 (non-strict mode, backward compatible).
+
+When set to 1 (strict mode), invalid string-to-number conversions (e.g., converting an empty string `''` or non-numeric string `'a'` to a bigint attribute) will return errors instead of silently converting to 0. This helps catch data quality issues early during data insertion.
+
+When set to 0 (non-strict mode, default), invalid conversions will silently convert to 0, maintaining backward compatibility with older versions.
+
+Strict mode validates the following cases:
+* Empty strings or strings that cannot be converted
+* Strings with trailing non-numeric characters (e.g., `'123abc'`)
+* Numeric values that exceed type ranges (overflow/underflow)
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+attr_autoconv_strict = 1  # enable strict conversion mode
+```
+<!-- end -->
+
 ### diskchunk_flush_search_timeout
 
 <!-- example conf diskchunk_flush_search_timeout -->

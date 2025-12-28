@@ -157,6 +157,7 @@ static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
 static bool				g_bCwdChanged = false;
 static CSphString		g_sKbnVersion;
+static bool				g_bAttrAutoconvStrict = false;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -1325,33 +1326,66 @@ std::unique_ptr<ISphTableFunc> CreateRemoveRepeats()
 class CSphMatchVariant 
 {
 public:
-	inline static SphAttr_t ToInt ( const SqlInsert_t & tVal )
+	inline static SphAttr_t ToInt ( const SqlInsert_t & tVal, CSphString & sError )
 	{
 		switch ( tVal.m_iType )
 		{
-			case SqlInsert_t::QUOTED_STRING:	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::QUOTED_STRING:
+			{
+				const char * sStart = tVal.m_sVal.cstr();
+				char * sEnd = nullptr;
+				errno = 0;
+				SphAttr_t uVal = strtoul ( sStart, &sEnd, 10 );
+					
+				if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, tVal.m_sVal.Length(), errno, "integer", sError ) )
+					return 0;
+					
+				return uVal;
+			}
 			case SqlInsert_t::CONST_INT:		return int(tVal.GetValueInt());
 			case SqlInsert_t::CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
 		}
 		return 0;
 	}
 
-	inline static SphAttr_t ToBigInt ( const SqlInsert_t & tVal )
+	inline static SphAttr_t ToBigInt ( const SqlInsert_t & tVal, CSphString & sError )
 	{
 		switch ( tVal.m_iType )
 		{
-			case SqlInsert_t::QUOTED_STRING:	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::QUOTED_STRING:
+			{
+				const char * sStart = tVal.m_sVal.cstr();
+				char * sEnd = nullptr;
+				errno = 0;
+				SphAttr_t iVal = strtoll ( sStart, &sEnd, 10 );
+					
+				if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, tVal.m_sVal.Length(), errno, "bigint", sError ) )
+					return 0;
+					
+				return iVal;
+			}
 			case SqlInsert_t::CONST_INT:		return tVal.GetValueInt();
 			case SqlInsert_t::CONST_FLOAT:		return int64_t(tVal.m_fVal); // FIXME? report conversion error?
 		}
 		return 0;
 	}
 
-	inline static SphAttr_t ToBigUint ( const SqlInsert_t & tVal )
+	inline static SphAttr_t ToBigUint ( const SqlInsert_t & tVal, CSphString & sError )
 	{
 		switch ( tVal.m_iType )
 		{
-		case SqlInsert_t::QUOTED_STRING:	return strtoull ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+		case SqlInsert_t::QUOTED_STRING:
+		{
+			const char * sStart = tVal.m_sVal.cstr();
+			char * sEnd = nullptr;
+			errno = 0;
+			SphAttr_t uVal = strtoull ( sStart, &sEnd, 10 );
+				
+			if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, errno, tVal.m_sVal.Length(), "bigint", sError ) )
+				return 0;
+				
+			return uVal;
+		}
 		case SqlInsert_t::CONST_INT:		return tVal.GetValueUint();
 		case SqlInsert_t::CONST_FLOAT:		return uint64_t(int64_t(tVal.m_fVal)); // FIXME? report conversion error?
 		}
@@ -1385,12 +1419,18 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TOKENCOUNT:
-			tAttr = ToInt(tVal);
+			tAttr = ToInt ( tVal, sError );
+			if ( !sError.IsEmpty() )
+				return false;
 			break;
 
 		case SPH_ATTR_BOOL:
 			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
-				tAttr = ToInt ( tVal );
+			{
+				tAttr = ToInt ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
+			}
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -1402,10 +1442,16 @@ public:
 					return false;
 				}
 
-				tAttr = ToBigUint(tVal);
+				tAttr = ToBigUint ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
 			}
 			else
-				tAttr = ToBigInt(tVal);
+			{
+				tAttr = ToBigInt ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
+			}
 			break;
 
 		case SPH_ATTR_FLOAT:
@@ -1425,7 +1471,11 @@ public:
 			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING )
 				tAttr = GetUTC ( tVal.m_sVal );
 			else
-				tAttr = ToInt(tVal);
+			{
+				tAttr = ToInt ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
+			}
 		}
 		break;
 
@@ -1455,6 +1505,46 @@ public:
 		tVal.SetValueInt(0);
 		CSphString sError;
 		SetAttr ( tMatch, tLoc, nullptr, tVal, eTargetType, false, sError );
+	}
+
+	static bool IsOnlySpace ( const char * sStart, char * sEnd, int iLen )
+	{
+		if ( *sEnd=='\0' )
+			return true;
+
+
+		while ( sEnd<sStart+iLen && *sEnd!='\0' )
+		{
+			if ( !sphIsSpace ( *sEnd ) )
+				return false;
+
+			sEnd++;
+		}
+
+		return true;
+	}
+
+	static bool ValidateConv ( const char * sStart, char * sEnd, int iLen, int iErrno, const char * sAttrType, CSphString & sError )
+	{
+		if ( sStart==sEnd )
+		{
+			sError.SetSprintf ( "invalid value '%s' for %s attribute", sStart, sAttrType );
+			return false;
+		}
+		
+		if ( !IsOnlySpace ( sStart, sEnd, iLen ) )
+		{
+			sError.SetSprintf ( "invalid value '%s' for %s attribute (trailing characters)", sStart, sAttrType );
+			return false;
+		}
+		
+		if ( iErrno==ERANGE )
+		{
+			sError.SetSprintf ( "value '%s' overflow for %s attribute", sStart, sAttrType );
+			return false;
+		}
+		
+		return true;
 	}
 };
 
@@ -13981,6 +14071,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	int iExpansionPhraseLimit = hSearchd.GetInt ( "expansion_phrase_limit", 1024 );
 	bool bExpansionPhraseWarning = hSearchd.GetBool ( "expansion_phrase_warning", false );
 	SetExpansionPhraseLimit ( iExpansionPhraseLimit, bExpansionPhraseWarning );
+
+	g_bAttrAutoconvStrict = hSearchd.GetBool ( "attr_autoconv_strict", false );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

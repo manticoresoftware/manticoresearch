@@ -28,19 +28,11 @@ void operator>> ( MemInputBuffer_c & tIn, RecvStateCleanupRequest_t & tReq )
 static bool CleanupRecvState ( const RecvStateCleanupRequest_t & tCmd )
 {
 	uint64_t uKey = DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex );
-	sphLogDebugRpl ( "CleanupRecvState: checking RecvState for cluster %s index %s, key " INT64_FMT, tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), uKey );
 
-	if ( !RECVSTATE_HASSTATE ( uKey ) )
-	{
-		sphLogDebugRpl ( "CleanupRecvState: RecvState not found for cluster %s index %s, key " INT64_FMT " (may have been already cleaned up)", 
-			tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), uKey );
+	if ( !RecvState::HasState ( uKey ) )
 		return true;
-	}
 
-	sphLogDebugRpl ( "CleanupRecvState: freeing RecvState for cluster %s index %s, key " INT64_FMT, tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), uKey );
-	RECVSTATE_FREE ( uKey );
-	sphLogDebugRpl ( "CleanupRecvState: RecvState freed for cluster %s index %s, key " INT64_FMT, tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr(), uKey );
-
+	RecvState::Free ( uKey );
 	return true;
 }
 

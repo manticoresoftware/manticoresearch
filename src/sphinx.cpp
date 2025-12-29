@@ -1188,6 +1188,7 @@ public:
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
 	void				Dealloc () final;
 	void				Preread () final;
+	void				PostSetup () final;
 
 	RenameResult_e		RenameEx ( CSphString sNewBase ) final;
 
@@ -10129,8 +10130,29 @@ void CSphIndex_VLN::Preread()
 	m_tDeadRowMap.Preread ( GetName(), "kill-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ) );
 	if ( sphInterrupted() ) return;
 
+	if ( g_bKillDictionary && m_tDeadRowMap.HasDead() )
+	{
+		ScopedMutex_t tLock ( m_tKillStatsLock );
+		if ( !m_bKillStatsBuilt )
+		{
+			int64_t tmStart = sphMicroTimer();
+			BuildKillStatsLocked();
+			if ( m_bKillStatsBuilt )
+			{
+				const int64_t tmTotalUs = sphMicroTimer() - tmStart;
+				sphLogDebug ( "kill dictionary built for '%s': killed=%d, words=%d, time=%.3f ms",
+					GetName(), (int)m_tDeadRowMap.GetNumDeads(), m_tKillStats.GetLength(), tmTotalUs/1000.0 );
+			}
+		}
+	}
+
 	m_bPassedRead = true;
 	sphLogDebug ( "Preread successfully finished" );
+}
+
+void CSphIndex_VLN::PostSetup()
+{
+	CSphIndex::PostSetup();
 }
 
 

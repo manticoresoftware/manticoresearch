@@ -20,7 +20,7 @@ It does not change the on-disk dictionary. Instead, it rebuilds per-killed-doc s
 
 ## How It Works
 1. **Killed rows are tracked** via the dead-row map (`.spm`), as before.
-2. **On first use**, the kill dictionary is built lazily:
+2. **On load/rotate**, the kill dictionary is built (if `kill_dictionary` is not disabled):
    - Scan the dead-row map.
    - For each dead row, fetch stored fields from docstore.
    - Re-tokenize the document using the same indexing pipeline:
@@ -47,7 +47,7 @@ It does not change the on-disk dictionary. Instead, it rebuilds per-killed-doc s
 
 ## Performance Considerations
 Building the kill dictionary is proportional to the number of killed rows and the size of their stored fields:
-- **Cost**: re-tokenizing each killed document once (lazy, on demand). "Lazy" means it is built only when word stats are requested (search/`SHOW META`/`CALL KEYWORDS`/`indextool --dumpdict`). If no such queries are executed, the kill dictionary is not built.
+- **Cost**: re-tokenizing each killed document once at table load/rotate (when enabled). Queries no longer pay this cost.
 - **Memory**: per-word hash map of doc/hit counts for killed docs. Memory grows with the number of unique tokens present in the killed documents, not with the total index size. The dictionary does **not** store the token text; it stores a `SphWordID_t` (64-bit word ID) plus two 32-bit counters, and hash-node pointers for chaining/ordering.
 - **Query-time overhead**: constant-time hash lookup per term to subtract `docs`/`hits`.
 
@@ -94,6 +94,6 @@ So the example above would cost roughly ~2.1–2.3 KB of extra RAM. With 100 uni
 During merge/optimize:
 - A **new merged chunk** is built from alive documents, with a fresh dictionary and docstore.
 - The merged chunk **starts with an empty kill dictionary cache**.
-- If the merged chunk has dead rows later, the kill dictionary is built as usual (lazy on first need, incremental after that).
+- If the merged chunk has dead rows later, the kill dictionary is built at load/rotate (eager) and updated incrementally as new kills happen.
 
 In practice, an optimized chunk typically has correct dictionary stats (since it is rebuilt from alive docs), so the kill dictionary tends to stay empty until new kills happen.

@@ -32,7 +32,7 @@ jobs:
         CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
         UNITY_BUILD: 1
         CACHEB: "../cache"
-        CTEST_REGEX: "rt_383|rt_none_3"
+        CTEST_REGEX: "rt_383|rt_478|rt_none_3"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

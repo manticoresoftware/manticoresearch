@@ -1,11 +1,11 @@
 # 管理复制节点
 
 <!-- example managing replication nodes 1 -->
-`ALTER CLUSTER <cluster_name> UPDATE nodes` 语句更新指定集群中每个节点上的节点列表，以包含集群中的所有活动节点。有关节点列表的更多信息，请参见 [加入集群](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)。
+`ALTER CLUSTER <cluster_name> UPDATE nodes` 语句将每个节点内的指定集群中的节点列表更新为包括集群中的所有活动节点。有关节点列表的更多信息，请参见[加入集群](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -34,7 +34,7 @@ $params = [
 $response = $client->cluster()->alter($params);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -48,7 +48,7 @@ utilsApi.sql('ALTER CLUSTER posts UPDATE nodes')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -62,7 +62,7 @@ await utilsApi.sql('ALTER CLUSTER posts UPDATE nodes')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -76,7 +76,7 @@ res = await utilsApi.sql('ALTER CLUSTER posts UPDATE nodes');
 ```
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -85,7 +85,7 @@ utilsApi.sql("ALTER CLUSTER posts UPDATE nodes");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -94,7 +94,7 @@ utilsApi.Sql("ALTER CLUSTER posts UPDATE nodes");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -105,19 +105,19 @@ utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
 <!-- end -->
 
 
-例如，当集群最初建立时，用于重新加入集群的节点列表是 `10.10.0.1:9312,10.10.1.1:9312`。从那以后，其他节点加入了集群，现在的活动节点是 `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`。然而，用于重新加入集群的节点列表尚未更新。
+例如，当集群最初建立时，用于重新加入集群的节点列表是 `10.10.0.1:9312,10.10.1.1:9312`。此后，其他节点加入了集群，现在活动节点是 `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`。然而，用于重新加入集群的节点列表没有更新。
 
-为了解决此问题，可以运行 `ALTER CLUSTER ... UPDATE nodes` 语句，将活动节点的列表复制到用于重新加入集群的节点列表中。这样，重新加入集群的节点列表将包含集群中的所有活动节点。
+要纠正这一点，可以运行 `ALTER CLUSTER ... UPDATE nodes` 语句将活动节点列表复制到用于重新加入集群的节点列表。这样，用于重新加入集群的节点列表将包括集群中的所有活动节点。
 
-两个节点列表都可以通过 [集群状态](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) 语句查看（`cluster_post_nodes_set` 和 `cluster_post_nodes_view`）。
+两个节点列表都可以通过使用 [集群状态](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) 语句 (`cluster_post_nodes_set` 和 `cluster_post_nodes_view`) 查看。
 
 ## 从集群中移除节点
 
-要从复制集群中移除节点，请按以下步骤操作：
-1. 停止该节点。
-2. 从已停止节点上的 `<data_dir>/manticore.json`（通常是 `/var/lib/manticore/manticore.json`）中移除集群信息。
-3. 在任何其他节点上运行 `ALTER CLUSTER cluster_name UPDATE nodes`。
+要从复制集群中移除节点，请按照以下步骤操作：
+1. 停止节点
+2. 从已停止节点的 `<data_dir>/manticore.json`（通常是 `/var/lib/manticore/manticore.json`）中删除集群信息。
+3. 在集群中的其他节点上运行 `ALTER CLUSTER cluster_name UPDATE nodes`。
 
-完成这些步骤后，其他节点将不再识别已分离的节点，已分离的节点也将不再识别集群。此操作不会影响集群中的表或已分离节点上的表。
+完成这些步骤后，其他节点将忘记已分离的节点，而已分离的节点将忘记集群。此操作不会影响集群中的表或已分离节点上的表。
 <!-- proofread -->
 

@@ -1048,6 +1048,8 @@ SELECT ... OPTION ranker=sph04;
 | wlccs                   | field     | float | Weighted Longest Common Contiguous Subsequence, sum(idf) over contiguous keyword spans                            |
 | atc                     | field     | float | Aggregate Term Closeness, log(1+sum(idf1*idf2*pow(distance, -1.75)) over the best pairs of keywords               |
 
+Note: For queries using **Phrase**, **Proximity**, or **NEAR** operators with more than 31 keywords, ranking factors that rely on term frequency (like `tf`, `idf`, `bm25`, `hit_count`, `word_count`) may be under-counted for keywords at position 31 and above. This is due to an internal 32-bit mask used to track term occurrences in these complex operators.
+
 ### Document-level Ranking Factors
 
 A **document-level factor** is a numeric value computed by the ranking engine for every matched document with regards to the current query. So it differs from a plain document attribute in that the attribute does not depend on the full text query, while factors might. These factors can be used anywhere in the ranking expression. Currently implemented document-level factors are:

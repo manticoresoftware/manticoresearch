@@ -5,13 +5,13 @@
 SHOW VERSION
 ```
 
-> 注意：`SHOW VERSION` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它不起作用，请确保已安装 Buddy。
+> 注意：`SHOW VERSION` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果无法使用，请确保已安装 Buddy。
 
-`SHOW VERSION` 提供 Manticore Search 实例中各个组件的详细版本信息。该命令对于需要验证所运行的 Manticore Search 及其相关组件版本的管理员和开发人员特别有用。
+`SHOW VERSION` 提供 Manticore Search 实例各个组件的详细版本信息。该命令对需要验证所运行的 Manticore Search 版本及其相关组件版本的管理员和开发人员特别有用。
 
-输出表格包括两列：
-- `Component`：此列命名 Manticore Search 的具体组件。
-- `Version`：此列显示相应组件的版本信息。
+输出表包含两列：
+- `Component`：此列显示 Manticore Search 的具体组件名称。
+- `Version`：此列显示对应组件的版本信息。
 
 <!-- request SQL -->
 ```sql

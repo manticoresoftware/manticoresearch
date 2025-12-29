@@ -111,43 +111,42 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	};
 }
 
-extern CSphString g_sMySQLVersion;
-
-static void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml, bool bHeadReply )
+void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 {
-	assert ( sBody && iBodyLen );
+	assert ( tReply.m_sBody.first && tReply.m_sBody.second );
 
-	const char * sContent = ( bHtml ? "text/html" : "application/json" );
+	const char * sContentType = tReply.m_sContentType;
+	if ( !sContentType )
+		sContentType = ( tReply.m_bHtml ? "text/html" : "application/json" );
+
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName(eCode), g_sMySQLVersion.cstr(), sContent, iBodyLen );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName ( tReply.m_eCode ), g_sStatusVersion.cstr(), sContentType, tReply.m_sBody.second );
 
 	int iHeaderLen = sHttp.Length();
 	int iBufLen = iHeaderLen;
-	if ( !bHeadReply )
-		iBufLen += iBodyLen;
+	if ( !tReply.m_bHeadReply )
+		iBufLen += tReply.m_sBody.second;
 	dData.Resize ( iBufLen );
 	memcpy ( dData.Begin(), sHttp.cstr(), iHeaderLen );
-	if ( !bHeadReply )
-		memcpy ( dData.Begin() + iHeaderLen, sBody, iBodyLen );
-}
-
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml )
-{
-	HttpBuildReply ( dData, eCode, sBody, iBodyLen, bHtml, false );
+	if ( !tReply.m_bHeadReply )
+		memcpy ( dData.Begin() + iHeaderLen, tReply.m_sBody.first, tReply.m_sBody.second );
 }
 
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply )
 {
-	HttpBuildReply ( dData, eCode, sBody, iBodyLen, false, bHeadReply );
+	HttpReplyTrait_t tReply { eCode, Str_t ( sBody, iBodyLen ) };
+	tReply.m_bHeadReply = bHeadReply;
+	HttpBuildReply ( tReply, dData );
 }
-
 
 void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError )
 {
 	JsonObj_c tErr;
 	tErr.AddStr ( "error", szError );
 	CSphString sJsonError = tErr.AsString();
-	HttpBuildReply ( dData, eCode, sJsonError.cstr(), sJsonError.Length(), false );
+	
+	HttpReplyTrait_t tReply { eCode, FromStr ( sJsonError ) };
+	HttpBuildReply ( tReply, dData );
 }
 
 struct Endpoint_t
@@ -465,18 +464,6 @@ CSphString HttpEndpointToStr ( EHTTP_ENDPOINT eEndpoint )
 	assert ( eEndpoint < EHTTP_ENDPOINT::TOTAL );
 	return g_dEndpoints[(int)eEndpoint].m_szName1;
 }
-
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml )
-{
-	const char * sContent = ( bHtml ? "text/html" : "application/json" );
-	StringBuilder_c sHttp;
-	sHttp.Sprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", HttpGetStatusName ( eCode ), g_sStatusVersion.cstr(), sContent, sReply.second );
-
-	dData.Reserve ( sHttp.GetLength() + sReply.second );
-	dData.Append ( (Str_t)sHttp );
-	dData.Append ( sReply );
-}
-
 
 HttpRequestParser_c::HttpRequestParser_c()
 {
@@ -800,6 +787,7 @@ inline int HttpRequestParser_c::MessageComplete ()
 	HTTPINFO << "MessageComplete";
 
 	m_bBodyDone = true;
+	m_bKeepAlive = (http_should_keep_alive (&m_tParser)!=0) ;
 	return 0;
 }
 
@@ -812,7 +800,7 @@ inline int HttpRequestParser_c::ParseHeaderCompleted ()
 	m_tParser.upgrade = 0;
 
 	// connection wide http options
-	m_bKeepAlive = ( ( m_tParser.flags & F_CONNECTION_KEEP_ALIVE ) != 0 );
+	m_bKeepAlive = (http_should_keep_alive (&m_tParser)!=0) ;
 	m_eType = (http_method)m_tParser.method;
 
 	FinishParserKeyVal();
@@ -892,7 +880,10 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
 	StringBuilder_c sIndexPage;
 	sIndexPage.Appendf ( g_sIndexPage, g_sStatusVersion.cstr() );
-	HttpBuildReply ( dData, EHTTP_STATUS::_200, (Str_t)sIndexPage, true );
+
+	HttpReplyTrait_t tReply { EHTTP_STATUS::_200, (Str_t)sIndexPage };
+	tReply.m_bHtml = true;
+	HttpBuildReply ( tReply, dData );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -983,12 +974,12 @@ std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const Sql
 	}
 }
 
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails )
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails, CSphString * pWarning )
 {
 	if ( bJson )
 		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings, tFails );
 	else
-		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings );
+		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings, pWarning );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1025,23 +1016,24 @@ StmtErrorReporter_i * CreateHttpErrorReporter()
 //////////////////////////////////////////////////////////////////////////
 // all the handlers for http queries
 
-void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData )
+void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 {
-	if ( bNeedHttpResponse )
-		HttpBuildReply ( dData, eStatus, sResult, false );
+	if ( tReply.m_bSendHeaders )
+	{
+		HttpBuildReply ( tReply, dData );
+	}
 	else
 	{
 		dData.Resize ( 0 );
-		dData.Append ( sResult );
+		dData.Append ( tReply.m_sBody );
 	}
 }
-
 
 void HttpHandler_c::SetErrorFormat ( bool bNeedHttpResponse )
 {
 	m_bNeedHttpResponse = bNeedHttpResponse;
 }
-	
+
 CSphVector<BYTE> & HttpHandler_c::GetResult()
 {
 	return m_dData;
@@ -1103,31 +1095,39 @@ void HttpHandler_c::ReportError ( const char * sError, HttpErrorType_e eType, EH
 	const char * sErrorType = GetErrorTypeName ( eType );
 	int iStatus = HttpGetStatusCodes ( eStatus );
 	CSphString sReply = ( sErrorType ? JsonEncodeResultError ( m_sError, sErrorType, iStatus, sIndex ) : JsonEncodeResultError ( m_sError, iStatus ) );
-	HttpBuildReplyHead ( GetResult(), eStatus, sReply.cstr(), sReply.Length(), false );
+	BuildReply ( sReply, eStatus );
 }
 
 void HttpHandler_c::BuildReply ( const CSphString & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( FromStr ( sResult ), eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, FromStr ( sResult ) };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const char* szResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( FromSz( szResult ), eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, FromSz( szResult ) };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( const StringBuilder_c & sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( (Str_t)sResult, eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, (Str_t)sResult };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 void HttpHandler_c::BuildReply ( Str_t sResult, EHTTP_STATUS eStatus )
 {
 	m_eHttpCode = eStatus;
-	ReplyBuf ( sResult, eStatus, m_bNeedHttpResponse, m_dData );
+	HttpReplyTrait_t tReply { eStatus, sResult };
+	tReply.m_bSendHeaders = m_bNeedHttpResponse;
+	ReplyBuf ( tReply, m_dData );
 }
 
 // check whether given served index is exist and has requested type
@@ -1294,8 +1294,6 @@ protected:
 	}
 };
 
-typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
-
 static const char * GetMysqlTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
@@ -1340,9 +1338,45 @@ JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eTy
 	return tOut;
 }
 
+constexpr const char* AttrType2Json ( ESphAttr eAttrType ) noexcept
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:  return "long";
+	case SPH_ATTR_BOOL: return "bool";
+	case SPH_ATTR_FLOAT: return "float";
+	case SPH_ATTR_DOUBLE: return "double";
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_UINT64: return "long long";
+	case SPH_ATTR_JSON_PTR:
+	case SPH_ATTR_JSON:	return "json";
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET_PTR:
+	case SPH_ATTR_INT64SET: return "multi";
+	default: break;
+	}
+	return "string";
+}
+
+// wrapper need, because direct definition of operator<< for ESphAttr affects also another places (unexpectedly)
+struct ESphAttrStr
+{
+	ESphAttr m_tVal;
+	explicit ESphAttrStr ( const ESphAttr eVal ) noexcept
+		: m_tVal ( eVal ) {};
+};
+
+JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, ESphAttrStr tType )
+{
+	tOut.FixupSpacedAndAppendEscaped ( AttrType2Json ( tType.m_tVal ) );
+	return tOut;
+}
+
 const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // json object with custom formatting
 
-class JsonRowBuffer_c : public RowBuffer_i
+class JsonRowBuffer_c final : public RowBuffer_i
 {
 public:
 	JsonRowBuffer_c()
@@ -1460,12 +1494,22 @@ public:
 	{
 		JsonEscapedBuilder sEscapedName;
 		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
-		ColumnNameType_t tCol { (CSphString)sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
-		m_dBuf.AppendName ( tCol.first.cstr(), false );
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
-		m_dColumns.Add ( tCol );
+		m_dColumns.Add ( (CSphString)sEscapedName );
+	}
+
+	void HeadColumnRaw ( const char * szName, ESphAttr uType ) final
+	{
+		JsonEscapedBuilder sEscapedName;
+		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
+		auto _ = m_dBuf.Object(false);
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
+		auto tTypeBlock = m_dBuf.Object(false);
+		m_dBuf.NamedVal ( "type", ESphAttrStr {uType} );
+		m_dColumns.Add ( (CSphString)sEscapedName );
 	}
 
 	void Add ( BYTE ) override {}
@@ -1478,13 +1522,13 @@ public:
 
 private:
 	JsonEscapedBuilder m_dBuf;
-	CSphVector<ColumnNameType_t> m_dColumns;
+	StrVec_t m_dColumns;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
 
 	void AddDataColumn()
 	{
-		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr(), false );
+		m_dBuf.AppendName ( m_dColumns[m_iCol].cstr(), false );
 		++m_iCol;
 	}
 
@@ -2498,7 +2542,9 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const cha
 	JsonObj_c tErr;
 	tErr.AddStr ( "error", szError );
 	CSphString sJsonError = tErr.AsString();
-	HttpBuildReply ( dData, eCode, FromStr (sJsonError), false );
+
+	HttpReplyTrait_t tReply { eCode, FromStr ( sJsonError ) };
+	HttpBuildReply ( tReply, dData );
 }
 
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,	const CSphString & sIndex, JsonEscapedBuilder & tOut )
@@ -2522,7 +2568,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
 		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
-		tOut.Sprintf ( R"("table":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_iQUID );
+		tOut.Sprintf ( R"("table":"%s","_type":"doc","_id":%U,"_score":1)", sIndex.cstr(), tDesc.m_iQUID );
 		{
 			ScopedComma_c sBrackets ( tOut, ",", R"("_source":{)", "}");
 			if ( !tDesc.m_bQL )

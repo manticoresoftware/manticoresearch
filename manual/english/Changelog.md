@@ -1,5 +1,107 @@
 # Changelog
 
+## Version 15.1.0
+**Released**: December 7th 2025
+
+### Recommended Libraries
+- Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 9.0.0
+- Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.40.2
+
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
+
+## Breaking Changes
+* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Updated MCL requirement to 9.0.0, bringing uncompressed float-vector storage, block-size change for KNN vectors, and non-buffered reads. This update changes the data format. Older MCL versions won’t be able to read it, but the new version can still read your existing columnar tables without any issues.
+
+### New Features and Improvements
+* 🆕 [v15.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.0) [ PR #3990](https://github.com/manticoresoftware/manticoresearch/pull/3990) Improved disk chunk flushing log records by breaking the total time into clearer parts.
+* 🆕 [v14.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.0) [ Issue #3860](https://github.com/manticoresoftware/manticoresearch/issues/3860) Updated Buddy requirement to 3.40.1, which includes an improvement in autocomplete: normalized bigram-separator characters to spaces and filtered out duplicate or malformed suggestion combinations to improve suggestion quality. It also includes a fix for invalid JSON errors in Kafka views and a fix for autocomplete so sorting combinations no longer throws errors when some keys are missing in the score map.
+* 🆕 [v14.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.0) [ Issue #615](https://github.com/manticoresoftware/manticoresearch-buddy/issues/615) Updated the Manticore Buddy requirement to version 3.39.1, which includes a fix for invalid JSON errors in the KNN plugin and allows Buddy handlers to override the HTTP `Content-Type` so `/metrics` now returns Prometheus text format (`text/plain; version=0.0.4`) instead of JSON, fixing scraping failures.
+* 🆕 [v14.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.4.0) [ PR #3942](https://github.com/manticoresoftware/manticoresearch/pull/3942) Updated the Manticore Buddy requirement to 3.38.0, filtering out zero-doc suggestions, improving string-key handling with Ds\Map, changing memory-usage reporting format in Buddy from KB to bytes for greater precision and enhancing performance, stability, and maintainability.
+* 🆕 [v14.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.0) [ Issue #3329](https://github.com/manticoresoftware/manticoresearch/issues/3329) Trim extra whitespace and new lines in JSON payloads when logging query requests — skip leading/trailing spaces to avoid logging malformed JSON.
+* 🆕 [v14.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.3.0) [ PR #3932](https://github.com/manticoresoftware/manticoresearch/pull/3932) Improved handling of `LOCK TABLES` / `UNLOCK TABLES`: write locks now return warnings instead of errors, read locks are correctly shown in `SHOW LOCKS`, and the overall lock logic behaves consistently.
+* 🆕 [v14.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.2.0) [ Issue #3891](https://github.com/manticoresoftware/manticoresearch/issues/3891) Added support for arbitrary filter expressions in `JOIN ON` clauses (not just equality comparisons), enabling queries like `... ON t1.id = t2.t1_id AND t2.value = 5`.
+
+## Bug Fixes
+* 🪲 [v15.0.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.6) [ Issue #3601](https://github.com/manticoresoftware/manticoresearch/issues/3601) Fixed a regression where the native Windows service failed to start when installed with a custom configuration path.
+* 🪲 [v15.0.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.5) [ Issue #3864](https://github.com/manticoresoftware/manticoresearch/issues/3864) Fixed handling of "joined fields" in SQL-based sources so that an "end marker" gets set correctly when iterating joined hits.
+* 🪲 [v15.0.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.4) [ Issue #4004](https://github.com/manticoresoftware/manticoresearch/issues/4004) Fixed a regression where HTTP `/sql` responses from the daemon incorrectly used the `Content-Type: text/html` header instead of `application/json`.
+* 🪲 [v15.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.3) [ Issue #2727](https://github.com/manticoresoftware/manticoresearch/issues/2727) Fixed issue where grouping via `GROUP BY` / `FACET` on attributes generated with a JSON-to-attribute mapping failed to work.
+* 🪲 [v15.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.2) [ Issue #3962](https://github.com/manticoresoftware/manticoresearch/issues/3962) Updated the Buddy requirement to 3.40.2, which adds fuzzy-search support to the `/sql` endpoint and includes other fuzzy-search fixes.
+* 🪲 [v15.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.1) [ PR #3922](https://github.com/manticoresoftware/manticoresearch/pull/3922) Updated the documentation and tests related to supporting Logstash 9.2.
+* 🪲 [v14.7.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.6) [ PR #4002](https://github.com/manticoresoftware/manticoresearch/pull/4002) Fixed KNN oversampling behavior: no longer compute rescored KNN distance when rescoring is not requested, and pass float-vector access hints through to the columnar storage layer.
+* 🪲 [v14.7.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.5) [ PR #3999](https://github.com/manticoresoftware/manticoresearch/pull/3999) Fixed the “test_298” model to resolve a failing KNN-related test.
+* 🪲 [v14.7.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.4) [ Issue #3977](https://github.com/manticoresoftware/manticoresearch/issues/3977) Tests on Windows sometimes produced .mdmp crash dumps — fixed so "ubertests" no longer leave minidumps after completion.
+* 🪲 [v14.7.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.3) [ Issue #3832](https://github.com/manticoresoftware/manticoresearch/issues/3832) Fixed a bug where multi-query requests via `/cli_json` that include semicolons (e.g. combining SQL statements) failed — semicolons are no longer replaced with null characters before processing.
+* 🪲 [v14.7.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.2) [ Issue #1613](https://github.com/manticoresoftware/manticoresearch/issues/1613) Documented the internal 32-bit mask used when counting ranking factors for Phrase/Proximity/NEAR operators and how it can undercount terms beyond the 31st keyword.
+* 🪲 [v14.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.1) [ PR #3992](https://github.com/manticoresoftware/manticoresearch/pull/3992) Fixed missing error messages for HTTP UPDATE and DELETE requests on distributed tables handled via agents, so clients now correctly receive errors when operations fail.
+* 🪲 [v14.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.4) [ Issue #3478](https://github.com/manticoresoftware/manticoresearch/issues/3478) Enhanced update validation to check that updated attributes do not conflict with full-text fields; updates now reject modifications if they target full-text fields.
+* 🪲 [v14.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.3) [ Issue #2352](https://github.com/manticoresoftware/manticoresearch/issues/2352) Fixed an internal error when using distributed tables with `persistent_connections_limit`.
+* 🪲 [v14.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.2) [ Issue #3757](https://github.com/manticoresoftware/manticoresearch/issues/3757) Fixed a bug where table-status counters misleadingly labeled with "_sec" (e.g. `query_time_1min`) actually reported milliseconds instead of seconds.
+* 🪲 [v14.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.1) [ Issue #3979](https://github.com/manticoresoftware/manticoresearch/issues/3979) Fixed a bug where `SHOW INDEX <name> STATUS` search timing stats (search_stats_ms_*) did not match the values calculated from the query logs; the reported timings now reflect the real logged query times.
+* 🪲 [v14.5.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.8) [ Issue #3517](https://github.com/manticoresoftware/manticoresearch/issues/3517) Updated HTTP header handling so that Buddy integrations can define or override headers instead of always forcing `application/json`.
+* 🪲 [v14.5.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.7) Fixed test 226 to enforce a stable result order, and corrected the GTest model for JSON mixed-array handling.
+* 🪲 [v14.5.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.6) Fixed Windows build by correcting a type mismatch in `binlog.cpp`, ensuring `DoSaveMeta()` now compiles correctly for Windows platforms.
+* 🪲 [v14.5.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.5) [Issue #805](https://github.com/manticoresoftware/manticoresearch/issues/805) [Issue #807](https://github.com/manticoresoftware/manticoresearch/issues/807) [Issue #3924](https://github.com/manticoresoftware/manticoresearch/issues/3924) Fixed inconsistent behavior in JSON-attribute faceting: aliasing a JSON array in a FACET clause now behaves the same as faceting on the array directly.
+* 🪲 [v14.5.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.4) [ Issue #3927](https://github.com/manticoresoftware/manticoresearch/issues/3927) Fixed a crash in KNN vector search by skipping searches on empty HNSW indexes.
+* 🪲 [v14.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.2) [ Issue #3669](https://github.com/manticoresoftware/manticoresearch/issues/3669) Fixed `MATCH()` parsing so empty groups like `()` no longer trigger an error (e.g. queries such as `camera()` now work correctly).
+* 🪲 [v14.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.1) [ PR #3961](https://github.com/manticoresoftware/manticoresearch/pull/3961) Updated backup documentation for mysqldump replication mode: explained using `--skip-lock-tables` when dumping replicated tables, and fixed several broken manual links.
+* 🪲 [v14.3.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.3.2) [ Issue #2772](https://github.com/manticoresoftware/manticoresearch/issues/2772) Fixed a bug where some commands executed via MySQL client 9 caused a "unexpected $undefined near '$$'" error in the query log.
+* 🪲 [v14.3.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.3.1) [ PR #3934](https://github.com/manticoresoftware/manticoresearch/pull/3934) Updated the Manticore Buddy requirement from 3.37.0 to 3.37.2, removing redundant `LOCK/UNLOCK TABLES` checks (now handled by the daemon) and fixing autocomplete parsing so queries with escaped quotes (e.g. `\"` or `\'`) are handled correctly instead of failing.
+* 🪲 [v14.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.2.1) [ Issue #3602](https://github.com/manticoresoftware/manticoresearch/issues/3602) Fixed a crash when using `knn_dist()` in a custom ranker expression with KNN+MATCH queries; such queries now return a clear error instead of crashing.
+* 🪲 [v14.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.1.1) docs: fixed minor translation issues.
+
+## Version 14.1.0
+
+**Released**: November 7th 2025
+
+❤️ We’d like to extend our heartfelt thanks to [@ricardopintottrdata](https://github.com/ricardopintottrdata) for their work on [PR #3792](https://github.com/manticoresoftware/manticoresearch/pull/3792) and [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) — addressing issues around `HAVING` total counts and the `filter with empty name` error — and to [@jdelStrother](https://github.com/jdelStrother) for their contribution with [PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819), which improves handling of `ParseCJKSegmentation` when Jieba support isn’t available. 
+
+Your efforts help make the project stronger — many thanks!
+
+### Recommended libraries
+- Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.1.0
+- Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.37.0
+
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
+
+### ⚠️ Important
+Version [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.0) updates the replication protocol. If you are running a replication cluster, you need to:
+  - First, cleanly stop all your nodes
+  - Then, start the node that was stopped last with `--new-cluster`, using the tool `manticore_new_cluster` in Linux.
+  - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+
+### New Features and Improvements
+* 🆕 [v14.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.1.0) [ Issue #3047](https://github.com/manticoresoftware/manticoresearch/issues/3047) Added support for `LOCK TABLES` statements generated by mysqldump, improving the safety of logical backups.
+* ⚠️ [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.0) [ PR #3896](https://github.com/manticoresoftware/manticoresearch/pull/3896) Added a [progress meter](../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md#SST-Progress-Metrics) for donor and joiner nodes in replication SST shown in SHOW STATUS.
+* 🆕 [v13.16.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.16.0) [ PR #3894](https://github.com/manticoresoftware/manticoresearch/pull/3894) Updated buddy from 3.36.1 to 3.37.0, which adds the "quorum" option.
+* 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [ PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling) option to fuzzy and autocomplete plugins.
+
+### Bug Fixes
+* 🪲 [ Issue #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) Added testing for Grafana version 12.3.
+* 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [ Issue #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) Fixed a crash caused by using `max(ft field)`.
+* 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [ PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) Fixed an error when using an empty filter name.
+* 🪲 [v13.15.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.12) [ PR #3873](https://github.com/manticoresoftware/manticoresearch/pull/3873) Updated buddy from 3.36.0 to 3.36.1 with an RT mode check in the EmulateElastic plugin.
+* 🪲 [v13.15.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.11) [ PR #3857](https://github.com/manticoresoftware/manticoresearch/pull/3857) Added testing for Filebeat version 9.2.
+* 🪲 [v13.15.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.10) [ PR #3880](https://github.com/manticoresoftware/manticoresearch/pull/3880) Tested automatic documentation translation after fixes.
+* 🪲 [v13.15.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.9) [ Issue #3783](https://github.com/manticoresoftware/manticoresearch/issues/3783) Fixed an issue preventing native FreeBSD compilation.
+* 🪲 [v13.15.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.8) Fixed documentation translations.
+* 🪲 [v13.15.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.7) [ PR #3868](https://github.com/manticoresoftware/manticoresearch/pull/3868) Updated executor from 1.3.5 to 1.3.6, adding support for the iconv extension.
+* 🪲 [v13.15.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.6) Fixed fuzzer build issue related to [issue 3817](https://github.com/manticoresoftware/manticoresearch/issues/3817).
+* 🪲 [v13.15.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.5) [ Issue #3644](https://github.com/manticoresoftware/manticoresearch/issues/3644) Fixed a crash caused by specific full-text queries.
+* 🪲 [v13.15.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.4) [ Issue #3686](https://github.com/manticoresoftware/manticoresearch/issues/3686) Fixed the issue where the full-text query `"(abc|def)"` didn't work as expected.
+* 🪲 [v13.15.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.3) [ Issue #3428](https://github.com/manticoresoftware/manticoresearch/issues/3428) Added the ability to get the total number of results for queries using `HAVING`.
+* 🪲 [v13.15.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.2) [ Issue #3817](https://github.com/manticoresoftware/manticoresearch/issues/3817) Added the option [searchd.expansion_phrase_warning](../Server_settings/Searchd.md#expansion_phrase_warning).
+* 🪲 [v13.15.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.1) [ PR #3848](https://github.com/manticoresoftware/manticoresearch/pull/3848) Fixed replication transaction key generation and handling of conflicting transactions.
+* 🪲 [v13.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.14.0) [ Issue #3806](https://github.com/manticoresoftware/manticoresearch/issues/3806) Fixed `CALL SUGGEST` not matching trigrams.
+* 🪲 [v13.13.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.8) [ PR #3839](https://github.com/manticoresoftware/manticoresearch/pull/3839) Updated buddy from 3.35.4 to 3.35.5 to correct the regex for matching joins in SQL queries.
+* 🪲 [v13.13.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.7) [ Issue #3815](https://github.com/manticoresoftware/manticoresearch/issues/3815) Updated buddy from 3.35.3 to 3.35.4 to fix an issue with negative IDs in REPLACE.
+* 🪲 [v13.13.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.6) [ PR #3830](https://github.com/manticoresoftware/manticoresearch/pull/3830) Updated buddy from 3.35.1 to 3.35.3.
+* 🪲 [v13.13.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.5) [ PR #3823](https://github.com/manticoresoftware/manticoresearch/pull/3823) Added a Grafana integration test.
+* 🪲 [v13.13.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.4) [ PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) Fixed `ParseCJKSegmentation` when Jieba support is not available.
+* 🪲 [v13.13.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.3) [ PR #3808](https://github.com/manticoresoftware/manticoresearch/pull/3808) Fixed error handling when filters are used in right-joined JSON queries.
+* 🪲 [v13.13.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.2) [ PR #3789](https://github.com/manticoresoftware/manticoresearch/pull/3789) Validated KNN parameters.
+* 🪲 [v13.13.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.1) [ Issue #3800](https://github.com/manticoresoftware/manticoresearch/issues/3800) Fixed build issues when compiling without cjk/jieba support.
+
 ## Version 13.13.0
 **Released**: October 7th 2025
 
@@ -971,7 +1073,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * Dynamic `max_matches` for aggregation queries to increase accuracy and lower response time.
 
 ### Minor changes
-* [Issue #822](https://github.com/manticoresoftware/manticoresearch/issues/822) SQL commands [FREEZE/UNFREEZE](Securing_and_compacting_a_table/Freezing_a_table.md) to prepare a real-time/plain table for a backup.
+* [Issue #822](https://github.com/manticoresoftware/manticoresearch/issues/822) SQL commands [FREEZE/UNFREEZE](Securing_and_compacting_a_table/Freezing_and_locking_a_table.md) to prepare a real-time/plain table for a backup.
 * [Commit c470](https://github.com/manticoresoftware/manticoresearch/commit/c47052f18ad4868134de1a97e8d7da570e531dfa) New settings `accurate_aggregation` and `max_matches_increase_threshold`  for controlled aggregation accuracy.
 * [Issue #718](https://github.com/manticoresoftware/manticoresearch/issues/718) Support for signed negative 64-bit IDs. Note, you still can't use IDs > 2^63, but you can now use ids in the range of from -2^63 to 0.
 * As we recently added support for secondary indexes, things became confusing as "index" could refer to a secondary index, a full-text index, or a plain/real-time `index`. To reduce confusion, we are renaming the latter to "table". The following SQL/command line commands are affected by this change. Their old versions are deprecated, but still functional:
@@ -1225,7 +1327,7 @@ Released: May 18th 2022
 * **⚠️ BREAKING CHANGE**: Index meta file format change. Previously meta files (`.meta`, `.sph`) were in binary format, now it's just json. The new Manticore version will convert older indexes automatically, but:
   - you can get warning like `WARNING: ... syntax error, unexpected TOK_IDENT`
   - you won't be able to run the index with previous Manticore versions, make sure you have a backup
-* **⚠️ BREAKING CHANGE**: Session state support with help of [HTTP keep-alive](Connecting_to_the_server/HTTP.md#Keep-alive). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
+* **⚠️ BREAKING CHANGE**: Session state support with help of [HTTP keep-alive](Connecting_to_the_server/HTTP.md#HTTP-state). This makes HTTP stateful when the client supports it too. For example, using the new [/cli](Connecting_to_the_server/HTTP.md#/cli) endpoint and HTTP keep-alive (which is on by default in all browsers) you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql. Note, previously `Connection: keep-alive` HTTP header was supported too, but it only caused reusing the same connection. Since this version it also makes the session stateful.
 * You can now specify `columnar_attrs = *` to define all your attributes as columnar in the [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode) which is useful in case the list is long.
 * Faster replication SST
 * **⚠️ BREAKING CHANGE**: Replication protocol has been changed. If you are running a replication cluster, then when upgrading to Manticore 5 you need to:

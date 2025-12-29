@@ -1,0 +1,12 @@
+{
+    "7b0012889a2ff93396c49bb6e7252682ef3a1a87e486a9c8718d3de3485865bc": {
+        "original": "# Starting the server\n\nManticore Search server can be started using different methods, depending on the installation type.\n\n<!-- proofread -->\n\n",
+        "translations": {
+            "chinese": "# \u542f\u52a8\u670d\u52a1\u5668\n\nManticore Search \u670d\u52a1\u5668\u53ef\u4ee5\u6839\u636e\u5b89\u88c5\u7c7b\u578b\u4f7f\u7528\u4e0d\u540c\u7684\u65b9\u6cd5\u542f\u52a8\u3002\n\n<!-- proofread -->",
+            "russian": "# \u0417\u0430\u043f\u0443\u0441\u043a \u0441\u0435\u0440\u0432\u0435\u0440\u0430\n\n\u0421\u0435\u0440\u0432\u0435\u0440 Manticore Search \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u0437\u0430\u043f\u0443\u0449\u0435\u043d \u0440\u0430\u0437\u043d\u044b\u043c\u0438 \u0441\u043f\u043e\u0441\u043e\u0431\u0430\u043c\u0438, \u0432 \u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e\u0441\u0442\u0438 \u043e\u0442 \u0442\u0438\u043f\u0430 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438.\n\n<!-- proofread -->"
+        },
+        "is_code_or_comment": false,
+        "model": "openai:gpt-4.1-mini",
+        "updated_at": 1766339846
+    }
+}

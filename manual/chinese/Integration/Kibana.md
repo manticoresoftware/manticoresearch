@@ -1,9 +1,9 @@
 # Manticore 与 Kibana 的集成
 
-[Kibana](https://www.elastic.co/kibana) 是一个可视化界面，允许您探索、可视化并为日志数据创建仪表盘。将 Kibana 与 Manticore Search 集成，可以使 Kibana 可视化加载速度比 Elasticsearch 快最多 3 倍，如此 [演示](https://github.com/manticoresoftware/kibana-demo#manticore-search-kibana-demo) 所示。此集成使用户能够通过交互式仪表盘、自定义可视化和实时搜索功能无缝分析数据。它还通过支持 Logstash 和 Filebeat 等工具简化了处理多样化数据源的过程，实现了流畅的数据摄取，是日志分析工作流的理想选择。
+[Kibana](https://www.elastic.co/kibana) 是一个可视化界面，允许您探索、可视化和创建日志数据的仪表盘。将 Kibana 与 Manticore Search 集成可以比 Elasticsearch 加快 Kibana 可视化加载速度高达 3 倍，如该[演示](https://github.com/manticoresoftware/kibana-demo#manticore-search-kibana-demo)中所示。此集成使用户能够通过交互式仪表盘、自定义可视化和实时搜索功能无缝分析其数据。它还通过支持 Logstash 和 Filebeat 等工具简化了处理多样数据源的过程，从而实现流畅的数据摄取，使其成为日志分析工作流的绝佳选择。
 
 ## 前提条件
-1. **下载 Kibana**：确保下载与 Manticore 兼容的 Kibana 版本。目前，推荐并测试的版本是 7.6.0。其他 7.x 版本可能可用，但可能会引入问题。不支持 8.x 版本。
+1. **下载 Kibana**：确保下载与 Manticore 兼容的 Kibana 版本。目前，推荐并测试的版本为 7.6.0。其他 7.x 版本可能可用，但可能带来问题。不支持 8.x 版本。
 2. **验证 Manticore**：确保您的 Manticore 实例正在运行且其 HTTP API 可访问（默认地址：`http://localhost:9308`）。
 
 ## 配置
@@ -12,9 +12,9 @@
    ```yaml
    elasticsearch.hosts: ["http://localhost:9308"]
    ```
-3. 启动 Kibana 并在浏览器中打开 `http://localhost:5601`。如有必要，将 `localhost` 替换为您的服务器 IP 或主机名。
+3. 启动 Kibana 并在浏览器中打开 `http://localhost:5601`。如有必要，将 `localhost` 替换为服务器的 IP 或主机名。
 
-> 注意：Manticore 在与 Kibana 配合使用时不需要进行身份验证设置。还请注意，Manticore 必须以[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)运行，才能与 Kibana 集成。
+> 注意：Manticore 在与 Kibana 配合使用时不需要进行身份验证设置。另请注意，Manticore 必须在[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下工作才能与 Kibana 集成。
 
 ### Manticore 配置示例
 ```searchd {
@@ -45,9 +45,7 @@
 - Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
 
 ## Limitations
-- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could 
-
-cause issues. Versions 8.x are not supported.
+- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could cause issues. Versions 8.x are not supported.
 - The following Elasticsearch-specific field types are not supported:
   - [Spatial data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
   - [Structured data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)

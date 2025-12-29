@@ -102,6 +102,7 @@ atom:
 	keyword								{ $$ = $1; }
 	| sentence							{ $$ = $1; }
 	| paragraph							{ $$ = $1; }
+	| '(' ')'							{ $$ = NULL; }
 	| '"' '"'							{ $$ = NULL; }
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
@@ -146,6 +147,7 @@ phrase:
 phrasetoken:
 	keyword								{ $$ = $1; }
 	| '(' phrase_group_expr ')'			{ $$ = $2; }
+	| '(' ')'							{ $$ = NULL; }
 	| '-'								{ $$ = NULL; }
 	| '~'								{ $$ = NULL; }
 	| '/'								{ $$ = NULL; }
@@ -164,6 +166,7 @@ phrase_group_sequence:
 phrase_group_atom:
 	keyword								{ $$ = $1; }
 	| '(' phrase_group_expr ')'			{ $$ = $2; }
+	| '(' ')'							{ $$ = NULL; }
 	;
 
 %%

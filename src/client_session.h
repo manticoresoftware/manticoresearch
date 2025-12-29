@@ -21,7 +21,7 @@
 
 constexpr const char* szManticore = "Manticore";
 
-class ClientSession_c
+class ClientSession_c final
 {
 public:
 	CSphString m_sError;
@@ -42,8 +42,12 @@ public:
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
 	bool m_bDeprecatedEOF = false;
+	StrVec_t m_dLockedTables;
 
 public:
+	NONCOPYMOVABLE ( ClientSession_c );
+	ClientSession_c() = default;
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void FreezeLastMeta();
+	~ClientSession_c();
 };

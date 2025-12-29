@@ -1,7 +1,7 @@
-# Обычные и реальные настройки таблиц
+# Настройки обычных и реального времени таблиц
 
 <!-- example config -->
-## Определение схемы таблицы в конфигурационном файле
+## Определение схемы таблицы в файле конфигурации
 
 ```ini
 table <table_name>[:<parent table name>] {
@@ -10,7 +10,7 @@ table <table_name>[:<parent table name>] {
 ```
 
 <!-- intro -->
-##### Пример простой таблицы в конфигурационном файле
+##### Пример обычной таблицы в файле конфигурации
 <!-- request Plain -->
 
 ```ini
@@ -23,7 +23,7 @@ table <table name> {
 }
 ```
 <!-- intro -->
-##### Пример реального времени таблицы в конфигурационном файле
+##### Пример таблицы реального времени в файле конфигурации
 <!-- request Real-time -->
 
 ```ini
@@ -63,7 +63,7 @@ table <table name> {
 ```
 <!-- end -->
 
-### Общие настройки для обычных и таблиц реального времени
+### Общие настройки для обычных таблиц и таблиц реального времени
 
 #### type
 
@@ -73,7 +73,7 @@ type = plain
 type = rt
 ```
 
-Тип таблицы: "plain" или "rt" (реальное время)
+Тип таблицы: "plain" (обычная) или "rt" (реального времени)
 
 Значение: **plain** (по умолчанию), rt
 
@@ -83,9 +83,9 @@ type = rt
 path = path/to/table
 ```
 
-Путь к месту хранения или расположения таблицы, может быть абсолютным или относительным, без расширения.
+Путь к месту хранения или расположения таблицы, абсолютный или относительный, без расширения.
 
-Значение: Путь к таблице, **обязательный**
+Значение: Путь к таблице, **обязательный параметр**
 
 #### stored_fields
 
@@ -95,15 +95,15 @@ stored_fields = title, content
 
 <!-- example stored_fields -->
 
-По умолчанию исходное содержимое полнотекстовых полей индексируется и сохраняется при определении таблицы в конфигурационном файле. Этот параметр позволяет указать поля, для которых должны сохраняться их исходные значения.
+По умолчанию, при определении таблицы в файле конфигурации, исходное содержимое полнотекстовых полей индексируется и сохраняется. Данная настройка позволяет указать поля, для которых следует хранить исходные значения.
 
-Значение: Список полнотекстовых полей, которые должны сохраняться, через запятую. Пустое значение (т.е. `stored_fields =` ) отключает сохранение исходных значений для всех полей.
+Значение: Список **полнотекстовых** полей, разделённых запятыми, для которых следует хранить исходные значения. Пустое значение (т.е. `stored_fields =` ) отключает хранение исходных значений для всех полей.
 
-Примечание: В случае таблицы реального времени поля, указанные в `stored_fields`, должны также быть объявлены как [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+Примечание: В случае таблицы реального времени, поля, перечисленные в `stored_fields`, также должны быть объявлены как [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
 
-Также обратите внимание, что не нужно указывать атрибуты в `stored_fields`, поскольку их исходные значения сохраняются в любом случае. `stored_fields` можно использовать только для полнотекстовых полей.
+Также обратите внимание, что вам не нужно перечислять атрибуты в `stored_fields`, поскольку их исходные значения и так сохраняются. `stored_fields` может использоваться только для полнотекстовых полей.
 
-Смотрите также [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) для опций сжатия хранения документов.
+См. также [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) для опций сжатия хранилища документов.
 
 
 <!-- intro -->
@@ -222,33 +222,33 @@ table products {
 stored_only_fields = title,content
 ```
 
-Используйте `stored_only_fields`, когда хотите, чтобы Manticore сохранял некоторые поля обычной или реальной таблицы **на диске, но не индексировал их**. Эти поля не будут доступны для полнотекстового поиска, но вы все равно сможете получить их значения в результатах поиска.
+Используйте `stored_only_fields`, когда вы хотите, чтобы Manticore хранил некоторые поля обычной таблицы или таблицы реального времени **только на диске, но не индексировал их**. Эти поля не будут доступны для поиска с помощью полнотекстовых запросов, но вы всё равно сможете получать их значения в результатах поиска.
 
-Например, это полезно, если вы хотите хранить данные, такие как JSON документы, которые должны возвращаться с каждым результатом, но не нуждаются в поиске, фильтрации или группировке. В этом случае только хранение — без индексации — экономит память и улучшает производительность.
+Например, это полезно, если вы хотите хранить данные, такие как JSON-документы, которые должны возвращаться с каждым результатом, но не нуждаются в поиске, фильтрации или группировке. В этом случае хранение их только на диске — без индексации — экономит память и повышает производительность.
 
-Это можно сделать двумя способами:
-- В [обычном режиме](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) в конфиге таблицы используйте настройку `stored_only_fields`.
-- В SQL интерфейсе ([RT режим](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)) используйте свойство [stored](../../Creating_a_table/Data_types.md#Storing-binary-data-in-Manticore) при определении текстового поля (вместо `indexed` или `indexed stored`). В SQL вам не нужно включать `stored_only_fields` — оно не поддерживается в командах `CREATE TABLE`.
+Вы можете сделать это двумя способами:
+- В [режиме plain](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) в конфигурации таблицы используйте настройку `stored_only_fields`.
+- В SQL-интерфейсе ([режим RT](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)) используйте свойство [stored](../../Creating_a_table/Data_types.md#Storing-binary-data-in-Manticore) при определении текстового поля (вместо `indexed` или `indexed stored`). В SQL вам не нужно включать `stored_only_fields` — эта опция не поддерживается в операторах `CREATE TABLE`.
 
-Значение `stored_only_fields` — это список имен полей через запятую. По умолчанию он пуст. Если вы используете таблицу реального времени, каждое поле из `stored_only_fields` должно быть объявлено также как [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+Значение `stored_only_fields` — это список имён полей, разделённых запятыми. По умолчанию список пуст. Если вы используете таблицу реального времени, каждое поле, перечисленное в `stored_only_fields`, также должно быть объявлено как [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
 
-Примечание: не нужно указывать атрибуты в `stored_only_fields`, так как их исходные значения в любом случае сохраняются.
+Примечание: вам не нужно перечислять атрибуты в `stored_only_fields`, поскольку их исходные значения и так сохраняются.
 
 Сравнение полей только для хранения со строковыми атрибутами:
 
-- **Только для хранения (stored-only) поле**:
+- **Поле только для хранения (stored-only field)**:
   - Хранится только на диске
   - Сжатый формат
-  - Можно только получить (нельзя использовать для фильтрации, сортировки и т.д.)
+  - Может только извлекаться (не используется для фильтрации, сортировки и т.д.)
 
-- **Строковый атрибут**:
-  - Хранится и на диске и в памяти
-  - Несжатый формат (если не используется колонковое хранение)
-  - Можно использовать для сортировки, фильтрации, группировки и т.д.
+- **Строковый атрибут (string attribute)**:
+  - Хранится на диске и в памяти
+  - Несжатый формат (если вы не используете колоночное хранилище)
+  - Может использоваться для сортировки, фильтрации, группировки и т.д.
 
-Если хотите, чтобы Manticore хранил текстовые данные, которые вы _только_ хотите хранить на диске (например, json данные, возвращаемые с каждым результатом), и не хранить их в памяти, а также не делать их доступными для поиска / фильтрации / группировки, используйте `stored_only_fields` или свойство `stored` для вашего текстового поля.
+Если вы хотите, чтобы Manticore хранил текстовые данные для вас **только** на диске (например, JSON-данные, которые возвращаются с каждым результатом), а не в памяти, и чтобы они не были доступны для поиска/фильтрации/группировки, используйте `stored_only_fields` или свойство `stored` для вашего текстового поля.
 
-При создании таблиц через SQL интерфейс пометьте ваше текстовое поле как `stored` (а не как `indexed` или `indexed stored`). Вам не понадобится опция `stored_only_fields` в вашем `CREATE TABLE` запросе; её включение может привести к ошибке запроса.
+При создании таблиц с помощью SQL-интерфейса помечайте ваше текстовое поле как `stored` (а не `indexed` или `indexed stored`). Вам не понадобится опция `stored_only_fields` в вашем операторе `CREATE TABLE`; её включение может привести к неудачному выполнению запроса.
 
 #### json_secondary_indexes
 
@@ -258,11 +258,11 @@ json_secondary_indexes = json_attr
 
 <!-- example json_secondary_indexes -->
 
-По умолчанию вторичные индексы генерируются для всех атрибутов, кроме JSON атрибутов. Тем не менее, вторичные индексы для JSON атрибутов могут быть явно сгенерированы с помощью настройки `json_secondary_indexes`. Если JSON атрибут включён в этот параметр, его содержимое преобразуется в несколько вторичных индексов. Эти индексы могут использоваться оптимизатором запросов для ускорения выполнения запросов.
+По умолчанию вторичные индексы генерируются для всех атрибутов, кроме JSON-атрибутов. Однако вторичные индексы для JSON-атрибутов могут быть явно сгенерированы с помощью настройки `json_secondary_indexes`. Когда JSON-атрибут включён в эту опцию, его содержимое "разворачивается" в несколько вторичных индексов. Эти индексы могут использоваться оптимизатором запросов для ускорения выполнения запросов.
 
 Вы можете просмотреть доступные вторичные индексы с помощью команды [SHOW TABLE <tbl> INDEXES](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md).
 
-Значение: Список JSON атрибутов через запятую, для которых следует генерировать вторичные индексы.
+Значение: Список JSON-атрибутов, разделённых запятыми, для которых должны быть сгенерированы вторичные индексы.
 
 <!-- intro -->
 ##### SQL:
@@ -371,7 +371,7 @@ table products {
 ```
 <!-- end -->
 
-### Настройки таблицы реального времени:
+### Real-time table settings:
 
 #### diskchunk_flush_search_timeout
 
@@ -379,7 +379,7 @@ table products {
 diskchunk_flush_search_timeout = 10s
 ```
 
-Таймаут для предотвращения автоматической записи RAM-чанка, если в таблице нет поисков. Подробнее [здесь](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
 
 #### diskchunk_flush_write_timeout
 
@@ -387,11 +387,11 @@ diskchunk_flush_search_timeout = 10s
 diskchunk_flush_write_timeout = 60s
 ```
 
-Таймаут для автоматической записи RAM-чанка, если в него нет записей. Подробнее [здесь](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout).
+The timeout for auto-flushing a RAM chunk if there are no writes to it. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout).
 
 #### optimize_cutoff
 
-Максимальное количество дисковых чанков для RT таблицы. Подробнее [здесь](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks).
+The maximum number of disk chunks for the RT table. Learn more [here](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks).
 
 #### rt_field
 
@@ -399,9 +399,9 @@ diskchunk_flush_write_timeout = 60s
 rt_field = subject
 ```
 
-Это объявление поля определяет полнотекстовые поля, которые будут индексироваться. Имена полей должны быть уникальными, порядок сохраняется. При вставке данных значения полей должны идти в том же порядке, как указано в конфигурации.
+This field declaration determines the full-text fields that will be indexed. The field names must be unique, and the order is preserved. When inserting data, the field values must be in the same order as specified in the configuration.
 
-Это мульти-значное, необязательное поле.
+This is a multi-value, optional field.
 
 #### rt_attr_uint
 
@@ -409,9 +409,9 @@ rt_field = subject
 rt_attr_uint = gid
 ```
 
-Это объявление определяет атрибут беззнакового целого числа.
+This declaration defines an unsigned integer attribute.
 
-Значение: имя поля или field_name:N (где N — максимальное количество бит для хранения).
+Value: the field name or field_name:N (where N is the maximum number of bits to keep).
 
 #### rt_attr_bigint
 
@@ -419,9 +419,9 @@ rt_attr_uint = gid
 rt_attr_bigint = gid
 ```
 
-Это объявление определяет атрибут BIGINT.
+This declaration defines a BIGINT attribute.
 
-Значение: имя поля, разрешено несколько записей.
+Value: field name, multiple records allowed.
 
 #### rt_attr_multi
 
@@ -429,9 +429,9 @@ rt_attr_bigint = gid
 rt_attr_multi = tags
 ```
 
-Объявляет мульти-значный атрибут (MVA) со значениями беззнаковых 32-битных целых чисел.
+Declares a multi-valued attribute (MVA) with unsigned 32-bit integer values.
 
-Значение: имя поля. Разрешено несколько записей.
+Value: field name. Multiple records allowed.
 
 #### rt_attr_multi_64
 
@@ -439,9 +439,9 @@ rt_attr_multi = tags
 rt_attr_multi_64 = wide_tags
 ```
 
-Объявляет мульти-значный атрибут (MVA) со значениями знаковых 64-битных BIGINT.
+Declares a multi-valued attribute (MVA) with signed 64-bit BIGINT values.
 
-Значение: имя поля. Разрешено несколько записей.
+Value: field name. Multiple records allowed.
 
 #### rt_attr_float
 
@@ -450,9 +450,9 @@ rt_attr_float = lat
 rt_attr_float = lon
 ```
 
-Объявляет атрибуты с плавающей точкой одинарной точности, 32-битный формат IEEE 754.
+Declares floating point attributes with single precision, 32-bit IEEE 754 format.
 
-Значение: имя поля. Разрешено несколько записей.
+Value: field name. Multiple records allowed.
 
 #### rt_attr_float_vector
 
@@ -461,17 +461,17 @@ rt_attr_float_vector = image_vector
 rt_attr_float_vector = text_vector
 ```
 
-Объявляет вектор значений с плавающей точкой для хранения эмбеддингов и обеспечения векторных поисков k-ближайших соседей (KNN).
+Declares a vector of floating-point values for storing embeddings and enabling k-nearest neighbor (KNN) vector searches.
 
-Значение: имя поля. Разрешено несколько записей.
+Value: field name. Multiple records allowed.
 
-Каждый векторный атрибут хранит массив чисел с плавающей точкой, которые представляют данные (например, текст, изображения или иной контент) как векторы высокого измерения. Эти векторы обычно генерируются моделями машинного обучения и могут использоваться для поиска сходств, рекомендаций, семантического поиска и других функций на базе искусственного интеллекта.
+Each vector attribute stores an array of floating-point numbers that represent data (such as text, images, or other content) as high-dimensional vectors. These vectors are typically generated by machine learning models and can be used for similarity search, recommendations, semantic search, and other AI-powered features.
 
-**Важно:** Векторные атрибуты с плавающей точкой требуют дополнительной конфигурации KNN для активации возможностей векторного поиска.
+**Important:** Float vector attributes require additional KNN configuration to enable vector search capabilities.
 
-##### Настройка KNN для векторных атрибутов
+##### Configuring KNN for vector attributes
 
-Чтобы включить KNN-поиск на векторных атрибутах с плавающей точкой, необходимо добавить конфигурацию `knn`, которая задает параметры индексации:
+To enable KNN searches on float vector attributes, you must add a `knn` configuration that specifies the indexing parameters:
 
 ```ini
 rt_attr_float_vector = image_vector
@@ -479,17 +479,17 @@ rt_attr_float_vector = text_vector
 knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200},{"name":"text_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
 ```
 
-**Обязательные параметры KNN:**
-- `name`: имя векторного атрибута (должно совпадать с именем `rt_attr_float_vector`)
-- `type`: тип индекса, в настоящее время поддерживается только `"hnsw"`
-- `dims`: число измерений в векторах (должно соответствовать выходу вашей модели эмбеддингов)
-- `hnsw_similarity`: функция расстояния — `"L2"`, `"IP"` (внутреннее произведение) или `"COSINE"`
+**Required KNN parameters:**
+- `name`: The name of the vector attribute (must match the `rt_attr_float_vector` name)
+- `type`: Index type, currently only `"hnsw"` is supported
+- `dims`: Number of dimensions in the vectors (must match your embedding model's output)
+- `hnsw_similarity`: Distance function - `"L2"`, `"IP"` (inner product), or `"COSINE"`
 
-**Дополнительные параметры KNN:**
-- `hnsw_m`: максимальное количество связей в графе
-- `hnsw_ef_construction`: компромисс между временем построения и точностью
+**Optional KNN parameters:**
+- `hnsw_m`: Maximum connections in the graph
+- `hnsw_ef_construction`: Construction time/accuracy trade-off
 
-Для получения дополнительной информации о векторном поиске KNN siehe [документацию KNN](../../Searching/KNN.md).
+For more details on KNN vector search, see the [KNN documentation](../../Searching/KNN.md).
 
 #### rt_attr_bool
 
@@ -497,9 +497,9 @@ knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity
 rt_attr_bool = available
 ```
 
-Объявляет булевый атрибут с 1-битными беззнаковыми целочисленными значениями.
+Declares a boolean attribute with 1-bit unsigned integer values.
 
-Значение: имя поля.
+Value: field name.
 
 #### rt_attr_string
 
@@ -507,9 +507,9 @@ rt_attr_bool = available
 rt_attr_string = title
 ```
 
-Объявление строкового атрибута.
+String attribute declaration.
 
-Значение: имя поля.
+Value: field name.
 
 #### rt_attr_json
 
@@ -517,9 +517,9 @@ rt_attr_string = title
 rt_attr_json = properties
 ```
 
-Объявляет атрибут JSON.
+Declares a JSON attribute.
 
-Значение: имя поля.
+Value: field name.
 
 #### rt_attr_timestamp
 
@@ -527,9 +527,9 @@ rt_attr_json = properties
 rt_attr_timestamp = date_added
 ```
 
-Объявляет атрибут временной метки.
+Declares a timestamp attribute.
 
-Значение: имя поля.
+Value: field name.
 
 #### rt_mem_limit
 
@@ -537,62 +537,60 @@ rt_attr_timestamp = date_added
 rt_mem_limit = 512M
 ```
 
-Ограничение памяти для RAM-чанка таблицы. Необязательно, по умолчанию 128M.
+Memory limit for a RAM chunk of the table. Optional, default is 128M.
 
-RT таблицы хранят часть данных в памяти, известной как "RAM-чанк", а также поддерживают ряд таблиц на диске, называемых "дисковыми чанками". Эта директива позволяет вам контролировать размер RAM-чанка. Когда данных слишком много, чтобы хранить их в памяти, RT таблицы сбрасывают их на диск, активируют вновь созданный дисковый чанк и сбрасывают RAM-чанк.
+RT tables store some data in memory, known as the "RAM chunk", and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
-Обратите внимание, что ограничение строгое, и RT таблицы никогда не выделяют больше памяти, чем указано в rt_mem_limit. Память не выделяется заранее, поэтому при указании лимита 512MB и вставке всего 3MB данных будет выделено только 3MB, а не 512MB.
+Please note that the limit is strict, and RT tables will never allocate more memory than what is specified in the rt_mem_limit. Additionally, memory is not preallocated, so specifying a 512MB limit and only inserting 3MB of data will result in allocating only 3MB, not 512MB.
 
-`rt_mem_limit` никогда не превышается, но фактический размер RAM-чанка может быть значительно меньше лимита. RT таблицы адаптируются к скорости вставки данных и динамически регулируют фактический лимит, чтобы минимизировать использование памяти и максимизировать скорость записи данных. Это работает следующим образом:
-* По умолчанию размер RAM-чанка составляет 50% от `rt_mem_limit`, называемый "`rt_mem_limit` лимит".
-* Как только RAM-чанк накапливает количество данных, равное `rt_mem_limit * rate` (по умолчанию 50% от `rt_mem_limit`), Manticore начинает сохранять RAM-чанк как новый дисковый чанк.
-* Во время сохранения нового дискового чанка Manticore оценивает количество новых/обновленных документов.
-* После сохранения нового дискового чанка обновляется коэффициент `rt_mem_limit rate`.
-* Коэффициент сбрасывается на 50% при каждом перезапуске searchd.
+The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be significantly lower than the limit. RT tables adapt to the data insertion pace and adjust the actual limit dynamically to minimize memory usage and maximize data write speed. This is how it works:
+* By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit` limit".
+* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit` by default), Manticore starts saving the RAM chunk as a new disk chunk.
+* While a new disk chunk is being saved, Manticore assesses the number of new/updated documents.
+* After saving a new disk chunk, the `rt_mem_limit` rate is updated.
+* The rate is reset to 50% each time you restart the searchd.
 
-Например, если на диск сохраняется 90MB данных, а во время сохранения поступает еще 10MB, коэффициент будет 90%. В следующий раз RT таблица соберет до 90% от `rt_mem_limit` перед сбросом данных. Чем выше скорость вставки, тем ниже коэффициент `rt_mem_limit`. Он варьируется от 33.3% до 95%. Текущий коэффициент таблицы можно посмотреть с помощью команды [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md).
+For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of data arrives while the save is in progress, the rate would be 90%. Next time, the RT table will collect up to 90% of `rt_mem_limit` before flushing the data. The faster the insertion pace, the lower the `rt_mem_limit` rate. The rate varies between 33.3% to 95%. You can view the current rate of a table using the [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) command.
 
-##### Как изменить rt_mem_limit и optimize_cutoff
+##### How to change rt_mem_limit and optimize_cutoff
 
-В режиме реального времени вы можете изменить лимит размера RAM-чанков и максимальное количество дисковых чанков с помощью оператора `ALTER TABLE`. Чтобы установить `rt_mem_limit` равным 1 гигабайту для таблицы "t", выполните следующий запрос: `ALTER TABLE t rt_mem_limit='1G'`. Чтобы изменить максимальное количество дисковых чанков, выполните запрос: `ALTER TABLE t optimize_cutoff='5'`.
+В режи real-time, можно ajust размер limit of RAM chunks и maximum number of disk chunks using `ALTER TABLE` statement. Для установ `rt_mem_limit` на 1 gigabyte для table "t", run query: `ALTER TABLE t rt_mem_limit='1G'`. Для change maximum number of disk chunks, run query: `ALTER TABLE t optimize_cutoff='5'`.
 
-В обычном режиме вы можете изменить значения `rt_mem_limit` и `optimize_cutoff`, обновив конфигурацию таблицы или выполнив команду `ALTER TABLE <table_name> RECONFIGURE`
+In plain mode, can change values of `rt_mem_limit` and `optimize_cutoff` by updating table configuration or running command `ALTER TABLE <table_name> RECONFIGURE`
 
-##### Важные заметки о RAM-чанках
+##### Important notes about RAM chunks
 
-* Таблицы реального времени подобны [распределённым](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table), которые состоят из нескольких локальных таблиц, также известных как дисковые чанки.
-* Каждый RAM-чанк состоит из нескольких сегментов — специальных таблиц, находящихся исключительно в памяти.
-* В то время как дисковые чанки хранятся на диске, RAM-чанки хранятся в памяти.
-* Каждая транзакция, выполненная с таблицей реального времени, создаёт новый сегмент, и сегменты RAM-чанка сливаются после каждого коммита транзакции. Лучше выполнять массовые INSERT-операции сотнями или тысячами документов, чем множественные отдельные INSERT с одним документом, чтобы уменьшить накладные расходы на слияние сегментов RAM-чанков.
-* Когда количество сегментов превышает 32, они объединяются, чтобы сохранить число ниже 32.
-* Таблицы реального времени всегда имеют один RAM-чанк (который может быть пуст) и один или несколько дисковых чанков.
-* Слияние больших сегментов занимает больше времени, поэтому лучше избегать слишком большого RAM-чанка (и, следовательно, большого значения `rt_mem_limit`).
-* Количество дисковых чанков зависит от данных в таблице и настройки `rt_mem_limit`.
-* Searchd сбрасывает RAM-чанк на диск (в виде сохранённого файла, а не как дисковый чанкт) при завершении работы и периодически согласно настройке [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period). Сброс нескольких гигабайт на диск может занять некоторое время.
-* Большой RAM-чанк создаёт большую нагрузку на хранилище как при сбросе в файл `.ram`, так и при переполнении и сбросе RAM-чанка на диск как дискового чанка.
-* RAM-чанк поддерживается с помощью [бинарного лога](../../Logging/Binary_logging.md) до тех пор, пока не будет сброшен на диск, и увеличение значения `rt_mem_limit` увеличит время воспроизведения бинарного лога и восстановления RAM-чанка.
-* RAM-чанк может работать немного медленнее, чем дисковый чанкт.
-* Несмотря на то, что RAM-чанк сам по себе не занимает больше памяти, чем `rt_mem_limit`, в некоторых случаях Manticore может занять больше памяти, например, если вы начали транзакцию для вставки данных и не зафиксировали её некоторое время. В этом случае данные, уже переданные в рамках транзакции, останутся в памяти.
+* Real-time tables are similar to [distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table) consisting of multiple local tables, also known as disk chunks.
+* Each RAM chunk is made up of multiple segments, which are special RAM-only tables.
+* While disk chunks are stored on disk, RAM chunks are stored in memory.
+* Each transaction made to a real-time table generates a new segment, and RAM chunk segments are merged after each transaction commit. It is more efficient to perform bulk INSERTs of hundreds or thousands of documents rather than multiple separate INSERTs with one document to reduce the overhead from merging RAM chunk segments.
+* When the number of segments exceeds 32, they will be merged to keep the count below 32.
+* Real-time tables always have one RAM chunk (which may be empty) and one or more disk chunks.
+* Merging larger segments takes longer, so it's best to avoid having a very large RAM chunk (and therefore `rt_mem_limit`).
+* The number of disk chunks depends on the data in the table and the `rt_mem_limit` setting.
+* Searchd flushes the RAM chunk to disk (as a persisted file, not as a disk chunk) on shutdown and periodically according to the [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period) setting. Flushing several gigabytes to disk may take some time.
+* A large RAM chunk puts more pressure on storage, both when flushing to disk into the `.ram` file and when the RAM chunk is full and dumped to disk as a disk chunk.
+* The RAM chunk is backed up by a [binary log](../../Logging/Binary_logging.md) until it is flushed to disk, and a larger `rt_mem_limit`, setting will increase the time it takes to replay the binary log and recover the RAM chunk.
+* The RAM chunk may be slightly slower than a disk chunk.
+* Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit`, Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
 
-##### Условия сброса RAM-чанков
+##### RAM chunk flushing conditions
 
-Помимо `rt_mem_limit`, поведение сброса RAM-чанков также зависит от следующих опций и условий:
+In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following options and conditions:
 
-* Замороженное состояние. Если таблица [заморожена](../../Securing_and_compacting_a_table/Freezing_a_table.md), сброс отложен. Это постоянное правило, его нельзя переопределить. Если условие `rt_mem_limit` достигнуто при замороженной таблице, все дальнейшие вставки будут задержаны до разморозки таблицы.
+* Frozen state. If the table is [frozen](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md), flushing is deferred. That is a permanent rule; nothing can override it. If the `rt_mem_limit` condition is reached while the table is frozen, all further inserts will be delayed until the table is unfrozen.
 
-* [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout): Эта опция задаёт тайм-аут (в секундах) для автоматического сброса RAM-чанка, если туда не записывались данные. Если в течение этого времени не происходит запись, чанкт будет сброшен на диск. Значение `-1` отключает авто-сброс на основе активности записи. Значение по умолчанию — 1 секунда.
+* [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout): This option defines the timeout (in seconds) for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk. Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
 
-* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): Эта опция задаёт тайм-аут (в секундах) для предотвращения авто-сброса RAM-чанка, если в таблице нет поисковых запросов. Авто-сброс произойдёт только, если был хотя бы один поиск за этот период. Значение по умолчанию — 30 секунд.
+* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
 
-* Идёт оптимизация: если в данный момент выполняется процесс оптимизации и количество существующих дисковых чанков
-  достигло или превысило внутренний сконфигурированный порог `cutoff`, сброс вызванный тайм-аутом `diskchunk_flush_write_timeout` или `diskchunk_flush_search_timeout` будет пропущен.
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
 
-* Слишком мало документов в сегментах RAM: если количество документов в сегментах RAM меньше минимального порога (8192),
-  сброс, вызванный тайм-аутом `diskchunk_flush_write_timeout` или `diskchunk_flush_search_timeout`, будет пропущен, чтобы избежать создания очень маленьких дисковых чанков. Это помогает минимизировать ненужные записи на диск и фрагментацию чанков.
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192), the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
-Эти тайм-ауты действуют совместно. RAM-чанк будет сброшен, если достигнут *любой* из тайм-аутов. Это гарантирует, что данные со временем сохранятся на диск, даже если не происходит запись, и наоборот, если происходит постоянная запись, но нет поисков, данные тоже будут сохраняться. Эти настройки позволяют более точно контролировать частоту сброса RAM-чанков, балансируя между сохранностью данных и производительностью. Настройки на уровне таблицы имеют более высокий приоритет и переопределяют глобальные значения по умолчанию.
+These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 
-### Настройки обычной таблицы:
+### Plain table settings:
 
 #### source
 
@@ -602,9 +600,9 @@ source = srcpart2
 source = srcpart3
 ```
 
-Поле source определяет источник, из которого будут получены документы при индексировании текущей таблицы. Источник должен быть хотя бы один. Источники могут быть разного типа (например, один может быть MySQL, другой PostgreSQL). Для получения дополнительной информации об индексировании из внешних хранилищ [читайте здесь](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
+The source field specifies the source from which documents will be obtained during indexing of the current table. There must be at least one source. The sources can be of different types (e.g. one could be MySQL, another PostgreSQL). For more information on indexing from external storages, [read here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
 
-Значение: имя источника **обязательно**. Допускается указание нескольких значений.
+Value: The name of the source is **mandatory**. Multiple values are allowed.
 
 #### killlist_target
 
@@ -612,9 +610,9 @@ source = srcpart3
 killlist_target = main:kl
 ```
 
-Этот параметр определяет таблицу(цы), к которым будет применяться kill-list. Совпадения в целевой таблице, которые обновляются или удаляются в текущей таблице, будут подавлены. В режиме `:kl` подавляемые документы берутся из [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). В режиме `:id` все идентификаторы документов из текущей таблицы подавляются в целевой. Если ни один режим не указан, оба режима будут действовать одновременно. [Узнайте больше о kill-list здесь](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+Этот параметр определяет таблицу (или таблицы), к которой будет применен килл-лист. Совпадения в целевой таблице, которые обновляются или удаляются в текущей таблице, будут подавлены. В режиме `:kl` документы для подавления берутся из [килл-листа](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). В режиме `:id` все идентификаторы документов из текущей таблицы подавляются в целевой. Если ни один из режимов не указан, будут действовать оба. [Подробнее о килл-листах здесь](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
-Значение: **не указано** (по умолчанию), target_table_name:kl, target_table_name:id, target_table_name. Допускается указание нескольких значений
+Значение: **не указано** (по умолчанию), target_table_name:kl, target_table_name:id, target_table_name. Допускается несколько значений
 
 #### columnar_attrs
 
@@ -623,11 +621,11 @@ columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 ```
 
-Этот параметр конфигурации определяет, какие атрибуты должны храниться в [колоночном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) вместо построчного хранения.
+Эта настройка определяет, какие атрибуты должны храниться в [колоночном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) вместо построчного.
 
 Вы можете установить `columnar_attrs = *`, чтобы хранить все поддерживаемые типы данных в колоночном хранилище.
 
-Дополнительно поддерживается атрибут `id` для хранения в колоночном хранилище.
+Кроме того, `id` является поддерживаемым атрибутом для хранения в колоночном хранилище.
 
 #### columnar_strings_no_hash
 
@@ -635,9 +633,9 @@ columnar_attrs = id, attr1, attr2, attr3
 columnar_strings_no_hash = attr1, attr2, attr3
 ```
 
-По умолчанию все строковые атрибуты, хранящиеся в колоночном хранилище, сохраняют предвычисленные хеши. Эти хеши используются для группировки и фильтрации. Однако они занимают дополнительное место, и если вам не нужно группировать по этому атрибуту, вы можете сэкономить пространство, отключив генерацию хешей.
+По умолчанию все строковые атрибуты, хранящиеся в колоночном хранилище, сохраняют предварительно рассчитанные хэши. Эти хэши используются для группировки и фильтрации. Однако они занимают дополнительное место, и если вам не нужно группировать по этому атрибуту, вы можете сэкономить место, отключив генерацию хэшей.
 
-### Создание таблицы в реальном времени онлайн через CREATE TABLE
+### Создание таблицы в реальном времени онлайн с помощью CREATE TABLE
 
 <!-- example rt_mode -->
 ##### Общий синтаксис CREATE TABLE
@@ -648,37 +646,37 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 
 ##### Типы данных:
 
-Для получения дополнительной информации о типах данных смотрите [подробнее о типах данных здесь](../../Creating_a_table/Data_types.md).
+Для получения дополнительной информации о типах данных см. [подробнее о типах данных здесь](../../Creating_a_table/Data_types.md).
 
 | Тип | Эквивалент в конфигурационном файле | Примечания | Псевдонимы |
 | - | - | - | - |
-| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | Опции: indexed, stored. По умолчанию: **оба**. Чтобы хранить текст но не индексировать, укажите только "stored". Чтобы индексировать текст, но не хранить, укажите только "indexed". | string |
+| [text](../../Creating_a_table/Data_types.md#Text) | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)  | Опции: indexed, stored. По умолчанию: **оба**. Чтобы текст хранился, но не индексировался, укажите только "stored". Чтобы текст только индексировался, укажите только "indexed". | string |
 | [integer](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint)	| целое число	 | int, uint |
-| [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| большое целое	 |   |
+| [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| большое целое число	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | число с плавающей запятой  |   |
-| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | вектор чисел с плавающей запятой  |   |
-| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | многозначное целое |   |
-| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | многозначное большое целое  |   |
+| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | вектор значений с плавающей запятой  |   |
+| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | многозначное целое число | mva |
+| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | многозначное большое целое число  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | логический |   |
 | [json](../../Creating_a_table/Data_types.md#JSON) | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON |   |
-| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | строка. Опция `indexed, attribute` делает значение полнотекстовым индексируемым и одновременно фильтруемым, сортируемым и группируемым  |   |
-| [timestamp](../../Creating_a_table/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | метка времени  |   |
-| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N — максимальное количество хранимых бит  |   |
+| [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | строка. Опция `indexed, attribute` сделает значение полнотекстово индексируемым и одновременно фильтруемым, сортируемым и группируемым  |   |
+| [timestamp](../../Creating_a_table/Data_types.md#Timestamps) |	[rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | временная метка  |   |
+| [bit(n)](../../Creating_a_table/Data_types.md#Integer) | [rt_attr_uint field_name:N](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N - максимальное количество битов для хранения  |   |
 
 <!-- intro -->
-##### Примеры создания таблицы в реальном времени через CREATE TABLE
+##### Примеры создания таблицы в реальном времени с помощью CREATE TABLE
 <!-- request SQL -->
 
 ```sql
 CREATE TABLE products (title text, price float) morphology='stem_en'
 ```
 
-Это создаёт таблицу "products" с двумя полями: "title" (полнотекстовое) и "price" (число с плавающей точкой), и устанавливает "morphology" в "stem_en".
+Это создает таблицу "products" с двумя полями: "title" (полнотекстовое) и "price" (с плавающей запятой), и устанавливает "morphology" в "stem_en".
 
 ```sql
 CREATE TABLE products (title text indexed, description text stored, author text, price float)
 ```
-Это создаёт таблицу "products" с тремя полями:
+Это создает таблицу "products" с тремя полями:
 * "title" индексируется, но не хранится.
 * "description" хранится, но не индексируется.
 * "author" и хранится, и индексируется.
@@ -692,73 +690,73 @@ create table ... engine='columnar';
 create table ... engine='rowwise';
 ```
 
-Параметр engine изменяет умолчательное [хранилище атрибутов](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) для всех атрибутов таблицы. Вы также можете указать `engine` [отдельно для каждого атрибута](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
+Настройка engine изменяет [хранилище атрибутов](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) по умолчанию для всех атрибутов в таблице. Вы также можете указать `engine` [отдельно для каждого атрибута](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
 
-Для информации о том, как включить колоночное хранилище в обычной таблице, смотрите [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs).
+Информацию о том, как включить колоночное хранилище для обычной таблицы, см. в [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) .
 
 Значения:
-* columnar - включает колоночное хранилище для всех атрибутов таблицы, за исключением [json](../../Creating_a_table/Data_types.md#JSON)
-* **rowwise (по умолчанию)** - ничего не меняет, использует традиционное построчное хранение для таблицы.
+* columnar - Включает колоночное хранилище для всех атрибутов таблицы, кроме [json](../../Creating_a_table/Data_types.md#JSON)
+* **rowwise (по умолчанию)** - Ничего не меняет и использует традиционное построчное хранилище для таблицы.
 
 
 ## Другие настройки
-Следующие настройки применимы как для таблиц реального времени, так и для обычных таблиц, независимо от того, указаны ли они в конфигурационном файле или заданы онлайн с помощью команды `CREATE` или `ALTER`.
+Следующие настройки применимы как к таблицам в реальном времени, так и к обычным таблицам, независимо от того, указаны ли они в конфигурационном файле или установлены онлайн с помощью команд `CREATE` или `ALTER`.
 
-### Производительность
+### Связанные с производительностью
 
 #### Доступ к файлам таблицы
 Manticore поддерживает два режима доступа для чтения данных таблицы: seek+read и mmap.
 
 В режиме seek+read сервер использует системный вызов `pread` для чтения списков документов и позиций ключевых слов, представленных файлами `*.spd` и `*.spp`. Сервер использует внутренние буферы чтения для оптимизации процесса чтения, и размер этих буферов можно настроить с помощью опций [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) и [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). Также существует опция [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen), которая управляет тем, как Manticore открывает файлы при запуске.
 
-В режиме доступа mmap поисковый сервер отображает файл таблицы в память с помощью системного вызова `mmap`, и ОС кеширует содержимое файла. Опции [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) и [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) не влияют на соответствующие файлы в этом режиме. mmap-ридер также может заблокировать данные таблицы в памяти, используя привилегированный вызов `mlock`, что предотвращает выгрузку кешированных данных на диск ОС.
+В режиме доступа mmap поисковый сервер отображает файлы таблицы в память с помощью системного вызова `mmap`, а ОС кэширует содержимое файлов. Опции [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) и [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) не оказывают влияния на соответствующие файлы в этом режиме. Модуль чтения mmap также может блокировать данные таблицы в памяти с помощью привилегированного вызова `mlock`, что предотвращает вытеснение кэшированных данных на диск подкачки.
 
-Для управления используемым режимом доступа доступны опции **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists** и **access_dict** со следующими значениями:
+Для управления выбором режима доступа доступны опции **access_plain_attrs**, **access_blob_attrs**, **access_doclists**, **access_hitlists** и **access_dict** со следующими значениями:
 
 | Значение | Описание |
 | - | - |
-| file | сервер читает файлы таблицы с диска через seek+read, используя внутренние буферы при обращении к файлам |
-| mmap | сервер отображает файлы таблицы в память, и ОС кеширует их содержимое при обращении к файлам |
-| mmap_preread | сервер отображает файлы таблицы в память, а поток в фоновом режиме один раз читает их для прогрева кеша |
-| mlock | сервер отображает файлы таблицы в память, а затем выполняет системный вызов mlock() для кеширования содержимого файлов и блокировки в памяти, чтобы предотвратить выгрузку |
+| file | сервер читает файлы таблицы с диска с помощью seek+read, используя внутренние буферы при доступе к файлу |
+| mmap | сервер отображает файлы таблицы в память, и ОС кэширует их содержимое при доступе к файлу |
+| mmap_preread | сервер отображает файлы таблицы в память, и фоновый поток читает их один раз для прогрева кэша |
+| mlock | сервер отображает файлы таблицы в память, а затем выполняет системный вызов mlock() для кэширования содержимого файла и его блокировки в памяти, чтобы предотвратить вытеснение на диск |
 
 
 | Настройка | Значения | Описание |
 | - | - | - |
-| access_plain_attrs  | mmap, **mmap_preread** (по умолчанию), mlock | управляет тем, как будут читаться файлы `*.spa` (обычные атрибуты), `*.spe` (пропускаемые списки), `*.spt` (поисковые индексы), `*.spm` (удалённые документы) |
-| access_blob_attrs   | mmap, **mmap_preread** (по умолчанию), mlock  | управляет тем, как будут читаться файлы `*.spb` (blob-атрибуты) (строковые, MVA и json атрибуты) |
+| access_plain_attrs  | mmap, **mmap_preread** (по умолчанию), mlock | управляет тем, как будут читаться `*.spa` (обычные атрибуты) `*.spe` (списки пропуска) `*.spt` (поисковые структуры) `*.spm` (удаленные документы) |
+| access_blob_attrs   | mmap, **mmap_preread** (по умолчанию), mlock  | управляет тем, как будут читаться `*.spb` (бинарные атрибуты) (строковые, MVA и JSON атрибуты) |
 | access_doclists   | **file** (по умолчанию), mmap, mlock  | управляет тем, как будут читаться данные `*.spd` (списки документов) |
-| access_hitlists   | **file** (по умолчанию), mmap, mlock  | управляет тем, как будут читаться данные `*.spp` (списки попаданий) |
-| access_dict   | mmap, **mmap_preread** (по умолчанию), mlock  | управляет тем, как будет читаться файл `*.spi` (словарь) |
+| access_hitlists   | **file** (по умолчанию), mmap, mlock  | управляет тем, как будут читаться данные `*.spp` (списки вхождений) |
+| access_dict   | mmap, **mmap_preread** (по умолчанию), mlock  | управляет тем, как будет читаться `*.spi` (словарь) |
 
-Ниже приведена таблица, которая поможет выбрать нужный режим:
+Вот таблица, которая поможет вам выбрать нужный режим:
 
-| часть таблицы |	оставлять на диске |	хранить в памяти |	кешировать в памяти при запуске сервера | блокировать в памяти |
+| часть таблицы |	хранить на диске |	хранить в памяти |	кэшировать в памяти при запуске сервера | заблокировать в памяти |
 | - | - | - | - | - |
-| обычные атрибуты в [строчном](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) (не колоночном) хранении, пропускаемые списки, словари, поисковые индексы, удалённые документы | 	mmap | mmap |	**mmap_preread** (по умолчанию) | mlock |
-| строковые, мультизначные атрибуты (MVA) и JSON атрибуты в строчном хранении | mmap | mmap | **mmap_preread** (по умолчанию) | mlock |
-| [колоночные](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) числовые, строковые и мультизначные атрибуты | всегда  | только средствами ОС  | нет  | не поддерживается |
+| обычные атрибуты в [строчном хранилище](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) (не колоночном), списки пропуска, списки слов, поисковые структуры, удаленные документы | 	mmap | mmap |	**mmap_preread** (по умолчанию) | mlock |
+| строчные строковые атрибуты, многозначные атрибуты (MVA) и JSON атрибуты | mmap | mmap | **mmap_preread** (по умолчанию) | mlock |
+| [Колоночные](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) числовые, строковые и многозначные атрибуты | всегда  | только средствами ОС  | нет  | не поддерживается |
 | списки документов | **file** (по умолчанию) | mmap | нет	| mlock |
-| списки попаданий | **file** (по умолчанию) | mmap | нет	| mlock |
+| списки вхождений | **file** (по умолчанию) | mmap | нет	| mlock |
 | словарь | mmap | mmap | **mmap_preread** (по умолчанию) | mlock |
 
 ##### Рекомендации:
 
-* Для **максимально быстрого времени отклика поиска** и достаточного объёма памяти используйте [строчные](../../Creating_a_table/Data_types.md#JSON) атрибуты и блокируйте их в памяти с помощью `mlock`. Также применяйте mlock для doclists/hitlists.
-* Если для вас приоритет — **не снижать производительность после запуска** и вы готовы принять более долгое время старта сервера, используйте опцию [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). Если вы хотите более быстрый перезапуск searchd, оставьте значение по умолчанию `mmap_preread`.
-* Если вы хотите **экономить память**, но при этом иметь достаточно памяти для всех атрибутов, избегайте использования `mlock`. Операционная система сама определит, что держать в памяти на основе частоты чтения с диска.
-* Если строчные атрибуты **не помещаются в память**, выберите [колоночные атрибуты](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
-* Если производительность полнотекстового поиска **не является приоритетом**, и вы хотите сэкономить память, используйте `access_doclists/access_hitlists=file`.
+* Для **максимально быстрого времени отклика поиска** и при наличии достаточного объема памяти используйте [строчные атрибуты](../../Creating_a_table/Data_types.md#JSON) и блокируйте их в памяти с помощью `mlock`. Кроме того, используйте mlock для списков документов/вхождений.
+* Если для вас приоритетом является **недопустимость снижения производительности после запуска** и вы готовы принять более долгий запуск, используйте опцию [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). Если вы хотите более быстрый перезапуск searchd, придерживайтесь опции по умолчанию `mmap_preread`.
+* Если вы хотите **экономить память**, но при этом у вас достаточно памяти для всех атрибутов, не используйте `mlock`. Операционная система будет определять, что следует держать в памяти, на основе частоты чтений с диска.
+* Если строчные атрибуты **не помещаются в память**, выберите [колоночные атрибуты](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
+* Если **производительность полнотекстового поиска не критична**, и вы хотите сэкономить память, используйте `access_doclists/access_hitlists=file`
 
-Режим по умолчанию обеспечивает баланс между:
+Режим по умолчанию предлагает баланс:
 * mmap,
-* Прогревом некроночных атрибутов,
-* Чтением колоночных атрибутов с диска без прогрева,
-* Чтением списков документов/списков попаданий с диска без прогрева.
+* Предварительное чтение неколоночных атрибутов,
+* Поиск и чтение колоночных атрибутов без предварительного чтения,
+* Поиск и чтение списков документов/вхождений без предварительного чтения.
 
-Это обеспечивает достойную производительность поиска, оптимальное использование памяти и более быстрый перезапуск searchd в большинстве случаев.
+Это обеспечивает достойную производительность поиска, оптимальное использование памяти и более быстрый перезапуск searchd в большинстве сценариев.
 
-### Другие настройки, влияющие на производительность
+### Другие настройки, связанные с производительностью
 
 #### attr_update_reserve
 
@@ -766,7 +764,7 @@ Manticore поддерживает два режима доступа для ч�
 attr_update_reserve = 256k
 ```
 
-Эта настройка резервирует дополнительное пространство для обновлений blob-атрибутов, таких как мультизначные атрибуты (MVA), строки и JSON. Значение по умолчанию — 128k. При обновлении этих атрибутов их длина может изменяться. Если обновлённая строка короче предыдущей, то она перезапишет старые данные в файле `*.spb`. Если обновлённая строка длиннее, она будет записана в конец файла `*.spb`. Этот файл отображается в память, что делает изменение его размера потенциально медленной операцией, в зависимости от реализации отображения файлов в память в ОС. Чтобы избежать частого изменения размера, можно использовать эту настройку для резервирования дополнительного пространства в конце `.spb` файла.
+Эта настройка резервирует дополнительное место для обновлений бинарных атрибутов, таких как многозначные атрибуты (MVA), строки и JSON. Значение по умолчанию — 128k. При обновлении этих атрибутов их длина может измениться. Если обновленная строка короче предыдущей, она перезапишет старые данные в файле `*.spb`. Если обновленная строка длиннее, она будет записана в конец файла `*.spb`. Этот файл отображается в память, что делает его изменение потенциально медленной операцией, в зависимости от реализации файлов, отображаемых в память, в операционной системе. Чтобы избежать частого изменения размера, вы можете использовать эту настройку для резервирования дополнительного места в конце файла .spb.
 
 Значение: размер, по умолчанию **128k**.
 
@@ -776,9 +774,9 @@ attr_update_reserve = 256k
 docstore_block_size = 32k
 ```
 
-Этот параметр контролирует размер блоков, используемых для хранения документов. Значение по умолчанию — 16 Кб. Когда исходный текст документа хранится с использованием stored_fields или stored_only_fields, он хранится внутри таблицы и сжимается для повышения эффективности. Чтобы оптимизировать доступ к диску и коэффициенты сжатия для небольших документов, эти документы объединяются в блоки. Процесс индексирования собирает документы, пока их общий размер не достигнет порога, заданного этим параметром. В этот момент блок документов сжимается. Этот параметр можно настроить для достижения лучших коэффициентов сжатия (путём увеличения размера блока) или более быстрого доступа к тексту документа (путём уменьшения размера блока).
+Этот параметр управляет размером блоков, используемых хранилищем документов. Значение по умолчанию составляет 16 КБ. Когда исходный текст документа сохраняется с использованием `stored_fields` или `stored_only_fields`, он хранится внутри таблицы и сжимается для эффективности. Для оптимизации доступа к диску и коэффициентов сжатия для небольших документов эти документы объединяются в блоки. Процесс индексации собирает документы до тех пор, пока их общий размер не достигнет порога, указанного этой опцией. В этот момент блок документов сжимается. Этот параметр можно настроить для достижения лучших коэффициентов сжатия (увеличивая размер блока) или более быстрого доступа к тексту документа (уменьшая размер блока).
 
-Значение: size, по умолчанию **16k**.
+Значение: размер, по умолчанию **16k**.
 
 #### docstore_compression
 
@@ -786,7 +784,7 @@ docstore_block_size = 32k
 docstore_compression = lz4hc
 ```
 
-Этот параметр определяет тип сжатия, используемого для сжатия блоков документов, хранящихся в хранилище документов. Если указаны stored_fields или stored_only_fields, то хранилище документов сохраняет сжатые блоки документов. 'lz4' обеспечивает высокую скорость сжатия и распаковки, тогда как 'lz4hc' (высокое сжатие) жертвует некоторой скоростью сжатия ради лучшего коэффициента сжатия. 'none' полностью отключает сжатие.
+Этот параметр определяет тип сжатия, используемого для сжатия блоков документов, хранящихся в хранилище документов. Если указаны `stored_fields` или `stored_only_fields`, хранилище документов сохраняет сжатые блоки документов. 'lz4' обеспечивает высокую скорость сжатия и распаковки, в то время как 'lz4hc' (высокое сжатие) жертвует некоторой скоростью сжатия ради лучшего коэффициента сжатия. 'none' полностью отключает сжатие.
 
 Значения: **lz4** (по умолчанию), lz4hc, none.
 
@@ -796,7 +794,7 @@ docstore_compression = lz4hc
 docstore_compression_level = 12
 ```
 
-Уровень сжатия, используемый при применении сжатия 'lz4hc' в хранилище документов. Настраивая уровень сжатия, вы можете найти оптимальный баланс между производительностью и коэффициентом сжатия при использовании 'lz4hc'. Учтите, что этот параметр не применяется при использовании сжатия 'lz4'.
+Уровень сжатия, используемый при применении сжатия 'lz4hc' в хранилище документов. Настраивая уровень сжатия, можно найти правильный баланс между производительностью и коэффициентом сжатия при использовании сжатия 'lz4hc'. Обратите внимание, что эта опция не применима при использовании сжатия 'lz4'.
 
 Значение: целое число от 1 до 12, по умолчанию **9**.
 
@@ -806,7 +804,7 @@ docstore_compression_level = 12
 preopen = 1
 ```
 
-Этот параметр указывает, что searchd должен открывать все файлы таблиц при запуске или ротации и держать их открытыми во время работы. По умолчанию файлы не открываются предварительно. Предварительно открытые таблицы требуют нескольких файловых дескрипторов на таблицу, но устраняют необходимость в вызовах open() для каждого запроса и защищают от гонок, которые могут возникать при ротации таблиц под большой нагрузкой. Однако если у вас много таблиц, может быть эффективнее открывать их по запросу, чтобы сохранять файловые дескрипторы.
+Этот параметр указывает, что searchd должен открывать все файлы таблиц при запуске или ротации и держать их открытыми во время работы. По умолчанию файлы не открываются заранее. Предварительно открытые таблицы требуют несколько файловых дескрипторов на таблицу, но они устраняют необходимость в вызовах open() для каждого запроса и защищены от состояний гонки, которые могут возникнуть во время ротации таблиц под высокой нагрузкой. Однако, если вы обслуживаете много таблиц, может быть эффективнее открывать их для каждого запроса, чтобы экономить файловые дескрипторы.
 
 Значение: **0** (по умолчанию) или 1.
 
@@ -816,9 +814,9 @@ preopen = 1
 read_buffer_docs = 1M
 ```
 
-Размер буфера для хранения списка документов по ключевому слову. Увеличение этого значения приведёт к увеличению использования памяти во время выполнения запроса, но может сократить время ввода-вывода.
+Размер буфера для хранения списка документов на ключевое слово. Увеличение этого значения приведет к более высокому использованию памяти во время выполнения запроса, но может сократить время ввода-вывода.
 
-Значение: size, по умолчанию **256k**, минимальное значение 8k.
+Значение: размер, по умолчанию **256k**, минимальное значение 8k.
 
 #### read_buffer_hits
 
@@ -826,11 +824,11 @@ read_buffer_docs = 1M
 read_buffer_hits = 1M
 ```
 
-Размер буфера для хранения списка попаданий по ключевому слову. Увеличение этого значения приведёт к увеличению использования памяти во время выполнения запроса, но может сократить время ввода-вывода.
+Размер буфера для хранения списка вхождений (хитов) на ключевое слово. Увеличение этого значения приведет к более высокому использованию памяти во время выполнения запроса, но может сократить время ввода-вывода.
 
-Значение: size, по умолчанию **256k**, минимальное значение 8k.
+Значение: размер, по умолчанию **256k**, минимальное значение 8k.
 
-### Настройки дискового пространства для plain table
+### Настройки дискового пространства для обычных таблиц
 
 #### inplace_enable
 
@@ -840,13 +838,13 @@ read_buffer_hits = 1M
 inplace_enable = {0|1}
 ```
 
-Включает инвертирование таблицы на месте. Необязательно, по умолчанию 0 (используются отдельные временные файлы).
+Включает инверсию таблицы на месте (in-place). Необязательный параметр, по умолчанию 0 (использует отдельные временные файлы).
 
-Опция `inplace_enable` уменьшает занимаемое на диске пространство во время индексирования plain table, при этом немного замедляет индексирование (используется примерно в 2 раза меньше диска, но достигается около 90-95% от исходной производительности).
+Опция `inplace_enable` уменьшает занимаемое дисковое пространство во время индексации обычных таблиц, слегка замедляя процесс индексации (используется примерно в 2 раза меньше диска, но производительность составляет около 90-95% от исходной).
 
-Индексирование состоит из двух основных этапов. На первом этапе собираются документы, обрабатываются и частично сортируются по ключевому слову, а промежуточные результаты записываются во временные файлы (.tmp*). На втором этапе документы полностью сортируются и создаются итоговые файлы таблиц. Пересборка таблицы в продакшене с ходу требует примерно в 3 раза больше дискового пространства: сначала для промежуточных временных файлов, затем для вновь созданной копии, и наконец для старой таблицы, которая в это время обслуживает запросы. (Промежуточные данные сопоставимы по размеру с финальной таблицей.) Это может быть слишком большим дисковым следом для больших наборов данных, и опция `inplace_enable` может использоваться для его уменьшения. При включении она повторно использует временные файлы, записывает в них финальные данные и переименовывает их после завершения. Однако это может потребовать дополнительного перемещения временных фрагментов данных, откуда исходит влияние на производительность.
+Индексация состоит из двух основных фаз. На первой фазе документы собираются, обрабатываются и частично сортируются по ключевым словам, а промежуточные результаты записываются во временные файлы (.tmp*). На второй фазе документы полностью сортируются и создаются окончательные файлы таблицы. Перестроение рабочей таблицы на лету требует примерно в 3 раза больше пикового дискового пространства: сначала для промежуточных временных файлов, затем для вновь созданной копии и, наконец, для старой таблицы, которая в это время обслуживает рабочие запросы. (Промежуточные данные сопоставимы по размеру с окончательной таблицей.) Это может быть слишком большим объемом дискового пространства для больших коллекций данных, и опция `inplace_enable` может быть использована для его уменьшения. При включении она повторно использует временные файлы, записывает в них окончательные данные и переименовывает их по завершении. Однако это может потребовать дополнительного перемещения фрагментов временных данных, что и приводит к снижению производительности.
 
-Директива не влияет на [searchd](../../Starting_the_server/Manually.md), она затрагивает только [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+Эта директива не влияет на [searchd](../../Starting_the_server/Manually.md), она затрагивает только утилиту [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -872,9 +870,9 @@ table products {
 inplace_hit_gap = size
 ```
 
-Настройка тонкой настройки [инвертирования на месте](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable). Управляет размером предварительно выделенного зазора в hitlist. Необязательно, по умолчанию 0.
+Опция тонкой настройки [Инверсии на месте](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable). Управляет размером предварительно выделенного зазора (gap) для списка вхождений (hitlist). Необязательный параметр, по умолчанию 0.
 
-Директива влияет только на инструмент [searchd](../../Starting_the_server/Manually.md) и не оказывает воздействия на [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
+Эта директива влияет только на утилиту [searchd](../../Starting_the_server/Manually.md) и не оказывает никакого влияния на утилиту [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool).
 
 <!-- intro -->
 ##### CONFIG:
@@ -900,9 +898,9 @@ table products {
 inplace_reloc_factor = 0.1
 ```
 
-Параметр inplace_reloc_factor определяет размер буфера релокации внутри memory arena, используемого во время индексирования. Значение по умолчанию — 0.1.
+Параметр `inplace_reloc_factor` определяет размер буфера перемещения (relocation buffer) в пределах области памяти (memory arena), используемой во время индексации. Значение по умолчанию составляет 0.1.
 
-Опция необязательна и влияет только на инструмент [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool), а не на сервер [searchd](../../Starting_the_server/Manually.md).
+Эта опция является необязательной и влияет только на утилиту [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool), а не на сервер [searchd](../../Starting_the_server/Manually.md).
 
 <!-- intro -->
 ##### CONFIG:
@@ -928,9 +926,9 @@ table products {
 inplace_write_factor = 0.1
 ```
 
-Контролирует размер буфера, используемого для записи на месте во время индексирования. Необязательно, значение по умолчанию 0.1.
+Управляет размером буфера, используемого для записи на месте (in-place writing) во время индексации. Необязательный параметр со значением по умолчанию 0.1.
 
-Важное замечание: эта директива влияет только на инструмент [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) и не влияет на сервер [searchd](../../Starting_the_server/Manually.md).
+Важно отметить, что эта директива влияет только на утилиту [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) и не затрагивает сервер [searchd](../../Starting_the_server/Manually.md).
 
 
 <!-- intro -->

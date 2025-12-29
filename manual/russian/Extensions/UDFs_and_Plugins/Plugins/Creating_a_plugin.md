@@ -1,36 +1,36 @@
 # Системные плагины
-## CREATE PLUGIN
+## СОЗДАТЬ ПЛАГИН
 
 ```sql
 CREATE PLUGIN plugin_name TYPE 'plugin_type' SONAME 'plugin_library'
 ```
 
-Загружает указанную библиотеку (если она ещё не загружена) и загружает из неё указанный плагин. Доступные типы плагинов включают:
+Загружает указанную библиотеку (если она еще не загружена) и загружает из нее указанный плагин. Доступные типы плагинов включают:
 
 - `ranker`
 - `index_token_filter`
 - `query_token_filter`
 
-Для получения дополнительной информации о написании плагинов, пожалуйста, обратитесь к документации [plugins](../../../Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md#Plugins).
+Для получения дополнительной информации о написании плагинов смотрите документацию [plugins](../../../Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md#Plugins).
 
 ```sql
 mysql> CREATE PLUGIN myranker TYPE 'ranker' SONAME 'myplugins.so';
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-## CREATE BUDDY PLUGIN
+## СОЗДАТЬ BUDDY ПЛАГИН
 
 <!-- example create_buddy_plugin -->
 
-Buddy плагины могут расширить функциональность Manticore Search и включить определённые запросы, которые не поддерживаются изначально. Чтобы узнать больше о создании Buddy плагинов, рекомендуем прочитать [эту статью](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/).
+Buddy плагины могут расширять функциональность Manticore Search и обеспечивать выполнение определенных запросов, которые не поддерживаются изначально. Чтобы узнать больше о создании Buddy плагинов, рекомендуем прочитать [эту статью](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/).
 
-Чтобы создать Buddy плагин, выполните следующую команду SQL:
+Для создания Buddy плагина выполните следующий SQL-запрос:
 
 ```sql
 CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VERSION <package version>
 ```
 
-> ПРИМЕЧАНИЕ: `CREATE BUDDY PLUGIN` требует [Manticore Buddy](../../../Installation/Manticore_Buddy.md). Если команда не срабатывает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: `CREATE BUDDY PLUGIN` требует [Manticore Buddy](../../../Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 Вы также можете использовать алиас-команду, специально созданную для Buddy плагинов, которую легче запомнить:
 
@@ -38,7 +38,7 @@ CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VER
 CREATE BUDDY PLUGIN <username/package name on https://packagist.org/> VERSION <package version>
 ```
 
-Эта команда установит плагин `show-hostname` в [plugin_dir](../../../Server_settings/Common.md#plugin_dir) и включит его без необходимости перезапуска сервера.
+Эта команда установит плагин `show-hostname` в [plugin_dir](../../../Server_settings/Common.md#plugin_dir) и активирует его без необходимости перезагрузки сервера.
 
 <!-- intro -->
 ### Примеры

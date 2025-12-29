@@ -1,0 +1,12 @@
+{
+    "a391fc213f66af0786a34d6a8b410c5e4b8dad930e9814b9b32112de1929d66d": {
+        "original": "# KILL\n\n<!-- example KILL -->\nCODE_BLOCK_0\n\n`KILL` terminates the execution of a query by its ID, which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\nCODE_BLOCK_1\n\n<!-- end -->\n<!-- proofread -->\n\n",
+        "translations": {
+            "chinese": "# KILL\n\n<!-- example KILL -->\nCODE_BLOCK_0\n\n`KILL` \u901a\u8fc7\u5176 ID \u7ec8\u6b62\u67e5\u8be2\u7684\u6267\u884c\uff0c\u60a8\u53ef\u4ee5\u5728 [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) \u4e2d\u627e\u5230\u8be5 ID\u3002\n\n<!-- request SQL -->\nCODE_BLOCK_1\n\n<!-- end -->\n<!-- proofread -->\n\n",
+            "russian": "# KILL\n\n<!-- example KILL -->\nCODE_BLOCK_0\n\n`KILL` \u0437\u0430\u0432\u0435\u0440\u0448\u0430\u0435\u0442 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0435 \u0437\u0430\u043f\u0440\u043e\u0441\u0430 \u043f\u043e \u0435\u0433\u043e \u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440\u0443, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0432\u044b \u043c\u043e\u0436\u0435\u0442\u0435 \u043d\u0430\u0439\u0442\u0438 \u0432 [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\nCODE_BLOCK_1\n\n<!-- end -->\n<!-- proofread -->\n\n"
+        },
+        "is_code_or_comment": false,
+        "model": "openai:gpt-4.1-mini",
+        "updated_at": 1766339819
+    }
+}

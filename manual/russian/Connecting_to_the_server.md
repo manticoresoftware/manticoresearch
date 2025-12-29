@@ -1,11 +1,11 @@
 # Подключение к серверу
 
 <!-- example connect -->
-С настройками по умолчанию Manticore ожидает ваши подключения на:
+Со стандартной конфигурацией, Manticore ожидает ваши подключения на:
 
   * порт 9306 для клиентов MySQL
   * порт 9308 для HTTP/HTTPS подключений
-  * порт 9312 для HTTP/HTTPS, а также подключений от других узлов Manticore и клиентов, использующих бинарный API Manticore
+  * порт 9312 для HTTP/HTTPS, а также подключений от других узлов Manticore и клиентов, основанных на бинарном API Manticore
 
 <!-- intro -->
 ##### Подключение через MySQL:
@@ -19,7 +19,7 @@ mysql -h0 -P9306
 ##### Подключение через JSON по HTTP
 
 <!-- request HTTP -->
-HTTP — это безсессионный протокол, поэтому он не требует какой-либо специальной фазы подключения:
+HTTP — это безсессионный протокол, поэтому не требует специальной фазы подключения:
 
 ```bash
 curl -s "http://localhost:9308/search"
@@ -132,9 +132,9 @@ async fn maticore_connect {
 
 <!-- intro -->
 ##### Подключение через Docker
-Если вы знакомы с Docker, вы можете использовать [официальный Docker-образ](https://github.com/manticoresoftware/docker) Manticore для запуска Manticore. Вот как вы можете подключиться к Docker контейнеру Manticore через MySQL:
+Если вы знакомы с Docker, вы можете использовать официальный образ Manticore [official Docker image](https://github.com/manticoresoftware/docker) для запуска Manticore. Вот как можно подключиться к Docker контейнеру Manticore через MySQL:
 <!-- request docker -->
-Запустите контейнер Manticore и используйте встроенный MySQL клиент для подключения к узлу.
+Запустите контейнер Manticore и используйте встроенный клиент MySQL для подключения к узлу.
 ```bash
 docker run --name manticore -d manticoresearch/manticore && docker exec -it manticore mysql
 ```

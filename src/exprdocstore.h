@@ -15,4 +15,4 @@
 #include "sphinxexpr.h"
 
 ISphExpr *	CreateExpr_GetStoredField ( const CSphString & sName );
-ISphExpr *	CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr );
+ISphExpr *	CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr, bool bPostlimit );

@@ -1,0 +1,43 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE neg_test (id INT, content TEXT) min_infix_len='2'; INSERT INTO neg_test VALUES (1, 'test data');"
+––– output –––
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from neg_test where match('test') option fuzzy='1'"
+––– output –––
+{"error":"Invalid value for option 'fuzzy'"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from neg_test where match('test') option fuzzy=-1"
+––– output –––
+{"error":"P01: syntax error, unexpected '-' near '-1'"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from neg_test where match('test') option fuzzy=abc"
+––– output –––
+{"error":"Invalid value for option 'fuzzy'"}
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE no_infix (id INT, content TEXT);"
+––– output –––
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from no_infix option fuzzy=1"
+––– output –––
+{"error":"The 'fuzzy' option requires a full-text query. Use: MATCH('search query') or MATCH('search query', table_name)"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "insert into neg_test values (2, 'new data')"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "create table new_table (id int)"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "drop table neg_test"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "show tables"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from neg_test where match('test') option fuzzy=1 layouts=''"
+––– output –––
+{"error":"Invalid options in query string, make sure they are separated by commas"}

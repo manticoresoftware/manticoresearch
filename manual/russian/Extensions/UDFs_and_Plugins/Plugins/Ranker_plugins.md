@@ -1,16 +1,16 @@
-# Ranker plugins
+# Ранкер плагины
 
-Плагины ранжирования позволяют реализовать пользовательский ранжировщик, который получает все вхождения совпавших ключевых слов в документе и вычисляет значение `WEIGHT()`. Они могут вызываться следующим образом:
+Ранкер плагины позволя вам реализовам кастом ранкер который получа все совпаданс клю워д в документ и вычис `WEIGHT()` value. Они могут быть вызлд как фоллws:
 
 ```sql
 SELECT id, attr1 FROM test WHERE match('hello') OPTION ranker=myranker('option1=1');
 ```
-Рабочий процесс вызова происходит следующим образом:
+The call workflow proceeds as follows:
 
-1. `XXX_init()` вызывается один раз на запрос на каждую таблицу, в самом начале. Ему передаются несколько опций на весь запрос через структуру `SPH_RANKER_INIT`, включая строки пользовательских опций (например, "option1=1" в приведённом выше примере).
-2. `XXX_update()` вызывается несколько раз для каждого совпавшего документа, при этом в качестве параметра передается каждое совпавшее вхождение ключевого слова — структура `SPH_RANKER_HIT`. Вхождения в пределах каждого документа гарантированно передаются в порядке возрастания значений `hit->hit_pos`.
-3. `XXX_finalize()` вызывается один раз для каждого совпавшего документа, когда больше нет совпадений ключевых слов. Она должна возвращать значение `WEIGHT()`. Эта функция является единственной обязательной.
-4. `XXX_deinit()` вызывается один раз на запрос, в самом конце.
+1. `XXX_init()` is invoked once per query per table, at the very beginning. Several query-wide options are passed to it via a `SPH_RANKER_INIT` structure, including the user options strings (for instance, "option1=1" in the example above).
+2. `XXX_update()` is called multiple times for each matched document, with every matched keyword occurrence provided as its parameter, a `SPH_RANKER_HIT` structure. The occurrences within each document are guaranteed to be passed in ascending order of `hit->hit_pos` values.
+3. `XXX_finalize()` is called once for each matched document when there are no more keyword occurrences. It must return the `WEIGHT()` value. This function is the only mandatory one.
+4. `XXX_deinit()` is invoked once per query, at the very end.
 
 
 <!-- proofread -->

@@ -4,15 +4,17 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) is a lightweight shipper for forwarding and centralizing log data. Once installed as an agent, it monitors the log files or locations you specify, collects log events, and forwards them for indexing, usually to Elasticsearch or Logstash.
 
-Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, All versions to 9.0 are fully supported.
+Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, versions 7.17-9.2 are supported.
 
 ## Filebeat configuration
 
 Configuration varies depending on which version of Filebeat you're using.
 
-### Configuration for Filebeat 7.17 - 8.0
+### Configuration for Filebeat 7.17, 8.0, 8.1
 
-```
+> **Important**: Filebeat versions 7.17.0, 8.0.0, and 8.1.0 have a known issue with glibc 2.35+ (used in Ubuntu 22.04 and newer distributions). These versions may crash with "Fatal glibc error: rseq registration failed". To fix this, add the `seccomp` configuration as shown below.
+
+```yaml
 filebeat.inputs:
 - type: log
   enabled: true
@@ -25,12 +27,23 @@ output.elasticsearch:
   hosts: ["http://localhost:9308"]
   index: "dpkg_log"
   compression_level: 0
+  allow_older_versions: true  # Required for 8.1
+
+# Fix for glibc 2.35+ compatibility (Ubuntu 22.04+)
+seccomp:
+  default_action: allow
+  syscalls:
+    - action: allow
+      names:
+        - rseq
 
 setup.ilm.enabled: false
 setup.template.enabled: false
 setup.template.name: "dpkg_log"
 setup.template.pattern: "dpkg_log"
 ```
+
+**References**: [Issue #30576](https://github.com/elastic/beats/issues/30576), [PR #30620](https://github.com/elastic/beats/pull/30620)
 
 
 ### Configuration for Filebeat 8.1 - 8.10

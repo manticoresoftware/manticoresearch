@@ -21,6 +21,7 @@
 #include "searchdha.h"
 #include "jieba.h"
 #include "sorterscroll.h"
+#include "joinsorter.h"
 #include "std/base64.h"
 
 // uncomment to see everything came to parser.
@@ -402,8 +403,9 @@ public:
 
 	bool			SetJoin ( const SqlNode_t & tIdx );
 	void			SetJoinType ( JoinType_e eType );
-	bool			AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2, int iTypeCast );
-	void			SetJoinOnCast ( ESphAttr eType ) { m_eJoinTypeCast = eType; }
+	bool			AddOnFilter ( const SqlNode_t & tAttr1, const SqlNode_t & tAttr2, int iTypeCast );
+	void			SetJoinOnCast ( ESphAttr eType )	{ m_eJoinTypeCast = eType; }
+	void			SetJoinParse ( bool bJoin )			{ m_bJoinParseMode = bJoin; }
 
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddDistinct ( SqlNode_t * pNewExpr );
@@ -414,6 +416,7 @@ public:
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
 	void			FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
+	void			FilterNot ( SqlNode_t & tNode, const SqlNode_t & tExpr );
 	void			SetOp ( SqlNode_t & tNode );
 
 	bool			SetOldSyntax();
@@ -450,10 +453,12 @@ private:
 	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
+	bool						m_bJoinParseMode = false;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
+	void			NegateFilterTree ( int iNode );
 };
 
 using YYSTYPE = SqlNode_t;
@@ -1611,7 +1616,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter
 	FilterTreeItem_t & tElem = m_dFilterTree.Add();
 	tElem.m_iFilterItem = m_pQuery->m_dFilters.GetLength();
 
-	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
+	CSphFilterSettings * pFilter = m_bJoinParseMode ? &m_pQuery->m_dOnValueFilters.Add() : &m_pQuery->m_dFilters.Add();
 	pFilter->m_sAttrName = sCol;
 	pFilter->m_eType = eType;
 	sphColumnToLowercase ( const_cast<char *>( pFilter->m_sAttrName.cstr() ) );
@@ -1806,8 +1811,25 @@ bool SqlParser_c::AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull )
 
 void SqlParser_c::AddHaving ()
 {
-	assert ( m_pQuery->m_dFilters.GetLength() );
-	m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
+     assert ( m_pQuery->m_dFilters.GetLength() );
+
+     // The filter we are about to move to HAVING has index (length-1).
+     // After Pop(), GetLength() equals that index.
+     const int iExpectHavingIdx = m_pQuery->m_dFilters.GetLength() - 1;
+     m_pQuery->m_tHaving = m_pQuery->m_dFilters.Pop();
+
+     // FIX(#887): The filter tree still contains a leaf for the just-moved HAVING filter.
+     // That leaf must be the *last* tree item and must reference the same filter index.
+     if ( m_dFilterTree.GetLength() > 0 )
+     {
+         const int iLastFilterItem = m_dFilterTree.Last().m_iFilterItem;
+         // Assert the tree's last leaf matches the moved filter.
+         assert ( iLastFilterItem == iExpectHavingIdx && "HAVING leaf must be the last filter-tree item" );
+
+         // Remove that dangling leaf so WHERE's CreateFilterTree() won't see an empty-name filter.
+         if ( iLastFilterItem == iExpectHavingIdx )
+             m_dFilterTree.Pop();
+     }
 }
 
 
@@ -1822,19 +1844,24 @@ bool SqlParser_c::SetJoin ( const SqlNode_t & tIdx )
 }
 
 
-bool SqlParser_c::AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2, int iTypeCast )
+bool SqlParser_c::AddOnFilter ( const SqlNode_t & tAttr1, const SqlNode_t & tAttr2, int iTypeCast )
 {
+	if ( !m_bJoinParseMode )
+	{
+		*m_pParseError = "Unable to parse join filter outside of JOIN ON clause";
+		return false;
+	}
+
+	CSphString sAttr1, sAttr2;
 	auto & tOn = m_pQuery->m_dOnFilters.Add();
-	ToString ( tOn.m_sIdx1, tIdx1 );
-	ToString ( tOn.m_sIdx2, tIdx2 );
-	ToString ( tOn.m_sAttr1, tAttr1 );
-	ToString ( tOn.m_sAttr2, tAttr2 );
+	ToString ( sAttr1, tAttr1 );
+	ToString ( sAttr2, tAttr2 );
 
-	if ( tOn.m_sAttr1.Begins(".") )
-		tOn.m_sAttr1 = tOn.m_sAttr1.SubString( 1, tOn.m_sAttr1.Length()-1 );
+	if ( !SplitJoinedAttrName ( sAttr1, tOn.m_sIdx1, tOn.m_sAttr1, m_pParseError ) )
+		return false;
 
-	if ( tOn.m_sAttr2.Begins(".") )
-		tOn.m_sAttr2 = tOn.m_sAttr2.SubString( 1, tOn.m_sAttr2.Length()-1 );
+	if ( !SplitJoinedAttrName ( sAttr2, tOn.m_sIdx2, tOn.m_sAttr2, m_pParseError ) )
+		return false;
 
 	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr1.cstr() ) );
 	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr2.cstr() ) );
@@ -1943,6 +1970,41 @@ void SqlParser_c::FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const S
 	tElem.m_bOr = true;
 	tElem.m_iLeft = tLeft.m_iParsedOp;
 	tElem.m_iRight = tRight.m_iParsedOp;
+}
+
+void SqlParser_c::NegateFilterTree ( int iNode )
+{
+	if ( iNode<0 || iNode>=m_dFilterTree.GetLength() )
+		return;
+
+	FilterTreeItem_t & tItem = m_dFilterTree[iNode];
+	if ( tItem.m_iFilterItem >= 0 )
+	{
+		// leaf - negate the filter
+		if ( tItem.m_iFilterItem<m_pQuery->m_dFilters.GetLength() )
+		{
+			CSphFilterSettings & tFilter = m_pQuery->m_dFilters[tItem.m_iFilterItem];
+			tFilter.m_bExclude = !tFilter.m_bExclude;
+		}
+
+	} else
+	{
+		// branch - apply de morgan
+		// NOT (A OR B)  > (NOT A) AND (NOT B)
+		// NOT (A AND B) > (NOT A) OR (NOT B)
+		tItem.m_bOr = !tItem.m_bOr;
+		if ( tItem.m_bOr )
+			m_bGotFilterOr = true;
+
+		NegateFilterTree ( tItem.m_iLeft );
+		NegateFilterTree ( tItem.m_iRight );
+	}
+}
+
+void SqlParser_c::FilterNot ( SqlNode_t & tNode, const SqlNode_t & tExpr )
+{
+	tNode.m_iParsedOp = tExpr.m_iParsedOp;
+	NegateFilterTree ( tNode.m_iParsedOp );
 }
 
 

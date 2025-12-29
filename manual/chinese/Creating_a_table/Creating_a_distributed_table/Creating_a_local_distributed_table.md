@@ -2,7 +2,7 @@
 
 <!-- example local_dist -->
 
-Manticore Search中的分布式表充当“主节点”，将请求的查询代理到其他表并提供它从收到的响应中合并的结果。该表本身不存储任何数据。它可以连接到本地表和位于其他服务器上的表。下面是一个简单分布式表的示例：
+在Manticore Search中，分布式表充当“主节点”，将所需的查询代理到其他表，并提供从接收到的响应中合并的结果。该表本身不存储任何数据。它可以连接到本地表和其他服务器上的表。以下是一个简单的分布式表示例：
 
 <!-- intro -->
 ##### 配置文件：
@@ -42,7 +42,7 @@ $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -51,7 +51,7 @@ utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' loca
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -60,7 +60,7 @@ await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request javascript -->
 
@@ -69,21 +69,21 @@ res = await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'i
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 

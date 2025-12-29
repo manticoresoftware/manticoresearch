@@ -323,6 +323,36 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 	}
 }
 
+static void CollectAliases ( const VecTraits_T<CSphQueryItem> & dItems, const CSphString & sGroupBy, const CSphString & sJsonGroupBy, sph::StringSet & hFacet )
+{
+	ARRAY_CONSTFOREACH ( i, dItems )
+	{
+		const CSphQueryItem & tItem = dItems[i];
+		if ( tItem.m_sExpr.IsEmpty() ) 
+			continue;
+
+		bool bMatch = false;
+
+		// 1st check - exact string match (raw or json)
+		if ( tItem.m_sExpr == sGroupBy )
+		{
+			bMatch = true;
+		} else if ( !sJsonGroupBy.IsEmpty() )
+		{
+			// 2nd - normalize JSON path
+			if ( tItem.m_sExpr==sJsonGroupBy )
+				bMatch = true;
+			else if ( sphJsonNameSplit ( tItem.m_sExpr.cstr() ) )
+				bMatch = ( SortJsonInternalSet ( tItem.m_sExpr )==sJsonGroupBy );
+		}
+
+		if ( bMatch )
+		{
+			hFacet.Add ( tItem.m_sExpr );
+			hFacet.Add ( tItem.m_sAlias );
+		}
+	}
+}
 
 void FrontendSchemaBuilder_c::RemapFacets()
 {
@@ -330,34 +360,65 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	if ( !m_tQuery.m_bFacet && !m_tQuery.m_bFacetHead )
 		return;
 
-	// remap MVA/JSON column to @groupby/@groupbystr in facet queries
-	const CSphColumnInfo * pGroupByCol = nullptr;
+	if ( m_tQuery.m_sGroupBy.IsEmpty() )
+		return;
+
+	CSphString sGroupBy = m_tQuery.m_sGroupBy;
 	CSphString sJsonGroupBy;
-	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() ) )
+	const CSphColumnInfo * pGroupByCol = nullptr;
+
+	if ( sphJsonNameSplit ( sGroupBy.cstr() ) )
 	{
-		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
+		sJsonGroupBy = SortJsonInternalSet ( sGroupBy );
 		pGroupByCol = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
 	}
 
 	if ( !pGroupByCol )
-	{
 		pGroupByCol = m_tRes.m_tSchema.GetAttr ( "@groupby" );
-		if ( !pGroupByCol )
-			return;
+	if ( !pGroupByCol )
+		return;
+
+	// JSON group by \ facet - 1st @groupbystr then @groupby
+	// @groupbystr has JSON items these grouped
+	// @groupby is the group key hash
+	const CSphColumnInfo * pGroupByStrCol = nullptr;
+	
+	// JSON path first - @groupbystr_j.field / @groupbystr_j['*']
+	if ( !sJsonGroupBy.IsEmpty() )
+	{
+		CSphString sGroupByStr;
+		sGroupByStr.SetSprintf ( "%s%s", GetInternalJsonPrefix(), sJsonGroupBy.cstr() );
+		pGroupByStrCol = m_tRes.m_tSchema.GetAttr ( sGroupByStr.cstr() );
+	}
+	
+	// if not found - plain attribute name - @groupbystr_j
+	if ( !pGroupByStrCol )
+	{
+		CSphString sGroupByStr;
+		sGroupByStr.SetSprintf ( "%s%s", GetInternalJsonPrefix(), sGroupBy.cstr() );
+		pGroupByStrCol = m_tRes.m_tSchema.GetAttr ( sGroupByStr.cstr() );
 	}
 
-	if ( m_tQuery.m_sGroupBy.IsEmpty() )
-		return;
+	const CSphColumnInfo * pRemapCol = pGroupByStrCol ? pGroupByStrCol : pGroupByCol;
+
+	sph::StringSet hFacet;
+	hFacet.Add ( sGroupBy );
+	if ( !sJsonGroupBy.IsEmpty() )
+		hFacet.Add ( sJsonGroupBy );
+
+	CollectAliases ( m_dItems, sGroupBy, sJsonGroupBy, hFacet );
+	CollectAliases ( m_tQuery.m_dItems, sGroupBy, sJsonGroupBy, hFacet );
+	CollectAliases ( m_tQuery.m_dRefItems, sGroupBy, sJsonGroupBy, hFacet );
 
 	for ( auto & tFrontend : m_dFrontend )
 	{
 		ESphAttr eAttr = tFrontend.m_eAttrType;
 		// checking _PTR attrs only because we should not have and non-ptr attr at this point
-		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		if ( hFacet[tFrontend.m_sName] && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 		{
-			tFrontend.m_tLocator = pGroupByCol->m_tLocator;
-			tFrontend.m_eAttrType = pGroupByCol->m_eAttrType;
-			tFrontend.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
+			tFrontend.m_tLocator = pRemapCol->m_tLocator;
+			tFrontend.m_eAttrType = pRemapCol->m_eAttrType;
+			tFrontend.m_eAggrFunc = pRemapCol->m_eAggrFunc;
 		}
 	}
 }

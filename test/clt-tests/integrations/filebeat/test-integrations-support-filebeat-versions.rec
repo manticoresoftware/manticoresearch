@@ -1,0 +1,659 @@
+––– block: ../../base/start-searchd-with-buddy –––
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; max_attempts=3; while [ $attempts -lt $max_attempts ]; do attempts=$((attempts+1)); if curl -s --fail --max-time 10 "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=1000&page=$page" | tee /tmp/page.json | jq -e ".next" > /dev/null; then jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; page=$((page+1)); attempts=0; else break; fi; done; jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; VERSIONS=$(cat /tmp/filebeat_tags.json | grep -E "^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$" | grep -E "^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|9.[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$" | sed -E "s/^([0-9]+.[0-9]+).[0-9]+$/\1/" | grep -v "rc|beta|alpha" | sort -V | uniq); echo "$VERSIONS"; mkdir -p /tmp/filebeat_cache; echo "Preparation done"; for version in $VERSIONS; do archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Filebeat $version ..."; if [ -f "$archive" ] && gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo ">>> Downloading Filebeat $version ..."; wget -q --timeout=30 "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" && { if gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo "✗ Archive for $version is corrupted"; rm -f "$archive"; fi; }; fi; done'
+––– output –––
+7.17
+8.0
+8.1
+8.2
+8.3
+8.4
+8.5
+8.6
+8.7
+8.8
+8.9
+8.10
+8.11
+8.12
+8.13
+8.14
+8.15
+8.16
+8.17
+8.18
+8.19
+9.0
+9.1
+9.2
+Preparation done
+>>> Checking Filebeat 7.17 ...
+>>> Downloading Filebeat 7.17 ...
+✓ Archive for 7.17 is OK
+>>> Checking Filebeat 8.0 ...
+>>> Downloading Filebeat 8.0 ...
+✓ Archive for 8.0 is OK
+>>> Checking Filebeat 8.1 ...
+>>> Downloading Filebeat 8.1 ...
+✓ Archive for 8.1 is OK
+>>> Checking Filebeat 8.2 ...
+>>> Downloading Filebeat 8.2 ...
+✓ Archive for 8.2 is OK
+>>> Checking Filebeat 8.3 ...
+>>> Downloading Filebeat 8.3 ...
+✓ Archive for 8.3 is OK
+>>> Checking Filebeat 8.4 ...
+>>> Downloading Filebeat 8.4 ...
+✓ Archive for 8.4 is OK
+>>> Checking Filebeat 8.5 ...
+>>> Downloading Filebeat 8.5 ...
+✓ Archive for 8.5 is OK
+>>> Checking Filebeat 8.6 ...
+>>> Downloading Filebeat 8.6 ...
+✓ Archive for 8.6 is OK
+>>> Checking Filebeat 8.7 ...
+>>> Downloading Filebeat 8.7 ...
+✓ Archive for 8.7 is OK
+>>> Checking Filebeat 8.8 ...
+>>> Downloading Filebeat 8.8 ...
+✓ Archive for 8.8 is OK
+>>> Checking Filebeat 8.9 ...
+>>> Downloading Filebeat 8.9 ...
+✓ Archive for 8.9 is OK
+>>> Checking Filebeat 8.10 ...
+>>> Downloading Filebeat 8.10 ...
+✓ Archive for 8.10 is OK
+>>> Checking Filebeat 8.11 ...
+>>> Downloading Filebeat 8.11 ...
+✓ Archive for 8.11 is OK
+>>> Checking Filebeat 8.12 ...
+>>> Downloading Filebeat 8.12 ...
+✓ Archive for 8.12 is OK
+>>> Checking Filebeat 8.13 ...
+>>> Downloading Filebeat 8.13 ...
+✓ Archive for 8.13 is OK
+>>> Checking Filebeat 8.14 ...
+>>> Downloading Filebeat 8.14 ...
+✓ Archive for 8.14 is OK
+>>> Checking Filebeat 8.15 ...
+>>> Downloading Filebeat 8.15 ...
+✓ Archive for 8.15 is OK
+>>> Checking Filebeat 8.16 ...
+>>> Downloading Filebeat 8.16 ...
+✓ Archive for 8.16 is OK
+>>> Checking Filebeat 8.17 ...
+>>> Downloading Filebeat 8.17 ...
+✓ Archive for 8.17 is OK
+>>> Checking Filebeat 8.18 ...
+>>> Downloading Filebeat 8.18 ...
+✓ Archive for 8.18 is OK
+>>> Checking Filebeat 8.19 ...
+>>> Downloading Filebeat 8.19 ...
+✓ Archive for 8.19 is OK
+>>> Checking Filebeat 9.0 ...
+>>> Downloading Filebeat 9.0 ...
+✓ Archive for 9.0 is OK
+>>> Checking Filebeat 9.1 ...
+>>> Downloading Filebeat 9.1 ...
+✓ Archive for 9.1 is OK
+>>> Checking Filebeat 9.2 ...
+>>> Downloading Filebeat 9.2 ...
+✓ Archive for 9.2 is OK
+––– input –––
+set +H && mkdir -p /tmp/filebeat_cache && echo "Preparation done"
+––– output –––
+Preparation done
+––– input –––
+cat << 'EOF' > /tmp/filebeat-single-test.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "✗ Usage: $0 <filebeat_version>" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+version="$1"
+full_version="${version}.0"
+echo ">>> Testing Filebeat version: $version"
+
+# Prepare test log
+echo -e "2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9" > /var/log/dpkg.log
+
+log_lines=$(wc -l < /var/log/dpkg.log)
+if [ "$log_lines" -eq 5 ]; then
+  echo "✓ Log file has 5 lines"
+else
+  echo "✗ Error: Expected 5 lines, got $log_lines" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+# Check Manticore availability
+if ! curl -s localhost:9308/cli_json -d 'SHOW TABLES' | jq -e '.[0].data' > /dev/null; then
+  echo "✗ Error: Manticore Search unavailable" >&2
+  return 1 2>/dev/null || exit 1
+fi
+echo "✓ Manticore Search available"
+
+# Create table
+mysql -h0 -P9306 -e "
+DROP TABLE IF EXISTS dpkg_log;
+CREATE TABLE dpkg_log (
+  id BIGINT,
+  message TEXT INDEXED STORED,
+  host JSON,
+  agent JSON,
+  input JSON,
+  log JSON,
+  ecs JSON,
+  \`@timestamp\` TEXT INDEXED STORED
+);"
+
+# Install Filebeat
+mkdir -p /usr/share/filebeat /tmp/fb-data-${version}
+tar -xzf "/tmp/filebeat_cache/filebeat-${full_version}-linux-x86_64.tar.gz" -C /usr/share/filebeat
+FB_DIR="/usr/share/filebeat/filebeat-${full_version}-linux-x86_64"
+
+# Clean previous registry data
+rm -rf /tmp/fb-data-${version}/*
+
+skip_standard_test=0
+
+
+# For all 9.x versions, use filestream with fingerprint disabled
+if [[ "$version" =~ ^9\. ]]; then
+  echo ">>> Testing Filebeat $version with filestream input and fingerprint disabled..."
+
+  cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: filestream
+  id: dpkg-filestream-input
+  enabled: true
+  paths: ["/var/log/dpkg.log"]
+  prospector.scanner.check_interval: 1s
+  prospector.scanner.fingerprint.enabled: false
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+
+  echo ">>> Starting Filebeat..."
+  "${FB_DIR}/filebeat" run -c "${FB_DIR}/filebeat.yml" > /tmp/fb-log-${version}.txt 2>&1 &
+  FB_PID=$!
+
+  echo ">>> Waiting for Filebeat to publish events..."
+  for i in {1..30}; do
+    row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" 2>/dev/null | grep -o '[0-9]\+' || echo "0")
+    if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -ge 5 ]; then
+      echo "✓ Filebeat $version processed logs"
+      kill $FB_PID 2>/dev/null || true
+      wait $FB_PID 2>/dev/null || true
+
+      if [ "$row_count" -eq 5 ]; then
+        echo "✓ Row count check for $version: $row_count rows"
+        structure=$(curl -s localhost:9308/cli_json -d 'DESCRIBE dpkg_log' | jq -c '[.[0].data[]] | sort_by(.Field)')
+        has_timestamp=$(echo "$structure" | grep -q "\"Field\":\"@timestamp\"" && echo "1" || echo "0")
+        has_message=$(echo "$structure" | grep -q "\"Field\":\"message\"" && echo "1" || echo "0")
+        if [ "$has_timestamp" = "1" ] && [ "$has_message" = "1" ]; then
+          echo "✓ Structure check for $version: passed"
+          echo "✓ Filebeat version $version tested successfully"
+          skip_standard_test=1
+        fi
+      fi
+      break
+    fi
+    sleep 1
+  done
+
+  if [ "$skip_standard_test" -eq 0 ]; then
+    kill $FB_PID 2>/dev/null || true
+    wait $FB_PID 2>/dev/null || true
+    mysql -h0 -P9306 -e "TRUNCATE TABLE dpkg_log" 2>/dev/null || true
+    echo "✗ Error: Filebeat $version failed to process logs" >&2
+    return 1 2>/dev/null || exit 1
+  fi
+fi
+
+# For all other versions (7.17, 8.x), use the standard approach
+if [ "$skip_standard_test" -eq 0 ]; then
+  # Versions 7.17.0, 8.0.0, 8.1.0 crash on glibc 2.35+ due to missing rseq syscall support
+  # Fixed in 7.17.2+ and 8.2.0+
+  # See: https://github.com/elastic/beats/issues/30576
+  # See: https://github.com/elastic/beats/pull/30620
+  if [[ "$version" =~ ^(7\.17|8\.0|8\.1)$ ]]; then
+    echo ">>> Using special configuration for Filebeat $version (glibc 2.35+ compatibility fix)..."
+
+    cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  $(if [[ "$version" =~ ^8\.[1-9]$ ]]; then echo "allow_older_versions: true"; fi)
+
+# Fix for glibc 2.35+ rseq syscall issue
+seccomp:
+  default_action: allow
+  syscalls:
+    - action: allow
+      names:
+        - rseq
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+
+  elif [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
+    # For versions 8.1 and higher (except 8.0, 8.1 which are handled above), add allow_older_versions option
+    cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+
+  else
+    # For versions before 8.1
+    cat > "${FB_DIR}/filebeat.yml" <<YML
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+
+path.data: /tmp/fb-data-${version}
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+YML
+  fi
+
+  echo ">>> Starting Filebeat..."
+  "${FB_DIR}/filebeat" run -c "${FB_DIR}/filebeat.yml" > /tmp/fb-log-${version}.txt 2>&1 &
+  FB_PID=$!
+
+  echo ">>> Waiting for Filebeat to publish events..."
+  for i in {1..30}; do
+    row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" 2>/dev/null | grep -o '[0-9]\+' || echo "0")
+    if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -ge 5 ]; then
+      echo "✓ Filebeat $version processed logs"
+      kill $FB_PID 2>/dev/null || true
+      wait $FB_PID 2>/dev/null || true
+      break
+    fi
+    sleep 1
+  done
+
+  # Final verification
+  row_count=$(mysql -N -s -h0 -P9306 -e "SELECT COUNT(*) FROM dpkg_log" 2>/dev/null | grep -o '[0-9]\+' || echo "0")
+  if [ "$row_count" -eq 5 ]; then
+    echo "✓ Row count check for $version: $row_count rows"
+    structure=$(curl -s localhost:9308/cli_json -d 'DESCRIBE dpkg_log' | jq -c '[.[0].data[]] | sort_by(.Field)')
+    has_timestamp=$(echo "$structure" | grep -q "\"Field\":\"@timestamp\"" && echo "1" || echo "0")
+    has_message=$(echo "$structure" | grep -q "\"Field\":\"message\"" && echo "1" || echo "0")
+    if [ "$has_timestamp" = "1" ] && [ "$has_message" = "1" ]; then
+      echo "✓ Structure check for $version: passed"
+      echo "✓ Filebeat version $version tested successfully"
+    else
+      echo "✗ Structure check for $version: failed" >&2
+      return 1 2>/dev/null || exit 1
+    fi
+  else
+    echo "✗ Row count check for $version: expected 5, got $row_count" >&2
+    return 1 2>/dev/null || exit 1
+  fi
+fi
+EOF
+––– output –––
+––– input –––
+chmod +x /tmp/filebeat-single-test.sh
+––– output –––
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 7.17
+––– output –––
+>>> Testing Filebeat version: 7.17
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Using special configuration for Filebeat 7.17 (glibc 2.35+ compatibility fix)...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 7.17 processed logs
+✓ Row count check for 7.17: 5 rows
+✓ Structure check for 7.17: passed
+✓ Filebeat version 7.17 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.0
+––– output –––
+>>> Testing Filebeat version: 8.0
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Using special configuration for Filebeat 8.0 (glibc 2.35+ compatibility fix)...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.0 processed logs
+✓ Row count check for 8.0: 5 rows
+✓ Structure check for 8.0: passed
+✓ Filebeat version 8.0 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.1
+––– output –––
+>>> Testing Filebeat version: 8.1
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Using special configuration for Filebeat 8.1 (glibc 2.35+ compatibility fix)...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.1 processed logs
+✓ Row count check for 8.1: 5 rows
+✓ Structure check for 8.1: passed
+✓ Filebeat version 8.1 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.2
+––– output –––
+>>> Testing Filebeat version: 8.2
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.2 processed logs
+✓ Row count check for 8.2: 5 rows
+✓ Structure check for 8.2: passed
+✓ Filebeat version 8.2 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.3
+––– output –––
+>>> Testing Filebeat version: 8.3
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.3 processed logs
+✓ Row count check for 8.3: 5 rows
+✓ Structure check for 8.3: passed
+✓ Filebeat version 8.3 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.4
+––– output –––
+>>> Testing Filebeat version: 8.4
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.4 processed logs
+✓ Row count check for 8.4: 5 rows
+✓ Structure check for 8.4: passed
+✓ Filebeat version 8.4 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.5
+––– output –––
+>>> Testing Filebeat version: 8.5
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.5 processed logs
+✓ Row count check for 8.5: 5 rows
+✓ Structure check for 8.5: passed
+✓ Filebeat version 8.5 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.6
+––– output –––
+>>> Testing Filebeat version: 8.6
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.6 processed logs
+✓ Row count check for 8.6: 5 rows
+✓ Structure check for 8.6: passed
+✓ Filebeat version 8.6 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.7
+––– output –––
+>>> Testing Filebeat version: 8.7
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.7 processed logs
+✓ Row count check for 8.7: 5 rows
+✓ Structure check for 8.7: passed
+✓ Filebeat version 8.7 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.8
+––– output –––
+>>> Testing Filebeat version: 8.8
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.8 processed logs
+✓ Row count check for 8.8: 5 rows
+✓ Structure check for 8.8: passed
+✓ Filebeat version 8.8 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.9
+––– output –––
+>>> Testing Filebeat version: 8.9
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.9 processed logs
+✓ Row count check for 8.9: 5 rows
+✓ Structure check for 8.9: passed
+✓ Filebeat version 8.9 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.10
+––– output –––
+>>> Testing Filebeat version: 8.10
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.10 processed logs
+✓ Row count check for 8.10: 5 rows
+✓ Structure check for 8.10: passed
+✓ Filebeat version 8.10 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.11
+––– output –––
+>>> Testing Filebeat version: 8.11
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.11 processed logs
+✓ Row count check for 8.11: 5 rows
+✓ Structure check for 8.11: passed
+✓ Filebeat version 8.11 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.12
+––– output –––
+>>> Testing Filebeat version: 8.12
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.12 processed logs
+✓ Row count check for 8.12: 5 rows
+✓ Structure check for 8.12: passed
+✓ Filebeat version 8.12 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.13
+––– output –––
+>>> Testing Filebeat version: 8.13
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.13 processed logs
+✓ Row count check for 8.13: 5 rows
+✓ Structure check for 8.13: passed
+✓ Filebeat version 8.13 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.14
+––– output –––
+>>> Testing Filebeat version: 8.14
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.14 processed logs
+✓ Row count check for 8.14: 5 rows
+✓ Structure check for 8.14: passed
+✓ Filebeat version 8.14 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.15
+––– output –––
+>>> Testing Filebeat version: 8.15
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.15 processed logs
+✓ Row count check for 8.15: 5 rows
+✓ Structure check for 8.15: passed
+✓ Filebeat version 8.15 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.16
+––– output –––
+>>> Testing Filebeat version: 8.16
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.16 processed logs
+✓ Row count check for 8.16: 5 rows
+✓ Structure check for 8.16: passed
+✓ Filebeat version 8.16 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.17
+––– output –––
+>>> Testing Filebeat version: 8.17
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.17 processed logs
+✓ Row count check for 8.17: 5 rows
+✓ Structure check for 8.17: passed
+✓ Filebeat version 8.17 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.18
+––– output –––
+>>> Testing Filebeat version: 8.18
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.18 processed logs
+✓ Row count check for 8.18: 5 rows
+✓ Structure check for 8.18: passed
+✓ Filebeat version 8.18 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.19
+––– output –––
+>>> Testing Filebeat version: 8.19
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.19 processed logs
+✓ Row count check for 8.19: 5 rows
+✓ Structure check for 8.19: passed
+✓ Filebeat version 8.19 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 9.0
+––– output –––
+>>> Testing Filebeat version: 9.0
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Testing Filebeat 9.0 with filestream input and fingerprint disabled...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 9.0 processed logs
+✓ Row count check for 9.0: 5 rows
+✓ Structure check for 9.0: passed
+✓ Filebeat version 9.0 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 9.1
+––– output –––
+>>> Testing Filebeat version: 9.1
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Testing Filebeat 9.1 with filestream input and fingerprint disabled...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 9.1 processed logs
+✓ Row count check for 9.1: 5 rows
+✓ Structure check for 9.1: passed
+✓ Filebeat version 9.1 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 9.2
+––– output –––
+>>> Testing Filebeat version: 9.2
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Testing Filebeat 9.2 with filestream input and fingerprint disabled...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 9.2 processed logs
+✓ Row count check for 9.2: 5 rows
+✓ Structure check for 9.2: passed
+✓ Filebeat version 9.2 tested successfully
+––– input –––
+rm -rf /tmp/fb-data-* /tmp/fb-log-*.txt /tmp/page.json /tmp/filebeat_tags.json
+––– output –––

@@ -1,45 +1,45 @@
-# 搜索分析
+# 搜索性能分析
 
-## 查询是如何被解释的
+## 查询如何被解析
 
 考虑这个复杂的查询示例：
 ```sql
 "hello world" @title "example program"~5 @body python -(php|perl) @* code
 ```
-该搜索的完整含义是：
+此搜索的完整含义是：
 
-* 在文档的任意字段中定位“hello”和“world”两个词相邻出现；
-* 此外，同一文档的标题字段中必须包含单词“example”和“program”，两词之间最多有但不包括5个词；（例如，“example PHP program”会匹配，但“example script to introduce outside data into the correct context for your program”不会，因为两词之间有5个或更多词）
-* 而且，同一文档的正文字段中必须包含单词“python”，同时排除“php”或“perl”；
-* 最后，同一文档的任意字段中必须包含单词“code”。
+* 在文档的任何字段中定位相邻出现的单词“hello”和“world”；
+* 此外，同一文档的标题字段中必须包含单词“example”和“program”，且它们之间最多（但不包括）有5个单词；（例如，“example PHP program”会匹配，但“example script to introduce outside data into the correct context for your program”则不会，因为这两个术语之间有5个或更多单词）
+* 再者，同一文档的正文字段中必须包含单词“python”，同时排除“php”或“perl”；
+* 最后，同一文档必须在任何字段中包含单词“code”。
 
-OR 运算符优先于 AND，因此“looking for cat | dog | mouse”意味着“looking for (cat | dog | mouse)”，而不是“(looking for cat) | dog | mouse”。
+OR运算符的优先级高于AND，因此“looking for cat | dog | mouse”意味着“looking for (cat | dog | mouse)”，而不是“(looking for cat) | dog | mouse”。
 
-为了理解查询将如何被执行，Manticore Search 提供了查询分析工具，用以检查查询表达式生成的查询树。
+为了理解查询将如何执行，Manticore Search提供了查询性能分析工具来检查查询表达式生成的查询树。
 
 <!-- example profiling -->
 
-## 在 SQL 中分析查询树
+## 在SQL中分析查询树
 
-要启用全文本查询的分析功能，必须在执行目标查询前激活它：
+要通过SQL语句启用全文查询性能分析，必须在执行目标查询前激活它：
 
 ```sql
 SET profiling =1;
 SELECT * FROM test WHERE MATCH('@title abc* @body hey');
 ```
 
-执行查询后，立即运行 `SHOW PLAN` 命令以查看查询树：
+要查看查询树，请在运行查询后立即执行`SHOW PLAN`命令：
 
 ```sql
 SHOW PLAN;
 ```
 
-此命令将返回执行查询的结构。请注意，这三个语句——SET profiling、查询语句和 SHOW——必须在同一会话中执行。
+此命令将返回已执行查询的结构。请注意，这3条语句——SET profiling、查询本身和SHOW——必须在同一会话中执行。
 
 
-## 在 HTTP JSON 中分析查询
+## 在HTTP JSON中分析查询
 
-使用 HTTP JSON 协议时，我们只需启用 `"profile":true`，即可在响应中获得全文本查询树的结构。
+使用HTTP JSON协议时，我们只需启用`"profile":true`即可在响应中获取全文查询树结构。
 
 ```json
 {
@@ -51,24 +51,24 @@ SHOW PLAN;
   }
 }
 ```
-响应将包含一个 `profile` 对象，其中含有一个 `query` 成员。
+响应将包含一个`profile`对象，其中有一个`query`成员。
 
-`query` 属性保存转换后的全文本查询树。每个节点包含：
+`query`属性保存转换后的全文查询树。每个节点包含：
 
-* `type`：节点类型，可能是 AND、OR、PHRASE、KEYWORD 等。
-* `description`：该节点的查询子树，字符串形式表示（采用 `SHOW PLAN` 格式）
-* `children`：若存在，则为子节点
-* `max_field_pos`：字段中的最大位置
+* `type`：节点类型，可以是AND、OR、PHRASE、KEYWORD等。
+* `description`：此节点的查询子树，以字符串形式表示（采用`SHOW PLAN`格式）
+* `children`：存在的任何子节点
+* `max_field_pos`：字段内的最大位置
 
-关键词节点还包括：
+关键字节点还将额外包括：
 
-* `word`：转换后的关键词。
-* `querypos`：此关键词在查询中的位置。
-* `excluded`：关键词是否被查询排除。
-* `expanded`：关键词是否通过前缀扩展添加。
-* `field_start`：关键词必须出现在字段的开头。
-* `field_end`：关键词必须出现在字段的结尾。
-* `boost`：关键词的逆文档频率（IDF）将乘以此值。
+* `word`：转换后的关键字。
+* `querypos`：此关键字在查询中的位置。
+* `excluded`：从查询中排除的关键字。
+* `expanded`：通过前缀扩展添加的关键字。
+* `field_start`：关键字必须出现在字段的开头。
+* `field_end`：关键字必须出现在字段的末尾。
+* `boost`：此关键字的IDF将乘以该值。
 
 
 <!-- intro -->
@@ -507,7 +507,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example SHOW PLAN EXPANSION -->
 
-在某些情况下，评估后的查询树可能因扩展和其他转换而与原始查询树有很大差异。
+在某些情况下，由于扩展和其他转换，评估后的查询树可能与原始查询树有显著差异。
 
 <!-- intro -->
 ##### SQL:
@@ -1174,10 +1174,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 
-## 在不执行查询的情况下分析查询
+## 不运行查询的性能分析
 
 <!-- Example Explain_query -->
-SQL 语句 `EXPLAIN QUERY` 允许显示指定全文查询的执行树，而不实际在表上执行搜索查询。
+SQL语句`EXPLAIN QUERY`允许显示给定全文查询的执行树，而无需对表执行实际的搜索查询。
 
 
 
@@ -1204,9 +1204,9 @@ Variable: transformed_tree
 <!-- end -->
 
 <!-- Example Explain_query_dot -->
-`EXPLAIN QUERY ... option format=dot` 允许以分层格式显示指定全文查询的执行树，适合使用现有工具可视化，如 https://dreampuf.github.io/GraphvizOnline：
+`EXPLAIN QUERY ... option format=dot`允许以分层格式显示所提供全文查询的执行树，适合通过现有工具（如https://dreampuf.github.io/GraphvizOnline）进行可视化：
 
-![EXPLAIN QUERY graphviz example](graphviz.png)
+![EXPLAIN QUERY graphviz示例](graphviz.png)
 
 <!-- intro -->
 ##### SQL:
@@ -1238,21 +1238,21 @@ Variable: transformed_tree
 ```
 <!-- end -->
 
-## 查看匹配因子的值
+## 查看匹配因子值
 <!-- example factors -->
-使用表达式排序器时，可以使用 [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) 函数揭示计算出的因子值。
+使用表达式排序器时，可以通过[PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29)函数显示计算出的因子值。
 
 该函数返回：
 
-* 文档级别因素的值（例如 bm25、field_mask、doc_word_count）
-* 生成匹配的每个字段的列表（包括 lcs、hit_count、word_count、sum_idf、min_hit_pos 等）
-* 查询中每个关键词及其 tf 和 idf 值的列表
+* 文档级别因素的值（如bm25、field_mask、doc_word_count）
+* 每个生成命中结果的字段列表（包括lcs、hit_count、word_count、sum_idf、min_hit_pos等）
+* 查询中每个关键词及其tf和idf值的列表
 
 
-这些值可用于理解为何某些文档在搜索中得分较低或较高，或用于改进现有的排序表达式。
+这些值可以用于理解某些文档在搜索中为何获得较低或较高的分数，或者用于细化现有的排名表达式。
 
 <!-- intro -->
-Example:
+示例：
 
 <!-- request SQL -->
 ```sql

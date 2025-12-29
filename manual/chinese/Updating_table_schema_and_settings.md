@@ -1,6 +1,6 @@
 # 更新表结构
 
-## 在 RT 模式下更新表结构
+## 在RT模式下更新表结构
 
 <!-- example ALTER -->
 
@@ -12,30 +12,30 @@ ALTER TABLE table DROP COLUMN column_name
 ALTER TABLE table MODIFY COLUMN column_name bigint
 ```
 
-该功能仅支持对 RT 表一次添加一个字段或将 `int` 列扩展为 `bigint`。支持的数据类型包括：
-* `int` - 整数字段
-* `timestamp` - 时间戳字段
-* `bigint` - 大整数字段
-* `float` - 浮点字段
-* `bool` - 布尔字段
-* `multi` - 多值整数字段
-* `multi64` - 多值大整数字段
-* `json` - json 字段
-* `string` / `text attribute` / `string attribute` - 字符串字段
-* `text` / `text indexed stored` / `string indexed stored` - 全文索引字段，原始值存储在 docstore 中
-* `text indexed` / `string indexed` - 仅全文索引字段（原始值不存储在 docstore）
-* `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不在 docstore 中存储原始值）
-* `text stored` / `string stored` - 只存储在 docstore 中的值，不建立全文索引，也不是字符串属性
-* 给任意属性（json 除外）添加 `engine='columnar'`，将其存储在[列存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中
+此功能仅支持为RT表一次添加一个字段，或将`int`列扩展为`bigint`。支持的数据类型包括：
+* `int` - 整数属性
+* `timestamp` - 时间戳属性
+* `bigint` - 大整数属性
+* `float` - 浮点数属性
+* `bool` - 布尔属性
+* `multi` - 多值整数属性
+* `multi64` - 多值bigint属性
+* `json` - json属性
+* `string` / `text attribute` / `string attribute` - 字符串属性
+* `text` / `text indexed stored` / `string indexed stored` - 全文索引字段，原始值存储在docstore中
+* `text indexed` / `string indexed` - 全文索引字段，仅索引（原始值不存储在docstore中）
+* `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不将原始值存储在docstore中）
+* `text stored` / `string stored` - 值仅存储在docstore中，不进行全文索引，也不是字符串属性
+* 为任何属性（json除外）添加`engine='columnar'`将使其存储在[列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中
 
-#### 重要说明：
-* ❗建议在执行 `ALTER` 前备份表文件，以防出现电源故障或类似问题导致数据损坏。
-* 添加列时不可查询表。
-* 新建属性的值默认为 0。
-* `ALTER` 不适用于分布式表和无属性的表。
-* 不能删除 `id` 列。
-* 删除同时是全文字段和字符串属性的字段时，第一次 `ALTER DROP` 删除属性，第二次删除全文字段。
-* 添加/删除全文字段仅支持[RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)。
+#### 重要注意事项：
+* ❗建议在`ALTER`表之前**备份表文件**，以防突然断电或其他类似问题导致数据损坏。
+* 添加列时无法查询表。
+* 新创建的属性值设置为0。
+* `ALTER`不适用于分布式表和无任何属性的表。
+* 不能删除`id`列。
+* 当删除一个既是全文字段又是字符串属性的字段时，第一次`ALTER DROP`删除属性，第二次删除全文字段。
+* 添加/删除全文字段仅在[RT模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下支持。
 
 <!-- request Example -->
 ```sql
@@ -129,7 +129,7 @@ mysql> desc rt;
 
 <!-- end -->
 
-## 在 RT 模式下更新表全文设置
+## 在RT模式下更新表全文设置
 
 <!-- example ALTER FT -->
 
@@ -137,14 +137,14 @@ mysql> desc rt;
 ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-您可以使用 `ALTER` 修改表的全文设置（基于[RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)），但这只对新文档生效，已有文档不受影响。
+您可以使用`ALTER`在[RT模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下修改表的全文设置。但是，它只影响新文档，不影响现有文档。
 示例：
-* 创建一个包含全文字段且 `charset_table` 只允许 3 个可搜索字符：`a`、`b` 和 `c` 的表。
-* 插入文档 'abcd' 并通过查询 `abcd` 查找，因为 `d` 不在 `charset_table` 中，故被忽略。
-* 发现需要支持 `d` 作为可搜索字符，使用 `ALTER` 添加。
-* 但相同的查询 `where match('abcd')` 依然只按 `abc` 搜索，因为已有文档保留了之前的 `charset_table` 内容。
-* 添加另一份文档 `abcd` 并再次搜索 `abcd`。
-* 现在能找到两份文档，`show meta` 显示用了两个关键词：`abc`（找旧文档）和 `abcd`（找新文档）。
+* 创建一个具有全文字段和`charset_table`的表，该表只允许3个可搜索字符：`a`、`b`和`c`。
+* 然后我们插入文档'abcd'并通过查询`abcd`找到它，`d`被忽略，因为它不在`charset_table`数组中
+* 然后我们意识到，我们也希望`d`可搜索，因此我们借助`ALTER`添加它
+* 但相同的查询`where match('abcd')`仍然显示它搜索的是`abc`，因为现有文档记住了`charset_table`的先前内容
+* 然后我们添加另一个文档`abcd`并再次搜索`abcd`
+* 现在它找到了两个文档，并且`show meta`显示它使用了两个关键词：`abc`（用于查找旧文档）和`abcd`（用于新文档）。
 
 <!-- request Example -->
 ```sql
@@ -222,12 +222,12 @@ mysql> show meta;
 
 <!-- example Renaming RT tables -->
 
-可以在 RT 模式下更改实时表名称。
+您可以在RT模式下更改实时表的名称。
 ```sql
 ALTER TABLE table_name RENAME new_table_name;
 ```
 
-> 注意：重命名实时表需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。若不工作，请确认 Buddy 是否已安装。
+> 注意：重命名实时表需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保Buddy已安装。
 
 <!-- request Example -->
 ```sql
@@ -249,7 +249,7 @@ Query OK, 0 rows affected (0.00 sec)
 ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER` 也可以重新配置基于[普通模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) 的 RT 表，使配置文件中新令牌化、形态学及其它文本处理设置生效于新文档。注意，已有文档不受影响。内部强制将当前 RAM 块存为新磁盘块并调整表头，使新文档采用更新的全文设置进行分词。
+`ALTER`还可以在[普通模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29)下重新配置RT表，以便配置文件中的新分词、词法分析和其他文本处理设置对新文档生效。注意，现有文档将保持不变。在内部，它会强制将当前RAM块保存为新的磁盘块，并调整表头，以便使用更新的全文设置对新文档进行分词。
 
 <!-- request Example -->
 ```sql
@@ -281,13 +281,13 @@ mysql> show table rt settings;
 ALTER TABLE table REBUILD SECONDARY
 ```
 
-也可以使用 `ALTER` 重建指定表中的二级索引。二级索引有时会被禁用，可能是整个表或表内一个或多个属性：
-* 当属性被更新，其二级索引会被禁用。
-* 如果 Manticore 加载了不再支持的二级索引旧版本，表的二级索引将全部被禁用。
+您还可以使用`ALTER`重建给定表中的二级索引。有时，二级索引可能对整个表或表中的一个或多个属性被禁用：
+* 当属性更新时，其二级索引将被禁用。
+* 如果Manticore加载了一个带有不再支持的旧版本二级索引的表，则整个表的二级索引将被禁用。
 
-`ALTER TABLE table REBUILD SECONDARY` 从属性数据重建二级索引并重新启用。
+`ALTER TABLE table REBUILD SECONDARY`从属性数据重建二级索引并重新启用它们。
 
-此外，旧版本二级索引可能被支持，但缺少某些特性，`REBUILD SECONDARY` 可用来更新二级索引。
+此外，旧版本的二级索引可能受支持，但会缺少某些功能。`REBUILD SECONDARY`可用于更新二级索引。
 
 <!-- request Example -->
 ```sql
@@ -303,14 +303,14 @@ Query OK, 0 rows affected (0.00 sec)
 <!-- end -->
 
 
-## 重建 KNN 索引
+## 重建KNN索引
 
 <!-- example ALTER REBUILD KNN -->
 ```sql
 ALTER TABLE table REBUILD KNN
 ```
 
-该命令重新处理表中所有向量数据，从头构建 KNN 索引。
+该命令重新处理表中的所有向量数据，并从头开始重建KNN索引。
 
 <!-- request Example -->
 ```sql
@@ -324,11 +324,11 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## 在 RT 模式下更新属性 API 密钥（用于生成嵌入）
+## 在RT模式下更新属性API密钥（用于嵌入生成）
 
 <!-- example api_key -->
 
-当使用远程模型自动生成嵌入时，`ALTER` 可修改 API 密钥：
+当远程模型用于自动嵌入时，可以使用`ALTER`修改API密钥：
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
@@ -345,13 +345,13 @@ ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
 
 <!-- example local_dist -->
 
-要更改分布式表中本地或远程节点列表，请使用与[创建表](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table)时相同的语法。只需将命令中的 `CREATE` 替换为 `ALTER`，并移除 `type='distributed'`：
+要更改分布式表中的本地或远程节点列表，请遵循与[创建表](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table)时相同的语法。只需将命令中的`CREATE`替换为`ALTER`，并移除`type='distributed'`：
 
 ```sql
 ALTER TABLE `distr_table_name` [[local='local_table_name'], [agent='host:port:remote_table'] ... ]
 ```
 
-> 注意：在线更改分布式表结构需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。若不工作，请确认 Buddy 是否已安装。
+> 注意：在线更改分布式表的模式需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保Buddy已安装。
 
 <!-- request Example -->
 ```sql

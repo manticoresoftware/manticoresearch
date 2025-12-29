@@ -12,12 +12,12 @@ brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/mantico
 brew services start manticoresearch
 ```
 
-Файл конфигурации по умолчанию для Manticore находится либо по пути `/usr/local/etc/manticoresearch/manticore.conf`, либо `/opt/homebrew/etc/manticoresearch/manticore.conf`.
+Файл конфигурации Manticore по умолчанию находится по пути `/usr/local/etc/manticoresearch/manticore.conf` или `/opt/homebrew/etc/manticoresearch/manticore.conf`.
 
-Если вы планируете использовать [indexer](../Creating_a_table/Local_tables/Plain_table.md) для извлечения данных из источников, таких как MySQL, PostgreSQL или другой базы данных через ODBC, вам могут потребоваться дополнительные библиотеки, такие как `mysql@5.7`, `libpq` и `unixodbc`, соответственно.
+Если вы планируете использовать [indexer](../Creating_a_table/Local_tables/Plain_table.md) для получения данных из источников, таких как MySQL, PostgreSQL или другой базы данных через ODBC, возможно, потребуются дополнительные библиотеки, такие как `mysql@5.7`, `libpq` и `unixodbc` соответственно.
 
 #### Пакеты для разработки
-Если вы предпочитаете "Nightly" (разработческие) версии, выполните:
+Если вы предпочитаете версии "Nightly" (разработческие), выполните:
 ```bash
 brew tap manticoresoftware/tap-dev
 brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
@@ -49,7 +49,7 @@ FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticor
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 
-Файл конфигурации Manticore — `./etc/manticoresearch/manticore.conf` после распаковки архива.
+Файл конфигурации Manticore после распаковки архива находится по пути `./etc/manticoresearch/manticore.conf`.
 
 -->
 

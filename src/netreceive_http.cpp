@@ -184,7 +184,8 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	{
 		if ( IsEmpty ( sMsg ) )
 		{
-			HttpBuildReply ( dResult, eCode, sMsg, false );
+			HttpReplyTrait_t tReply { eCode, sMsg };
+			HttpBuildReply ( tReply, dResult );
 		} else
 		{
 			LogNetError ( sMsg.first );
@@ -197,6 +198,8 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	{
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
 		tParser.Reinit();
+
+		tIn.SetTimeoutUS ( S2US * (tSess.GetPersistent()?g_iClientTimeoutS:g_iReadTimeoutS) );
 
 		tSess.SetKilled ( false );
 
@@ -249,12 +252,16 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		if ( tParser.KeepAlive() )
 		{
 			if ( !tSess.GetPersistent() )
+			{
+				tSess.SetPersistent ( true );
 				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );
-			tSess.SetPersistent ( true );
+			}
 		} else {
 			if ( tSess.GetPersistent() )
+			{
+				tSess.SetPersistent ( false );
 				tIn.SetTimeoutUS ( S2US * g_iReadTimeoutS );
-			tSess.SetPersistent ( false );
+			}
 		}
 
 		// if first chunk is (most probably) pure header, we can proceed special headers here

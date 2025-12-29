@@ -76,9 +76,6 @@ searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
 export TZ=Asia/Tokyo && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-sleep 2
-––– output –––
-––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
         Value: Asia/Tokyo
@@ -93,9 +90,6 @@ searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
 export TZ=UTC && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
-––– output –––
-––– input –––
-sleep 2
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
@@ -123,9 +117,6 @@ ln -snf /usr/share/zoneinfo/Asia/Singapore /etc/localtime && echo "Asia/Singapor
 unset TZ && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-sleep 2
-––– output –––
-––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
         Value: Asia/Singapore
@@ -140,9 +131,6 @@ ln -snf /usr/share/zoneinfo/Europe/London /etc/localtime && echo "Europe/London"
 ––– output –––
 ––– input –––
 searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
-––– output –––
-––– input –––
-sleep 2
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
@@ -169,9 +157,6 @@ searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] Using time zone 'America/New_York'
 ––– input –––
-sleep 2
-––– output –––
-––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
         Value: America/New_York
@@ -191,9 +176,6 @@ ln -snf /usr/share/zoneinfo/Australia/Sydney /etc/localtime && echo "Australia/S
 searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] Using time zone 'America/New_York'
-––– input –––
-sleep 2
-––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––

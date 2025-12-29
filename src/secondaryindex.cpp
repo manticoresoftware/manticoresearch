@@ -1493,3 +1493,8 @@ void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool
 		}
 	}
 }
+
+bool HasForceHints ( const VecTraits_T<IndexHint_t> & dHints )
+{
+	return dHints.any_of ( [] ( const auto & tHint ) { return ( tHint.m_bForce && tHint.m_eType==SecondaryIndexType_e::INDEX ); } );
+}

@@ -656,8 +656,13 @@ opt_where_clause:
 	| where_clause
 	;
 
+
+where_tok:
+	TOK_WHERE		{ pParser->SetJoinParse(false); }
+	;
+
 where_clause:
-	TOK_WHERE where_expr
+	where_tok where_expr
 	;
 
 where_expr:
@@ -730,17 +735,16 @@ join_type:
 	| TOK_LEFT	{ pParser->SetJoinType ( JoinType_e::LEFT ); }
 	;
 
+join_tok:
+	TOK_JOIN	{ pParser->SetJoinParse(true); }
+	;
+
 join_clause:
-	join_type TOK_JOIN single_tablename TOK_ON on_clause
+	join_type join_tok single_tablename TOK_ON on_clause
 		{
 			if ( !pParser->SetJoin($3) )
 				YYERROR;
 		}
-	;
-
-on_clause_attr:
-	TOK_SUBKEY
-	| on_clause_attr TOK_SUBKEY			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	;
 
 on_clause_type_cast:
@@ -749,14 +753,8 @@ on_clause_type_cast:
 	| TOK_STRING	{ pParser->SetJoinOnCast(SPH_ATTR_STRING); }
 	;
 
-on_clause_equality:
-    single_tablename on_clause_attr '=' single_tablename on_clause_attr				{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
-	| on_clause_type_cast '(' single_tablename on_clause_attr ')' '=' single_tablename on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
-	| single_tablename on_clause_attr '=' on_clause_type_cast '(' single_tablename on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
-	;
-
 on_clause:
-	on_clause_equality
+	filter_item
 	| on_clause TOK_AND on_clause
 	;
 
@@ -764,12 +762,27 @@ filter_expr:
 	filter_item							{ pParser->SetOp ( $$ ); }
 	| filter_expr TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $3 ); }
 	| filter_expr TOK_OR filter_expr	{ pParser->FilterOr ( $$, $1, $3 ); }
+	| TOK_NOT filter_expr				{ pParser->FilterNot ( $$, $2 ); }
 	| '(' filter_expr ')'				{ pParser->FilterGroup ( $$, $2 ); }
 	;
-	
-filter_item:	
-	expr_ident '=' bool_or_integer_value
 
+filter_item:
+	expr_ident '=' expr_ident
+		{
+			if ( !pParser->AddOnFilter ( $1, $3, -1 ) )
+				YYERROR;
+		}
+	| expr_ident '=' on_clause_type_cast '(' expr_ident ')'
+		{
+			if ( !pParser->AddOnFilter ( $1, $5, 1 ) )
+				YYERROR;
+		}
+	| on_clause_type_cast '(' expr_ident ')' '=' expr_ident
+		{
+			if ( !pParser->AddOnFilter ( $3, $6, 0 ) )
+				YYERROR;
+		}
+	| expr_ident '=' bool_or_integer_value
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )

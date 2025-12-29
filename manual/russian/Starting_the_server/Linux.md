@@ -1,6 +1,6 @@
 # Запуск Manticore в Linux
 
-### Запуск и остановка с использованием systemd
+### Запуск и остановка с помощью systemd
 
 После установки служба Manticore Search не запускается автоматически. Чтобы запустить Manticore, выполните следующую команду:
 
@@ -26,23 +26,23 @@ sudo systemctl is-enabled manticore
 sudo systemctl disable manticore
 ```
 
-Чтобы включить запуск Manticore при загрузке, выполните:
+Чтобы включить автозапуск Manticore при загрузке, выполните:
 
 ```bash
 sudo systemctl enable manticore
 ```
 
-Процесс `searchd` записывает информацию о запуске в журнал `systemd`. Если ведение журналов systemd включено, вы можете просмотреть записанную информацию с помощью следующей команды:
+Процесс `searchd` записывает информацию о запуске в журнал `systemd`. Если ведение журнала systemd включено, вы можете просмотреть записанную информацию с помощью следующей команды:
 
 ```shell
 sudo journalctl -u manticore
 ```
 
-### Пользовательские флаги запуска с использованием systemd
+### Пользовательские параметры запуска с помощью systemd
 
-`systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS` позволяет указать пользовательские флаги запуска, с которыми должен запускаться демон Manticore Search. Полный список смотрите [здесь](../Starting_the_server/Manually.md#searchd-command-line-options).
+`systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS` позволяет указать пользовательские флаги запуска, с которыми следует запускать демон Manticore Search. Полный список смотрите [здесь](../Starting_the_server/Manually.md#searchd-command-line-options).
 
-Например, чтобы запустить Manticore с уровнем журналирования debug, выполните:
+Например, чтобы запустить Manticore с уровнем логирования debug, можно выполнить:
 ```bash
 systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='--logdebug'
 systemctl restart manticore
@@ -56,7 +56,7 @@ systemctl restart manticore
 
 Обратите внимание, что переменные окружения systemd сбрасываются при перезагрузке сервера.
 
-### Запуск и остановка с использованием service
+### Запуск и остановка с помощью service
 
 Manticore можно запускать и останавливать с помощью команд service:
 
@@ -65,19 +65,19 @@ sudo service manticore start
 sudo service manticore stop
 ```
 
-Чтобы включить sysV службу при загрузке на системах RedHat, выполните:
+Чтобы включить службу sysV для автозапуска в системах RedHat, выполните:
 
 ```shell
 chkconfig manticore on
 ```
 
-Чтобы включить sysV службу при загрузке на системах Debian (включая Ubuntu), выполните:
+Чтобы включить службу sysV для автозапуска в системах Debian (включая Ubuntu), выполните:
 
 ```shell
 update-rc.d manticore defaults
 ```
 
-Обратите внимание, что `searchd` запускается системой инициализации от имени пользователя `manticore`, и все файлы, созданные сервером, будут принадлежать этому пользователю. Если `searchd` запускается, например, от имени пользователя root, права доступа к файлам изменятся, что может привести к проблемам при повторном запуске `searchd` в виде службы.
+Обратите внимание, что `searchd` запускается системой инициализации от имени пользователя `manticore`, и все файлы, созданные сервером, будут принадлежать этому пользователю. Если `searchd` запустить, например, от имени root, права на файлы изменятся, что может вызвать проблемы при повторном запуске `searchd` в качестве службы.
 
 <!-- proofread -->
 

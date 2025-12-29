@@ -293,6 +293,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
+	bool	AddKNNRescoreColumn();
 	bool	AddJoinAttrs();
 	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
@@ -808,6 +809,20 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 
 bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags )
 {
+	// validate that MAX/MIN/SUM/AVG cannot be used on string/text columns
+	// This check must happen BEFORE the switch statement that may modify tExprCol.m_eAttrType
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX || tExprCol.m_eAggrFunc==SPH_AGGR_MIN 
+		|| tExprCol.m_eAggrFunc==SPH_AGGR_SUM || tExprCol.m_eAggrFunc==SPH_AGGR_AVG )
+	{
+		if ( tExprCol.m_eAttrType==SPH_ATTR_STRING || tExprCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+		{
+			const char * sFunc = ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX ) ? "MAX" 
+				: ( tExprCol.m_eAggrFunc==SPH_AGGR_MIN ) ? "MIN"
+				: ( tExprCol.m_eAggrFunc==SPH_AGGR_SUM ) ? "SUM" : "AVG";
+			return Err ( "%s() cannot be used on text/string column '%s'", sFunc, sExpr.cstr() );
+		}
+	}
+
 	switch ( tExprCol.m_eAggrFunc )
 	{
 	case SPH_AGGR_AVG:
@@ -1264,6 +1279,10 @@ bool QueueCreator_c::AddColumnarAttributeExpressions()
 		tItem.m_sExpr = tItem.m_sAlias = tAttr.m_sName;
 		if ( !ParseQueryItem ( tItem ) )
 			return false;
+
+		// copy knn settings
+		pSorterAttr = m_pSorterSchema->GetAttr ( tAttr.m_sName.cstr() );
+		const_cast<CSphColumnInfo *>(pSorterAttr)->m_tKNN = tAttr.m_tKNN;
 	}
 
 	return true;
@@ -1529,13 +1548,27 @@ bool QueueCreator_c::AddKNNDistColumn()
 	m_pSorterSchema->AddAttr ( tKNNDist, true );
 	m_hQueryColumns.Add ( tKNNDist.m_sName );
 
+	return true;
+}
+
+
+bool QueueCreator_c::AddKNNRescoreColumn()
+{
+	const auto & tKNN = m_tQuery.m_tKnnSettings;
+	if ( tKNN.m_sAttr.IsEmpty() )
+		return true;
+
+	if ( !tKNN.m_bRescore )
+		return true;
+
+	auto pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
 	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
 	tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
-
 
 	return true;
 }
@@ -2421,7 +2454,8 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates()
-		&& AddNullBitmask();
+		&& AddNullBitmask()
+		&& AddKNNRescoreColumn();
 }
 
 bool QueueCreator_c::SetupGroupQueue ()
@@ -2439,7 +2473,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 
 	// check for columnar attributes that have FINAL eval stage
 	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
-	CSphVector<int> dStoredColumnar;
+	IntVec_t dStoredColumnarFinal, dStoredColumnarPostlimit;
 	auto & tSchema = *m_pSorterSchema;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
@@ -2447,19 +2481,42 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		bool bStored = false;
 		bool bColumnar = tAttr.m_pExpr && tAttr.m_pExpr->IsColumnar(&bStored);
 		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
-			dStoredColumnar.Add(i);
+		{
+			// we need docids at the final stage if we want to fetch from docstore. so they must be evaluated before that
+			if ( IsIndependentAttr ( tAttr.m_sName, tSchema ) && tAttr.m_sName!=sphGetDocidName() )
+				dStoredColumnarPostlimit.Add(i);
+			else
+				dStoredColumnarFinal.Add(i);
+		}
 	}
 
-	if ( dStoredColumnar.GetLength()<=1 )
-		return true;
+	const int MIN_FINAL_THRESH = 2;
+	if ( dStoredColumnarFinal.GetLength()>MIN_FINAL_THRESH )
+		for ( auto i : dStoredColumnarFinal )
+		{
+			auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
 
-	for ( auto i : dStoredColumnar )
+			CSphString sColumnarAttrName;
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
+			tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType, false );
+		}
+
+	// fixme! benchmark and maybe remove the >1 condition
+	const int MIN_POSTLIMIT_THRESH = 1;
+	bool bDirectQueue = m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer;
+	if ( dStoredColumnarPostlimit.GetLength()>MIN_POSTLIMIT_THRESH && !bDirectQueue )
 	{
-		auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
+		for ( auto i : dStoredColumnarPostlimit )
+		{
+			auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
 
-		CSphString sColumnarAttrName;
-		tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
-		tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType );
+			CSphString sColumnarAttrName;
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
+			tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType, true );
+			tAttr.m_eStage = SPH_EVAL_POSTLIMIT;
+		}
+
+		m_bExprsNeedDocids = true;
 	}
 
 	return true;

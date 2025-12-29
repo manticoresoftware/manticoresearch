@@ -1,9 +1,9 @@
-# Создание кластера репликации
+# Создание репликационного кластера
 
 <!-- example creating a replication cluster 1 -->
-Для создания кластера репликации необходимо задать минимум его [имя](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name).
+Чтобы создать репликационный кластер, необходимо как минимум задать его [имя](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name).
 
-Если вы создаете один кластер или первый кластер, можно опустить параметр [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path). В этом случае в качестве пути к кластеру будет использован параметр [data_dir](../../Server_settings/Searchd.md#data_dir). Однако для всех последующих кластеров необходимо указать [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path), и путь должен быть доступен. Также может быть задан параметр [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) для перечисления всех узлов в кластере.
+Если вы создаете один кластер или первый кластер, вы можете опустить опцию [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path). В этом случае в качестве пути кластера будет использоваться опция [data_dir](../../Server_settings/Searchd.md#data_dir). Однако для всех последующих кластеров вы должны указать [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#path), и путь должен быть доступен. Также может быть установлена опция [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) для перечисления всех узлов в кластере.
 
 
 <!-- intro -->
@@ -127,7 +127,7 @@ utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'cli
 
 <!-- end -->
 
-Если параметр [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) не указан при создании кластера, первым узлом, который присоединится к кластеру, будет сохранен как параметр [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes).
+Если опция [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) не указана при создании кластера, первый узел, присоединившийся к кластеру, будет сохранен как опция [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes).
 
 <!-- proofread -->
 

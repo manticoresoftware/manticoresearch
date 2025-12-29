@@ -1,10 +1,10 @@
 # Интеграция Manticore с Kibana
 
-[Kibana](https://www.elastic.co/kibana) — это визуальный интерфейс, который позволяет исследовать, визуализировать и создавать панели мониторинга для ваших логов. Интеграция Kibana с Manticore Search может ускорить загрузку визуализаций Kibana до 3 раз по сравнению с Elasticsearch, как показано в этом [демо](https://github.com/manticoresoftware/kibana-demo#manticore-search-kibana-demo). Эта интеграция позволяет пользователям беспрепятственно анализировать свои данные с помощью интерактивных панелей, пользовательских визуализаций и возможностей поиска в реальном времени. Она также упрощает работу с разнообразными источниками данных, поддерживая инструменты, такие как Logstash и Filebeat для упрощенного ввода данных, что делает её отличным выбором для рабочих процессов анализа логов.
+[Kibana](https://www.elastic.co/kibana) — это визуальный интерфейс, который позволяет исследовать, визуализировать и создавать панели управления для ваших логов. Интеграция Kibana с Manticore Search может ускорить загрузку визуализаций Kibana до 3 раз по сравнению с Elasticsearch, как продемонстрировано в этом [демо](https://github.com/manticoresoftware/kibana-demo#manticore-search-kibana-demo). Эта интеграция позволяет пользователям беспрепятственно анализировать данные с помощью интерактивных панелей управления, пользовательских визуализаций и возможностей поиска в реальном времени. Она также упрощает работу с различными источниками данных, поддерживая инструменты, такие как Logstash и Filebeat для упрощённой загрузки данных, что делает её отличным выбором для рабочих процессов анализа логов.
 
 ## Требования
-1. **Скачайте Kibana**: Убедитесь, что вы скачали версию Kibana, совместимую с Manticore. В настоящее время рекомендуется и протестирована версия 7.6.0. Другие версии 7.x могут работать, но могут вызвать проблемы. Версия 8.x не поддерживается.
-2. **Проверьте Manticore**: Убедитесь, что ваш экземпляр Manticore запущен и его HTTP API доступен (по умолчанию: `http://localhost:9308`).
+1. **Скачать Kibana**: Убедитесь, что вы скачали версию Kibana, совместимую с Manticore. В настоящее время протестирована и рекомендована версия 7.6.0. Другие версии 7.x могут работать, но возможно возникновение проблем. Версия 8.x не поддерживается.
+2. **Проверить Manticore**: Убедитесь, что ваш экземпляр Manticore работает и его HTTP API доступен (по умолчанию: `http://localhost:9308`).
 
 ## Конфигурация
 1. Откройте [файл конфигурации Kibana](https://www.elastic.co/guide/en/kibana/current/settings.html) (`kibana.yml`).
@@ -14,7 +14,7 @@
    ```
 3. Запустите Kibana и откройте её в браузере по адресу `http://localhost:5601`. При необходимости замените `localhost` на IP-адрес или имя хоста вашего сервера.
 
-> Примечание: Manticore не требует настройки аутентификации при работе с Kibana. Также обратите внимание, что Manticore должен работать в [режиме реального времени](../Read_this_first.md#Real-time-mode-vs-plain-mode) для интеграции с Kibana.
+> Примечание: Для работы с Kibana Manticore не требует настройки аутентификации. Также обратите внимание, что Manticore должен работать в [режиме реального времени](../Read_this_first.md#Real-time-mode-vs-plain-mode) для интеграции с Kibana.
 
 ### Пример конфигурации Manticore
 ```searchd {
@@ -45,9 +45,7 @@
 - Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
 
 ## Limitations
-- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could 
-
-cause issues. Versions 8.x are not supported.
+- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could cause issues. Versions 8.x are not supported.
 - The following Elasticsearch-specific field types are not supported:
   - [Spatial data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
   - [Structured data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)

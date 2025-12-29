@@ -1,8 +1,8 @@
-# Добавление распределённой таблицы с удалёнными агентами
+# Добата табли с уда агents
 
-Для понимания того, как добавить распределённую таблицу с удалёнными агентами, важно сначала иметь базовое представление о [распределённых таблицах](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md). В этой статье мы сосредоточимся на том, как использовать распределённую таблицу в качестве основы для создания кластера экземпляров Manticore.
+Для понима как добата табли с уда агents, важно first иметь базовое understanding о [distributed tables](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) In this article, we will focus на как использовать distributed table как basis для созда кластер Мanticore instances.
 <!-- example conf dist 1 -->
-Вот пример того, как распределить данные на 4 сервера, каждый из которых обслуживает один из шардов:
+Here is example как split data over 4 servers, each serving one of shards:
 
 
 <!-- intro -->
@@ -19,14 +19,14 @@ table mydist {
 }
 ```
 <!-- end -->
-В случае сбоя сервера распределённая таблица продолжит работать, но результаты с неработающего шарда будут отсутствовать.
+In event server failure, distributed table will still work, but results from failed shard will be missing.
 
 <!-- example conf dist 2 -->
-Теперь, когда мы добавили зеркала, каждый шард находится на 2 серверах. По умолчанию мастер (экземпляр searchd с распределённой таблицей) случайным образом выбирает одно из зеркал.
+Now that we've added mirrors, each shard is found on 2 servers. By default, master (searchd instance with distributed table) will randomly pick one of mirrors.
 
-Режим выбора зеркал можно задать с помощью параметра [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy). Помимо стандартного режима `random` существует также `ha_strategy = roundrobin`.
+Mode used for picking mirrors can be set using [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) setting. In addition to default `random` mode there's also `ha_strategy = roundrobin`.
 
-Более продвинутые стратегии, основанные на вероятностях с учётом задержек, включают `noerrors` и `nodeads`. Они не только исключают зеркала с проблемами, но и мониторят время отклика и балансируют нагрузку. Если зеркало отвечает медленнее (например, из-за выполнения каких-то операций), оно будет получать меньше запросов. Когда зеркало восстанавливается и обеспечивает лучшее время отклика, оно получает больше запросов.
+More advanced strategies based on latency-weighted probabilities include `noerrors` and `nodeads`. These not only take out mirrors with issues but also monitor response times and do balancing. If mirror responds slower (for example, due to some operations running on it), it will receive fewer requests. When mirror recovers and provides better times, it will receive more requests.
 
 <!-- intro -->
 ##### ini:

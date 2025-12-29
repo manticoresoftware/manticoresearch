@@ -1092,6 +1092,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "expansion_phrase_limit",	0, NULL },
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
+	{ "attr_autoconv_strict",	0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1300,8 +1301,9 @@ static bool TryToExec ( char * pExecLine, const char * szFilename, CSphVector<ch
 
 		execv ( pExecLine, (char**)dArgv.begin() );
 		exit ( 1 );
+	}
 
-	} else if ( iChild==-1 )
+	if ( iChild==-1 )
 		return Err ( "fork failed: [%d] %s", errno, strerrorm(errno) );
 
 	close ( iWrite );

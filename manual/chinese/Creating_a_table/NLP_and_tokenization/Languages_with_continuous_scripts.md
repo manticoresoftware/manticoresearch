@@ -1,13 +1,13 @@
-# 中文，日文和韩文（CJK）及泰语
+# 中文、日文、韩文和泰语语言
 
-Manticore 提供内置支持，用于索引[连续书写](https://en.wikipedia.org/wiki/Scriptio_continua)语言（即不使用空格或其他标记分隔单词或句子的语言）。这允许您用两种不同的方式处理这些语言的文本：
+Manticore 提供了对使用连续书写的语言（即不使用单词或句子之间分隔符的语言）进行索引的内置支持。这允许您以两种不同的方式处理这些语言的文字：
 
 <!-- example cont 1 -->
 1. 使用 [ICU](https://icu.unicode.org/) 库进行精确分词。目前仅支持中文。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -37,7 +37,7 @@ $index->create([
 ```
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -46,7 +46,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'c
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -55,7 +55,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request Javascript -->
 
@@ -64,7 +64,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -73,7 +73,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'co
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -82,7 +82,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'co
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -106,10 +106,10 @@ table products {
 <!-- end -->
 
 <!-- example cont 2 -->
-2. 使用 [Jieba](https://github.com/fxsjy/jieba) 库进行精确分词。和 ICU 一样，目前仅支持中文。
+2. 使用 [Jieba](https://github.com/fxsjy/jieba) 库进行精确分词。与 ICU 类似，它目前仅支持中文。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -139,7 +139,7 @@ $index->create([
 ```
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -148,7 +148,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'c
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -157,7 +157,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request Javascript -->
 
@@ -166,7 +166,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -175,7 +175,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'co
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -184,7 +184,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'co
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -208,12 +208,12 @@ table products {
 <!-- end -->
 
 <!-- example cont 3 -->
-3. 使用 N-gram 选项 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 和 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 进行基本支持
-对于每种使用连续书写的语言，都有单独的字符集表（`chinese`、`korean`、`japanese`、`thai`）可用。或者，您可以使用通用的 `cont` 字符集表来一次性支持所有 CJK 和泰语，或者使用 `cjk` 字符集仅包含所有 CJK 语言。
+3. 使用 N-gram 选项 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 和 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 进行基本支持。
+对于每种使用连续书写的语言，都有单独的字符集表（`chinese`、`korean`、`japanese`、`thai`），可以使用。或者，您可以使用通用的 `cont` 字符集表同时支持所有 CJK 和泰语语言，或者使用 `cjk` 字符集仅包括所有 CJK 语言。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -251,7 +251,7 @@ $index->create([
 ```
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -260,7 +260,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'n
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -269,7 +269,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request javascript -->
 
@@ -277,7 +277,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'');
 ```
 <!-- intro -->
-##### java:
+##### Java：
 
 <!-- request Java -->
 
@@ -286,7 +286,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -295,7 +295,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'no
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -320,11 +320,11 @@ table products {
 <!-- end -->
 
 <!-- example cont 3_2 -->
-此外，内置支持中文 [停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)，别名为 `zh`。
+此外，还提供了对中文 [停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) 的内置支持，别名 `zh`。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -339,7 +339,7 @@ POST /cli -d "
 CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 <!-- request PHP -->
 
 ```php
@@ -356,7 +356,7 @@ $index->create([
 ```
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -365,7 +365,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'c
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -374,7 +374,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table
 ```
 
 <!-- intro -->
-##### Javascript:
+##### JavaScript：
 
 <!-- request javascript -->
 
@@ -382,7 +382,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
 ```
 <!-- intro -->
-##### java:
+##### Java：
 
 <!-- request Java -->
 
@@ -391,7 +391,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'ch
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -400,7 +400,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'ch
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 

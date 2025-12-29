@@ -1,29 +1,29 @@
 # 删除文档
 
-仅在[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)下支持删除以下类型的表：
-* [实时](../Creating_a_table/Local_tables/Real-time_table.md) 表
-* [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) 表
-* 仅包含 RT 表作为本地或远程代理的分布式表。
+删除文档仅在[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)中支持以下表格类型：
+* [实时](../Creating_a_table/Local_tables/Real-time_table.md) 表格
+* [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) 表格
+* 只包含实时表作为本地或远程代理的分布式表格。
 
-您可以根据文档的 ID 或某些条件从表中删除现有文档。
+您可以根据其ID或某些条件从表格中删除现有文档。
 
-另外，还可以使用[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) 来删除多个文档。
+此外，[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion)可用于删除多个文档。
 
-文档删除可通过 SQL 和 JSON 接口完成。
+通过SQL和JSON接口均可实现文档的删除。
 
-对于 SQL，成功操作的响应将指示删除的行数。
+对于SQL，成功操作的响应将指示删除的行数。
 
-对于 JSON，使用 `json/delete` 端点。服务器将响应一个 JSON 对象，指示操作是否成功以及删除的行数。
+对于JSON，使用`json/delete`端点。服务器将以JSON对象形式响应，指示操作是否成功以及删除的行数。
 
-建议使用[表截断](../Emptying_a_table.md)来删除表中的所有文档，因为这是一个更快的操作。
+建议使用[表清空](../Emptying_a_table.md)而不是删除来从表中删除所有文档，因为这是一个更快的操作。
 
 
 <!-- example delete 2 -->
-本例中，我们从名为 `test` 的表中删除匹配全文查询 `test document` 的所有文档：
+在这个示例中，我们从名为`test`的表中删除匹配全文查询`test document`的所有文档：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -73,7 +73,7 @@ POST /delete -d '
     }'
 ```
 
-* JSON 中的 `query` 包含全文搜索的语句；其语法与[JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON)中的相同。
+* `query`中的JSON包含一个用于全文搜索的子句；它与[JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON)中的语法相同。
 
 <!-- response JSON -->
 
@@ -84,7 +84,7 @@ POST /delete -d '
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -102,7 +102,7 @@ Array(
 ```
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -116,7 +116,7 @@ indexApi.delete({"table" : "test", "query": { "match": { "*": "test document" }}
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -130,7 +130,7 @@ indexApi.delete({"table" : "test", "query": { "match": { "*": "test document" }}
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -144,7 +144,7 @@ res = await indexApi.delete({"table" : "test", "query": { "match": { "*": "test 
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -170,7 +170,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -195,7 +195,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -222,7 +222,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### TypeScript:
+##### TypeScript：
 
 <!-- request TypeScript -->
 ``` typescript
@@ -239,7 +239,7 @@ res = await indexApi.delete({
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request Go -->
 ```go
@@ -257,11 +257,11 @@ deleteRequest.SetQuery(deleteQuery)
 <!-- end -->
 
 <!-- example delete 3 -->
-此处 - 从名为 `test` 的表中删除 `id` 等于 1 的文档：
+这里 - 从名为`test`的表中删除具有`id`等于1的文档：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -280,7 +280,7 @@ POST /delete -d '
     }'
 ```
 
-* JSON 中的 `id` 是要删除的行的 `id`。
+* `id`中的JSON是需要删除的行`id`。
 
 <!-- response JSON -->
 
@@ -293,7 +293,7 @@ POST /delete -d '
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -313,7 +313,7 @@ Array(
 ```
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -327,7 +327,7 @@ indexApi.delete({"table" : "test", "id" : 1})
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -341,7 +341,7 @@ indexApi.delete({"table" : "test", "id" : 1})
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -355,7 +355,7 @@ res = await indexApi.delete({"table" : "test", "id" : 1});
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -376,7 +376,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -396,7 +396,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -421,7 +421,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### TypeScript:
+##### TypeScript：
 
 <!-- request TypeScript -->
 ``` typescript
@@ -435,7 +435,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request Go -->
 ```go
@@ -451,13 +451,13 @@ deleteRequest.SetId(1)
 <!-- end -->
 
 <!-- example delete 4 -->
-此处，根据表名为 `test` 的表内与 `id` 值匹配的文档被删除：
+这里，从名为`test`的表中删除具有`id`匹配值的文档：
 
-注意，`id=N` 或 `id IN (X,Y)` 形式的删除最快，因为它们无需执行搜索即可删除文档。
-还要注意，响应中仅包含第一个被删除文档的 id，在对应的 `_id` 字段中。
+注意，带有`id=N`或`id IN (X,Y)`的形式的删除操作最快，因为它们在不执行搜索的情况下删除文档。
+还请注意，响应中仅包含对应于`_id`字段的第一个被删除文档的id。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -494,7 +494,7 @@ POST /delete -d '
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -516,13 +516,13 @@ Array(
 <!-- end -->
 
 <!-- example delete 5 -->
-Manticore SQL 允许为 `DELETE` 语句使用复杂条件。
+Manticore SQL 允许为`DELETE`语句使用复杂的条件。
 
-例如，这里我们删除匹配全文查询 `test document`，且其属性 `mva1` 值大于 206，或者其 `mva1` 的值为 100 或 103 的文档，来自名为 `test` 的表：
+例如，这里我们正在从名为`test`的表中删除匹配全文查询`test document`且具有属性`mva1`的值大于206或`mva1`值为100或103的文档：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -550,11 +550,11 @@ Query OK, 4 rows affected (0.00 sec)
 <!-- end -->
 
 <!-- example delete 6 -->
-这是一个删除集群 `cluster` 中表 `test` 中文档的示例。注意，我们必须同时提供集群名称属性和表属性，才能删除复制集群中的表中的行：
+这是从集群`cluster`的表`test`中删除文档的一个示例。请注意，我们必须提供集群名称属性以及表属性以从复制集群内的表中删除行：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -571,10 +571,10 @@ POST /delete -d '
       "id": 100
     }'
 ```
-* JSON 中的 `cluster` 是包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)的名称
+* `cluster`中的JSON是包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)的名称
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -595,7 +595,7 @@ Array(
 ```
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -609,7 +609,7 @@ indexApi.delete({"cluster":"cluster","table" : "test", "id" : 1})
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -623,7 +623,7 @@ indexApi.delete({"cluster":"cluster","table" : "test", "id" : 1})
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -637,7 +637,7 @@ indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -658,7 +658,7 @@ class DeleteResponse {
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -739,7 +739,7 @@ deleteRequest.SetId(1)
 
 <!-- example bulk delete -->
 
-您还可以使用 `/bulk` 端点在一次调用中执行多个删除操作。该端点仅适用于 `Content-Type` 设置为 `application/x-ndjson` 的数据。数据应格式化为换行分隔的 JSON（NDJSON）。基本上，这意味着每一行应恰好包含一个 JSON 语句，并以换行符 `\n` 结尾，可能还包括一个 `\r`。
+你也可以使用 `/bulk` 端点，在一次调用中执行多个删除操作。此端点仅适用于 `Content-Type` 设置为 `application/x-ndjson` 的数据。数据应格式化为换行符分隔的 JSON（NDJSON）。本质上，这意味着每一行应恰好包含一个 JSON 语句，并以换行符 `\n` 和可能的 `\r` 结尾。
 
 
 <!-- intro -->

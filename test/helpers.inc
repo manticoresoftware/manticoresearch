@@ -1,7 +1,11 @@
 <?php
 
 ini_set ( "display_errors", 1 );
-ini_set ( "error_reporting", (E_ALL | E_STRICT) & ~E_USER_DEPRECATED );
+$error_reporting = E_ALL & ~E_USER_DEPRECATED;
+if ( defined ( 'E_STRICT' ) && PHP_VERSION_ID < 80400 ) {
+	$error_reporting |= E_STRICT;
+}
+ini_set ( "error_reporting", $error_reporting );
 ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
@@ -699,7 +703,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 
 	if ( !file_exists($abs_pidfile) )
 	{
-		$error = "PID file ($abs_pidfile) was not created";
+		$error = "PID file ($abs_pidfile) was not created after $i tries";
 		return 1;
 	}
 
@@ -1299,14 +1303,19 @@ function RunCurl ( $curl_desc, &$rows )
 	return $http_code;
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+function CurlDesc ( $http_endpoint, $use_agent=0, $use_ssl=false )
 {
 	global $agents;
 
 	$ssl = $use_ssl ? "https://" : "";
 
 	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+	return array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+}
+
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+{
+	$curl_desc = CurlDesc ( $http_endpoint, $use_agent, $use_ssl );
 	if ( $http_method=="POST" )
     {
         $curl_desc[CURLOPT_POST] = 1;
@@ -2585,7 +2594,7 @@ class SphinxConfig
 		}
 	}
 
-	function RunQueryQL ( $query, &$error, &$examples, $bench, &$connection, &$old_agent, &$old_vip )
+	function RunQueryQL ( $query, &$error, &$examples, $bench, &$connection0, &$connection1, &$old_agent, &$old_vip )
 	{
 		global $agents, $index_data_path;
 
@@ -2595,6 +2604,7 @@ class SphinxConfig
 
         $sleep_agent=ArrVal ($attrs, "sleep", 0);
         $use_agent=ArrVal ($attrs, "d", 0);
+		$secondary_session=ArrVal ($attrs, "conn", 0);
         $vip_connection=ArrVal ($attrs, "vip", 0);
         $system_cmd = ArrVal ($attrs, "system");
         $wait_value = ArrVal ($attrs, "wait_value", 0);
@@ -2607,6 +2617,11 @@ class SphinxConfig
         $ignore_rows = ArrVals ($attrs, 'ignore');
         $hide = ArrVals ($attrs, 'hide',false);
         $params = ArrVal ( $attrs, "params");
+
+		if ( $secondary_session == 0 )
+			$connection = &$connection0;
+		else
+			$connection = &$connection1;
 
         // mysql_host - we direct query to host mysql server, NOT to searchd! (that is sometimes need for rotation)
         $mysql_host = ($use_agent==="mysql");
@@ -2657,6 +2672,10 @@ class SphinxConfig
                 return false;
             $old_agent = $use_agent;
 		}
+
+		if ( $connection===false )
+			if (!($connection = ConnectSpecificQL($use_agent)))
+				return false;
 
 		if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
 		{
@@ -2890,7 +2909,8 @@ class SphinxConfig
 			$cl->Open ();
 		}
 
-        $ql_connection=false;
+        $ql_connection0=false;
+		$ql_connection1=false;
         $old_agent = -1;
         $old_vip = -1;
 
@@ -2923,7 +2943,7 @@ class SphinxConfig
 		{
 			$qinfo = $this->_queries[$n];
 			if ($qinfo['type']=='sphinxql')
-                $bOk = $this->RunQueryQL ( $qinfo, $error, $examples, $benchmark, $ql_connection, $old_agent, $old_vip );
+                $bOk = $this->RunQueryQL ( $qinfo, $error, $examples, $benchmark, $ql_connection0, $ql_connection1, $old_agent, $old_vip );
 			elseif ($qinfo['type']=='query')
                 $bOk = $this->RunQueryHttp ( $qinfo, $error, $examples );
 			elseif ( $qinfo['type']=='comment') {
@@ -3061,8 +3081,11 @@ class SphinxConfig
 			}
 		}
 
-        if ( $ql_connection )
-            mysqli_close ( $ql_connection );
+        if ( $ql_connection0 )
+            mysqli_close ( $ql_connection0 );
+
+		if ( $ql_connection1 )
+			mysqli_close ( $ql_connection1 );
 
 		if ( $benchmark )
 			printf ( " - done in %s\n", sphFormatTime ( MyMicrotime() - $start ) );
@@ -4028,7 +4051,7 @@ class SphinxConfig
 							else
 								$justcopy = true;
 							break;
-						case "source";
+						case "source":
 							{
 								$idxbody .= "\ttype\t= rt\n";
 								if ( $collectdata )

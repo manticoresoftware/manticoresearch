@@ -578,6 +578,7 @@ struct CSphQuery
 	CSphString		m_sJoinIdx;						///< index to perform join on
 	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
 	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
+	CSphVector<CSphFilterSettings> m_dOnValueFilters;	///< JOIN ON value filters
 	int				m_iJoinBatchSize = -1;			///< join batch size (-1==default, 0==disable batching)
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
@@ -1074,7 +1075,7 @@ public:
 	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 };
 
-bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError );
+bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError, CSphString & sWarning );
 
 // helper - collects killed documents
 struct KillAccum_t final : public IndexSegment_c

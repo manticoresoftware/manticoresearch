@@ -1,22 +1,22 @@
-# MATCH
+# 匹配
 
-`MATCH` 子句允许对文本字段进行全文搜索。输入的查询字符串会使用与索引时应用于文本的设置相同的方式进行[分词](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md)。除了输入文本的分词外，查询字符串还支持若干[全文操作符](../../Searching/Full_text_matching/Operators.md)，这些操作符强制执行关键词如何提供有效匹配的各种规则。
+`MATCH` 子句允许在文本字段中进行全文搜索。输入查询字符串使用与索引文本时相同的设置进行分词。除了输入文本的分词外，查询字符串还支持一系列的 [全文操作符](../../Searching/Full_text_matching/Operators.md)，这些操作符会强制执行各种规则，以确保关键词能够提供有效的匹配。
 
-全文匹配子句可以与属性[过滤器](../../Searching/Filters.md)以 AND 布尔逻辑组合。**不支持全文匹配与属性过滤器之间的 OR 关系**。
+全文匹配子句可以与属性 [过滤器](../../Searching/Filters.md) 结合使用，作为 AND 布尔运算。**全文匹配和属性过滤器之间的 OR 关系不被支持**。
 
-匹配查询总是在过滤过程中首先执行，随后是[属性过滤器](../../Searching/Filters.md)。属性过滤器应用于匹配查询的结果集。没有匹配子句的查询称为全扫描。
+匹配查询总是首先在过滤过程中执行，然后是 [属性过滤器](../../Searching/Filters.md)。属性过滤器应用于匹配查询的结果集。没有匹配子句的查询称为全扫描。
 
 `SELECT` 子句中最多只能有一个 `MATCH()`。
 
-使用[全文查询语法](../../Searching/Full_text_matching/Operators.md)时，匹配会跨文档的所有已索引文本字段进行，除非表达式要求在某个字段内匹配（如短语搜索）或被字段操作符限制。
+使用 [全文查询语法](../../Searching/Full_text_matching/Operators.md)，匹配将在文档的所有索引文本字段中进行，除非表达式要求在字段内进行匹配（如短语搜索）或受到字段操作符的限制。
 
-在使用[JOIN](../../Searching/Joining.md) 查询时，`MATCH()` 可以接受一个可选的第二个参数，用于指定全文搜索应用于哪个表。默认情况下，全文查询应用于 `JOIN` 操作中的左表：
+在使用 [JOIN](../../Searching/Joining.md) 查询时，`MATCH()` 可以接受一个可选的第二个参数，指定全文搜索应应用于哪个表。默认情况下，全文查询应用于 `JOIN` 操作中的左表：
 
 ```sql
 SELECT * FROM table1 LEFT JOIN table2 ON table1.id = table2.id WHERE MATCH('search query', table2);
 ```
 
-这允许你在联接操作中对特定表执行全文搜索。有关使用 MATCH 与 JOIN 的更多详细信息，请参阅[联接表](../../Searching/Joining.md)部分。
+这允许你在 JOIN 操作中对特定表进行全文搜索。有关使用 MATCH 与 JOIN 的详细信息，请参阅 [JOIN 表](../../Searching/Joining.md) 部分。
 
 ## SQL
 
@@ -25,15 +25,15 @@ SELECT * FROM table1 LEFT JOIN table2 ON table1.id = table2.id WHERE MATCH('sear
 ```sql
 MATCH('search query' [, table_name])
 ```
-- `'search query'`：全文搜索查询字符串，可以包含各种[全文操作符](../../Searching/Full_text_matching/Operators.md)。
-- `table_name`：（可选）用于指定应用全文搜索的表名，在 `JOIN` 查询中用于指定不同于默认左表的表。
+- `'search query'`：全文搜索查询字符串，可以包含各种 [全文操作符](../../Searching/Full_text_matching/Operators.md)。
+- `table_name`：（可选）应用于全文搜索的表的名称，在 JOIN 查询中指定不同于默认左表的表。
 
 
-[SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) 语句使用 [MATCH](../../Searching/Full_text_matching/Basic_usage.md) 子句，该子句必须跟在 WHERE 之后，以执行全文搜索。`MATCH()` 接受一个输入字符串，其中所有[全文操作符](../../Searching/Full_text_matching/Operators.md)均可用。
+[SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) 语句使用 [MATCH](../../Searching/Full_text_matching/Basic_usage.md) 子句进行全文搜索，该子句必须位于 WHERE 之后。`MATCH()` 接受一个输入字符串，在该字符串中可用所有 [全文操作符](../../Searching/Full_text_matching/Operators.md)。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -53,7 +53,7 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 ```
 
 <!-- request MATCH with filters -->
-这是一个使用 MATCH 和 WHERE 过滤器的更复杂查询示例。
+一个使用 MATCH 与 WHERE 过滤器的更复杂的查询示例。
 
 ```sql
 SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
@@ -65,7 +65,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 
 <!-- example Example_11 -->
 
-全文匹配可在 `/search` 端点以及基于 HTTP 的客户端中使用。以下子句可用于执行全文匹配：
+全文匹配在 `/search` 端点和基于 HTTP 的客户端中可用。以下子句可用于执行全文匹配：
 
 ### match
 
@@ -78,7 +78,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 }
 ```
 
-你可以指定字段列表：
+您可以指定一个字段列表：
 
 ```json
 "match":
@@ -86,9 +86,9 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
   "field1,field2": "keyword"
 }
 ```
-或者你可以使用 `_all` 或 `*` 来搜索所有字段。
+或者可以使用 `_all` 或 `*` 来搜索所有字段。
 
-你也可以使用 "!field" 搜索除了某个字段之外的所有字段：
+可以使用 "!field" 搜索所有字段，但不包括一个字段：
 
 ```json
 "match":
@@ -96,7 +96,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
   "!field1": "keyword"
 }
 ```
-默认情况下，关键词使用 OR 操作符组合。然而，你可以使用 "operator" 子句更改此行为：
+默认情况下，关键词使用 OR 操作符组合。但是，可以使用 "operator" 子句更改此行为：
 
 ```json
 "query":
@@ -114,7 +114,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 
 "operator" 可以设置为 "or" 或 "and"。
 
-`boost` 修饰符也可以应用。它通过所示因子提升包含 IDF 计算的排名分数中的词语[IDF](../../Searching/Options.md#idf)_得分。它不会以任何方式影响匹配过程。
+`boost` 修饰符也可以应用。它会将词 [IDF](../../Searching/Options.md#idf) 分数在包含 IDF 的排名分数中提高指定的倍数。它不会以任何方式影响匹配过程。
 ```json
 "query":
 {
@@ -131,7 +131,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 
 ### match_phrase
 
-"match_phrase" 是一个匹配整个短语的查询。它类似于 SQL 中的短语操作符。示例如下：
+"match_phrase" 是一个查询，匹配整个短语。它类似于 SQL 中的短语操作符。以下是一个示例：
 
 ```json
 "query":
@@ -141,7 +141,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 ```
 
 ### query_string
-"query_string" 接受一个输入字符串，作为 `MATCH()` 语法的全文查询。
+"query_string" 接受一个输入字符串作为 `MATCH()` 语法的全文查询。
 
 ```json
 "query":
@@ -152,7 +152,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 
 ### match_all
 
-"match_all" 接受一个空对象，并返回表中的文档，而不执行任何属性过滤或全文匹配。或者，你可以在请求中省略 `query` 子句，效果相同。
+"match_all" 接受一个空对象并返回表中的文档，而不进行任何属性过滤或全文匹配。或者，您也可以在请求中省略 `query` 子句，其效果相同。
 
 ```json
 "query":
@@ -164,7 +164,7 @@ SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `i
 
 ### 结合全文过滤与其他过滤器
 
-所有全文匹配子句都可以与[必须](../../Searching/Filters.md#must)、[必须不](../../Searching/Filters.md#must_not)和[应该](../../Searching/Filters.md#should)操作符结合，形成[JSON `bool` 查询](../../Searching/Filters.md#bool-query)。
+所有全文匹配子句都可以与 [must](../../Searching/Filters.md#must)、[must_not](../../Searching/Filters.md#must_not) 和 [should](../../Searching/Filters.md#should) 操作符结合使用，这些操作符属于 [JSON `bool` 查询](../../Searching/Filters.md#bool-query)。
 
 <!-- intro -->
 示例：

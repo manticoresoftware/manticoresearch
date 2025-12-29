@@ -150,6 +150,8 @@ public:
 	virtual bool				InitState ( const CSphQueryContext &, CSphString & )	{ return true; }
 
 	void						FinalizeCache ( const ISphSchema & tSorterSchema ) override;
+	// skip caching when SI iterators used as qcache will see the full-text without SI filters as SI modify filters
+	void						DisableCaching() { SafeReleaseAndZero ( m_pQcacheEntry ); }
 
 	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
 
@@ -207,6 +209,8 @@ protected:
 			assert ( !m_pOriginalRoot );
 			m_pOriginalRoot = m_pRoot.release();
 			m_pRoot = CreatePseudoFTNode ( m_pOriginalRoot, (RowidIterator_i*)*ppResult );
+			// if SI iterator created - disable caching; only qcache or SI could work at the time
+			DisableCaching();
 			return true;
 
 		case EXTRA_SET_BOUNDARIES:

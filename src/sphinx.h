@@ -1286,6 +1286,8 @@ public:
 	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD, CSphString & sError ) = 0;
 
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {}
+	virtual void				FlushKillStats ( bool bWaitComplete ) const {}
+	virtual bool				HasKillStatsDirty() const { return false; }
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) const {}

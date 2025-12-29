@@ -1072,6 +1072,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
 	{ "kill_dictionary",		0, nullptr },
+	{ "kill_dictionary_idle_timeout",		0, nullptr },
 	{ "engine",					0, nullptr },
 	{ "join_cache_size",		0, nullptr },
 	{ "replication_connect_timeout",	0, NULL },

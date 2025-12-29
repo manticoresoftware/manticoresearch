@@ -721,9 +721,13 @@ kibana_version_string = 1.2.3
 ### kill_dictionary
 
 <!-- example conf kill_dictionary -->
-Enables or disables the kill dictionary for RT disk chunks. When enabled, Manticore rebuilds per-killed-doc word stats from docstore and subtracts them at query time, so `docs`/`hits` and ranking weights reflect killed rows. This is enabled by default.
+Controls the kill dictionary for RT disk chunks. When enabled, Manticore rebuilds per-killed-doc word stats from docstore and subtracts them at query time, so `docs`/`hits` and ranking weights reflect killed rows. This is enabled by default in `idle` mode.
 
-If disabled, queries use raw chunk dictionary stats (no correction for killed rows).
+Modes:
+- `0`: disabled, queries use raw chunk dictionary stats.
+- `realtime`: enabled, and kills are applied immediately (per-kill re-tokenization).
+- `flush`: enabled, but per-kill updates are deferred until the next flush/merge rebuilds the stats.
+- `idle`: enabled, but per-kill updates are deferred until the write stream goes idle (see `kill_dictionary_idle_timeout`).
 
 <!-- intro -->
 ##### Example:
@@ -731,7 +735,22 @@ If disabled, queries use raw chunk dictionary stats (no correction for killed ro
 <!-- request Example -->
 
 ```ini
-kill_dictionary = 0
+kill_dictionary = flush
+```
+<!-- end -->
+
+### kill_dictionary_idle_timeout
+
+<!-- example conf kill_dictionary_idle_timeout -->
+Idle timeout for rebuilding kill dictionary stats when `kill_dictionary=idle`. If there are pending kills and no writes occur for this many seconds, Manticore rebuilds kill stats and persists `.spks`. Set to `-1` to disable idle rebuilds.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+kill_dictionary_idle_timeout = 15s
 ```
 <!-- end -->
 

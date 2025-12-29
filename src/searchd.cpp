@@ -8749,7 +8749,14 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 
 	if ( sName == "kill_dictionary" )
 	{
-		g_bKillDictionary = !!iSetValue;
+		if ( sSetValue.IsEmpty() )
+			sSetValue.SetSprintf ( "%lld", (long long)iSetValue );
+
+		KillDictionaryMode_e eMode;
+		if ( !ParseKillDictionaryMode ( sSetValue, eMode ) )
+			sError = "Unknown kill_dictionary value (0|realtime|flush|idle)";
+		else
+			g_eKillDictionaryMode = eMode;
 		return true;
 	}
 
@@ -9469,7 +9476,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]  { return GetLastInsertId ( pVars ); } );
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
-	dTable.MatchTuplet ( "kill_dictionary", g_bKillDictionary ? "1" : "0" );
+	dTable.MatchTuplet ( "kill_dictionary", KillDictionaryModeName ( g_eKillDictionaryMode ) );
 
 	switch ( GetSecondaryIndexDefault() )
 	{
@@ -14059,7 +14066,15 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
-	g_bKillDictionary = hSearchd.GetBool ( "kill_dictionary", g_bKillDictionary );
+	if ( hSearchd ( "kill_dictionary" ) )
+	{
+		CSphString sValue = hSearchd.GetStr ( "kill_dictionary" );
+		KillDictionaryMode_e eMode;
+		if ( ParseKillDictionaryMode ( sValue, eMode ) )
+			g_eKillDictionaryMode = eMode;
+		else
+			sphWarning ( "kill_dictionary invalid value '%s'; using '%s'", sValue.cstr(), KillDictionaryModeName ( g_eKillDictionaryMode ) );
+	}
 
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );
@@ -14067,6 +14082,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
 	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", bTestMode ? -1 : 1 ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", 30 ) );
+	SetRtKillStatsIdleTimeout ( hSearchd.GetSTimeS ( "kill_dictionary_idle_timeout", 15 ) );
 
 	int iExpansionPhraseLimit = hSearchd.GetInt ( "expansion_phrase_limit", 1024 );
 	bool bExpansionPhraseWarning = hSearchd.GetBool ( "expansion_phrase_warning", false );

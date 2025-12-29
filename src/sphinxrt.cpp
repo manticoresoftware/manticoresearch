@@ -170,11 +170,17 @@ volatile int AutoOptimizeCutoffKNN() noexcept
 
 static int64_t g_iFlushWriteUs = -1LL; // 111 at the end sighs uninitialized value
 static int64_t g_iFlushSearchUs = 30'000'111LL;
+static int64_t g_iKillStatsIdleUs = 15'000'000LL;
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch )
 {
 	g_iFlushWriteUs = (iFlushWrite==-1)? -1LL : 1'000'000LL * iFlushWrite;
 	g_iFlushSearchUs = 1'000'000LL * iFlushSearch;
+}
+
+void SetRtKillStatsIdleTimeout ( int iIdleTimeout )
+{
+	g_iKillStatsIdleUs = ( iIdleTimeout==-1 ) ? -1LL : 1'000'000LL * iIdleTimeout;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1543,6 +1549,7 @@ private:
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 	CSphVector<int>				m_dSavingTickets GUARDED_BY ( m_tWorkers.SerialChunkAccess() );			// segments which are currently in saving to disk chunk(s)
 	mutable MiniTimer_c			m_dSavingTimer;
+	mutable MiniTimer_c			m_dKillStatsTimer;
 
 	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
 
@@ -1604,6 +1611,7 @@ private:
 	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError, SaveDiskDataTimings_t * pTimings = nullptr ) const;
 	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						ConditionalDiskChunk ();
+	void						ConditionalKillStats ();
 
 	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
@@ -1723,6 +1731,7 @@ RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSche
 	}
 
 	m_dSavingTimer.SetHandler ( [this]() { ConditionalDiskChunk(); } );
+	m_dKillStatsTimer.SetHandler ( [this]() { ConditionalKillStats(); } );
 }
 
 class OptimizeGuard_c final
@@ -1753,6 +1762,7 @@ RtIndex_c::~RtIndex_c ()
 		TRACE_SCHED ( "rt", "~RtIndex_c" );
 
 		m_dSavingTimer.UnEngage();
+		m_dKillStatsTimer.UnEngage();
 
 		m_tSaving.SetShutdownFlag();
 		StopMergeSegmentsWorker();
@@ -3611,6 +3621,7 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 	StartMergeSegments ( pNewSeg ? MergeSeg_e::NEWSEG : MergeSeg_e::KILLED );
 	m_tmDataWriten.store ( sphMicroTimer(), std::memory_order_relaxed );
 	ConditionalDiskChunk();
+	ConditionalKillStats();
 
 	return true;
 }
@@ -3735,6 +3746,55 @@ void RtIndex_c::ConditionalDiskChunk ( )
 		RTSAVELOG << "finaly FLUSH";
 		m_tmDataWriten.store ( 0, std::memory_order_relaxed );
 		SaveDiskChunk (false);
+	}, m_tWorkers.SerialChunkAccess() );
+}
+
+void RtIndex_c::ConditionalKillStats ()
+{
+	if ( !KillDictionaryIdle() )
+		return;
+
+	if ( g_iKillStatsIdleUs < 0 )
+		return;
+
+	bool bDirty = false;
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( const auto & pChunk : *pChunks )
+	{
+		if ( pChunk && pChunk->Cidx().HasKillStatsDirty() )
+		{
+			bDirty = true;
+			break;
+		}
+	}
+
+	if ( !bDirty )
+		return;
+
+	const int64_t tmNow = sph::MicroTimer();
+	int64_t tmDataWriten = m_tmDataWriten.load ( std::memory_order_relaxed );
+	if ( !tmDataWriten )
+		tmDataWriten = tmNow - g_iKillStatsIdleUs;
+
+	const int64_t tmNextIdle = tmDataWriten + g_iKillStatsIdleUs;
+	if ( tmNow < tmNextIdle )
+	{
+		m_dKillStatsTimer.EngageAt ( tmNextIdle );
+		return;
+	}
+
+	if ( OptimizesRunning() )
+	{
+		m_dKillStatsTimer.EngageAt ( tmNow + g_iKillStatsIdleUs );
+		return;
+	}
+
+	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
+	{
+		StartRoutine();
+		auto tReset = AtScopeExit ( [this] { StopRoutine(); } );
+		auto pChunksLocal = m_tRtChunks.DiskChunks();
+		pChunksLocal->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushKillStats ( true ); } );
 	}, m_tWorkers.SerialChunkAccess() );
 }
 
@@ -4741,6 +4801,15 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	SaveMeta ( iTID, dChunks );
 	m_iSavedTID = iTID;
 
+	int64_t tmKillStats = 0;
+	if ( KillDictionaryEnabled() )
+	{
+		tmKillStats = -sphMicroTimer();
+		auto pChunks = m_tRtChunks.DiskChunks();
+		pChunks->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushDeadRowMap ( true ); } );
+		tmKillStats += sphMicroTimer();
+	}
+
 	// from this point all readers will see new state of the index.
 	m_dSavingTickets.RemoveValue ( iSaveOp );
 	Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
@@ -4756,7 +4825,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 					, dChunks.GetLength(), iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 
 	// Add timing breakdown
-	if ( tTimings.m_tmAttributes || tTimings.m_tmDeadRowMap || tTimings.m_tmDocs || tTimings.m_tmInfix || tTimings.m_tmCheckpoints || tTimings.m_tmHeader )
+	if ( tTimings.m_tmAttributes || tTimings.m_tmDeadRowMap || tTimings.m_tmDocs || tTimings.m_tmInfix || tTimings.m_tmCheckpoints || tTimings.m_tmHeader || tmKillStats )
 	{
 		sInfo << " [attrs=" << ( tTimings.m_tmAttributes / 1000 ) << "ms"
 			  << " deadmap=" << ( tTimings.m_tmDeadRowMap / 1000 ) << "ms"
@@ -4764,6 +4833,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 			  << " infix=" << ( tTimings.m_tmInfix / 1000 ) << "ms"
 			  << " checkpoints=" << ( tTimings.m_tmCheckpoints / 1000 ) << "ms"
 			  << " header=" << ( tTimings.m_tmHeader / 1000 ) << "ms"
+			  << " killstats=" << ( tmKillStats / 1000 ) << "ms"
 			  << "]";
 	}
 
@@ -5350,6 +5420,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	RecalculateRateLimit ( iUsedRam, 1, false );
 
 	RunMergeSegmentsWorker();
+	ConditionalKillStats();
 	return m_bPreallocPassedOk;
 }
 
@@ -6880,8 +6951,25 @@ bool RtIndex_c::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 
 		assert ( !iCmp );
 		const auto* pWord = (const RtWord_t*)tReader;
-		pQword->m_iDocs += pWord->m_uDocs;
-		pQword->m_iHits += pWord->m_uHits;
+		DWORD uDocs = pWord->m_uDocs;
+		DWORD uHits = pWord->m_uHits;
+		if ( pCurSeg->m_tDeadRowMap.HasDead() )
+		{
+			uDocs = 0;
+			uHits = 0;
+			RtDocReader_c tDocReader ( pCurSeg, *pWord );
+			while ( tDocReader.UnzipDoc() )
+			{
+				const auto* pDoc = (const RtDoc_t*)tDocReader;
+				if ( pCurSeg->m_tDeadRowMap.IsSet ( pDoc->m_tRowID ) )
+					continue;
+
+				++uDocs;
+				uHits += pDoc->m_uHits;
+			}
+		}
+		pQword->m_iDocs += uDocs;
+		pQword->m_iHits += uHits;
 		pQword->m_bHasHitlist &= pWord->m_bHasHitlist;
 		if ( bSetup )
 			pQword->SetupReader ( pCurSeg, *pWord );
@@ -6899,8 +6987,25 @@ bool RtIndex_c::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 		return false;
 
 	const auto* pWord = (const RtWord_t*)tReader;
-	pQword->m_iDocs += pWord->m_uDocs;
-	pQword->m_iHits += pWord->m_uHits;
+	DWORD uDocs = pWord->m_uDocs;
+	DWORD uHits = pWord->m_uHits;
+	if ( pCurSeg->m_tDeadRowMap.HasDead() )
+	{
+		uDocs = 0;
+		uHits = 0;
+		RtDocReader_c tDocReader ( pCurSeg, *pWord );
+		while ( tDocReader.UnzipDoc() )
+		{
+			const auto* pDoc = (const RtDoc_t*)tDocReader;
+			if ( pCurSeg->m_tDeadRowMap.IsSet ( pDoc->m_tRowID ) )
+				continue;
+
+			++uDocs;
+			uHits += pDoc->m_uHits;
+		}
+	}
+	pQword->m_iDocs += uDocs;
+	pQword->m_iHits += uHits;
 	pQword->m_bHasHitlist &= pWord->m_bHasHitlist;
 	if ( bSetup )
 		pQword->SetupReader ( pCurSeg, *pWord );

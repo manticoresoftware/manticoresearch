@@ -1208,7 +1208,15 @@ static void LoadKillDictionarySetting ( const CSphConfig & hConf )
 		return;
 
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-	g_bKillDictionary = hSearchd.GetBool ( "kill_dictionary", g_bKillDictionary );
+	if ( hSearchd ( "kill_dictionary" ) )
+	{
+		CSphString sValue = hSearchd.GetStr ( "kill_dictionary" );
+		KillDictionaryMode_e eMode;
+		if ( ParseKillDictionaryMode ( sValue, eMode ) )
+			g_eKillDictionaryMode = eMode;
+		else
+			sphWarning ( "kill_dictionary invalid value '%s'; using '%s'", sValue.cstr(), KillDictionaryModeName ( g_eKillDictionaryMode ) );
+	}
 }
 
 static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, StrVec_t * pWarnings, CSphString & sError )

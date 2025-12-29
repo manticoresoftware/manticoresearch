@@ -13,6 +13,7 @@
 searchd
 {
 	<searchd_settings/>
+	kill_dictionary = realtime
 }
 
 index rt

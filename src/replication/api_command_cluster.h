@@ -36,6 +36,7 @@ enum class E_CLUSTER : WORD
 	GET_NODE_VER		= 10,
 	GET_NODE_VER_ID		= 11,
 	UPDATE_SST_PROGRESS	= 12,
+	RECV_STATE_CLEANUP	= 13,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -54,6 +55,7 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::GET_NODE_VER: return "get_node_ver";
 	case E_CLUSTER::GET_NODE_VER_ID: return "get_node_ver_id";
 	case E_CLUSTER::UPDATE_SST_PROGRESS: return "update_sst_progress";
+	case E_CLUSTER::RECV_STATE_CLEANUP: return "recv_state_cleanup";
 	default: return "unknown";
 	}
 }

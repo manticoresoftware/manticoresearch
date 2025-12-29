@@ -98,34 +98,34 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 
 已知的全局服务器变量有：
 
-* `ACCURATE_AGGREGATION`: 为未来查询的选项 [accurate_aggregation](../Searching/Options.md#accurate_aggregation) 设置默认值。
-* `AUTO_OPTIMIZE = {1|0}` 启用/禁用 [auto_optimize](../Server_settings/Searchd.md#auto_optimize)。
+* `ACCURATE_AGGREGATION`: 设置未来查询选项 [accurate_aggregation](../Searching/Options.md#accurate_aggregation) 的默认值。
+* `AUTO_OPTIMIZE = {1|0}` 开启/关闭 [auto_optimize](../Server_settings/Searchd.md#auto_optimize)。
 * `cluster_user = name` 设置与 `mysqldump` / `mariadb-dump` 一起使用的用户名，以 [启用复制模式](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
-* `COREDUMP= {1|0}` 在服务器崩溃时启用/禁用保存核心文件或小型转储。更多细节 [here](../Starting_the_server/Manually.md#searchd-command-line-options)。
-* `CPUSTATS= {1|0}` 启用/禁用 [CPU 时间跟踪](../Starting_the_server/Manually.md#searchd-command-line-options)。
-* `DISTINCT_PRECISION_THRESHOLD`: 为未来查询的选项 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 设置默认值。
-* `ES_COMPAT = {on/off/dashboards}` 当设置为 `on`（默认值）时，支持 Elasticsearch 风格的写入请求；`off` 禁用该支持；`dashboards` 启用该支持并允许来自 Kibana 的请求（此功能为实验性功能）。
+* `COREDUMP= {1|0}` 在服务器崩溃时开启/关闭保存核心文件或小型转储。更多详情 [here](../Starting_the_server/Manually.md#searchd-command-line-options)。
+* `CPUSTATS= {1|0}` 开启/关闭 [CPU 时间跟踪](../Starting_the_server/Manually.md#searchd-command-line-options)。
+* `DISTINCT_PRECISION_THRESHOLD`: 设置未来查询选项 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 的默认值。
+* `ES_COMPAT = {on/off/dashboards}` 当设置为 `on`（默认）时，支持 Elasticsearch 风格的写入请求；`off` 禁用支持；`dashboards` 启用支持并允许来自 Kibana 的请求（此功能是实验性的）。
 * `EXPANSION_MERGE_THRESHOLD_DOCS`: 在运行时更改配置的 [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) 设置值。
 * `EXPANSION_MERGE_THRESHOLD_HITS`: 在运行时更改配置的 [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) 设置值。
-* `GROUPING_IN_UTC = {0 | 1}` 当设置为 1 时，使定时分组函数（day()、month()、year()、yearmonth()、yearmonthday()）以 UTC 计算。有关 [grouping_in_utc](../Server_settings/Searchd.md) 配置参数的更多详细信息，请阅读文档。
+* `GROUPING_IN_UTC = {0 | 1}` 当设置为 1 时，使定时分组函数（day(), month(), year(), yearmonth(), yearmonthday()）以 UTC 计算。有关 [grouping_in_utc](../Server_settings/Searchd.md) 配置参数的更多详情，请阅读文档。
 * `IOSTATS = {0 | 1}` 启用或禁用查询日志中的 I/O 操作（除属性外）报告。
-* `KILL_DICTIONARY = {0 | 1}` 在运行时启用/禁用 RT 磁盘块的 [kill_dictionary](../Server_settings/Searchd.md#kill_dictionary)。
+* `KILL_DICTIONARY = {0 | realtime | flush | idle}` 在运行时控制 RT 磁盘块的 [kill_dictionary](../Server_settings/Searchd.md#kill_dictionary)。
 * `LOG_DEBUG_FILTER = <string value>` 过滤冗余日志消息。如果设置了值，则所有级别大于 INFO（即 `DEBUG`、`DEBUGV` 等）的日志将与该字符串进行比较，并仅在它们以给定值开头时输出。
 * `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` 更改当前日志详细程度级别。
 * `MAINTENANCE = {0 | 1}` 当设置为 1 时，将服务器置于维护模式。在此模式下，只有具有 VIP 连接的客户端可以执行查询。所有新的非 VIP 入站连接将被拒绝。现有连接保持不变。
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` 在运行时重新定义 [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query)。作为全局设置，它会更改所有会话的行为。值 0 表示“无限制”。如果同时设置了每会话和全局变量，则每会话变量具有更高的优先级。
 * `NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}` 更改 [net_wait_tm](../Server_settings/Searchd.md#net_wait_tm) searchd 设置值。
 * `OPTIMIZE_CUTOFF = <value>`: 在运行时更改配置的 [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) 设置值。
-* `PSEUDO_SHARDING = {1|0}` 启用/禁用搜索 [伪分片](../Server_settings/Searchd.md#pseudo_sharding)。
+* `PSEUDO_SHARDING = {1|0}` 开启/关闭搜索 [伪分片](../Server_settings/Searchd.md#pseudo_sharding)。
 * `QCACHE_MAX_BYTES = <value>` 将 [query_cache](../Searching/Query_cache.md) 的 RAM 使用限制更改为给定值。
 * `QCACHE_THRESH_MSEC = <value>` 将 [query_cache](../Searching/Query_cache.md) 的最小墙时间阈值更改为给定值。
 * `QCACHE_TTL_SEC = <value>` 将 [query_cache](../Searching/Query_cache.md) 的缓存结果 TTL 更改为给定值。
 * `QUERY_LOG_FORMAT = {plain | sphinxql}` 更改当前日志格式。
-* `QUERY_LOG_MIN_MSEC = <value>` 更改 [query_log_min_msec](../Server_settings/Searchd.md#query_log_min_msec) searchd 设置值。在这种情况下，它期望的值正好以毫秒为单位，并且不解析配置中的时间后缀。
-  > 警告：这是一个非常具体且“严格”的变量；被过滤的消息将被完全丢弃，不会写入日志。在这种情况下，最好使用类似 'grep' 的工具来过滤日志，这样您至少可以保留完整的原始日志作为备份。
+* `QUERY_LOG_MIN_MSEC = <value>` 更改 [query_log_min_msec](../Server_settings/Searchd.md#query_log_min_msec) searchd 设置值。在这种情况下，它期望的值正好是毫秒，并且不解析配置中的时间后缀。
+  > 警告：这是一个非常具体且“硬性”的变量；被过滤的消息将被完全丢弃，不会写入日志。在这种情况下，最好使用类似 'grep' 的工具过滤日志，这样至少可以保留完整的原始日志作为备份。
 * `RESET_NETWORK_TIMEOUT_ON_PACKET = {1|0}` 更改 [reset_network_timeout_on_packet](../Server_settings/Searchd.md#reset_network_timeout_on_packet) 参数。只有具有 VIP 连接的客户端可以更改此变量。
-* `SECONDARY_INDEXES = {1|0}` 启用/禁用搜索查询的 [二级索引](../Server_settings/Searchd.md#secondary_indexes)。
-* `TIMEZONE = <value>` 指定与日期/时间相关函数使用的时区。有关 [timezone](../Server_settings/Searchd.md) 配置参数的更多详细信息，请阅读文档。
+* `SECONDARY_INDEXES = {1|0}` 开启/关闭搜索查询的 [二级索引](../Server_settings/Searchd.md#secondary_indexes)。
+* `TIMEZONE = <value>` 指定与日期/时间相关函数使用的时区。有关 [timezone](../Server_settings/Searchd.md) 配置参数的更多详情，请阅读文档。
 
 示例：
 

@@ -1202,6 +1202,23 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
+static void LoadKillDictionarySetting ( const CSphConfig & hConf )
+{
+	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
+		return;
+
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+	if ( hSearchd ( "kill_dictionary" ) )
+	{
+		CSphString sValue = hSearchd.GetStr ( "kill_dictionary" );
+		KillDictionaryMode_e eMode;
+		if ( ParseKillDictionaryMode ( sValue, eMode ) )
+			g_eKillDictionaryMode = eMode;
+		else
+			sphWarning ( "kill_dictionary invalid value '%s'; using '%s'", sValue.cstr(), KillDictionaryModeName ( g_eKillDictionaryMode ) );
+	}
+}
+
 static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString sIndex, bool bDictKeywords, bool bRotate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// don't expect complete index declarations from indexes created with CREATE TABLE
@@ -1450,6 +1467,7 @@ int main ( int argc, char ** argv )
 
 	// can't reuse the code from searchdconfig, using a simplified version here
 	LoadJsonConfig ( hConf, sOptConfig );
+	LoadKillDictionarySetting ( hConf );
 
 	// no indexes in both .json and .conf?
 	if ( !hConf ( "index" ) )

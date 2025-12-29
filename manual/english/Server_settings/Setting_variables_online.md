@@ -109,6 +109,8 @@ Known global server variables are:
 * `EXPANSION_MERGE_THRESHOLD_HITS`: Changes the value of the config's [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, causes timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in UTC. Read the doc for [grouping_in_utc](../Server_settings/Searchd.md) config params for more details.
 * `IOSTATS = {0 | 1}` Enables or disables I/O operations (except for attributes) reporting in the query log.
+* `KILL_DICTIONARY = {0 | realtime | flush | idle}` Controls [kill_dictionary](../Server_settings/Searchd.md#kill_dictionary) for RT disk chunks at runtime.
+* `KILL_DICTIONARY_IDLE_TIMEOUT = <time>` Changes [kill_dictionary_idle_timeout](../Server_settings/Searchd.md#kill_dictionary_idle_timeout) at runtime. Accepts the same time syntax as config: plain number in seconds, or `ms/s/m/h/d` suffixes.
 * `LOG_DEBUG_FILTER = <string value>` Filters out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they start with the given value.
 * `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` Changes the current log verboseness level.
 * `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with VIP connections can execute queries in this mode. All new non-VIP incoming connections are refused. Existing connections are left intact.
@@ -144,4 +146,3 @@ Query OK, 0 rows affected (0.01 sec)
 
 To make user variables persistent, make sure [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) is enabled.
 <!-- proofread -->
-

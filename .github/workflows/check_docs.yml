@@ -2,7 +2,6 @@ name: 📖 checkdocs
 run-name: 📖 checkdocs
 
 on:
-  workflow_call:
   pull_request:
     paths:
       - 'manual/**'

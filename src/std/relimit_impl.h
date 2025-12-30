@@ -20,7 +20,7 @@ namespace sph
 {
 
 /// Default relimit: grow 2x
-int64_t DefaultRelimit::Relimit ( int64_t iLimit, int64_t iNewLimit )
+constexpr int64_t DefaultRelimit::Relimit ( int64_t iLimit, int64_t iNewLimit )
 {
 	if ( !iLimit )
 		iLimit = MAGIC_INITIAL_LIMIT;
@@ -35,7 +35,7 @@ int64_t DefaultRelimit::Relimit ( int64_t iLimit, int64_t iNewLimit )
 
 /// tight-vector policy
 /// grow only 1.2x on resize (not 2x) starting from a certain threshold
-int64_t TightRelimit::Relimit ( int64_t iLimit, int64_t iNewLimit )
+constexpr int64_t TightRelimit::Relimit ( int64_t iLimit, int64_t iNewLimit )
 {
 	if ( !iLimit )
 		iLimit = MAGIC_INITIAL_LIMIT;

@@ -1,7 +1,11 @@
 <?php
 
 ini_set ( "display_errors", 1 );
-ini_set ( "error_reporting", (E_ALL | E_STRICT) & ~E_USER_DEPRECATED );
+$error_reporting = E_ALL & ~E_USER_DEPRECATED;
+if ( defined ( 'E_STRICT' ) && PHP_VERSION_ID < 80400 ) {
+	$error_reporting |= E_STRICT;
+}
+ini_set ( "error_reporting", $error_reporting );
 ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
@@ -1299,14 +1303,19 @@ function RunCurl ( $curl_desc, &$rows )
 	return $http_code;
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+function CurlDesc ( $http_endpoint, $use_agent=0, $use_ssl=false )
 {
 	global $agents;
 
 	$ssl = $use_ssl ? "https://" : "";
 
 	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+	return array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+}
+
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
+{
+	$curl_desc = CurlDesc ( $http_endpoint, $use_agent, $use_ssl );
 	if ( $http_method=="POST" )
     {
         $curl_desc[CURLOPT_POST] = 1;
@@ -4042,7 +4051,7 @@ class SphinxConfig
 							else
 								$justcopy = true;
 							break;
-						case "source";
+						case "source":
 							{
 								$idxbody .= "\ttype\t= rt\n";
 								if ( $collectdata )

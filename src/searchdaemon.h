@@ -154,7 +154,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10B,
+	VER_COMMAND_CLUSTER		= 0x10C,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x101,
 
@@ -1470,7 +1470,7 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 class RowBuffer_i : public ISphNoncopyable
 {
 public:
-	virtual ~RowBuffer_i() {}
+	virtual ~RowBuffer_i() = default;
 
 	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
 	virtual void PutDoubleAsString ( double fVal, const char * szFormat=nullptr ) = 0;
@@ -1521,6 +1521,11 @@ public:
 
 	// add the next column. The EOF after the full set will be fired automatically
 	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING ) = 0;
+
+	virtual void HeadColumnRaw ( const char * sName, ESphAttr uType )
+	{
+		HeadColumn ( sName, ESphAttr2MysqlColumn ( uType ) );
+	};
 
 	virtual void Add ( BYTE uVal ) = 0;
 

@@ -8419,7 +8419,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		for ( auto i : dSorters )
 			tSSTransform.Transform ( i, tGuard );
 
-		tResult.m_pDocstore = m_tSchema.HasStoredFields () ? this : nullptr;
+		tResult.m_pDocstore = m_tSchema.HasStoredFields () || m_tSchema.HasStoredAttrs() ? this : nullptr;
 		tMeta.m_iQueryTime = 0;
 		return true;
 	}
@@ -8465,7 +8465,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( tMeta.m_bHasPrediction )
 		tMeta.m_tStats.Add ( tQueryStats );
 
-	tResult.m_pDocstore = m_tSchema.HasStoredFields() ? this : nullptr;
+	tResult.m_pDocstore = m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ? this : nullptr;
 	tMeta.m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	return true;
@@ -8908,6 +8908,9 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 
 		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, GetFilebase(), sError ) )
 			return false;
+
+		if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sAttrName, DOCSTORE_ATTR )!=-1 )
+			m_pDocstoreFields->RemoveField ( sAttrName, DOCSTORE_ATTR );
 
 		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
 		pSeg->UpdateUsedRam();

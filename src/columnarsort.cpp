@@ -12,6 +12,7 @@
 #include "attribute.h"
 #include "sortcomp.h"
 #include "conversion.h"
+#include "knnmisc.h"
 
 
 class CompareSingleError_fn
@@ -1104,6 +1105,9 @@ static bool CanCreateColumnarSorter ( const ISphSchema & tSchema, const CSphMatc
 			return false;
 
 		if ( tAttr.IsJoined() )
+			return false;
+
+		if ( tAttr.m_sName==GetKnnDistRescoreAttrName() )
 			return false;
 	}
 

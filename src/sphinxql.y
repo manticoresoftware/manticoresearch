@@ -762,6 +762,7 @@ filter_expr:
 	filter_item							{ pParser->SetOp ( $$ ); }
 	| filter_expr TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $3 ); }
 	| filter_expr TOK_OR filter_expr	{ pParser->FilterOr ( $$, $1, $3 ); }
+	| TOK_NOT filter_expr				{ pParser->FilterNot ( $$, $2 ); }
 	| '(' filter_expr ')'				{ pParser->FilterGroup ( $$, $2 ); }
 	;
 

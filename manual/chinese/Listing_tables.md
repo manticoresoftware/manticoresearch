@@ -1,23 +1,24 @@
-# 列表表格
+# 表格列表
 
-Manticore Search 具有单一层次结构的表格。
+Manticore搜索具有单层表结构层次。
 
-与其他DBMS不同，在Manticore中没有将表格分组到数据库中的概念。然而，为了与SQL方言的互操作性，Manticore接受`SHOW DATABASES`语句，但该语句不会返回任何结果。
+与其他数据库管理系统不同，Manticore没有概念的表分组到数据库的层次结构。然而，为了与SQL方言的互操作性，Manticore接受`SHOW DATABASES`语句，但该语句不会返回任何结果。
 
 <!-- example listing -->
 ## SHOW TABLES
 
+测试1
 通用语法：
 
 ```sql
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` 语句列出所有当前活动的表格及其类型。现有的表格类型包括 `local`，`distributed`，`rt`，`percolate` 和 `template`。
+`SHOW TABLES`语句列出所有当前活动表，以及它们的类型。现有的表类型包括`local`、`distributed`、`rt`、`percolate`和`template`。
 
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 
@@ -58,7 +59,7 @@ Array
 
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -79,7 +80,7 @@ utilsApi.sql('SHOW TABLES')
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -100,7 +101,7 @@ await utilsApi.sql('SHOW TABLES')
 ```
 
 <!-- intro -->
-##### Javascript：
+##### JavaScript:
 
 <!-- request javascript -->
 
@@ -114,7 +115,7 @@ res = await utilsApi.sql('SHOW TABLES');
 ```
 
 <!-- intro -->
-##### java：
+##### Java:
 
 <!-- request Java -->
 
@@ -128,7 +129,7 @@ utilsApi.sql("SHOW TABLES", true)
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -142,7 +143,7 @@ utilsApi.Sql("SHOW TABLES", true)
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -158,11 +159,11 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 <!-- end -->
 
 <!-- example Example_2 -->
-支持使用 LIKE 子句按名称过滤表格。
+可选的LIKE子句用于根据表名进行过滤。
 
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 
@@ -199,7 +200,7 @@ Array
 
 
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -218,7 +219,7 @@ utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -237,7 +238,7 @@ await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- intro -->
-##### Javascript：
+##### JavaScript:
 
 <!-- request javascript -->
 
@@ -252,7 +253,7 @@ utilsApi.sql('SHOW TABLES LIKE \'pro%\'')
 
 
 <!-- intro -->
-##### java：
+##### Java:
 
 <!-- request Java -->
 
@@ -266,7 +267,7 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -280,7 +281,7 @@ utilsApi.Sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -302,7 +303,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表格的列及其关联的类型。列包括文档ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句中预期的字段和属性顺序相同。列类型包括 `field`，`integer`，`timestamp`，`ordinal`，`bool`，`float`，`bigint`，`string` 和 `mva`。ID 列将被类型化为 `bigint`。示例：
+`DESCRIBE`语句列出表的列及其关联类型。列包括文档ID、全文字段和属性。列的顺序与`INSERT`和`REPLACE`语句期望的顺序一致。列类型包括`field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string`和`mva`。ID列将被类型化为`bigint`。示例：
 
 ```sql
 mysql> DESC rt;
@@ -317,13 +318,13 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-支持使用 LIKE 子句。参见
-[SHOW META](Node_info_and_management/SHOW_META.md) 以获取其语法细节。
-
+可选的LIKE子句支持。请参阅[SHOW META](Node_info_and_management/SHOW_META.md)以获取其语法细节。
 ### SELECT FROM name.@table
 
+你可以也可以执行查询`select * from <table_name>.@table`，以查看表的结构。该方法的优势在于可以使用`WHERE`子句进行过滤：
+
 <!-- example name_table -->
-您还可以通过执行查询 `select * from <table_name>.@table` 查看表格的模式。此方法的好处是您可以使用 `WHERE` 子句进行过滤：
+select * from tbl.@table where type='text';
 
 <!-- request SQL -->
 ```sql
@@ -332,78 +333,64 @@ select * from tbl.@table where type='text';
 
 <!-- response SQL -->
 ```sql
-+------+-------+------+----------------+
-| id   | field | type | properties     |
-+------+-------+------+----------------+
-|    2 | title | text | indexed stored |
-+------+-------+------+----------------+
-1 row in set (0.00 sec)
+你可以也可以对`<your_table_name>.@table`执行许多其他操作，考虑到它是一个Manticore表，包含整数和字符串属性。
+select field from tbl.@table;
+select field, properties from tbl.@table where type in ('text', 'uint');
+select * from tbl.@table where properties any ('stored');
+## SHOW CREATE TABLE
+SHOW CREATE TABLE table_name
 ```
 
 <!-- end -->
 
 <!-- example name_table2 -->
 
-您还可以将 `<your_table_name>.@table` 作为常规 Manticore 表进行许多其他操作，其列由整数和字符串属性组成。
+打印用于创建指定表的`CREATE TABLE`语句。
 
 <!-- request SQL -->
 
 ```sql
-select field from tbl.@table;
-select field, properties from tbl.@table where type in ('text', 'uint');
-select * from tbl.@table where properties any ('stored');
+##### SQL:
+SHOW CREATE TABLE tbl\G
+SHOW CREATE TABLE tbl\G
 ```
 
 <!-- end -->
 
-## SHOW CREATE TABLE
+### 多表结构
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name
+如果使用`DESC`语句对一个percolate表进行查询，它会显示外表的结构，该结构是存储查询的表的结构。该结构是静态的，所有本地的percolate表都使用相同的结构：
 ```
 
-打印用于创建指定表格的 `CREATE TABLE` 语句。
+mysql> DESC pq;
 
 <!-- intro -->
-##### SQL：
++---------+--------+
 
 <!-- request SQL -->
 ```sql
-SHOW CREATE TABLE tbl\G
+| Field   | Type   |
 ```
 
 <!-- response SQL -->
 ```sql
-       Table: tbl
-Create Table: CREATE TABLE tbl (
-f text indexed stored
-) charset_table='non_cont,cont' morphology='icu_chinese'
-1 row in set (0.00 sec)
-```
-<!-- end -->
-
-### Percolate 表模式
-
-如果您在 percolate 表上使用 `DESC` 语句，它将显示外部表格模式，即存储查询的模式。此模式是静态的，并且所有本地 percolate 表相同：
-
-```sql
-mysql> DESC pq;
-+---------+--------+
-| Field   | Type   |
 +---------+--------+
 | id      | bigint |
 | query   | string |
 | tags    | string |
 | filters | string |
-+---------+--------+
-4 rows in set (0.00 sec)
 ```
+<!-- end -->
 
-如果您想查看预期的文档模式，请使用以下命令：
-`DESC <pq table name> table`：
++---------+--------+
+
+4 rows in set (0.00 sec)
 
 ```sql
+如果要查看预期的文档结构，请使用以下命令：
+`DESC <pq table name> table`
 mysql> DESC pq TABLE;
 +-------+--------+
 | Field | Type   |
@@ -412,16 +399,30 @@ mysql> DESC pq TABLE;
 | title | text   |
 | gid   | uint   |
 +-------+--------+
-3 rows in set (0.00 sec)
 ```
 
-`desc pq table like ...` 也支持并按如下方式工作：
+3 rows in set (0.00 sec)
+此外，`desc pq table like ...`也支持，并且工作如下：
 
 ```sql
 mysql> desc pq table like '%title%';
 +-------+------+----------------+
 | Field | Type | Properties     |
 +-------+------+----------------+
+| title | text | indexed stored |
++-------+------+----------------+
+1 row in set (0.00 sec)
+mysql> desc pq table like '%title%';
++-------+------+----------------+
+```
+
+| Field | Type | Properties     |
+
+```sql
++-------+------+----------------+
+| title | text | indexed stored |
++-------+------+----------------+
+1 row in set (0.00 sec)
 | title | text | indexed stored |
 +-------+------+----------------+
 1 row in set (0.00 sec)

@@ -1,6 +1,8 @@
-name: Checkdocs
+name: 📖 Check docs
+run-name: 📖 Check docs ${{ github.sha }}
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'manual/**'

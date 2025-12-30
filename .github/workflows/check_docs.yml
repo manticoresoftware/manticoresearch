@@ -1,4 +1,4 @@
-name: 📖 Checkdocs
+name: Checkdocs
 
 on:
   pull_request:

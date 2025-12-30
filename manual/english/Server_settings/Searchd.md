@@ -742,7 +742,7 @@ kill_dictionary = flush
 ### kill_dictionary_idle_timeout
 
 <!-- example conf kill_dictionary_idle_timeout -->
-Idle timeout for rebuilding kill dictionary stats when `kill_dictionary=idle`. If there are pending kills and no writes occur for this many seconds, Manticore rebuilds kill stats and persists `.spks`. Set to `-1` to disable idle rebuilds.
+Idle timeout for rebuilding kill dictionary stats when `kill_dictionary=idle`. If there are pending kills and no writes occur for this many seconds, Manticore rebuilds kill stats and persists `.spks`. Set to `-1` to disable idle rebuilds. Accepts seconds or `ms/s/m/h/d` suffixes.
 
 <!-- intro -->
 ##### Example:

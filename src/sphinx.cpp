@@ -3065,6 +3065,10 @@ bool CSphIndex_VLN::HasKillStatsDirty() const
 	if ( !m_tDeadRowMap.HasDead() )
 		return false;
 
+	CSphString sStatsFile = GetFilename ( SPH_EXT_SPKS );
+	if ( !sphIsReadable ( sStatsFile.cstr() ) )
+		return true;
+
 	ScopedMutex_t tLock ( m_tKillStatsLock );
 	return m_bKillStatsDirty || !m_bKillStatsBuilt;
 }
@@ -3086,6 +3090,9 @@ void CSphIndex_VLN::FlushKillStatsFile() const
 	}
 
 	ScopedMutex_t tLock ( m_tKillStatsLock );
+	if ( !m_bKillStatsDirty && !sphIsReadable ( sStatsFile.cstr() ) )
+		m_bKillStatsDirty = true;
+
 	if ( !m_bKillStatsDirty )
 		return;
 

@@ -183,6 +183,13 @@ void SetRtKillStatsIdleTimeout ( int iIdleTimeout )
 	g_iKillStatsIdleUs = ( iIdleTimeout==-1 ) ? -1LL : 1'000'000LL * iIdleTimeout;
 }
 
+int GetRtKillStatsIdleTimeout ()
+{
+	if ( g_iKillStatsIdleUs < 0 )
+		return -1;
+	return (int)( g_iKillStatsIdleUs / 1'000'000LL );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 // Variable Length Byte (VLB) encoding
@@ -3797,7 +3804,35 @@ void RtIndex_c::ConditionalKillStats ()
 		StartRoutine();
 		auto tReset = AtScopeExit ( [this] { StopRoutine(); } );
 		auto pChunksLocal = m_tRtChunks.DiskChunks();
-		pChunksLocal->for_each ( [] ( ConstDiskChunkRefPtr_t & pIdx ) { pIdx->Cidx().FlushKillStats ( true ); } );
+		CSphVector<ConstDiskChunkRefPtr_t> dDirty;
+		for ( const auto & pIdx : *pChunksLocal )
+		{
+			if ( pIdx && pIdx->Cidx().HasKillStatsDirty() )
+				dDirty.Add ( pIdx );
+		}
+
+		if ( dDirty.IsEmpty() )
+			return;
+
+		const int iMaxJobs = Max ( 1, Min ( (int)dDirty.GetLength(), GetNumLogicalCPUs() / 2 ) );
+		Coro::Waitable_T<int> tRunning { 0 };
+
+		for ( const auto & pIdx : dDirty )
+		{
+			tRunning.Wait ( [iMaxJobs] ( int iVal ) { return iVal < iMaxJobs; } );
+			tRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+
+			Threads::StartJob ( [pIdx, &tRunning]() mutable
+			{
+				ScopedMiniInfo_t _ ( new MiniTaskInfo_t );
+				myinfo::SetCommand ( "SYSTEM" );
+				myinfo::SetTaskInfo ( "KILLSTATS %s", pIdx->Cidx().GetName() );
+				pIdx->Cidx().FlushKillStats ( true );
+				tRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } );
+			}, m_tWorkers.SaveSegmentsWorker() );
+		}
+
+		tRunning.Wait ( [] ( int iVal ) { return iVal == 0; } );
 	}, m_tWorkers.SerialChunkAccess() );
 }
 
@@ -11174,6 +11209,8 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		pRes->m_iMappedHits += tDisk.m_iMappedHits;
 		pRes->m_iMappedResidentHits += tDisk.m_iMappedResidentHits;
 		pRes->m_iDead += tDisk.m_iDead;
+		if ( pChunk->Cidx().HasKillStatsDirty() )
+			++pRes->m_iKillDictDirtyChunks;
 	}
 
 	pRes->m_iNumRamChunks = tGuard.m_dRamSegs.GetLength();

@@ -19,6 +19,9 @@ It does not change the on-disk dictionary. Instead, it rebuilds per-killed-doc s
 - `indextool` reads the same setting from the `searchd` section in the config file.
 - **Idle rebuild timeout** (searchd section): `kill_dictionary_idle_timeout = 15s` (default)
   - Used only with `kill_dictionary=idle`. `-1` disables idle rebuilds.
+  - Accepts time values as seconds or with `ms/s/m/h/d` suffixes (for example, `1500ms`, `15s`, `1m`).
+- **Runtime idle timeout**: `SET GLOBAL kill_dictionary_idle_timeout = 15s`
+  - `SHOW [GLOBAL] VARIABLES LIKE 'kill_dictionary_idle_timeout'` reports the current value (seconds).
 
 ## How It Works
 1. **Killed rows are tracked** via the dead-row map (`.spm`), as before.
@@ -83,6 +86,10 @@ Approximate RAM cost for this example:
 - Plus the fixed 256-bucket pointer table: ~2 KB.
 
 So the example above would cost roughly ~2.1–2.3 KB of extra RAM. With 100 unique tokens, expect ~6–8 KB plus the same ~2 KB bucket table.
+
+## Observability
+- `SHOW TABLE <rt> STATUS` includes `kill_dictionary_dirty_chunks`, the number of disk chunks that have pending kill-stats rebuilds (missing or dirty `.spks`).
+- `SHOW THREADS OPTION FORMAT=ALL` shows background jobs as `KILLSTATS <chunk>` while an idle rebuild is running.
 
 ## Persistence and Disk Storage
 - The kill dictionary cache itself is in-memory, but aggregated kill stats can be persisted.

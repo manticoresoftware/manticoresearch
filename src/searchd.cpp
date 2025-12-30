@@ -8760,6 +8760,31 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 		return true;
 	}
 
+	if ( sName == "kill_dictionary_idle_timeout" )
+	{
+		int64_t iTimeoutUs = 0;
+		if ( sSetValue.IsEmpty() )
+			iTimeoutUs = iSetValue * 1'000'000LL;
+		else
+		{
+			char * sErr = nullptr;
+			iTimeoutUs = sphGetTime64 ( sSetValue.cstr(), &sErr, 0 );
+			if ( sErr && *sErr )
+				sError.SetSprintf ( "Unknown kill_dictionary_idle_timeout value '%s'", sSetValue.cstr() );
+		}
+
+		if ( sError.IsEmpty() )
+		{
+			if ( iTimeoutUs < 0 )
+				SetRtKillStatsIdleTimeout ( -1 );
+			else if ( iTimeoutUs > (int64_t)INT_MAX * 1'000'000LL )
+				SetRtKillStatsIdleTimeout ( INT_MAX );
+			else
+				SetRtKillStatsIdleTimeout ( (int)( iTimeoutUs / 1'000'000LL ) );
+		}
+		return true;
+	}
+
 	if ( sName == "threads_ex" )
 	{
 		if ( !THREAD_EX_NEEDS_VIP || tSess.GetVip() )
@@ -9477,6 +9502,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
 	dTable.MatchTuplet ( "kill_dictionary", KillDictionaryModeName ( g_eKillDictionaryMode ) );
+	dTable.MatchTupletf ( "kill_dictionary_idle_timeout", "%d", GetRtKillStatsIdleTimeout() );
 
 	switch ( GetSecondaryIndexDefault() )
 	{
@@ -9671,6 +9697,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "ram_chunk", "%l", tStatus.m_iRamChunkSize );
 		dStatus.MatchTupletf ( "ram_chunk_segments_count", "%d", tStatus.m_iNumRamChunks );
 		dStatus.MatchTupletf ( "disk_chunks", "%d", tStatus.m_iNumChunks );
+		dStatus.MatchTupletf ( "kill_dictionary_dirty_chunks", "%d", tStatus.m_iKillDictDirtyChunks );
 		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
 		dStatus.MatchTupletf ( "mem_limit_rate", "%0.2F%%", PercentOf ( tStatus.m_fSaveRateLimit, 1.0, 2 ) );
 		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );

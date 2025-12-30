@@ -3,7 +3,7 @@ name: Translate docs
 on:
   workflow_run:
     workflows: 
-      - Checkdocs
+      - 📖 Check docs
     types:
       - completed
 

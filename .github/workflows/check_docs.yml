@@ -1,5 +1,4 @@
-name: 📖 checkdocs
-run-name: 📖 checkdocs
+name: 📖 Checkdocs
 
 on:
   pull_request:

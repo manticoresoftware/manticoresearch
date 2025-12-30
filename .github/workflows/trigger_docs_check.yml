@@ -1,0 +1,21 @@
+name: 📖 Trigger doc check
+run-name: 📖 Trigger doc check ${{ github.sha }}
+
+on:
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+      - manticore-*
+
+jobs:
+  trigger_doc_check:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Trigger doc check
+        run: |
+          echo "Doc check triggered"

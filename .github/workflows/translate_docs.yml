@@ -1,9 +1,9 @@
 name: Translate docs
 
 on:
-  workflow_dispatch:
   workflow_run:
-    workflows: [checkdocs]
+    workflows: 
+      - checkdocs
     types:
       - completed
 

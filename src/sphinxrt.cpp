@@ -3791,6 +3791,9 @@ void RtIndex_c::ConditionalKillStats ()
 
 	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
 	{
+		ScopedMiniInfo_t _ ( new MiniTaskInfo_t );
+		myinfo::SetCommand ( "SYSTEM" );
+		myinfo::SetTaskInfo ( "KILLSTATS build %s", GetName() );
 		StartRoutine();
 		auto tReset = AtScopeExit ( [this] { StopRoutine(); } );
 		auto pChunksLocal = m_tRtChunks.DiskChunks();

@@ -1308,8 +1308,20 @@ private:
 		DWORD				m_iDocs = 0;
 		DWORD				m_iHits = 0;
 	};
+	struct KillStatsBuildProfile_t
+	{
+		int64_t				m_tmDocstore = 0;
+		int64_t				m_tmSetup = 0;
+		int64_t				m_tmIterateDoc = 0;
+		int64_t				m_tmIterateHits = 0;
+		int64_t				m_tmHitsLoop = 0;
+		int64_t				m_tmDocsSort = 0;
+		int64_t				m_tmDocsAdd = 0;
+		int64_t				m_iRows = 0;
+		int64_t				m_iHits = 0;
+	};
 
-	mutable CSphOrderedHash<KillWordStats_t, SphWordID_t, IdentityHash_fn, 256> m_tKillStats;
+mutable CSphOrderedHash<KillWordStats_t, SphWordID_t, IdentityHash_fn, 65536> m_tKillStats;
 	mutable CSphMutex		m_tKillStatsLock;
 	mutable bool			m_bKillStatsBuilt = false;
 	mutable bool			m_bKillStatsFieldsReady = false;
@@ -1364,7 +1376,7 @@ private:
 	void						SetupExactDict ( DictRefPtr_c &pDict ) const;
 	bool						KillStatsSupported() const;
 	bool						PrepareKillStatsFieldsLocked() const;
-	void						UpdateKillStatsForRowsLocked ( const VecTraits_T<RowID_t> & dRows ) const;
+	void						UpdateKillStatsForRowsLocked ( const VecTraits_T<RowID_t> & dRows, KillStatsBuildProfile_t * pProfile = nullptr ) const;
 	void						BuildKillStatsLocked() const;
 	bool						GetKillStats ( SphWordID_t uWordID, KillWordStats_t & tStats ) const;
 	void						AddKillStatsForRows ( const VecTraits_T<RowID_t> & dRows ) const;
@@ -10437,7 +10449,7 @@ bool CSphIndex_VLN::PrepareKillStatsFieldsLocked() const
 	return !m_dKillFieldIds.IsEmpty();
 }
 
-void CSphIndex_VLN::UpdateKillStatsForRowsLocked ( const VecTraits_T<RowID_t> & dRows ) const
+void CSphIndex_VLN::UpdateKillStatsForRowsLocked ( const VecTraits_T<RowID_t> & dRows, KillStatsBuildProfile_t * pProfile ) const
 {
 	if ( !KillDictionaryEnabled() )
 		return;
@@ -10450,6 +10462,11 @@ void CSphIndex_VLN::UpdateKillStatsForRowsLocked ( const VecTraits_T<RowID_t> & 
 
 	if ( !PrepareKillStatsFieldsLocked() )
 		return;
+
+	const int64_t tmStart = sphMicroTimer();
+	int64_t tmLastLog = tmStart;
+	const int64_t iTotalRows = dRows.GetLength();
+	int64_t iProcessed = 0;
 
 	CSphString sError;
 	TokenizerRefPtr_c pTokenizer = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
@@ -10485,79 +10502,155 @@ void CSphIndex_VLN::UpdateKillStatsForRowsLocked ( const VecTraits_T<RowID_t> & 
 
 	CSphVector<SphWordID_t> dSeen;
 	dSeen.Reserve ( 1024 );
+	CSphVector<DWORD> dSeenCounts;
+	dSeenCounts.Reserve ( 1024 );
 
 	for ( const auto & tRow : dRows )
 	{
-		DocstoreDoc_t tDoc = m_pDocstore->GetDoc ( tRow, &m_dKillFieldIds, tSession.GetUID(), false );
-		if ( tDoc.m_dFields.GetLength() != m_dKillFieldIds.GetLength() )
-			continue;
-
-		dFields.Fill ( tEmpty );
-		for ( int i = 0; i < m_dKillFieldSchemaIdx.GetLength(); i++ )
+		do
 		{
-			const int iSchemaIdx = m_dKillFieldSchemaIdx[i];
-			if ( iSchemaIdx<0 || iSchemaIdx>=m_tSchema.GetFieldsCount() )
-				continue;
+			const int64_t tmDocStart = sphMicroTimer();
+			DocstoreDoc_t tDoc = m_pDocstore->GetDoc ( tRow, &m_dKillFieldIds, tSession.GetUID(), false );
+			if ( pProfile )
+				pProfile->m_tmDocstore += sphMicroTimer() - tmDocStart;
 
-			const auto & dField = tDoc.m_dFields[i];
-			dFields[iSchemaIdx] = VecTraits_T<const char> ( (const char *)dField.Begin(), dField.GetLength() );
-		}
+			if ( tDoc.m_dFields.GetLength() != m_dKillFieldIds.GetLength() )
+				break;
 
-		CSphSource_StringVector tSrc ( dFields, m_tSchema );
-		if ( m_tSettings.m_bHtmlStrip && !tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
-			continue;
-
-		tSrc.Setup ( m_tSettings, nullptr );
-		tSrc.SetTokenizer ( pTokenizer );
-		tSrc.SetDict ( pDict );
-		if ( m_pFieldFilter )
-			tSrc.SetFieldFilter ( m_pFieldFilter->Clone() );
-		tSrc.SetMorphFields ( m_tMorphFields );
-		if ( !tSrc.Connect ( sError ) )
-			continue;
-
-		tSrc.m_tDocInfo.m_tRowID = tRow;
-		bool bEOF = false;
-		if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
-		{
-			tSrc.Disconnect();
-			continue;
-		}
-
-		ISphHits * pHits = tSrc.IterateHits ( sError );
-		if ( !pHits )
-		{
-			tSrc.Disconnect();
-			continue;
-		}
-
-		dSeen.Resize ( 0 );
-		for ( const auto & tHit : *pHits )
-		{
-			SphWordID_t uWord = tHit.m_uWordID;
-			if ( !uWord || uWord==WORDID_MAX )
-				continue;
-
-			KillWordStats_t & tStats = m_tKillStats.AddUnique ( uWord );
-			tStats.m_iHits++;
-			dSeen.Add ( uWord );
-		}
-
-		if ( !dSeen.IsEmpty() )
-		{
-			dSeen.Sort();
-			SphWordID_t uPrev = WORDID_MAX;
-			for ( const auto & uWord : dSeen )
+			dFields.Fill ( tEmpty );
+			for ( int i = 0; i < m_dKillFieldSchemaIdx.GetLength(); i++ )
 			{
-				if ( uWord==uPrev )
+				const int iSchemaIdx = m_dKillFieldSchemaIdx[i];
+				if ( iSchemaIdx<0 || iSchemaIdx>=m_tSchema.GetFieldsCount() )
 					continue;
 
-				m_tKillStats.AddUnique ( uWord ).m_iDocs++;
-				uPrev = uWord;
+				const auto & dField = tDoc.m_dFields[i];
+				dFields[iSchemaIdx] = VecTraits_T<const char> ( (const char *)dField.Begin(), dField.GetLength() );
+			}
+
+			const int64_t tmSetupStart = sphMicroTimer();
+			CSphSource_StringVector tSrc ( dFields, m_tSchema );
+			if ( m_tSettings.m_bHtmlStrip && !tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
+			{
+				if ( pProfile )
+					pProfile->m_tmSetup += sphMicroTimer() - tmSetupStart;
+				break;
+			}
+
+			tSrc.Setup ( m_tSettings, nullptr );
+			tSrc.SetTokenizer ( pTokenizer );
+			tSrc.SetDict ( pDict );
+			if ( m_pFieldFilter )
+				tSrc.SetFieldFilter ( m_pFieldFilter->Clone() );
+			tSrc.SetMorphFields ( m_tMorphFields );
+			if ( !tSrc.Connect ( sError ) )
+			{
+				if ( pProfile )
+					pProfile->m_tmSetup += sphMicroTimer() - tmSetupStart;
+				break;
+			}
+
+			tSrc.m_tDocInfo.m_tRowID = tRow;
+			const int64_t tmIterateDocStart = sphMicroTimer();
+			bool bEOF = false;
+			if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
+			{
+				if ( pProfile )
+				{
+					pProfile->m_tmSetup += sphMicroTimer() - tmSetupStart;
+					pProfile->m_tmIterateDoc += sphMicroTimer() - tmIterateDocStart;
+				}
+				tSrc.Disconnect();
+				break;
+			}
+
+			if ( pProfile )
+			{
+				pProfile->m_tmSetup += sphMicroTimer() - tmSetupStart;
+				pProfile->m_tmIterateDoc += sphMicroTimer() - tmIterateDocStart;
+			}
+
+			const int64_t tmHitsStart = sphMicroTimer();
+			ISphHits * pHits = tSrc.IterateHits ( sError );
+			if ( !pHits )
+			{
+				if ( pProfile )
+					pProfile->m_tmIterateHits += sphMicroTimer() - tmHitsStart;
+				tSrc.Disconnect();
+				break;
+			}
+
+			if ( pProfile )
+				pProfile->m_tmIterateHits += sphMicroTimer() - tmHitsStart;
+
+			dSeen.Resize ( 0 );
+			dSeenCounts.Resize ( 0 );
+			const int64_t tmHitLoopStart = sphMicroTimer();
+			for ( const auto & tHit : *pHits )
+			{
+				SphWordID_t uWord = tHit.m_uWordID;
+				if ( !uWord || uWord==WORDID_MAX )
+					continue;
+
+				dSeen.Add ( uWord );
+				if ( pProfile )
+					pProfile->m_iHits++;
+			}
+			if ( pProfile )
+				pProfile->m_tmHitsLoop += sphMicroTimer() - tmHitLoopStart;
+
+			if ( !dSeen.IsEmpty() )
+			{
+				const int64_t tmSortStart = sphMicroTimer();
+				dSeen.Sort();
+				if ( pProfile )
+					pProfile->m_tmDocsSort += sphMicroTimer() - tmSortStart;
+
+				const int64_t tmDocsAddStart = sphMicroTimer();
+				dSeenCounts.Resize ( 0 );
+				SphWordID_t uPrev = WORDID_MAX;
+				int iUnique = 0;
+				for ( const auto & uWord : dSeen )
+				{
+					if ( uWord==uPrev )
+					{
+						++dSeenCounts.Last();
+						continue;
+					}
+
+					dSeenCounts.Add ( 1 );
+					dSeen[iUnique++] = uWord;
+					uPrev = uWord;
+				}
+				dSeen.Resize ( iUnique );
+
+				ARRAY_FOREACH ( i, dSeenCounts )
+				{
+					KillWordStats_t & tStats = m_tKillStats.AddUnique ( dSeen[i] );
+					tStats.m_iDocs++;
+					tStats.m_iHits += dSeenCounts[i];
+				}
+				if ( pProfile )
+					pProfile->m_tmDocsAdd += sphMicroTimer() - tmDocsAddStart;
+			}
+
+			tSrc.Disconnect();
+		} while ( false );
+
+		++iProcessed;
+		if ( pProfile )
+			++pProfile->m_iRows;
+		if ( ( iProcessed & 1023 )==0 )
+		{
+			const int64_t tmNow = sphMicroTimer();
+			if ( tmNow - tmLastLog >= 1'000'000 )
+			{
+				const double fProgress = iTotalRows ? ( 100.0 * (double)iProcessed / (double)iTotalRows ) : 100.0;
+				sphLogDebugv ( "kill dictionary build '%s': rows=%lld/%lld (%.1f%%), elapsed %.3f sec",
+					GetFilebase(), (long long)iProcessed, (long long)iTotalRows, fProgress, (double)( tmNow - tmStart ) / 1'000'000.0 );
+				tmLastLog = tmNow;
 			}
 		}
-
-		tSrc.Disconnect();
 	}
 }
 
@@ -10569,20 +10662,41 @@ void CSphIndex_VLN::BuildKillStatsLocked() const
 	if ( !PrepareKillStatsFieldsLocked() )
 		return;
 
+	const int64_t tmStart = sphMicroTimer();
+	const uint64_t uDead = m_tDeadRowMap.GetNumDeads();
+	sphLogDebug ( "kill dictionary build start '%s': dead_rows=%llu", GetFilebase(), (unsigned long long)uDead );
+
 	m_tKillStats.Reset();
 	m_bKillStatsBuilt = true;
 	m_bKillStatsDirty = true;
 
 	if ( !m_tDeadRowMap.HasDead() )
+	{
+		sphLogDebug ( "kill dictionary build done '%s': dead_rows=0, words=0, time=%.3f sec", GetFilebase(), (double)( sphMicroTimer() - tmStart ) / 1'000'000.0 );
 		return;
+	}
 
 	CSphVector<RowID_t> dDead;
+	KillStatsBuildProfile_t tProfile;
 	dDead.Reserve ( m_tDeadRowMap.GetNumDeads() );
 	for ( RowID_t tRowID = 0; tRowID < m_iDocinfo; tRowID++ )
 		if ( m_tDeadRowMap.IsSet ( tRowID ) )
 			dDead.Add ( tRowID );
 
-	UpdateKillStatsForRowsLocked ( dDead );
+	UpdateKillStatsForRowsLocked ( dDead, &tProfile );
+
+	sphLogDebug ( "kill dictionary build done '%s': dead_rows=%llu, words=%d, rows=%lld, hits=%lld, time=%.3f sec"
+		" [docstore=%.3f sec setup=%.3f sec iterate_doc=%.3f sec iterate_hits=%.3f sec hit_loop=%.3f sec sort=%.3f sec docs_add=%.3f sec]",
+		GetFilebase(), (unsigned long long)uDead, m_tKillStats.GetLength(),
+		(long long)tProfile.m_iRows, (long long)tProfile.m_iHits,
+		(double)( sphMicroTimer() - tmStart ) / 1'000'000.0,
+		(double)tProfile.m_tmDocstore / 1'000'000.0,
+		(double)tProfile.m_tmSetup / 1'000'000.0,
+		(double)tProfile.m_tmIterateDoc / 1'000'000.0,
+		(double)tProfile.m_tmIterateHits / 1'000'000.0,
+		(double)tProfile.m_tmHitsLoop / 1'000'000.0,
+		(double)tProfile.m_tmDocsSort / 1'000'000.0,
+		(double)tProfile.m_tmDocsAdd / 1'000'000.0 );
 }
 
 bool CSphIndex_VLN::GetKillStats ( SphWordID_t uWordID, KillWordStats_t & tStats ) const

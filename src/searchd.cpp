@@ -6548,11 +6548,11 @@ static const CSphSchema & GetSchemaForCreateTable ( const CSphIndex * pIndex )
 }
 
 
-static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
+static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
 {
 	assert(pIndex);
 
-	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema );
+	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema, eExt );
 	return sCreateTable;
 }
 
@@ -6594,7 +6594,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 			return;
 		}
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ) );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::PATH );
 		break;
 	}
 	case RunIdx_e::DISTR:
@@ -6676,7 +6676,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( pServed )
 	{
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ) );
+		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ), ( tStmt.m_bFormatExtFilesPath ? ExtFilesFormat_e::PATH : ExtFilesFormat_e::VALUES ) );
 	} else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -10550,7 +10550,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	WIdx_T<RtIndex_i*> pRtIndex { pServed };
 
 	// get all table settings as a string
-	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema() );
+	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema(), ExtFilesFormat_e::PATH );
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )

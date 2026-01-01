@@ -122,8 +122,10 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
+	// Free old data pointer attributes before resetting
 	FreeDataPtrAttrs();
-	m_tRefMatch.Reset ( pSchema->GetRowSize() );
+	
+	m_tRefMatch.Reset ( pSchema->GetDynamicSize() );
 	m_dStatic.Resize ( pSchema->GetStaticSize() );
 	m_tRefMatch.m_pStatic = m_dStatic.Begin();
 
@@ -137,11 +139,30 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 		}
 
 		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
+		if ( !pAttr )
+			continue;
+
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// use the remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				pAttr = pRemapped;
+		}
+
 		auto pRowData = pAttr->m_tLocator.m_bDynamic ? m_tRefMatch.m_pDynamic : m_dStatic.Begin();
 		switch ( i.m_eType )
 		{
 		case SPH_ATTR_STRINGPTR:
-			sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
+			// After remapping, pAttr should be SPH_ATTR_STRINGPTR, but check to be safe
+			if ( pAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
+			{
+				BYTE * pPacked = sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } );
+				sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)pPacked );
+			}
 			break;
 
 		case SPH_ATTR_FLOAT:
@@ -164,18 +185,29 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
-	for ( auto & i : m_tScroll.m_dAttrs )
+	for ( const auto & i : m_tScroll.m_dAttrs )
 	{
-		if ( i.m_sSortAttr=="weight()" )
+		if ( i.m_sSortAttr=="weight()" || !sphIsDataPtrAttr(i.m_eType) )
 			continue;
 
-		const CSphColumnInfo * pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
-		assert(pAttr);
-		if ( sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
+		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
+		if ( !pAttr )
+			continue;
+
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// use the remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
 		{
-			auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
-			sphDeallocatePacked(pData);
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				pAttr = pRemapped;
 		}
+
+		auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
+		if ( pData )
+			sphDeallocatePacked(pData);
 	}
 }
 
@@ -218,9 +250,22 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		if ( !pAttr )
 			return false;
 
+		ESphAttr eCheckType = pAttr->m_eAttrType;
+		
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// check if there's a remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && eCheckType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = tSchema.GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				eCheckType = SPH_ATTR_STRINGPTR;
+		}
+
 		bool bSupported = false;
 		for ( auto eType : dSupportedTypes )
-			if ( pAttr->m_eAttrType==eType )
+			if ( eCheckType==eType )
 			{
 				bSupported = true;
 				break;

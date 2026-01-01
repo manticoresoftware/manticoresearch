@@ -512,35 +512,36 @@ index_converter {--config /path/to/config|--path}
 ```bash
 searchd [OPTIONS]
 ```
-* [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Указывает путь к файлу конфигурации
+* [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Задает путь к файлу конфигурации
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Принудительно запускает сервер в консольном режиме
-* [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Включает сохранение core dump при сбое
-* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчет о времени ЦПУ
-* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет службу Manticore из Microsoft Management Console и других мест регистрации служб
-* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Запрещает серверу обслуживать входящие подключения до предварительного чтения файлов таблиц
-* [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Показывает все доступные параметры
-* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Ограничивает работу сервера только указанной таблицей
-* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает searchd как службу в Microsoft Management Console
-* [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчетность по вводу/выводу
+* [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Включает сохранение дампа памяти при аварийном завершении
+* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчетность о времени процессора
+* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет службу Manticore из консоли управления Microsoft и других мест, где регистрируются службы
+* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Запрещает серверу обслуживать входящие соединения до предварительного чтения файлов таблиц
+* [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает все доступные параметры
+* [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - Выводить только ошибки при запуске
+* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Ограничивает сервер обслуживанием только указанной таблицы
+* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает searchd как службу в консоли управления Microsoft
+* [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Включает отчетность о вводе/выводе
 * [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - Переопределяет [listen](Server_settings/Searchd.md#listen) из файла конфигурации
-* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод в лог сервера
-* [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод репликации в лог сервера
-* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер как эталонный узел с защитой при [перезапуске кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
-* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер как эталонный узел, обходя защиту при [перезапуске кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
-* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Не отделяет searchd и запускает его в первом плане
-* [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Используется Microsoft Management Console для запуска searchd как службы на Windows
-* [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - Переопределяет [pid_file](Server_settings/Searchd.md#pid_file) из файла конфигурации
-* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Указывает порт, на котором searchd должен слушать, игнорируя порт из файла конфигурации
-* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает дополнительные опции воспроизведения бинарного лога
-* [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - Присваивает указанное имя службе searchd при установке или удалении, отображаемое в Microsoft Management Console
-* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Запрашивает статус работающего поискового сервиса
+* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод в журнал сервера
+* [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - Включает дополнительный отладочный вывод по репликации в журнал сервера
+* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер в качестве опорного узла с защитой от [перезапуска кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
+* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - Инициализирует кластер репликации и устанавливает сервер в качестве опорного узла, обходя защиту от [перезапуска кластера](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)
+* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - Удерживает searchd работающим на переднем плане
+* [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Используется консолью управления Microsoft для запуска searchd как службы на платформах Windows
+* [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - Переопределяет [pid_file](Server_settings/Searchd.md#pid_file) в файле конфигурации
+* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - Задает порт, на котором должен слушать searchd, игнорируя порт, указанный в файле конфигурации
+* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - Устанавливает дополнительные параметры воспроизведения бинарного лога
+* [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - Присваивает searchd заданное имя при установке или удалении службы, как оно отображается в консоли управления Microsoft
+* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - Запрашивает статус у запущенной службы search
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Останавливает сервер Manticore
-* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Грациозно останавливает сервер Manticore
-* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет пути из всех имен файлов, на которые ссылается таблица
+* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Корректно останавливает сервер Manticore
+* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет имена путей из всех имен файлов, на которые ссылается таблица
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает информацию о версии
 
 ##### Переменные окружения searchd
-* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - Включает подробное логирование при завершении работы searchd
+* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - Включает подробное логирование во время завершения работы searchd
 
 ## [Indextool](Miscellaneous_tools.md#indextool)
 Различные функции обслуживания таблиц, полезные для устранения неполадок.
@@ -663,4 +664,3 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Страница установки](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Страница установки](https://manticoresearch.com/install-15.1.0/)
 <!-- proofread -->
-

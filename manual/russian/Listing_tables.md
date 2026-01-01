@@ -1,6 +1,6 @@
 # Список таблиц
 
-В Manticore Search используется одноуровневая иерархия для таблиц.
+Manticore Search имеет одноуровневую иерархию для таблиц.
 
 В отличие от других СУБД, в Manticore нет концепции группировки таблиц в базы данных. Однако для совместимости с диалектами SQL, Manticore принимает операторы `SHOW DATABASES` для совместимости с диалектом SQL, но оператор не возвращает никаких результатов.
 
@@ -344,7 +344,7 @@ select * from tbl.@table where type='text';
 
 <!-- example name_table2 -->
 
-Вы также можете выполнять множество других действий с `<your_table_name>.@table`, рассматривая её как обычную таблицу Manticore с колонками, состоящими из целочисленных и строковых атрибутов.
+Вы также можете выполнять множество других действий с `<your_table_name>.@table`, рассматривая её как обычную таблицу Manticore со столбцами, состоящими из целочисленных и строковых атрибутов.
 
 <!-- request SQL -->
 
@@ -360,10 +360,15 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name
+SHOW CREATE TABLE table_name [ OPTION format_ext_files = 'values' | 'path' ]
 ```
 
-Выводит оператор `CREATE TABLE`, который использовался для создания указанной таблицы.
+Выводит оператор `CREATE TABLE`, использованный для создания указанной таблицы.
+
+Опция `format_ext_files` позволяет управлять отображением настроек внешних файлов (таких как `stopwords`, `exceptions`, `wordforms`, `hitless_words`):
+
+* `'values'` (по умолчанию): Отображает содержимое файлов в виде встроенных списков с использованием опций `*_list` (например, `stopwords_list='word1; word2'`).
+* `'path'`: Отображает пути к файлам с использованием исходных опций (например, `stopwords='/path/to/file'`).
 
 <!-- intro -->
 ##### SQL:
@@ -415,7 +420,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-Также поддерживается `desc pq table like ...`, и работает следующим образом:
+Также поддерживается `desc pq table like ...` и работает следующим образом:
 
 ```sql
 mysql> desc pq table like '%title%';

@@ -49,9 +49,9 @@ create table movies(title text, year_ int) morphology='stem_en' html_strip='1' s
 show tables;
 
 create table test1 (title text) wordforms = '<this_test/>/wordforms.txt <this_test/>/wordforms2.txt';
-show create table test1;
+show create table test1 OPTION format_ext_files = 'path';
 create table test2 like test1;
-show create table test2;
+show create table test2 OPTION format_ext_files = 'path';
 insert into test2 values (1,'word form');
 insert into test2 values (2,'word1 form1');
 select * from test2 where match('wordform');
@@ -60,7 +60,7 @@ drop table test1;
 drop table test2;
 
 create table test1 (title text) wordforms = '<this_test/>/wordform*.txt';
-show create table test1;
+show create table test1 OPTION format_ext_files = 'path';
 drop table test1;
 
 create table test1(title text) charset_table='non_cjk #' stopwords='<this_test/>/stops.txt';
@@ -92,7 +92,8 @@ alter table test_alter exceptions='<this_test/>/exc1.txt';
 alter table test_alter stopwords='<this_test/>/stops1.txt';
 alter table test_alter wordforms='<this_test/>/wordforms2.txt';
 
-SHOW CREATE TABLE test_alter;
+SHOW CREATE TABLE test_alter OPTION format_ext_files = 'path';
+SHOW CREATE TABLE test_alter OPTION format_ext_files = 'values';
 drop table test_alter;
 </sphinxql>
 

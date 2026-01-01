@@ -145,5 +145,96 @@ table products {
 }
 ```
 <!-- end -->
+
+## exceptions_list
+
+```ini
+exceptions_list = 'map-from-tokens => map-to-token; ...'
+```
+
+<!-- example exceptions_list -->
+The `exceptions_list` setting allows you to specify exceptions directly in the `CREATE TABLE` statement. It is supported in [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) only.
+
+The values must be separated by semicolons (`;`). Since exceptions can contain `>` or `=>` as separators, and potentially other special characters, make sure to escape semicolons if they are part of the token itself (e.g. `\;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) exceptions_list = 'at & t => at&t; MS Windows => ms windows'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) exceptions_list = 'at & t => at&t; MS Windows => ms windows'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'exceptions_list' => 'at & t => at&t; MS Windows => ms windows'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) exceptions_list = \'at & t => at&t; MS Windows => ms windows\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions_list = \'at & t => at&t; MS Windows => ms windows\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions_list = \'at & t => at&t; MS Windows => ms windows\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) exceptions_list = 'at & t => at&t; MS Windows => ms windows'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) exceptions_list = 'at & t => at&t; MS Windows => ms windows'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) exceptions_list = 'at & t => at&t; MS Windows => ms windows'", Some(true)).await;
+```
+
+<!-- end -->
 <!-- proofread -->
 

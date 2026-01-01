@@ -1,0 +1,3 @@
+word1 form1 > wordform1
+word2 form3 > wordform4
+word5 form5 > wordform6

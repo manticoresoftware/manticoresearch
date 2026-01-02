@@ -5608,6 +5608,31 @@ struct CmpDistDocABC_fn
 	}
 };
 
+// sort by distance asc, document count desc, ABC asc
+struct CmpFoundDocs_fn
+{
+	const char * m_pBuf;
+	explicit CmpFoundDocs_fn ( const char * pBuf ) : m_pBuf ( pBuf ) {}
+
+	inline bool IsLess ( const SuggestWord_t & a, const SuggestWord_t & b ) const
+	{
+		// sort by found_docs desc, dist asc
+		if ( a.m_iFoundDocs!=b.m_iFoundDocs )
+			return a.m_iFoundDocs>b.m_iFoundDocs;  // descending
+
+		if ( a.m_iDistance==b.m_iDistance && a.m_iDocs==b.m_iDocs )
+		{
+			return ( sphDictCmpStrictly ( m_pBuf + a.m_iNameOff, a.m_iLen, m_pBuf + b.m_iNameOff, b.m_iLen )<0 );
+		}
+
+		if ( a.m_iDistance==b.m_iDistance )
+			return a.m_iDocs>=b.m_iDocs;
+		return a.m_iDistance<b.m_iDistance;
+	}
+};
+
+static bool HasSuggestFoundDocs ( const SuggestArgs_t & tArgs ) { return tArgs.m_eSearch!=SuggestArgs_t::SearchMode_e::NONE; }
+
 static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t & tRes, const CSphString & sSentence, RowBuffer_i & tOut )
 {
 	if ( tArgs.m_bResultOneline )
@@ -5648,6 +5673,18 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 			tOut.PutString ( sBuf );
 			if ( !tOut.Commit() )
 				return;
+
+			if ( HasSuggestFoundDocs ( tArgs ) )
+			{
+				sBuf.Clear ();
+				sBuf.StartBlock ( "," );
+				for ( const auto & dMatched : tRes.m_dMatched )
+					sBuf.Appendf ( "%d", dMatched.m_iFoundDocs );
+				tOut.PutString ( "found_docs" );
+				tOut.PutString ( sBuf );
+				if ( !tOut.Commit() )
+					return;
+			}
 		}
 	} else
 	{
@@ -5658,6 +5695,8 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 		{
 			tOut.HeadColumn ( "distance" );
 			tOut.HeadColumn ( "docs" );
+			if ( HasSuggestFoundDocs ( tArgs ) )
+				tOut.HeadColumn ( "found_docs" );
 		}
 		tOut.HeadEnd ();
 
@@ -5679,6 +5718,8 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 			{
 				tOut.PutNumAsString ( tWord.m_iDistance );
 				tOut.PutNumAsString ( tWord.m_iDocs );
+				if ( HasSuggestFoundDocs ( tArgs ) )
+					tOut.PutNumAsString ( tWord.m_iFoundDocs );
 			}
 			if ( !tOut.Commit() )
 				return;
@@ -5688,7 +5729,9 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 	tOut.Eof();
 }
 
-static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError )
+static void SuggestSearch ( const char * sIndexName, const SuggestArgs_t & tArgs, SuggestResult_t & tRes, bool bFinal );
+
+static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError, bool bFinal )
 {
 	assert ( pServed );
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
@@ -5703,7 +5746,63 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs.m_bForceBigrams ) )
 		pIdx->GetSuggest ( tArgs, tRes );
 
+	SuggestSearch ( pIdx->GetName(), tArgs, tRes, bFinal );
 	return true;
+}
+
+static void SuggestSearchSort ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes )
+{
+	if ( tRes.m_sSentence.IsEmpty() || !HasSuggestFoundDocs ( tArgs ) || tRes.m_dMatched.IsEmpty() )
+		return;
+
+	// sort by found_docs desc, dist asc
+	CmpFoundDocs_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+	tRes.m_dMatched.Sort ( tCmp );
+}
+
+void SuggestSearch ( const char * sIndexName, const SuggestArgs_t & tArgs, SuggestResult_t & tRes, bool bFinal )
+{
+	if ( tRes.m_sSentence.IsEmpty() || !HasSuggestFoundDocs ( tArgs ) || tRes.m_dMatched.IsEmpty() )
+		return;
+
+	const CSphString & sSentence = tRes.m_sSentence;
+	const BYTE * pBuf = tRes.m_dBuf.Begin();
+
+	for ( auto & tWord : tRes.m_dMatched )
+	{
+		// char * vs Str_t is safe as all words are null-terminated
+		const BYTE * sSuggested = pBuf + tWord.m_iNameOff;
+
+		SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
+		CSphQuery & tQuery = tHandler.m_dQueries[0];
+		tQuery.m_sIndexes = sIndexName;
+		tQuery.m_iLimit = 1;
+		tQuery.m_iMaxMatches = 1;
+		// phrase or bag of words
+		if ( tArgs.m_eSearch==SuggestArgs_t::SearchMode_e::PHRASE )
+			tQuery.m_sQuery.SetSprintf ( "\"%s %s\"", sSentence.cstr(), sSuggested );
+		else
+			tQuery.m_sQuery.SetSprintf ( "%s %s", sSentence.cstr(), sSuggested );
+
+		// only count(*) select list item
+		CSphQueryItem & tItem = tQuery.m_dItems.Add();
+		tItem.m_sExpr = "count(*)";
+		tItem.m_sAlias = "count(*)";
+
+		tHandler.RunQueries();
+
+		// count(*) value from the result set into found_docs
+		const auto & tResult = tHandler.m_dAggrResults[0];
+		const CSphColumnInfo * pCol = tResult.m_tSchema.GetAttr ( "count(*)" );
+		if ( tResult.m_iSuccesses > 0 && !tResult.m_dResults.IsEmpty() && !tResult.m_dResults[0].m_dMatches.IsEmpty() && pCol )
+		{
+			const CSphMatch & tMatch = tResult.m_dResults[0].m_dMatches[0];
+			tWord.m_iFoundDocs = (int)tMatch.GetAttr ( pCol->m_tLocator );
+		}
+	}
+
+	if ( bFinal )
+		SuggestSearchSort ( tArgs, tRes );
 }
 
 static void MergetRestultSets ( const SuggestResult_t & tSrc, SuggestResult_t & tDst )
@@ -5723,12 +5822,21 @@ static void MergetRestultSets ( const SuggestResult_t & tSrc, SuggestResult_t & 
 	}
 }
 
-static void UniqRestultSets ( int iLimit, SuggestResult_t & tRes )
+static void UniqRestultSets ( int iLimit, SuggestResult_t & tRes, bool bSortByFoundDocs )
 {
 	SuggestMergeDocs ( tRes.m_dMatched );
 
-	CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
-	tRes.m_dMatched.Sort ( tCmp );
+	if ( bSortByFoundDocs )
+	{
+		// sort by found_docs desc, dist asc
+		CmpFoundDocs_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+		tRes.m_dMatched.Sort ( tCmp );
+
+	} else
+	{
+		CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+		tRes.m_dMatched.Sort ( tCmp );
+	}
 
 	tRes.Flattern ( iLimit );
 }
@@ -5739,6 +5847,8 @@ enum class SuggestFlags_e : DWORD
 	NON_CHAR_ALLOWED			= 1UL << 0,
 	SENTENCE					= 1UL << 1,
 	QUERY_MODE					= 1UL << 2,
+	SEARCH_PHRASE				= 1UL << 3,
+	SEARCH_WORDS				= 1UL << 4,
 };
 
 static void SendSuggestReply ( const SuggestResult_t & tRes, ISphOutputBuffer & tOut )
@@ -5752,6 +5862,7 @@ static void SendSuggestReply ( const SuggestResult_t & tRes, ISphOutputBuffer & 
 	{
 		tOut.SendInt ( tWord.m_iDistance );
 		tOut.SendInt ( tWord.m_iDocs );
+		tOut.SendInt ( tWord.m_iFoundDocs );
 
 		tOut.SendInt ( tWord.m_iLen );
 		tOut.SendBytes ( pBuf + tWord.m_iNameOff, tWord.m_iLen );
@@ -5779,6 +5890,10 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 	tArgs.m_bNonCharAllowed = !!( uFlags & (DWORD)SuggestFlags_e::NON_CHAR_ALLOWED );
 	tArgs.m_bSentence = !!( uFlags & (DWORD)SuggestFlags_e::SENTENCE );
 	tArgs.m_bQueryMode = !!( uFlags & (DWORD)SuggestFlags_e::QUERY_MODE );
+	if ( uFlags & (DWORD)SuggestFlags_e::SEARCH_PHRASE )
+		tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::PHRASE;
+	else if ( uFlags & (DWORD)SuggestFlags_e::SEARCH_WORDS )
+		tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::WORDS;
 
 	if ( tReq.GetError() )
 	{
@@ -5795,7 +5910,7 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 
 	CSphString sError;
 	SuggestResult_t tRes;
-	if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord.cstr(), tRes, sError ) )
+	if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord.cstr(), tRes, sError, false ) )
 	{
 		SendErrorReply ( tOut, "%s", sError.cstr() );
 		return;
@@ -5829,6 +5944,8 @@ public:
 		uFlags |= (DWORD)SuggestFlags_e::NON_CHAR_ALLOWED * m_tArgs.m_bNonCharAllowed;
 		uFlags |= (DWORD)SuggestFlags_e::SENTENCE * m_tArgs.m_bSentence;
 		uFlags |= (DWORD)SuggestFlags_e::QUERY_MODE * m_tArgs.m_bQueryMode;
+		uFlags |= (DWORD)SuggestFlags_e::SEARCH_PHRASE * ( m_tArgs.m_eSearch==SuggestArgs_t::SearchMode_e::PHRASE );
+		uFlags |= (DWORD)SuggestFlags_e::SEARCH_WORDS * ( m_tArgs.m_eSearch==SuggestArgs_t::SearchMode_e::WORDS );
 		tOut.SendDword ( uFlags );
 	}
 
@@ -5859,6 +5976,7 @@ public:
 			SuggestWord_t & tWord = m_tRes.m_dMatched[iOff + i];
 			tWord.m_iDistance = tReq.GetInt();
 			tWord.m_iDocs = tReq.GetInt();
+			tWord.m_iFoundDocs = tReq.GetInt();
 
 			int iWordLen = tReq.GetInt();
 			tWord.m_iNameOff = m_tRes.m_dBuf.GetLength();
@@ -5887,8 +6005,9 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 			return false;
 		}
 
+		// search for locals but sort all suggestions in the end
 		SuggestResult_t tCur;
-		if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord, tCur, sError ) )
+		if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord, tCur, sError, false ) )
 			return false;
 
 		MergetRestultSets ( tCur, tRes );
@@ -5915,7 +6034,9 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 
 	// sort and relimit results sets
 	if ( ( iAgentsReply + dLocals.GetLength() )>1 )
-		UniqRestultSets ( tArgs.m_iLimit, tRes );
+		UniqRestultSets ( tArgs.m_iLimit, tRes, HasSuggestFoundDocs ( tArgs ) );
+	else
+		SuggestSearchSort ( tArgs, tRes ); // need to sort by found_docs
 
 	return true;
 }
@@ -5978,6 +6099,19 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else if ( sOpt=="force_bigrams" )
 		{
 			tArgs.m_bForceBigrams = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
+		} else if ( sOpt=="search_mode" )
+		{
+			if ( tStmt.m_dCallOptValues[i].m_sVal=="phrase" )
+			{
+				tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::PHRASE;
+				iTokType = SqlInsert_t::QUOTED_STRING;
+			}
+			else if ( tStmt.m_dCallOptValues[i].m_sVal=="words" )
+			{
+				tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::WORDS;
+				iTokType = SqlInsert_t::QUOTED_STRING;
+			}
+
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -6007,7 +6141,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 			return;
 		}
 
-		if ( pLocal && !SuggestLocalIndexGet ( pLocal, tArgs, sWord, tRes, sError ) )
+		if ( pLocal && !SuggestLocalIndexGet ( pLocal, tArgs, sWord, tRes, sError, true ) )
 		{
 			tOut.Error ( sError.cstr () );
 			return;

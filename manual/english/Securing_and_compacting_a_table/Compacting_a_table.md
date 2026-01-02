@@ -1,6 +1,6 @@
 # Compacting a Table
 
-Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines pairs of disk chunks, removing documents that were previously deleted using DELETE statements.
+Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines disk chunks (N-way merge), removing documents that were previously deleted using DELETE statements.
 
 Beginning with Manticore 4, this process occurs [automatically by default](../Server_settings/Searchd.md#auto_optimize). However, you can also use the following commands to manually initiate table compaction.
 
@@ -65,7 +65,7 @@ OPTIMIZE TABLE rt OPTION sync=1;
 
 ### Throttling the IO impact
 
-Optimization can be a lengthy and I/O-intensive process. To minimize the impact, all actual merge work is executed serially in a special background thread, and the `OPTIMIZE` statement simply adds a job to its queue. The optimization thread can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
+Optimization can be a lengthy and I/O-intensive process. The `OPTIMIZE` statement adds a job to a background worker pool. You can control how many jobs run in parallel with [parallel_chunk_merges](../Server_settings/Searchd.md#parallel_chunk_merges) and how many chunks each job merges with [merge_chunks_per_job](../Server_settings/Searchd.md#merge_chunks_per_job). The optimization workers can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
 
 During optimization, the RT table being optimized remains online and available for both searching and updates nearly all the time. It is locked for a very brief period when a pair of disk chunks is successfully merged, allowing for the renaming of old and new files and updating the table header.
 
@@ -111,4 +111,3 @@ Once the table is added back to the cluster, you must resume write operations on
 Search operations are available as usual during the process on any of the nodes.
 
 <!-- proofread -->
-

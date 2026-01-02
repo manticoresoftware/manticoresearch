@@ -1061,6 +1061,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "boolean_simplify",		0, nullptr },
 	{ "query_log_commands",		0, nullptr },
 	{ "auto_optimize",			0, nullptr },
+	{ "parallel_chunk_merges",	0, nullptr },
 	{ "pseudo_sharding",		0, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
 	{ "secondary_indexes",		0, nullptr },

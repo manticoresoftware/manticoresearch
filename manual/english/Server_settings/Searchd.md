@@ -107,6 +107,55 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 <!-- end -->
 
+### parallel_chunk_merges
+
+<!-- example conf parallel_chunk_merges -->
+This setting controls how many disk chunk merge jobs the server is allowed to run in parallel during [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) for real-time tables.
+
+This affects only disk chunk merging (compaction), not query parallelism.
+
+Set it to `1` to disable parallel chunk merging (merge jobs will run one-by-one). Higher values may speed up compaction on systems with fast storage, but will increase concurrent disk I/O.
+
+Default is `max(1, min(2, threads/2))`.
+
+This value can be changed at runtime using `SET GLOBAL parallel_chunk_merges = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+parallel_chunk_merges = 1
+```
+
+<!-- request Increase -->
+```ini
+parallel_chunk_merges = 4
+```
+
+<!-- end -->
+
+### merge_chunks_per_job
+
+<!-- example conf merge_chunks_per_job -->
+This setting controls how many RT disk chunks are merged in a single OPTIMIZE job (N-way merge). If fewer than this number are available, the job will merge what it can (minimum 2).
+
+Lower values allow more jobs to be scheduled in parallel; higher values reduce the number of jobs but increase the size of each merge.
+
+Default is `2`.
+
+This value can be changed at runtime using `SET GLOBAL merge_chunks_per_job = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Increase -->
+```ini
+merge_chunks_per_job = 4
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->
@@ -1764,4 +1813,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

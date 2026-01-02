@@ -3,12 +3,11 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
-  pull_request:
-    paths:
-      - 'manual/**'
-    branches:
-      - master
-      - manticore-*
+  workflow_run:
+    workflows: 
+      - 📖 Trigger doc check
+    types:
+      - completed
 
 jobs:
   translate_docs:

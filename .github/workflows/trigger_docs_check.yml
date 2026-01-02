@@ -1,0 +1,23 @@
+name: 📖 Trigger doc check
+run-name: 📖 Trigger doc check ${{ github.sha }}
+
+# We use this intermediate workflow to workaround the issue with repo secrets unavailable for PR-s from external repos
+# The `check_docs` workflow use this one for its `workflow_run` event which let it run without errors
+on:
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+      - manticore-*
+
+jobs:
+  trigger_doc_check:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Trigger doc check
+        run: |
+          echo "Doc check triggered"

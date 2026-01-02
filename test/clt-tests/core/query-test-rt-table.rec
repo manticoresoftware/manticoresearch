@@ -23,6 +23,9 @@ manticore-load --quiet --json --init="CREATE TABLE test (id bigint, usertest tex
     }
 }
 ––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test"
+––– output –––
+––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 100000 OPTION max_matches=100000;" > /tmp/test_data.txt
 ––– output –––
 ––– input –––

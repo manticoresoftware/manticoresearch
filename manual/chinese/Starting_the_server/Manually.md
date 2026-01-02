@@ -1,12 +1,12 @@
 # 手动启动 Manticore
 
-你也可以通过直接调用 `searchd`（Manticore 搜索服务器二进制文件）来启动 Manticore 搜索：
+您也可以通过直接调用 `searchd`（Manticore Search 服务器二进制文件）来启动 Manticore Search：
 
 ```shell
 searchd [OPTIONS]
 ```
 
-请注意，如果没有指定配置文件路径，`searchd` 将根据操作系统在几个位置尝试找到它。
+请注意，如果没有指定配置文件的路径，`searchd` 将会根据操作系统在几个位置尝试查找它。
 
 
 ## searchd 命令行选项
@@ -14,60 +14,61 @@ searchd [OPTIONS]
 
 在所有操作系统中，`searchd` 可用的选项包括：
 
-* `--help` (`-h` 简写) 列出你特定版本的 `searchd` 可以使用的所有参数。
-* `--version` (`-v` 简写) 显示 Manticore 搜索版本信息。
-* `--config <file>` (`-c <file>` 简写) 告诉 `searchd` 使用指定的文件作为其配置。
-* `--stop` 用于异步停止 `searchd`，使用 Manticore 配置文件中指定的 PID 文件详细信息。因此，你可能还需要使用 `--config` 选项告诉 `searchd` 使用哪个配置文件。示例：
+* `--help`（简写为 `-h`）列出在您当前构建的 `searchd` 中可以使用的所有参数。
+* `--version`（简写为 `-v`）显示 Manticore Search 的版本信息。
+* `--quiet`（简写为 `-q`）抑制启动输出，仅显示错误（横幅和预加载消息）。
+* `--config <file>`（简写为 `-c <file>`）告诉 `searchd` 使用指定的文件作为其配置。
+* `--stop` 用于异步停止 `searchd`，使用 Manticore 配置文件中指定的 PID 文件详细信息。因此，您可能还需要通过 `--config` 选项向 `searchd` 确认要使用的配置文件。示例：
 
   ```bash
   $ searchd --config /etc/manticoresearch/manticore.conf --stop
   ```
 
-* `--stopwait` 用于同步停止 `searchd`。`--stop` 基本上告诉运行中的实例退出（通过发送 SIGTERM），然后立即返回。`--stopwait` 也会尝试等待运行中的 `searchd` 实例实际完成关闭（例如，保存所有待处理的属性更改）并退出。示例：
+* `--stopwait` 用于同步停止 `searchd`。`--stop` 本质上是告诉正在运行的实例退出（通过发送 SIGTERM），然后立即返回。`--stopwait` 还会尝试等待直到正在运行的 `searchd` 实例实际完成关闭（例如，保存所有待处理的属性更改）并退出。示例：
 
   ```bash
   $ searchd --config /etc/manticoresearch/manticore.conf --stopwait
   ```
   可能的退出代码如下：
-    * 0 表示成功
-    * 1 如果连接到运行中的搜索服务器失败
-    * 2 如果服务器在关闭过程中报告错误
-    * 3 如果服务器在关闭过程中崩溃
+    * 成功时为 0
+    * 如果连接到正在运行的 searchd 服务器失败时为 1
+    * 如果服务器在关闭期间报告错误时为 2
+    * 如果服务器在关闭期间崩溃时为 3
 
-* `--status` 命令用于使用从（可选提供的）配置文件中提供的连接详细信息查询运行中的 `searchd` 实例状态。它将尝试使用配置文件中找到的第一个 UNIX 套接字或 TCP 端口连接到运行中的实例。成功后，它将查询一些状态和性能计数器值并打印它们。你也可以使用 [SHOW STATUS](../Node_info_and_management/Node_status.md#SHOW-STATUS) 命令通过 SQL 协议访问相同的计数器。示例：
+* `--status` 命令用于通过配置文件（可选提供）中的连接详细信息查询正在运行的 `searchd` 实例状态。它将尝试使用配置文件中找到的第一个 UNIX 套接字或 TCP 端口连接到正在运行的实例。成功时，它将查询多个状态和性能计数器值并打印出来。您也可以使用 [SHOW STATUS](../Node_info_and_management/Node_status.md#SHOW-STATUS) 命令通过 SQL 协议访问相同的计数器。示例：
 
   ```bash
   $ searchd --status
   $ searchd --config /etc/manticoresearch/manticore.conf --status
   ```
 
-* `--pidfile` 用于强制使用 PID 文件（其中存储 `searchd` 进程标识号），即使其他调试选项与此相反（例如，`--console`）。这是一个调试选项。
+* `--pidfile` 用于显式强制使用 PID 文件（其中存储了 `searchd` 进程标识号），即使其他调试选项另有说明（例如，`--console`）。这是一个调试选项。
 
   ```bash
   $ searchd --console --pidfile
   ```
 
-* `--console` 用于强制 `searchd` 进入控制台模式。通常，Manticore 作为常规服务器应用程序运行，并将信息记录到日志文件（如配置文件中指定的）。但在调试配置或服务器本身的问题时，或者尝试诊断难以追踪的问题时，强制它直接将信息输出到调用它的控制台/命令行可能会更容易。以控制台模式运行意味着该进程不会被分叉（因此搜索按顺序进行），并且不会写入日志。（需要注意的是，控制台模式不是运行 `searchd` 的预期方法。）你可以这样调用它：
+* `--console` 用于强制 `searchd` 进入控制台模式。通常，Manticore 作为常规服务器应用程序运行，并将信息记录到日志文件中（如配置文件中指定）。但是，当调试配置或服务器本身的问题，或尝试诊断难以追踪的问题时，强制它直接将信息转储到调用它的控制台/命令行可能更方便。在控制台模式下运行还意味着进程不会分叉（因此搜索是顺序进行的），并且不会写入日志。（需要注意的是，控制台模式不是运行 `searchd` 的预期方法。）您可以这样调用它：
 
   ```bash
   $ searchd --config /etc/manticoresearch/manticore.conf --console
   ```
 
-* `--logdebug`、`--logreplication`、`--logdebugv` 和 `--logdebugvv` 选项启用服务器日志中的附加调试输出。它们的详细程度不同。这些是调试选项，通常不应启用，因为它们可能会污染日志。在需要时可以临时启用以协助复杂的调试会话。
+* `--logdebug`、`--logreplication`、`--logdebugv` 和 `--logdebugvv` 选项用于在服务器日志中启用额外的调试输出。它们的区别在于日志详细程度级别。这些是调试选项，通常不应启用，因为它们可能会大量污染日志。它们可以临时启用以协助复杂的调试会话。
 
-* `--iostats` 与日志选项一起使用（必须在 `manticore.conf` 中激活 `query_log`）时，可以提供有关查询过程中执行的输入/输出操作的更详细信息，带有轻微的性能开销和更大的日志。I/O 统计信息不包括通过 mmap 加载的属性的 I/O 操作信息。要启用它，可以按如下方式启动 `searchd`：
+* `--iostats` 与日志选项（`manticore.conf` 中必须已激活 `query_log`）一起使用，以提供有关查询过程中执行的输入/输出操作的更详细信息，这会带来轻微的性能损失和稍大的日志。IO 统计信息不包括属性的 IO 操作信息，因为这些是通过 mmap 加载的。要启用它，您可以这样启动 `searchd`：
 
   ```bash
   $ searchd --config /etc/manticoresearch/manticore.conf --iostats
   ```
 
-* `--cpustats` 用于提供实际 CPU 时间报告（包括墙钟时间）在查询日志文件（每个给定的查询）和状态报告（聚合）中。它依赖于 `clock_gettime()` Linux 系统调用，或在某些系统上退回到较不精确的调用。你可以这样启动 `searchd`：
+* `--cpustats` 用于在查询日志文件（每个查询）和状态报告（聚合）中提供实际的 CPU 时间报告（除了墙时间）。它依赖于 Linux 系统调用 `clock_gettime()`，或者在某些系统上回退到较不精确的调用。您可以这样启动 `searchd`：
 
   ```bash
   $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
   ```
 
-* `--port portnumber` (`-p` 简写) 用于指定 Manticore 应监听的端口以接受二进制协议请求，通常用于调试目的。这通常默认为 9312，但有时需要在不同的端口上运行。通过命令行指定它将覆盖配置文件中指定的内容。有效的范围是 0 到 65535，但编号为 1024 及以下的端口通常需要特权账户才能运行。
+*  `--port portnumber`（简写为 `-p`）用于指定 Manticore 应监听以接受二进制协议请求的端口，通常用于调试目的。这通常默认为 9312，但有时需要在不同的端口上运行。在命令行上指定它将覆盖配置文件中指定的任何内容。有效范围是 0 到 65535，但 1024 及以下的端口通常需要特权账户才能运行。
 
   使用示例：
 
@@ -75,11 +76,11 @@ searchd [OPTIONS]
   $ searchd --port 9313
   ```
 
-* `--listen ( address ":" port | port | path ) [ ":" protocol ]`（或 `-l` 简写）与 `--port` 一起使用，但允许你不仅指定端口，还可以指定 `searchd` 将监听的完整路径、IP 地址和端口或 Unix 域套接字路径。换句话说，你可以指定 IP 地址（或主机名）和端口号、仅端口号或 Unix 套接字路径。如果你只指定端口号但没有指定地址，`searchd` 将监听所有网络接口。Unix 路径由前导斜杠标识。作为最后一个参数，你还可以指定用于此套接字上的连接的协议处理器（监听器）。支持的协议值为 'sphinx' 和 'mysql'（自 4.1 版本起使用 MySQL 协议）。
+* `--listen ( address ":" port | port | path ) [ ":" protocol ]`（或 `-l` 简写）与 `--port` 的作用相同，但允许您指定不仅仅是端口，还可以指定完整的路径、IP 地址和端口，或 Unix 域套接字路径，`searchd` 将监听这些。换句话说，您可以指定 IP 地址（或主机名）和端口号，仅端口号，或 Unix 套接字路径。如果您指定了端口号但未指定地址，searchd 将监听所有网络接口。Unix 路径通过前导斜杠标识。作为最后一个参数，您还可以指定用于此套接字连接的协议处理程序（监听器）。支持的协议值为 'sphinx' 和 'mysql'（自 4.1 版本以来使用的 MySQL 协议）。
 
-* `--force-preread` 禁止服务器在表文件预读完成之前为任何传入连接提供服务。默认情况下，在启动时，服务器在将表文件懒加载到内存中时接受连接。这扩展了行为并使其等待直到文件加载完成。
+* `--force-preread` 禁止服务器在预读取表文件完成之前服务任何传入连接。默认情况下，在启动时，服务器在表文件懒加载到内存时接受连接。这扩展了该行为，并使其等待直到文件加载完成。
 
-* `--index (--table) <table>`（或 `-i (-t) <table>` 简写）强制此 `searchd` 实例仅服务于指定的表。如上所述，这通常用于调试目的；更长期的更改通常会应用到配置文件本身。
+* `--index (--table) <table>`（或 `-i (-t) <table>` 简写）强制此 `searchd` 实例仅服务指定的表。与上面的 `--port` 一样，这通常用于调试目的；更长期的更改通常会直接应用于配置文件本身。
 
 * `--strip-path` 从表中引用的所有文件名（停用词、词形变化、例外等）中剥离路径名。这对于拾取在另一台机器上构建的表（路径布局可能不同）非常有用。
 
@@ -173,12 +174,11 @@ Manticore 利用 [plugin_dir](../Server_settings/Common.md#plugin_dir) 来存储
 
 `searchd` 支持多个信号：
 
-* `SIGTERM` - 启动干净的关闭。新查询将不会被处理，但已经开始的查询不会被强制中断。
-* `SIGHUP` - 启动表轮换。根据 [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) 设置的值，新查询可能会短暂等待；客户端将收到临时错误。
-* `SIGUSR1` - 强制重新打开 searchd 日志和查询日志文件，允许日志文件轮换。
+* `SIGTERM` - 初始清理关闭。新查询将不会被处理，但已启动的查询不会被强制中断。  
+* `SIGHUP` - 启动表的旋转。根据 [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) 设置值，新查询可能会短暂卡住；客户端将收到临时错误。  
+* `SIGUSR1` - 强制重开搜索d日志和查询日志文件，允许日志文件旋转。  
 
-## 环境变量
+## 环境变量  
 
-* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` 在 searchd 关闭时启用详细日志记录。这在发生某些关闭问题时非常有用，例如 Manticore 关闭时间过长或在关闭过程中冻结。 
+* `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` 启用详细日志，当搜索d关闭时会记录详细信息。这在某些关闭问题中非常有用，例如当Manticore长时间关闭或在关闭过程中冻结时。  
 <!-- proofread -->
-

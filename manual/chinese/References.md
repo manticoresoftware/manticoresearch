@@ -514,33 +514,34 @@ searchd [OPTIONS]
 ```
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - 指定配置文件的路径
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器以控制台模式运行
-* [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 启用崩溃时保存核心转储
-* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用 CPU 时间报告
-* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从 Microsoft 管理控制台及其他注册服务的位置移除 Manticore 服务
-* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 防止服务器在表文件预读完成前服务传入连接
+* [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 在崩溃时启用核心转储保存
+* [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用CPU时间报告
+* [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从Microsoft管理控制台和其他服务注册位置删除Manticore服务
+* [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 在表文件预读完成前阻止服务器处理传入连接
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - 显示所有可用参数
-* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - 限制服务器只服务指定的表
-* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - 将 searchd 安装为 Microsoft 管理控制台中的服务
+* [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - 仅在启动时打印错误
+* [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - 限制服务器仅服务指定的表
+* [--install](Starting_the_server/Manually.md#searchd-command-line-options) - 在Microsoft管理控制台中将searchd安装为服务
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用输入/输出报告
-* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的 [listen](Server_settings/Searchd.md#listen)
-* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - 启用在服务器日志中的额外调试输出
-* [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - 启用在服务器日志中的额外复制调试输出
-* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群，并将服务器设置为带有 [集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 保护的参考节点
-* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群，并将服务器设置为参考节点，跳过 [集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 保护
-* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - 使 searchd 保持在前台运行
-* [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - 由 Microsoft 管理控制台用于在 Windows 平台上以服务方式启动 searchd
-* [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的 [pid_file](Server_settings/Searchd.md#pid_file)
-* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - 指定 searchd 应监听的端口，忽略配置文件中指定的端口
-* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - 设置附加的二进制日志重放选项
-* [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - 在安装或删除服务时，为 searchd 指定名称，该名称显示在 Microsoft 管理控制台中
-* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - 查询运行的搜索服务以返回其状态
-* [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止 Manticore 服务器
-* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - 优雅地停止 Manticore 服务器
-* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - 从表中引用的所有文件名中移除路径名
+* [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的[listen](Server_settings/Searchd.md#listen)
+* [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - 在服务器日志中启用额外的调试输出
+* [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - 在服务器日志中启用额外的复制调试输出
+* [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并设置服务器作为参考节点，带有[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
+* [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并设置服务器作为参考节点，绕过[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
+* [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - 保持searchd在前台运行
+* [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - 由Microsoft管理控制台用于在Windows平台将searchd作为服务启动
+* [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的[pid_file](Server_settings/Searchd.md#pid_file)
+* [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - 指定searchd应监听的端口，忽略配置文件中指定的端口
+* [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - 设置额外的二进制日志重放选项
+* [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - 在安装或删除服务时为searchd分配给定名称，如Microsoft管理控制台中显示的名称
+* [--status](Starting_the_server/Manually.md#searchd-command-line-options) - 查询正在运行的搜索服务以返回其状态
+* [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止Manticore服务器
+* [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - 优雅地停止Manticore服务器
+* [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - 从表中引用的所有文件名中删除路径名
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - 显示版本信息
 
 ##### Searchd 环境变量
-* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - 在 searchd 关闭期间启用详细日志记录
+* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - 在searchd关闭期间启用详细日志记录
 
 ## [Indextool](Miscellaneous_tools.md#indextool)
 各种有助于故障排除的表维护功能。
@@ -663,4 +664,3 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [安装页面](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [安装页面](https://manticoresearch.com/install-15.1.0/)
 <!-- proofread -->
-

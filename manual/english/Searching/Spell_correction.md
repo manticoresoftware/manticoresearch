@@ -230,6 +230,7 @@ That's the only difference between them. Several options are supported for custo
 | non_char | do not skip dictionary words with non alphabet symbols | 0 (skip such words) |
 | sentence | Returns the original sentence along with the last word replaced by the matched one. | 0 (do not return the full sentence) |
 | force_bigrams | Forces the use of bigrams (2-character n-grams) instead of trigrams for all word lengths, which can improve matching for words with transposition errors | 0 (use trigrams for words ≥6 characters) |
+| search_mode | Refines suggestions by performing searches on the index. Accepts `'phrase'` for exact phrase matching or `'words'` for bag-of-words matching. When enabled, adds a `found_docs` column showing document counts and re-ranks results by `found_docs` descending, then by `distance` ascending. | N/A (disabled by default) |
 
 To show how it works, let's create a table and add a few documents to it.
 
@@ -375,6 +376,80 @@ CALL SUGGEST('ipohne', 'products', 1 as force_bigrams);
 +--------+----------+------+
 ```
 <!-- end -->
+
+##### Refining suggestions with search_mode
+The `search_mode` option enhances suggestions by performing actual searches on the index to count how many documents contain each suggested phrase or combination of words. This helps rank suggestions based on real document relevance rather than just dictionary statistics.
+
+The option accepts two values:
+- `'phrase'` - Performs exact phrase searches. For example, when suggesting "bag with tassel", it searches for the exact phrase `"bag with tassel"` and counts documents containing these words as an adjacent phrase.
+- `'words'` - Performs bag-of-words searches. For example, when suggesting "bag with tassel", it searches for `bag with tassel` (without quotes) and counts documents containing all these words, regardless of order or intervening words.
+
+> NOTE: The `search_mode` option only works when `sentence` is enabled (i.e., when the input contains multiple words). For single-word queries, `search_mode` is ignored.
+
+> NOTE: **Performance consideration**: Each suggestion candidate triggers a separate search query against the index. If you need to evaluate many candidates, consider using a lower `limit` value to reduce the number of searches performed.
+
+When `search_mode` is enabled, results include a `found_docs` column showing the document count for each suggestion, and results are re-ranked by `found_docs` descending, then by `distance` ascending.
+
+<!-- intro -->
+##### Example with phrase matching:
+
+<!-- request Example -->
+
+```sql
+CALL QSUGGEST('bag with tasel', 'products', 1 as sentence, 'phrase' as search_mode);
+```
+
+<!-- response Example -->
+
+```sql
++-------------------+----------+------+-------------+
+| suggest           | distance | docs | found_docs  |
++-------------------+----------+------+-------------+
+| bag with tassel   | 1        | 13   | 10          |
+| bag with tazer    | 2        | 27   | 3           |
++-------------------+----------+------+-------------+
+```
+
+<!-- end -->
+
+<!-- intro -->
+##### Example comparing phrase vs words matching:
+
+<!-- request Example -->
+
+```sql
+-- With phrase matching: finds exact phrases only
+CALL QSUGGEST('test carp', 'products', 1 as sentence, 'phrase' as search_mode);
+
+-- With words matching: finds documents with all words regardless of order
+CALL QSUGGEST('test carp', 'products', 1 as sentence, 'words' as search_mode);
+```
+
+<!-- response Example -->
+
+```sql
+-- Phrase mode results:
++----------------+----------+------+-------------+
+| suggest        | distance | docs | found_docs  |
++----------------+----------+------+-------------+
+| test car       | 1        | 17   | 5           |
+| test carpet    | 2        | 19   | 4           |
++----------------+----------+------+-------------+
+
+-- Words mode results (more matches for "test carpet" due to word separation):
++----------------+----------+------+-------------+
+| suggest        | distance | docs | found_docs  |
++----------------+----------+------+-------------+
+| test carpet    | 2        | 19   | 19          |
+| test car       | 1        | 17   | 5           |
++----------------+----------+------+-------------+
+```
+
+<!-- end -->
+
+**Understanding the difference**:
+- **Phrase matching** (`'phrase'`): Searches for exact sequences. The query `"test carpet"` matches only documents where these words appear together in that exact order (e.g., "test carpet cleaning" matches, but "test the carpet" or "carpet test" do not).
+- **Bag-of-words matching** (`'words'`): Searches for all words to exist in the document, order doesn't matter. The query `test carpet` matches any document containing both "test" and "carpet" anywhere (e.g., "test the carpet", "test red carpet", "carpet test" all match).
 
 ### Demo
 

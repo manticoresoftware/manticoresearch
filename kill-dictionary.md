@@ -120,7 +120,7 @@ These expose whether chunks still need a rebuild.
 ### 5) Tooling output (indextool)
 This makes it visible which stats are raw vs corrected.
 - `src/indextool.cpp::LoadKillDictionarySetting()` reads `kill_dictionary` from config so `indextool` uses the same behavior as the server.
-- `src/sphinxrt.cpp::RtIndex_c::DebugDumpDict()` adds `docs_eff`, `hits_eff`, and `chunk_id` columns to `--dumpdict`.
+- `src/sphinxrt.cpp::RtIndex_c::DebugDumpDict()` adds `docs_eff`, `hits_eff`, and `chunk_id` columns to `--dumpdict`, and prints RAM-segment words using the stored length prefix (so `\x03` is not shown as a leading character).
 
 ### 6) RAM-segment stats correction
 To keep RAM-segment stats consistent with killed rows, per-segment docs/hits are recomputed when a segment has dead rows.
@@ -144,6 +144,7 @@ To keep RAM-segment stats consistent with killed rows, per-segment docs/hits are
 ## Tooling Notes (indextool)
 - `indextool --dumpdict` always outputs raw `docs`/`hits` plus extra columns `docs_eff`/`hits_eff` and `chunk_id`.
 - `chunk_id` is the disk chunk id; RAM segments are marked as `-1`.
+- RAM-segment words are stored as length-prefixed buffers; the dump now skips the length byte so words are printed cleanly.
 - The effective columns are adjusted by the kill dictionary (same as query-time stats).
 - The authoritative values for corrected stats are from `SHOW META` / `CALL KEYWORDS` (and query-time ranking).
 

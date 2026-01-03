@@ -1466,6 +1466,7 @@ public:
 	void				UnlockEnabledState () noexcept final;
 
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
+	void				SetSkipLock ( bool bSkipLock ) final;
 
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
@@ -1476,6 +1477,7 @@ public:
 protected:
 	CSphSourceStats		m_tStats;
 	bool				m_bDebugCheck = false;
+	bool				m_bSkipLock = false;
 	bool				m_bCheckIdDups = false;
 	int					m_iCheckChunk = -1;
 	CSphFixedVector<int>	m_dChunkNames { 0 };
@@ -5323,21 +5325,24 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	m_bPreallocPassedOk = false;
 
-	CSphString sLock = GetFilename ( "lock" );
-	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
-	if ( m_iLockFD<0 )
+	if ( !m_bSkipLock )
 	{
-		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm(errno) );
-		return false;
-	}
-
-	if ( !sphLockEx ( m_iLockFD, false ) )
-	{
-		SafeClose ( m_iLockFD );
-		if ( !m_bDebugCheck )
+		CSphString sLock = GetFilename ( "lock" );
+		m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
+		if ( m_iLockFD<0 )
 		{
-			m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
+			m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm(errno) );
 			return false;
+		}
+
+		if ( !sphLockEx ( m_iLockFD, false ) )
+		{
+			SafeClose ( m_iLockFD );
+			if ( !m_bDebugCheck )
+			{
+				m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
+				return false;
+			}
 		}
 	}
 
@@ -6575,6 +6580,13 @@ void RtIndex_c::SetDebugCheck ( bool bCheckIdDups, int iCheckChunk )
 	m_bCheckIdDups = bCheckIdDups;
 	m_iCheckChunk = iCheckChunk;
 	ProhibitSave();
+}
+
+void RtIndex_c::SetSkipLock ( bool bSkipLock )
+{
+	m_bSkipLock = bSkipLock;
+	if ( m_bSkipLock )
+		ProhibitSave();
 }
 
 //////////////////////////////////////////////////////////////////////////

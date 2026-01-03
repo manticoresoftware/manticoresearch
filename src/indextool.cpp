@@ -1062,6 +1062,7 @@ Options are:
 -q, --quiet			be quiet, skip banner etc (useful with --fold etc)
 --strip-path			strip path from filenames referenced by table
 				(eg. stopwords, exceptions, etc)
+--skip-lock			skip taking exclusive table lock (unsafe)
 --stats				show total statistics in the dictionary dump
 --skip-uniq			skip unique (df=1) words in the .idf files
 )"
@@ -1241,11 +1242,12 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 	return nullptr;
 }
 
-static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * pIndex )
+static void PreallocIndex ( const char * szIndex, bool bStripPath, bool bSkipLock, CSphIndex * pIndex )
 {
 	SetIndexFilenameBuilder ( CreateFilenameBuilder );
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 	StrVec_t dWarnings;
+	pIndex->SetSkipLock ( bSkipLock );
 	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.get(), dWarnings ) )
 		sphDie ( "table '%s': prealloc failed: %s\n", szIndex, pIndex->GetLastError().cstr() );
 
@@ -1313,6 +1315,7 @@ int main ( int argc, char ** argv )
 	bool bCheckIdDups = false;
 	int iCheckChunk = -1;
 	DocID_t iExtractDocid = -1;
+	bool bSkipLock = false;
 
 	const char* szErrorMsgTmpl = "ERROR: malformed or unknown option near '%s'.\n";
 	int i;
@@ -1322,6 +1325,7 @@ int main ( int argc, char ** argv )
 		if ( argv[i][0]!='-' ) break;
 		OPT ( "-q", "--quiet" )		{ bTraceToStdout = false; continue; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; continue; }
+		OPT1 ( "--skip-lock" )		{ bSkipLock = true; continue; }
 		OPT1 ( "--checkconfig" )	{ SetCmd ( IndextoolCmd_e::CHECKCONFIG ); continue; }
 		OPT1 ( "--rotate" )			{ bRotate = true; continue; }
 		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
@@ -1590,7 +1594,7 @@ int main ( int argc, char ** argv )
 			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
 		Threads::CallCoroutine ( [&] {
-		PreallocIndex ( sIndex.cstr(), bStripPath, pIndex.get() );
+		PreallocIndex ( sIndex.cstr(), bStripPath, bSkipLock, pIndex.get() );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			return;
@@ -1672,6 +1676,7 @@ int main ( int argc, char ** argv )
 					sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 				StrVec_t dWarnings;
+				pIndex->SetSkipLock ( bSkipLock );
 				if ( !pIndex->Prealloc ( bStripPath, nullptr, dWarnings ) )
 					sphDie ( "table '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 

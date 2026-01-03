@@ -23,7 +23,7 @@ manticore-load --quiet --json --init="CREATE TABLE test (id bigint, usertest tex
     }
 }
 ––– input –––
-mysql -h0 -P9306 -e "flush ramchunk test"
+mysql -h0 -P9306 -e "flush ramchunk test; optimize table test option sync=1, cutoff=1"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 100000 OPTION max_matches=100000;" > /tmp/test_data.txt
@@ -7419,5 +7419,5 @@ mysql -h0 -P9306 -e "SELECT COUNT(DISTINCT category) as unique_categories FROM t
 +-------------------+
 | unique_categories |
 +-------------------+
-|           1002386 |
+|           1000000 |
 +-------------------+

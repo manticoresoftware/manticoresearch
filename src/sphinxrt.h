@@ -475,5 +475,7 @@ volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
+void SetRtKillStatsIdleTimeout ( int iIdleTimeout );
+int GetRtKillStatsIdleTimeout ();
 
 #endif // _sphinxrt_

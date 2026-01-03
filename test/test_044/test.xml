@@ -16,6 +16,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	kill_dictionary = realtime
 }
 
 source src_main

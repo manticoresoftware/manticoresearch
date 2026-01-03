@@ -219,6 +219,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		{
 			const BYTE * pResult = nullptr;
 			int iBytes = pColumnarIterator->Get ( tRowID, pResult );
+			(void)iBytes;
 			assert ( iBytes==sizeof(DWORD) );
 			bDefault = *(const DWORD*)pResult;
 		}

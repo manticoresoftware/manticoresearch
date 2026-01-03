@@ -65,6 +65,87 @@ extern int g_iPredictorCostMatch;
 extern bool g_bJsonStrict;
 extern bool g_bJsonAutoconvNumbers;
 extern bool g_bJsonKeynamesToLowercase;
+enum class KillDictionaryMode_e
+{
+	OFF = 0,
+	REALTIME = 1,
+	FLUSH = 2,
+	IDLE = 3
+};
+
+extern KillDictionaryMode_e g_eKillDictionaryMode;
+
+inline bool KillDictionaryEnabled()
+{
+	return g_eKillDictionaryMode != KillDictionaryMode_e::OFF;
+}
+
+inline bool KillDictionaryRealtime()
+{
+	return g_eKillDictionaryMode == KillDictionaryMode_e::REALTIME;
+}
+
+inline bool KillDictionaryFlush()
+{
+	return g_eKillDictionaryMode == KillDictionaryMode_e::FLUSH;
+}
+
+inline bool KillDictionaryIdle()
+{
+	return g_eKillDictionaryMode == KillDictionaryMode_e::IDLE;
+}
+
+inline const char * KillDictionaryModeName ( KillDictionaryMode_e eMode )
+{
+	switch ( eMode )
+	{
+	case KillDictionaryMode_e::OFF: return "0";
+	case KillDictionaryMode_e::REALTIME: return "realtime";
+	case KillDictionaryMode_e::FLUSH: return "flush";
+	case KillDictionaryMode_e::IDLE: return "idle";
+	default: return "0";
+	}
+}
+
+inline bool ParseKillDictionaryMode ( const CSphString & sValue, KillDictionaryMode_e & eMode )
+{
+	CSphString sVal = sValue;
+	sVal.ToLower();
+
+	if ( sVal.IsEmpty() )
+		return false;
+
+	if ( sVal=="0" || sVal=="off" || sVal=="false" )
+	{
+		eMode = KillDictionaryMode_e::OFF;
+		return true;
+	}
+
+	if ( sVal=="1" || sVal=="on" || sVal=="true" || sVal=="realtime" )
+	{
+		eMode = KillDictionaryMode_e::REALTIME;
+		return true;
+	}
+
+	if ( sVal=="2" || sVal=="flush" )
+	{
+		eMode = KillDictionaryMode_e::FLUSH;
+		return true;
+	}
+
+	if ( sVal=="3" || sVal=="idle" || sVal=="merge" )
+	{
+		eMode = KillDictionaryMode_e::IDLE;
+		return true;
+	}
+
+	return false;
+}
+struct KillStatsFileHeader_t
+{
+	uint64_t m_uDeadRows = 0;
+	uint64_t m_uEntries = 0;
+};
 
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL HELPER FUNCTIONS, CLASSES, ETC

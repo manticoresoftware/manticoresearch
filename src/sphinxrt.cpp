@@ -11583,7 +11583,12 @@ void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 	{
 		RtWordReader_c tRdWord ( pSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
 		while ( tRdWord.UnzipWord() )
-			fprintf ( fp, "%s,%u,%u,0,%u,%u,%d\n", tRdWord->m_sWord, tRdWord->m_uDocs, tRdWord->m_uHits, tRdWord->m_uDocs, tRdWord->m_uHits, -1 );
+		{
+			const BYTE * pWord = tRdWord->m_sWord;
+			int iLen = pWord ? (int)pWord[0] : 0;
+			const char * sWord = pWord ? (const char *)( pWord + 1 ) : "";
+			fprintf ( fp, "%.*s,%u,%u,0,%u,%u,%d\n", iLen, sWord, tRdWord->m_uDocs, tRdWord->m_uHits, tRdWord->m_uDocs, tRdWord->m_uHits, -1 );
+		}
 
 	}
 

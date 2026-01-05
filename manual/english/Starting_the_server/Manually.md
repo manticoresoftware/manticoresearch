@@ -20,61 +20,61 @@ The options available to `searchd` in all operating systems are:
 * `--config <file>` (`-c <file>` for short) tells `searchd` to use the specified file as its configuration.
 * `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
 
-  ```bash
-  $ searchd --config /etc/manticoresearch/manticore.conf --stop
-  ```
+    ```bash
+    $ searchd --config /etc/manticoresearch/manticore.conf --stop
+    ```
 
 * `--stopwait` is used to synchronously stop `searchd`. `--stop` essentially tells the running instance to exit (by sending it a SIGTERM) and then immediately returns. `--stopwait` will also attempt to wait until the running `searchd` instance actually finishes the shutdown (eg. saves all the pending attribute changes) and exits. Example:
 
-  ```bash
-  $ searchd --config /etc/manticoresearch/manticore.conf --stopwait
-  ```
-  Possible exit codes are as follows:
-    * 0 on success
-    * 1 if connection to running searchd server failed
-    * 2 if server reported an error during shutdown
-    * 3 if server crashed during shutdown
+    ```bash
+    $ searchd --config /etc/manticoresearch/manticore.conf --stopwait
+    ```
+    Possible exit codes are as follows:
+      - 0 on success
+      - 1 if connection to running searchd server failed
+      - 2 if server reported an error during shutdown
+      - 3 if server crashed during shutdown
 
 * `--status` command is used to query running `searchd` instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use [SHOW STATUS](../Node_info_and_management/Node_status.md#SHOW-STATUS) command to access the very same counters via SQL protocol. Examples:
 
-  ```bash
-  $ searchd --status
-  $ searchd --config /etc/manticoresearch/manticore.conf --status
-  ```
+    ```bash
+    $ searchd --status
+    $ searchd --config /etc/manticoresearch/manticore.conf --status
+    ```
 
 * `--pidfile` is used to explicitly force using a PID file (where the `searchd` process identification number is stored) despite any other debugging options that say otherwise (for instance, `--console`). This is a debugging option.
 
-  ```bash
-  $ searchd --console --pidfile
-  ```
+    ```bash
+    $ searchd --console --pidfile
+    ```
 
 * `--console` is used to force `searchd` into console mode. Typically, Manticore runs as a conventional server application and logs information into log files (as specified in the configuration file). However, when debugging issues in the configuration or the server itself, or trying to diagnose hard-to-track-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running `searchd`.)  You can invoke it as:
 
-  ```bash
-  $ searchd --config /etc/manticoresearch/manticore.conf --console
-  ```
+    ```bash
+    $ searchd --config /etc/manticoresearch/manticore.conf --console
+    ```
 
 * `--logdebug`, `--logreplication`, `--logdebugv`, and `--logdebugvv` options enable additional debug output in the server log. They differ by the logging verboseness level. These are debugging options and should not be normally enabled, as they can pollute the log a lot. They can be used temporarily on request to assist with complicated debugging sessions.
 
 * `--iostats` is used in conjunction with the logging options (the `query_log` must have been activated in  `manticore.conf`) to provide more detailed information on a per-query basis about the input/output operations carried out in the course of that query, with a slight performance hit and slightly bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap. To enable it, you can start `searchd` as follows:
 
-  ```bash
-  $ searchd --config /etc/manticoresearch/manticore.conf --iostats
-  ```
+    ```bash
+    $ searchd --config /etc/manticoresearch/manticore.conf --iostats
+    ```
 
 * `--cpustats` is used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated). It depends on `clock_gettime()` Linux system call or falls back to less precise call on certain systems. You might start `searchd` thus:
 
-  ```bash
-  $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
-  ```
+    ```bash
+    $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
+    ```
 
 *  `--port portnumber` (`-p` for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.
 
-  An example of usage:
+    An example of usage:
 
-  ```bash
-  $ searchd --port 9313
-  ```
+    ```bash
+    $ searchd --port 9313
+    ```
 
 * `--listen ( address ":" port | port | path ) [ ":" protocol ]` (or `-l` for short) Works as `--port`, but allows you to specify not only the port, but the full path, IP address and port, or Unix-domain socket path that `searchd` will listen on. In other words, you can specify either an IP address (or hostname) and port number, just a port number, or a Unix socket path. If you specify a port number but not the address, searchd will listen on all network interfaces. A Unix path is identified by a leading slash. As the last parameter, you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
 
@@ -98,9 +98,9 @@ The options available to `searchd` in all operating systems are:
 
 * `--coredump` is used to enable saving a core file or a minidump of the server on crash. Disabled by default to speed up of server restart on crash. This is useful for debugging purposes.
 
-  ```bash
-  $ searchd --config /etc/manticoresearch/manticore.conf --coredump
-  ```
+    ```bash
+    $ searchd --config /etc/manticoresearch/manticore.conf --coredump
+    ```
 
 * `--new-cluster` bootstraps a replication cluster and makes the server a reference node with [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection. On Linux you can also run `manticore_new_cluster`. It will start Manticore in `--new-cluster` mode via systemd.
 
@@ -108,26 +108,27 @@ The options available to `searchd` in all operating systems are:
 
 * `--mockstack` analyzes and reports the necessary stack sizes for recursive expression evaluation, pattern matching operations, and filter processing. This debugging option outputs calculated stack requirements to the console for optimization purposes. The output provides environment variables that can be used to configure stack requirements for different operations.
 
-  Example:
-  ```bash
-  $ searchd --mockstack
-  Manticore 7.4.7 e90b5afbb@25032706 dev (columnar 4.1.2 15bbcc7@25031206) (secondary 4.1.2 15bbcc7@25031206) (knn 4.1.2 15bbcc7@25031206)
-  Copyright (c) 2001-2016, Andrew Aksyonoff
-  Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-  Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+    Example:
 
-  export MANTICORE_KNOWN_CREATE_SIZE=200
-  export MANTICORE_START_KNOWN_CREATE_SIZE=4504
-  export MANTICORE_KNOWN_EXPR_SIZE=16
-  export MANTICORE_START_KNOWN_EXPR_SIZE=200
-  export MANTICORE_NONE=32
-  export MANTICORE_START_NONE=104
-  export MANTICORE_KNOWN_FILTER_SIZE=224
-  export MANTICORE_START_KNOWN_FILTER_SIZE=11192
-  export MANTICORE_KNOWN_MATCH_SIZE=320
-  export MANTICORE_START_KNOWN_MATCH_SIZE=14552
-  export NO_STACK_CALCULATION=1
-  ```
+    ```bash
+    $ searchd --mockstack
+    Manticore 7.4.7 e90b5afbb@25032706 dev (columnar 4.1.2 15bbcc7@25031206) (secondary 4.1.2 15bbcc7@25031206) (knn 4.1.2 15bbcc7@25031206)
+    Copyright (c) 2001-2016, Andrew Aksyonoff
+    Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+    Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+  
+    export MANTICORE_KNOWN_CREATE_SIZE=200
+    export MANTICORE_START_KNOWN_CREATE_SIZE=4504
+    export MANTICORE_KNOWN_EXPR_SIZE=16
+    export MANTICORE_START_KNOWN_EXPR_SIZE=200
+    export MANTICORE_NONE=32
+    export MANTICORE_START_NONE=104
+    export MANTICORE_KNOWN_FILTER_SIZE=224
+    export MANTICORE_START_KNOWN_FILTER_SIZE=11192
+    export MANTICORE_KNOWN_MATCH_SIZE=320
+    export MANTICORE_START_KNOWN_MATCH_SIZE=14552
+    export NO_STACK_CALCULATION=1
+    ```
 
 ### Windows options
 
@@ -137,28 +138,29 @@ Note that in Windows searchd will default to `--console` mode, unless you instal
 
 * `--install` installs `searchd` as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where `--install` is specified will also become part of the command line on future starts of the service. For example, as a part of calling `searchd`, you will likely also need to specify the configuration file with `--config`, and you would do that as well as specifying `--install`. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to `searchd`. Example:
 
-  ```bat
-  C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
-     --config C:\Manticore\manticore.conf
-  ```
+    ```bat
+    C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
+       --config C:\Manticore\manticore.conf
+    ```
 
-  If you want to have the I/O stats every time you start `searchd`, you need to specify the option on the same line as the `--install` command thus:
+    If you want to have the I/O stats every time you start `searchd`, you need to specify the option on the same line as the `--install` command thus:
 
-  ```bat
-  C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
-     --config C:\Manticore\manticore.conf --iostats
-  ```
+    ```bat
+    C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
+       --config C:\Manticore\manticore.conf --iostats
+    ```
 * `--delete` removes the service from the Microsoft Management Console and other places where services are registered, after previously being installed with `--install`. Note that this does not uninstall the software or delete the tables. It means the service will not be called from the services system, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot or until `--stop`). If the service was installed with a custom name (with `--servicename`), the same name will need to be specified with `--servicename` when calling to uninstall. Example:
 
-  ```bat
-  C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --delete
-  ```
+    ```bat
+    C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --delete
+    ```
 
 * `--servicename <name>` applies the given name to `searchd` when installing or deleting the service, as it would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log in to the system, or a system with multiple `searchd` instances, a more descriptive name may be applicable. Note that unless combined with `--install` or `--delete`, this option does not do anything.  Example:
-  ```bat
-  C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
-     --config C:\Manticore\manticore.conf --servicename ManticoreSearch
-  ```
+
+    ```bat
+    C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
+       --config C:\Manticore\manticore.conf --servicename ManticoreSearch
+    ```
 
 * `--ntservice` is an option that is passed by the Microsoft Management Console to `searchd` to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service is started, although if you wanted to call this as a regular service from the command-line (as the complement to `--console`) you could do so in theory.
 

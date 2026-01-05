@@ -7124,7 +7124,7 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		if ( tNewSchema.IsAttrStored(i) )
-			iOldNumStored++;
+			iNewNumStored++;
 
 	if ( iOldNumStored==iNewNumStored )
 		return true;

@@ -1,0 +1,38 @@
+Test for issue #3661: adding stored attribute to columnar table without docstore
+
+Bug: ALTER TABLE ADD COLUMN on columnar table with no stored fields/attrs tried to rename missing .spds and corrupted table.
+Fix: correctly count stored attrs in new schema so docstore file juggling only happens when needed.
+
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+Create a columnar table without stored fields/attrs
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t3661; create table t3661 (tag integer) engine='columnar';"
+––– output –––
+––– comment –––
+Insert data and flush to disk
+––– input –––
+mysql -h0 -P9306 -e "insert into t3661 values(1, 0), (2, 1), (3, 2); flush ramchunk t3661;"
+––– output –––
+––– comment –––
+Add stored string attribute (should not fail or corrupt table)
+––– input –––
+mysql -h0 -P9306 -e "alter table t3661 add column value string attribute indexed;"; echo $?
+––– output –––
+0
+––– comment –––
+Verify new attribute exists and table is usable
+––– input –––
+mysql -h0 -P9306 -e "desc t3661" | grep "value"
+––– output –––
+| value | string | indexed attribute columnar fast_fetch |
+––– input –––
+mysql -h0 -P9306 -e "select count(*) from t3661;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+

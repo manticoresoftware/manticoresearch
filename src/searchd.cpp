@@ -6553,11 +6553,9 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	{
 		if ( tStmt.m_tCreateTable.m_bIfNotExists )
 			return true;
-		else
-		{
-			sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
-			return false;
-		}
+
+		sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
+		return false;
 	}
 
 	if ( CSphSchema::IsReserved ( tStmt.m_sIndex.cstr() ) )
@@ -6596,7 +6594,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
 		{
-			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loded", i.m_tAttr.m_sName.cstr() );
+			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loaded", i.m_tAttr.m_sName.cstr() );
 			return false;
 		}
 

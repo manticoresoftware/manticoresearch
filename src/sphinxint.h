@@ -141,8 +141,13 @@ inline bool ParseKillDictionaryMode ( const CSphString & sValue, KillDictionaryM
 
 	return false;
 }
+static constexpr uint32_t KILL_STATS_MAGIC = 0x534B5053; // "SPKS"
+static constexpr uint32_t KILL_STATS_VERSION = 1;
+
 struct KillStatsFileHeader_t
 {
+	uint32_t m_uMagic = KILL_STATS_MAGIC;
+	uint32_t m_uVersion = KILL_STATS_VERSION;
 	uint64_t m_uDeadRows = 0;
 	uint64_t m_uEntries = 0;
 };

@@ -680,6 +680,11 @@ Modes:
 - `flush`: enabled, but per-kill updates are deferred until the next flush/merge rebuilds the stats.
 - `idle`: enabled, but per-kill updates are deferred until the write stream goes idle (see `kill_dictionary_idle_timeout`).
 
+Notes on `flush` mode:
+- Stats become accurate after each disk-chunk flush, not after every REPLACE/DELETE.
+- Write latency is smoother than `realtime`, but flushes can take longer because kill stats are applied synchronously during the flush.
+- Throughput can be similar to, or slightly worse than, `realtime` depending on flush frequency and dataset.
+
 <!-- intro -->
 ##### Example:
 
@@ -1800,4 +1805,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

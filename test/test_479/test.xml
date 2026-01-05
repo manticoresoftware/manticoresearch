@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>issue 3661: columnar alter add stored attr</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+	<sphinxql>
+		drop table if exists t3661;
+		create table t3661 (tag integer) engine='columnar';
+		insert into t3661 values(1, 0), (2, 1), (3, 2);
+		flush ramchunk t3661;
+		alter table t3661 add column value string attribute indexed;
+		desc t3661;
+		select count(*) from t3661;
+		drop table t3661;
+	</sphinxql>
+</queries>
+</test>

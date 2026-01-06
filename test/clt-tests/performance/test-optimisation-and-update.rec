@@ -25,13 +25,14 @@ mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=2;"
 ––– input –––
 sleep 1 && mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 ––– output –––
-+--------------------------+-------+
-| Variable_name            | Value |
-+--------------------------+-------+
-| ram_chunk                | 0     |
-| ram_chunk_segments_count | 0     |
-| disk_chunks              | 2     |
-+--------------------------+-------+
++------------------------------+-------+
+| Variable_name                | Value |
++------------------------------+-------+
+| ram_chunk                    | 0     |
+| ram_chunk_segments_count     | 0     |
+| disk_chunks                  | 2     |
+| kill_dictionary_dirty_chunks | 0     |
++------------------------------+-------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– output –––
@@ -53,13 +54,14 @@ mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=2;"
 ––– input –––
 sleep 5 && mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 ––– output –––
-+--------------------------+-------+
-| Variable_name            | Value |
-+--------------------------+-------+
-| ram_chunk                | 0     |
-| ram_chunk_segments_count | 0     |
-| disk_chunks              | 2     |
-+--------------------------+-------+
++------------------------------+-------+
+| Variable_name                | Value |
++------------------------------+-------+
+| ram_chunk                    | 0     |
+| ram_chunk_segments_count     | 0     |
+| disk_chunks                  | 2     |
+| kill_dictionary_dirty_chunks | 0     |
++------------------------------+-------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– output –––
@@ -85,13 +87,14 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– input –––
 mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 ––– output –––
-+--------------------------+-------+
-| Variable_name            | Value |
-+--------------------------+-------+
-| ram_chunk                | 0     |
-| ram_chunk_segments_count | 0     |
-| disk_chunks              | 2     |
-+--------------------------+-------+
++------------------------------+-------+
+| Variable_name                | Value |
++------------------------------+-------+
+| ram_chunk                    | 0     |
+| ram_chunk_segments_count     | 0     |
+| disk_chunks                  | 2     |
+| kill_dictionary_dirty_chunks | 0     |
++------------------------------+-------+
 ––– input –––
 mysql -h0 -P9306 -e "select * from name ORDER BY id ASC LIMIT 5;"
 ––– output –––

@@ -459,6 +459,7 @@ private:
 	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
 	void			NegateFilterTree ( int iNode );
+	void			FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept;
 };
 
 using YYSTYPE = SqlNode_t;
@@ -1190,9 +1191,28 @@ void SqlParser_c::AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode
 	SetSelect ( pStart, pEnd );
 }
 
+// fixup expressions like 1+`column` - which came from parser as 1+`column - without terminating `
+void SqlParser_c::FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept
+{
+	if ( !pExpr || !m_pLastTokenStart )
+		return;
+
+	if ( (m_pLastTokenStart - m_pBuf) <= pExpr->m_iEnd )
+		return;
+
+	if ( m_pBuf[pExpr->m_iEnd] != '`')
+		return;
+
+	// if we have odd number of backticks - extend expression to include last backtick also
+	auto iBackticks = count_of ( VecTraits_T<const char> { m_pBuf + pExpr->m_iStart, pExpr->m_iEnd-pExpr->m_iStart }, [](const char c) { return c=='`';} );
+	if ( iBackticks & 1 )
+		++pExpr->m_iEnd;
+}
+
 void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	FixupLastBacktick ( pExpr );
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;

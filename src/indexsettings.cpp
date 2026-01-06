@@ -2280,6 +2280,7 @@ static bool IsDDLToken ( const CSphString & sTok )
 		"INTEGER",
 		"INT",
 		"IF",
+		"KNN",
 		"JOIN",
 		"JSON",
 		"KILLLIST_TARGET",

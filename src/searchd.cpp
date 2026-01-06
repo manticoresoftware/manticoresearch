@@ -6529,7 +6529,7 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 	ARRAY_FOREACH ( i, dAttrs )
 	{
 		const CSphString & sName = fnGetName(dAttrs[i]);
-		if ( CSphSchema::IsReserved ( sName.cstr() ) || sphIsInternalAttr ( sName ) )
+		if ( sphIsInternalAttr ( sName ) )
 		{
 			sError.SetSprintf ( "attribute name '%s' is a reserved keyword", sName.cstr() );
 			return false;

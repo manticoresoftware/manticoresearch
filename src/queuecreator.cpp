@@ -2333,8 +2333,9 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 	const auto & tKNN = m_tQuery.m_tKnnSettings;
 	if ( !tKNN.m_sAttr.IsEmpty() && tKNN.m_fOversampling > 1.0f )
 	{
-		int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
-		return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
+		int64_t iRequested = tKNN.GetRequestedDocs();
+		if ( !tKNN.m_sAttr.IsEmpty() && iRequested > tKNN.m_iK )
+			return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
 	}
 
 	if ( m_tQuery.m_bExplicitMaxMatches || m_tQuery.m_bHasOuter || !m_tSettings.m_bComputeItems )

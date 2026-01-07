@@ -105,7 +105,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_columnar"
 |        5 |
 +----------+
 ––– comment –––
-Optimize table for proper k parameter behavior in disk chunks
+Optimize table for oversampling behavior in disk chunks
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json_columnar; OPTIMIZE TABLE test_json_columnar OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
@@ -116,7 +116,7 @@ Test KNN search via JSON API with explicit query_vector
 VECTOR=$(python3 -c "print(','.join(['0.01']*384))")
 curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json_columnar\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
 ––– output –––
-2
+5
 ––– comment –––
 Create table without auto-embeddings configuration
 ––– input –––
@@ -232,7 +232,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_json_rowwise"
 |        5 |
 +----------+
 ––– comment –––
-Optimize table for proper k parameter behavior in disk chunks
+Optimize table for oversampling behavior in disk chunks
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_json_rowwise; OPTIMIZE TABLE test_json_rowwise OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
@@ -243,4 +243,4 @@ Test KNN search via JSON API with explicit query_vector
 VECTOR=$(python3 -c "print(','.join(['0.01']*384))")
 curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json_rowwise\",\"knn\":{\"field\":\"embedding\",\"query_vector\":[$VECTOR],\"k\":2}}" | jq -r '.hits.total // "0"'
 ––– output –––
-2
+5

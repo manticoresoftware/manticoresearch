@@ -14,21 +14,43 @@
 #pragma once
 
 #include "ints.h"
+#include "vector.h"
 #include <memory>
 
 
 //////////////////////////////////////////////////////////////////////////
+struct TDigestCentroid_t
+{
+	double		m_fMean = 0.0;
+	int64_t		m_iCount = 0;
+};
+
+
 class TDigest_c
 {
 	class Impl_c;
 	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
-	TDigest_c();
+	explicit TDigest_c ( double fCompression = 200.0 );
 	~TDigest_c();
 
 	void Add ( double fValue, int64_t iWeight = 1 );
 	double Percentile ( int iPercent ) const noexcept;
+	double Percentile ( double fPercent ) const noexcept;
+	double Quantile ( double fQuantile ) const noexcept;
+	double Cdf ( double fValue ) const noexcept;
+
+	void Clear();
+	int64_t GetCount () const noexcept;
+
+	void Merge ( const TDigest_c & tOther );
+
+	void Export ( CSphVector<TDigestCentroid_t> & dOut ) const;
+	void Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids );
+
+	void SetCompression ( double fCompression );
+	double GetCompression () const noexcept;
 };
 
 std::unique_ptr<TDigest_c> sphCreateTDigest();

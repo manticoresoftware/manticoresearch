@@ -18,6 +18,8 @@
 
 #include <cfloat>
 #include <cmath>
+#include <algorithm>
+#include <iterator>
 
 #if _WIN32
 #pragma warning(push,1)
@@ -41,7 +43,8 @@
 class TDigest_c::Impl_c final
 {
 public:
-	Impl_c ()
+	explicit Impl_c ( double fCompression )
+		: m_fCompression ( std::max ( 1.0, fCompression ) )
 	{
 		Reset();
 	}
@@ -87,7 +90,7 @@ public:
 			iSum += i->second;
 
 		int64_t iN = 0;
-		const double COMPRESSION = 200.0;
+		const double COMPRESSION = m_fCompression;
 		for ( auto i=tStart; i!=tLastNeighbor; ++i )
 		{
 			double fQuantile = m_iCount==1 ? 0.5 : (iSum + (i->second - 1) / 2.0) / (m_iCount - 1);
@@ -120,39 +123,51 @@ public:
 			Compress();
 	}
 
-
 	double Percentile ( int iPercent ) const noexcept
 	{
-		assert ( iPercent>=0 && iPercent<=100 );
+		return Percentile ( double ( iPercent ) );
+	}
 
+	double Percentile ( double fPercent ) const noexcept
+	{
+		if ( fPercent<=0.0 )
+			return Quantile ( 0.0 );
+		if ( fPercent>=100.0 )
+			return Quantile ( 1.0 );
+
+		return Quantile ( fPercent / 100.0 );
+	}
+
+	double Quantile ( double fQuantile ) const noexcept
+	{
 		if ( m_dMap.empty() )
 			return 0.0;
 
-		int64_t iTotalCount = 0;
-		double fPercent = double ( iPercent ) / 100.0;
-		fPercent *= m_iCount;
+		if ( fQuantile<=0.0 )
+			return m_dMap.begin()->first;
+		if ( fQuantile>=1.0 )
+			return std::prev ( m_dMap.end() )->first;
 
+		double fTarget = fQuantile * m_iCount;
+
+		int64_t iTotalCount = 0;
 		auto iMapFirst = m_dMap.begin();
 		auto iMapLast = m_dMap.end();
 		--iMapLast;
 
 		for ( auto i = iMapFirst; i!=m_dMap.end(); ++i )
 		{
-			if ( fPercent < iTotalCount + i->second )
+			if ( fTarget < iTotalCount + i->second )
 			{
 				if ( i==iMapFirst || i==iMapLast )
 					return i->first;
-				else
-				{
-					// get mean from previous iterator; get mean from next iterator; calc delta
-					auto iPrev = i;
-					auto iNext = i;
-					iPrev--;
-					iNext++;
 
-					double fDelta = ( iNext->first - iPrev->first ) / 2.0;
-					return i->first + ((fPercent - iTotalCount) / i->second - 0.5) * fDelta;
-				}
+				auto iPrev = std::prev ( i );
+				auto iNext = std::next ( i );
+
+				double fDelta = ( iNext->first - iPrev->first ) / 2.0;
+				double fLocal = ( fTarget - iTotalCount ) / i->second - 0.5;
+				return i->first + fLocal * fDelta;
 			}
 
 			iTotalCount += i->second;
@@ -161,10 +176,97 @@ public:
 		return iMapLast->first;
 	}
 
+	double Cdf ( double fValue ) const noexcept
+	{
+		if ( m_dMap.empty() )
+			return 0.0;
+
+		auto iMapFirst = m_dMap.begin();
+		auto iMapLast = std::prev ( m_dMap.end() );
+
+		if ( fValue <= iMapFirst->first )
+			return 0.0;
+		if ( fValue >= iMapLast->first )
+			return 1.0;
+
+		double fCumulative = 0.0;
+		auto iPrev = iMapFirst;
+		for ( auto i = m_dMap.begin(); i!=m_dMap.end(); ++i )
+		{
+			double fMean = i->first;
+			if ( fValue < fMean )
+			{
+				if ( i==iMapFirst )
+					return 0.0;
+
+				double fLeft = iPrev->first;
+				double fSpan = fMean - fLeft;
+				double fFraction = ( fSpan>0.0 ) ? ( ( fValue - fLeft ) / fSpan ) : 0.0;
+				double fBetween = ( iPrev->second + i->second ) / 2.0;
+				double fBefore = fCumulative - iPrev->second;
+				double fValueCount = ( iPrev->second / 2.0 ) + fFraction * fBetween;
+				return std::min ( 1.0, std::max ( 0.0, ( fBefore + fValueCount ) / m_iCount ) );
+			}
+
+			fCumulative += i->second;
+			iPrev = i;
+		}
+
+		return 1.0;
+	}
+
+	void Clear ()
+	{
+		Reset();
+	}
+
+	void Merge ( const Impl_c & tOther )
+	{
+		for ( const auto & tEntry : tOther.m_dMap )
+			Add ( tEntry.first, tEntry.second );
+	}
+
+	int64_t GetCount () const
+	{
+		return m_iCount;
+	}
+
+	double GetCompression () const
+	{
+		return m_fCompression;
+	}
+
+	void SetCompression ( double fCompression )
+	{
+		m_fCompression = std::max ( 1.0, fCompression );
+		if ( !m_dMap.empty() )
+			Compress();
+	}
+
+	void Export ( CSphVector<TDigestCentroid_t> & dOut ) const
+	{
+		dOut.Resize ( 0 );
+		dOut.Reserve ( (int) m_dMap.size() );
+		for ( const auto & tEntry : m_dMap )
+		{
+			TDigestCentroid_t & tCentroid = dOut.Add();
+			tCentroid.m_fMean = tEntry.first;
+			tCentroid.m_iCount = tEntry.second;
+		}
+	}
+
+	void Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids )
+	{
+		Reset();
+		for ( const TDigestCentroid_t & tCentroid : dCentroids )
+			Add ( tCentroid.m_fMean, tCentroid.m_iCount );
+	}
+
 private:
 	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator<std::pair<const double, int64_t>>>;
 	BalancedTree_c		m_dMap;
 	int64_t				m_iCount;
+	double				m_fCompression;
 
 	double WeightedAvg ( double fX1, int64_t iW1, double fX2, int64_t iW2 )
 	{
@@ -206,8 +308,8 @@ private:
 };
 
 
-TDigest_c::TDigest_c ()
-		: m_pImpl { std::make_unique<TDigest_c::Impl_c> () }
+TDigest_c::TDigest_c ( double fCompression )
+		: m_pImpl { std::make_unique<TDigest_c::Impl_c> ( fCompression ) }
 {}
 
 
@@ -223,6 +325,56 @@ void TDigest_c::Add ( double fValue, int64_t iWeight )
 double TDigest_c::Percentile ( int iPercent ) const noexcept
 {
 	return m_pImpl->Percentile (iPercent);
+}
+
+double TDigest_c::Percentile ( double fPercent ) const noexcept
+{
+	return m_pImpl->Percentile ( fPercent );
+}
+
+double TDigest_c::Quantile ( double fQuantile ) const noexcept
+{
+	return m_pImpl->Quantile ( fQuantile );
+}
+
+double TDigest_c::Cdf ( double fValue ) const noexcept
+{
+	return m_pImpl->Cdf ( fValue );
+}
+
+void TDigest_c::Clear()
+{
+	m_pImpl->Clear();
+}
+
+int64_t TDigest_c::GetCount () const noexcept
+{
+	return m_pImpl->GetCount();
+}
+
+void TDigest_c::Merge ( const TDigest_c & tOther )
+{
+	m_pImpl->Merge ( *tOther.m_pImpl );
+}
+
+void TDigest_c::Export ( CSphVector<TDigestCentroid_t> & dOut ) const
+{
+	m_pImpl->Export ( dOut );
+}
+
+void TDigest_c::Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids )
+{
+	m_pImpl->Import ( dCentroids );
+}
+
+void TDigest_c::SetCompression ( double fCompression )
+{
+	m_pImpl->SetCompression ( fCompression );
+}
+
+double TDigest_c::GetCompression () const noexcept
+{
+	return m_pImpl->GetCompression ();
 }
 
 

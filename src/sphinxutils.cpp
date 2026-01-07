@@ -1061,7 +1061,6 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "boolean_simplify",		0, nullptr },
 	{ "query_log_commands",		0, nullptr },
 	{ "auto_optimize",			0, nullptr },
-	{ "parallel_chunk_merges",	0, nullptr },
 	{ "pseudo_sharding",		0, nullptr },
 	{ "optimize_cutoff",		0, nullptr },
 	{ "secondary_indexes",		0, nullptr },
@@ -1094,6 +1093,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
 	{ "attr_autoconv_strict",	0, NULL },
+	{ "parallel_chunk_merges",	0, nullptr },
+	{ "merge_chunks_per_job",	0, nullptr },
 	{ NULL,						0, NULL }
 };
 

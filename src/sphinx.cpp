@@ -1205,7 +1205,7 @@ public:
 	template <class QWORD>
 	static bool			MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, VecTraits_T<std::unique_ptr<CSphFixedVector<RowID_t>>> dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress );
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
-	static bool			DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings );
+	static bool			DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings );
 	std::unique_ptr<ISphFilter>		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
@@ -6701,8 +6701,10 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, V
 	if ( iSources<2 )
 		return false;
 
+	// Use last index for file paths to match DoMergeN which uses pDstIndex (last index)
+	const CSphIndex_VLN * pDstIndex = dIndexes.Last();
 	CSphAutofile tDummy;
-	pHitBuilder->CreateIndexFiles ( dIndexes[0]->GetTmpFilename ( SPH_EXT_SPD ), dIndexes[0]->GetTmpFilename ( SPH_EXT_SPP ), dIndexes[0]->GetTmpFilename ( SPH_EXT_SPE ), false, 0, tDummy );
+	pHitBuilder->CreateIndexFiles ( pDstIndex->GetTmpFilename ( SPH_EXT_SPD ), pDstIndex->GetTmpFilename ( SPH_EXT_SPP ), pDstIndex->GetTmpFilename ( SPH_EXT_SPE ), false, 0, tDummy );
 
 	struct Source_t
 	{
@@ -7108,7 +7110,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	return true;
 }
 
-bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings )
+bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::DoMergeN" );
 	auto & tMonitor = tProgress.GetMergeCb();
@@ -7124,6 +7126,8 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 
 	const CSphIndex_VLN * pBaseIndex = dIndexes[0];
 	assert ( pBaseIndex );
+	const CSphIndex_VLN * pDstIndex = dIndexes.Last();
+	assert ( pDstIndex );
 
 	const CSphSchema & tBaseSchema = pBaseIndex->m_tSchema;
 	const bool bBaseWordDict = pBaseIndex->m_pDict->GetSettings().m_bWordDict;
@@ -7167,29 +7171,12 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 		int64_t iPrevDocs = iTotalDocs;
 		tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pIndex->m_iChunk );
 
-		if ( i==0 && pFilter )
+		for ( RowID_t uRow = 0; uRow < dRowMaps[i]->GetULength(); ++uRow )
 		{
-			const DWORD * pRow = pIndex->m_tAttr.GetReadPtr();
-			const int iStride = pIndex->m_tSchema.GetRowSize();
-			for ( RowID_t uRow = 0; uRow < dRowMaps[i]->GetULength(); ++uRow, pRow+=iStride )
-			{
-				if ( pIndex->m_tDeadRowMap.IsSet(uRow) )
-					continue;
+			if ( pIndex->m_tDeadRowMap.IsSet(uRow) )
+				continue;
 
-				if ( !pFilter->Eval ( { uRow, pRow } ) )
-					continue;
-
-				(*dRowMaps[i])[uRow] = (RowID_t)iTotalDocs++;
-			}
-		} else
-		{
-			for ( RowID_t uRow = 0; uRow < dRowMaps[i]->GetULength(); ++uRow )
-			{
-				if ( pIndex->m_tDeadRowMap.IsSet(uRow) )
-					continue;
-
-				(*dRowMaps[i])[uRow] = (RowID_t)iTotalDocs++;
-			}
+			(*dRowMaps[i])[uRow] = (RowID_t)iTotalDocs++;
 		}
 
 		tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pIndex->m_iChunk );
@@ -7199,7 +7186,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	if ( iTotalDocs >= INVALID_ROWID )
 		return false; // too many docs in merged segment (>4G even with filtered/killed), abort.
 
-	BuildHeader_t tBuildHeader ( pBaseIndex->m_tStats );
+	BuildHeader_t tBuildHeader ( pDstIndex->m_tStats );
 
 	StrVec_t dDeleteOnInterrupt;
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
@@ -7214,7 +7201,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	{
 		int64_t tmAttrsStart = sphMicroTimer();
 		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
-		if ( !tAttrMerger.Prepare ( pBaseIndex, pBaseIndex ) )
+		if ( !tAttrMerger.Prepare ( pBaseIndex, pDstIndex ) )
 			return false;
 
 		for ( int i = 0; i < iIndexes; ++i )
@@ -7225,14 +7212,14 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 			if ( !tAttrMerger.CopyAttributes ( *dIndexes[i], *dRowMaps[i], dAliveCounts[i] ) )
 				return false;
 
-		if ( !tAttrMerger.FinishMergeAttributes ( pBaseIndex, tBuildHeader ) )
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
 		if ( pTimings )
 			pTimings->m_tmAttrs = sphMicroTimer() - tmAttrsStart;
 	}
 
-	const CSphIndex_VLN * pSettings = pBaseIndex;
-	CSphAutofile tDict ( pBaseIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError, true );
+	const CSphIndex_VLN * pSettings = pDstIndex;
+	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError, true );
 
 	if ( !sError.IsEmpty() || tDict.GetFD()<0 || tMonitor.NeedStop() )
 		return false;
@@ -7282,7 +7269,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, cons
 	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter.get();
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
-	IndexBuildDone ( tBuildHeader, tWriteHeader, pBaseIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
+	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
 	if ( pTimings )
 	{
 		pTimings->m_tmFinalize = sphMicroTimer() - tmFinalizeStart;
@@ -7306,7 +7293,7 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSph
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
 }
 
-bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings )
+bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings )
 {
 	TRACE_CORO ( "sph", "sphMergeN" );
 	if ( dIndexes.GetLength()<2 )
@@ -7320,9 +7307,7 @@ bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, VecTraits_T<CSphFilter
 	for ( const auto * pIndex : dIndexes )
 		dVlnIndexes.Add ( (const CSphIndex_VLN *)pIndex );
 
-	auto * pBaseIndex = dVlnIndexes[0];
-	std::unique_ptr<ISphFilter> pFilter = pBaseIndex->CreateMergeFilters ( dFilters );
-	return CSphIndex_VLN::DoMergeN ( dVlnIndexes, pFilter.get(), sError, tProgress, pTimings );
+	return CSphIndex_VLN::DoMergeN ( dVlnIndexes, sError, tProgress, pTimings );
 }
 
 template < typename QWORD >
@@ -10005,11 +9990,11 @@ void CSphIndex_VLN::Preread()
 {
 	MEMORY ( MEM_INDEX_DISK );
 
-	sphLogDebug ( "CSphIndex_VLN::Preread invoked '%s'(%s)", GetName(), GetFilebase() );
-
 	assert ( m_bPassedAlloc );
 	if ( m_bPassedRead )
 		return;
+
+	sphLogDebug ( "CSphIndex_VLN::Preread invoked '%s'(%s)", GetName(), GetFilebase() );
 
 	///////////////////
 	// read everything

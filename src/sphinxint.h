@@ -842,6 +842,7 @@ struct BuildBufferSettings_t
 };
 
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError );
+
 struct MergeTimings_t
 {
 	int64_t m_tmTotal = 0;
@@ -850,7 +851,7 @@ struct MergeTimings_t
 	int64_t m_tmFinalize = 0;
 };
 
-bool			sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings = nullptr );
+bool			sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings = nullptr );
 
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );

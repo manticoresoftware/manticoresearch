@@ -77,6 +77,15 @@ bool IsKnnDist ( const CSphString & sExpr )
 	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
 }
 
+
+void SetupKNNLimit ( CSphQuery & tQuery )
+{
+	auto & tKNN = tQuery.m_tKnnSettings;
+
+	if ( tKNN.m_iK < 0 )
+		tKNN.m_iK = tQuery.m_iLimit;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void NormalizeVec ( VecTraits_T<float> & dData )
@@ -659,8 +668,7 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		NormalizeVec(dPoint);
 
 	std::string sErrorSTL;
-	int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, iRequested, tKNN.m_iEf, sErrorSTL );
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
@@ -687,7 +695,7 @@ RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQu
 	if ( !tRes.first )
 		return dIterators;
 
-	dIterators.Add ( { tRes.first, int64_t ( tQuery.m_tKnnSettings.m_iK*tQuery.m_tKnnSettings.m_fOversampling ) } );
+	dIterators.Add ( { tRes.first, tQuery.m_tKnnSettings.GetRequestedDocs() } );
 	return dIterators;
 }
 

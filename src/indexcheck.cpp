@@ -1796,7 +1796,7 @@ bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColum
 		return false;
 	}
 
-	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+	if ( sphIsInternalAttr ( tCol.m_sName ) )
 	{
 		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
 		return false;

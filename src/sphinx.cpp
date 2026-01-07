@@ -1611,6 +1611,13 @@ uint64_t FilterTreeItem_t::GetHash() const
 
 //////////////////////////////////////////////////////////////////////////
 
+int64_t KnnSearchSettings_t::GetRequestedDocs() const
+{
+	assert ( m_iK>=0 );
+	return m_bRescore ? int64_t ( m_fOversampling * m_iK ) : m_iK;
+}
+
+
 struct SelectBounds_t
 {
 	int		m_iStart;
@@ -7496,7 +7503,7 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		if ( tNewSchema.IsAttrStored(i) )
-			iOldNumStored++;
+			iNewNumStored++;
 
 	if ( iOldNumStored==iNewNumStored )
 		return true;
@@ -8457,7 +8464,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
-		int iRequestedKNNDocs = Min ( int64_t(tQuery.m_tKnnSettings.m_iK * tQuery.m_tKnnSettings.m_fOversampling), m_iDocinfo );
+		int iRequestedKNNDocs = Min ( tQuery.m_tKnnSettings.GetRequestedDocs(), m_iDocinfo );
 		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 	}

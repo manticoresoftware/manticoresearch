@@ -92,7 +92,7 @@ jobs:
             test_prefix: test/clt-tests/vector-knn/
               
     steps:
-      - uses: manticoresoftware/clt@0.7.5
+      - uses: manticoresoftware/clt@0.7.7
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}

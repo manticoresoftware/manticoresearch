@@ -154,7 +154,7 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 		if ( i.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
 		{
 			CSphString sRemappedName;
-			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			sRemappedName.SetSprintf ( "%s%s", GetInternalAttrPrefix(), i.m_sSortAttr.cstr() );
 			auto pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
 			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
 				pAttr = pRemapped;

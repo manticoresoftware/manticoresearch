@@ -24,6 +24,8 @@ searchd
 		flush ramchunk t3661;
 		alter table t3661 add column value string attribute indexed;
 		desc t3661;
+		select * from t3661 where value='abc';
+		select * from t3661;
 		select count(*) from t3661;
 		drop table t3661;
 	</sphinxql>

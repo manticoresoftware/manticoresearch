@@ -34,6 +34,10 @@ AggrFunc_i * CreateAggrAvg ( const CSphColumnInfo & tAttr, const CSphAttrLocator
 AggrFunc_i * CreateAggrMin ( const CSphColumnInfo & tAttr );
 AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr );
 
+AggrFunc_i * CreateAggrPercentiles ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrPercentileRanks ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrMad ( const CSphColumnInfo & tAttr );
+
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr );
 
 #endif // _aggregate_

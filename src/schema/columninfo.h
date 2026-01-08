@@ -77,6 +77,8 @@ struct CSphColumnInfo
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
 
+	double			m_fTdigestCompression = 200.0;		///< tdigest compression for extended aggs
+
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 
 	/// handy ctor

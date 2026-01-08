@@ -13,6 +13,7 @@
 #include "aggregate.h"
 
 #include "schema/columninfo.h"
+#include "std/tdigest.h"
 
 /// aggregate traits for different attribute types
 template < typename T >
@@ -20,6 +21,203 @@ class AggrFunc_Traits_T : public AggrFunc_i
 {
 public:
 	explicit		AggrFunc_Traits_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+namespace
+{
+using BStream_c = TightPackedVec_T<BYTE>;
+
+static double FetchNumericAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, ESphAttr eType )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_BOOL:
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_TIMESTAMP:
+		return (double)tMatch.GetAttr ( tLoc );
+
+	case SPH_ATTR_FLOAT:
+		return (double)tMatch.GetAttrFloat ( tLoc );
+
+	case SPH_ATTR_DOUBLE:
+		return tMatch.GetAttrDouble ( tLoc );
+
+	default:
+		return 0.0;
+	}
+}
+
+static void StoreTDigestBlob ( const TDigest_c & tDigest, const CSphMatch & tDst, const CSphAttrLocator & tLoc )
+{
+	ByteBlob_t dPrev = tDst.FetchAttrData ( tLoc, nullptr );
+	if ( dPrev.first )
+		sphDeallocatePacked ( sphPackedBlob ( dPrev ) );
+
+	CSphVector<TDigestCentroid_t> dCentroids;
+	tDigest.Export ( dCentroids );
+
+	BStream_c dOut;
+	int iCount = dCentroids.GetLength();
+	BYTE * pCount = dOut.AddN ( sizeof ( int ) );
+	sphUnalignedWrite ( pCount, iCount );
+
+	if ( iCount>0 )
+	{
+		size_t uSize = sizeof(TDigestCentroid_t) * (size_t)iCount;
+		BYTE * pData = dOut.AddN ( (int)uSize );
+		memcpy ( pData, dCentroids.Begin(), uSize );
+	}
+
+	sphPackPtrAttrInPlace ( dOut );
+	const_cast<CSphMatch&>(tDst).SetAttr ( tLoc, (SphAttr_t)dOut.LeakData() );
+}
+
+static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, TDigest_c & tDigest, double fCompression )
+{
+	ByteBlob_t dBlob = tMatch.FetchAttrData ( tLoc, nullptr );
+	if ( !dBlob.first )
+	{
+		tDigest.Clear();
+		tDigest.SetCompression ( fCompression );
+		return;
+	}
+
+	const BYTE * pData = dBlob.first;
+	int iCount = sphUnalignedRead<int>(pData);
+	pData += sizeof(int);
+
+	CSphVector<TDigestCentroid_t> dCentroids;
+	if ( iCount>0 )
+	{
+		dCentroids.Resize ( iCount );
+		memcpy ( dCentroids.Begin(), pData, sizeof(TDigestCentroid_t)*(size_t)iCount );
+	}
+	tDigest.SetCompression ( fCompression );
+	tDigest.Import ( dCentroids );
+}
+
+static void FreeTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
+{
+	ByteBlob_t dBlob = tMatch.FetchAttrData ( tLoc, nullptr );
+	if ( dBlob.first )
+		sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+}
+}
+
+class AggrTDigestBase_c : public AggrFunc_i
+{
+protected:
+	CSphAttrLocator	m_tLocator;
+	ESphAttr		m_eValueType;
+	double			m_fCompression;
+
+	explicit AggrTDigestBase_c ( const CSphColumnInfo & tAttr )
+		: m_tLocator ( tAttr.m_tLocator )
+		, m_eValueType ( tAttr.m_eAttrType )
+		, m_fCompression ( tAttr.m_fTdigestCompression ? tAttr.m_fTdigestCompression : 200.0 )
+	{
+	}
+
+	void AppendValue ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
+	{
+		double fVal = FetchNumericAttr ( tMatch, m_tLocator, m_eValueType );
+		tDigest.Add ( fVal );
+	}
+
+	void MergeFromMatch ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
+	{
+		TDigest_c tOther ( m_fCompression );
+		LoadTDigestBlob ( tMatch, m_tLocator, tOther, m_fCompression );
+		tDigest.Merge ( tOther );
+	}
+
+	void SaveDigest ( const TDigest_c & tDigest, CSphMatch & tMatch ) const
+	{
+		StoreTDigestBlob ( tDigest, tMatch, m_tLocator );
+	}
+
+public:
+	void Setup ( CSphMatch & tDst, const CSphMatch &, bool bMerge ) override
+	{
+		if ( bMerge )
+		{
+			TDigest_c tDigest ( m_fCompression );
+			LoadTDigestBlob ( tDst, m_tLocator, tDigest, m_fCompression );
+			SaveDigest ( tDigest, tDst );
+			return;
+		}
+
+		TDigest_c tDigest ( m_fCompression );
+		AppendValue ( tDigest, tDst );
+		SaveDigest ( tDigest, tDst );
+	}
+
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool, bool bMerge ) override
+	{
+		TDigest_c tDigest ( m_fCompression );
+		LoadTDigestBlob ( tDst, m_tLocator, tDigest, m_fCompression );
+
+		if ( bMerge )
+			MergeFromMatch ( tDigest, tSrc );
+		else
+			AppendValue ( tDigest, tSrc );
+
+		SaveDigest ( tDigest, tDst );
+	}
+};
+
+class AggrPercentiles_c final : public AggrTDigestBase_c
+{
+public:
+	explicit AggrPercentiles_c ( const CSphColumnInfo & tAttr )
+		: AggrTDigestBase_c ( tAttr )
+	{}
+};
+
+class AggrPercentileRanks_c final : public AggrTDigestBase_c
+{
+public:
+	explicit AggrPercentileRanks_c ( const CSphColumnInfo & tAttr )
+		: AggrTDigestBase_c ( tAttr )
+	{}
+};
+
+class AggrMad_c final : public AggrTDigestBase_c
+{
+public:
+	explicit AggrMad_c ( const CSphColumnInfo & tAttr )
+		: AggrTDigestBase_c ( tAttr )
+	{}
+
+	void Finalize ( CSphMatch & tDst ) override
+	{
+		TDigest_c tDigest ( m_fCompression );
+		LoadTDigestBlob ( tDst, m_tLocator, tDigest, m_fCompression );
+
+		if ( tDigest.GetCount()==0 )
+		{
+			FreeTDigestBlob ( tDst, m_tLocator );
+			tDst.SetAttrDouble ( m_tLocator, 0.0 );
+			return;
+		}
+
+		double fMedian = tDigest.Quantile ( 0.5 );
+
+		CSphVector<TDigestCentroid_t> dCentroids;
+		tDigest.Export ( dCentroids );
+
+		TDigest_c tDeviation ( m_fCompression );
+		for ( const auto & tCentroid : dCentroids )
+		{
+			double fDeviation = fabs ( tCentroid.m_fMean - fMedian );
+			tDeviation.Add ( fDeviation, tCentroid.m_iCount );
+		}
+
+		double fMad = tDeviation.Quantile ( 0.5 );
+
+		FreeTDigestBlob ( tDst, m_tLocator );
+		tDst.SetAttrDouble ( m_tLocator, fMad );
+	}
+};
 
 	T				GetValue ( const CSphMatch & tRow );
 	void			SetValue ( CSphMatch & tRow, T val );
@@ -816,4 +1014,19 @@ AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr )
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr )
 {
 	return new AggrConcat_c(tAttr);
+}
+
+AggrFunc_i * CreateAggrPercentiles ( const CSphColumnInfo & tAttr )
+{
+	return new AggrPercentiles_c ( tAttr );
+}
+
+AggrFunc_i * CreateAggrPercentileRanks ( const CSphColumnInfo & tAttr )
+{
+	return new AggrPercentileRanks_c ( tAttr );
+}
+
+AggrFunc_i * CreateAggrMad ( const CSphColumnInfo & tAttr )
+{
+	return new AggrMad_c ( tAttr );
 }

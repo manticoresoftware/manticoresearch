@@ -350,6 +350,17 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 			m_dAggregates.Add ( CreateAggrConcat(tAttr) );
 			m_tPregroup.AddPtr ( tAttr.m_tLocator );
 			break;
+		case SPH_AGGR_PERCENTILES:
+			m_dAggregates.Add ( CreateAggrPercentiles ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_PERCENTILE_RANKS:
+			m_dAggregates.Add ( CreateAggrPercentileRanks ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_MAD:
+			m_dAggregates.Add ( CreateAggrMad ( tAttr ) );
+			break;
 
 		default: assert ( 0 && "internal error: unhandled aggregate function" );
 			break;

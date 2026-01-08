@@ -2284,6 +2284,9 @@ static ESphAggrFunc GetAggr ( Aggr_e eAggrFunc )
 	case Aggr_e::MAX: return SPH_AGGR_MAX;
 	case Aggr_e::SUM: return SPH_AGGR_SUM;
 	case Aggr_e::AVG: return SPH_AGGR_AVG;
+	case Aggr_e::PERCENTILES: return SPH_AGGR_PERCENTILES;
+	case Aggr_e::PERCENTILE_RANKS: return SPH_AGGR_PERCENTILE_RANKS;
+	case Aggr_e::MAD: return SPH_AGGR_MAD;
 	default: return SPH_AGGR_NONE;
 	}
 }
@@ -2380,6 +2383,13 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
 			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
 			tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+			switch ( tBucket.m_eAggrFunc )
+			{
+			case Aggr_e::PERCENTILES: tItem.m_fTdigestCompression = tBucket.m_tPercentiles.m_fCompression; break;
+			case Aggr_e::PERCENTILE_RANKS: tItem.m_fTdigestCompression = tBucket.m_tPercentileRanks.m_fCompression; break;
+			case Aggr_e::MAD: tItem.m_fTdigestCompression = tBucket.m_tMad.m_fCompression; break;
+			default: break;
+			}
 		} else
 		{
 			tItem.m_sExpr = tBucket.m_sCol;
@@ -2440,6 +2450,13 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
 				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
 				tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+				switch ( tBucket.m_eAggrFunc )
+				{
+				case Aggr_e::PERCENTILES: tItem.m_fTdigestCompression = tBucket.m_tPercentiles.m_fCompression; break;
+				case Aggr_e::PERCENTILE_RANKS: tItem.m_fTdigestCompression = tBucket.m_tPercentileRanks.m_fCompression; break;
+				case Aggr_e::MAD: tItem.m_fTdigestCompression = tBucket.m_tMad.m_fCompression; break;
+				default: break;
+				}
 			}
 			break;
 

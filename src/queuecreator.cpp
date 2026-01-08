@@ -830,6 +830,10 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
 		tExprCol.m_tLocator.m_iBitCount = 64;
 		break;
+	case SPH_AGGR_MAD:
+		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
+		tExprCol.m_tLocator.m_iBitCount = 64;
+		break;
 
 	case SPH_AGGR_CAT:
 		// force GROUP_CONCAT() to be computed as strings
@@ -1098,6 +1102,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	m_bZonespanlist |= bHasZonespanlist;
 	m_bExprsNeedDocids |= bExprsNeedDocids;
 	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
+	tExprCol.m_fTdigestCompression = tItem.m_fTdigestCompression;
 	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );

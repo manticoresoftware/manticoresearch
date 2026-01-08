@@ -2371,7 +2371,8 @@ static VecTraits_T<CSphMatch> GetResultMatches ( const VecTraits_T<CSphMatch> & 
 
 static bool IsSingleValue ( Aggr_e eAggr )
 {
-	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG || eAggr==Aggr_e::MAD );
+	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG || eAggr==Aggr_e::MAD
+		|| eAggr==Aggr_e::PERCENTILES || eAggr==Aggr_e::PERCENTILE_RANKS );
 }
 
 static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )

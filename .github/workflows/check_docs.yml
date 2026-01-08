@@ -63,10 +63,10 @@ jobs:
           # Run auto-translate
           ./translator/bin/auto-translate
 
-          # Check if there are any changes to commit
-          if ! git diff --quiet; then
+          # Check if there are any changes to commit (including untracked files)
+          if [ -n "$(git status --porcelain)" ]; then
             echo "Auto-translate made changes, committing them..."
-            git add .
+            git add -A
             git commit -m "docs: Auto-translate documentation changes by ${{ github.actor }}"
             git push
             echo "Changes committed and pushed successfully"

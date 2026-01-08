@@ -18,6 +18,11 @@ fetch_and_check ( roaring ${ROARINGBITMAP_PLACE} ${ROARINGBITMAP_SRC_MD5} ROARIN
 get_build ( ROARINGBITMAP_BUILD roaring )
 external_build ( roaring ROARINGBITMAP_SRC ROARINGBITMAP_BUILD ROARING_EXCEPTIONS=0 ROARING_USE_CPM=0 ENABLE_ROARING_TESTS=0 ROARING_DISABLE_AVX=1 ROARING_DISABLE_NEON=1 ROARING_DISABLE_AVX512=1 )
 
+# avoid re-importing if some roaring targets were already defined earlier
+if (TARGET roaring::roaring)
+	return ()
+endif ()
+
 # now it should find
 find_package ( roaring REQUIRED CONFIG )
 return_if_target_found ( roaring::roaring "was built and saved" )

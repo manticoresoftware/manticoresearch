@@ -39,7 +39,7 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 
 <!-- intro -->
-##### Plain mode (using configuration file):
+##### Plain mode (using configuration file) - Manual vectors:
 
 <!-- request Config -->
 ```ini
@@ -50,6 +50,8 @@ table test_vec {
     knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":4,"hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200}]}
 }
 ```
+
+**Note:** For auto-embeddings in plain mode, see the example below, which shows how to use `model_name` and `from` parameters in the `knn` configuration.
 
 <!-- end -->
 
@@ -109,6 +111,51 @@ CREATE TABLE products_all (
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
 );
 ```
+
+<!-- intro -->
+##### Plain mode (using configuration file):
+
+<!-- request Config -->
+```ini
+table products {
+    type = rt
+    path = /path/to/products
+    rt_field = title
+    rt_field = description
+    rt_attr_float_vector = embedding_vector
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+}
+```
+
+Using OpenAI with API key in plain mode:
+```ini
+table products_openai {
+    type = rt
+    path = /path/to/products_openai
+    rt_field = title
+    rt_field = description
+    rt_attr_float_vector = embedding_vector
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"openai/text-embedding-ada-002","from":"title,description","api_key":"your-api-key-here"}]}
+}
+```
+
+Using all text fields (empty FROM):
+```ini
+table products_all {
+    type = rt
+    path = /path/to/products_all
+    rt_field = title
+    rt_field = description
+    rt_attr_float_vector = embedding_vector
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+}
+```
+
+**Important notes for plain mode:**
+- When using `model_name`, you **must not** specify `dims` - the model automatically determines the vector dimensions. The `dims` and `model_name` parameters are mutually exclusive.
+- When **not** using `model_name` (manual vector insertion), you **must** specify `dims` to indicate the vector dimensions.
+- The `from` parameter specifies which fields to use for embedding generation (comma-separated list, or empty string for all text/string fields). This parameter is required when using `model_name`.
+- For API-based models (OpenAI, Voyage, Jina), include the `api_key` parameter in the knn configuration
 
 <!-- end -->
 

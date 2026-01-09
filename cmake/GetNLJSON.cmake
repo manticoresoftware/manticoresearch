@@ -1,8 +1,8 @@
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 
-set ( NLJSON_GITHUB "http://github.com/nlohmann/json/archive/refs/tags/v3.10.5.tar.gz" )
-set ( NLJSON_BUNDLE "${LIBS_BUNDLE}/nljson-v3.10.5.tar.gz" )
-set ( NLJSON_SRC_MD5 "5b946f7d892fa55eabec45e76a20286b" )
+set ( NLJSON_GITHUB "http://github.com/nlohmann/json/archive/refs/tags/v3.12.0.tar.gz" )
+set ( NLJSON_BUNDLE "${LIBS_BUNDLE}/nljson-v3.12.0.tar.gz" )
+set ( NLJSON_SRC_MD5 "c2528c3e04faccaaee44f1f8f3d30d99" )
 
 include ( update_bundle )
 

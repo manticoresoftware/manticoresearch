@@ -124,6 +124,7 @@ std::unique_ptr<DocstoreFields_i>	CreateDocstoreFields();
 
 void				InitDocstore ( int64_t iCacheSize );
 void				ShutdownDocstore();
+void				ClearDocstoreCache();
 
 class DebugCheckError_i;
 class CSphAutoreader;

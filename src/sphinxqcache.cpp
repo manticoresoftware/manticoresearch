@@ -42,7 +42,8 @@ public:
 	void						Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );
 	void						Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
 	QcacheEntry_c *				Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema );
-	void						DeleteIndex ( int64_t iIndexId ) EXCLUDES ( m_tLock );
+	void						ClearByIndexId ( int64_t iIndexId ) EXCLUDES ( m_tLock );
+	void						ClearAll() EXCLUDES ( m_tLock );
 
 private:
 	static uint64_t				GetKey ( int64_t iIndexId, const CSphQuery & q );
@@ -570,12 +571,22 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 
 }
 
-void Qcache_c::DeleteIndex ( int64_t iIndexId )
+void Qcache_c::ClearByIndexId ( int64_t iIndexId )
 {
 	ScopedMutex_t dLock ( m_tLock );
 	ARRAY_FOREACH ( i, m_hData )
 		if ( IsValidEntry(i) && m_hData[i]->m_iIndexId==iIndexId )
 			DeleteEntry(i);
+}
+
+void Qcache_c::ClearAll()
+{
+	ScopedMutex_t dLock ( m_tLock );
+	ARRAY_FOREACH ( i, m_hData )
+		if ( IsValidEntry(i) )
+			DeleteEntry(i);
+
+	m_iMruHead = -1;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -695,7 +706,12 @@ void QcacheSetup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec )
 	g_Qcache.Setup ( iMaxBytes, iThreshMsec, iTtlSec );
 }
 
-void QcacheDeleteIndex ( int64_t iIndexId )
+void QcacheClearByIndexId ( int64_t iIndexId )
 {
-	g_Qcache.DeleteIndex ( iIndexId );
+	g_Qcache.ClearByIndexId ( iIndexId );
+}
+
+void QcacheClearAll()
+{
+	g_Qcache.ClearAll();
 }

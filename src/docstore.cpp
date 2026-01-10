@@ -323,7 +323,8 @@ class BlockCache_c : public LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>
 	using BASE::BASE;
 
 public:
-	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+	void					ClearByIndexId ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+	void					ClearAll() { BASE::Delete ( []( const HashKey_t & ){ return true; } ); }
 
 	static void				Init ( int64_t iCacheSize );
 	static void				Done()	{ SafeDelete(m_pBlockCache); }
@@ -576,7 +577,7 @@ Docstore_c::~Docstore_c ()
 {
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 	if ( pBlockCache )
-		pBlockCache->DeleteAll(m_iIndexId);
+		pBlockCache->ClearByIndexId(m_iIndexId);
 
 	DocstoreReaders_c * pReaders = DocstoreReaders_c::Get();
 	if ( pReaders )
@@ -1951,6 +1952,13 @@ void ShutdownDocstore()
 {
 	BlockCache_c::Done();
 	DocstoreReaders_c::Done();
+}
+
+void ClearDocstoreCache()
+{
+	BlockCache_c * pBlockCache = BlockCache_c::Get();
+	if ( pBlockCache )
+		pBlockCache->ClearAll();
 }
 
 

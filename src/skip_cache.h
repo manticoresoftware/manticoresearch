@@ -28,7 +28,8 @@ void ShutdownSkipCache();
 
 namespace SkipCache
 {
-	void DeleteAll ( int64_t iIndexId );
+	void ClearByIndexId ( int64_t iIndexId );
+	void ClearAll();
 	void Release ( SkipCacheKey_t tKey );
 	bool Find ( SkipCacheKey_t tKey, SkipData_t * & pData );
 	bool Add ( SkipCacheKey_t tKey, SkipData_t* pData );

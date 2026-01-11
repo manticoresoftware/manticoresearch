@@ -42,34 +42,26 @@ mysql -h0 -P9306 -e "UNLOCK TABLES;"
 ––– comment –––
 Test WRITE lock syntax (Manticore accepts syntax but does not implement WRITE locks)
 Manticore shows warning and treats WRITE lock as no-op (table remains unlocked)
+All commands in same session to test WRITE lock behavior
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES products WRITE;
+SHOW WARNINGS;
+INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);
+SELECT COUNT(*) FROM products;
+UNLOCK TABLES;
+EOF
 ––– output –––
 +---------+------+--------------------------------+
 | Level   | Code | Message                        |
 +---------+------+--------------------------------+
 | warning | 1000 | Write lock is not implemented. |
 +---------+------+--------------------------------+
-––– comment –––
-Verify WRITE lock has no effect: INSERT succeeds (table is not actually locked)
-––– input –––
-mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"
-––– output –––
-––– comment –––
-Verify count after insert
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
-––– output –––
 +----------+
 | count(*) |
 +----------+
 |        4 |
 +----------+
-––– comment –––
-Release WRITE lock
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
 ––– comment –––
 Verify data persisted after unlock
 ––– input –––
@@ -126,13 +118,29 @@ Insert data into orders table
 mysql -h0 -P9306 -e "INSERT INTO orders VALUES (1, 1, 2), (2, 2, 1);"
 ––– output –––
 ––– comment –––
-Lock multiple tables with different lock types (products READ, orders WRITE)
-NOTE: WRITE lock on 'orders' has no effect (not implemented), only READ lock on 'products' is active
+Lock multiple tables with different lock types (products READ, orders WRITE) in same session
+NOTE: WRITE lock has no effect, but READ lock on products will block modifications
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ, orders WRITE;"
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES products READ, orders WRITE;
+SELECT * FROM products WHERE id = 1;
+INSERT INTO orders VALUES (3, 1, 5);
+SELECT COUNT(*) FROM orders;
+UNLOCK TABLES;
+EOF
 ––– output –––
++------+-----------+------------+
+| id   | title     | price      |
++------+-----------+------------+
+|    1 | iPhone 15 | 999.989990 |
++------+-----------+------------+
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
 ––– comment –––
-Read from READ-locked table (works)
+Read from table after lock released (previous session closed)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 ––– output –––
@@ -142,9 +150,9 @@ mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 |    1 | iPhone 15 | 999.989990 |
 +------+-----------+------------+
 ––– comment –––
-Insert into WRITE-locked table (succeeds because WRITE lock is not implemented)
+Insert into table after lock released (previous session closed, WRITE lock not implemented anyway)
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO orders VALUES (3, 1, 5);"
+mysql -h0 -P9306 -e "INSERT INTO orders VALUES (4, 2, 3);"
 ––– output –––
 ––– comment –––
 Verify insert succeeded
@@ -154,32 +162,18 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM orders;"
 +----------+
 | count(*) |
 +----------+
-|        3 |
+|        4 |
 +----------+
 ––– comment –––
-Release all locks
+Test WRITE lock with UPDATE and DELETE in same session (WRITE lock has no effect)
 ––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Test WRITE lock syntax (has no effect - not implemented)
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
-––– output –––
-––– comment –––
-Verify UPDATE works (WRITE lock has no effect, table is not actually locked)
-––– input –––
-mysql -h0 -P9306 -e "UPDATE products SET price = 1099.99 WHERE id = 1;"
-––– output –––
-––– comment –––
-Verify DELETE works (WRITE lock has no effect, table is not actually locked)
-––– input –––
-mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;"
-––– output –––
-––– comment –––
-Verify UPDATE and DELETE worked
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES products WRITE;
+UPDATE products SET price = 1099.99 WHERE id = 1;
+DELETE FROM products WHERE id = 4;
+SELECT COUNT(*) FROM products;
+UNLOCK TABLES;
+EOF
 ––– output –––
 +----------+
 | count(*) |
@@ -187,35 +181,21 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 |        3 |
 +----------+
 ––– comment –––
-Release lock
+Test REPLACE INTO with WRITE lock (WRITE lock has no effect)
+All commands in same session
 ––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Lock for REPLACE INTO operation
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE;"
-––– output –––
-––– comment –––
-REPLACE INTO updates existing record
-––– input –––
-mysql -h0 -P9306 -e "REPLACE INTO products VALUES (2, 'Samsung Galaxy S24 Ultra', 1199.99);"
-––– output –––
-––– comment –––
-Verify REPLACE worked
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 2;"
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES products WRITE;
+REPLACE INTO products VALUES (2, 'Samsung Galaxy S24 Ultra', 1199.99);
+SELECT * FROM products WHERE id = 2;
+UNLOCK TABLES;
+EOF
 ––– output –––
 +------+--------------------------+-------------+
 | id   | title                    | price       |
 +------+--------------------------+-------------+
 |    2 | Samsung Galaxy S24 Ultra | 1199.989990 |
 +------+--------------------------+-------------+
-––– comment –––
-Release lock
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
 ––– comment –––
 Create distributed table for testing lock compatibility
 ––– input –––
@@ -238,12 +218,20 @@ mysql -h0 -P9306 -e "SELECT * FROM dist_products WHERE id = 1;"
 |    1 | iPhone 15 | 1099.989990 |
 +------+-----------+-------------+
 ––– comment –––
-Test SHOW TABLES works while table is locked
+Test SHOW TABLES works while table is locked (must be in same session)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ;"
+mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW TABLES; UNLOCK TABLES;"
 ––– output –––
++---------------+-------------+
+| Table         | Type        |
++---------------+-------------+
+| dist_products | distributed |
+| orders        | rt          |
+| products      | rt          |
+| products2     | rt          |
++---------------+-------------+
 ––– comment –––
-SHOW TABLES should work with active lock
+Verify SHOW TABLES works without locks
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
@@ -256,28 +244,15 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | products2     | rt          |
 +---------------+-------------+
 ––– comment –––
-Release lock and run SHOW TABLES again
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES; SHOW TABLES;"
-––– output –––
-+---------------+-------------+
-| Table         | Type        |
-+---------------+-------------+
-| dist_products | distributed |
-| orders        | rt          |
-| products      | rt          |
-| products2     | rt          |
-+---------------+-------------+
-––– comment –––
 Test re-locking (LOCK replaces previous lock)
-Lock WRITE first, then re-lock with READ
+Lock WRITE first, then re-lock with READ in same session
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE; LOCK TABLES products READ;"
-––– output –––
-––– comment –––
-Verify READ lock is active (can read)
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES products WRITE;
+LOCK TABLES products READ;
+SELECT * FROM products WHERE id = 1;
+UNLOCK TABLES;
+EOF
 ––– output –––
 +------+-----------+-------------+
 | id   | title     | price       |
@@ -285,12 +260,7 @@ mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
 |    1 | iPhone 15 | 1099.989990 |
 +------+-----------+-------------+
 ––– comment –––
-Final cleanup
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Test WRITE lock returns warning (not implemented)
+Lock table with WRITE lock and verify warning (WRITE lock is not implemented)
 ––– input –––
 mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 ––– output –––
@@ -300,10 +270,15 @@ mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 | warning | 1000 | Write lock is not implemented. |
 +---------+------+--------------------------------+
 ––– comment –––
-Release WRITE lock before SHOW LOCKS test
+WRITE lock doesn't block modifications (not implemented), test within same session
 ––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; INSERT INTO products VALUES (4, 'OnePlus 12', 699.99); SELECT COUNT(*) FROM products; UNLOCK TABLES;"
 ––– output –––
++----------+
+| count(*) |
++----------+
+|        4 |
++----------+
 ––– comment –––
 Test SHOW LOCKS displays active locks (must be in same session)
 ––– input –––

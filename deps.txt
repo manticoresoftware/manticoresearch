@@ -1,6 +1,6 @@
 backup 1.9.6+25070510-5247d066
 buddy 3.40.5+25122612-d075954a-dev
-mcl 9.0.2+25122309-5b73f8d1-dev
+mcl 10.0.0+26011116-88c182b2
 executor 1.3.6+25102902-defbddd7-dev
 tzdata 1.0.1 250714 7eebffa
 load 1.24.0+25122422-e5db1c82-dev

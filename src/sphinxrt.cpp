@@ -9084,7 +9084,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	// fixme: notify that it was ALTER that caused the flush
 	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
-	QcacheDeleteIndex ( GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
 }
 
 bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
@@ -9201,8 +9201,8 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	// Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	// all done, reset cache
-	QcacheDeleteIndex ( GetIndexId() );
-	QcacheDeleteIndex ( pIndex->GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
+	QcacheClearByIndexId ( pIndex->GetIndexId() );
 	return true;
 }
 
@@ -9357,8 +9357,8 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 	// Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	// all done, reset cache
-	QcacheDeleteIndex ( GetIndexId() );
-	QcacheDeleteIndex ( pSrcIndex->GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
+	QcacheClearByIndexId ( pSrcIndex->GetIndexId() );
 	return true;
 }
 
@@ -9430,7 +9430,7 @@ bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
 	}
 
 	// reset cache
-	QcacheDeleteIndex ( GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
 	return true;
 }
 

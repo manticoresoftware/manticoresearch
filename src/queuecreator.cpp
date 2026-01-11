@@ -2472,10 +2472,29 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 	if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead )
 		return true;
 
+	auto & tSchema = *m_pSorterSchema;
+
+	// early-out if nothing to process
+	bool bFound = false;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bStored = false;
+		bool bColumnar = tAttr.m_pExpr && tAttr.m_pExpr->IsColumnar(&bStored);
+		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
+		{
+			bFound = true;
+			break;
+		}
+	}
+
+	if ( !bFound )
+		return true;
+
 	// check for columnar attributes that have FINAL eval stage
 	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
 	IntVec_t dStoredColumnarFinal, dStoredColumnarPostlimit;
-	auto & tSchema = *m_pSorterSchema;
+	AttrDependencyMap_c tDepMap(tSchema);
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tSchema.GetAttr(i);
@@ -2484,7 +2503,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
 		{
 			// we need docids at the final stage if we want to fetch from docstore. so they must be evaluated before that
-			if ( IsIndependentAttr ( tAttr.m_sName, tSchema ) && tAttr.m_sName!=sphGetDocidName() )
+			if ( tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
 				dStoredColumnarPostlimit.Add(i);
 			else
 				dStoredColumnarFinal.Add(i);

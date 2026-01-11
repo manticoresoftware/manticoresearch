@@ -710,6 +710,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 		return CHKOPT( dShowOptions, eOption );
 
 	case STMT_DROP_TABLE:
+	case STMT_DROP_CACHE:
 	case STMT_ALTER_INDEX_SETTINGS:
 	case STMT_DESCRIBE:
 	case STMT_SHOW_CREATE_TABLE:

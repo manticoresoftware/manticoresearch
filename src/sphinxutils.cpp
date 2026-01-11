@@ -1093,6 +1093,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
 	{ "attr_autoconv_strict",	0, NULL },
+	{ "parallel_chunk_merges",	0, nullptr },
+	{ "merge_chunks_per_job",	0, nullptr },
 	{ NULL,						0, NULL }
 };
 

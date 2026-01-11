@@ -1,7 +1,6 @@
 #include "nlohmann/json.hpp"
 
 using nljson = nlohmann::json;
-using namespace nlohmann::literals;
 
 static nljson GetSystemTable()
 {

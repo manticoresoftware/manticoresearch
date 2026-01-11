@@ -1,7 +1,3 @@
-#include "nlohmann/json.hpp"
-
-using nljson = nlohmann::json;
-using nlohmann::literals::json_literals::operator""_json;
 
 static nljson GetSystemTable()
 {

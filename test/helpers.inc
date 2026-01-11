@@ -2544,6 +2544,8 @@ class SphinxConfig
 
 	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time, $ignore_rows )
 	{
+		global $g_disable_float_tolerance;
+
 	    $raw_result["sphinxql"] = $query;
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
@@ -2573,6 +2575,7 @@ class SphinxConfig
 			
 			// Check if query contains "knn" (case insensitive) to determine if we should round floats
 			$has_knn = (stripos($query, 'knn') !== false);
+			$round_knn = $has_knn && !$g_disable_float_tolerance;
 			
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
@@ -2591,7 +2594,7 @@ class SphinxConfig
                     continue;
 				
 				// Round float values if query contains "knn" (use 5 decimal places to handle architecture differences)
-				if ( $has_knn )
+				if ( $round_knn )
 					RoundFloatValues ( $row, 5 );
 				
 				$query_result["rows"][] = $row;
@@ -3355,6 +3358,8 @@ class SphinxConfig
 
 	function CompareResultSets ( $set1, $set2 )
 	{
+		global $g_disable_float_tolerance;
+
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
@@ -3363,13 +3368,14 @@ class SphinxConfig
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
 		$has_knn = HasKnnInQuery($set1) || HasKnnInQuery($set2);
+		$round_knn = $has_knn && !$g_disable_float_tolerance;
 
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
 		// Round float values in both sets if query contains "knn" (ensures both are rounded to same precision)
 		// Use 5 decimal places to handle architecture differences in 6th-8th decimal places
-		if ( $has_knn )
+		if ( $round_knn )
 		{
 			if ( isset ( $set1["rows"] ) )
 				RoundFloatValues ( $set1["rows"], 5 );
@@ -3377,7 +3383,7 @@ class SphinxConfig
 				RoundFloatValues ( $set2["rows"], 5 );
 		}
 
-		// Use strict comparison (RoundFloatValues handles the tolerance via rounding)
+		// Use strict comparison (KNN rounding handles the tolerance when enabled)
 		return $set1 === $set2;
 	}
 

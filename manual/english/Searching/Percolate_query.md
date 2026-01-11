@@ -543,7 +543,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /pq/products/search
 {
   "query": {
     "percolate": {
@@ -912,7 +912,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /pq/products/search
 {
   "query": {
     "percolate": {
@@ -1310,7 +1310,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /pq/products/search
 {
   "query": {
     "percolate": {
@@ -1809,7 +1809,7 @@ JSON:
 <!-- request JSON -->
 
 ```json
-POST /pq/products/_search
+POST /pq/products/search
 {
   "query": {
     "percolate": {
@@ -2391,7 +2391,7 @@ SELECT * FROM pq;
 <!-- request JSON -->
 
 ```json
-POST /pq/pq/_search
+POST /pq/pq/search
 ```
 
 <!-- response JSON -->
@@ -2781,7 +2781,7 @@ CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test do
 <!-- request JSON -->
 
 ```json
-POST /pq/pq/_search -d '
+POST /pq/pq/search -d '
 "query":
 {
         "percolate":

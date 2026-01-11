@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "SEARCHD" "1" "07/11/2025" "Manticore Search" ""
+.TH "SEARCHD" "1" "05/01/2026" "Manticore Search" ""
 .SH "NAME"
 searchd \- Manticore Search Server
 .SH "SYNOPSIS"
@@ -22,98 +22,90 @@ The options available to \fB\fCsearchd\fR in all operating systems are:
 .IP \(bu 2
 \fB\fC\-\-version\fR (\fB\fC\-v\fR for short) shows Manticore Search version information.
 .IP \(bu 2
+\fB\fC\-\-quiet\fR (\fB\fC\-q\fR for short) suppresses startup output except errors (banner and precache messages).
+.IP \(bu 2
 \fB\fC\-\-config <file>\fR (\fB\fC\-c <file>\fR for short) tells \fB\fCsearchd\fR to use the specified file as its configuration.
 .IP \(bu 2
 \fB\fC\-\-stop\fR is used to asynchronously stop \fB\fCsearchd\fR, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to \fB\fCsearchd\fR which configuration file to use with the \fB\fC\-\-config\fR option. Example:
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stop
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stop
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-stopwait\fR is used to synchronously stop \fB\fCsearchd\fR\&. \fB\fC\-\-stop\fR essentially tells the running instance to exit (by sending it a SIGTERM) and then immediately returns. \fB\fC\-\-stopwait\fR will also attempt to wait until the running \fB\fCsearchd\fR instance actually finishes the shutdown (eg. saves all the pending attribute changes) and exits. Example:
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stopwait
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stopwait
 .fi
 .RE
-.TP
+.PP
 Possible exit codes are as follows:
-    * 0 on success
-    * 1 if connection to running searchd server failed
-    * 2 if server reported an error during shutdown
-    * 3 if server crashed during shutdown
 .RS
+.IP \(bu 2
+0 on success
+.IP \(bu 2
+1 if connection to running searchd server failed
+.IP \(bu 2
+2 if server reported an error during shutdown
+.IP \(bu 2
+3 if server crashed during shutdown
+.RE
 .IP \(bu 2
 \fB\fC\-\-status\fR command is used to query running \fB\fCsearchd\fR instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use \fB\fCSHOW STATUS\fR command to access the very same counters via SQL protocol. Examples:
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-status
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-status
+$ searchd \-\-status
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-status
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-pidfile\fR is used to explicitly force using a PID file (where the \fB\fCsearchd\fR process identification number is stored) despite any other debugging options that say otherwise (for instance, \fB\fC\-\-console\fR). This is a debugging option.
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-console \-\-pidfile
+$ searchd \-\-console \-\-pidfile
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-console\fR is used to force \fB\fCsearchd\fR into console mode. Typically, Manticore runs as a conventional server application and logs information into log files (as specified in the configuration file). However, when debugging issues in the configuration or the server itself, or trying to diagnose hard\-to\-track\-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to. (It should be noted that console mode is not the intended method for running \fB\fCsearchd\fR\&.)  You can invoke it as:
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-console
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-console
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-logdebug\fR, \fB\fC\-\-logreplication\fR, \fB\fC\-\-logdebugv\fR, and \fB\fC\-\-logdebugvv\fR options enable additional debug output in the server log. They differ by the logging verboseness level. These are debugging options and should not be normally enabled, as they can pollute the log a lot. They can be used temporarily on request to assist with complicated debugging sessions.
 .IP \(bu 2
 \fB\fC\-\-iostats\fR is used in conjunction with the logging options (the \fB\fCquery_log\fR must have been activated in  \fB\fCmanticore.conf\fR) to provide more detailed information on a per\-query basis about the input/output operations carried out in the course of that query, with a slight performance hit and slightly bigger logs. The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap. To enable it, you can start \fB\fCsearchd\fR as follows:
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-iostats
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-iostats
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-cpustats\fR is used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated). It depends on \fB\fCclock_gettime()\fR Linux system call or falls back to less precise call on certain systems. You might start \fB\fCsearchd\fR thus:
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-cpustats
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-cpustats
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-port portnumber\fR (\fB\fC\-p\fR for short) is used to specify the port that Manticore should listen on to accept binary protocol requests, usually for debugging purposes. This will usually default to 9312, but sometimes you need to run it on a different port. Specifying it on the command line will override anything specified in the configuration file. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run.
-.RE
-.IP
+.PP
 An example of usage:
 .PP
 .RS
 .nf
-  $ searchd \-\-port 9313
+$ searchd \-\-port 9313
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-listen ( address ":" port | port | path ) [ ":" protocol ]\fR (or \fB\fC\-l\fR for short) Works as \fB\fC\-\-port\fR, but allows you to specify not only the port, but the full path, IP address and port, or Unix\-domain socket path that \fB\fCsearchd\fR will listen on. In other words, you can specify either an IP address (or hostname) and port number, just a port number, or a Unix socket path. If you specify a port number but not the address, searchd will listen on all network interfaces. A Unix path is identified by a leading slash. As the last parameter, you can also specify a protocol handler (listener) to be used for connections on this socket. Supported protocol values are 'sphinx' and 'mysql' (MySQL protocol used since 4.1).
 .IP \(bu 2
@@ -144,42 +136,43 @@ $ searchd \-\-replay\-flags=accept\-desc\-timestamp
 .RE
 .IP \(bu 2
 \fB\fC\-\-coredump\fR is used to enable saving a core file or a minidump of the server on crash. Disabled by default to speed up of server restart on crash. This is useful for debugging purposes.
-.RE
 .PP
 .RS
 .nf
-  $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-coredump
+$ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-coredump
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-new\-cluster\fR bootstraps a replication cluster and makes the server a reference node with \fB\fCcluster restart\fR protection. On Linux you can also run \fB\fCmanticore_new_cluster\fR\&. It will start Manticore in \fB\fC\-\-new\-cluster\fR mode via systemd.
 .IP \(bu 2
 \fB\fC\-\-new\-cluster\-force\fR bootstraps a replication cluster and makes the server a reference node bypassing \fB\fCcluster restart\fR protection. On Linux you can also run \fB\fCmanticore_new_cluster \-\-force\fR\&. It will start Manticore in \fB\fC\-\-new\-cluster\-force\fR mode via systemd.
 .IP \(bu 2
 \fB\fC\-\-mockstack\fR analyzes and reports the necessary stack sizes for recursive expression evaluation, pattern matching operations, and filter processing. This debugging option outputs calculated stack requirements to the console for optimization purposes. The output provides environment variables that can be used to configure stack requirements for different operations.
-.RE
-.IP
+.PP
 Example:
-```bash
+.PP
+.RS
+.nf
 $ searchd \-\-mockstack
 Manticore 7.4.7 e90b5afbb@25032706 dev (columnar 4.1.2 15bbcc7@25031206) (secondary 4.1.2 15bbcc7@25031206) (knn 4.1.2 15bbcc7@25031206)
 Copyright (c) 2001\-2016, Andrew Aksyonoff
-Copyright (c) 2008\-2016, Sphinx Technologies Inc (\[la]http://sphinxsearch.com\[ra])
-Copyright (c) 2017\-2025, Manticore Software LTD (\[la]https://manticoresearch.com\[ra])
-.IP
-export MANTICORE\fIKNOWN\fPCREATE\fISIZE=200
-export MANTICORE\fPSTART\fIKNOWN\fPCREATE\fISIZE=4504
-export MANTICORE\fPKNOWN\fIEXPR\fPSIZE=16
-export MANTICORE\fISTART\fPKNOWN\fIEXPR\fPSIZE=200
-export MANTICORE\fINONE=32
-export MANTICORE\fPSTART\fINONE=104
-export MANTICORE\fPKNOWN\fIFILTER\fPSIZE=224
-export MANTICORE\fISTART\fPKNOWN\fIFILTER\fPSIZE=11192
-export MANTICORE\fIKNOWN\fPMATCH\fISIZE=320
-export MANTICORE\fPSTART\fIKNOWN\fPMATCH\fISIZE=14552
-export NO\fPSTACK_CALCULATION=1
-```
+Copyright (c) 2008\-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017\-2025, Manticore Software LTD (https://manticoresearch.com)
+
+export MANTICORE_KNOWN_CREATE_SIZE=200
+export MANTICORE_START_KNOWN_CREATE_SIZE=4504
+export MANTICORE_KNOWN_EXPR_SIZE=16
+export MANTICORE_START_KNOWN_EXPR_SIZE=200
+export MANTICORE_NONE=32
+export MANTICORE_START_NONE=104
+export MANTICORE_KNOWN_FILTER_SIZE=224
+export MANTICORE_START_KNOWN_FILTER_SIZE=11192
+export MANTICORE_KNOWN_MATCH_SIZE=320
+export MANTICORE_START_KNOWN_MATCH_SIZE=14552
+export NO_STACK_CALCULATION=1
+.fi
+.RE
+.RE
 .SS Windows options
 .PP
 There are some options for \fB\fCsearchd\fR that are specific to Windows platforms, concerning handling as a service, and are only available in Windows binaries.
@@ -188,40 +181,39 @@ Note that in Windows searchd will default to \fB\fC\-\-console\fR mode, unless y
 .RS
 .IP \(bu 2
 \fB\fC\-\-install\fR installs \fB\fCsearchd\fR as a service into the Microsoft Management Console (Control Panel / Administrative Tools / Services). Any other parameters specified on the command line, where \fB\fC\-\-install\fR is specified will also become part of the command line on future starts of the service. For example, as a part of calling \fB\fCsearchd\fR, you will likely also need to specify the configuration file with \fB\fC\-\-config\fR, and you would do that as well as specifying \fB\fC\-\-install\fR\&. Once called, the usual start/stop facilities will become available via the management console, so any methods you could use for starting, stopping and restarting services would also apply to \fB\fCsearchd\fR\&. Example:
-.RE
 .PP
 .RS
 .nf
-  C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
-     \-\-config C:\\Manticore\\manticore.conf
+C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
+   \-\-config C:\\Manticore\\manticore.conf
 .fi
 .RE
-.IP
+.PP
 If you want to have the I/O stats every time you start \fB\fCsearchd\fR, you need to specify the option on the same line as the \fB\fC\-\-install\fR command thus:
 .PP
 .RS
 .nf
-  C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
-     \-\-config C:\\Manticore\\manticore.conf \-\-iostats
+C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
+   \-\-config C:\\Manticore\\manticore.conf \-\-iostats
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-delete\fR removes the service from the Microsoft Management Console and other places where services are registered, after previously being installed with \fB\fC\-\-install\fR\&. Note that this does not uninstall the software or delete the tables. It means the service will not be called from the services system, and will not be started on the machine's next start. If currently running as a service, the current instance will not be terminated (until the next reboot or until \fB\fC\-\-stop\fR). If the service was installed with a custom name (with \fB\fC\-\-servicename\fR), the same name will need to be specified with \fB\fC\-\-servicename\fR when calling to uninstall. Example:
-.RE
 .PP
 .RS
 .nf
-  C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-delete
+C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-delete
 .fi
 .RE
-.RS
 .IP \(bu 2
 \fB\fC\-\-servicename <name>\fR applies the given name to \fB\fCsearchd\fR when installing or deleting the service, as it would appear in the Management Console; this will default to searchd, but if being deployed on servers where multiple administrators may log in to the system, or a system with multiple \fB\fCsearchd\fR instances, a more descriptive name may be applicable. Note that unless combined with \fB\fC\-\-install\fR or \fB\fC\-\-delete\fR, this option does not do anything.  Example:
-\fB\fCbat
+.PP
+.RS
+.nf
 C:\\WINDOWS\\system32> C:\\Manticore\\bin\\searchd.exe \-\-install
- \-\-config C:\\Manticore\\manticore.conf \-\-servicename ManticoreSearch
-\fR
+   \-\-config C:\\Manticore\\manticore.conf \-\-servicename ManticoreSearch
+.fi
+.RE
 .IP \(bu 2
 \fB\fC\-\-ntservice\fR is an option that is passed by the Microsoft Management Console to \fB\fCsearchd\fR to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service is started, although if you wanted to call this as a regular service from the command\-line (as the complement to \fB\fC\-\-console\fR) you could do so in theory.
 .IP \(bu 2
@@ -253,7 +245,7 @@ Manticore utilizes the \fB\fCplugin_dir\fR for storing and using Manticore Buddy
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2025 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2026 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
 Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"

@@ -144,7 +144,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.3
+      - uses: manticoresoftware/clt@0.7.7
         with:
           test_prefix: ${{ matrix.test_prefix }}
           image: ${{ matrix.image }}
@@ -234,11 +234,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.3
+      - uses: manticoresoftware/clt@0.7.7
         with:
           test_prefix: ${{ matrix.test_prefix }}
           image: ${{ matrix.image }}
           comment_mode: failures
           run_args: --privileged
           ui_host: "https://clt.manticoresearch.com"
-

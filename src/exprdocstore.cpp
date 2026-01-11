@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,7 +27,7 @@ public:
 	int			IntEval ( const CSphMatch & tMatch ) const final;
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final;
 	bool		IsDataPtrAttr() const final		{ return sphIsBlobAttr(m_eAttrType); }
-	bool		IsStored() const final			{ return !POSTLIMIT; }
+	bool		IsStored() const final			{ return true; }
 	bool		UsesDocstore() const			{ return true; }
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const;
 	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final { return GetBlobPacked(tMatch); }
@@ -108,16 +108,27 @@ int Expr_GetStored_T<POSTLIMIT>::StringEval ( const CSphMatch & tMatch, const BY
 template <bool POSTLIMIT>
 void Expr_GetStored_T<POSTLIMIT>::Command ( ESphExprCommand eCmd, void * pArg )
 {
-	if ( eCmd!=SPH_EXPR_SET_DOCSTORE_DOCID )
-		return;
+	switch ( eCmd )
+	{
+	case SPH_EXPR_SET_DOCSTORE_DOCID:
+		{
+			m_dFieldIds.Resize(0);
+			assert(pArg);
+			m_tSessionDocID = *(DocstoreSession_c::InfoDocID_t*)pArg;
+			assert ( m_tSessionDocID.m_pDocstore );
+			int iFieldId = m_tSessionDocID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
+			if ( iFieldId!=-1 )
+				m_dFieldIds.Add(iFieldId);
+		}
+		break;
 
-	m_dFieldIds.Resize(0);
-	assert(pArg);
-	m_tSessionDocID = *(DocstoreSession_c::InfoDocID_t*)pArg;
-	assert ( m_tSessionDocID.m_pDocstore );
-	int iFieldId = m_tSessionDocID.m_pDocstore->GetFieldId ( m_sField.cstr(), m_eDocstoreType );
-	if ( iFieldId!=-1 )
-		m_dFieldIds.Add(iFieldId);
+	case SPH_EXPR_GET_COLUMNAR_COL:
+		*(CSphString*)pArg = m_sField;
+		break;
+
+	default:
+		break;
+	}
 }
 
 template <bool POSTLIMIT>
@@ -236,7 +247,10 @@ ISphExpr * CreateExpr_GetStoredField ( const CSphString & sName )
 	return new Expr_GetStored_T<true> ( sName, DOCSTORE_TEXT, SPH_ATTR_STRING );
 }
 
-ISphExpr * CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr )
+ISphExpr * CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr, bool bPostlimit )
 {
+	if ( bPostlimit )
+		return new Expr_GetStored_T<true> ( sName, DOCSTORE_ATTR, eAttr );
+
 	return new Expr_GetStored_T<false> ( sName, DOCSTORE_ATTR, eAttr );
 }

@@ -1,19 +1,19 @@
 # FEDERATED
 
-使用 MySQL 的 FEDERATED 引擎，您可以从 MySQL/MariaDB 连接到本地或远程的 Manticore 实例并执行搜索查询。
+使用MySQL的FEDERATED引擎，您可以从MySQL/MariaDB连接到本地或远程的Manticore实例，并执行搜索查询。
 
-## 使用 FEDERATED
+## 使用FEDERATED
 
-由于 FEDERATED 引擎的限制以及 Manticore 实现了自定义语法（如 [MATCH](../Searching/Full_text_matching/Basic_usage.md) 子句），实际的 Manticore 查询不能直接用于 FEDERATED 引擎，必须通过“代理”（作为列中的字符串发送）。
+实际的Manticore查询不能直接与FEDERATED引擎一起使用，而必须通过“代理”（作为字符串在列中发送）发送，因为FEDERATED引擎的限制以及Manticore实现自定义语法如[MATCH](../Searching/Full_text_matching/Basic_usage.md)子句。
 
-要通过 `FEDERATED` 进行搜索，首先需要创建一个 FEDERATED 引擎表。Manticore 查询将包含在对 FEDERATED 表执行的 `SELECT` 中的 `query` 列中。
+要通过`FEDERATED`进行搜索，您首先需要创建一个FEDERATED引擎表。Manticore查询将包含在`SELECT`语句中执行的FEDERATED表的`query`列中。
 
 <!-- example create federated -->
-创建一个兼容 FEDERATED 的 MySQL 表：
+创建一个FEDERATED兼容的MySQL表：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -37,11 +37,11 @@ Query OK, 0 rows affected (0.00 sec)
 <!-- end -->
 
 <!-- example select federated -->
-查询兼容 FEDERATED 的表：
+查询FEDERATED兼容表：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -61,35 +61,35 @@ SELECT * FROM t1 WHERE query='SELECT * FROM movies WHERE MATCH (\'pie\')';
 ```
 <!-- end -->
 
-唯一固定的映射是 `query` 列。它是必需的，并且必须是唯一附加表的列。
+唯一的固定映射是`query`列。它是必需的，并且必须是唯一的一个与表关联的列。
 
-通过 `FEDERATED` 连接的 Manticore 表**必须**是物理表（普通表或实时表）。
+通过`FEDERATED`链接的Manticore表**必须**是一个物理表（普通或实时）。
 
-FEDERATED 表应具有与远程 Manticore 表属性同名的列，因为它们将按名称绑定到 Manticore 结果集中提供的属性。然而，它可能只映射部分属性，而非全部。
+FEDERATED表的列名应与远程Manticore表属性相同，因为它们将绑定到Manticore结果集中的属性名称。然而，它可能只映射一些属性，而不是所有属性。
 
-Manticore 服务器通过用户名 "FEDERATED" 识别来自 FEDERATED 客户端的查询。`CONNECTION` 字符串参数用于指定 Manticore 主机、SQL 端口和通过连接进行查询的表。连接字符串语法如下：
+Manticore服务器通过用户名“FEDERATED”识别来自FEDERATED客户端的查询。`CONNECTION`字符串参数用于指定通过连接发送的查询的Manticore主机、SQL端口和表。`CONNECTION`字符串的语法如下：
 
 ```ini
 CONNECTION="mysql://FEDERATED@HOST:PORT/DB/TABLENAME"
 ```
 
-由于 Manticore 没有数据库的概念，`DB` 字符串可以是任意的，因为 Manticore 会忽略它，但 MySQL 要求在 `CONNECTION` 字符串定义中必须有值。如示例所示，完整的 `SELECT` SQL 查询应放在针对 `query` 列的 WHERE 子句中。
+由于Manticore没有数据库的概念，`DB`字符串可以是随机的，因为它将被Manticore忽略，但MySQL要求`CONNECTION`字符串定义中有一个值。如示例所示，完整的`SELECT`SQL查询应放置在`query`列的WHERE子句中。
 
-仅支持 `SELECT` 语句，不支持 `INSERT`、`REPLACE`、`UPDATE` 或 `DELETE`。
+仅支持`SELECT`语句，不支持`INSERT`、`REPLACE`、`UPDATE`或`DELETE`。
 
-### FEDERATED 提示
+### FEDERATED提示
 
-一个**非常重要**的注意事项是，让 Manticore 执行排序、过滤和结果集切片要**远远**比增加最大匹配数并在 MySQL 端使用 WHERE、ORDER BY 和 LIMIT 子句更高效。原因有两个。首先，Manticore 实现了多种优化，执行这些任务的性能优于 MySQL。其次，搜索守护进程（searchd）需要打包、传输和解包的数据量更少。
+一个**非常重要**的注意事项是，允许Manticore执行排序、过滤和切片结果集比在MySQL侧增加最大匹配数并使用WHERE、ORDER BY和LIMIT子句要高效得多。这是有两个原因。首先，Manticore实现了许多优化并在此类任务中表现优于MySQL。其次，Manticore需要传输的数据量更少，因此在Manticore和MySQL之间传输的数据量更少。
 
 <!-- example federated join -->
-可以在 FEDERATED 表和其他 MySQL 表之间执行 JOIN。这可以用来检索未存储在 Manticore 表中的信息。
+可以在FEDERATED表和其他MySQL表之间执行JOIN操作。这可以用于检索未存储在Manticore表中的信息。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
-##### 将基于 MySQL 的表与由 Manticore 提供服务的 FEDERATED 表进行 JOIN 的查询：
+##### 查询以JOIN MySQL基于表与由Manticore提供的FEDERATED表：
 
 ```sql
 SELECT t1.id, t1.year, comments.comment FROM t1 JOIN comments ON t1.id=comments.post_id WHERE query='SELECT * FROM movies WHERE MATCH (\'pie\')';

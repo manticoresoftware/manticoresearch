@@ -179,6 +179,8 @@
 * [≫ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [Fluent Bit](Integration/Fluentbit.md)
+    * [Vector.dev](Integration/Vectordev.md)
     * [Kibana](Integration/Kibana.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)

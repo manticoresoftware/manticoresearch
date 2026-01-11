@@ -1,28 +1,28 @@
 # Фасетный поиск
 
-Фасетный поиск так же важен для современного поискового приложения, как [автозаполнение](../Searching/Autocomplete.md), [исправление опечаток](../Searching/Spell_correction.md) и подсветка поисковых ключевых слов [highlighting](../Searching/Highlighting.md), особенно в продуктах электронной коммерции.
+Фасетный поиск так же важен для современного поискового приложения, как [автодополнение](../Searching/Autocomplete.md), [исправление орфографии](../Searching/Spell_correction.md) и [подсветка](../Searching/Highlighting.md) ключевых слов поиска, особенно в электронной коммерции.
 
-![Faceted search](faceted.png)
+![Фасетный поиск](faceted.png)
 
-Фасетный поиск полезен при работе с большими объемами данных и различными взаимосвязанными свойствами, такими как размер, цвет, производитель или другие факторы. При запросе больших объемов данных результаты поиска часто включают множество записей, которые не соответствуют ожиданиям пользователя. Фасетный поиск позволяет конечному пользователю явно определить критерии, которым должны удовлетворять результаты поиска.
+Фасетный поиск полезен при работе с большими объемами данных и различными взаимосвязанными свойствами, такими как размер, цвет, производитель или другие факторы. При запросе огромных объемов данных результаты поиска часто включают множество записей, не соответствующих ожиданиям пользователя. Фасетный поиск позволяет конечному пользователю явно определить критерии, которым должны соответствовать его результаты поиска.
 
-В Manticore Search есть оптимизация, которая сохраняет набор результатов исходного запроса и повторно использует его для каждого вычисления фасета. Поскольку агрегации применяются к уже вычисленному подмножеству документов, они выполняются быстро, и общее время выполнения часто может быть лишь немного дольше, чем у первоначального запроса. Фасеты можно добавлять к любому запросу, и фасет может быть любым атрибутом или выражением. Результат фасета включает значения фасета и количество по фасету. К фасетам можно получить доступ с помощью SQL-запроса `SELECT`, объявляя их в самом конце запроса.
+В Manticore Search есть оптимизация, которая сохраняет набор результатов исходного запроса и повторно использует его для каждого расчета фасета. Поскольку агрегации применяются к уже вычисленному подмножеству документов, они выполняются быстро, и общее время выполнения часто может быть лишь немного больше, чем у первоначального запроса. Фасеты могут быть добавлены к любому запросу, и фасетом может быть любой атрибут или выражение. Результат фасета включает значения фасета и количество фасетов. Доступ к фасетам можно получить с помощью оператора SQL `SELECT`, объявив их в самом конце запроса.
 
 ## Агрегации
 
 <!-- example Aggregations -->
 ### SQL
-Значения фасета могут исходить из атрибута, свойства JSON внутри JSON-атрибута или выражения. Значения фасета также могут иметь псевдонимы, но **псевдоним должен быть уникальным** во всех наборах результатов (основной набор результатов запроса и другие наборы результатов фасетов). Значение фасета выводится из агрегированного атрибута/выражения, но также может исходить из другого атрибута/выражения.
+Значения фасета могут происходить из атрибута, свойства JSON внутри атрибута JSON или выражения. Значения фасета также могут иметь псевдонимы, но **псевдоним должен быть уникальным** во всех наборах результатов (основной набор результатов запроса и другие наборы результатов фасетов). Значение фасета получается из агрегированного атрибута/выражения, но также может происходить из другого атрибута/выражения.
 
 ```sql
 FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
-Несколько объявлений фасетов должны разделяться пробелом.
+Несколько объявлений фасетов должны быть разделены пробелом.
 
 ### HTTP JSON
 
-Фасеты можно определить в узле `aggs`:
+Фасеты могут быть определены в узле `aggs`:
 
 ``` json
      "aggs" :
@@ -40,12 +40,12 @@ FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FA
 ```
 
 где:
-* `group name` — это псевдоним, присвоенный агрегации
-* значение `field` должно содержать имя атрибута или выражения, по которому выполняется фасетирование
-* необязательный параметр `size` указывает максимальное количество бакетов, включаемых в результат. Если не указан, наследует лимит основного запроса. Подробнее см. в разделе [Размер результата фасета](../Searching/Faceted_search.md#Size-of-facet-result).
-* необязательный параметр `sort` задает массив атрибутов и/или дополнительных свойств с использованием того же синтаксиса, что и ["параметр sort в основном запросе"](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
+* `group name` - это псевдоним, присвоенный агрегации
+* `field` должен содержать имя атрибута или выражения, по которому выполняется фасетирование
+* необязательный `size` указывает максимальное количество групп для включения в результат. Если не указан, наследует лимит основного запроса. Подробнее можно узнать в разделе [Размер результата фасета](../Searching/Faceted_search.md#Size-of-facet-result).
+* необязательный `sort` указывает массив атрибутов и/или дополнительных свойств, используя тот же синтаксис, что и [параметр "sort" в основном запросе](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
 
-Набор результатов будет содержать узел `aggregations` с возвращенными фасетами, где `key` — агрегированное значение, а `doc_count` — количество в агрегации.
+Набор результатов будет содержать узел `aggregations` с возвращенными фасетами, где `key` - это агрегированное значение, а `doc_count` - количество агрегаций.
 
 ``` json
     "aggregations": {
@@ -761,7 +761,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ### Фасетирование по агрегации другого атрибута
 
-Данные можно фасетировать, агрегируя другой атрибут или выражение. Например, если документы содержат как идентификатор бренда, так и его название, можно вернуть в фасете названия брендов, но агрегировать идентификаторы брендов. Это можно сделать с помощью `FACET {expr1} BY {expr2}`
+Данные могут быть фасетированы путем агрегации другого атрибута или выражения. Например, если документы содержат как идентификатор бренда, так и его название, мы можем вернуть в фасете названия брендов, но агрегировать идентификаторы брендов. Это можно сделать с помощью `FACET {expr1} BY {expr2}`
 
 
 <!-- intro -->
@@ -809,11 +809,11 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 
 ### Фасетирование без дубликатов
 
-Если нужно удалить дубликаты из бакетов, возвращаемых FACET, можно использовать `DISTINCT field_name`, где `field_name` — поле, по которому нужно выполнить дедупликацию. Это также может быть `id` (что является значением по умолчанию), если вы выполняете FACET-запрос к распределенной таблице и не уверены, что у вас уникальные идентификаторы в таблицах (таблицы должны быть локальными и иметь одинаковую схему).
+Если вам нужно удалить дубликаты из групп, возвращаемых FACET, вы можете использовать `DISTINCT field_name`, где `field_name` - это поле, по которому вы хотите выполнить дедупликацию. Это также может быть `id` (который используется по умолчанию), если вы выполняете запрос FACET к распределенной таблице и не уверены, есть ли у вас уникальные идентификаторы в таблицах (таблицы должны быть локальными и иметь одинаковую схему).
 
-Если в вашем запросе несколько объявлений FACET, `field_name` должен быть одинаковым во всех них.
+Если у вас несколько объявлений FACET в запросе, `field_name` должен быть одинаковым во всех них.
 
-`DISTINCT` возвращает дополнительный столбец `count(distinct ...)` перед столбцом `count(*)`, что позволяет получить оба результата без необходимости делать дополнительный запрос.
+`DISTINCT` возвращает дополнительный столбец `count(distinct ...)` перед столбцом `count(*)`, позволяя получить оба результата без необходимости делать другой запрос.
 
 <!-- intro -->
 ##### SQL:
@@ -951,7 +951,7 @@ POST /sql -d 'SELECT brand_name, property FROM facetdemo FACET brand_name distin
 <!-- example Expressions -->
 ### Фасет по выражениям
 
-Фасеты могут агрегировать по выражениям. Классический пример — сегментация цен по определенным диапазонам:
+Фасеты могут агрегировать по выражениям. Классический пример - сегментация цен по определенным диапазонам:
 
 <!-- request SQL -->
 
@@ -1525,9 +1525,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example Multi-level -->
 
-### Facet over multi-level grouping
+### Фасет по многоуровневой группировке
 
-Facets can aggregate over multi-level grouping, with the result set being the same as if the query performed a multi-level grouping:
+Фасеты могут агрегировать по многоуровневой группировке, при этом результирующий набор будет таким же, как если бы запрос выполнял многоуровневую группировку:
 
 <!-- request SQL -->
 
@@ -1567,16 +1567,16 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 
 <!-- example histogram -->
 
-### Facet over histogram values
+### Фасет по гистограммным значениям
 
-Facets can aggregate over histogram values by constructing fixed-size buckets over the values.
-The key function is:
+Фасеты могут агрегировать по гистограммным значениям, создавая фиксированные интервалы (бакеты) для значений.
+Ключевая функция:
 
 ```sql
 key_of_the_bucket = interval + offset * floor ( ( value - offset ) / interval )
 ```
 
-The histogram argument `interval` must be positive, and the histogram argument `offset` must be positive and less than `interval`. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+Аргумент гистограммы `interval` должен быть положительным, а аргумент гистограммы `offset` должен быть положительным и меньше `interval`. По умолчанию бакеты возвращаются в виде массива. Аргумент гистограммы `keyed` преобразует ответ в словарь с ключами бакетов.
 
 <!-- request SQL -->
 
@@ -1708,17 +1708,17 @@ POST /search -d '
 
 <!-- example histogram_date -->
 
-### Facet over histogram date values
+### Фасет по гистограммным значениям дат
 
-Facets can aggregate over histogram date values, which is similar to the normal histogram. The difference is that the interval is specified using a date or time expression. Such expressions require special support because the intervals are not always of fixed length. Values are rounded to the closest bucket using the following key function:
+Фасеты могут агрегировать по гистограммным значениям дат, что аналогично обычной гистограмме. Разница в том, что интервал задаётся с помощью выражения даты или времени. Такие выражения требуют специальной поддержки, потому что интервалы не всегда имеют фиксированную длину. Значения округляются до ближайшего бакета с использованием следующей ключевой функции:
 
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
 
-The histogram parameter `calendar_interval` understands months to have different amounts of days.
-Unlike `calendar_interval`, the `fixed_interval` parameter uses a fixed number of units and does not deviate, regardless of where it falls on the calendar. However `fixed_interval` cannot process units such as months because a month is not a fixed quantity. Attempting to specify units like weeks or months for `fixed_interval` will result in an error.
-The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+Параметр гистограммы `calendar_interval` учитывает, что месяцы имеют разное количество дней.
+В отличие от `calendar_interval`, параметр `fixed_interval` использует фиксированное количество единиц и не отклоняется, независимо от того, на какую дату календаря он приходится. Однако `fixed_interval` не может обрабатывать единицы, такие как месяцы, потому что месяц — это не фиксированная величина. Попытка указать единицы, такие как недели или месяцы, для `fixed_interval` приведёт к ошибке.
+Допустимые интервалы описаны в выражении [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29). По умолчанию бакеты возвращаются в виде массива. Аргумент гистограммы `keyed` преобразует ответ в словарь с ключами бакетов.
 
 <!-- request SQL -->
 
@@ -1799,10 +1799,10 @@ POST /search -d '
 
 <!-- example facet range -->
 
-### Facet over set of ranges
+### Фасет по набору диапазонов
 
-Facets can aggregate over a set of ranges. The values are checked against the bucket range, where each bucket includes the `from` value and excludes the `to` value from the range.
-Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+Фасеты могут агрегировать по набору диапазонов. Значения проверяются на соответствие диапазону бакета, где каждый бакет включает значение `from` и исключает значение `to` из диапазона.
+Установка свойства `keyed` в `true` преобразует ответ в словарь с ключами бакетов, а не в массив.
 
 <!-- request SQL -->
 
@@ -1942,9 +1942,9 @@ POST /search -d '
 
 <!-- example facet range_date -->
 
-### Facet over set of date ranges
+### Фасет по набору диапазонов дат
 
-Facets can aggregate over a set of date ranges, which is similar to the normal range. The difference is that the `from` and `to` values can be expressed in [Date math](../Functions/Date_and_time_functions.md#Date-math) expressions. This aggregation includes the `from` value and excludes the `to` value for each range. Setting the `keyed` property to `true` makes the response a dictionary with the bucket keys rather than an array.
+Фасеты могут агрегировать по набору диапазонов дат, что аналогично обычному диапазону. Разница в том, что значения `from` и `to` могут быть выражены с помощью выражений [Date math](../Functions/Date_and_time_functions.md#Date-math). Эта агрегация включает значение `from` и исключает значение `to` для каждого диапазона. Установка свойства `keyed` в `true` преобразует ответ в словарь с ключами бакетов, а не в массив.
 
 <!-- request SQL -->
 
@@ -2035,9 +2035,9 @@ POST /search -d '
 <!-- end -->
 
 <!-- example Ordering -->
-### Ordering in facet result
+### Сортировка в результате фасета
 
-Facets support the `ORDER BY` clause just like a standard query. Each facet can have its own ordering, and the facet ordering doesn't affect the main result set's ordering, which is determined by the main query's `ORDER BY`. Sorting can be done on attribute name, count (using `COUNT(*)`, `COUNT(DISTINCT attribute_name)`), or the special `FACET()` function, which provides the aggregated data values. By default, a query with `ORDER BY COUNT(*)` will sort in descending order.
+Фасеты поддерживают предложение `ORDER BY`, как и стандартный запрос. Каждый фасет может иметь свою собственную сортировку, и сортировка фасета не влияет на порядок основного результирующего набора, который определяется предложением `ORDER BY` основного запроса. Сортировка может выполняться по имени атрибута, количеству (с использованием `COUNT(*)`, `COUNT(DISTINCT attribute_name)`) или специальной функции `FACET()`, которая предоставляет агрегированные значения данных. По умолчанию запрос с `ORDER BY COUNT(*)` будет сортировать по убыванию.
 
 
 <!-- intro -->
@@ -2220,11 +2220,11 @@ POST /search -d '
 
 
 <!-- example Size -->
-### Size of facet result
+### Размер результата фасета
 
-By default, each facet result set is limited to 20 values. The number of facet values can be controlled with the `LIMIT` clause individually for each facet by providing either a number of values to return in the format `LIMIT count` or with an offset as `LIMIT offset, count`.
+По умолчанию каждый результирующий набор фасета ограничен 20 значениями. Количество значений фасета можно контролировать с помощью предложения `LIMIT` индивидуально для каждого фасета, указав либо количество возвращаемых значений в формате `LIMIT count`, либо со смещением как `LIMIT offset, count`.
 
-The maximum facet values that can be returned is limited by the query's `max_matches` setting. If you want to implement dynamic `max_matches` (limiting `max_matches` to offset + per page for better performance), it must be taken into account that a too low `max_matches` value can affect the number of facet values. In this case, a minimum `max_matches` value should be used that is sufficient to cover the number of facet values.
+Максимальное количество возвращаемых значений фасета ограничено настройкой `max_matches` запроса. Если вы хотите реализовать динамический `max_matches` (ограничивая `max_matches` до offset + per page для лучшей производительности), следует учитывать, что слишком низкое значение `max_matches` может повлиять на количество значений фасета. В этом случае следует использовать минимальное значение `max_matches`, достаточное для покрытия количества значений фасета.
 
 <!-- intro -->
 ##### SQL:
@@ -2816,17 +2816,17 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 
 <!-- end -->
-### Возвращаемый набор результатов
+### Возвращаемый результирующий набор
 
-При использовании SQL поиск с фасетами возвращает несколько наборов результатов. Клиент/библиотека/коннектор MySQL, используемый **должен** поддерживать несколько наборов результатов, чтобы получить доступ к наборам результатов фасетов.
+При использовании SQL поиск с фасетами возвращает несколько наборов результатов. Используемый клиент/библиотека/коннектор MySQL **обязательно** должен поддерживать множественные наборы результатов для доступа к наборам результатов фасетов.
 
 <!-- example Performance -->
 ### Производительность
 
-Внутренне `FACET` является сокращением для выполнения мультизапроса, где первый запрос содержит основной поисковый запрос, а остальные запросы в пакете имеют каждый свою кластеризацию. Как и в случае мультизапроса, общая оптимизация запросов может сработать для фасетного поиска, что означает, что поисковый запрос выполняется только один раз, а фасеты работают с результатом поискового запроса, при этом каждый фасет добавляет лишь часть времени к общему времени запроса.
+Внутренне `FACET` является сокращением для выполнения мультизапроса, где первый запрос содержит основной поисковый запрос, а остальные запросы в пакете содержат каждый свою кластеризацию. Как и в случае с мультизапросом, для фасетного поиска может сработать общая оптимизация запросов, что означает, что поисковый запрос выполняется только один раз, а фасеты работают с результатом поискового запроса, причем каждый фасет добавляет лишь небольшую долю времени к общему времени выполнения запроса.
 
 
-Чтобы проверить, был ли фасетный поиск выполнен в оптимизированном режиме, вы можете посмотреть в [журнал запросов](../Logging/Query_logging.md), где все записанные запросы будут содержать строку `xN`, где `N` — количество запросов, выполненных в оптимизированной группе. Кроме того, вы можете проверить вывод оператора [SHOW META](../Node_info_and_management/SHOW_META.md), который отобразит метрику `multiplier`:
+Чтобы проверить, работал ли фасетный поиск в оптимизированном режиме, вы можете посмотреть в [журнал запросов](../Logging/Query_logging.md), где все залогированные запросы будут содержать строку `xN`, где `N` — количество запросов, выполненных в оптимизированной группе. Альтернативно, вы можете проверить вывод оператора [SHOW META](../Node_info_and_management/SHOW_META.md), который отобразит метрику `multiplier`:
 
 <!-- request SQL -->
 

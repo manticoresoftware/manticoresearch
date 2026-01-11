@@ -1,5 +1,5 @@
 #=============================================================================
-# Copyright 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+# Copyright 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.
@@ -15,9 +15,9 @@
 # If no file found, it will try to fetch it from
 # https://snowballstem.org/dist/libstemmer_c.tgz
 
-set ( STEMMER_REMOTE "https://snowballstem.org/dist/libstemmer_c.tgz" )
+set ( STEMMER_REMOTE "https://github.com/manticoresoftware/snowball/archive/refs/tags/v3.0.3.tar.gz" )
 set ( STEMMER_BUNDLEZIP "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-set ( STEMMER_SRC_MD5 "f8288a861db7c97dc4750020c7c7aa6f" )
+set ( STEMMER_SRC_MD5 "4fec9f845790b1758175bd16e06e4fe6" )
 
 cmake_minimum_required ( VERSION 3.17 FATAL_ERROR )
 include ( update_bundle )

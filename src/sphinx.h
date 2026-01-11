@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -512,12 +512,14 @@ struct ScrollSettings_t
 struct KnnSearchSettings_t
 {
 	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
-	int				m_iK = 0;				///< KNN K
+	int				m_iK = 0;				///< KNN K (-1 means auto)
 	int				m_iEf = 0;				///< KNN ef
-	bool			m_bRescore = false;		///< KNN rescoring
-	float			m_fOversampling = 1.0f;	///< KNN oversampling
+	bool			m_bRescore = true;		///< KNN rescoring
+	float			m_fOversampling = 3.0f;	///< KNN oversampling
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
+
+	int64_t			GetRequestedDocs() const;
 };
 
 /// search query. Pure struct, no member functions
@@ -1075,7 +1077,7 @@ public:
 	CSphVector<PostponedUpdate_t>	m_dPostponedUpdates;
 };
 
-bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError );
+bool Update_CheckAttributes ( const CSphAttrUpdate& tUpd, const ISphSchema& tSchema, CSphString& sError, CSphString & sWarning );
 
 // helper - collects killed documents
 struct KillAccum_t final : public IndexSegment_c

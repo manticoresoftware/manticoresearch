@@ -1,6 +1,6 @@
-# 词形变化
+# 词形变换
 
-词形变化在通过 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 规则对输入文本进行分词后应用。它们本质上允许你用另一个词替换一个词。通常，这用于将不同的词形归一化为单一的标准形式（例如，将所有变体如 "walks"、"walked"、"walking" 规范化为标准形式 "walk"）。它也可以用来实现 [词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md) 的例外情况，因为词干提取不会应用于词形变化列表中的词。
+词形变换在通过[字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)规则对输入文本进行分词后应用。它们本质上允许您将一个词替换为另一个词。通常，这用于将不同的词形变体归一化为单一的标准形式（例如，将"walks"、"walked"、"walking"等所有变体归一化为标准形式"walk"）。它也可以用于实现[词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md)的例外情况，因为词干提取不会应用于词形变换列表中找到的单词。
 
 ## wordforms
 
@@ -11,9 +11,9 @@ wordforms = path/to/dict*.txt
 ```
 
 <!-- example wordforms -->
-词形变化字典。可选，默认为空。
+词形变换字典。可选，默认为空。
 
-词形变化字典用于在索引和搜索过程中规范化输入词。因此，对于 [plain table](../../Creating_a_table/Local_tables/Plain_table.md) 来说，必须旋转表以应用词形变化文件中的更改。
+词形变换字典用于在索引和搜索过程中对输入的单词进行归一化。因此，对于[普通表](../../Creating_a_table/Local_tables/Plain_table.md)，需要轮换表以获取词形变换文件的更改。
 
 <!-- intro -->
 ##### SQL:
@@ -116,10 +116,10 @@ table products {
 ```
 <!-- end -->
 
-Manticore 中的词形变化支持设计为能够良好处理大型字典。它们对索引速度有适度影响；例如，包含 100 万条目的字典会使全文索引速度降低约 1.5 倍。搜索速度完全不受影响。额外的内存占用大致等于字典文件大小，且字典在多个表之间共享。例如，如果同一个 50 MB 的词形变化文件被指定给 10 个不同的表，额外的 `searchd` 内存使用大约为 50 MB。
+Manticore 中的词形变换支持旨在很好地处理大型字典。它们对索引速度有适度影响；例如，包含 100 万条目的字典会使全文索引速度减慢约 1.5 倍。搜索速度完全不受影响。额外的 RAM 影响大致等于字典文件大小，并且字典在表之间共享。例如，如果为 10 个不同的表指定了完全相同的 50 MB 词形变换文件，则额外的 `searchd` RAM 使用量将约为 50 MB。
 
 <!-- example wf_simple -->
-字典文件应为简单的纯文本格式。每行应包含源词形和目标词形，使用 UTF-8 编码，并以“大于号”分隔。加载文件时会应用 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 中的规则。因此，如果你不修改 `charset_table`，你的词形变化将是不区分大小写的，类似于其他全文索引的数据。以下是文件内容的示例：
+字典文件应为简单的纯文本格式。每行应包含源词形和目标词形，采用 UTF-8 编码，用大于号分隔。加载文件时将应用[字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)中的规则。因此，如果您不修改 `charset_table`，您的词形变换将不区分大小写，类似于其他全文索引数据。以下是文件内容的示例：
 
 <!-- request Example -->
 ```ini
@@ -129,12 +129,12 @@ walking > walk
 ```
 <!-- end -->
 
-有一个捆绑的工具叫做 [Spelldump](../../Miscellaneous_tools.md#spelldump)，它可以帮助你创建 Manticore 可读取格式的字典文件。该工具可以读取以 `ispell` 或 `MySpell` 格式的源 `.dict` 和 `.aff` 字典文件，这些文件随 OpenOffice 一起捆绑提供。
+有一个捆绑的实用程序称为 [Spelldump](../../Miscellaneous_tools.md#spelldump)，可帮助您创建 Manticore 可读格式的字典文件。该实用程序可以读取 `ispell` 或 `MySpell` 格式的源 `.dict` 和 `.aff` 字典文件，这些格式与 OpenOffice 捆绑。
 
-你可以将多个源词映射到一个目标词。该过程作用于分词后的词元，而非源文本，因此空白和标记的差异会被忽略。
+您可以将多个源词映射到单个目标词。该过程作用于词元，而非源文本，因此空格和标记的差异将被忽略。
 
 <!-- example wf_more_complex -->
-你可以使用 `=>` 符号代替 `>`。也允许注释（以 `#` 开头）。最后，如果一行以波浪号（`~`）开头，词形变化将在形态学处理之后应用，而非之前（注意此情况下只支持单个源词和目标词）。
+您可以使用 `=>` 符号代替 `>`。也允许注释（以 `#` 开头）。最后，如果一行以波浪号（`~`）开头，则词形变换将在形态学处理后应用，而不是之前（注意，在这种情况下仅支持单个源词和目标词）。
 
 <!-- request Example -->
 ```ini
@@ -146,7 +146,7 @@ core 2duo => c2d # Some people write '2duo' together...
 <!-- end -->
 
 <!-- example wf_escaping -->
-如果你需要将 `>`、`=` 或 `~` 作为普通字符使用，可以通过在它们前面加反斜杠（`\`）来转义。`>` 和 `=` 都应以此方式转义。示例如下：
+如果您需要将 `>`、`=` 或 `~` 用作普通字符，可以通过在每个字符前加反斜杠（`\`）来转义它们。`>` 和 `=` 都应以此方式转义。以下是一个示例：
 
 <!-- request Example -->
 ```ini
@@ -160,7 +160,7 @@ c\=\> => cde
 <!-- end -->
 
 <!-- example wf_multiple_tokens -->
-你可以指定多个目标词元：
+您可以指定多个目标词元：
 
 <!-- request Example -->
 ```ini
@@ -170,11 +170,11 @@ s3 e3 > season 3 episode 3
 <!-- end -->
 
 <!-- example wf_multiple_files -->
-你可以指定多个文件，而不仅仅是一个。可以使用通配符作为模式，所有匹配的文件将按简单升序处理：
+您可以指定多个文件，而不仅仅是一个。可以使用通配符作为模式，所有匹配的文件将按简单的升序处理：
 
-在 RT 模式下，只允许使用绝对路径。
+在 RT 模式下，仅允许绝对路径。
 
-如果使用多字节编码页且文件名包含非拉丁字符，结果顺序可能不完全是字母顺序。如果在多个文件中发现相同的词形变化定义，后面的定义将覆盖之前的。
+如果使用多字节代码页且文件名包含非拉丁字符，结果顺序可能不完全按字母顺序排列。如果在多个文件中找到相同的词形变换定义，则使用后一个并覆盖先前的定义。
 
 <!-- request SQL -->
 ```sql

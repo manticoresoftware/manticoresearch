@@ -1,6 +1,6 @@
 # Запуск Manticore в MacOS
 
-## Запуск Manticore через менеджер пакетов HomeBrew
+## Запуск Manticore через пакетный менеджер HomeBrew
 
 Если Manticore установлен с помощью HomeBrew, вы можете запустить его как сервис Brew.
 

@@ -81,7 +81,7 @@ ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expectin
 ––– input –––
 mysql -h0 -P9306 -e "ALTER TABLE @name local='index201' local='index204';"
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected identifier, expecting tablename or ENGINE or MODIFY or TYPE near '@name local='index201' local='index204''
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected identifier near '@name local='index201' local='index204''
 ––– input –––
 mysql -h0 -P9306 -e "DESC products"
 ––– output –––

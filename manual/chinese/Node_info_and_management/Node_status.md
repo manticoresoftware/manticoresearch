@@ -3,17 +3,17 @@
 ## 状态
 
 <!-- example status -->
-查看 Manticore 节点的高级信息最简单的方法是在 MySQL 客户端中运行 `status`。它将显示各种方面的信息，例如：
+通过在MySQL客户端运行`status`可以查看关于Manticore节点的高级信息。它将显示各种方面的信息，例如：
 * 当前版本
-* 是否启用了 SSL
-* 当前 TCP 端口/Unix 套接字
+* 是否启用SSL
+* 当前TCP端口/Unix套接字
 * 运行时间
-* [线程](../Server_settings/Searchd.md#threads) 数量
-* [队列中的作业](../Server_settings/Searchd.md#jobs_queue_size) 数量
+* 线程数量（[参见此处](../Server_settings/Searchd.md#threads)）
+* 队列中的任务数量（[参见此处](../Server_settings/Searchd.md#jobs_queue_size)）
 * 连接数（`clients`）
 * 当前正在处理的任务数
 * 自启动以来执行的查询数
-* 队列中的作业数和任务数，按线程数归一化
+* 根据线程数量归一化的队列中的任务数和任务数
 
 <!-- request SQL -->
 ```sql
@@ -50,7 +50,7 @@ Queue/Th: 0.2  Tasks/Th: 0.4
 
 <!-- end-->
 
-## SHOW STATUS
+## SHOW 状态
 
 ```sql
 SHOW STATUS [ LIKE pattern ]
@@ -58,10 +58,10 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` 是一个 SQL 语句，显示各种有用的性能计数器。IO 和 CPU 计数器仅在 `searchd` 启动时使用了 `--iostats` 和 `--cpustats` 开关（或通过 `SET GLOBAL iostats/cpustats=1` 启用）时可用。
+`SHOW STATUS`是一个SQL语句，提供了各种有用的性能计数器。IO和CPU计数器仅在`searchd`以`--iostats`和`--cpustats`开关启动时或通过`SET GLOBAL iostats/cpustats=1`启用时可用。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -155,7 +155,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-支持可选的 `LIKE` 子句，允许您仅选择匹配特定模式的变量。模式语法遵循标准 SQL 通配符，其中 `%` 表示任意数量的任意字符，`_` 表示单个字符。
+支持可选的`LIKE`子句，允许您选择仅匹配特定模式的变量。模式语法遵循标准SQL通配符，其中`%`表示任意数量的任何字符，而`_`表示一个字符。
 
 <!-- request qcache -->
 
@@ -212,20 +212,20 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- example show status like stats_ms -->
 
-`SHOW STATUS` 命令提供了 Manticore 中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计数据是在 1、5 和 15 分钟的滑动窗口内计算的，显示查询时间的平均值、最小值、最大值以及 95%/99% 百分位值。
+`SHOW STATUS`命令提供了Manticore中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的时间统计。这些统计数据是在1分钟、5分钟和15分钟的滑动窗口上计算的，显示了每种查询类型的时间的平均值、最小值、最大值以及95%和99%分位数。
 
-这些指标有助于跟踪特定时间间隔内的性能，使得更容易发现查询响应时间的趋势并找到可能的瓶颈。
+这些指标有助于跟踪特定时间段内的性能，使发现查询响应时间的趋势和可能瓶颈变得更加容易。
 
-以下指标是 `SHOW STATUS` 输出的一部分：
-- `*_avg`：过去 1、5 和 15 分钟内每种查询类型的平均查询时间。
+以下是`SHOW STATUS`输出的一部分指标：
+- `*_avg`：每种查询类型的平均查询时间，分别在过去1分钟、5分钟和15分钟内。
 - `*_min`：每种查询类型记录的最短查询时间。
 - `*_max`：每种查询类型记录的最长查询时间。
-- `*_pct95`：95% 查询完成所需的时间。
-- `*_pct99`：99% 查询完成所需的时间。
+- `*_pct95`：完成95%查询所需的时间。
+- `*_pct99`：完成99%查询所需的时间。
 
-这些统计数据分别针对插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询提供，详细展示了不同操作的性能。
+这些统计数据分别提供给插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询，提供了不同操作性能的详细见解。
 
-如果在监控间隔内没有执行查询，系统将显示 `N/A`。
+如果在监控间隔内没有执行查询，则系统将显示`N/A`。
 
 <!-- request perf_stats -->
 
@@ -258,18 +258,18 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- end -->
 
-## SHOW SETTINGS
+## SHOW 设置
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` 是一个 SQL 语句，显示配置文件中的当前设置。设置名称以以下格式表示：`'config_section_name'.'setting_name'`
+`SHOW SETTINGS`是一个SQL语句，显示配置文件中的当前设置。设置名称以以下格式表示：`'config_section_name'.'setting_name'`
 
-结果还包括两个附加值：
-- `configuration_file` - 配置文件的路径
-- `worker_pid` - 正在运行的 `searchd` 实例的进程 ID
+结果还包括两个额外的值：
+- `configuration_file` - 配置文件路径
+- `worker_pid` - 运行中的`searchd`实例的进程ID
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -300,17 +300,17 @@ SHOW SETTINGS;
 
 <!-- end -->
 
-## SHOW AGENT STATUS
+## SHOW AGENT 状态
 ```sql
 SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 ```
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` 显示[远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)或分布式表的统计信息。它包括最后请求时间、最后响应时间、各种错误和成功次数等值。统计信息针对每个代理在最近 1、5 和 15 个间隔内显示，每个间隔由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
+`SHOW AGENT 状态`显示远程代理或分布式表的统计信息。它包括诸如上次请求的年龄、最后回答的年龄、各种类型错误和成功的数量等值。统计信息按[ha_period_karma](../Server_settings/Searchd.md#ha_period_karma)秒为单位，显示每个代理过去1分钟、5分钟和15分钟的统计信息。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -379,7 +379,7 @@ SHOW AGENT STATUS;
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -444,7 +444,7 @@ Array(
 )
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -512,7 +512,7 @@ utilsApi.sql('SHOW AGENT STATUS')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -580,7 +580,7 @@ await utilsApi.sql('SHOW AGENT STATUS')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -648,7 +648,7 @@ res = await utilsApi.sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -716,7 +716,7 @@ utilsApi.sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -784,7 +784,7 @@ utilsApi.Sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -852,7 +852,7 @@ utils_api.sql("SHOW AGENT STATUS", Some(true)).await;
 ```
 
 <!-- intro -->
-##### TypeScript:
+##### TypeScript：
 
 <!-- request TypeScript -->
 
@@ -935,7 +935,7 @@ res = await utilsApi.sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### Go:
+##### Go：
 
 <!-- request Go -->
 
@@ -1022,10 +1022,10 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-支持可选的 `LIKE` 子句，语法与 `SHOW STATUS` 中相同。
+支持可选的`LIKE`子句，语法与`SHOW STATUS`相同。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -1045,7 +1045,7 @@ SHOW AGENT STATUS LIKE '%5period%msec%';
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -1067,7 +1067,7 @@ Array(
 )
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -1089,7 +1089,7 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -1111,7 +1111,7 @@ await utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -1134,7 +1134,7 @@ res = await utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -1156,7 +1156,7 @@ utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -1266,7 +1266,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-You can specify a particular agent by its address. In this case, only that agent's data will be displayed. Additionally, the `agent_` prefix will be used instead of `ag_N_`:
+您可以通过其地址指定特定的代理。在这种情况下，将仅显示该代理的数据。此外，将使用 `agent_` 前缀而不是 `ag_N_`：
 
 <!-- intro -->
 ##### SQL:
@@ -1583,7 +1583,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-Finally, you can check the status of the agents in a specific distributed table using the `SHOW AGENT table_name STATUS` statement. This statement displays the table's HA status (i.e., whether or not it uses agent mirrors at all) and provides information on the mirrors, including: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect.
+最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。此语句会显示表的HA状态（即是否使用代理镜像）以及镜像的信息，包括：地址、黑洞和持久性标志，以及在使用加权概率策略之一时使用的镜像选择概率。
 
 <!-- intro -->
 ##### SQL:
@@ -1929,10 +1929,10 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 
 <!-- example prometheus exporter -->
 
-Manticore Search has a built-in Prometheus exporter.
-To request metrics, make sure the HTTP port is exposed and simply call the /metrics endpoint.
+Manticore Search 具有内置的 Prometheus 导出器。
+要请求指标，请确保暴露了 HTTP 端口并简单地调用 /metrics 终端节点。
 
-**Note:** The exporter requires **Buddy** to be enabled.
+**注意：** 导出器需要 **Buddy** 被启用。
 
 <!-- intro -->
 ##### HTTP:

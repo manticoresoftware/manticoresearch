@@ -1,10 +1,12 @@
 {
-  "0076a86951e1b2994ac6f07412f5f03add3e80e8a604025ea9648b89e865336e": {
-    "original": "# Starting Manticore in MacOS\n\n## Starting Manticore via HomeBrew package manager\n\nIf Manticore is installed using HomeBrew, you can run it as a Brew service.\n\nTo start Manticore, run the following command:\n\nCODE_BLOCK_0\n\nTo stop Manticore, run the following command:\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
-    "translations": {
-      "chinese": "# 在 MacOS 上启动 Manticore\n\n## 通过 HomeBrew 包管理器启动 Manticore\n\n如果使用 HomeBrew 安装了 Manticore，可以将其作为 Brew 服务运行。\n\n要启动 Manticore，请运行以下命令：\n\nCODE_BLOCK_0\n\n要停止 Manticore，请运行以下命令：\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
-      "russian": "# Запуск Manticore в MacOS\n\n## Запуск Manticore через менеджер пакетов HomeBrew\n\nЕсли Manticore установлен с помощью HomeBrew, вы можете запустить его как сервис Brew.\n\nЧтобы запустить Manticore, выполните следующую команду:\n\nCODE_BLOCK_0\n\nЧтобы остановить Manticore, выполните следующую команду:\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
-    },
-    "is_code_or_comment": false
-  }
+    "25a7937bd189c514c98d448a9db20b157d5c877762a55e858df3012e9a286159": {
+        "original": "# Starting Manticore in MacOS\n\n## Starting Manticore via HomeBrew package manager\n\nIf Manticore is installed using HomeBrew, you can run it as a Brew service.\n\nTo start Manticore, run the following command:\n\nCODE_BLOCK_0\nTo stop Manticore, run the following command:\n\nCODE_BLOCK_1\n<!-- proofread -->\n\n",
+        "translations": {
+            "chinese": "# \u5728 MacOS \u4e0a\u542f\u52a8 Manticore\n\n## \u901a\u8fc7 HomeBrew \u5305\u7ba1\u7406\u5668\u542f\u52a8 Manticore\n\n\u5982\u679c\u4f7f\u7528 HomeBrew \u5b89\u88c5\u4e86 Manticore\uff0c\u53ef\u4ee5\u5c06\u5176\u4f5c\u4e3a Brew \u670d\u52a1\u8fd0\u884c\u3002\n\n\u8981\u542f\u52a8 Manticore\uff0c\u8bf7\u8fd0\u884c\u4ee5\u4e0b\u547d\u4ee4\uff1a\n\nCODE_BLOCK_0\n\u8981\u505c\u6b62 Manticore\uff0c\u8bf7\u8fd0\u884c\u4ee5\u4e0b\u547d\u4ee4\uff1a\n\nCODE_BLOCK_1\n<!-- proofread -->",
+            "russian": "# \u0417\u0430\u043f\u0443\u0441\u043a Manticore \u0432 MacOS\n\n## \u0417\u0430\u043f\u0443\u0441\u043a Manticore \u0447\u0435\u0440\u0435\u0437 \u043f\u0430\u043a\u0435\u0442\u043d\u044b\u0439 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440 HomeBrew\n\n\u0415\u0441\u043b\u0438 Manticore \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d \u0441 \u043f\u043e\u043c\u043e\u0449\u044c\u044e HomeBrew, \u0432\u044b \u043c\u043e\u0436\u0435\u0442\u0435 \u0437\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u044c \u0435\u0433\u043e \u043a\u0430\u043a \u0441\u0435\u0440\u0432\u0438\u0441 Brew.\n\n\u0427\u0442\u043e\u0431\u044b \u0437\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u044c Manticore, \u0432\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0443\u044e \u043a\u043e\u043c\u0430\u043d\u0434\u0443:\n\nCODE_BLOCK_0\n\u0427\u0442\u043e\u0431\u044b \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c Manticore, \u0432\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0443\u044e \u043a\u043e\u043c\u0430\u043d\u0434\u0443:\n\nCODE_BLOCK_1\n<!-- proofread -->"
+        },
+        "is_code_or_comment": false,
+        "model": "openai:gpt-4.1-mini",
+        "updated_at": 1766339819
+    }
 }

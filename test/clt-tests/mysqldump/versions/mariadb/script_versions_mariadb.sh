@@ -63,7 +63,23 @@ for version in "${versions[@]}"; do
 
     # Restore dump
     docker exec -i db-test $db_type -hmanticore -P9306 manticore < dump.sql
-    docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
+    restore_status=$?
+    
+    # Clear query log before test query
+    docker exec manticore bash -c "> /var/log/manticore/query.log" 2>/dev/null || true
+    
+    # Execute test query (only if restore succeeded)
+    if [ $restore_status -eq 0 ]; then
+        docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
+    else
+        echo "⚠️ Warning: Restore failed for $version, skipping query log check"
+    fi
+    
+    # Output query log content (only if restore succeeded) - CLT will validate against expected output
+    if [ $restore_status -eq 0 ]; then
+        echo "   Query log content:"
+        docker exec manticore cat /var/log/manticore/query.log 2>/dev/null || echo "   (empty)"
+    fi
 
     # Checking for errors
     if [ -s dump.sql ]; then

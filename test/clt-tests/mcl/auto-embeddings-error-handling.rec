@@ -180,6 +180,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_rowwise WHERE KNN(vec, 1, 'artificial i
 | id   |
 +------+
 |    1 |
+|    2 |
 +------+
 ––– comment –––
 Test 16: Columnar vec attribute only
@@ -207,6 +208,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_vec_columnar WHERE KNN(vec, 1, 'artific
 | id   |
 +------+
 |    1 |
+|    2 |
 +------+
 ––– comment –––
 Test 17: Full columnar table (engine='columnar')
@@ -234,6 +236,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_full_columnar WHERE KNN(vec, 1, 'artifi
 | id   |
 +------+
 |    1 |
+|    2 |
 +------+
 ––– comment –––
 Test 18: Verify SHOW CREATE TABLE differences

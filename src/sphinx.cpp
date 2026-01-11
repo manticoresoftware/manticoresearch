@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -664,7 +664,7 @@ UpdateContext_t::UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tS
 
 //////////////////////////////////////////////////////////////////////////
 
-bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError )
+bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, CSphString & sError, CSphString & sWarning )
 {
 	for ( const auto & tUpdAttr : tUpd.m_dAttributes )
 	{
@@ -684,6 +684,14 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			if ( tUpd.m_bIgnoreNonexistent )
 				continue;
 
+			// if it's a field but not an attribute, reject
+			bool bIsField = ( tSchema.GetField ( sUpdAttrName.cstr() ) != nullptr );
+			if ( bIsField )
+			{
+				sError.SetSprintf ( "attribute '%s' can not be updated (full-text field)", sUpdAttrName.cstr() );
+				return false;
+			}
+
 			sError.SetSprintf ( "attribute '%s' not found", sUpdAttrName.cstr() );
 			return false;
 		}
@@ -698,11 +706,22 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
-		case SPH_ATTR_STRING:
 		case SPH_ATTR_BIGINT:
 		case SPH_ATTR_FLOAT:
 		case SPH_ATTR_JSON:
 			break;
+
+		// if string attribute is also a full-text field, allow update but warn
+		case SPH_ATTR_STRING:
+		if ( tSchema.GetField ( sUpdAttrName.cstr() )!=nullptr )
+		{
+			if ( sWarning.IsEmpty() )
+				sWarning.SetSprintf ( "attribute '%s' is updated, but full-text field is not (recommended to use REPLACE instead)", sUpdAttrName.cstr() );
+			else
+				sWarning.SetSprintf ( "%s; attribute '%s' is updated, but full-text field is not (recommended to use REPLACE instead)", sWarning.cstr(), sUpdAttrName.cstr() );
+		}
+		break;
+
 		default:
 			sError.SetSprintf ( "attribute '%s' can not be updated (must be boolean, integer, bigint, float, timestamp, string, MVA or JSON)", sUpdAttrName.cstr() );
 			return false;
@@ -1337,7 +1356,7 @@ private:
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, ByteBlob_t tBlob, int nBlobAttrs, const CSphAttrLocator & tBlobRowLoc, bool & bCritical, CSphString & sError ) final;
 	void						Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx );
 	void						MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx );
-	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError );
+	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
@@ -1588,6 +1607,13 @@ uint64_t FilterTreeItem_t::GetHash() const
 
 
 //////////////////////////////////////////////////////////////////////////
+
+int64_t KnnSearchSettings_t::GetRequestedDocs() const
+{
+	assert ( m_iK>=0 );
+	return m_bRescore ? int64_t ( m_fOversampling * m_iK ) : m_iK;
+}
+
 
 struct SelectBounds_t
 {
@@ -1954,8 +1980,8 @@ CSphIndex::CSphIndex ( CSphString sIndexName, CSphString sFileBase )
 
 CSphIndex::~CSphIndex ()
 {
-	QcacheDeleteIndex ( m_iIndexId );
-	SkipCache::DeleteAll ( m_iIndexId );
+	QcacheClearByIndexId ( m_iIndexId );
+	SkipCache::ClearByIndexId ( m_iIndexId );
 }
 
 
@@ -2462,13 +2488,13 @@ void CSphIndex_VLN::MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const U
 }
 
 
-bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError )
+bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError, CSphString & sWarning )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::DoUpdateAttributes" );
 	if ( dRows.IsEmpty() )
 		return true;
 
-	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
+	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError, sWarning ) )
 		return false;
 
 	tCtx.m_pHistograms = m_pHistograms;
@@ -2569,7 +2595,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
 
-	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))
+	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError, sWarning ) )
 		return -1;
 
 	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
@@ -2604,6 +2630,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 		return;
 
 	CSphString sError;
+	CSphString sWarning;
 	bool bCritical;
 
 	for ( auto & tPostUpdate : dPostUpdates )
@@ -2612,7 +2639,7 @@ void CSphIndex_VLN::UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & d
 
 		AttrUpdateInc_t tUpdInc { tPostUpdate.m_pUpdate }; // don't move, keep update (need twice when split chunks)
 		UpdateContext_t tCtx ( tUpdInc, m_tSchema );
-		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError ) )
+		if ( !DoUpdateAttributes ( dRows, tCtx, bCritical, sError, sWarning ) )
 		{
 			sphWarning ("UpdateAttributesOffline: %s", sError.cstr() );
 			break;
@@ -7104,7 +7131,7 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		if ( tNewSchema.IsAttrStored(i) )
-			iOldNumStored++;
+			iNewNumStored++;
 
 	if ( iOldNumStored==iNewNumStored )
 		return true;
@@ -8065,7 +8092,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
-		int iRequestedKNNDocs = Min ( int64_t(tQuery.m_tKnnSettings.m_iK * tQuery.m_tKnnSettings.m_fOversampling), m_iDocinfo );
+		int iRequestedKNNDocs = Min ( tQuery.m_tKnnSettings.GetRequestedDocs(), m_iDocinfo );
 		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 	}
@@ -8740,8 +8767,8 @@ void CSphIndex_VLN::Dealloc ()
 	m_bPassedAlloc = false;
 	m_uAttrsStatus = 0;
 
-	QcacheDeleteIndex ( m_iIndexId );
-	SkipCache::DeleteAll ( m_iIndexId );
+	QcacheClearByIndexId ( m_iIndexId );
+	SkipCache::ClearByIndexId ( m_iIndexId );
 
 	m_iIndexId = GetIndexUid();
 }
@@ -11321,6 +11348,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( bCollectPredictionCounters )
 		tTermSetup.m_pStats = &tQueryStats;
 
+	if ( HasForceHints ( tQuery.m_dIndexHints ) )
+		tCtx.m_bSkipQCache = true;
+
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
@@ -11384,15 +11414,25 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
-	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
-	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
-	if ( tSpawned.second )
-		return false;
-
-	if ( pIterator )
+	
+	// skip SI create if cache ranker used
+	bool bIsCacheRanker = pRanker->IsCache();
+	std::pair<RowidIterator_i *, bool>  tSpawned = {nullptr, false};
+	std::unique_ptr<RowidIterator_i> pIterator;
+	
+	if ( !bIsCacheRanker )
 	{
-		auto pIter = pIterator.get();
-		pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
+		// Not using cache - spawn SI iterators if needed
+		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
+		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
+		if ( tSpawned.second )
+			return false;
+
+		if ( pIterator )
+		{
+			auto pIter = pIterator.get();
+			pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
+		}
 	}
 
 	//////////////////////////////////////

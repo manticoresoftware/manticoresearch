@@ -2,12 +2,12 @@
 
 Поиск является основной функцией Manticore Search. Вы можете:
 * Выполнять [полнотекстовый поиск](../Searching/Full_text_matching/Basic_usage.md#MATCH) и реализовывать [подсветку](../Searching/Highlighting.md) результатов поиска
-* Выполнять [поиск k-ближайших соседей](../Searching/KNN.md)
-* Применять [фильтрацию, не связанную с полнотекстовым поиском](../Searching/Filters.md)
+* Выполнять [поиск k ближайших соседей](../Searching/KNN.md)
+* Применять [неполнтекстовые фильтры](../Searching/Filters.md)
 * Использовать [выражения](../Searching/Expressions.md) для фильтрации
 * Использовать различные [опции поиска](../Searching/Options.md)
-* Применять [мультизапросы](../Searching/Multi-queries.md) и [подзапросы](../Searching/Sub-selects.md)
-* Выполнять [агрегации](../Searching/Grouping.md) и [фасетный поиск](../Searching/Faceted_search.md) результатов поиска
+* Использовать [мультизапросы](../Searching/Multi-queries.md) и [подзапросы](../Searching/Sub-selects.md)
+* Проводить [агрегации](../Searching/Grouping.md) и [фацетный](../Searching/Faceted_search.md) анализ результатов поиска
 * И многое другое
 
 ## Общий синтаксис

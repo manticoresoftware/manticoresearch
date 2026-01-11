@@ -1,0 +1,163 @@
+––– comment –––
+Test Content-Type headers for HTTP endpoints with Buddy enabled
+Verifies correct Content-Type headers including Buddy-specific endpoints
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Install jq for JSON processing in Buddy tests
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– comment –––
+Create test table and prepare test data
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_ct; CREATE TABLE test_ct (title TEXT, year INT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_ct VALUES (1, 'Test Document', 2024);"
+––– output –––
+––– input –––
+echo '{"index":{"_index":"test_ct","_id":2}}
+{"title":"Bulk Document","year":2024}' > /tmp/bulk_test.ndjson
+––– output –––
+––– comment –––
+Test /sql endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql" -d "SELECT * FROM test_ct LIMIT 1" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /sql?mode=raw endpoint with various SQL commands - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql?mode=raw" -d "SHOW VERSION" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql?mode=raw" -d "SHOW TABLES" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql?mode=raw" -d "SELECT * FROM test_ct" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql?mode=raw" -d "CREATE TABLE test_ct2 LIKE test_ct" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/sql?mode=raw" -d "DROP TABLE IF EXISTS test_ct2" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s "http://localhost:9308/sql?mode=raw&query=SELECT%20COUNT(*)%20FROM%20test_ct" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /cli endpoint - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/cli?SHOW%20VERSION" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s "http://localhost:9308/cli?SELECT%20*%20FROM%20test_ct%20LIMIT%201" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /cli_json endpoint - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/cli_json?SHOW%20TABLES" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/cli_json" -d "SELECT * FROM test_ct" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /search endpoint (Elasticsearch-compatible) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/search" -d '{"index":"test_ct","query":{"match_all":{}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /insert endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/insert" -d '{"index":"test_ct","id":100,"doc":{"title":"Insert Test","year":2024}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /replace endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/replace" -d '{"index":"test_ct","id":100,"doc":{"title":"Replace Test","year":2025}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /update endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/update" -d '{"index":"test_ct","id":100,"doc":{"year":2026}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /delete endpoint - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/delete" -d '{"index":"test_ct","id":100}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /bulk and /_bulk endpoints - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/bulk" -H "Content-Type: application/x-ndjson" --data-binary @/tmp/bulk_test.ndjson 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– input –––
+curl -i -s -X POST "http://localhost:9308/_bulk" -H "Content-Type: application/x-ndjson" --data-binary @/tmp/bulk_test.ndjson 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /autocomplete endpoint (Buddy plugin) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/autocomplete" -d '{"table":"test_ct","query":"te"}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /metrics endpoint (Prometheus exporter - Buddy plugin) - should return text/plain
+––– input –––
+curl -i -s "http://localhost:9308/metrics" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: text/plain; charset=UTF-8
+––– comment –––
+Test /_search endpoint (Elasticsearch-compatible search) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/_search" -d '{"query":{"match_all":{}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /<table>/_search endpoint (Elasticsearch table-specific search) - should return application/json
+––– input –––
+curl -i -s -X POST "http://localhost:9308/test_ct/_search" -d '{"query":{"match_all":{}}}' 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /_cat/indices endpoint (Elasticsearch cat API - Buddy EmulateElastic) - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/_cat/indices" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /_nodes endpoint (Elasticsearch nodes info - Buddy EmulateElastic) - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/_nodes" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8
+––– comment –––
+Test /index.html - should return text/html
+––– input –––
+curl -i -s "http://localhost:9308/index.html" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: text/html; charset=UTF-8
+––– comment –––
+Test / root endpoint - should return application/json
+––– input –––
+curl -i -s "http://localhost:9308/" 2>&1 | grep -i "Content-Type:"
+––– output –––
+Content-Type: application/json; charset=UTF-8

@@ -23,11 +23,12 @@ TESTED_VERSIONS="10.0
 11.3
 12.0
 12.1
-12.2"
+12.2
+12.3"
 
 # Check for NEW versions (after latest tested)
 # WARNING: Also update GRAFANA_LATEST below when changing this!
-LATEST_TESTED_VERSION="12.2"
+LATEST_TESTED_VERSION="12.3"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/grafana/grafana/tags/?page_size=100" \
 | jq -r ".results[].name" \
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
@@ -62,7 +63,7 @@ echo "Using tested versions:"
 echo "$TESTED_VERSIONS"
 SCRIPT
 ––– output –––
-✅ No new versions found after 12.2
+✅ No new versions found after 12.3
 Using tested versions:
 10.0
 10.1
@@ -76,35 +77,77 @@ Using tested versions:
 12.0
 12.1
 12.2
+12.3
+––– comment –––
+If new versions are detected, test will fail with detailed instructions:
+- Lists files that need to be updated in manticoresearch repo
+- Shows where to add new version tests
+- Reminds to update documentation in manual/
+- Reminds to update website in site repo (manticoresearch-grafana-integration blog post)
 ––– input –––
 bash << 'SCRIPT'
-# Check blog post for Grafana version
-echo "Checking Grafana version in blog post..."
+# Check documentation versions for Grafana
+echo "Checking Grafana version references in documentation..."
 echo ""
 
 # Must match LATEST_TESTED_VERSION above
-GRAFANA_LATEST="12.2"
+GRAFANA_LATEST="12.3"
 
+# 1. Check manual documentation (local file mounted via workflow)
+echo "=== Checking manual documentation ==="
+GRAFANA_MANUAL="/manual/english/Integration/Grafana.md"
+if [ -f "$GRAFANA_MANUAL" ]; then
+    echo "✓ Checking $GRAFANA_MANUAL"
+    FOUND_VERSION=$(grep -o "versions [0-9.–-]* are" "$GRAFANA_MANUAL" | head -1)
+    if echo "$FOUND_VERSION" | grep -q "${GRAFANA_LATEST}"; then
+        echo "✅ Manual: $FOUND_VERSION"
+    else
+        echo "❌ Manual must contain version ${GRAFANA_LATEST}" >&2
+        echo "   Current: $FOUND_VERSION" >&2
+        echo "   Update to: versions 10.0-${GRAFANA_LATEST} are tested and supported" >&2
+        exit 1
+    fi
+else
+    echo "❌ Manual not found at $GRAFANA_MANUAL" >&2
+    echo "Manual must be mounted via workflow: -v \$(pwd)/manual:/manual" >&2
+    exit 1
+fi
+
+echo ""
 echo "=== Checking website blog post ==="
+# 2. Check website blog post
 BLOG_URL="https://manticoresearch.com/blog/manticoresearch-grafana-integration/"
 echo "✓ Fetching $BLOG_URL"
 
-BLOG_CONTENT=$(curl -s "$BLOG_URL")
+# Try curl first, fallback to wget
+if command -v curl > /dev/null 2>&1; then
+    BLOG_CONTENT=$(curl -s "$BLOG_URL")
+elif command -v wget > /dev/null 2>&1; then
+    BLOG_CONTENT=$(wget -qO- "$BLOG_URL")
+else
+    echo "❌ Neither curl nor wget available" >&2
+    exit 1
+fi
 
 if [ -z "$BLOG_CONTENT" ]; then
     echo "⚠️  WARNING: Blog fetch failed - skipping" >&2
-elif echo "$BLOG_CONTENT" | grep -q "Grafana versions.*${GRAFANA_LATEST}"; then
-    FOUND_FORMAT=$(echo "$BLOG_CONTENT" | grep -o "Grafana versions [0-9.-]*${GRAFANA_LATEST}" | head -1)
-    echo "✅ Blog: $FOUND_FORMAT"
+elif echo "$BLOG_CONTENT" | grep -E "compatible with Grafana versions.*(up to |-|–)${GRAFANA_LATEST}" > /dev/null; then
+    echo "✅ Blog: contains ${GRAFANA_LATEST}"
 else
-    BLOG_VERSION=$(echo "$BLOG_CONTENT" | grep -o "Grafana versions [0-9.-]*" | head -1)
-    echo "⚠️  WARNING: Blog does NOT contain ${GRAFANA_LATEST}" >&2
-    echo "   Found: $BLOG_VERSION" >&2
-    echo "   Expected: Grafana versions 10.0-${GRAFANA_LATEST}" >&2
+    BLOG_VERSION=$(echo "$BLOG_CONTENT" | grep -o "compatible with Grafana versions [0-9.–-]* " | head -1 | sed 's/compatible with Grafana versions //')
+    echo "⚠️  WARNING: Blog does NOT contain ${GRAFANA_LATEST} (found: ${BLOG_VERSION})" >&2
+    echo "   Update: site/content/english/blog/manticoresearch-grafana-integration/index.md" >&2
 fi
+
+echo ""
+echo "✅ Documentation validation complete"
 SCRIPT
 ––– output –––
-Checking Grafana version in blog post...
+Checking Grafana version references in documentation...
+=== Checking manual documentation ===
+✓ Checking /manual/english/Integration/Grafana.md
+✅ Manual: versions 10.0-12.3 are
 === Checking website blog post ===
 ✓ Fetching https://manticoresearch.com/blog/manticoresearch-grafana-integration/
-✅ Blog: Grafana versions 10.0-12.2
+✅ Blog: contains 12.3
+✅ Documentation validation complete

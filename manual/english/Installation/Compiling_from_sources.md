@@ -295,8 +295,7 @@ cmake .
 cmake --build . --clean-first --config RelWithDebInfo
 ```
 
-If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you
-have to run cmake again, pointing to the source folder and configuring the options.
+If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you have to run cmake again, pointing to the source folder and configuring the options.
 
 If it also doesn't help, just wipe out your build folder and begin from scratch.
 

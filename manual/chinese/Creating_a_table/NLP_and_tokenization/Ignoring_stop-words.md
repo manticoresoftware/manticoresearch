@@ -1,12 +1,12 @@
 # 忽略停用词
 
-停用词是在索引和搜索过程中被忽略的词，通常由于其高频率且对搜索结果价值较低。
+停用词是在索引和搜索过程中被忽略的词语，通常是因为它们出现频率高但对搜索结果价值低。
 
-Manticore Search 默认对停用词应用[词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以通过使用[stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)来关闭此功能。
+Manticore Search 默认对停用词应用[词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以通过 [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed) 选项关闭此功能。
 
-小型停用词文件存储在表头中，嵌入文件的大小有限制，该限制由[embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)选项定义。
+小的停用词文件存储在表头中，可嵌入的文件大小有限制，由 [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) 选项定义。
 
-停用词不被索引，但会影响关键词的位置。例如，如果“the”是停用词，文档1包含短语“in office”，而文档2包含短语“in the office”，搜索“in office”作为精确短语时只会返回第一个文档，尽管第二个文档中的“the”作为停用词被跳过。此行为可以通过[stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)指令进行修改。
+停用词不会被索引，但它们会影响关键词的位置。例如，如果 "the" 是一个停用词，文档1包含短语 "in office"，而文档2包含短语 "in the office"，那么将 "in office" 作为精确短语搜索时，只会返回第一个文档，尽管第二个文档中的 "the" 作为停用词被跳过。此行为可以通过 [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step) 指令修改。
 
 ## stopwords
 
@@ -15,11 +15,13 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 ```
 
 <!-- example stopwords -->
-stopwords 设置是可选的，默认为空。它允许你指定一个或多个停用词文件的路径，路径之间用空格分隔。所有文件都会被加载。在实时模式下，只允许使用绝对路径。
+stopwords 设置是可选的，默认为空。它允许您指定一个或多个停用词文件的路径，用空格分隔。所有文件都将被加载。在实时模式下，只允许绝对路径。
 
-停用词文件格式为简单的 UTF-8 编码纯文本。文件数据将根据[charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)设置进行分词，因此你可以使用与索引数据相同的分隔符。
+停用词文件格式是简单的纯文本，采用 UTF-8 编码。文件数据将根据 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 设置进行分词，因此您可以使用与索引数据相同的分隔符。
 
-停用词文件可以手动或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供了一个模式，可以创建按关键词频率排序的表频率字典。该字典中的热门关键词通常可以用作停用词。详情请参见[--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)和[--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)开关。该字典中的热门关键词通常可以用作停用词。
+当 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 索引激活时，由属于 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 范围内的字符组成的停用词本身会被分词为 N-gram。因此，每个单独的 N-gram 成为一个独立的停用词。例如，在 `ngram_len=1` 和合适的 `ngram_chars` 设置下，停用词 `test` 将被解释为 `t`、`e`、`s`、`t` 四个不同的停用词。
+
+停用词文件可以手动或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供了一种模式，可以创建表的频率词典，按关键词频率排序。该词典中的高频词通常可以用作停用词。详情请参见 [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 和 [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 开关。该词典中的高频词通常可以用作停用词。
 
 
 <!-- intro -->
@@ -115,7 +117,7 @@ table products {
 ```
 <!-- end -->
 
-或者你可以使用 Manticore 自带的默认停用词文件。目前提供了50种语言的停用词。以下是它们的完整别名列表：
+或者，您可以使用 Manticore 自带的默认停用词文件。目前支持 50 种语言的停用词。以下是它们的完整别名列表：
 
 * af - 南非荷兰语
 * ar - 阿拉伯语
@@ -265,7 +267,7 @@ table products {
 <!-- end -->
 
 <!-- example stopwords 2 -->
-如果你需要使用多种语言的停用词，应列出所有别名，RT模式下用逗号分隔，普通模式下用空格分隔：
+如果您需要使用多种语言的停用词，应列出所有语言的别名，用逗号（RT 模式）或空格（普通模式）分隔：
 
 
 <!-- intro -->
@@ -367,11 +369,11 @@ stopword_step={0|1}
 ```
 
 <!-- example stopword_step -->
-[stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) 的 position_increment 设置是可选的，允许的值为0和1，默认值为1。
+The position_increment setting on [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) is optional, and the allowed values are 0 and 1, with the default being 1.
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -400,7 +402,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -409,7 +411,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' 
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -418,7 +420,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -427,21 +429,21 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", true);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 <!-- request C# -->
 ```clike
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", true);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -478,7 +480,7 @@ By default, stop words are stemmed themselves, and then applied to tokens *after
 However, you can change this behavior by enabling the `stopwords_unstemmed` directive. When this is enabled, stop words are applied before stemming (and therefore to the original word forms), and the tokens are skipped when the token is equal to the stopword.
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -507,7 +509,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -516,7 +518,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' 
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -525,7 +527,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -534,21 +536,21 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", true);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", true);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 

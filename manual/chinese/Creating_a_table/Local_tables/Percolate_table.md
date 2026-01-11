@@ -1,27 +1,27 @@
-# Percolate 表
+# 渗透表
 
 <!-- example pq -->
-Percolate 表是一种特殊的表，用于存储查询而非文档。它用于前瞻性搜索，或称为“反向搜索”。
+渗透表是一种特殊的表，它存储的是查询而不是文档。它用于前瞻性搜索，或者称为“反向搜索”。
 
-* 要了解如何针对 percolate 表执行搜索查询，请参见章节 [Percolate query](../../Searching/Percolate_query.md)。
-* 要了解如何准备表以进行搜索，请参见章节 [Adding rules to a percolate table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)。
+* 要了解如何对渗透表执行搜索查询，请参阅章节[渗透查询](../../Searching/Percolate_query.md)。
+* 要了解如何为搜索准备表，请参阅章节[向渗透表添加规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)。
 
-Percolate 表的模式是固定的，包含以下字段：
+渗透表的模式是固定的，包含以下字段：
 
 | 字段 | 描述 |
 | - | - |
-| ID| 一个带有自动递增功能的无符号 64 位整数。添加 PQ 规则时可以省略，如 [add a PQ rule](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 中所述 |
-| Query | 规则的[全文查询](../../Searching/Full_text_matching/Basic_usage.md)，可以视为 [MATCH 子句](../../Searching/Full_text_matching/Basic_usage.md) 或 [JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 的值。如果查询中使用了[按字段操作符](../../Searching/Full_text_matching/Operators.md)，则需要在 percolate 表配置中声明全文字段。如果存储的查询仅用于属性过滤（无全文查询），则查询值可以为空或省略。该字段的值应对应预期的文档模式，该模式在创建 percolate 表时指定。 |
-| Filters | 可选。Filters 是一个可选字符串，包含属性过滤器和/或表达式，定义方式与 [WHERE 子句](../../Searching/Filters.md#WHERE) 或 [JSON 过滤](../../Searching/Filters.md#HTTP-JSON) 相同。该字段的值应对应预期的文档模式，该模式在创建 percolate 表时指定。 |
-| Tags | 可选。Tags 表示由逗号分隔的字符串标签列表，可用于过滤/删除 PQ 规则。执行 [Percolate query](../../Searching/Percolate_query.md) 时，标签也可以与匹配的文档一起返回。 |
+| ID| 一个具有自动递增功能的64位无符号整数。在添加PQ规则时可以省略，如[添加PQ规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)中所述 |
+| Query | 规则的[全文查询](../../Searching/Full_text_matching/Basic_usage.md)，可以看作是[MATCH子句](../../Searching/Full_text_matching/Basic_usage.md)或[JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)的值。如果查询中使用了[按字段运算符](../../Searching/Full_text_matching/Operators.md)，则需要在渗透表配置中声明全文字段。如果存储的查询仅用于属性过滤（没有全文查询），查询值可以为空或省略。此字段的值应对应于预期的文档模式，该模式在创建渗透表时指定。 |
+| Filters | 可选。过滤器是一个可选字符串，包含属性过滤器和/或表达式，定义方式与[WHERE子句](../../Searching/Filters.md#WHERE)或[JSON过滤](../../Searching/Filters.md#HTTP-JSON)相同。此字段的值应对应于预期的文档模式，该模式在创建渗透表时指定。 |
+| Tags | 可选。标签表示一个由逗号分隔的字符串标签列表，可用于过滤/删除PQ规则。在执行[渗透查询](../../Searching/Percolate_query.md)时，标签也可以与匹配的文档一起返回。 |
 
-请注意，创建 percolate 表时无需添加上述字段。
+请注意，在创建渗透表时，您不需要添加上述字段。
 
-创建新的 percolate 表时需要记住的是，必须指定文档的预期模式，该模式将用于检查您稍后添加的规则。此操作与[任何其他本地表](../../Creating_a_table/Local_tables.md)的方式相同。
+创建新的渗透表时，您需要记住的是指定文档的预期模式，该模式将与您稍后添加的规则进行匹配。这与[任何其他本地表](../../Creating_a_table/Local_tables.md)的创建方式相同。
 
 
 <!-- intro -->
-##### 通过 SQL 创建 percolate 表：
+##### 通过SQL创建渗透表：
 
 <!-- request SQL -->
 
@@ -35,7 +35,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### 通过 HTTP 的 JSON 创建 percolate 表：
+##### 通过HTTP上的JSON创建渗透表：
 
 <!-- request JSON -->
 
@@ -54,7 +54,7 @@ POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
 ```
 
 <!-- intro -->
-##### 通过 PHP 客户端创建 percolate 表：
+##### 通过PHP客户端创建渗透表：
 
 <!-- request PHP -->
 
@@ -83,7 +83,7 @@ Array(
 ```
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -92,7 +92,7 @@ utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -101,7 +101,7 @@ await utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -109,7 +109,7 @@ await utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'')
 res = await utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'');
 ```
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request java -->
 
@@ -118,7 +118,7 @@ utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -127,7 +127,7 @@ utilsApi.Sql("CREATE TABLE products(title text, meta json) type='pq'");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -136,7 +136,7 @@ utils_api.sql("CREATE TABLE products(title text, meta json) type='pq'", Some(tru
 ```
 
 <!-- intro -->
-##### TypeScript:
+##### TypeScript：
 
 <!-- request typescript -->
 
@@ -145,7 +145,7 @@ res = await utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'
 ```
 
 <!-- intro -->
-##### Go:
+##### Go：
 
 <!-- request go -->
 
@@ -154,7 +154,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title t
 ```
 
 <!-- intro -->
-##### 通过配置创建 percolate 表：
+##### 通过配置创建渗透表：
 
 <!-- request CONFIG -->
 

@@ -21,7 +21,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore manticore-extra
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновлённой структурой пакетов:
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
 
 ```bash
 sudo yum remove manticore*
@@ -30,7 +30,7 @@ sudo yum remove manticore*
 Это не удалит ваши данные и файл конфигурации.
 
 ###### Пакеты для разработки
-Если вы предпочитаете "Nightly" (разработческие) версии, выполните:
+Если вы предпочитаете версии "Nightly" (разработческие), выполните:
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
@@ -40,21 +40,21 @@ sudo yum -y --enablerepo manticore-dev install manticore manticore-extra mantico
 ### Отдельные RPM-пакеты
 Чтобы скачать отдельные RPM-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
 
-### Другие пакеты, которые могут понадобиться
-#### Для indexer
-Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, убедитесь, что у вас установлены соответствующие клиентские библиотеки, чтобы обеспечить доступ к нужным источникам индексации. Следующая команда установит все их сразу; вы можете использовать её как есть или сократить, установив только необходимые библиотеки (для источников только mysql достаточно `mysql-libs`, а unixODBC не обязателен).
+### Дополнительные пакеты, которые могут понадобиться
+#### Для индексатора
+Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, необходимо убедиться, что установлены соответствующие клиентские библиотеки для обеспечения поддержки нужных вам источников индексации. В строке ниже они устанавливаются все сразу; вы можете использовать её как есть или сократить установку, оставив только необходимые библиотеки (для MySQL-источников достаточно только `mysql-libs`, unixODBC не обязателен).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
 
-В CentOS Stream 8 может потребоваться выполнить:
+В CentOS Stream 8 вам может понадобиться выполнить:
 
 ```
 dnf install mariadb-connector-c
 ```
 
-если при попытке создать plain table из MySQL возникает ошибка `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`.
+если при сборке plain-таблицы из MySQL вы получаете ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`.
 
 #### Украинский лемматизатор
 Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и сконфигурирован с опцией `--enable-shared`.**

@@ -2,13 +2,13 @@
 
 <!-- example replace -->
 
-`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но перед вставкой нового документа помечает предыдущий документ с тем же ID как удалённый.
+`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но предварительно помечает предыдущий документ с таким же ID как удалённый перед вставкой нового.
 
 Если вам нужны обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
 
-Синтаксис SQL оператора `REPLACE` следующий:
+Синтаксис SQL-запроса `REPLACE` следующий:
 
 **Для замены всего документа:**
 ```sql
@@ -48,8 +48,8 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` — это псевдоним эндпоинта и работает так же.
-* Эндпоинт в стиле Elasticsearch `<table>/_doc/<id>`:
+  `/index` — алиас для этого эндпоинта и работает так же.
+* Elasticsearch-подобный эндпоинт `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -58,7 +58,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  > ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+  > ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 * Частичная замена:
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -68,7 +68,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру при необходимости.
+  `<table name>` может быть просто названием таблицы или в формате `cluster:table`. Это позволяет делать обновления в конкретном кластере, если это необходимо.
 
   > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
@@ -140,7 +140,7 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
-> ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 ```json
 PUT /products/_doc/2
@@ -435,15 +435,15 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` доступен для real-time и percolate таблиц. Нельзя заменять данные в plain таблице.
+`REPLACE` доступен для реального времени и перколационных таблиц. В обычных таблицах заменить данные нельзя.
 
-При выполнении `REPLACE` предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+Когда вы запускаете `REPLACE`, предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы форсировать слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-## Bulk replace
+## Массовая замена
 
 <!-- example bulk_replace -->
 
-Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
+Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [массовое добавление документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
 
 <!-- intro -->
 ##### HTTP:

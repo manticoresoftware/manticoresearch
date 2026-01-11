@@ -1,10 +1,12 @@
 {
-  "3a74623b9e39156ae267ddb73e009c50e7a90bc90918ce2afa5021a9c403a780": {
-    "original": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\nIt returns the current values of a few server-wide variables. Also, support for `GLOBAL` and `SESSION` clauses was added.\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n\n<!-- proofread -->",
-    "translations": {
-      "chinese": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\n它返回一些服务器范围变量的当前值。同时，添加了对 `GLOBAL` 和 `SESSION` 子句的支持。\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n\n<!-- proofread -->",
-      "russian": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\nОн возвращает текущие значения нескольких переменных, действующих на уровне всего сервера. Также была добавлена поддержка клаузул `GLOBAL` и `SESSION`.\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n\n<!-- proofread -->"
-    },
-    "is_code_or_comment": false
-  }
+    "20a45f5f6844e6dc178468aa3cad486227a252c7799f52197c3fb3b5d9347559": {
+        "original": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\nIt returns the current values of a few server-wide variables. Also, support for `GLOBAL` and `SESSION` clauses was added.\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n<!-- proofread -->\n\n",
+        "translations": {
+            "chinese": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\n\u5b83\u8fd4\u56de\u4e00\u4e9b\u670d\u52a1\u5668\u8303\u56f4\u53d8\u91cf\u7684\u5f53\u524d\u503c\u3002\u540c\u65f6\uff0c\u8fd8\u589e\u52a0\u4e86\u5bf9 `GLOBAL` \u548c `SESSION` \u5b50\u53e5\u7684\u652f\u6301\u3002\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n<!-- proofread -->",
+            "russian": "# SHOW VARIABLES\n\nCODE_BLOCK_0\n\n\u041e\u043d \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u0442\u0435\u043a\u0443\u0449\u0438\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u0438\u0445 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0445, \u0434\u0435\u0439\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0445 \u043d\u0430 \u0443\u0440\u043e\u0432\u043d\u0435 \u0432\u0441\u0435\u0433\u043e \u0441\u0435\u0440\u0432\u0435\u0440\u0430. \u0422\u0430\u043a\u0436\u0435 \u0431\u044b\u043b\u0430 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0430 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0430 \u043a\u043b\u0430\u0443\u0437\u0430 `GLOBAL` \u0438 `SESSION`.\n\nCODE_BLOCK_1\n\nCODE_BLOCK_2\n\nCODE_BLOCK_3\n<!-- proofread -->"
+        },
+        "is_code_or_comment": false,
+        "model": "openai:gpt-4.1-mini",
+        "updated_at": 1766339823
+    }
 }

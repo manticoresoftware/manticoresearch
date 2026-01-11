@@ -139,7 +139,7 @@ When a session requests a read lock, Manticore:
 4. Waits for all ongoing insert, replace, update, or delete operations on the table to finish.
 5. Increases the table's read-lock counter (see [SHOW LOCKS](../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS)).
 
-Any modifying statement (insert/replace/update/delete) first checks if a table is read-locked. If it is, the statement fails with the error `table is locked`.
+Any modifying statement (DML) like `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, and `TRUNCATE` first checks if a table is read-locked. If it is, the statement fails with the error `table is locked`. DDL statements (such as `CREATE`, `ALTER`, `DROP`) are not blocked by read locks.
 
 
 <!-- request Example -->

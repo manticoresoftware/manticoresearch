@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -824,4 +824,48 @@ TEST_F ( DeathLogger_c, ParseListener_wrong_port )
 		ParseListener ( sCase.sSpec, &sFatal );
 		EXPECT_STREQ ( "port 65536 is out of range", sFatal.cstr() );
 	}
+}
+
+TEST ( PersistentConnectionsPool, functionality )
+{
+	PersistentConnectionsPool_c dPool;
+	dPool.ReInit ( 10 );
+	int iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	dPool.ReturnConnection(13);
+	dPool.ReturnConnection(15);
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 13 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 15 );
+	dPool.ReturnConnection(17);
+	dPool.ReturnConnection(16);
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 17 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, 16 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -1 );
+
+	// limit (10 buckets) exhaused
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -2 );
+	iSock = dPool.RentConnection();
+	EXPECT_EQ ( iSock, -2 );
 }

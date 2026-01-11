@@ -2,56 +2,56 @@
 
 <!-- example SHOW TABLE STATUS -->
 
-`SHOW TABLE STATUS` 是一个显示每个表各种统计信息的 SQL 语句。
+`SHOW TABLE STATUS` 是一个 SQL 语句，用于显示每个表的各种统计信息。
 
-语法为：
+语法如下：
 
 ```sql
 SHOW TABLE table_name STATUS
 ```
 
-根据索引类型，显示的统计信息包含不同的行集：
+根据索引类型，显示的统计信息包括不同的行集：
 
 * **template**: `index_type`。
 * **distributed**: `index_type`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
 * **percolate**: `index_type`，`stored_queries`，`ram_bytes`，`disk_bytes`，`max_stack_need`，`average_stack_base`，`
   desired_thread_stack`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
-* **plain**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包含一组 `field_tokens_*` 和 `total_tokens`，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
-* **rt**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包含一组 `field_tokens_*` 和 `total_tokens`，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`ram_chunk`，`ram_chunk_segments_count`，`disk_chunks`，`mem_limit`，`mem_limit_rate`，`ram_bytes_retired`，`optimizing`，`locked`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
+* **plain**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包括 `field_tokens_*` 和 `total_tokens` 集合，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
+* **rt**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包括 `field_tokens_*` 和 `total_tokens` 集合，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`ram_chunk`，`ram_chunk_segments_count`，`disk_chunks`，`mem_limit`，`mem_limit_rate`，`ram_bytes_retired`，`optimizing`，`locked`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
 
 以下是这些值的含义：
 
-* `index_type`：当前为 `disk`、`rt`、`percolate`、`template` 和 `distributed` 之一。
+* `index_type`：当前取值为 `disk`、`rt`、`percolate`、`template` 和 `distributed` 之中的一种。
 * `indexed_documents`：已索引文档的数量。
-* `indexed_bytes`：已索引文本的总体大小。注意，该值不是严格的，因为在全文索引中不可能严格还原存储的文本来测量它。
-* `stored_queries`：表中存储的 percolate 查询数量。
-* `field_tokens_XXX`：可选，整个表中每个字段的总长度（以令牌计）（内部用于 `BM25A` 和 `BM25F` 排名函数）。仅适用于使用 `index_field_lengths=1` 构建的表。
-* `total_tokens`：可选，所有 `field_tokens_XXX` 的总和。
+* `indexed_bytes`：已索引文本的总体大小。请注意，该值不是严格准确的，因为在全文索引中不可能严格地将存储的文本恢复以进行测量。
+* `stored_queries`：存储在表中的 percolate 查询数量。
+* `field_tokens_XXX`：可选，整个表中各字段的总长度（以令牌计），内部用于 `BM25A` 和 `BM25F` 排序函数。仅适用于使用 `index_field_lengths=1` 构建的表。
+* `total_tokens`：可选，所有 `field_tokens_XXX` 的整体和。
 * `ram_bytes`：表占用的总 RAM。
 * `disk_bytes`：表占用的总磁盘空间。
 * `disk_mapped`：文件映射的总大小。
-* `disk_mapped_cached`：实际缓存于 RAM 中的文件映射总大小。
+* `disk_mapped_cached`：实际缓存在 RAM 中的文件映射大小。
 * `disk_mapped_doclists` 和 `disk_mapped_cached_doclists`：属于文档列表的总映射和缓存映射部分。
-* `disk_mapped_hitlists` 和 `disk_mapped_cached_hitlists`：属于命中列表的总映射和缓存映射部分。文档列表和命中列表的值分开显示，因为它们通常很大（例如，大约占整个表大小的 90%）。
-* `killed_documents` 和 `killed_rate`：前者表示已删除文档的数量，后者表示删除文档与已索引文档的比例。从技术上讲，删除文档意味着在搜索结果中屏蔽它，但它仍然物理存在于表中，只有在合并/优化表后才会被清除。
+* `disk_mapped_hitlists` 和 `disk_mapped_cached_hitlists`：属于命中列表的总映射和缓存映射部分。由于文档列表和命中列表通常较大（例如，占整个表大小约90%），故这两个值单独显示。
+* `killed_documents` 和 `killed_rate`：分别表示已删除文档的数量及删除文档占已索引文档的比例。从技术上讲，删除文档意味着在搜索输出中屏蔽，但文档仍物理存在于表中，只有在合并/优化表后才会被真正清除。
 * `ram_chunk`：实时或 percolate 表的 RAM 块大小。
-* `ram_chunk_segments_count`：RAM 块内部由段组成，通常不超过 32。此行显示当前段数。
+* `ram_chunk_segments_count`：RAM 块内部由多个段组成，通常不超过 32 个。本行显示当前段数。
 * `disk_chunks`：实时表中的磁盘块数量。
 * `mem_limit`：表的 `rt_mem_limit` 实际值。
-* `mem_limit_rate`：RAM 块被刷新为磁盘块的比例，例如，如果 `rt_mem_limit` 是 128M，比例是 50%，当 RAM 块超过 64M 时将保存一个新的磁盘块。
-* `ram_bytes_retired`：表示 RAM 块中的垃圾大小（例如，已删除或替换但尚未永久移除的文档）。
-* `optimizing`：值大于 0 表示表当前正在执行优化（即正在合并某些磁盘块）。
-* `locked`：值大于 0 表示表当前被 [FREEZE](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#Freezing-a-table) 锁定。数字表示表被冻结的次数。例如，表可能先被 `manticore-backup` 冻结，然后又被复制冻结。只有当没有其他进程需要冻结时，才应完全解冻。
-* `max_stack_need`：计算存储的 percolate 查询中最复杂部分所需的栈空间。这是动态值，取决于构建细节如编译器、优化、硬件等。
-* `average_stack_base`：通常在开始计算 percolate 查询时占用的栈空间。
-* `desired_thread_stack`：上述值的总和，向上取整到 128 字节边界。如果此值大于 `thread_stack`，则可能无法在此表上执行 `call pq`，因为某些存储的查询会失败。默认 `thread_stack` 值为 1M（即 1048576）；其他值应自行配置。
-* `tid` 和 `tid_saved`：表示表的保存状态。`tid` 随每次更改（事务）递增。`tid_saved` 显示保存在 `<table>.ram` 文件中 RAM 块状态的最大 `tid`。当数字不同时，某些更改仅存在于 RAM 中，并且也由 binlog 备份（如果启用）。执行 `FLUSH TABLE` 或安排定期刷新会保存这些更改。刷新后，binlog 被清除，`tid_saved` 表示新的实际状态。
-* `query_time_*`，`exact_query_time_*`：查询执行时间统计，针对最近 1 分钟、5 分钟、15 分钟和服务器启动以来的总时间；数据封装为 JSON 对象，包括查询次数以及最小、最大、平均、95 和 99 百分位值。
-* `found_rows_*`：查询找到的行数统计；提供最近 1 分钟、5 分钟、15 分钟和服务器启动以来的总时间；数据封装为 JSON 对象，包括查询次数以及最小、最大、平均、95 和 99 百分位值。
-* `command_*`：针对该表成功执行特定命令的总次数计数器。
-* `search_stats_ms_*`：搜索查询执行时间（毫秒）统计。* 表示时间窗口（例如 1min、5min、15min、total）。这些统计基于 1、5 和 15 分钟的滑动窗口计算，显示查询时间的平均值、最小值、最大值以及 95 和 99 百分位值。
-* `insert_replace_stats_ms_*`：插入和替换查询执行时间（毫秒）统计。* 表示时间窗口（例如 1min、5min、15min、total）。这些统计基于 1、5 和 15 分钟的滑动窗口计算，显示查询时间的平均值、最小值、最大值以及 95 和 99 百分位值。
-* `update_stats_ms_*`：更新查询执行时间（毫秒）统计。* 表示时间窗口（例如 1min、5min、15min、total）。这些统计基于 1、5 和 15 分钟的滑动窗口计算，显示查询时间的平均值、最小值、最大值以及 95 和 99 百分位值。
+* `mem_limit_rate`：RAM 块被刷写成磁盘块的比例，例如，若 `rt_mem_limit` 为 128M，且比例为 50%，当 RAM 块超过 64M 时将保存一个新的磁盘块。
+* `ram_bytes_retired`：表示 RAM 块内的垃圾大小（如已删除或替换但未永久移除的文档）。
+* `optimizing`：大于 0 表明表当前正在执行优化（即正在合并某些磁盘块）。
+* `locked`：大于 0 表示表当前被 [FREEZE](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#Freezing-a-table) 锁定。数字表示表被冻结的次数。例如，表可能被 `manticore-backup` 冻结一次，接着被复制功能再次冻结。只有当没有其它进程需要冻结时，表才能完全解冻。
+* `max_stack_need`：计算存储的 percolate 查询时所需的最大堆栈空间。该值是动态的，取决于编译器、优化、硬件等构建详情。
+* `average_stack_base`：通常在启动 percolate 查询计算时占用的堆栈空间。
+* `desired_thread_stack`：以上两值之和，向上取整至 128 字节的整数倍。如果该值大于 `thread_stack`，则可能无法在此表上执行 `call pq`，因为某些存储查询会失败。默认的 `thread_stack` 为 1M (即1048576); 其它值需用户配置。
+* `tid` 和 `tid_saved`：表示表保存状态。`tid` 随每次变更（事务）递增。`tid_saved` 显示在 `<table>.ram` 文件中保存的 RAM 块的最大 `tid`。当两值不同时，表示有些变更仅存在于 RAM 中，并由二进制日志支持（如果启用）。执行 `FLUSH TABLE` 或安排定期刷新会保存这些变更。刷新后，binlog 被清空，`tid_saved` 表示新的实际状态。
+* `query_time_*`、`exact_query_time_*`：最近 1 分钟、5 分钟、15 分钟以及自服务器启动以来的查询执行时间统计；数据封装为 JSON 对象，包括查询数量及最小、最大、平均、95% 和 99% 百分位值。
+* `found_rows_*`：查询所找到的行数统计；分别提供最近 1 分钟、5 分钟、15 分钟以及自服务器启动以来的统计；数据封装为 JSON 对象，包括查询数量及最小、最大、平均、95% 和 99% 百分位值。
+* `command_*`：特定命令成功执行于此表的总次数计数器。
+* `search_stats_ms_*`：搜索查询执行时间（毫秒）的统计。*表示时间窗口（例如 1min, 5min, 15min, total）。这些统计在 1、5 和 15 分钟滑动窗口内计算，显示查询时间的平均值、最小值、最大值以及 95% / 99% 百分位数。
+* `insert_replace_stats_ms_*`：插入和替换查询执行时间（毫秒）的统计。*表示时间窗口（例如 1min, 5min, 15min, total）。这些统计在 1、5 和 15 分钟滑动窗口内计算，显示查询时间的平均值、最小值、最大值以及 95% / 99% 百分位数。
+* `update_stats_ms_*`：更新查询执行时间（毫秒）的统计。*表示时间窗口（例如 1min, 5min, 15min, total）。这些统计在 1、5 和 15 分钟滑动窗口内计算，显示查询时间的平均值、最小值、最大值以及 95% / 99% 百分位数。
 
 <!-- intro -->
 ##### SQL:

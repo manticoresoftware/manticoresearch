@@ -64,6 +64,8 @@ Testing version: mariadb:10.5
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.5 completed successfully
 Testing cluster:table with mariadb:10.5...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -95,6 +97,8 @@ Testing version: mariadb:10.6
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.6 completed successfully
 Testing cluster:table with mariadb:10.6...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -126,6 +130,8 @@ Testing version: mariadb:10.7
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.7 completed successfully
 Testing cluster:table with mariadb:10.7...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -157,6 +163,8 @@ Testing version: mariadb:10.8
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.8 completed successfully
 Testing cluster:table with mariadb:10.8...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -188,6 +196,8 @@ Testing version: mariadb:10.9
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.9 completed successfully
 Testing cluster:table with mariadb:10.9...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -219,6 +229,8 @@ Testing version: mariadb:10.10
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.10 completed successfully
 Testing cluster:table with mariadb:10.10...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -250,6 +262,8 @@ Testing version: mariadb:10.11
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.11 completed successfully
 Testing cluster:table with mariadb:10.11...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -281,6 +295,8 @@ Testing version: mariadb:11.0
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.0 completed successfully
 Testing cluster:table with mariadb:11.0...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -312,6 +328,8 @@ Testing version: mariadb:11.1
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.1 completed successfully
 Testing cluster:table with mariadb:11.1...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -343,6 +361,8 @@ Testing version: mariadb:11.2
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.2 completed successfully
 Testing cluster:table with mariadb:11.2...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -374,6 +394,8 @@ Testing version: mariadb:11.3-rc
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.3-rc completed successfully
 Testing cluster:table with mariadb:11.3-rc...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -408,6 +430,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.4 completed successfully
 Testing cluster:table with mariadb:11.4...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -443,6 +467,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.5 completed successfully
 Testing cluster:table with mariadb:11.5...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -478,6 +504,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.6 completed successfully
 Testing cluster:table with mariadb:11.6...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -513,6 +541,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.7 completed successfully
 Testing cluster:table with mariadb:11.7...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -548,6 +578,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.8 completed successfully
 Testing cluster:table with mariadb:11.8...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -583,6 +615,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:12.0 completed successfully
 Testing cluster:table with mariadb:12.0...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -618,6 +652,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:12.1 completed successfully
 Testing cluster:table with mariadb:12.1...
   Testing WITHOUT --skip-lock-tables (should fail)...
@@ -653,6 +689,8 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   19 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |  32712 | 1558907136.000000 | {"a":[1912418574,1670100966],"b":239810528}  | 24970160,1819190943,2021816520   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb      |    1 | 1341382959 | 283037034  | 1458644736.000000 |
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
+   Query log content:
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:latest completed successfully
 Testing cluster:table with mariadb:latest...
   Testing WITHOUT --skip-lock-tables (should fail)...

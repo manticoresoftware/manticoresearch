@@ -1,7 +1,7 @@
 # 删除复制集群
 
 <!-- example deleting a replication cluster  1 -->
-`DELETE CLUSTER` 语句删除指定的具有其 [名称](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name) 的集群。集群一旦被删除，它将从所有节点中移除，但其表保持完整并变为活动的本地非复制表。
+`DELETE CLUSTER` 语句会删除指定的集群及其 [名称](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name)。一旦删除集群，它将从所有节点中移除，但其表保持完整并成为活动的本地非复制表。
 
 
 

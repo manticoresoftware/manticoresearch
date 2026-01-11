@@ -97,6 +97,8 @@ The phrase operator mandates that the words be adjacent to each other.
 
 The phrase search operator can include a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
 
+Note: When using this operator with queries containing more than 31 keywords, ranking statistics (such as `tf`, `idf`, `bm25`) for keywords at position 31 and above may be under-counted. This is due to a 32-bit mask used internally to track term occurrences within a match. Matching logic (finding documents) remains correct, but ranking scores may be affected for very long queries.
+
 ```sql
 "exact * phrase * * for terms"
 ```
@@ -123,6 +125,8 @@ You can also use the OR operator inside the quotes. The OR operator (`|`) must b
 ```
 
 Proximity distance is measured in words, accounting for word count, and applies to all words within quotes. For example, the query `"cat dog mouse"~5` indicates that there must be a span of fewer than 8 words containing all 3 words. Therefore, a document with `CAT aaa bbb ccc DOG eee fff MOUSE` will not match this query, as the span is exactly 8 words long.
+
+Note: When using this operator with queries containing more than 31 keywords, ranking statistics (such as `tf`, `idf`, `bm25`) for keywords at position 31 and above may be under-counted. This is due to a 32-bit mask used internally to track term occurrences within a match. Matching logic (finding documents) remains correct, but ranking scores may be affected for very long queries.
 
 You can also use the OR operator inside a proximity search. The OR operator (`|`) must be enclosed in brackets `()` when used inside proximity searches. Each option is checked separately.
 
@@ -247,12 +251,22 @@ While the original proximity operator works only on sets of keywords, `NEAR` is 
 
 It is important to note that `one NEAR/7 two NEAR/7 three` is not exactly equivalent to `"one two three"~7`. The key difference is that the proximity operator allows up to 6 non-matching words between all three matching words, while the version with `NEAR` is less restrictive: it permits up to 6 words between `one` and `two`, and then up to 6 more between that two-word match and `three`.
 
+Note: When using this operator with queries containing more than 31 keywords, ranking statistics (such as `tf`, `idf`, `bm25`) for keywords at position 31 and above may be under-counted. This is due to a 32-bit mask used internally to track term occurrences within a match. Matching logic (finding documents) remains correct, but ranking scores may be affected for very long queries.
+
 ### NOTNEAR operator
 
 ```sql
 Church NOTNEAR/3 street
 ```
-The `NOTNEAR` operator serves as a negative assertion. It matches a document when the left argument is present and either the right argument is absent from the document or the right argument is a specified distance away from the end of the left matched argument. The distance is denoted in words. The syntax is `NOTNEAR/N`, which is case-sensitive and does not permit spaces between the `NOTNEAR` keyword, slash sign, and distance value. Both arguments of this operator can be terms or any operators or group of operators.
+
+The `NOTNEAR` operator serves as a negative assertion and functions as the logical inverse of the `NEAR` operator. It matches a document when the left argument is present, provided that the right argument is either absent from the document or is located **more than** the specified distance away from the left argument.
+
+The syntax is `NOTNEAR/N`, which is case-sensitive and does not permit spaces between the `NOTNEAR` keyword, slash sign, and distance value.
+
+Key behaviors include:
+*   **Symmetry**: Like `NEAR`, the `NOTNEAR` operator applies regardless of the order of terms in the text. It will exclude a match if the right argument is found within the specified distance either **before** or **after** the left argument.
+*   **Distance Threshold**: The distance `N` represents the nearby range (inclusive). If the words are separated by `N` words or fewer, the match is discarded. The right argument must be `N + 1` or more words away.
+*   **Arguments**: Both arguments of this operator can be terms, phrases, or groups of operators.
 
 ### SENTENCE and PARAGRAPH operators
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1406,7 +1406,12 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd )
 
 	assert ( tCmd.m_pUpdateAPI );
 	CSphString sError;
-	return Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError ) || TlsMsg::Err ( sError );
+	CSphString sWarning;
+	if ( !Update_CheckAttributes ( *tCmd.m_pUpdateAPI, tSchema, sError, sWarning ) )
+		return TlsMsg::Err ( sError );
+
+	assert ( sWarning.IsEmpty() ); // FIXME!!! should be validated on donor
+	return true;
 }
 
 // load indexes received from another node or existed already into daemon
@@ -2574,6 +2579,10 @@ CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluste
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( pCluster )
-		return pCluster->m_pSstProgress;
+	{
+		CSphRefcountedPtr<SstProgress_i> pProgress { pCluster->m_pSstProgress };
+		return pProgress;
+	}
+
 	return nullptr;
 }

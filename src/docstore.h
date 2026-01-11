@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -124,6 +124,7 @@ std::unique_ptr<DocstoreFields_i>	CreateDocstoreFields();
 
 void				InitDocstore ( int64_t iCacheSize );
 void				ShutdownDocstore();
+void				ClearDocstoreCache();
 
 class DebugCheckError_i;
 class CSphAutoreader;

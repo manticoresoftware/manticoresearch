@@ -1,10 +1,12 @@
 {
-  "740b4f597097c268a76c85c615ae90705b8caccd6f5973624470308b4881d2ad": {
-    "original": "# FLUSH HOSTNAMES\n\nCODE_BLOCK_0\n\nThe FLUSH HOSTNAMES command is used to renew IP addresses associated with agent host names. If you want to always query the DNS for getting the host name IP, you can use the [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) directive.\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
-    "translations": {
-      "chinese": "# 刷新主机名\n\nCODE_BLOCK_0\n\nFLUSH HOSTNAMES 命令用于更新与代理主机名关联的 IP 地址。如果您希望始终查询 DNS 以获取主机名的 IP，可以使用 [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) 指令。\n\nCODE_BLOCK_1\n\n<!-- proofread -->",
-      "russian": "# FLUSH HOSTNAMES\n\nCODE_BLOCK_0\n\nКоманда FLUSH HOSTNAMES используется для обновления IP-адресов, связанных с именами хостов агентов. Если вы хотите всегда запрашивать DNS для получения IP-адреса хоста, вы можете использовать директиву [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup).\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
-    },
-    "is_code_or_comment": false
-  }
+    "9edc16d44ede32bd55892b8df4ee45b863c13923d420b7c166ba38a7635b58cc": {
+        "original": "# FLUSH HOSTNAMES\n\nCODE_BLOCK_0\n\nThe FLUSH HOSTNAMES command is used to renew IP addresses associated with agent host names. If you want to always query the DNS for getting the host name IP, you can use the [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) directive.\n\nCODE_BLOCK_1\n\n<!-- proofread -->\n\n",
+        "translations": {
+            "chinese": "# \u5237\u65b0\u4e3b\u673a\u540d\n\nCODE_BLOCK_0\n\nFLUSH HOSTNAMES \u547d\u4ee4\u7528\u4e8e\u66f4\u65b0\u4e0e\u4ee3\u7406\u4e3b\u673a\u540d\u5173\u8054\u7684 IP \u5730\u5740\u3002\u5982\u679c\u60a8\u5e0c\u671b\u59cb\u7ec8\u901a\u8fc7 DNS \u67e5\u8be2\u4ee5\u83b7\u53d6\u4e3b\u673a\u540d\u7684 IP\uff0c\u53ef\u4ee5\u4f7f\u7528 [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) \u6307\u4ee4\u3002\n\nCODE_BLOCK_1\n\n<!-- proofread -->\n\n",
+            "russian": "# FLUSH HOSTNAMES\n\nCODE_BLOCK_0\n\n\u041a\u043e\u043c\u0430\u043d\u0434\u0430 FLUSH HOSTNAMES \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442\u0441\u044f \u0434\u043b\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f IP-\u0430\u0434\u0440\u0435\u0441\u043e\u0432, \u0441\u0432\u044f\u0437\u0430\u043d\u043d\u044b\u0445 \u0441 \u0438\u043c\u0435\u043d\u0430\u043c\u0438 \u0445\u043e\u0441\u0442\u043e\u0432 \u0430\u0433\u0435\u043d\u0442\u043e\u0432. \u0415\u0441\u043b\u0438 \u0432\u044b \u0445\u043e\u0442\u0438\u0442\u0435 \u0432\u0441\u0435\u0433\u0434\u0430 \u0437\u0430\u043f\u0440\u0430\u0448\u0438\u0432\u0430\u0442\u044c DNS \u0434\u043b\u044f \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u044f IP-\u0430\u0434\u0440\u0435\u0441\u0430 \u0438\u043c\u0435\u043d\u0438 \u0445\u043e\u0441\u0442\u0430, \u0432\u044b \u043c\u043e\u0436\u0435\u0442\u0435 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u0434\u0438\u0440\u0435\u043a\u0442\u0438\u0432\u0443 [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup).\n\nCODE_BLOCK_1\n\n<!-- proofread -->"
+        },
+        "is_code_or_comment": false,
+        "model": "openai:gpt-4.1-mini",
+        "updated_at": 1766339767
+    }
 }

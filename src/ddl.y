@@ -66,6 +66,8 @@
 %token	TOK_MODIFY_COLUMN
 %token	TOK_MULTI
 %token	TOK_MULTI64
+%token	TOK_MVA "mva"
+%token	TOK_MVA64 "mva64"
 %token	TOK_NOT
 %token	TOK_OPTION
 %token	TOK_PLUGIN
@@ -112,6 +114,8 @@ tableident:
 	| TOK_MODIFY
     | TOK_TYPE
     | TOK_ENGINE
+    | TOK_MVA
+    | TOK_MVA64
 	;
 
 ident:
@@ -131,6 +135,8 @@ attribute_type:
 	| TOK_BOOL		{ $$.SetValueInt ( SPH_ATTR_BOOL ); }
 	| TOK_MULTI		{ $$.SetValueInt ( SPH_ATTR_UINT32SET ); }
 	| TOK_MULTI64	{ $$.SetValueInt ( SPH_ATTR_INT64SET ); }
+	| TOK_MVA		{ $$.SetValueInt ( SPH_ATTR_UINT32SET ); }
+    | TOK_MVA64		{ $$.SetValueInt ( SPH_ATTR_INT64SET ); }
 	| TOK_JSON		{ $$.SetValueInt ( SPH_ATTR_JSON ); }
 	| TOK_INT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }
 	| TOK_UINT		{ $$.SetValueInt ( SPH_ATTR_INTEGER ); }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -44,20 +44,19 @@ class SkipCache_c: public LRUCache_T<SkipCacheKey_t, SkipData_t*, SkipCacheUtil_
 	using BASE::BASE;
 
 public:
-	void DeleteAll ( int64_t iIndexId )
-	{
-		BASE::Delete ( [iIndexId] ( const SkipCacheKey_t& tKey ) { return tKey.m_iIndexId == iIndexId; } );
-	}
+	void ClearByIndexId ( int64_t iIndexId )	{ BASE::Delete ( [iIndexId] ( const SkipCacheKey_t & tKey ) { return tKey.m_iIndexId == iIndexId; } ); }
+	void ClearAll()								{ BASE::Delete ( [] ( const SkipCacheKey_t & ) { return true; } ); }
 
-	static void Init ( int64_t iCacheSize );
-	static void Done() { SafeDelete ( m_pSkipCache ); }
-	static SkipCache_c* Get() { return m_pSkipCache; }
+	static void				Init	( int64_t iCacheSize );
+	static void				Done()	{ SafeDelete ( m_pSkipCache ); }
+	static SkipCache_c *	Get()	{ return m_pSkipCache; }
 
 private:
-	static SkipCache_c* m_pSkipCache;
+	static SkipCache_c * m_pSkipCache;
 };
 
-SkipCache_c* SkipCache_c::m_pSkipCache = nullptr;
+
+SkipCache_c * SkipCache_c::m_pSkipCache = nullptr;
 
 
 void SkipCache_c::Init ( int64_t iCacheSize )
@@ -79,12 +78,22 @@ void ShutdownSkipCache()
 	SkipCache_c::Done();
 }
 
-void SkipCache::DeleteAll ( int64_t iIndexId )
+
+void SkipCache::ClearByIndexId ( int64_t iIndexId )
+{
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
+	if ( pSkipCache )
+		pSkipCache->ClearByIndexId ( iIndexId );
+}
+
+
+void SkipCache::ClearAll()
 {
 	SkipCache_c* pSkipCache = SkipCache_c::Get();
 	if ( pSkipCache )
-		pSkipCache->DeleteAll ( iIndexId );
+		pSkipCache->ClearAll();
 }
+
 
 void SkipCache::Release ( SkipCacheKey_t tKey )
 {
@@ -93,18 +102,22 @@ void SkipCache::Release ( SkipCacheKey_t tKey )
 		pSkipCache->Release ( std::move ( tKey ) );
 }
 
+
 bool SkipCache::Find ( SkipCacheKey_t tKey, SkipData_t * & pData )
 {
-	SkipCache_c* pSkipCache = SkipCache_c::Get();
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
 	if ( pSkipCache )
 		return pSkipCache->Find ( std::move ( tKey ), pData );
+
 	return false;
 }
 
+
 bool SkipCache::Add ( SkipCacheKey_t tKey, SkipData_t* pData )
 {
-	SkipCache_c* pSkipCache = SkipCache_c::Get();
+	SkipCache_c * pSkipCache = SkipCache_c::Get();
 	if ( pSkipCache )
 		return pSkipCache->Add ( std::move ( tKey ), pData );
+
 	return false;
 }

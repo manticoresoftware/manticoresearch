@@ -1,4 +1,4 @@
-a:1:{i:0;a:10:{i:0;a:6:{s:13:"http_endpoint";s:9:"json/bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:473:"{ "insert" : { "table" : "test_rt", "id" : 1, "doc": { "tag" : 1, "content" : "doc one" } } }
+a:1:{i:0;a:12:{i:0;a:6:{s:13:"http_endpoint";s:9:"json/bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:473:"{ "insert" : { "table" : "test_rt", "id" : 1, "doc": { "tag" : 1, "content" : "doc one" } } }
 { "insert" : { "table" : "test_rt", "id" : 2, "doc": { "tag" : 2, "content" : "doc two" } } }
 { "insert" : { "table" : "test_rt", "id" : 3, "doc": { "tag" : 3, "content" : "doc three" } } }
 { "insert" : { "table" : "test_rt", "id" : 4, "doc": { "tag" : 4, "content" : "doc four" } } }
@@ -21,4 +21,13 @@ a:1:{i:0;a:10:{i:0;a:6:{s:13:"http_endpoint";s:9:"json/bulk";s:11:"http_method";
 	"id":1
 }";s:4:"rows";s:55:"{"table":"dist","id":1,"found":true,"result":"deleted"}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "table": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:325:"{"timed_out":false,"hits":{"total":4,"total_relation":"eq","hits":[{"_id":2,"_score":1,"_source":{"content":"doc two","tag":200}},{"_id":3,"_score":1,"_source":{"content":"doc three","tag":200}},{"_id":4,"_score":1,"_source":{"content":"doc four","tag":200}},{"_id":5,"_score":1,"_source":{"content":"doc five","tag":200}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:8;a:6:{s:13:"http_endpoint";s:9:"json/bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:137:"{ "delete" : { "table" : "dist", "id" : 2 } }
 { "delete" : { "table" : "dist", "id" : 3 } }
-{ "delete" : { "table" : "dist", "id" : 4 } }";s:4:"rows";s:273:"{"items":[{"delete":{"table":"dist","id":2,"found":true,"result":"deleted"}},{"delete":{"table":"dist","id":3,"found":true,"result":"deleted"}},{"delete":{"table":"dist","id":4,"found":true,"result":"deleted"}}],"current_line":3,"skipped_lines":0,"errors":false,"error":""}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "table": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:133:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":5,"_score":1,"_source":{"content":"doc five","tag":200}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}
+{ "delete" : { "table" : "dist", "id" : 4 } }";s:4:"rows";s:273:"{"items":[{"delete":{"table":"dist","id":2,"found":true,"result":"deleted"}},{"delete":{"table":"dist","id":3,"found":true,"result":"deleted"}},{"delete":{"table":"dist","id":4,"found":true,"result":"deleted"}}],"current_line":3,"skipped_lines":0,"errors":false,"error":""}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "table": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:133:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":5,"_score":1,"_source":{"content":"doc five","tag":200}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:30:"{
+	"table":"dist_t",
+	"id":1
+}";s:4:"rows";s:173:"{"error":{"type":"action_request_validation_exception","reason":"table test_t: table test_t: table not available, or does not support DELETE","table":"dist_t"},"status":409}";s:9:"http_code";i:409;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:59:"{
+	"table":"dist",
+	"doc":
+	{
+	    "missed_attr" : 200
+	}
+}";s:4:"rows";s:159:"{"error":{"type":"action_request_validation_exception","reason":"table test_rt: table test_rt: attribute 'missed_attr' not found","table":"dist"},"status":409}";s:9:"http_code";i:409;s:4:"http";i:1;}}}

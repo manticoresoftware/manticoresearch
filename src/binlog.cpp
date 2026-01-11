@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1278,7 +1278,7 @@ void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 	// sphWarning ( "%s", sMetaLog.cstr() );
 
 	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
-	if ( eForce==eNoForce && m_dCurrentFiles==dFiles )
+	if ( eForce==eNoForce && m_dCurrentFiles==(const IntVec_t &)dFiles )
 		return;
 
 	if ( dFiles.IsEmpty() )

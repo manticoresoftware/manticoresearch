@@ -1,8 +1,8 @@
-# 以 Docker 镜像安装 Manticore Search
+# 安装 Manticore Search 作为 Docker 镜像
 
-Manticore Search 的 Docker 镜像可在 [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/) 上公开获取，镜像由 [Manticore Search docker GitHub 仓库](https://github.com/manticoresoftware/docker) 构建。
+Manticore Search 的 Docker 镜像可在 [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/) 公共访问，镜像由 [Manticore Search docker GitHub 仓库](https://github.com/manticoresoftware/docker) 构建。
 
-要获取 Manticore 镜像，请运行以下命令：
+要拉取 Manticore 镜像，请运行以下命令：
 
 ```bash
 docker pull manticoresearch/manticore

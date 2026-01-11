@@ -375,8 +375,8 @@ private:
 
 	static DocstoreReaders_c * m_pReaders;
 
-	static const int MIN_READER_CACHE_SIZE = 262144;
-	static const int MAX_READER_CACHE_SIZE = 1048576;
+	static const int MIN_READER_BUFFER_SIZE = 32768;
+	static const int MAX_READER_BUFFER_SIZE = 262144;
 	static const int MAX_TOTAL_READER_SIZE = 8388608;
 
 	void		Delete ( CSphReader * pReader, const HashKey_t tKey );
@@ -413,9 +413,9 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, int64_t iIndexId, con
 	if ( m_tHash ( { iSessionId, iIndexId } ) )
 		return;
 
-	int iBufferSize = (int)uBlockSize*8;
-	iBufferSize = Min ( iBufferSize, MAX_READER_CACHE_SIZE );
-	iBufferSize = Max ( iBufferSize, MIN_READER_CACHE_SIZE );
+	int iBufferSize = (int)uBlockSize*4;
+	iBufferSize = Min ( iBufferSize, MAX_READER_BUFFER_SIZE );
+	iBufferSize = Max ( iBufferSize, MIN_READER_BUFFER_SIZE );
 
 	if ( iBufferSize<=(int)uBlockSize )
 		return;
@@ -1953,6 +1953,7 @@ void ShutdownDocstore()
 	BlockCache_c::Done();
 	DocstoreReaders_c::Done();
 }
+
 
 void ClearDocstoreCache()
 {

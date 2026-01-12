@@ -36,7 +36,7 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y manticore manticore-extra > /dev/null 2>&1; echo $?
+apt-get install -y manticore manticore-extra
 ––– output –––
 0
 ––– input –––

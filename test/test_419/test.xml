@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn embeddings plain mode</name>
+
+<requires>
+	<http/>
+	<knn/>
+	<embeddings/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+<!-- Plain mode auto-embeddings: working case -->
+index test_auto_embed
+{
+    type = rt
+    path = <data_path/>/test_auto_embed
+    rt_field = f
+	rt_attr_float_vector = vec
+	knn = {"attrs":[{"name":"vec","type":"hnsw","hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"f"}]}
+}
+
+<!-- Plain mode auto-embeddings: Error case - model + dims specified should fail (NOT SERVING) -->
+index test_error_model_dims
+{
+    type = rt
+    path = <data_path/>/test_error_model_dims
+    rt_field = title
+	rt_attr_float_vector = embedding_vector
+	knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","dims":4,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+}
+
+<!-- Plain mode auto-embeddings: Error case - model not specified and no dims specified should fail (NOT SERVING) -->
+index test_error_no_model_no_dims
+{
+    type = rt
+    path = <data_path/>/test_error_no_model_no_dims
+    rt_field = title
+	rt_attr_float_vector = embedding_vector
+	knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+}
+</config>
+
+<queries>
+<sphinxql>
+	<!-- Test auto-embeddings in plain mode (config file) - working case -->
+	insert into test_auto_embed(f) values('bread'),('dog');
+	select id, f, knn_dist() from test_auto_embed where knn(vec, 5, 'cat');
+
+	<!-- Validate error case tables are not available -->
+	show tables;
+	select * from test_error_model_dims;
+	select * from test_error_no_model_no_dims;
+</sphinxql>
+</queries>
+
+</test>
+

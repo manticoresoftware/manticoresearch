@@ -3983,6 +3983,15 @@ static bool ParseAggrPercentiles ( const JsonObj_c & tBucket, JsonAggr_t & tItem
 static bool ParseAggrPercentileRanks ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError );
 static bool ParseAggrMad ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError );
 
+static void ApplyDefaultPercentiles ( CSphVector<float> & dPercents )
+{
+	static const float dDefaults[] = { 1.f, 5.f, 25.f, 50.f, 75.f, 95.f, 99.f };
+	dPercents.Resize ( 0 );
+	dPercents.Reserve ( (int)( sizeof ( dDefaults ) / sizeof ( dDefaults[0] ) ) );
+	for ( float fVal : dDefaults )
+		dPercents.Add ( fVal );
+}
+
 static bool ParseAggrRange ( const JsonObj_c & tBucket, JsonAggr_t & tItem, bool bDate, CSphString & sError )
 {
 	JsonObj_c tRanges = tBucket.GetItem( "ranges" );
@@ -4325,39 +4334,45 @@ static bool ParseTdigestCompression ( const JsonObj_c & tBucket, double & fCompr
 static bool ParseAggrPercentiles ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError )
 {
 	JsonObj_c tValues = tBucket.GetItem ( "values" );
-	if ( !tValues || !tValues.IsArray() )
-	{
-		sError.SetSprintf ( "\"%s\" missed \"values\" property", tItem.m_sBucketName.cstr() );
-		return false;
-	}
-
-	int iCount = tValues.Size();
-	if ( !iCount )
-	{
-		sError.SetSprintf ( "\"%s\" empty \"values\" property", tItem.m_sBucketName.cstr() );
-		return false;
-	}
-
 	auto & dPercents = tItem.m_tPercentiles.m_dPercents;
-	dPercents.Resize ( 0 );
-	dPercents.Reserve ( iCount );
-
-	for ( const auto & tVal : tValues )
+	if ( !tValues )
 	{
-		if ( !tVal.IsNum() )
+		ApplyDefaultPercentiles ( dPercents );
+	} else
+	{
+		if ( !tValues.IsArray() )
 		{
-			sError.SetSprintf ( "\"%s\" \"values\" entries should be numeric", tItem.m_sBucketName.cstr() );
+			sError.SetSprintf ( "\"%s\" \"values\" should be an array", tItem.m_sBucketName.cstr() );
 			return false;
 		}
 
-		double fPercent = tVal.DblVal();
-		if ( fPercent<0.0 || fPercent>100.0 )
+		int iCount = tValues.Size();
+		if ( !iCount )
 		{
-			sError.SetSprintf ( "\"%s\" percentile values should be within [0,100]", tItem.m_sBucketName.cstr() );
+			sError.SetSprintf ( "\"%s\" empty \"values\" property", tItem.m_sBucketName.cstr() );
 			return false;
 		}
 
-		dPercents.Add ( (float)fPercent );
+		dPercents.Resize ( 0 );
+		dPercents.Reserve ( iCount );
+
+		for ( const auto & tVal : tValues )
+		{
+			if ( !tVal.IsNum() )
+			{
+				sError.SetSprintf ( "\"%s\" \"values\" entries should be numeric", tItem.m_sBucketName.cstr() );
+				return false;
+			}
+
+			double fPercent = tVal.DblVal();
+			if ( fPercent<0.0 || fPercent>100.0 )
+			{
+				sError.SetSprintf ( "\"%s\" percentile values should be within [0,100]", tItem.m_sBucketName.cstr() );
+				return false;
+			}
+
+			dPercents.Add ( (float)fPercent );
+		}
 	}
 
 	bool bKeyed = false;

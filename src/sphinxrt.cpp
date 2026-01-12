@@ -11427,7 +11427,6 @@ bool RtIndex_c::AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl,
 	m_pEmbeddings.reset();
 	if ( !LoadEmbeddingModels(sError) )
 	{
-		// Revert the change on failure
 		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
 		m_pEmbeddings.reset();
 		CSphString sRevertError;
@@ -11439,8 +11438,6 @@ bool RtIndex_c::AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl,
 		const char * szError = sError.cstr();
 		if ( bIsRemovingCustomUrl && szError && ( strstr ( szError, "Invalid API key" ) || strstr ( szError, "API key" ) ) )
 		{
-			// Return a clear error message explaining the situation
-			// The API key validation failed when trying to use the default endpoint
 			sError.SetSprintf ( "cannot remove API_URL: API key validation failed for the default endpoint. The API key may be invalid, expired, or not authorized for the default provider endpoint. To remove API_URL, first update the API key to a valid key that works with the default endpoint, or keep using a custom API_URL" );
 		}
 		
@@ -11485,7 +11482,6 @@ bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphSt
 	m_pEmbeddings.reset();
 	if ( !LoadEmbeddingModels(sError) )
 	{
-		// Revert the change on failure
 		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iAPITimeout = iOldTimeout;
 		m_pEmbeddings.reset();
 		CSphString sRevertError;

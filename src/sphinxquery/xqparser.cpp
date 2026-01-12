@@ -147,6 +147,8 @@ public:
 	int						m_iQuorumQuote = -1;
 	int						m_iQuorumFSlash = -1;
 	bool					m_bCheckNumber = false;
+	int						m_iBlendedGroup = 0;
+	int						m_iBlendedStepDelta = 1;
 
 	StrVec_t				m_dIntTokens;
 
@@ -427,10 +429,13 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		int iSkippedPosBeforeToken = 0;
 		if ( m_bWasBlended )
 		{
-			iSkippedPosBeforeToken = m_pTokenizer->SkipBlended();
-			// just add all skipped blended parts except blended head (already added to atomPos)
-			if ( iSkippedPosBeforeToken>1 )
-				m_iAtomPos += iSkippedPosBeforeToken - 1;
+			if ( !m_bExpandBlended || ( m_bExpandBlended && m_pTokenizer->IsPhraseMode() ) )
+			{
+				iSkippedPosBeforeToken = m_pTokenizer->SkipBlended();
+				// just add all skipped blended parts except blended head (already added to atomPos)
+				if ( iSkippedPosBeforeToken>1 )
+					m_iAtomPos += iSkippedPosBeforeToken - 1;
+			}
 		}
 
 		// tricky stuff
@@ -469,6 +474,10 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		m_bWasBlended = m_pTokenizer->TokenIsBlended();
 		m_bEmpty = false;
 
+		// track blended group when expand is enabled
+		if ( m_bExpandBlended && !m_pTokenizer->IsPhraseMode() && m_pTokenizer->TokenIsBlendedHead() )
+			m_iBlendedGroup++; // new blended group
+
 		int iPrevDeltaPos = 0;
 		if ( m_pPlugin && m_pPlugin->m_fnPushToken )
 			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, const_cast<char*>(sToken), &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), int ( m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() ) );
@@ -477,7 +486,17 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			return 0;
 
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
-		m_iAtomPos += 1 + m_iPendingNulls;
+		if ( m_bExpandBlended && !m_pTokenizer->IsPhraseMode() )
+		{
+			// step from previous token to increment current token position
+			m_iAtomPos += m_iBlendedStepDelta + m_iPendingNulls;
+			// step for next token based on current token
+			m_iBlendedStepDelta = m_pTokenizer->TokenIsBlended() ? 0 : 1;
+		} else
+		{
+			m_iAtomPos += 1 + m_iPendingNulls;
+			m_iBlendedStepDelta = 1;
+		}
 		if ( iPrevDeltaPos>1 ) // to match with condifion of m_bWasBlended above
 			m_iAtomPos += ( iPrevDeltaPos - 1);
 
@@ -831,6 +850,14 @@ XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, int iSkippedPosBefore
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
 	tAW.m_iSkippedBefore = iSkippedPosBeforeToken;
 	HandleModifiers ( tAW );
+	
+	// Set blended generation if blend_expand is enabled and token is blended
+	if ( m_bExpandBlended && !m_pTokenizer->IsPhraseMode() )
+	{
+		if ( m_pTokenizer->TokenIsBlended() || m_pTokenizer->TokenIsBlendedPart() )
+			tAW.m_iBlendedGroup = m_iBlendedGroup;
+	}
+	
 	XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
 	pNode->AddDirtyWord ( std::move(tAW) );
 	return pNode;
@@ -1041,6 +1068,18 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	DictRefPtr_c pMyDict = GetStatelessDict ( pDict );
 
 	Setup ( pSchema, pTokenizer->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
+	
+	// blend variants if blended_expand option used
+	if ( pQuery && !pQuery->m_sExpandBlended.IsEmpty() )
+	{
+		const CSphTokenizerSettings & tTokSettings = pTokenizer->GetSettings();
+		const CSphString & sBlendMode = ( pQuery->m_sExpandBlended=="1" ? tTokSettings.m_sBlendMode.cstr() : pQuery->m_sExpandBlended );
+		if ( !tTokSettings.m_sBlendMode.IsEmpty() && !m_pTokenizer->SetBlendMode ( sBlendMode.cstr(), tParsed.m_sParseError ) )
+			return false;
+
+		m_bExpandBlended = true;
+	}
+	
 	m_sQuery = (BYTE*)const_cast<char*>(sQuery);
 	m_iQueryLen = sQuery ? (int) strlen(sQuery) : 0;
 	m_iPendingNulls = 0;
@@ -1048,6 +1087,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	m_pRoot = nullptr;
 	m_bEmpty = true;
 	m_iOvershortStep = tSettings.m_iOvershortStep;
+	m_iBlendedGroup = 0;
+	m_iBlendedStepDelta = 1;
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );

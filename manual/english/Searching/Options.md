@@ -221,6 +221,16 @@ The accuracy of the `HyperLogLog` and the threshold for converting from the hash
 ### expand_keywords
 `0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
+### expand_blended
+`0`, `off`, `1`, or any combination of `blend_mode` options (`0` by default). Expands blended keywords into their constituent variants during query parsing. When enabled, keywords like "well-being" are expanded into variants such as "well-being", "wellbeing", "well", and "being", which are then grouped into OR subtrees in the query tree.
+
+The supported values are:
+* `0` or `off` - Blended expansion is disabled (default). Blended keywords are processed normally without expansion.
+* `1` - Blended expansion is enabled and uses the table's [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting to determine which variants to generate.
+* Any blend mode option(s) - Blended expansion is enabled with the specified blend mode(s), overriding the table's `blend_mode` setting.
+
+Refer to [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) for more details on options.
+
 ### field_weights
 Named integer list (per-field user weights for ranking).
 

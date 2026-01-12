@@ -561,6 +561,7 @@ struct CSphQuery
 	DWORD			m_uDebugFlags = 0;
 	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion
 	int				m_iExpansionLimit = DEFAULT_QUERY_EXPANSION_LIMIT;	///< whether to limit wildcard expansion, default use index settings
+	CSphString		m_sExpandBlended;			///< control blend_chars expansion during search tokenization
 
 	bool			m_bAccurateAggregation = false;			///< setting via options
 	bool			m_bExplicitAccurateAggregation = false; ///< whether anything was set via options

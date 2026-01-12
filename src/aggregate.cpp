@@ -15,12 +15,25 @@
 #include "schema/columninfo.h"
 #include "std/tdigest.h"
 
+#include <cmath>
+#include <cstring>
+
 /// aggregate traits for different attribute types
 template < typename T >
 class AggrFunc_Traits_T : public AggrFunc_i
 {
 public:
-	explicit		AggrFunc_Traits_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	explicit AggrFunc_Traits_T ( const CSphAttrLocator & tLocator )
+		: m_tLocator ( tLocator )
+	{}
+
+	T GetValue ( const CSphMatch & tRow );
+	void SetValue ( CSphMatch & tRow, T val );
+
+protected:
+	CSphAttrLocator	m_tLocator;
+};
+
 namespace
 {
 using BStream_c = TightPackedVec_T<BYTE>;
@@ -82,7 +95,8 @@ static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & 
 	}
 
 	const BYTE * pData = dBlob.first;
-	int iCount = sphUnalignedRead<int>(pData);
+	int iCount = 0;
+	memcpy ( &iCount, pData, sizeof(int) );
 	pData += sizeof(int);
 
 	CSphVector<TDigestCentroid_t> dCentroids;
@@ -208,7 +222,7 @@ public:
 		TDigest_c tDeviation ( m_fCompression );
 		for ( const auto & tCentroid : dCentroids )
 		{
-			double fDeviation = fabs ( tCentroid.m_fMean - fMedian );
+			double fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
 			tDeviation.Add ( fDeviation, tCentroid.m_iCount );
 		}
 
@@ -217,13 +231,6 @@ public:
 		FreeTDigestBlob ( tDst, m_tLocator );
 		tDst.SetAttrDouble ( m_tLocator, fMad );
 	}
-};
-
-	T				GetValue ( const CSphMatch & tRow );
-	void			SetValue ( CSphMatch & tRow, T val );
-
-protected:
-	CSphAttrLocator	m_tLocator;
 };
 
 template<>

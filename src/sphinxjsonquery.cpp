@@ -2395,7 +2395,8 @@ static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInf
 	}
 
 	const BYTE * pData = dBlob.first;
-	int iCount = sphUnalignedRead<int>(pData);
+	int iCount = 0;
+	memcpy ( &iCount, pData, sizeof(int) );
 	pData += sizeof(int);
 
 	CSphVector<TDigestCentroid_t> dCentroids;

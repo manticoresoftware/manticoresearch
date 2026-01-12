@@ -8131,7 +8131,13 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	if ( !dFilters.GetLength() )
 	{
 		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, tMeta.m_sError );
+		{
+			// Create a lambda to capture 'this' for GetDocinfoByRowID
+			auto fnGetDocinfo = [this]( RowID_t tRowID ) -> const CSphRowitem * {
+				return GetDocinfoByRowID ( tRowID );
+			};
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, &tCtx, m_pColumnar.get(), m_tBlobAttrs.GetReadPtr(), fnGetDocinfo, tMeta.m_sError );
+		}
 
 		return { nullptr, false };
 	}
@@ -8153,7 +8159,11 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	// knn iterators
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, bError, tMeta.m_sError );
+	// Create a lambda to capture 'this' for GetDocinfoByRowID
+	auto fnGetDocinfo = [this]( RowID_t tRowID ) -> const CSphRowitem * {
+		return GetDocinfoByRowID ( tRowID );
+	};
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, &tCtx, m_pColumnar.get(), m_tBlobAttrs.GetReadPtr(), fnGetDocinfo, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 

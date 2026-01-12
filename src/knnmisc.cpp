@@ -16,6 +16,8 @@
 #include "fileio.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
+#include "querycontext.h"
+#include "match.h"
 
 
 bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
@@ -630,7 +632,7 @@ bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
-std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphString & sError )
+std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphQueryContext * pCtx, const columnar::Columnar_i * pColumnar, const BYTE * pBlobPool, GetDocinfoByRowID_fn fnGetDocinfo, CSphString & sError )
 {
 	auto & tKNN = tQuery.m_tKnnSettings;
 	if ( tKNN.m_sAttr.IsEmpty() )
@@ -667,25 +669,86 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 	if ( pKNNAttr->m_tKNN.m_eHNSWSimilarity == knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(dPoint);
 
+	// Create license-safe filter callback function if filters exist AND on-the-fly filtering is enabled
+	// The callback is only used during the search, which completes in the iterator constructor
 	std::string sErrorSTL;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL );
+	knn::Iterator_i * pIterator;
+	
+	// Only use on-the-fly filtering if explicitly enabled and filters exist
+	// NOTE: On-the-fly filtering works with:
+	//   - Columnar filters (need pColumnar to call SetColumnar)
+	//   - Expression filters (need fnGetDocinfo to set m_pStatic)
+	// If pColumnar is null (e.g., with --force-pseudo-sharding), we can still use fnGetDocinfo
+	if ( tKNN.m_bOnTheFlyFiltering && pCtx && pCtx->m_pFilter && ( pColumnar || fnGetDocinfo ) )
+	{
+		// Ensure filter has columnar and blob pool set up before creating the lambda
+		// This must be done once, before the lambda is created, not inside it
+		// SetColumnar will create the iterator needed for columnar filter evaluation
+		// If pColumnar is null, the filter will use expression evaluation with m_pStatic
+		if ( pColumnar )
+			pCtx->m_pFilter->SetColumnar ( pColumnar );
+		if ( pBlobPool )
+			pCtx->m_pFilter->SetBlobStorage ( pBlobPool );
+		
+		// Capture filter pointer directly to avoid repeated access through context
+		ISphFilter * pFilterCapture = pCtx->m_pFilter.get();
+		
+		// Capture function for getting docinfo (needed for expression filters)
+		GetDocinfoByRowID_fn fnGetDocinfoCapture = fnGetDocinfo;
+		
+		// Use auto for lambda - no need for std::function
+		// Capture pointers by value - they must remain valid during the search
+		// Note: The context and pointers must outlive the iterator creation (which completes synchronously)
+		auto fnFilter = [pFilterCapture, fnGetDocinfoCapture](uint32_t uRowID) -> bool
+		{
+			// Safety check: if filter is invalid, allow all (should not happen)
+			if ( !pFilterCapture )
+				return true;
+
+			// Create a match with rowid and docinfo (if available)
+			// For columnar filters: m_pStatic is not needed (they use m_pIterator)
+			// For expression filters: m_pStatic may be needed for expression evaluation
+			CSphMatch tMatch;
+			tMatch.m_tRowID = (RowID_t)uRowID;
+			// Set m_pStatic if we have a function to get it (needed for expression filters)
+			tMatch.m_pStatic = fnGetDocinfoCapture ? fnGetDocinfoCapture ( (RowID_t)uRowID ) : nullptr;
+			tMatch.m_pDynamic = nullptr; // Not allocated (we skip CalcFilter)
+			tMatch.m_iWeight = 0;
+			tMatch.m_iTag = 0;
+
+			// Evaluate the filter
+			// For columnar filters: Eval() uses m_pIterator->Get() which only needs the RowID
+			// For expression filters: Eval() may call expression->Eval() which might need m_pStatic
+			return pFilterCapture->Eval ( tMatch );
+		};
+		
+		pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL, nullptr, fnFilter );
+	}
+	else
+	{
+		// Default behavior: no on-the-fly filtering (post-filtering will be applied later)
+		pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL, nullptr, nullptr );
+	}
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
 		return { nullptr, true };
 	}
 
+	// Search is complete, callback is no longer needed
+	// pFilterCallback will be destroyed when function returns
+	
 	pKnnDist->SetData ( pIterator->GetData() );
 	
 	return { CreateIteratorWrapper ( pIterator, nullptr ), false };
 }
 
 
-RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, bool & bError, CSphString & sError )
+RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphQueryContext * pCtx, const columnar::Columnar_i * pColumnar, const BYTE * pBlobPool, GetDocinfoByRowID_fn fnGetDocinfo, bool & bError, CSphString & sError )
 {
 	RowIteratorsWithEstimates_t dIterators;
 
-	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, sError );
+	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pCtx, pColumnar, pBlobPool, fnGetDocinfo, sError );
 	if ( tRes.second )
 	{
 		bError = true;

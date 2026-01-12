@@ -324,8 +324,10 @@ jobs:
     runs-on: ubuntu-22.04
     # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
+    # TEMPORARY: Publishing disabled for testing
     if: |
-      (github.repository == 'manticoresoftware/manticoresearch')
+      false
+      && (github.repository == 'manticoresoftware/manticoresearch')
       && (
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
@@ -729,7 +731,7 @@ jobs:
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
-    needs: publish_rhel
+    needs: pack_rhel
     strategy:
       fail-fast: false
       matrix:
@@ -744,7 +746,7 @@ jobs:
 
   clt_deb_dev_installation:
     name: Testing DEB dev packages installation
-    needs: publish_debian_ubuntu
+    needs: pack_debian_ubuntu
     strategy:
       fail-fast: false
       matrix:

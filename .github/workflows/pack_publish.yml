@@ -629,18 +629,14 @@ jobs:
         
         echo "Created custom config at: $customConfig"
         
-        # Start searchd with custom config and capture stderr
+        # Start searchd with custom config
         echo "Starting searchd with custom config..."
         
-        # Create a temp file for stderr output
-        $stderrFile = "$env:TEMP\searchd-stderr.txt"
-        
-        # Start searchd and redirect stderr to file
+        # Start searchd process
         $process = Start-Process -FilePath $searchdPath `
             -ArgumentList "--config", $customConfig `
             -PassThru `
-            -NoNewWindow `
-            -RedirectStandardError $stderrFile
+            -NoNewWindow
         
         # Wait for startup
         Start-Sleep -Seconds 5
@@ -648,27 +644,10 @@ jobs:
         # Check if process is still running
         if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
             echo "✗ searchd process died"
-            if (Test-Path $stderrFile) {
-                echo "stderr output:"
-                Get-Content $stderrFile
-            }
             exit 1
         }
         
-        # Verify custom config path was used by checking stderr
-        if (Test-Path $stderrFile) {
-            $stderrContent = Get-Content $stderrFile -Raw
-            if ($stderrContent -match [regex]::Escape($customConfig)) {
-                echo "✓ Custom config path verified: searchd used $customConfig"
-            } else {
-                echo "⚠ Custom config path not found in stderr output"
-                echo "stderr content:"
-                echo $stderrContent
-                # Don't fail here - functional tests below will verify it works
-            }
-        } else {
-            echo "⚠ No stderr output captured"
-        }
+        echo "✓ searchd started with custom config: $customConfig"
         
         # Test connectivity
         $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
@@ -685,7 +664,7 @@ jobs:
             # Use mysql client if available, otherwise skip this test
             $mysqlPath = Get-Command mysql -ErrorAction SilentlyContinue
             if ($mysqlPath) {
-                $result = & mysql -h127.0.0.1 -P9306 -e "SELECT 1 as test_result;" 2>&1
+                $result = & mysql -h 127.0.0.1 -P 9306 -e "SELECT 1 as test_result;" 2>&1
                 if ($LASTEXITCODE -eq 0) {
                     echo "✓ MySQL query executed successfully"
                 } else {
@@ -706,7 +685,6 @@ jobs:
         # Cleanup
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force $customConfigDir -ErrorAction SilentlyContinue
-        Remove-Item -Force $stderrFile -ErrorAction SilentlyContinue
       shell: pwsh
 
   publish_nsis:

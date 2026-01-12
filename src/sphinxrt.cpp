@@ -11427,32 +11427,24 @@ bool RtIndex_c::AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl,
 	m_pEmbeddings.reset();
 	if ( !LoadEmbeddingModels(sError) )
 	{
+		// Revert the change on failure
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+
 		// If we're removing a custom URL and validation fails due to API key format,
 		// provide a clear error message explaining that a valid API key is required
 		// to use the default endpoint. This is consistent with table creation errors.
 		const char * szError = sError.cstr();
 		if ( bIsRemovingCustomUrl && szError && ( strstr ( szError, "Invalid API key" ) || strstr ( szError, "API key" ) ) )
 		{
-			// Revert the change
-			const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
-			m_pEmbeddings.reset();
-			CSphString sRevertError;
-			LoadEmbeddingModels(sRevertError);
-			
 			// Return a clear error message explaining the situation
 			// The API key validation failed when trying to use the default endpoint
 			sError.SetSprintf ( "cannot remove API_URL: API key validation failed for the default endpoint. The API key may be invalid, expired, or not authorized for the default provider endpoint. To remove API_URL, first update the API key to a valid key that works with the default endpoint, or keep using a custom API_URL" );
-			return false;
 		}
-		else
-		{
-			// For other errors or when setting a custom URL, revert on failure
-			const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
-			m_pEmbeddings.reset();
-			CSphString sRevertError;
-			LoadEmbeddingModels(sRevertError);
-			return false;
-		}
+		
+		return false;
 	}
 
 	RaiseAlterGeneration();

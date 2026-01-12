@@ -22,7 +22,8 @@
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
 #include "std/tdigest.h"
-#include "mem.h"
+
+#include <cstring>
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";

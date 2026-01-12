@@ -49,6 +49,7 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
+#include "conversion.h"
 
 // services
 #include "taskping.h"
@@ -10227,35 +10228,9 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 		case Alter_e::ApiTimeout:
 			{
-				// Validate that the string is a valid integer
-				const char * p = tStmt.m_sAlterOption.cstr();
-				if ( !p || !*p )
-				{
-					sAlterError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+				int iTimeout = 0;
+				if ( !ValidateAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
 					break;
-				}
-				
-				// Check if all characters are digits
-				while ( *p )
-				{
-					if ( *p < '0' || *p > '9' )
-					{
-						sAlterError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
-						break;
-					}
-					p++;
-				}
-				
-				if ( !sAlterError.IsEmpty() )
-					break;
-				
-				int iTimeout = atoi ( tStmt.m_sAlterOption.cstr() );
-				if ( iTimeout < 0 )
-				{
-					sAlterError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
-					break;
-				}
-				
 				WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
 			}
 			break;

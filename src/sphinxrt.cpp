@@ -11482,7 +11482,7 @@ bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphSt
 
 	if ( iTimeout < 0 )
 	{
-		sError.SetSprintf ( "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)" );
+		sError = g_sAPITimeoutError;
 		return false;
 	}
 

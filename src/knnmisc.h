@@ -63,3 +63,8 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, bool & bError, CSphString & sError );
 
 ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings );
+
+constexpr const char * g_sAPITimeoutError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+
+// Validate API_TIMEOUT parameter value
+bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );

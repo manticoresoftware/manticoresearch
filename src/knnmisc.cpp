@@ -16,6 +16,7 @@
 #include "fileio.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
+#include "conversion.h"
 
 
 bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
@@ -814,4 +815,25 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 		return pSorter;
 
 	return new RescoreSorter_c(pSorter);
+}
+
+
+bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError )
+{
+	if ( sValue.IsEmpty() )
+	{
+		sError = g_sAPITimeoutError;
+		return false;
+	}
+
+	CSphString sParseError;
+	uint64_t uTimeout = sphToUInt64 ( sValue.cstr(), &sParseError );
+	if ( !sParseError.IsEmpty() || uTimeout > INT_MAX )
+	{
+		sError = g_sAPITimeoutError;
+		return false;
+	}
+
+	iTimeout = (int)uTimeout;
+	return true;
 }

@@ -530,31 +530,10 @@ bool DdlParser_c::AddItemOptionAPITimeout ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption);
 	
-	// Validate that the string is a valid integer
-	const char * p = sValue.cstr();
-	if ( !p || !*p )
-	{
-		m_sError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+	int iTimeout = 0;
+	if ( !ValidateAPITimeout ( sValue, iTimeout, m_sError ) )
 		return false;
-	}
 	
-	// Check if all characters are digits
-	while ( *p )
-	{
-		if ( *p < '0' || *p > '9' )
-		{
-			m_sError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
-			return false;
-		}
-		p++;
-	}
-	
-	int iTimeout = atoi(sValue.cstr());
-	if ( iTimeout < 0 )
-	{
-		m_sError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
-		return false;
-	}
 	// 0 means use default timeout (10 seconds), positive value is timeout in seconds
 	m_tItemOptions.m_iAPITimeout = iTimeout;
 	return true;

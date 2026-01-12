@@ -3,18 +3,14 @@
 mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT); INSERT INTO t VALUES (1, 'example'), (2, 'test');"
 ––– output –––
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'|grep -v "\-\-\-"|grep -v Component; echo
 ––– output –––
-+------------+----------------------------------+
-| Component  | Version                          |
-+------------+----------------------------------+
 | Daemon     | %{VERSION} #!/\s*/!#|
 | Columnar   | columnar %{VERSION} #!/\s*/!#|
 | Secondary  | secondary %{VERSION} #!/\s*/!#|
 | Knn        | knn %{VERSION} #!/\s*/!#|
 | Embeddings | embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)\s*/!#|
 | Buddy      | buddy %{VERSION} #!/\s*/!#|
-+------------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––

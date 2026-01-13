@@ -2426,13 +2426,18 @@ static CSphString FormatKey ( double fValue )
 
 static void AppendValueStringFields ( JsonEscapedBuilder & tOut, const CSphString & sValue )
 {
-	tOut.Sprintf ( ",\"value\":%s", sValue.cstr() );
-	tOut.Sprintf ( R"(,"value_as_string":"%s")", sValue.cstr() );
+	tOut.AppendName ( "value" );
+	tOut += sValue.cstr();
+	tOut.AppendName ( "value_as_string" );
+	tOut.Sprintf ( "\"%s\"", sValue.cstr() );
 }
 
 static void AppendNullValueFields ( JsonEscapedBuilder & tOut )
 {
-	tOut += ",\"value\":null,\"value_as_string\":null";
+	tOut.AppendName ( "value" );
+	tOut += "null";
+	tOut.AppendName ( "value_as_string" );
+	tOut += "null";
 }
 
 static void EncodePercentilesValues ( const JsonAggr_t & tAggr, const CSphMatch & tMatch, const CSphColumnInfo & tStore, JsonEscapedBuilder & tOut )

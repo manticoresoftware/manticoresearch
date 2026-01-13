@@ -90,21 +90,22 @@ mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid2 (title TEXT, embedding F
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid2': prealloc: Failed to send request to remote model
 ––– comment –––
-Test Case 3: API_URL='ftp://example.com' (wrong protocol, should be http/https)
+Test Case 3: API_URL='ftp://127.0.0.1' (wrong protocol, should be http/https)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid3 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='ftp://example.com')" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid3 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='ftp://127.0.0.1')" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid3': prealloc: Failed to send request to remote model
 ––– comment –––
-Test Case 4: API_URL='http://example.com' (missing path)
+Test Case 4: API_URL='http://127.0.0.1:8080/wrong-path' (wrong path, missing /v1/embeddings)
+Note: Using localhost mock server with wrong path instead of external domain. The mock server returns 404 for non-/v1/embeddings paths, which tests that the API_URL path must be correct.
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid4 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://example.com')" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid4 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://127.0.0.1:8080/wrong-path')" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid4': prealloc: Invalid API key for remote model (HTTP status code 403)
+ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid4': prealloc: Unsupported remote model given (HTTP status code 404)
 ––– comment –––
-Test Case 5: API_URL='http://example.com:99999' (invalid port)
+Test Case 5: API_URL='http://127.0.0.1:99999/v1/embeddings' (invalid port, nothing listening)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid5 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://example.com:99999')" 2>&1
+mysql -h0 -P9306 -e "CREATE TABLE test_api_url_invalid5 (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://127.0.0.1:99999/v1/embeddings')" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_api_url_invalid5': prealloc: Failed to send request to remote model
 ––– comment –––

@@ -29,6 +29,7 @@ bool CSphColumnInfo::operator== ( const CSphColumnInfo & rhs ) const
 {
 	return m_sName == rhs.m_sName
 		&& m_eAttrType == rhs.m_eAttrType
+		&& m_eAggrInputType == rhs.m_eAggrInputType
 		&& m_tLocator.m_iBitCount == rhs.m_tLocator.m_iBitCount
 		&& m_tLocator.m_iBitOffset == rhs.m_tLocator.m_iBitOffset
 		&& m_tLocator.m_bDynamic == rhs.m_tLocator.m_bDynamic;

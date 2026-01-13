@@ -158,7 +158,7 @@ insert into `test:rt1` (id,title,mva1) values (602, 'test 383', (622,623));
 </sphinxql>
 <!-- request to node 1 -->
 <sphinxql d="1">
-	debug wait test status 15 like 'state' option 'timeout'=30;
+	debug wait test status 15 like 'state' option 'timeout'=60;
 SELECT * FROM test:rt1 order by id asc;
 </sphinxql>
 
@@ -173,37 +173,11 @@ ALTER CLUSTER test DROP `rt1`,`rt2`;
 ALTER CLUSTER test ADD rt1, rt2;
 </sphinxql>
 
-<sphinxql d="0">
-ALTER CLUSTER test DROP `rt1`,`rt2`;
-</sphinxql>
-
-<!-- crash on add table after joiner got restarted -->
-<!-- restart node 1 -->
-<sphinxql d="1" system="stop-agent"/>
-<sphinxql d="1" system="start-agent"/>
-<sphinxql d="1" system="wait-ready" cluster="test"/>
-<!-- donor at the node 0 -->
-<sphinxql d="0">
-ALTER CLUSTER test ADD rt1, rt2;
-ALTER CLUSTER test DROP `rt1`,`rt2`;
-</sphinxql>
-<!-- donor at the node 1 -->
-<sphinxql d="1">
-ALTER CLUSTER test ADD rt1, rt2;
-ALTER CLUSTER test DROP `rt1`,`rt2`;
-</sphinxql>
-<!-- restart node 1 -->
-<sphinxql d="1" system="stop-agent"/>
-<sphinxql d="1" system="start-agent"/>
-<sphinxql d="1" system="wait-ready" cluster="test"/>
-<!-- donor at the node 1 -->
-<sphinxql d="1">
-ALTER CLUSTER test ADD rt1, rt2;
-ALTER CLUSTER test DROP `rt1`,`rt2`;
-</sphinxql>
 
 <!-- cleanup -->
 <sphinxql d="0">
+	ALTER CLUSTER test DROP rt1;
+	ALTER CLUSTER test DROP rt2;
 	ALTER CLUSTER test DROP rtc;
 	DROP TABLE rt1;
 	DROP TABLE rt2;

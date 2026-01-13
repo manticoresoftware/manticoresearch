@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "common.h"
 #include "searchdha.h"
 #include "cluster_commands.h"
+#include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterRequest_t& tReq )
@@ -165,6 +166,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 
 	case E_CLUSTER::UPDATE_SST_PROGRESS:
 		ReceiveSstProgress ( tOut, tBuf, sCluster );
+		break;
+
+	case E_CLUSTER::RECV_STATE_CLEANUP:
+		ReceiveClusterRecvStateCleanup ( tOut, tBuf, sCluster );
 		break;
 
 	default:

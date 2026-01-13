@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -8419,7 +8419,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		for ( auto i : dSorters )
 			tSSTransform.Transform ( i, tGuard );
 
-		tResult.m_pDocstore = m_tSchema.HasStoredFields () ? this : nullptr;
+		tResult.m_pDocstore = m_tSchema.HasStoredFields () || m_tSchema.HasStoredAttrs() ? this : nullptr;
 		tMeta.m_iQueryTime = 0;
 		return true;
 	}
@@ -8465,7 +8465,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	if ( tMeta.m_bHasPrediction )
 		tMeta.m_tStats.Add ( tQueryStats );
 
-	tResult.m_pDocstore = m_tSchema.HasStoredFields() ? this : nullptr;
+	tResult.m_pDocstore = m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ? this : nullptr;
 	tMeta.m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	return true;
@@ -8909,6 +8909,9 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, GetFilebase(), sError ) )
 			return false;
 
+		if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sAttrName, DOCSTORE_ATTR )!=-1 )
+			m_pDocstoreFields->RemoveField ( sAttrName, DOCSTORE_ATTR );
+
 		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
 		pSeg->UpdateUsedRam();
 	}
@@ -9081,7 +9084,7 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	// fixme: notify that it was ALTER that caused the flush
 	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
-	QcacheDeleteIndex ( GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
 }
 
 bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
@@ -9198,8 +9201,8 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	// Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	// all done, reset cache
-	QcacheDeleteIndex ( GetIndexId() );
-	QcacheDeleteIndex ( pIndex->GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
+	QcacheClearByIndexId ( pIndex->GetIndexId() );
 	return true;
 }
 
@@ -9354,8 +9357,8 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 	// Binlog::NotifyIndexFlush ( GetName(), m_iTID, false );
 
 	// all done, reset cache
-	QcacheDeleteIndex ( GetIndexId() );
-	QcacheDeleteIndex ( pSrcIndex->GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
+	QcacheClearByIndexId ( pSrcIndex->GetIndexId() );
 	return true;
 }
 
@@ -9427,7 +9430,7 @@ bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
 	}
 
 	// reset cache
-	QcacheDeleteIndex ( GetIndexId() );
+	QcacheClearByIndexId ( GetIndexId() );
 	return true;
 }
 

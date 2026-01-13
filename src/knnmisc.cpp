@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -77,6 +77,15 @@ bool IsKnnDist ( const CSphString & sExpr )
 	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
 }
 
+
+void SetupKNNLimit ( CSphQuery & tQuery )
+{
+	auto & tKNN = tQuery.m_tKnnSettings;
+
+	if ( tKNN.m_iK < 0 )
+		tKNN.m_iK = tQuery.m_iLimit;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void NormalizeVec ( VecTraits_T<float> & dData )
@@ -102,13 +111,14 @@ public:
 	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tAttr.m_tLocator, pOldSchema, pNewSchema ); }
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
 	ISphExpr *	Clone() const override									{ return new Expr_KNNDist_c ( m_dAnchor, m_tAttr ); }
-	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
 
 protected:
 	CSphVector<float>	m_dAnchor;
 	CSphColumnInfo		m_tAttr;
+	bool				m_bUseAttribute = false;
 
 	float				CalcDist ( const CSphMatch & tMatch ) const;
 
@@ -158,7 +168,7 @@ void Expr_KNNDist_c::Command ( ESphExprCommand eCmd, void * pArg )
 		if ( m_tAttr.IsColumnar() )
 		{
 			auto pColumnar = (const columnar::Columnar_i*)pArg;
-			if ( pColumnar )
+			if ( pColumnar && !m_bUseAttribute )
 			{
 				std::string sError; // FIXME! report errors
 				columnar::IteratorHints_t tHints { .m_bNeedStringHashes = false, .m_bBuffered = false };
@@ -204,7 +214,7 @@ float Expr_KNNDist_c::CalcDist ( const CSphMatch & tMatch ) const
 {
 	// this code path is used when no iterator is available, i.e. in ram chunk
 	ByteBlob_t tRes;
-	if ( m_tAttr.IsColumnar() )
+	if ( m_pIterator )
 		tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
 	else
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
@@ -229,20 +239,41 @@ void Expr_KNNDist_c::SetAnchor ( const CSphVector<float> & dAnchor )
 
 class Expr_KNNDistRescore_c : public Expr_KNNDist_c
 {
-	using Expr_KNNDist_c::Expr_KNNDist_c;
-
 public:
-	float		Eval ( const CSphMatch & tMatch ) const override		{ return CalcDist(tMatch); }
+				Expr_KNNDistRescore_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+
+	float		Eval ( const CSphMatch & tMatch ) const override	{ return CalcDist(tMatch); }
+	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
+	bool		IsColumnar ( bool * pStored ) const final			{ return m_tAttr.IsColumnar(); }
 
 protected:
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
-	ISphExpr *	Clone() const override									{ return new Expr_KNNDistRescore_c ( m_dAnchor, m_tAttr ); }
+	ISphExpr *	Clone() const override								{ return new Expr_KNNDistRescore_c ( m_dAnchor, m_tAttr ); }
 };
+
+
+Expr_KNNDistRescore_c::Expr_KNNDistRescore_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
+	: Expr_KNNDist_c ( dAnchor, tAttr )
+{
+	if ( tAttr.IsColumnarExpr() )
+		m_bUseAttribute = true;
+}
+
+
+void Expr_KNNDistRescore_c ::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	Expr_KNNDist_c::Command ( eCmd, pArg );
+
+	if ( m_bUseAttribute && eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+		static_cast<StrVec_t*>(pArg)->Add ( m_tAttr.m_sName );
+}
 
 
 uint64_t Expr_KNNDistRescore_c ::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
 	EXPR_CLASS_NAME("Expr_KNNDistRescore_c");
+	CALC_STR_HASH(m_tAttr.m_sName, m_tAttr.m_sName.Length());
+	CALC_POD_HASH(m_bUseAttribute);
 	return CALC_DEP_HASHES();
 }
 
@@ -508,7 +539,14 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		}
 
 		CSphString sSimilarity;
-		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError ) ) return false;
+		
+		// Fetch model_name first to check if dims should be optional
+		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
+		
+		// dims is required unless model_name is specified (model determines dimensions)
+		bool bDimsOptional = !tParsed.m_sModelName.empty();
+		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError, bDimsOptional ) ) return false;
+		
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWM, "hnsw_m", sError, true ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
@@ -532,8 +570,6 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			sError = "4-bit quantization is no longer supported";
 			return false;
 		}
-
-		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
 
 		if ( !tParsed.m_sModelName.empty() )
 		{
@@ -637,8 +673,7 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		NormalizeVec(dPoint);
 
 	std::string sErrorSTL;
-	int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, iRequested, tKNN.m_iEf, sErrorSTL );
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
@@ -665,7 +700,7 @@ RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQu
 	if ( !tRes.first )
 		return dIterators;
 
-	dIterators.Add ( { tRes.first, int64_t ( tQuery.m_tKnnSettings.m_iK*tQuery.m_tKnnSettings.m_fOversampling ) } );
+	dIterators.Add ( { tRes.first, tQuery.m_tKnnSettings.GetRequestedDocs() } );
 	return dIterators;
 }
 

@@ -33,21 +33,21 @@ mysql -h0 -P9306 -e "INSERT INTO emb_test (id, title, content) VALUES
 ––– output –––
 0
 ––– comment –––
-IMPORTANT: Optimize table to make k parameter work correctly
+IMPORTANT: Optimize table so k parameter is applied (oversampling still applies)
 Data is currently in ramchunk where k parameter is not applied
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK emb_test; OPTIMIZE TABLE emb_test OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
 0
 ––– comment –––
-Verify k=2 returns exactly 2 documents after optimization
+Verify k=2 returns oversampled results after optimization
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM emb_test WHERE KNN(vec, 2, 'artificial intelligence')"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
-|        2 |
+|        3 |
 +----------+
 ––– comment –––
 === PART 2: ENDPOINT TESTS WITH OPTIMIZED TABLE ===
@@ -61,6 +61,7 @@ curl -s "http://localhost:9308/cli?select%20id,%20title%20from%20emb_test%20wher
 +----+------------------+
 | 1  | machine learning |
 | 2  | computer vision  |
+| 3  | natural language |
 +----+------------------+
 ––– comment –––
 CLI_JSON endpoint with distance
@@ -75,7 +76,7 @@ SQL mode=raw endpoint
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select count(*) from emb_test where knn(vec, 2, 'neural networks')" | jq -r '.[0].data[0]."count(*)"'
 ––– output –––
-2
+3
 ––– comment –––
 JSON API insert with auto-embedding
 ––– input –––
@@ -126,7 +127,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning
 |        3 |
 +----------+
 ––– comment –––
-AFTER optimization: k parameter works correctly
+AFTER optimization: k parameter still oversamples by default
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK chunk_test; OPTIMIZE TABLE chunk_test OPTION sync=1, cutoff=1"; echo $?
 ––– output –––
@@ -137,5 +138,5 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM chunk_test WHERE KNN(vec, 1, 'learning
 +----------+
 | count(*) |
 +----------+
-|        1 |
+|        3 |
 +----------+

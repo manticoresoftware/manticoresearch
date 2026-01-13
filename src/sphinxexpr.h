@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "std/refcounted_mt.h"
 #include "std/string.h"
 #include "std/sharedptr.h"
+#include "std/stringhash.h"
 
 /// forward decls
 class CSphMatch;
@@ -359,6 +360,16 @@ struct JoinArgs_t
 	JoinArgs_t ( const ISphSchema & tJoinedSchema, const CSphString & sIndex1, const CSphString & sIndex2 );
 };
 
+class AttrDependencyMap_c
+{
+public:
+			AttrDependencyMap_c ( const ISphSchema & tSchema );
+
+	bool	IsIndependent ( const CSphString & sAttr ) const;
+
+private:
+	SmallStringHash_T<sph::StringSet> m_hDependents;
+};
 
 struct CommonFilterSettings_t;
 ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );

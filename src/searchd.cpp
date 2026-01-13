@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,6 +12,7 @@
 
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "docstore.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "replication/api_command_cluster.h"
@@ -155,6 +156,7 @@ static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
 static bool				g_bCwdChanged = false;
 static CSphString		g_sKbnVersion;
+static bool				g_bAttrAutoconvStrict = false;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -173,6 +175,7 @@ bool					g_bIOStats		= false;
 static auto&			g_bCpuStats 	= sphGetbCpuStat ();
 static bool				g_bOptNoDetach	= false; // whether to detach from console, or work in front
 static bool				g_bOptNoLock	= false; // whether to lock indexes (with .spl) or not
+static bool				g_bOptQuiet		= false; // suppress startup output except errors
 static bool				g_bStripPath	= false;
 
 static auto& g_bGotSighup		= sphGetGotSighup();	// we just received SIGHUP; need to log
@@ -1322,33 +1325,66 @@ std::unique_ptr<ISphTableFunc> CreateRemoveRepeats()
 class CSphMatchVariant 
 {
 public:
-	inline static SphAttr_t ToInt ( const SqlInsert_t & tVal )
+	inline static SphAttr_t ToInt ( const SqlInsert_t & tVal, CSphString & sError )
 	{
 		switch ( tVal.m_iType )
 		{
-			case SqlInsert_t::QUOTED_STRING:	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::QUOTED_STRING:
+			{
+				const char * sStart = tVal.m_sVal.cstr();
+				char * sEnd = nullptr;
+				errno = 0;
+				SphAttr_t uVal = strtoul ( sStart, &sEnd, 10 );
+					
+				if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, tVal.m_sVal.Length(), errno, "integer", sError ) )
+					return 0;
+					
+				return uVal;
+			}
 			case SqlInsert_t::CONST_INT:		return int(tVal.GetValueInt());
 			case SqlInsert_t::CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
 		}
 		return 0;
 	}
 
-	inline static SphAttr_t ToBigInt ( const SqlInsert_t & tVal )
+	inline static SphAttr_t ToBigInt ( const SqlInsert_t & tVal, CSphString & sError )
 	{
 		switch ( tVal.m_iType )
 		{
-			case SqlInsert_t::QUOTED_STRING:	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::QUOTED_STRING:
+			{
+				const char * sStart = tVal.m_sVal.cstr();
+				char * sEnd = nullptr;
+				errno = 0;
+				SphAttr_t iVal = strtoll ( sStart, &sEnd, 10 );
+					
+				if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, tVal.m_sVal.Length(), errno, "bigint", sError ) )
+					return 0;
+					
+				return iVal;
+			}
 			case SqlInsert_t::CONST_INT:		return tVal.GetValueInt();
 			case SqlInsert_t::CONST_FLOAT:		return int64_t(tVal.m_fVal); // FIXME? report conversion error?
 		}
 		return 0;
 	}
 
-	inline static SphAttr_t ToBigUint ( const SqlInsert_t & tVal )
+	inline static SphAttr_t ToBigUint ( const SqlInsert_t & tVal, CSphString & sError )
 	{
 		switch ( tVal.m_iType )
 		{
-		case SqlInsert_t::QUOTED_STRING:	return strtoull ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+		case SqlInsert_t::QUOTED_STRING:
+		{
+			const char * sStart = tVal.m_sVal.cstr();
+			char * sEnd = nullptr;
+			errno = 0;
+			SphAttr_t uVal = strtoull ( sStart, &sEnd, 10 );
+				
+			if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, errno, tVal.m_sVal.Length(), "bigint", sError ) )
+				return 0;
+				
+			return uVal;
+		}
 		case SqlInsert_t::CONST_INT:		return tVal.GetValueUint();
 		case SqlInsert_t::CONST_FLOAT:		return uint64_t(int64_t(tVal.m_fVal)); // FIXME? report conversion error?
 		}
@@ -1382,12 +1418,18 @@ public:
 		{
 		case SPH_ATTR_INTEGER:
 		case SPH_ATTR_TOKENCOUNT:
-			tAttr = ToInt(tVal);
+			tAttr = ToInt ( tVal, sError );
+			if ( !sError.IsEmpty() )
+				return false;
 			break;
 
 		case SPH_ATTR_BOOL:
 			if ( !ConvertBool ( tVal, tAttr ) ) // try to convert true \ false string then number
-				tAttr = ToInt ( tVal );
+			{
+				tAttr = ToInt ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
+			}
 			break;
 
 		case SPH_ATTR_BIGINT:
@@ -1399,10 +1441,16 @@ public:
 					return false;
 				}
 
-				tAttr = ToBigUint(tVal);
+				tAttr = ToBigUint ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
 			}
 			else
-				tAttr = ToBigInt(tVal);
+			{
+				tAttr = ToBigInt ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
+			}
 			break;
 
 		case SPH_ATTR_FLOAT:
@@ -1422,7 +1470,11 @@ public:
 			if ( pName && tVal.m_iType==SqlInsert_t::QUOTED_STRING )
 				tAttr = GetUTC ( tVal.m_sVal );
 			else
-				tAttr = ToInt(tVal);
+			{
+				tAttr = ToInt ( tVal, sError );
+				if ( !sError.IsEmpty() )
+					return false;
+			}
 		}
 		break;
 
@@ -1452,6 +1504,46 @@ public:
 		tVal.SetValueInt(0);
 		CSphString sError;
 		SetAttr ( tMatch, tLoc, nullptr, tVal, eTargetType, false, sError );
+	}
+
+	static bool IsOnlySpace ( const char * sStart, char * sEnd, int iLen )
+	{
+		if ( *sEnd=='\0' )
+			return true;
+
+
+		while ( sEnd<sStart+iLen && *sEnd!='\0' )
+		{
+			if ( !sphIsSpace ( *sEnd ) )
+				return false;
+
+			sEnd++;
+		}
+
+		return true;
+	}
+
+	static bool ValidateConv ( const char * sStart, char * sEnd, int iLen, int iErrno, const char * sAttrType, CSphString & sError )
+	{
+		if ( sStart==sEnd )
+		{
+			sError.SetSprintf ( "invalid value '%s' for %s attribute", sStart, sAttrType );
+			return false;
+		}
+		
+		if ( !IsOnlySpace ( sStart, sEnd, iLen ) )
+		{
+			sError.SetSprintf ( "invalid value '%s' for %s attribute (trailing characters)", sStart, sAttrType );
+			return false;
+		}
+		
+		if ( iErrno==ERANGE )
+		{
+			sError.SetSprintf ( "value '%s' overflow for %s attribute", sStart, sAttrType );
+			return false;
+		}
+		
+		return true;
 	}
 };
 
@@ -5518,6 +5610,31 @@ struct CmpDistDocABC_fn
 	}
 };
 
+// sort by distance asc, document count desc, ABC asc
+struct CmpFoundDocs_fn
+{
+	const char * m_pBuf;
+	explicit CmpFoundDocs_fn ( const char * pBuf ) : m_pBuf ( pBuf ) {}
+
+	inline bool IsLess ( const SuggestWord_t & a, const SuggestWord_t & b ) const
+	{
+		// sort by found_docs desc, dist asc
+		if ( a.m_iFoundDocs!=b.m_iFoundDocs )
+			return a.m_iFoundDocs>b.m_iFoundDocs;  // descending
+
+		if ( a.m_iDistance==b.m_iDistance && a.m_iDocs==b.m_iDocs )
+		{
+			return ( sphDictCmpStrictly ( m_pBuf + a.m_iNameOff, a.m_iLen, m_pBuf + b.m_iNameOff, b.m_iLen )<0 );
+		}
+
+		if ( a.m_iDistance==b.m_iDistance )
+			return a.m_iDocs>=b.m_iDocs;
+		return a.m_iDistance<b.m_iDistance;
+	}
+};
+
+static bool HasSuggestFoundDocs ( const SuggestArgs_t & tArgs ) { return tArgs.m_eSearch!=SuggestArgs_t::SearchMode_e::NONE; }
+
 static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t & tRes, const CSphString & sSentence, RowBuffer_i & tOut )
 {
 	if ( tArgs.m_bResultOneline )
@@ -5558,6 +5675,18 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 			tOut.PutString ( sBuf );
 			if ( !tOut.Commit() )
 				return;
+
+			if ( HasSuggestFoundDocs ( tArgs ) )
+			{
+				sBuf.Clear ();
+				sBuf.StartBlock ( "," );
+				for ( const auto & dMatched : tRes.m_dMatched )
+					sBuf.Appendf ( "%d", dMatched.m_iFoundDocs );
+				tOut.PutString ( "found_docs" );
+				tOut.PutString ( sBuf );
+				if ( !tOut.Commit() )
+					return;
+			}
 		}
 	} else
 	{
@@ -5568,6 +5697,8 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 		{
 			tOut.HeadColumn ( "distance" );
 			tOut.HeadColumn ( "docs" );
+			if ( HasSuggestFoundDocs ( tArgs ) )
+				tOut.HeadColumn ( "found_docs" );
 		}
 		tOut.HeadEnd ();
 
@@ -5589,6 +5720,8 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 			{
 				tOut.PutNumAsString ( tWord.m_iDistance );
 				tOut.PutNumAsString ( tWord.m_iDocs );
+				if ( HasSuggestFoundDocs ( tArgs ) )
+					tOut.PutNumAsString ( tWord.m_iFoundDocs );
 			}
 			if ( !tOut.Commit() )
 				return;
@@ -5598,7 +5731,9 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 	tOut.Eof();
 }
 
-static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError )
+static void SuggestSearch ( const char * sIndexName, const SuggestArgs_t & tArgs, SuggestResult_t & tRes, bool bFinal );
+
+static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError, bool bFinal )
 {
 	assert ( pServed );
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
@@ -5613,7 +5748,63 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence, tArgs.m_bForceBigrams ) )
 		pIdx->GetSuggest ( tArgs, tRes );
 
+	SuggestSearch ( pIdx->GetName(), tArgs, tRes, bFinal );
 	return true;
+}
+
+static void SuggestSearchSort ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes )
+{
+	if ( tRes.m_sSentence.IsEmpty() || !HasSuggestFoundDocs ( tArgs ) || tRes.m_dMatched.IsEmpty() )
+		return;
+
+	// sort by found_docs desc, dist asc
+	CmpFoundDocs_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+	tRes.m_dMatched.Sort ( tCmp );
+}
+
+void SuggestSearch ( const char * sIndexName, const SuggestArgs_t & tArgs, SuggestResult_t & tRes, bool bFinal )
+{
+	if ( tRes.m_sSentence.IsEmpty() || !HasSuggestFoundDocs ( tArgs ) || tRes.m_dMatched.IsEmpty() )
+		return;
+
+	const CSphString & sSentence = tRes.m_sSentence;
+	const BYTE * pBuf = tRes.m_dBuf.Begin();
+
+	for ( auto & tWord : tRes.m_dMatched )
+	{
+		// char * vs Str_t is safe as all words are null-terminated
+		const BYTE * sSuggested = pBuf + tWord.m_iNameOff;
+
+		SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
+		CSphQuery & tQuery = tHandler.m_dQueries[0];
+		tQuery.m_sIndexes = sIndexName;
+		tQuery.m_iLimit = 1;
+		tQuery.m_iMaxMatches = 1;
+		// phrase or bag of words
+		if ( tArgs.m_eSearch==SuggestArgs_t::SearchMode_e::PHRASE )
+			tQuery.m_sQuery.SetSprintf ( "\"%s %s\"", sSentence.cstr(), sSuggested );
+		else
+			tQuery.m_sQuery.SetSprintf ( "%s %s", sSentence.cstr(), sSuggested );
+
+		// only count(*) select list item
+		CSphQueryItem & tItem = tQuery.m_dItems.Add();
+		tItem.m_sExpr = "count(*)";
+		tItem.m_sAlias = "count(*)";
+
+		tHandler.RunQueries();
+
+		// count(*) value from the result set into found_docs
+		const auto & tResult = tHandler.m_dAggrResults[0];
+		const CSphColumnInfo * pCol = tResult.m_tSchema.GetAttr ( "count(*)" );
+		if ( tResult.m_iSuccesses > 0 && !tResult.m_dResults.IsEmpty() && !tResult.m_dResults[0].m_dMatches.IsEmpty() && pCol )
+		{
+			const CSphMatch & tMatch = tResult.m_dResults[0].m_dMatches[0];
+			tWord.m_iFoundDocs = (int)tMatch.GetAttr ( pCol->m_tLocator );
+		}
+	}
+
+	if ( bFinal )
+		SuggestSearchSort ( tArgs, tRes );
 }
 
 static void MergetRestultSets ( const SuggestResult_t & tSrc, SuggestResult_t & tDst )
@@ -5633,12 +5824,21 @@ static void MergetRestultSets ( const SuggestResult_t & tSrc, SuggestResult_t & 
 	}
 }
 
-static void UniqRestultSets ( int iLimit, SuggestResult_t & tRes )
+static void UniqRestultSets ( int iLimit, SuggestResult_t & tRes, bool bSortByFoundDocs )
 {
 	SuggestMergeDocs ( tRes.m_dMatched );
 
-	CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
-	tRes.m_dMatched.Sort ( tCmp );
+	if ( bSortByFoundDocs )
+	{
+		// sort by found_docs desc, dist asc
+		CmpFoundDocs_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+		tRes.m_dMatched.Sort ( tCmp );
+
+	} else
+	{
+		CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+		tRes.m_dMatched.Sort ( tCmp );
+	}
 
 	tRes.Flattern ( iLimit );
 }
@@ -5649,6 +5849,8 @@ enum class SuggestFlags_e : DWORD
 	NON_CHAR_ALLOWED			= 1UL << 0,
 	SENTENCE					= 1UL << 1,
 	QUERY_MODE					= 1UL << 2,
+	SEARCH_PHRASE				= 1UL << 3,
+	SEARCH_WORDS				= 1UL << 4,
 };
 
 static void SendSuggestReply ( const SuggestResult_t & tRes, ISphOutputBuffer & tOut )
@@ -5662,6 +5864,7 @@ static void SendSuggestReply ( const SuggestResult_t & tRes, ISphOutputBuffer & 
 	{
 		tOut.SendInt ( tWord.m_iDistance );
 		tOut.SendInt ( tWord.m_iDocs );
+		tOut.SendInt ( tWord.m_iFoundDocs );
 
 		tOut.SendInt ( tWord.m_iLen );
 		tOut.SendBytes ( pBuf + tWord.m_iNameOff, tWord.m_iLen );
@@ -5689,6 +5892,10 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 	tArgs.m_bNonCharAllowed = !!( uFlags & (DWORD)SuggestFlags_e::NON_CHAR_ALLOWED );
 	tArgs.m_bSentence = !!( uFlags & (DWORD)SuggestFlags_e::SENTENCE );
 	tArgs.m_bQueryMode = !!( uFlags & (DWORD)SuggestFlags_e::QUERY_MODE );
+	if ( uFlags & (DWORD)SuggestFlags_e::SEARCH_PHRASE )
+		tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::PHRASE;
+	else if ( uFlags & (DWORD)SuggestFlags_e::SEARCH_WORDS )
+		tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::WORDS;
 
 	if ( tReq.GetError() )
 	{
@@ -5705,7 +5912,7 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 
 	CSphString sError;
 	SuggestResult_t tRes;
-	if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord.cstr(), tRes, sError ) )
+	if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord.cstr(), tRes, sError, false ) )
 	{
 		SendErrorReply ( tOut, "%s", sError.cstr() );
 		return;
@@ -5739,6 +5946,8 @@ public:
 		uFlags |= (DWORD)SuggestFlags_e::NON_CHAR_ALLOWED * m_tArgs.m_bNonCharAllowed;
 		uFlags |= (DWORD)SuggestFlags_e::SENTENCE * m_tArgs.m_bSentence;
 		uFlags |= (DWORD)SuggestFlags_e::QUERY_MODE * m_tArgs.m_bQueryMode;
+		uFlags |= (DWORD)SuggestFlags_e::SEARCH_PHRASE * ( m_tArgs.m_eSearch==SuggestArgs_t::SearchMode_e::PHRASE );
+		uFlags |= (DWORD)SuggestFlags_e::SEARCH_WORDS * ( m_tArgs.m_eSearch==SuggestArgs_t::SearchMode_e::WORDS );
 		tOut.SendDword ( uFlags );
 	}
 
@@ -5769,6 +5978,7 @@ public:
 			SuggestWord_t & tWord = m_tRes.m_dMatched[iOff + i];
 			tWord.m_iDistance = tReq.GetInt();
 			tWord.m_iDocs = tReq.GetInt();
+			tWord.m_iFoundDocs = tReq.GetInt();
 
 			int iWordLen = tReq.GetInt();
 			tWord.m_iNameOff = m_tRes.m_dBuf.GetLength();
@@ -5797,8 +6007,9 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 			return false;
 		}
 
+		// search for locals but sort all suggestions in the end
 		SuggestResult_t tCur;
-		if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord, tCur, sError ) )
+		if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord, tCur, sError, false ) )
 			return false;
 
 		MergetRestultSets ( tCur, tRes );
@@ -5825,7 +6036,9 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 
 	// sort and relimit results sets
 	if ( ( iAgentsReply + dLocals.GetLength() )>1 )
-		UniqRestultSets ( tArgs.m_iLimit, tRes );
+		UniqRestultSets ( tArgs.m_iLimit, tRes, HasSuggestFoundDocs ( tArgs ) );
+	else
+		SuggestSearchSort ( tArgs, tRes ); // need to sort by found_docs
 
 	return true;
 }
@@ -5888,6 +6101,19 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		} else if ( sOpt=="force_bigrams" )
 		{
 			tArgs.m_bForceBigrams = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
+		} else if ( sOpt=="search_mode" )
+		{
+			if ( tStmt.m_dCallOptValues[i].m_sVal=="phrase" )
+			{
+				tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::PHRASE;
+				iTokType = SqlInsert_t::QUOTED_STRING;
+			}
+			else if ( tStmt.m_dCallOptValues[i].m_sVal=="words" )
+			{
+				tArgs.m_eSearch = SuggestArgs_t::SearchMode_e::WORDS;
+				iTokType = SqlInsert_t::QUOTED_STRING;
+			}
+
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -5917,7 +6143,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 			return;
 		}
 
-		if ( pLocal && !SuggestLocalIndexGet ( pLocal, tArgs, sWord, tRes, sError ) )
+		if ( pLocal && !SuggestLocalIndexGet ( pLocal, tArgs, sWord, tRes, sError, true ) )
 		{
 			tOut.Error ( sError.cstr () );
 			return;
@@ -6304,7 +6530,7 @@ static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CS
 	ARRAY_FOREACH ( i, dAttrs )
 	{
 		const CSphString & sName = fnGetName(dAttrs[i]);
-		if ( CSphSchema::IsReserved ( sName.cstr() ) || sphIsInternalAttr ( sName ) )
+		if ( sphIsInternalAttr ( sName ) )
 		{
 			sError.SetSprintf ( "attribute name '%s' is a reserved keyword", sName.cstr() );
 			return false;
@@ -6328,11 +6554,9 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	{
 		if ( tStmt.m_tCreateTable.m_bIfNotExists )
 			return true;
-		else
-		{
-			sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
-			return false;
-		}
+
+		sError.SetSprintf ( "table '%s' already exists", tStmt.m_sIndex.cstr() );
+		return false;
 	}
 
 	if ( CSphSchema::IsReserved ( tStmt.m_sIndex.cstr() ) )
@@ -6371,7 +6595,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
 		{
-			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loded", i.m_tAttr.m_sName.cstr() );
+			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loaded", i.m_tAttr.m_sName.cstr() );
 			return false;
 		}
 
@@ -6555,6 +6779,33 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, 
 		tOut.Error ( sError.cstr() );
 	else
 		tOut.Ok ( 0, ( sWarning.IsEmpty() ? 0 : 1 ) );
+}
+
+
+static void ClearSecondaryIndexCaches()
+{
+	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+	for ( const auto & i : *hLocal )
+	{
+		if ( !i.second )
+			continue;
+		
+		RIdx_c pIdx { i.second };
+		const SIContainer_c * pSI = pIdx->GetSI();
+		if ( pSI && !pSI->IsEmpty() )
+			const_cast<SIContainer_c*>(pSI)->ClearCache(); // need non-const access to clear caches
+	}
+}
+
+
+static void HandleMysqlDropCache ( RowBuffer_i & tOut )
+{
+	QcacheClearAll();
+	ClearDocstoreCache();
+	SkipCache::ClearAll();
+	ClearSecondaryIndexCaches();
+	
+	tOut.Ok ( 0, 0 );
 }
 
 
@@ -11282,6 +11533,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlDropTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 		return true;
 
+	case STMT_DROP_CACHE:
+		m_tLastMeta = CSphQueryResultMeta();
+		HandleMysqlDropCache ( tOut );
+		return true;
+
 	case STMT_SHOW_CREATE_TABLE:
 		HandleMysqlShowCreateTable ( tOut, *pStmt );
 		return true;
@@ -13246,6 +13502,7 @@ void ShowHelp ()
 		"Options are:\n"
 		"-h, --help\t\tdisplay this help message\n"
 		"-v, --version\t\tdisplay version information\n"
+		"-q, --quiet\t\tonly print errors on startup\n"
 		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
@@ -13292,6 +13549,15 @@ void ShowHelp ()
 		"searchd --install --config c:\\sphinx\\manticore.conf\n"
 #endif
 		);
+}
+
+static bool HasQuietFlag ( int argc, char ** argv )
+{
+	for ( int i = 1; i < argc; ++i )
+		if ( !strcmp ( argv[i], "-q" ) || !strcmp ( argv[i], "--quiet" ) )
+			return true;
+
+	return false;
 }
 
 
@@ -13940,6 +14206,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	int iExpansionPhraseLimit = hSearchd.GetInt ( "expansion_phrase_limit", 1024 );
 	bool bExpansionPhraseWarning = hSearchd.GetBool ( "expansion_phrase_warning", false );
 	SetExpansionPhraseLimit ( iExpansionPhraseLimit, bExpansionPhraseWarning );
+
+	g_bAttrAutoconvStrict = hSearchd.GetBool ( "attr_autoconv_strict", false );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -14118,8 +14386,11 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	case ADD_NEEDLOAD:
 	{
 		assert ( pJustLoadedLocal );
-		fprintf ( stdout, "precaching table '%s'\n", szIndexName );
-		fflush ( stdout );
+		if ( !g_bOptQuiet )
+		{
+			fprintf ( stdout, "precaching table '%s'\n", szIndexName );
+			fflush ( stdout );
+		}
 
 		IndexFiles_c dJustAddedFiles ( pJustLoadedLocal->m_sIndexPath );
 
@@ -14231,7 +14502,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 	if ( !iValidIndexes )
 		sphLogDebug ( "no valid tables to serve" );
 	else
-		fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
+		if ( !g_bOptQuiet )
+			fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
 // if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
@@ -14452,7 +14724,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	InitBanner();
 
-	if ( !WinService() )
+	g_bOptQuiet = HasQuietFlag ( argc, argv );
+	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
+	if ( g_bOptQuiet )
+		g_eLogLevel = SPH_LOG_FATAL;
+
+	if ( !WinService() && !g_bOptQuiet )
 		fprintf ( stdout, "%s",  g_sBanner.cstr() );
 
 	if ( bColumnarError )
@@ -14507,6 +14784,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
+	auto UpdateLogLevel = [&eQuietRestoreLevel] ( ESphLogLevel eLevel )
+	{
+		if ( g_bOptQuiet )
+			eQuietRestoreLevel = Max ( eQuietRestoreLevel, eLevel );
+		else
+			g_eLogLevel = Max ( g_eLogLevel, eLevel );
+	};
+
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
@@ -14517,6 +14802,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
 		OPT ( "-v", "--version" )	{ return 0; }
+		OPT ( "-q", "--quiet" )		g_bOptQuiet = true;
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
@@ -14532,10 +14818,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
 #endif
-		OPT1 ( "--logdebug" )		g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_DEBUG );
-		OPT1 ( "--logdebugv" )		g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_VERBOSE_DEBUG );
-		OPT1 ( "--logdebugvv" )		g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_VERY_VERBOSE_DEBUG );
-		OPT1 ( "--logreplication" )	g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_RPL_DEBUG );
+		OPT1 ( "--logdebug" )		UpdateLogLevel ( SPH_LOG_DEBUG );
+		OPT1 ( "--logdebugv" )		UpdateLogLevel ( SPH_LOG_VERBOSE_DEBUG );
+		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
+		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
@@ -15124,6 +15410,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// disable startup logging to stdout
 	if ( !g_bOptNoDetach )
 		StopLogStdout();
+
+	if ( g_bOptQuiet )
+		g_eLogLevel = eQuietRestoreLevel;
 
 	while (true)
 	{

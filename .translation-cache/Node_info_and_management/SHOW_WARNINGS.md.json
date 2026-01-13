@@ -1,10 +1,12 @@
 {
-  "980163563f9f8c84156acbc14906a60fd2b463d76552881ee26e6ec887f00863": {
-    "original": "# SHOW WARNINGS\n\n`SHOW WARNINGS` statement can be used to retrieve the warning produced by the latest query. The error message will be returned along with the query itself:\n\nCODE_BLOCK_0\n\n<!-- proofread -->",
-    "translations": {
-      "chinese": "# SHOW WARNINGS\n\n`SHOW WARNINGS` 语句可用于检索最新查询产生的警告。错误信息将与查询本身一起返回：\n\nCODE_BLOCK_0\n\n<!-- proofread -->",
-      "russian": "# SHOW WARNINGS\n\nОператор `SHOW WARNINGS` можно использовать для получения предупреждений, вызванных последним запросом. Сообщение об ошибке будет возвращено вместе с самим запросом:\n\nCODE_BLOCK_0\n\n<!-- proofread -->"
-    },
-    "is_code_or_comment": false
-  }
+    "bee6431fd613cbd80ad5949d08960a6d734952829e888db8061730df3e47f45a": {
+        "original": "# SHOW WARNINGS\n\n`SHOW WARNINGS` statement can be used to retrieve the warning produced by the latest query. The error message will be returned along with the query itself:\n\nCODE_BLOCK_0\n<!-- proofread -->\n\n",
+        "translations": {
+            "chinese": "# \u663e\u793a\u8b66\u544a\n\n`SHOW WARNINGS` \u8bed\u53e5\u53ef\u7528\u4e8e\u68c0\u7d22\u6700\u65b0\u67e5\u8be2\u4ea7\u751f\u7684\u8b66\u544a\u3002\u9519\u8bef\u4fe1\u606f\u5c06\u4e0e\u67e5\u8be2\u672c\u8eab\u4e00\u540c\u8fd4\u56de\uff1a\n\nCODE_BLOCK_0\n<!-- proofread -->",
+            "russian": "# \u041f\u041e\u041a\u0410\u0417\u0410\u0422\u042c \u041f\u0420\u0415\u0414\u0423\u041f\u0420\u0415\u0416\u0414\u0415\u041d\u0418\u042f\n\n\u041e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 `SHOW WARNINGS` \u043c\u043e\u0436\u043d\u043e \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u0434\u043b\u044f \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u044f \u043f\u0440\u0435\u0434\u0443\u043f\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u0439, \u0432\u043e\u0437\u043d\u0438\u043a\u0448\u0438\u0445 \u043f\u0440\u0438 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0438 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0435\u0433\u043e \u0437\u0430\u043f\u0440\u043e\u0441\u0430. \u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u043e\u0431 \u043e\u0448\u0438\u0431\u043a\u0435 \u0431\u0443\u0434\u0435\u0442 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u043e \u0432\u043c\u0435\u0441\u0442\u0435 \u0441 \u0441\u0430\u043c\u0438\u043c \u0437\u0430\u043f\u0440\u043e\u0441\u043e\u043c:\n\nCODE_BLOCK_0\n<!-- proofread -->"
+        },
+        "is_code_or_comment": false,
+        "model": "openai:gpt-4.1-mini",
+        "updated_at": 1766339819
+    }
 }

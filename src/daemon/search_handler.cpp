@@ -2364,8 +2364,11 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	{
 		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
 
-		// add only new items
-		if ( hAttrs[tBucket.m_sCol] )
+		const bool bHasAggrFunc = ( tBucket.m_eAggrFunc!=Aggr_e::NONE );
+		CSphString sAlias = bHasAggrFunc ? GetAggrName ( i, tBucket.m_sCol ) : tBucket.m_sCol;
+
+		// add only new items (by alias)
+		if ( hAttrs[sAlias] )
 			continue;
 
 		if ( tBucket.m_eAggrFunc==Aggr_e::COUNT )
@@ -2381,7 +2384,7 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
 		{
 			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
-			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			tItem.m_sAlias = sAlias;
 			tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
 			switch ( tBucket.m_eAggrFunc )
 			{
@@ -2393,9 +2396,10 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		} else
 		{
 			tItem.m_sExpr = tBucket.m_sCol;
-			tItem.m_sAlias = tBucket.m_sCol;
-			hAttrs.Add ( tBucket.m_sCol );
+			tItem.m_sAlias = sAlias;
 		}
+
+		hAttrs.Add ( tItem.m_sAlias );
 	}
 
 	tQuery.m_bFacetHead = true;

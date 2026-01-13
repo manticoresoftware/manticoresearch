@@ -830,6 +830,11 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
 		tExprCol.m_tLocator.m_iBitCount = 64;
 		break;
+	case SPH_AGGR_PERCENTILES:
+	case SPH_AGGR_PERCENTILE_RANKS:
+		tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+		tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
+		break;
 	case SPH_AGGR_MAD:
 		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
 		tExprCol.m_tLocator.m_iBitCount = 64;

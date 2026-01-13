@@ -597,6 +597,95 @@ jobs:
         echo "✓ HTTP endpoints respond with status 200"
         echo "✓ Manticore service is operational"
       shell: pwsh
+    
+    - name: Test custom config path
+      run: |
+        echo "=== TESTING CUSTOM CONFIG PATH ==="
+        
+        $installPath = "C:\Program Files (x86)\Manticore"
+        $searchdPath = "$installPath\bin\searchd.exe"
+        
+        # Stop current searchd
+        Stop-Process -Name "searchd" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        
+        # Create custom config in non-standard location
+        $customConfigDir = "$env:TEMP\manticore-test-config"
+        New-Item -ItemType Directory -Force -Path $customConfigDir | Out-Null
+        
+        $customConfig = "$customConfigDir\custom.conf"
+        @"
+        searchd {
+            listen = 127.0.0.1:9306:mysql
+            listen = 127.0.0.1:9308:http
+            listen = 127.0.0.1:9312
+            log = $installPath\var\log\manticore\searchd.log
+            query_log = $installPath\var\log\manticore\query.log
+            pid_file = $installPath\var\run\searchd.pid
+            data_dir = $installPath\var\data
+            buddy_path =
+        }
+        "@  | Out-File -FilePath $customConfig -Encoding UTF8
+        
+        echo "Created custom config at: $customConfig"
+        
+        # Start searchd with custom config
+        echo "Starting searchd with custom config..."
+        
+        # Start searchd process
+        $process = Start-Process -FilePath $searchdPath `
+            -ArgumentList "--config", $customConfig `
+            -PassThru `
+            -NoNewWindow
+        
+        # Wait for startup
+        Start-Sleep -Seconds 5
+        
+        # Check if process is still running
+        if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
+            echo "✗ searchd process died"
+            exit 1
+        }
+        
+        echo "✓ searchd started with custom config: $customConfig"
+        
+        # Test connectivity
+        $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+        if ($port9306) {
+            echo "✓ Port 9306 accessible"
+        } else {
+            echo "✗ Port 9306 not accessible"
+            exit 1
+        }
+        
+        # Test MySQL query to verify service is operational
+        echo "Testing MySQL query..."
+        try {
+            # Use mysql client if available, otherwise skip this test
+            $mysqlPath = Get-Command mysql -ErrorAction SilentlyContinue
+            if ($mysqlPath) {
+                $result = & mysql -h 127.0.0.1 -P 9306 -e "SELECT 1 as test_result;" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    echo "✓ MySQL query executed successfully"
+                } else {
+                    echo "✗ MySQL query failed"
+                    echo $result
+                    exit 1
+                }
+            } else {
+                echo "⚠ MySQL client not available, skipping query test"
+            }
+        } catch {
+            echo "⚠ MySQL query test skipped: $_"
+        }
+        
+        echo ""
+        echo "=== CUSTOM CONFIG PATH TEST PASSED ==="
+        
+        # Cleanup
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $customConfigDir -ErrorAction SilentlyContinue
+      shell: pwsh
 
   publish_nsis:
     name: Publishing Windows NSIS installer

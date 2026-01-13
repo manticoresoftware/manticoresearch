@@ -2449,6 +2449,9 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			case Aggr_e::MAX:
 			case Aggr_e::SUM:
 			case Aggr_e::AVG:
+			case Aggr_e::PERCENTILES:
+			case Aggr_e::PERCENTILE_RANKS:
+			case Aggr_e::MAD:
 			{
 				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );

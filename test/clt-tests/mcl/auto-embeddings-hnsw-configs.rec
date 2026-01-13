@@ -89,40 +89,55 @@ mysql -h0 -P9306 -e "SELECT id FROM test_ip WHERE KNN(vec, 2, 'artificial intell
 Test 5: Compare distance values between different metrics
 ––– input –––
 echo "L2 (Euclidean) distances:"
-mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_l2 WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
+mysql -h0 -P9306 -E -e "SELECT id, content, KNN_DIST() as distance FROM test_l2 WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
 ––– output –––
 L2 (Euclidean) distances:
-+------+------------------+------------+
-| id   | content          | distance   |
-+------+------------------+------------+
-|    2 | deep learning    |   0.491045 |
-|    1 | machine learning | 0.61700082 |
-|    3 | cooking recipes  | 1.42384136 |
-+------+------------------+------------+
+*************************** 1. row ***************************
+      id: 2
+ content: deep learning
+distance: 0.491#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+      id: 1
+ content: machine learning
+distance: 0.617#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+      id: 3
+ content: cooking recipes
+distance: 1.423#!/[0-9]{0,5}/!#
 ––– input –––
 echo "Cosine similarity distances (smaller = more similar):"
-mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_cosine WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
+mysql -h0 -P9306 -E -e "SELECT id, content, KNN_DIST() as distance FROM test_cosine WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
 ––– output –––
 Cosine similarity distances (smaller = more similar):
-+------+------------------+------------+
-| id   | content          | distance   |
-+------+------------------+------------+
-|    2 | deep learning    | 0.24552250 |
-|    1 | machine learning | 0.30850041 |
-|    3 | cooking recipes  | 0.71192080 |
-+------+------------------+------------+
+*************************** 1. row ***************************
+      id: 2
+ content: deep learning
+distance: 0.245#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+      id: 1
+ content: machine learning
+distance: 0.308#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+      id: 3
+ content: cooking recipes
+distance: 0.711#!/[0-9]{0,5}/!#
 ––– input –––
 echo "Inner product distances (smaller = more similar):"
-mysql -h0 -P9306 -e "SELECT id, content, KNN_DIST() as distance FROM test_ip WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
+mysql -h0 -P9306 -E -e "SELECT id, content, KNN_DIST() as distance FROM test_ip WHERE KNN(vec, 3, 'neural networks') ORDER BY distance"
 ––– output –––
 Inner product distances (smaller = more similar):
-+------+------------------+------------+
-| id   | content          | distance   |
-+------+------------------+------------+
-|    2 | deep learning    | 0.24552250 |
-|    1 | machine learning | 0.30850047 |
-|    3 | cooking recipes  | 0.71192086 |
-+------+------------------+------------+
+*************************** 1. row ***************************
+      id: 2
+ content: deep learning
+distance: 0.245#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+      id: 1
+ content: machine learning
+distance: 0.308#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+      id: 3
+ content: cooking recipes
+distance: 0.711#!/[0-9]{0,5}/!#
 ––– comment –––
 === HNSW INDEX PARAMETERS ===
 ––– comment –––

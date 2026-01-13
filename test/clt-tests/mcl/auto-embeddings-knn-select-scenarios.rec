@@ -42,140 +42,226 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as total_records FROM test_knn_select"
 ––– comment –––
 Test KNN search with vector parameter (traditional approach)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3))"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3, 0.4,0.2, 0.3))"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    1 | machine learning algorithms | 141.302780 |
-|    4 | artificial intelligence     | 141.419083 |
-|    2 | cooking recipes             | 141.779907 |
-|    3 | travel destinations         | 142.266846 |
-|    5 | healthy eating              | 142.354874 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 141.302#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 141.419#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 141.779#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 142.266#!/[0-9]{0,5}/!#
+*************************** 5. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 142.354#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with text query parameter (auto-embeddings approach)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'machine learning artificial intelligence')"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'machine learning artificial intelligence')"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    4 | artificial intelligence     | 0.59020078 |
-|    1 | machine learning algorithms | 0.60105515 |
-|    2 | cooking recipes             |   1.779692 |
-|    3 | travel destinations         | 1.94063687 |
-|    5 | healthy eating              |   1.976098 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 0.590#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 0.601#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 1.779#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 1.940#!/[0-9]{0,5}/!#
+*************************** 5. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 1.976#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with empty string query
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 2, '')"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 2, '')"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    2 | cooking recipes             | 1.88556850 |
-|    1 | machine learning algorithms | 1.92225611 |
-|    3 | travel destinations         | 1.93586946 |
-|    4 | artificial intelligence     | 1.94731545 |
-|    5 | healthy eating              | 1.97711217 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 1.885#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 1.922#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 1.935#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 1.947#!/[0-9]{0,5}/!#
+*************************** 5. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 1.977#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with different text queries to verify semantic similarity
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 2, 'food cooking recipes')"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 2, 'food cooking recipes')"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    2 | cooking recipes             | 0.80746633 |
-|    5 | healthy eating              | 1.31011271 |
-|    4 | artificial intelligence     | 1.73995149 |
-|    1 | machine learning algorithms | 1.74750781 |
-|    3 | travel destinations         | 1.83199012 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 0.807#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 1.310#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 1.739#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 1.747#!/[0-9]{0,5}/!#
+*************************** 5. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 1.831#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with document ID parameter
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 2, 1)"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 2, 1)"
 ––– output –––
-+------+-------------------------+------------+
-| id   | title                   | knn_dist() |
-+------+-------------------------+------------+
-|    4 | artificial intelligence | 0.22544095 |
-|    2 | cooking recipes         | 1.76208055 |
-|    3 | travel destinations     | 1.83849883 |
-|    5 | healthy eating          | 1.97417617 |
-+------+-------------------------+------------+
+*************************** 1. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 0.225#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 1.762#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 1.838#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 1.974#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with additional filtering
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_knn_select WHERE knn(embedding, 5, 'technology computers') AND category = 'technology'"
+mysql -h0 -P9306 -E -e "SELECT id, title, category, knn_dist() FROM test_knn_select WHERE knn(embedding, 5, 'technology computers') AND category = 'technology'"
 ––– output –––
-+------+-----------------------------+------------+------------+
-| id   | title                       | category   | knn_dist() |
-+------+-----------------------------+------------+------------+
-|    4 | artificial intelligence     | technology | 1.32850134 |
-|    1 | machine learning algorithms | technology | 1.35791051 |
-+------+-----------------------------+------------+------------+
+*************************** 1. row ***************************
+        id: 4
+     title: artificial intelligence
+  category: technology
+knn_dist(): 1.328#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 1
+     title: machine learning algorithms
+  category: technology
+knn_dist(): 1.357#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with advanced options (ef, rescore, oversampling)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'travel vacation destinations', {ef=100, rescore=1, oversampling=2.0})"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'travel vacation destinations', {ef=100, rescore=1, oversampling=2.0})"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    3 | travel destinations         | 0.59569979 |
-|    2 | cooking recipes             | 1.77228165 |
-|    4 | artificial intelligence     | 1.79695368 |
-|    5 | healthy eating              | 1.86994112 |
-|    1 | machine learning algorithms | 1.87506628 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 0.595#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 1.772#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 1.796#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 1.869#!/[0-9]{0,5}/!#
+*************************** 5. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 1.875#!/[0-9]{0,5}/!#
 ––– comment –––
 Test special characters in search query
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title FROM test_knn_select WHERE knn(embedding, 3, 'search query with special chars @#$%^&*()')"
+mysql -h0 -P9306 -E -e "SELECT id, title FROM test_knn_select WHERE knn(embedding, 3, 'search query with special chars @#$%^&*()')"
 ––– output –––
-+------+-----------------------------+
-| id   | title                       |
-+------+-----------------------------+
-|    4 | artificial intelligence     |
-|    3 | travel destinations         |
-|    1 | machine learning algorithms |
-|    5 | healthy eating              |
-|    2 | cooking recipes             |
-+------+-----------------------------+
+*************************** 1. row ***************************
+   id: 4
+title: artificial intelligence
+*************************** 2. row ***************************
+   id: 3
+title: travel destinations
+*************************** 3. row ***************************
+   id: 1
+title: machine learning algorithms
+*************************** 4. row ***************************
+   id: 5
+title: healthy eating
+*************************** 5. row ***************************
+   id: 2
+title: cooking recipes
 ––– comment –––
 Test KNN search with MATCH combination
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'artificial intelligence') AND MATCH('machine')"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'artificial intelligence') AND MATCH('machine')"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    4 | artificial intelligence     | 0.84652847 |
-|    1 | machine learning algorithms | 0.90871155 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 0.846#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 0.908#!/[0-9]{0,5}/!#
 ––– comment –––
 Test KNN search with LIMIT
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 5, 'healthy nutrition food')"
+mysql -h0 -P9306 -E -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn(embedding, 5, 'healthy nutrition food')"
 ––– output –––
-+------+-----------------------------+------------+
-| id   | title                       | knn_dist() |
-+------+-----------------------------+------------+
-|    5 | healthy eating              | 0.47211158 |
-|    2 | cooking recipes             |   1.500787 |
-|    3 | travel destinations         | 1.80363417 |
-|    1 | machine learning algorithms | 1.97797108 |
-|    4 | artificial intelligence     |   1.989296 |
-+------+-----------------------------+------------+
+*************************** 1. row ***************************
+        id: 5
+     title: healthy eating
+knn_dist(): 0.472#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+        id: 2
+     title: cooking recipes
+knn_dist(): 1.500#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+        id: 3
+     title: travel destinations
+knn_dist(): 1.803#!/[0-9]{0,5}/!#
+*************************** 4. row ***************************
+        id: 1
+     title: machine learning algorithms
+knn_dist(): 1.977#!/[0-9]{0,5}/!#
+*************************** 5. row ***************************
+        id: 4
+     title: artificial intelligence
+knn_dist(): 1.989#!/[0-9]{0,5}/!#
 ––– comment –––
 Test that text queries produce consistent results
 ––– input –––
-QUERY1_MD5=$(mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'machine learning')" | md5sum | awk '{print $1}'); QUERY2_MD5=$(mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'machine learning')" | md5sum | awk '{print $1}'); echo "query1_md5: $QUERY1_MD5"; echo "query2_md5: $QUERY2_MD5"; if [ "$QUERY1_MD5" = "$QUERY2_MD5" ]; then echo "SUCCESS: Same text query produces consistent results"; else echo "FAIL: Same text query produces different results"; fi
+QUERY1_MD5=$(mysql -h0 -P9306 -E -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'machine learning')" | md5sum | awk '{print $1}'); QUERY2_MD5=$(mysql -h0 -P9306 -E -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'machine learning')" | md5sum | awk '{print $1}'); echo "query1_md5: $QUERY1_MD5"; echo "query2_md5: $QUERY2_MD5"; if [ "$QUERY1_MD5" = "$QUERY2_MD5" ]; then echo "SUCCESS: Same text query produces consistent results"; else echo "FAIL: Same text query produces different results"; fi
 ––– output –––
 query1_md5: #!/[a-f0-9]{32}/!#
 query2_md5: #!/[a-f0-9]{32}/!#
@@ -183,7 +269,7 @@ SUCCESS: Same text query produces consistent results
 ––– comment –––
 Test that different text queries produce different results
 ––– input –––
-TECH_MD5=$(mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'technology computers')" | md5sum | awk '{print $1}'); FOOD_MD5=$(mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'food cooking')" | md5sum | awk '{print $1}'); echo "tech_query_md5: $TECH_MD5"; echo "food_query_md5: $FOOD_MD5"; if [ "$TECH_MD5" != "$FOOD_MD5" ]; then echo "SUCCESS: Different text queries produce different results"; else echo "INFO: Query comparison result"; fi
+TECH_MD5=$(mysql -h0 -P9306 -E -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'technology computers')" | md5sum | awk '{print $1}'); FOOD_MD5=$(mysql -h0 -P9306 -E -e "SELECT id, knn_dist() FROM test_knn_select WHERE knn(embedding, 3, 'food cooking')" | md5sum | awk '{print $1}'); echo "tech_query_md5: $TECH_MD5"; echo "food_query_md5: $FOOD_MD5"; if [ "$TECH_MD5" != "$FOOD_MD5" ]; then echo "SUCCESS: Different text queries produce different results"; else echo "INFO: Query comparison result"; fi
 ––– output –––
 tech_query_md5: #!/[a-f0-9]{32}/!#
 food_query_md5: #!/[a-f0-9]{32}/!#
@@ -191,6 +277,6 @@ food_query_md5: #!/[a-f0-9]{32}/!#
 ––– comment –––
 Test error case: KNN on table without auto-embeddings
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_auto (id BIGINT, title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2') engine='columnar'"; mysql -h0 -P9306 -e "INSERT INTO test_no_auto (id, title, embedding) VALUES (1, 'test', (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4))"; mysql -h0 -P9306 -e "SELECT id, title FROM test_no_auto WHERE knn(embedding, 2, 'test query')"
+mysql -h0 -P9306 -e "CREATE TABLE test_no_auto (id BIGINT, title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2') engine='columnar'"; mysql -h0 -P9306 -e "INSERT INTO test_no_auto (id, title, embedding) VALUES (1, 'test', (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4))"; mysql -h0 -P9306 -E -e "SELECT id, title FROM test_no_auto WHERE knn(embedding, 2, 'test query')"
 ––– output –––
 #!/.*ERROR.*(model|embedding|auto).*/!#

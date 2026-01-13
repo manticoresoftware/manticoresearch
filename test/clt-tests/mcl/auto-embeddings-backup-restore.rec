@@ -43,15 +43,23 @@ mysql -h0 -P9306 -e "SELECT id FROM test_backup WHERE KNN(vec, 2, 'artificial in
 ––– comment –––
 Verify KNN returns semantically closest documents (distances confirm ranking)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, content, KNN_DIST() as distance FROM test_backup WHERE KNN(vec, 3, 'artificial intelligence') ORDER BY distance"
+mysql -h0 -P9306 -E -e "SELECT id, title, content, KNN_DIST() as distance FROM test_backup WHERE KNN(vec, 3, 'artificial intelligence') ORDER BY distance"
 ––– output –––
-+------+------------------+------------------+------------+
-| id   | title            | content          | distance   |
-+------+------------------+------------------+------------+
-|    1 | machine learning | neural networks  | 0.851733#!/[0-9]{0,3}/!# |
-|    3 | computer vision  | image processing | 1.130702#!/[0-9]{0,3}/!# |
-|    2 | deep learning    | transformers     | 1.311729#!/[0-9]{0,3}/!# |
-+------+------------------+------------------+------------+
+*************************** 1. row ***************************
+      id: 1
+   title: machine learning
+ content: neural networks
+distance: 0.85173#!/[0-9]{0,4}/!#
+*************************** 2. row ***************************
+      id: 3
+   title: computer vision
+ content: image processing
+distance: 1.13070#!/[0-9]{0,4}/!#
+*************************** 3. row ***************************
+      id: 2
+   title: deep learning
+ content: transformers
+distance: 1.31172#!/[0-9]{0,4}/!#
 ––– comment –––
 Check manticore-backup is available
 ––– input –––

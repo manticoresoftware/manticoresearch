@@ -826,14 +826,27 @@ bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString 
 		return false;
 	}
 
-	CSphString sParseError;
-	uint64_t uTimeout = sphToUInt64 ( sValue.cstr(), &sParseError );
-	if ( !sParseError.IsEmpty() || uTimeout > INT_MAX )
+	// Check that all characters are digits (non-negative integer only)
+	const char * p = sValue.cstr();
+	while ( *p >= '0' && *p <= '9' )
+		p++;
+
+	// If we didn't consume the entire string, it's invalid
+	if ( *p != '\0' )
 	{
 		sError = g_sAPITimeoutError;
 		return false;
 	}
 
-	iTimeout = (int)uTimeout;
+	// Parse and check for overflow
+	char * pEnd = nullptr;
+	unsigned long ulTimeout = strtoul ( sValue.cstr(), &pEnd, 10 );
+	if ( ulTimeout > INT_MAX )
+	{
+		sError = g_sAPITimeoutError;
+		return false;
+	}
+
+	iTimeout = (int)ulTimeout;
 	return true;
 }

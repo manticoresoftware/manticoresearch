@@ -4,7 +4,7 @@ $sd_managed_searchd	= false;
 $sd_skip_indexer = false;
 $g_ignore_weights = false;
 $g_pick_query = -1;
-$g_disable_float_tolerance = false;
+$g_disable_float_tolerance = true;
 
 require_once ( "settings.inc" );
 
@@ -50,7 +50,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "--no-marks\t\tDon't mark the output of every test in the logs.\n");
 	print ( "--valgrind-searchd\t\tRun searchd under valgrind during test.\n");
 	print ( "--ignore-weights\tIgnore differences in weights. (Useful for testing that reference database changes are ok.)\n" );
-	print ( "--no-float-tolerance\tDisable float tolerance for comparisons (use strict equality).\n" );
+	print ( "--float-tolerance\tEnable float tolerance for comparisons.\n" );
 	print ( "--cwd\t\t\tchange directory to ubertest.php location (for git bisect)\n" );
 	print ( "\nEnvironment variables are:\n" );
 	print ( "DBUSER\t\t\tuse 'USER' as MySQL user\n" );
@@ -118,7 +118,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--keep-all" )					$locals['keep_all'] = true;
 	else if ( $arg=="--no-demo" )					$g_skipdemo = true;
 	else if ( $arg=="--no-marks" )					$g_usemarks = false;
-	else if ( $arg=="--no-float-tolerance" )			$g_disable_float_tolerance = true;
+	else if ( $arg=="--float-tolerance" )			$g_disable_float_tolerance = false;
 	else if ( $arg=="--cwd" )						chdir ( DIRNAME ( __FILE__ ) );
 	else if ( $arg=="--sd_extra" )					$locals['extra_searchd_options'] = $args[++$i];
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;

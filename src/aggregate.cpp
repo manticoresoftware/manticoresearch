@@ -126,7 +126,7 @@ protected:
 
 	explicit AggrTDigestBase_c ( const CSphColumnInfo & tAttr )
 		: m_tLocator ( tAttr.m_tLocator )
-		, m_eValueType ( tAttr.m_eAttrType )
+		, m_eValueType ( tAttr.m_eAggrInputType!=SPH_ATTR_NONE ? tAttr.m_eAggrInputType : tAttr.m_eAttrType )
 		, m_fCompression ( tAttr.m_fTdigestCompression ? tAttr.m_fTdigestCompression : 200.0 )
 	{
 	}

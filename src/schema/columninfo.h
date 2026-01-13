@@ -52,6 +52,7 @@ struct CSphColumnInfo
 
 	CSphString		m_sName;							///< column name
 	ESphAttr		m_eAttrType;						///< attribute type
+	ESphAttr		m_eAggrInputType { SPH_ATTR_NONE };///< original attr type for aggregate inputs
 
 	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
 	bool			m_bIndexed = false;					///< whether to index this column as fulltext field too

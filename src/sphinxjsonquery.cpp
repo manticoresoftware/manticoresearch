@@ -2548,12 +2548,10 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 			if ( i )
 				sAttrs += ",";
 			sAttrs += tRes.m_tSchema.GetAttr(i).m_sName.cstr();
-			sAttrs += "/";
-			sAttrs += tRes.m_tSchema.GetAttr(i).m_sAlias.cstr();
 		}
 		sAttrs += "]";
 		sAttrs += " aggrName=";
-		sAttrs += GetAggrName ( iAggrItem, tAggr.m_sCol );
+		sAttrs += GetAggrName ( iAggrItem, tAggr.m_sCol ).cstr();
 		sAttrs += " bucket=";
 		sAttrs += tAggr.m_sBucketName.cstr();
 		sphWarning ( "%s", sAttrs.cstr() );

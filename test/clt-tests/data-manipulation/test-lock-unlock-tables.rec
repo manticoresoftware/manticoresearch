@@ -1,5 +1,6 @@
 # Test LOCK TABLES and UNLOCK TABLES functionality
-# Validates MySQL-compatible table locking for READ operations
+# Validates MySQL-compatible table locking for READ operations with cross-session behavior
+# Uses 'debug sleep' to keep locks active while testing from another session
 # NOTE: WRITE locks are not implemented - syntax accepted but shows warning and has no effect
 # Issue: https://github.com/manticoresoftware/manticoresearch/issues/3047
 
@@ -73,6 +74,49 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 |        4 |
 +----------+
 ––– comment –––
+Test cross-session READ lock blocking INSERT (session 1 holds READ lock, session 2 tries to INSERT)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Blocked Insert', 500);" 2>&1; wait $LOCK_PID 2>/dev/null
+––– output –––
+ERROR 1064 (42000) at line 1: table 'products' is locked
+––– comment –––
+Test cross-session READ lock blocking UPDATE (session 1 holds READ lock, session 2 tries to UPDATE)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "UPDATE products SET price = 1199.99 WHERE id = 1;" 2>&1; wait $LOCK_PID 2>/dev/null
+––– output –––
+ERROR 1064 (42000) at line 1: table products: table is locked
+––– comment –––
+Test cross-session READ lock blocking DELETE (session 1 holds READ lock, session 2 tries to DELETE)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;" 2>&1; wait $LOCK_PID 2>/dev/null
+––– output –––
+ERROR 1064 (42000) at line 1: table products: table is locked
+––– comment –––
+Test cross-session READ lock allowing SELECT (session 1 holds READ lock, session 2 can SELECT)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"; wait $LOCK_PID 2>/dev/null
+––– output –––
++----------+
+| count(*) |
++----------+
+|        4 |
++----------+
+––– comment –––
+Test WRITE lock doesn't block cross-session modifications (WRITE locks not implemented)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Not Blocked', 500);"; wait $LOCK_PID 2>/dev/null
+––– output –––
+––– comment –––
+Verify INSERT succeeded (WRITE lock has no effect)
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+
+––– comment –––
 Test locking multiple tables with READ
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS products2; CREATE TABLE products2 (id BIGINT, name TEXT);"
@@ -95,7 +139,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM product
 +----------+
 | count(*) |
 +----------+
-|        4 |
+|        5 |
 +----------+
 +----------+
 | count(*) |
@@ -118,84 +162,11 @@ Insert data into orders table
 mysql -h0 -P9306 -e "INSERT INTO orders VALUES (1, 1, 2), (2, 2, 1);"
 ––– output –––
 ––– comment –––
-Lock multiple tables with different lock types (products READ, orders WRITE) in same session
-NOTE: WRITE lock has no effect, but READ lock on products will block modifications
+Test cross-session multi-table READ lock (session 1 locks products, session 2 tries INSERT into products)
 ––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES products READ, orders WRITE;
-SELECT * FROM products WHERE id = 1;
-INSERT INTO orders VALUES (3, 1, 5);
-SELECT COUNT(*) FROM orders;
-UNLOCK TABLES;
-EOF
+mysql -h0 -P9306 -e "LOCK TABLES products READ, orders READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (6, 'Blocked Multi', 600);" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
-+------+-----------+------------+
-| id   | title     | price      |
-+------+-----------+------------+
-|    1 | iPhone 15 | 999.989990 |
-+------+-----------+------------+
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
-––– comment –––
-Read from table after lock released (previous session closed)
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM products WHERE id = 1;"
-––– output –––
-+------+-----------+------------+
-| id   | title     | price      |
-+------+-----------+------------+
-|    1 | iPhone 15 | 999.989990 |
-+------+-----------+------------+
-––– comment –––
-Insert into table after lock released (previous session closed, WRITE lock not implemented anyway)
-––– input –––
-mysql -h0 -P9306 -e "INSERT INTO orders VALUES (4, 2, 3);"
-––– output –––
-––– comment –––
-Verify insert succeeded
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM orders;"
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        4 |
-+----------+
-––– comment –––
-Test WRITE lock with UPDATE and DELETE in same session (WRITE lock has no effect)
-––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES products WRITE;
-UPDATE products SET price = 1099.99 WHERE id = 1;
-DELETE FROM products WHERE id = 4;
-SELECT COUNT(*) FROM products;
-UNLOCK TABLES;
-EOF
-––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
-––– comment –––
-Test REPLACE INTO with WRITE lock (WRITE lock has no effect)
-All commands in same session
-––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES products WRITE;
-REPLACE INTO products VALUES (2, 'Samsung Galaxy S24 Ultra', 1199.99);
-SELECT * FROM products WHERE id = 2;
-UNLOCK TABLES;
-EOF
-––– output –––
-+------+--------------------------+-------------+
-| id   | title                    | price       |
-+------+--------------------------+-------------+
-|    2 | Samsung Galaxy S24 Ultra | 1199.989990 |
-+------+--------------------------+-------------+
+ERROR 1064 (42000) at line 1: table 'products' is locked
 ––– comment –––
 Create distributed table for testing lock compatibility
 ––– input –––
@@ -212,11 +183,11 @@ Verify we can still query distributed table even though locking failed
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM dist_products WHERE id = 1;"
 ––– output –––
-+------+-----------+-------------+
-| id   | title     | price       |
-+------+-----------+-------------+
-|    1 | iPhone 15 | 1099.989990 |
-+------+-----------+-------------+
++------+-----------+------------+
+| id   | title     | price      |
++------+-----------+------------+
+|    1 | iPhone 15 | 999.989990 |
++------+-----------+------------+
 ––– comment –––
 Test SHOW TABLES works while table is locked (must be in same session)
 ––– input –––
@@ -254,11 +225,11 @@ SELECT * FROM products WHERE id = 1;
 UNLOCK TABLES;
 EOF
 ––– output –––
-+------+-----------+-------------+
-| id   | title     | price       |
-+------+-----------+-------------+
-|    1 | iPhone 15 | 1099.989990 |
-+------+-----------+-------------+
++------+-----------+------------+
+| id   | title     | price      |
++------+-----------+------------+
+|    1 | iPhone 15 | 999.989990 |
++------+-----------+------------+
 ––– comment –––
 Lock table with WRITE lock and verify warning (WRITE lock is not implemented)
 ––– input –––
@@ -272,12 +243,12 @@ mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 ––– comment –––
 WRITE lock doesn't block modifications (not implemented), test within same session
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE; INSERT INTO products VALUES (4, 'OnePlus 12', 699.99); SELECT COUNT(*) FROM products; UNLOCK TABLES;"
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; INSERT INTO products VALUES (7, 'Same Session Insert', 699.99); SELECT COUNT(*) FROM products; UNLOCK TABLES;"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
-|        4 |
+|        6 |
 +----------+
 ––– comment –––
 Test SHOW LOCKS displays active locks (must be in same session)

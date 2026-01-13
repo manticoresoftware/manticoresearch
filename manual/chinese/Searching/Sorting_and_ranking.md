@@ -1,16 +1,16 @@
 # 排序和排名
 
-查询结果可以按全文排名权重、一个或多个属性或表达式进行排序。
+查询结果可以按照全文排名权重、一个或多个属性或表达式进行排序。
 
-**全文** 查询默认返回排序的匹配项。如果未指定任何内容，则按相关性排序，这相当于 SQL 格式中的 `ORDER BY weight() DESC`。
+**全文**查询返回匹配项默认按顺序排序。如果没有指定排序方式，则默认按相关性排序，这等同于SQL格式中的`ORDER BY weight() DESC`。
 
-**非全文** 查询默认不执行任何排序。
+**非全文**查询默认不进行任何排序。
 
 ## 高级排序
 
-当您通过添加 SQL 格式的 `ORDER BY` 子句或通过 HTTP JSON 使用 `sort` 选项显式提供排序规则时，自动启用扩展模式。
+当您显式提供排序规则时，扩展模式会自动启用。这可以通过在SQL格式中添加`ORDER BY`子句或通过HTTP JSON使用`sort`选项来实现。
 
-### 通过 SQL 排序
+### 通过SQL排序
 
 通用语法：
 ```sql
@@ -22,7 +22,7 @@ SELECT ... ORDER BY
 
 <!-- example alias -->
 
-在排序子句中，您可以使用最多 5 列的任意组合，每列后跟 `asc` 或 `desc`。函数和表达式不允许作为排序子句的参数，除了 `weight()` 和 `random()` 函数（后者只能通过 SQL 以 `ORDER BY random()` 形式使用）。但是，您可以在 SELECT 列表中使用任何表达式，并按其别名排序。
+在排序子句中，可以使用最多5列的任意组合，每列后跟`asc`或`desc`。排序子句不允许使用函数和表达式作为参数，除非是`weight()`和`random()`函数（后者只能通过SQL以`ORDER BY random()`的形式使用）。但是，可以在SELECT列表中使用任何表达式并按其别名排序。
 
 <!-- request SQL -->
 ```sql
@@ -40,10 +40,10 @@ select *, a + b alias from test order by alias desc;
 
 <!-- end -->
 
-## 通过 JSON 排序
+## 通过JSON排序
 
 <!-- example sorting 1 -->
-`"sort"` 指定一个数组，其中每个元素可以是属性名，或者如果您想按匹配权重排序则为 `_score`，如果想要随机匹配顺序则为 `_random`。在这种情况下，属性的排序顺序默认为升序，`_score` 默认为降序。
+`"sort"`指定一个数组，其中每个元素可以是属性名称或`_score`（如果您想按匹配权重排序）或`_random`（如果您想按随机匹配顺序排序）。在这种情况下，默认情况下，属性的排序顺序为升序，而`_score`的排序顺序为降序。
 
 <!-- intro -->
 
@@ -99,7 +99,7 @@ select *, a + b alias from test order by alias desc;
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -109,7 +109,7 @@ $search->setIndex("test")->match('Test document')->sort('_score')->sort('id');
 
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -120,7 +120,7 @@ search_request.sort = ['_score', 'id']
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -131,7 +131,7 @@ search_request.sort = ['_score', 'id']
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -142,7 +142,7 @@ searchRequest.sort = ['_score', 'id'];
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -157,7 +157,7 @@ searchRequest.setSort(sort);
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -169,7 +169,7 @@ searchRequest.Sort = new List<Object> {"_score", "id"};
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -188,7 +188,7 @@ let search_req = SearchRequest {
 
 <!-- intro -->
 
-##### Typescript:
+##### Typescript：
 
 <!-- request typescript -->
 ``` typescript
@@ -203,7 +203,7 @@ searchRequest = {
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request go -->
 ```go
@@ -219,8 +219,8 @@ searchRequest.SetSort(sort)
 <!-- example sorting 2 -->
 您也可以显式指定排序顺序：
 
-* `asc`：升序排序
-* `desc`：降序排序
+* `asc`：按升序排序
+* `desc`：按降序排序
 
 
 <!-- intro -->
@@ -281,7 +281,7 @@ searchRequest.SetSort(sort)
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -291,7 +291,7 @@ $search->setIndex("test")->match('Test document')->sort('id', 'desc')->sort('_sc
 
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -303,7 +303,7 @@ search_request.sort = [sort_by_id, '_score']
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -315,7 +315,7 @@ search_request.sort = [sort_by_id, '_score']
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -327,7 +327,7 @@ searchRequest.sort = [sortById, 'id'];
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -347,7 +347,7 @@ searchRequest.setSort(sort);
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -361,7 +361,7 @@ searchRequest.Sort.Add("_score");
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -384,7 +384,7 @@ let search_req = SearchRequest {
 
 <!-- intro -->
 
-##### Typescript:
+##### Typescript：
 
 <!-- request typescript -->
 ``` typescript
@@ -399,7 +399,7 @@ searchRequest = {
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request go -->
 ```go
@@ -414,7 +414,7 @@ searchRequest.SetSort(sort)
 <!-- end -->
 
 <!-- example sorting 3 -->
-您还可以使用另一种语法，通过 `order` 属性指定排序顺序：
+您还可以使用另一种语法并通过`order`属性指定排序顺序：
 
 
 <!-- intro -->
@@ -474,7 +474,7 @@ searchRequest.SetSort(sort)
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -484,7 +484,7 @@ $search->setIndex("test")->match('Test document')->sort('id', 'desc');
 
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -496,7 +496,7 @@ search_request.sort = [sort_by_id]
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -508,7 +508,7 @@ search_request.sort = [sort_by_id]
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -520,7 +520,7 @@ searchRequest.sort = [sortById];
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -539,7 +539,7 @@ searchRequest.setSort(sort);
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -552,7 +552,7 @@ searchRequest.Sort.Add(sortById);
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -573,7 +573,7 @@ let search_req = SearchRequest {
 
 <!-- intro -->
 
-##### Typescript:
+##### Typescript：
 
 <!-- request typescript -->
 ``` typescript
@@ -588,7 +588,7 @@ searchRequest = {
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request go -->
 ```go
@@ -602,7 +602,7 @@ searchRequest.SetSort(sort)
 <!-- end -->
 
 <!-- example sorting 4 -->
-JSON 查询中也支持按 MVA 属性排序。排序模式可以通过 `mode` 属性设置。支持以下模式：
+JSON查询中也支持按MVA属性排序。排序模式可以通过`mode`属性设置。支持以下模式：
 
 * `min`：按最小值排序
 * `max`：按最大值排序
@@ -664,7 +664,7 @@ JSON 查询中也支持按 MVA 属性排序。排序模式可以通过 `mode` �
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -674,7 +674,7 @@ $search->setIndex("test")->match('Test document')->sort('id','desc','max');
 
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -686,7 +686,7 @@ search_request.sort = [sort]
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -698,7 +698,7 @@ search_request.sort = [sort]
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -710,7 +710,7 @@ searchRequest.sort = [sort];
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -728,7 +728,7 @@ searchRequest.setSort(sort);
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -740,7 +740,7 @@ searchRequest.Sort.Add(sort);
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -764,7 +764,7 @@ let search_req = SearchRequest {
 
 <!-- intro -->
 
-##### Typescript:
+##### Typescript：
 
 <!-- request typescript -->
 ``` typescript
@@ -779,7 +779,7 @@ searchRequest = {
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request go -->
 ```go
@@ -793,7 +793,7 @@ searchRequest.SetSort(sort)
 <!-- end -->
 
 <!-- example sorting 5 -->
-当按属性排序时，默认禁用匹配权重（分数）计算（不使用排名器）。您可以通过将 `track_scores` 属性设置为 `true` 来启用权重计算：
+在按属性排序时，默认情况下匹配权重（得分）计算被禁用（不使用排名器）。可以通过将`track_scores`属性设置为`true`来启用权重计算：
 
 <!-- intro -->
 
@@ -853,7 +853,7 @@ searchRequest.SetSort(sort)
 ```
 
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -863,7 +863,7 @@ $search->setIndex("test")->match('Test document')->sort('id','desc','max')->trac
 
 <!-- intro -->
 
-##### Python:
+##### Python：
 
 <!-- request Python -->
 ``` python
@@ -876,7 +876,7 @@ search_request.sort = [sort]
 
 <!-- intro -->
 
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 ``` python
@@ -889,7 +889,7 @@ search_request.sort = [sort]
 
 <!-- intro -->
 
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 ``` javascript
@@ -902,7 +902,7 @@ searchRequest.sort = [sort];
 
 <!-- intro -->
 
-##### java:
+##### java：
 
 <!-- request Java -->
 ``` java
@@ -921,7 +921,7 @@ searchRequest.setSort(sort);
 
 <!-- intro -->
 
-##### C#:
+##### C#：
 
 <!-- request C# -->
 ``` clike
@@ -934,7 +934,7 @@ searchRequest.Sort.Add(sort);
 
 <!-- intro -->
 
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 ``` rust
@@ -959,7 +959,7 @@ let search_req = SearchRequest {
 
 <!-- intro -->
 
-##### Typescript:
+##### Typescript：
 
 <!-- request typescript -->
 ``` typescript
@@ -975,7 +975,7 @@ searchRequest = {
 
 <!-- intro -->
 
-##### Go:
+##### Go：
 
 <!-- request go -->
 ```go
@@ -992,27 +992,27 @@ searchRequest.SetSort(sort)
 
 ## 排名概述
 
-排名（也称为加权）搜索结果可以定义为一个过程，即针对每个匹配的文档计算所谓的相关性（权重），以对应匹配它的查询。因此，相关性最终只是附加到每个文档上的一个数字，用于估计该文档与查询的相关程度。然后可以基于该数字和/或一些附加参数对搜索结果进行排序，使得最受关注的结果出现在结果页的更高位置。
+搜索结果的排名（也称为加权）可以定义为针对每个与给定查询匹配的文档计算所谓的相关性（权重）的过程。因此，相关性最终只是附加在每个文档上的一个数字，用以估计该文档与查询的相关程度。然后可以基于该数字和/或一些额外参数对搜索结果进行排序，使得最受欢迎的结果会出现在结果页的更高位置。
 
-没有一种适用于所有场景的单一标准排名方法。更重要的是，永远不可能有这样的方式，因为相关性是*主观的*。也就是说，对你来说相关的内容，对我来说可能不相关。因此，在一般情况下，相关性不仅难以计算；从理论上讲是不可能的。
+没有一种单一的、适用于所有场景的标准文档排名方法。而且，也不可能有这样一种方法，因为相关性是*主观*的。也就是说，对你来说相关的内容，可能对我来说不相关。因此，在一般情况下，不仅计算起来困难；从理论上讲也是不可能的。
 
-所以 Manticore 中的排名是可配置的。它有一个所谓的**ranker**（排名器）的概念。排名器可以形式化定义为一个函数，输入为文档和查询，输出为相关性值。通俗地说，排名器控制 Manticore 使用哪种具体算法来为文档分配权重。
+所以，Manticore 中的排名是可配置的。它有一个所谓的**ranker**（排名器）的概念。排名器可以形式化定义为一个接受文档和查询作为输入，并输出相关性值的函数。通俗来说，排名器控制着 Manticore 将如何（使用哪种具体算法）给文档分配权重。
 
-## 可用的内置排名器
+## 内置排名器
 
-Manticore 附带了几个适用于不同用途的内置排名器。它们中的许多使用两个因素：短语接近度（也称为 LCS）和 BM25。短语接近度基于关键词位置，而 BM25 基于关键词频率。基本上，文档正文与查询之间的短语匹配程度越好，短语接近度越高（当文档包含整个查询的逐字引用时达到最大值）。而 BM25 在文档包含更多稀有词时更高。详细讨论留待后面。
+Manticore 提供了几种适用于不同用途的内置排名器。它们中的许多使用两个因素：短语接近度（也称为LCS）和BM25。短语接近度根据关键词位置工作，而BM25根据关键词频率工作。基本上，文档和查询之间的短语匹配程度越高，短语接近度越高（当文档包含查询的完整逐字引用时达到最大值）。而当文档包含更多罕见词时，BM25分值越高。详细讨论稍后进行。
 
-当前实现的排名器有：
+目前实现的排名器有：
 
-* `proximity_bm25`，默认排名模式，结合使用短语接近度和 BM25 排名。
-* `bm25`，统计排名模式，仅使用 BM25 排名（类似大多数其他全文引擎）。此模式更快，但对于包含多个关键词的查询可能导致质量较差。
-* `none`，无排名模式。此模式显然是最快的。所有匹配赋予权重 1。有时称为布尔搜索，只匹配文档但不排名。
-* `wordcount`，按关键词出现次数排名。该排名器计算每个字段的关键词出现次数，然后乘以字段权重，最后求和。
-* `proximity` 返回原始短语接近度值。此模式内部用于模拟 `SPH_MATCH_ALL` 查询。
-* `matchany` 返回之前在 `SPH_MATCH_ANY` 模式下计算的排名，内部用于模拟 `SPH_MATCH_ANY` 查询。
-* `fieldmask` 返回一个 32 位掩码，第 N 位对应第 N 个全文字段（从 0 开始编号）。只有当相应字段有满足查询的关键词出现时，该位才会被设置。
-* `sph04` 通常基于默认的 `proximity_bm25` 排名器，但额外提升匹配出现在文本字段开头或结尾的权重。因此，如果字段等于精确查询，`sph04` 应该将其排名高于包含精确查询但不完全相等的字段。（例如，当查询为“Hyde Park”时，标题为“Hyde Park”的文档应排名高于标题为“Hyde Park, London”或“The Hyde Park Cafe”的文档。）
-* `expr` 允许你在运行时指定排名公式。它暴露了几个内部文本因素，并允许你定义如何从这些因素计算最终权重。你可以在[下面的小节](../Searching/Sorting_and_ranking.md#Quick-summary-of-the-ranking-factors)中找到其语法和可用因素的参考详情。
+* `proximity_bm25`，默认的排名模式，同时使用并结合了短语接近度和BM25排名。
+* `bm25`，一种只使用BM25的统计排名模式（类似大多数其他全文引擎）。该模式速度更快，但对于包含多个关键词的查询可能导致质量较差。
+* `none`，无排名模式。该模式显然最快。所有匹配项均赋值权重1。有时称为布尔搜索，只匹配文档但不排序。
+* `wordcount`，按关键词出现次数排名。该排名器计算每个字段的关键词出现次数，再乘以字段权重，最后求和。
+* `proximity` 返回原始的短语接近值作为结果。该模式在内部用于模拟 `SPH_MATCH_ALL` 查询。
+* `matchany` 返回在早期 `SPH_MATCH_ANY` 模式中计算的排名值，并在内部用于模拟 `SPH_MATCH_ANY` 查询。
+* `fieldmask` 返回一个32位掩码，第N位对应第N个全文字段，编号从0开始。只有当相应字段含有满足查询的关键词出现时，该位才会被置位。
+* `sph04` 基本上基于默认的 `proximity_bm25` 排名器，但额外提升当匹配发生在文本字段开头或结尾的情况。因此，如果某字段完全等于查询，`sph04` 应该将其排名高于包含该查询但不完全相等的字段。（例如，当查询为“Hyde Park”时，标题为“Hyde Park”的文档应排名高于标题为“Hyde Park, London”或“The Hyde Park Cafe”的文档。）
+* `expr` 允许你在运行时指定排名公式。它暴露了多个内部文本因素，允许你定义如何从这些因素计算最终权重。你可以在[下方小节](../Searching/Sorting_and_ranking.md#Quick-summary-of-the-ranking-factors)中找到其语法细节和可用因素参考。
 
 排名器名称不区分大小写。示例：
 
@@ -1022,103 +1022,103 @@ SELECT ... OPTION ranker=sph04;
 
 ## 排名因素快速总结
 
-| 名称                    | 级别     | 类型  | 概要                                                                                                            |
+| Name                    | Level     | Type  | Summary                                                                                                            |
 | ----------------------- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
-| max_lcs                 | query     | int   | 当前查询的最大可能 LCS 值                                                                                         |
-| bm25                    | document  | int   | BM25(1.2, 0) 的快速估计                                                                                           |
-| bm25a(k1, b)            | document  | int   | 具有可配置 K1、B 常数和语法支持的精确 BM25() 值                                                                   |
-| bm25f(k1, b, {field=weight, ...}) | document | int   | 具有额外可配置字段权重的精确 BM25F() 值                                                                           |
-| field_mask              | document  | int   | 匹配字段的位掩码                                                                                                   |
-| query_word_count        | document  | int   | 查询中唯一包含的关键词数量                                                                                         |
-| doc_word_count          | document  | int   | 文档中匹配的唯一关键词数量                                                                                         |
-| lcs                     | field     | int   | 查询与文档之间的最长公共子序列（以词为单位）                                                                       |
-| user_weight             | field     | int   | 用户字段权重                                                                                                      |
-| hit_count               | field     | int   | 关键词出现的总次数                                                                                                 |
-| word_count              | field     | int   | 匹配的唯一关键词数量                                                                                               |
-| tf_idf                  | 字段     | 浮点型 | 匹配关键词的 tf*idf 之和 == 出现次数的 idf 之和                                                     |
-| min_hit_pos             | 字段     | 整型   | 第一个匹配出现的位置，以词为单位，从1开始                                                               |
-| min_best_span_pos       | 字段     | 整型   | 第一个最大LCS跨度的位置，以词为单位，从1开始                                                                 |
-| exact_hit               | 字段     | 布尔型  | 查询是否 == 字段                                                                                             |
-| min_idf                 | 字段     | 浮点型 | 匹配关键词的最小 idf                                                                                     |
-| max_idf                 | 字段     | 浮点型 | 匹配关键词的最大 idf                                                                                     |
-| sum_idf                 | 字段     | 浮点型 | 匹配关键词的 idf 之和                                                                                     |
-| exact_order             | 字段     | 布尔型  | 查询关键词是否a) 全部匹配且 b) 按查询顺序                                                   |
-| min_gaps                | 字段     | 整型   | 匹配跨度中关键词之间的最小间隔数                                        |
-| lccs                    | 字段     | 整型   | 查询和文档之间的最长连续公共子序列，以词为单位                                         |
-| wlccs                   | 字段     | 浮点型 | 加权最长连续公共子序列，连续关键词跨度的 idf 之和                            |
-| atc                     | 字段     | 浮点型 | 聚合词项接近度，log(1+sum(idf1*idf2*pow(距离, -1.75)) 在最佳关键词对上               |
+| max_lcs                 | query     | int   | 当前查询的最大可能LCS值                                                                                              |
+| bm25                    | document  | int   | BM25(1.2, 0) 的快速估算值                                                                                            |
+| bm25a(k1, b)            | document  | int   | 精确的BM25()值，支持配置K1、B常数和语法                                                                             |
+| bm25f(k1, b, {field=weight, ...}) | document | int   | 精确的BM25F()值，额外支持配置字段权重                                                                               |
+| field_mask              | document  | int   | 匹配字段的位掩码                                                                                                    |
+| query_word_count        | document  | int   | 查询中唯一包含的关键字数量                                                                                            |
+| doc_word_count          | document  | int   | 文档中匹配的唯一关键字数量                                                                                            |
+| lcs                     | field     | int   | 查询与文档之间的最长公共子序列，按词数计                                                                             |
+| user_weight             | field     | int   | 用户字段权重                                                                                                        |
+| hit_count               | field     | int   | 关键字出现的总次数                                                                                                  |
+| word_count              | field     | int   | 唯一匹配关键字的数量                                                                                                |
+| tf_idf                  | field     | float | 匹配关键字的tf*idf之和 == 所有出现的idf之和                                                                          |
+| min_hit_pos             | field     | int   | 首次匹配出现位置，按词数，1起始                                                                                        |
+| min_best_span_pos       | field     | int   | 首个最大LCS跨度位置，按词数，1起始                                                                                    |
+| exact_hit               | field     | bool  | 查询是否与字段完全相等                                                                                              |
+| min_idf                 | field     | float | 匹配关键字中最小的idf                                                                                                |
+| max_idf                 | field     | float | 匹配关键字中最大的idf                                                                                                |
+| sum_idf                 | field     | float | 匹配关键字的idf之和                                                                                                |
+| exact_order             | field     | bool  | 是否所有查询关键字a)均匹配且b)顺序与查询中一致                                                                     |
+| min_gaps                | field     | int   | 匹配跨度中匹配关键字之间的最小间隙数                                                                                  |
+| lccs                    | field     | int   | 查询与文档之间的最长连续公共子序列，按词数计                                                                          |
+| wlccs                   | field     | float | 加权最长连续公共子序列，连续关键字跨度上的idf之和                                                                    |
+| atc                     | field     | float | 聚合词项接近度，log(1+匹配关键字最佳对的 idf1*idf2*pow(distance, -1.75)之和)                                        |
 
-注意：对于使用**短语**、**邻近**或**NEAR**运算符且关键词超过31个的查询，依赖词频的排名因子（如 `tf`、`idf`、`bm25`、`hit_count`、`word_count`）可能会对第31个及以上位置的关键词进行低估。这是由于内部使用了32位掩码来跟踪这些复杂运算符中的词项出现情况。
+注意：对于使用**短语**、**邻近**或**NEAR**操作符并包含超过31个关键字的查询，依赖词频的排名因子（如 `tf`、`idf`、`bm25`、`hit_count`、`word_count`）可能会对第31个及以后位置的关键字计数不足。这是由于内部使用32位掩码来跟踪这些复杂操作符中的词项出现情况所致。
 
 ### 文档级排名因子
 
-**文档级因子**是排名引擎为每个匹配文档针对当前查询计算的数值。因此它不同于普通文档属性，属性不依赖于全文查询，而因子可能会依赖。这些因子可以在排名表达式的任何位置使用。目前实现的文档级因子包括：
+**文档级因子**是排名引擎针对当前查询为每个匹配文档计算的数值。所以它不同于单纯的文档属性，后者不依赖于全文查询，而因子可能依赖。这些因子可以在排名表达式的任何位置使用。目前已实现的文档级因子有：
 
-* `bm25`（整型），文档级BM25估计（不进行关键词出现过滤）。
-* `max_lcs`（整型），查询级可能的最大值，`sum(lcs*user_weight)`表达式可能达到的值。这可用于权重提升缩放。例如，`MATCHANY`排名器公式使用此值以确保任何字段中的完全短语匹配都高于所有字段中任何部分匹配的组合。
-* `field_mask`（整型），匹配字段的32位掩码。
-* `query_word_count`（整型），查询中唯一关键词的数量，根据排除的关键词数量进行调整。例如，`(one one one one)`和`(one !two)`查询都应赋值为1，因为只有一个唯一的非排除关键词。
-* `doc_word_count`（整型），在整个文档中匹配的唯一关键词数量。
+* `bm25`（整数），文档级BM25估算值（不考虑关键字出现次数过滤）。
+* `max_lcs`（整数），一个查询级的最大可能值，`sum(lcs*user_weight)`表达式可达到的最大值。这对于权重提升的缩放很有用。例如，`MATCHANY`排序公式使用该值保证任意字段的完整短语匹配排名高于所有字段的部分匹配组合。
+* `field_mask`（整数），文档级的32位匹配字段掩码。
+* `query_word_count`（整数），查询中唯一关键字的数量，已调整排除关键词数。例如，查询 `(one one one one)` 和 `(one !two)` 都应赋值为1，因为仅有一个唯一非排除关键字。
+* `doc_word_count`（整数），整个文档中匹配的唯一关键字数量。
 
 ### 字段级排名因子
 
-**字段级因子**是排名引擎为每个匹配的文档内文本字段针对当前查询计算的数值。由于可能有多个字段匹配查询，但最终权重需要是单一整型值，这些值需要折叠为单一值。为实现这一点，字段级因子只能在字段聚合函数中使用，**不能**在表达式的任何位置使用。例如，不能使用`(lcs+bm25)`作为排名表达式，因为`lcs`有多个值（每个匹配字段一个）。应使用`(sum(lcs)+bm25)`，该表达式对所有匹配字段的`lcs`求和，然后将`bm25`加到每字段和上。目前实现的字段级因子包括：
+一个**字段级因子**是排名引擎针对当前查询计算的每个匹配文档内文本字段的数值。由于一个查询可以匹配不止一个字段，但最终权重需要是一个单一的整数值，这些值需要被合并成一个。为此，字段级因子只能在字段聚合函数中使用，**不能**在表达式的其他任何地方使用。例如，你不能使用 `(lcs+bm25)` 作为你的排名表达式，因为 `lcs` 对每个匹配字段会有多个值。你应该使用 `(sum(lcs)+bm25)`，该表达式会对所有匹配字段中的 `lcs` 求和，然后加上 `bm25`。当前实现的字段级因子有：
 
-* `lcs`（整型），文档和查询之间最大逐字匹配的长度，以词计算。LCS代表最长公共子序列（或子集）。当仅匹配零散关键词时取最小值1，当整个查询以精确查询关键词顺序在字段中逐字匹配时取最大值（查询关键词数量）。例如，如果查询是'hello world'且字段包含从查询直接引用的这两个词（即相邻且完全按查询顺序），`lcs`将为2。如果查询是'hello world program'且字段包含'hello world'，`lcs`将为2。注意，查询关键词的任何子集都可以匹配，不仅限于相邻关键词。例如，如果查询是'hello world program'且字段包含'hello (test program)'，`lcs`也将为2，因为'hello'和'program'分别在查询中的相同位置匹配。最后，如果查询是'hello world program'且字段包含'hello world program'，`lcs`将为3。（希望这一点此时已经不足为奇了。）
-* `user_weight`（整型），用户指定的每字段权重（参考[OPTION field_weights](../Searching/Options.md#field_weights)中的SQL）。如果未明确指定，权重默认为1。
-* `hit_count`（整型），字段中匹配的关键词出现次数。注意单个关键词可能出现多次。例如，如果'hello'在字段中出现3次，'world'出现5次，`hit_count`将为8。
-* `word_count`（整数），匹配字段中唯一关键词的数量。例如，如果'hello'和'world'在字段中的任何位置出现，`word_count`将为2，无论这两个关键词出现多少次。
-* `tf_idf`（浮点数），匹配字段中所有关键词的TF/IDF之和。IDF是逆文档频率，是介于0和1之间的浮点值，描述关键词的频率（基本上，对于出现在索引的每个文档中的关键词为0，对于仅出现在单个文档中的唯一关键词为1）。TF是词频，是字段中匹配关键词出现的次数。顺便说一下，`tf_idf`实际上是通过对所有匹配出现的IDF求和来计算的。这从构造上等同于对所有匹配关键词求TF*IDF的和。
-* `min_hit_pos`（整数），以单词计算的第一个匹配关键词出现的位置
+* `lcs` (整数)，文档和查询之间最长精确匹配的长度，按单词计数。LCS 代表最长公共子序列（或子集）。当字段中只匹配了零散关键词时取最小值 1，当字段完全逐字匹配整个查询时取最大值，即查询关键词数量（且词序完全相同）。例如，若查询是 'hello world' 且字段包含这两个词按查询顺序相邻出现，则 `lcs` 为 2。再如，查询为 'hello world program'，字段包含 'hello world'，则 `lcs` 为 2。注意，匹配的关键词可以是查询关键词的任意子集，而不必是相邻关键词的子集。例如，若查询为 'hello world program'，字段包含 'hello (test program)'，`lcs` 也为 2，因为 'hello' 和 'program' 分别在字段中与查询位置对应匹配。最后，若查询为 'hello world program'，字段包含 'hello world program'，则 `lcs` 为 3。（此时应该不意外了。）
+* `user_weight` (整数)，用户指定的每字段权重（参考 SQL 中的 [OPTION field_weights](../Searching/Options.md#field_weights)）。若未显式指定，权重默认为 1。
+* `hit_count` (整数)，字段中匹配到的关键词出现次数。注意，单个关键词可出现多次。例如，若字段中 'hello' 出现了 3 次，'world' 出现了 5 次，`hit_count` 为 8。
+* `word_count` (整数)，字段中匹配到的不同关键词数量。例如，若字段中出现 'hello' 和 'world'，`word_count` 为 2，不论它们出现次数多少。
+* `tf_idf` (浮点数)，字段中所有匹配关键词的 TF/IDF 之和。IDF 表示逆文档频率，是 0 到 1 之间的浮点值，描述关键词的频率（基本上，出现于每个索引文档的关键词 IDF 为 0，而只出现于单一文档的关键词 IDF 为 1）。TF 是术语频率，字段中匹配关键词出现次数。顺带一提，`tf_idf` 实际是通过对所有匹配出现累加 IDF 计算的。按照构造方法，这等价于对所有匹配关键词累加 TF*IDF。
+* `min_hit_pos` (整数)，第一个匹配关键词出现的位置，按单词计数。
 
-   因此，这是一个相对低级的"原始"因子，你可能需要在使用它进行排名之前进行*调整*。具体的调整取决于你的数据和最终的公式，但以下是一些起步的想法：(a) 当`word_count`<2时，可以简单地忽略任何基于min_gaps的提升；
+   因此，这是一个相对低层次的“原始”因子，通常你会想在使用它进行排名之前对它进行*调整*。具体调整高度依赖你的数据和最终公式，但这里先给几个思路：（a）当 `word_count<2` 时，可以简单忽略任何基于 `min_gaps` 的提升；
 
-    (b) 对于非平凡的min_gaps值（即当`word_count`>=2时），可以用某个"最坏情况"常数进行截断，而对于平凡值（即当min_gaps=0且`word_count`<2时），可以用该常数替换；
+    （b）当 `word_count>=2` 且 `min_gaps` 非平凡时，可以用某个“最坏情况”的常量限制它，而平凡值（即 `min_gaps=0` 且 `word_count<2`）可以被该常量替代；
 
-    (c) 可以应用类似1/(1+min_gaps)的传递函数（使得更好的、较小的min_gaps值会使其最大化，而更差的、较大的min_gaps值会缓慢下降）；等等。
-* `lccs`（整数）。最长公共连续子序列。查询和文档之间最长的公共子短语的长度，以关键词计算。
+    （c）可以应用诸如 `1/(1+min_gaps)` 的传递函数（使得越好、越小的 `min_gaps` 取值该函数值越大，而更差、越大的 `min_gaps` 会缓慢下降）；等等。
+* `lccs` (整数)，最长公共连续子序列。查询和文档之间最长公共子短语的长度，按关键词计数。
 
-    LCCS因子与LCS有些相似，但更加严格。虽然LCS即使没有两个查询词相邻也可能大于1，但LCCS只有在文档中存在*完全的*连续查询子短语时才会大于1。例如，(one two three four five)查询与(one hundred three hundred five hundred)文档会得到lcs=3，但lccs=1，因为尽管3个关键词（one, three, five）在查询和文档之间的相对位置相同，但实际上没有两个匹配位置相邻。
+    LCCS 因子与 LCS 有些相似，但限制更严格。虽然 LCS 可以大于 1，即使没有两个查询词是相邻匹配，LCCS 只有当文档中存在*精确*、连续的查询子短语时才会大于 1。例如，查询为（one two three four five），文档为（one hundred three hundred five hundred）时，`lcs=3`，但 `lccs=1`，因为虽然 3 个关键词（one, three, five）的排列对应查询中一致，但没有两个匹配词位置是相邻的。
 
-    请注意，LCCS仍然无法区分频繁和罕见的关键词；对于这一点，请参见WLCCS。
-* `wlccs`（浮点数）。加权最长公共连续子序列。查询和文档之间最长子短语的关键词的IDF之和。
+    注意，LCCS 仍然不区分频繁和稀有关键词；相关内容参见 WLCCS。
+* `wlccs` (浮点数)，加权最长公共连续子序列。查询和文档之间最长公共子短语的关键词 IDF 之和。
 
-    WLCCS的计算方式类似于LCCS，但每个"合适的"关键词出现会使其增加关键词的IDF，而不是像LCS和LCCS那样简单地加1。这使得能够对罕见和更重要的关键词序列进行更高的排名，即使它们比频繁关键词的序列更短。例如，查询`(Zanzibar bed and breakfast)`对于文档`(hotels of Zanzibar)`会得到lccs=1，而对于`(London bed and breakfast)`会得到lccs=3，尽管"Zanzibar"实际上比整个"bed and breakfast"短语更罕见。WLCCS因子通过使用关键词频率来解决这个问题。
-* `atc`（浮点数）。聚合词项接近度。一种基于接近度的度量，当文档包含更多更紧密定位且更重要（罕见）的查询关键词组时，其值会增加。
+    WLCCS 的计算类似于 LCCS，但每个“合适”的关键词匹配会增加该关键词的 IDF，而不是像 LCS 和 LCCS 那样仅加 1。这允许排名系统将更稀有且重要的关键词序列排名高于更频繁的关键词序列，即使后者较长。例如，查询 `(Zanzibar bed and breakfast)` 对文档 `(hotels of Zanzibar)` 产生 `lccs=1`，但对 `(London bed and breakfast)` 产生 `lccs=3`，尽管 “Zanzibar” 实际上比整个 “bed and breakfast” 短语更稀有。WLCCS 因子通过使用关键词频率解决了此问题。
+* `atc` (浮点数)，聚合术语接近度（Aggregate Term Closeness）。一种基于邻近的度量，当文档包含更多且更紧密且更重要（稀有）的查询关键词组合时，该值增加。
 
-    **警告：**你应该将ATC与OPTION idf='plain,tfidf_unnormalized'一起使用（见[下文](../Searching/Sorting_and_ranking.md#Configuration-of-IDF-formula)）；否则，你可能会得到意外的结果。
+    **警告：** 你应该在 OPTION `idf='plain,tfidf_unnormalized'` 下使用 ATC（参见[下文](../Searching/Sorting_and_ranking.md#Configuration-of-IDF-formula)）；否则可能得到意外的结果。
 
-    ATC基本上的工作原理如下。对于文档中的每个关键词*出现*，我们计算所谓的*词项接近度*。为此，我们检查主要出现位置左右所有查询关键词的最近其他出现位置，计算距离衰减系数k = pow(distance, -1.75)，并对这些出现位置求和衰减后的IDF。因此，对于每个关键词的每次出现，我们得到一个"接近度"值，描述该出现的"邻居"。然后我们将这些每次出现的接近度乘以其各自关键词的IDF，将它们全部求和，最后计算该和的对数。
+    ATC 的基本操作如下。对于文档中的每个关键词 *出现*，我们计算所谓的 *项接近度*。为此，我们检查所有查询关键词（包括关键词本身）在主题出现左侧和右侧的所有最近的其他出现，计算这些出现的距离衰减系数 k = pow(distance, -1.75)，然后对这些衰减的逆文档频率（IDF）求和。结果，对于每个关键词的每个出现，我们获得一个“接近度”值，描述该出现的“邻居”。然后，我们将这些每个出现的接近度乘以其相应的主题关键词IDF，将它们全部相加，最后计算该和的对数。
 
-换句话说，我们处理文档中最佳（最近）的匹配关键词对，并计算成对的"接近度"，作为其IDF乘积并按距离系数缩放：
+换句话说，我们处理文档中最佳（最近）匹配的关键词对，并计算它们的“接近度”作为它们的IDF按距离系数缩放的乘积：
 
 ```
 pair_tc = idf(pair_word1) * idf(pair_word2) * pow(pair_distance, -1.75)
 ```
 
-然后我们对这些接近度求和，并计算最终的对数衰减ATC值：
+然后，我们对这些接近度求和，并计算最终的对数衰减ATC值：
 
 ```
 atc = log(1+sum(pair_tc))
 ```
 
-请注意，这个最终的衰减对数正是你应该使用OPTION idf=plain的原因，因为没有它，log()内的表达式可能是负数。
+请注意，这个最终的对数衰减正是你应该使用 OPTION idf=plain 的原因，因为如果没有它，对数内部的表达式可能是负数。
 
-更近的关键词出现对ATC的贡献*远远*多于更频繁的关键词。事实上，当关键词紧挨着时，distance=1且k=1；当它们之间只有一个词时，distance=2且k=0.297，两个词之间时，distance=3且k=0.146，以此类推。同时，IDF衰减得相对较慢。例如，在一个100万文档的集合中，匹配10、100和1000个文档的关键词的IDF值分别为0.833、0.667和0.500。所以，一对仅在10个文档中各出现一次但中间有2个其他词的相当罕见的关键词将产生pair_tc = 0.101，因此几乎可以与一对100个文档和1000个文档的关键词（中间有1个其他词）的pair_tc = 0.099相媲美。更重要的是，一对两个*唯一的*、1个文档的关键词（中间有3个词）将得到pair_tc = 0.088，输给一对1000个文档的关键词（紧挨着且pair_tc = 0.25）。因此，基本上，虽然ATC确实结合了关键词频率和接近度，但它仍然稍微偏好接近度。
+更接近的关键词出现对ATC的贡献 *远多* 于更频繁的关键词。事实上，当关键词紧挨着时，距离=1且k=1；当它们之间只有一个词时，距离=2且k=0.297，两个词之间时，距离=3且k=0.146，依此类推。同时，IDF的衰减速度较慢。例如，在一个100万文档集合中，匹配10、100和1000个文档的关键词的IDF值分别为0.833、0.667和0.500。因此，一对两个相对罕见的关键词，每个出现10次，但中间有2个词，其pair_tc = 0.101，几乎无法超过一对一个出现100次和一个出现1000次的关键词，中间只有一个词，其pair_tc = 0.099。此外，一对两个 *唯一* 的1次文档关键词，中间有3个词，其pair_tc = 0.088，会输给一对两个1000次文档关键词紧挨着出现，其pair_tc = 0.25。因此，虽然ATC确实结合了关键词频率和接近度，但它仍然更倾向于接近度。
 
-### 排名因子聚合函数
+### 排序因子聚合函数
 
-一个**字段聚合函数**是一个单参数函数，接受带有字段级因子的表达式，遍历所有匹配的字段，并计算最终结果。当前已实现的字段聚合函数包括：
+**字段聚合函数**是一个单参数函数，接受字段级因子的表达式，遍历所有匹配的字段，并计算最终结果。目前实现的字段聚合函数包括：
 
-* `sum`，它将参数表达式在所有匹配的字段上相加。例如 `sum(1)` 应返回匹配字段的数量。
-* `top`，它返回所有匹配字段中参数的最高值。
-* `max_window_hits`，管理命中位置的滑动窗口，以跟踪指定窗口大小内的最大命中数。它移除落在窗口外的过时命中，并添加最新命中，更新在该窗口内找到的最大命中数。
+* `sum`，将参数表达式在所有匹配的字段上相加。例如 `sum(1)` 应该返回匹配字段的数量。
+* `top`，返回参数在所有匹配字段中的最高值。
+* `max_window_hits`，管理一个滑动窗口的命中位置，跟踪指定窗口大小内的最大命中数。它会移除窗口外的过时命中，并添加最新的命中，更新窗口内找到的最大命中数。
 
-### 所有内置排名器的公式表达式
+### 所有内置排序器的公式表达式
 
-大多数其他排名器实际上可以使用基于表达式的排名器模拟。您只需提供适当的表达式。虽然这种模拟可能比使用内置的编译排名器慢，但如果您想从现有排名器开始微调排名公式，这仍可能很有趣。此外，这些公式以清晰、可读的方式描述了排名器的细节。
+大多数其他排序器实际上可以通过基于表达式的排序器来模拟。你只需要提供一个适当的表达式即可。虽然这种模拟可能比使用内置编译排序器慢，但如果你希望从现有的排序器之一开始微调你的排序公式，这仍然可能很有趣。此外，公式以清晰可读的方式描述了排序器的细节。
 
-* proximity_bm25（默认排名器）= `sum(lcs*user_weight)*1000+bm25`
+* proximity_bm25（默认排序器）= `sum(lcs*user_weight)*1000+bm25`
 * bm25 = `sum(user_weight)*1000+bm25`
 * none = `1`
 * wordcount = `sum(hit_count*user_weight)`
@@ -1130,15 +1130,15 @@ atc = log(1+sum(pair_tc))
 
 ### IDF公式的配置
 
-Manticore中历史上默认的IDF（逆文档频率）等同于 `OPTION idf='normalized,tfidf_normalized'`，这些归一化可能会导致几个不期望的效果。
+Manticore历史上默认的IDF（逆文档频率）等同于 OPTION idf='normalized,tfidf_normalized'，而这些规范化可能会导致一些不希望的效果。
 
-首先，`idf=normalized`会导致关键词惩罚。例如，如果您搜索 `the | something`，且 `the` 出现在超过50%的文档中，那么同时包含关键词 `the` 和 `something` 的文档将比只包含关键词 `something` 的文档权重更低。使用 `OPTION idf=plain` 可以避免这种情况。
+首先，`idf=normalized`会导致关键词惩罚。例如，如果你搜索 `the | something`，而 `the` 出现在超过50%的文档中，那么包含两个关键词 `the` 和 `[something` 的文档将比只包含一个关键词 `something` 的文档权重更低。使用 OPTION idf=plain 可以避免这种情况。
 
-普通IDF在 `[0, log(N)]` 范围内变化，关键词不会被惩罚；而归一化IDF在 `[-log(N), log(N)]` 范围内变化，过于频繁的关键词会被惩罚。
+Plain IDF在 `[0, log(N)]` 范围内变化，关键词永远不会被惩罚；而normalized IDF在 `[-log(N), log(N)]` 范围内变化，过于频繁的关键词会被惩罚。
 
-其次，`idf=tfidf_normalized`会导致查询间IDF漂移。历史上，我们额外将IDF除以查询关键词数量，以便所有关键词的 `sum(tf*idf)` 仍然保持在 `[0,1]` 范围内。然而，这意味着查询 `word1` 和 `word1 | nonmatchingword2` 会为完全相同的结果集分配不同的权重，因为 `word1` 和 `nonmatchingword2` 的IDF都会被除以2。`OPTION idf='tfidf_unnormalized'` 修复了这个问题。请注意，一旦禁用此归一化，BM25、BM25A、BM25F()排名因子将相应缩放。
+其次，`idf=tfidf_normalized`会导致IDF在查询之间漂移。历史上，我们还额外将IDF除以查询关键词数量，使得所有关键词的 `sum(tf*idf)` 仍然适合 `[0,1]` 范围。然而，这意味着查询 `word1` 和 `word1 | nonmatchingword2` 会对完全相同的返回集分配不同的权重，因为 `word1` 和 `nonmatchingword2` 的IDF都会被除以2。`OPTION idf='tfidf_unnormalized'`可以修复这个问题。请注意，一旦禁用这种规范化，BM25、BM25A、BM25F() 排序因子将相应地进行缩放。
 
-IDF标志可以混合使用；`plain` 和 `normalized` 是互斥的；`tfidf_unnormalized` 和 `tfidf_normalized` 是互斥的；而在这种互斥组中未指定的标志将采用其默认值。这意味着 `OPTION idf=plain` 等同于完整的 `OPTION idf='plain,tfidf_normalized'` 规范。
+IDF标志可以混合；`plain` 和 `normalized` 是互斥的；`tfidf_unnormalized` 和 `tfidf_normalized` 也是互斥的；在这样的互斥组中未指定的标志将采用默认值。这意味着 OPTION idf=plain 等同于完整的 OPTION idf='plain,tfidf_normalized' 指定。
 
 <!-- proofread -->
 

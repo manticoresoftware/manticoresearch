@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1673,15 +1673,15 @@ bool AgentConn_t::Fatal ( AgentStats_e eStat, const char * sMessage, ... )
 /// correct way to close connection:
 void AgentConn_t::Finish ( bool bFail )
 {
+	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
+	LazyDeleteOrChange (); // remove timer and all callbacks, if any
+	m_pPollerTask = nullptr;
+
 	if ( m_iSock>=0 && ( bFail || !IsPersistent() ) )
 	{
 		sphLogDebugA ( "%d Socket %d closed and turned to -1", m_iStoreTag, m_iSock );
 		SafeCloseSocket ( m_iSock );
 	}
-
-	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-	LazyDeleteOrChange (); // remove timer and all callbacks, if any
-	m_pPollerTask = nullptr;
 
 	ReturnPersist ();
 	if ( m_iStartQuery )
@@ -3323,7 +3323,7 @@ private:
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
 	// So, we can't just delete the task in the case. Instead, we invalidate it (set m_ifd=-1, nullify payload),
 	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
-	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true )
+	AgentConn_t * DeleteTask ( TaskNet_t * pTask, bool bReleasePayload=true ) REQUIRES ( LazyThread )
 	{
 		assert ( pTask );
 		sphLogDebugL ( "L DeleteTask for %p, (conn %p, io %d), release=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, bReleasePayload );
@@ -3356,7 +3356,7 @@ private:
 	}
 
 
-	void ProcessChanges ( TaskNet_t * pTask )
+	void ProcessChanges ( TaskNet_t * pTask ) REQUIRES ( LazyThread )
 	{
 		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload, pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
 
@@ -3481,7 +3481,7 @@ private:
 	}
 
 	/// abandon and release all events (on shutdown)
-	void AbortScheduled ()
+	void AbortScheduled () REQUIRES ( LazyThread )
 	{
 		while ( !m_dTimeouts.IsEmpty () )
 		{
@@ -3713,8 +3713,12 @@ public:
 		} else
 			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us", pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
-		
-		AddToQueue ( pTask, pConnection->InNetLoop () );
+		const bool bRemoveClosingFromEpoll = (NETPOLL_TYPE == NETPOLL_EPOLL) && (iTimeoutUS<0) && pConnection->InNetLoop ();
+
+		if ( bRemoveClosingFromEpoll )
+			events_change_io (pTask);
+		else
+			AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )

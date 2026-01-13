@@ -24,7 +24,6 @@ LOGSTASH_LOG="$LOG_DIR/logstash.log"
 TEMP_DATA_DIR="/tmp/logstash_test_${VERSION}"
 TEST_LOG="/var/log/dpkg.log"
 killall -9 java logstash ruby 2>/dev/null || true
-sleep 2
 rm -rf "$TEMP_DATA_DIR" 2>/dev/null || true
 mkdir -p "$TEMP_DATA_DIR"
 chmod 777 "$TEMP_DATA_DIR"

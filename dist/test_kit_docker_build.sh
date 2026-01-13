@@ -217,7 +217,7 @@ parent_dir=$(realpath ..)
 echo "Copying $parent_dir to /manticore/ in the container"
 docker exec manticore-test-kit mkdir -p /manticore
 docker cp "$parent_dir" manticore-test-kit:/tmp/manticore_parent
-docker exec manticore-test-kit bash -c "shopt -s dotglob && cp -r /tmp/manticore_parent/* /manticore/ && rm -rf /tmp/manticore_parent"
+docker exec manticore-test-kit bash -c "shopt -s dotglob && cp -r /tmp/manticore_parent/* /manticore/ && rm -rf /tmp/*"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

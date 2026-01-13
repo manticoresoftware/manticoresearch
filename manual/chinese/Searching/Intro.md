@@ -1,4 +1,4 @@
-# Manticore Search 搜索简介
+# Manticore Search 搜索入门
 
 搜索是 Manticore Search 的核心功能。您可以：
 * 执行[全文搜索](../Searching/Full_text_matching/Basic_usage.md#MATCH)并实现搜索结果的[高亮显示](../Searching/Highlighting.md)
@@ -6,8 +6,8 @@
 * 应用[非全文过滤](../Searching/Filters.md)
 * 使用[表达式](../Searching/Expressions.md)进行过滤
 * 利用各种[搜索选项](../Searching/Options.md)
-* 使用[多查询](../Searching/Multi-queries.md)和[子查询](../Searching/Sub-selects.md)
-* 进行搜索结果的[聚合](../Searching/Grouping.md)和[分面](../Searching/Faceted_search.md)
+* 使用[多重查询](../Searching/Multi-queries.md)和[子查询](../Searching/Sub-selects.md)
+* 对搜索结果进行[聚合](../Searching/Grouping.md)和[分面搜索](../Searching/Faceted_search.md)
 * 以及更多功能
 
 ## 通用语法

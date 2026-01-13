@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -107,6 +107,7 @@ enum SqlStmt_e : BYTE
 	STMT_CREATE_TABLE,
 	STMT_CREATE_TABLE_LIKE,
 	STMT_DROP_TABLE,
+	STMT_DROP_CACHE,
 	STMT_SHOW_CREATE_TABLE,
 	STMT_UPDATE,
 	STMT_CREATE_FUNCTION,
@@ -179,7 +180,7 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	{
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
+	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "drop_cache", "show_create_table", "update", "create_func",
 	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
 	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",

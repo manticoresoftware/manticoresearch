@@ -22,7 +22,7 @@ To run KNN searches, you must first configure your table. Float vectors and KNN 
   
   **Note:** When using `COSINE` similarity, vectors are automatically normalized upon insertion. This means the stored vector values may differ from the original input values, as they will be converted to unit vectors (vectors with a mathematical length/magnitude of 1.0) to enable efficient cosine similarity calculations. This normalization preserves the direction of the vector while standardizing its length.
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.
-* `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off.
+* `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off. The default is 200.
 
 <!-- intro -->
 ##### SQL
@@ -39,7 +39,7 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 
 <!-- intro -->
-##### Plain mode (using configuration file):
+##### Plain mode (using configuration file) - Manual vectors:
 
 <!-- request Config -->
 ```ini
@@ -50,6 +50,8 @@ table test_vec {
     knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":4,"hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200}]}
 }
 ```
+
+**Note:** For auto-embeddings in plain mode, see the example below, which shows how to use `model_name` and `from` parameters in the `knn` configuration.
 
 <!-- end -->
 
@@ -121,6 +123,51 @@ CREATE TABLE products_all (
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
 );
 ```
+
+<!-- intro -->
+##### Plain mode (using configuration file):
+
+<!-- request Config -->
+```ini
+table products {
+    type = rt
+    path = /path/to/products
+    rt_field = title
+    rt_field = description
+    rt_attr_float_vector = embedding_vector
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+}
+```
+
+Using OpenAI with API key in plain mode:
+```ini
+table products_openai {
+    type = rt
+    path = /path/to/products_openai
+    rt_field = title
+    rt_field = description
+    rt_attr_float_vector = embedding_vector
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"openai/text-embedding-ada-002","from":"title,description","api_key":"your-api-key-here"}]}
+}
+```
+
+Using all text fields (empty FROM):
+```ini
+table products_all {
+    type = rt
+    path = /path/to/products_all
+    rt_field = title
+    rt_field = description
+    rt_attr_float_vector = embedding_vector
+    knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":""}]}
+}
+```
+
+**Important notes for plain mode:**
+- When using `model_name`, you **must not** specify `dims` - the model automatically determines the vector dimensions. The `dims` and `model_name` parameters are mutually exclusive.
+- When **not** using `model_name` (manual vector insertion), you **must** specify `dims` to indicate the vector dimensions.
+- The `from` parameter specifies which fields to use for embedding generation (comma-separated list, or empty string for all text/string fields). This parameter is required when using `model_name`.
+- For API-based models (OpenAI, Voyage, Jina), include the `api_key` parameter in the knn configuration
 
 <!-- end -->
 
@@ -317,7 +364,7 @@ POST /insert
 
 Now, you can perform a KNN search using the `knn` clause in either SQL or JSON format. Both interfaces support the same essential parameters, ensuring a consistent experience regardless of the format you choose:
 
-- SQL: `select ... from <table name> where knn ( <field>, <k>, <query vector> [,<options>] )`
+- SQL: `select ... from <table name> where knn ( <field>, <query vector> [,<options>] )`
 - JSON:
   ```
   POST /search
@@ -327,7 +374,6 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
       {
           "field": "<field>",
           "query": "<text or vector>",
-          "k": <k>,
           "ef": <ef>,
 		  "rescore": <rescore>,
 		  "oversampling": <oversampling>
@@ -337,15 +383,15 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
 
 The parameters are:
 * `field`: This is the name of the float vector attribute containing vector data.
-* `k`: This represents the number of documents to return and is a key parameter for Hierarchical Navigable Small World (HNSW) indexes. It specifies the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
+* `k`: Deprecated option. Use query `limit` instead. It was used to specify the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
 * `query`: (Recommended parameter) The search query, which can be either:
   - Text string: Automatically converted to embeddings if the field has auto-embeddings configured. Will return an error if the field doesn't have auto-embeddings.
   - Vector array: Works the same as `query_vector`.
 * `query_vector`: (Legacy parameter) The search vector as an array of numbers. Still supported for backward compatibility.
   **Note:** Use either `query` or `query_vector`, not both in the same request.
-* `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search.
-* `rescore`: Enables KNN rescoring (disabled by default). Set to `1` in SQL or `true` in JSON to enable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
-* `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. No oversampling is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
+* `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search. The default is 10.
+* `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
+* `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -355,7 +401,7 @@ Documents are always sorted by their distance to the search vector. Any addition
 <!-- request SQL -->
 
 ```sql
-select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), { ef=2000, oversampling=3.0, rescore=1 } );
+select id, knn_dist() from test where knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=2000, oversampling=3.0, rescore=1 } );
 ```
 <!-- response SQL -->
 
@@ -382,7 +428,6 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5,
 		"ef": 2000, 
 		"rescore": true,
 		"oversampling": 3.0

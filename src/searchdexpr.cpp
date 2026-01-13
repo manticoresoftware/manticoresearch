@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -697,7 +697,8 @@ void Expr_Highlight_c::MarkAllFields()
 
 	const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-		m_dRequestedFieldIds.Add(i);
+		if ( tSchema.IsFieldStored(i) )
+			m_dRequestedFieldIds.Add(i);
 }
 
 

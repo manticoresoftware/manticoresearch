@@ -59,32 +59,32 @@ mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_ip; OPTIMIZE TABLE test_ip OPTION sync=
 ––– comment –––
 Test 4: Verify KNN search returns correct documents
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id FROM test_l2 WHERE KNN(vec, 2, 'artificial intelligence')"
+mysql -h0 -P9306 -E -e "SELECT id FROM test_l2 WHERE KNN(vec, 2, 'artificial intelligence')"
 ––– output –––
-+------+
-| id   |
-+------+
-|    1 |
-|    2 |
-+------+
+*************************** 1. row ***************************
+id: 1
+*************************** 2. row ***************************
+id: 2
+*************************** 3. row ***************************
+id: 3
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id FROM test_cosine WHERE KNN(vec, 2, 'artificial intelligence')"
+mysql -h0 -P9306 -E -e "SELECT id FROM test_cosine WHERE KNN(vec, 2, 'artificial intelligence')"
 ––– output –––
-+------+
-| id   |
-+------+
-|    1 |
-|    2 |
-+------+
+*************************** 1. row ***************************
+id: 1
+*************************** 2. row ***************************
+id: 2
+*************************** 3. row ***************************
+id: 3
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id FROM test_ip WHERE KNN(vec, 2, 'artificial intelligence')"
+mysql -h0 -P9306 -E -e "SELECT id FROM test_ip WHERE KNN(vec, 2, 'artificial intelligence')"
 ––– output –––
-+------+
-| id   |
-+------+
-|    1 |
-|    2 |
-+------+
+*************************** 1. row ***************************
+id: 1
+*************************** 2. row ***************************
+id: 2
+*************************** 3. row ***************************
+id: 3
 ––– comment –––
 Test 5: Compare distance values between different metrics
 ––– input –––
@@ -188,29 +188,20 @@ echo "HNSW configurations test completed"
 ––– output –––
 HNSW configurations test completed
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_m4"
+mysql -h0 -P9306 -E -e "SELECT COUNT(*) FROM test_hnsw_m4"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+count(*): 1
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_m32"
+mysql -h0 -P9306 -E -e "SELECT COUNT(*) FROM test_hnsw_m32"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+count(*): 1
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_ef"
+mysql -h0 -P9306 -E -e "SELECT COUNT(*) FROM test_hnsw_ef"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+count(*): 1
 ––– comment –––
 Test 9: Performance comparison with different M values
 ––– input –––
@@ -225,7 +216,7 @@ Additional documents inserted for performance comparison
 Test 10: Compare search results between different M values
 ––– input –––
 echo "Search with M=4 (faster, less connections):"
-mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m4 WHERE KNN(vec, 3, 'document content') LIMIT 3\G"
+mysql -h0 -P9306 -E -e "SELECT id FROM test_hnsw_m4 WHERE KNN(vec, 3, 'document content') LIMIT 3"
 ––– output –––
 Search with M=4 (faster, less connections):
 *************************** 1. row ***************************
@@ -236,7 +227,7 @@ id: %{NUMBER}
 id: %{NUMBER}
 ––– input –––
 echo "Search with M=32 (slower, more connections, potentially more accurate):"
-mysql -h0 -P9306 -e "SELECT id FROM test_hnsw_m32 WHERE KNN(vec, 3, 'document content') LIMIT 3\G"
+mysql -h0 -P9306 -E -e "SELECT id FROM test_hnsw_m32 WHERE KNN(vec, 3, 'document content') LIMIT 3"
 ––– output –––
 Search with M=32 (slower, more connections, potentially more accurate):
 *************************** 1. row ***************************

@@ -2729,6 +2729,10 @@ Multi-value attributes allow storing variable-length lists of 32-bit unsigned in
 ```sql
 CREATE TABLE products(title text, product_codes multi);
 ```
+or
+```sql
+CREATE TABLE products(title text, product_codes mva);
+```
 
 <!-- intro -->
 ##### JSON:
@@ -3405,6 +3409,10 @@ A data type that allows storing variable-length lists of 64-bit signed integers.
 
 ```sql
 CREATE TABLE products(title text, values multi64);
+```
+or
+```sql
+CREATE TABLE products(title text, values mva64);
 ```
 
 <!-- intro -->

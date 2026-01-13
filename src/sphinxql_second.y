@@ -28,10 +28,12 @@
 %token	TOK_ATTRIBUTES
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_BAD_NUMERIC
+%token	TOK_CACHE
 %token	TOK_CLUSTER
 %token	TOK_COMMITTED
 %token	TOK_COMPRESS
 %token	TOK_DELETE
+%token	TOK_DROP
 %token	TOK_FLUSH
 %token	TOK_FREEZE
 %token	TOK_GLOBAL
@@ -95,6 +97,7 @@ statement:
 	| flush_index
 	| flush_hostnames
 	| flush_logs
+	| drop_cache
 	| reload_plugins
 	| reload_index
     | reload_indexes
@@ -393,6 +396,14 @@ flush_logs:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_LOGS;
+		}
+	;
+
+drop_cache:
+	TOK_DROP TOK_CACHE
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_DROP_CACHE;
 		}
 	;
 

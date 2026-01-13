@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1294,8 +1294,6 @@ protected:
 	}
 };
 
-typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
-
 static const char * GetMysqlTypeName ( MysqlColumnType_e eType )
 {
 	switch ( eType )
@@ -1340,9 +1338,45 @@ JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, MysqlColumnType_e eTy
 	return tOut;
 }
 
+constexpr const char* AttrType2Json ( ESphAttr eAttrType ) noexcept
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:  return "long";
+	case SPH_ATTR_BOOL: return "bool";
+	case SPH_ATTR_FLOAT: return "float";
+	case SPH_ATTR_DOUBLE: return "double";
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_UINT64: return "long long";
+	case SPH_ATTR_JSON_PTR:
+	case SPH_ATTR_JSON:	return "json";
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET_PTR:
+	case SPH_ATTR_INT64SET: return "multi";
+	default: break;
+	}
+	return "string";
+}
+
+// wrapper need, because direct definition of operator<< for ESphAttr affects also another places (unexpectedly)
+struct ESphAttrStr
+{
+	ESphAttr m_tVal;
+	explicit ESphAttrStr ( const ESphAttr eVal ) noexcept
+		: m_tVal ( eVal ) {};
+};
+
+JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& tOut, ESphAttrStr tType )
+{
+	tOut.FixupSpacedAndAppendEscaped ( AttrType2Json ( tType.m_tVal ) );
+	return tOut;
+}
+
 const StrBlock_t dJsonObjCustom { { ",\n", 2 }, { "[", 1 }, { "]", 1 } }; // json object with custom formatting
 
-class JsonRowBuffer_c : public RowBuffer_i
+class JsonRowBuffer_c final : public RowBuffer_i
 {
 public:
 	JsonRowBuffer_c()
@@ -1460,12 +1494,22 @@ public:
 	{
 		JsonEscapedBuilder sEscapedName;
 		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
-		ColumnNameType_t tCol { (CSphString)sEscapedName, eType };
 		auto _ = m_dBuf.Object(false);
-		m_dBuf.AppendName ( tCol.first.cstr(), false );
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
 		auto tTypeBlock = m_dBuf.Object(false);
 		m_dBuf.NamedVal ( "type", eType );
-		m_dColumns.Add ( tCol );
+		m_dColumns.Add ( (CSphString)sEscapedName );
+	}
+
+	void HeadColumnRaw ( const char * szName, ESphAttr uType ) final
+	{
+		JsonEscapedBuilder sEscapedName;
+		sEscapedName.FixupSpacedAndAppendEscaped ( szName );
+		auto _ = m_dBuf.Object(false);
+		m_dBuf.AppendName ( sEscapedName.cstr(), false );
+		auto tTypeBlock = m_dBuf.Object(false);
+		m_dBuf.NamedVal ( "type", ESphAttrStr {uType} );
+		m_dColumns.Add ( (CSphString)sEscapedName );
 	}
 
 	void Add ( BYTE ) override {}
@@ -1478,13 +1522,13 @@ public:
 
 private:
 	JsonEscapedBuilder m_dBuf;
-	CSphVector<ColumnNameType_t> m_dColumns;
+	StrVec_t m_dColumns;
 	int m_iTotalRows = 0;
 	int m_iCol = 0;
 
 	void AddDataColumn()
 	{
-		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr(), false );
+		m_dBuf.AppendName ( m_dColumns[m_iCol].cstr(), false );
 		++m_iCol;
 	}
 

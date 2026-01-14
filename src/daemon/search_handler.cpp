@@ -2500,6 +2500,9 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			case Aggr_e::MAX:
 			case Aggr_e::SUM:
 			case Aggr_e::AVG:
+			case Aggr_e::PERCENTILES:
+			case Aggr_e::PERCENTILE_RANKS:
+			case Aggr_e::MAD:
 				break;
 
 			case Aggr_e::COMPOSITE:

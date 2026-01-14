@@ -111,11 +111,8 @@ static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & 
 	tDigest.Import ( dCentroids );
 }
 
-static void FreeTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
+static void FreeTDigestBlob ( const CSphMatch &, const CSphAttrLocator & )
 {
-	ByteBlob_t dBlob = tMatch.FetchAttrData ( tLoc, nullptr );
-	if ( dBlob.first )
-		sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
 }
 }
 

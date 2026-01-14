@@ -1,60 +1,29 @@
 ––– input –––
-echo "password" | htpasswd -s -c -i /tmp/.htpasswd user
-––– output –––
-Adding password for user user
-––– input –––
-sed -i 's/searchd {/searchd {\nauth_user_file = \/tmp\/.htpasswd/g' /etc/manticoresearch/manticore.conf
-––– output –––
-––– input –––
-timeout 5 searchd --nodetach | awk -F 'FATAL: ' '{print $2}'
-––– output –––
-file '/tmp/.htpasswd' has permissions to all
-––– input –––
-chmod 600 /tmp/.htpasswd
+sed -i 's/searchd {/searchd {\nauth = 1/g' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "show version\G"
+printf 'user\npassword\npassword\n' | searchd --auth >/dev/null 2>&1
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "select 1"
 ––– output –––
 ERROR 1047 (08S01): Access denied for user 'root' (using password: NO)
 ––– input –––
-mysql -h0 -P9306 -e "show version\G" -uuser -ppassword
+mysql -h0 -P9306 -N -e "select 1" -uuser -ppassword
 ––– output –––
 mysql: [Warning] Using a password on the command line interface can be insecure.
-*************************** 1. row ***************************
-Component: Daemon
-Version: %{VERSION}
-*************************** 2. row ***************************
-Component: Columnar
-Version: columnar %{VERSION}
-*************************** 3. row ***************************
-Component: Secondary
-Version: secondary %{VERSION}
-*************************** 4. row ***************************
-Component: KNN
-Version: knn %{VERSION}
-*************************** 5. row ***************************
-Component: Buddy
-Version: buddy %{VERSION}
+#!/\+-+\+/!#
+#!/\|\s*1\s*\|/!#
+#!/\+-+\+/!#
 ––– input –––
-sed -i 's/auth_user_file = \/tmp\/.htpasswd//g' /etc/manticoresearch/manticore.conf
+sed -i 's/auth = 1//g' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "show version\G"
+mysql -h0 -P9306 -N -e "select 1"
 ––– output –––
-*************************** 1. row ***************************
-Component: Daemon
-Version: %{VERSION}
-*************************** 2. row ***************************
-Component: Columnar
-Version: columnar %{VERSION}
-*************************** 3. row ***************************
-Component: Secondary
-Version: secondary %{VERSION}
-*************************** 4. row ***************************
-Component: KNN
-Version: knn %{VERSION}
-*************************** 5. row ***************************
-Component: Buddy
-Version: buddy %{VERSION}
+#!/\+-+\+/!#
+#!/\|\s*1\s*\|/!#
+#!/\+-+\+/!#

@@ -126,18 +126,42 @@ protected:
 	ESphAttr		m_eValueType;
 	double			m_fCompression;
 	CSphString		m_sName;
+	ISphExprRefPtr_c m_pInputExpr;
 
 	explicit AggrTDigestBase_c ( const CSphColumnInfo & tAttr )
 		: m_tLocator ( tAttr.m_tLocator )
 		, m_eValueType ( tAttr.m_eAggrInputType!=SPH_ATTR_NONE ? tAttr.m_eAggrInputType : tAttr.m_eAttrType )
 		, m_fCompression ( tAttr.m_fTdigestCompression ? tAttr.m_fTdigestCompression : 200.0 )
 		, m_sName ( tAttr.m_sName )
+		, m_pInputExpr ( tAttr.m_pExpr )
 	{
+	}
+
+	double EvalInput ( const CSphMatch & tMatch ) const
+	{
+		if ( m_pInputExpr )
+		{
+			switch ( m_eValueType )
+			{
+			case SPH_ATTR_BOOL:
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_BIGINT:
+			case SPH_ATTR_TIMESTAMP:
+				return (double)m_pInputExpr->Int64Eval ( tMatch );
+			case SPH_ATTR_FLOAT:
+			case SPH_ATTR_DOUBLE:
+				return (double)m_pInputExpr->Eval ( tMatch );
+			default:
+				return (double)m_pInputExpr->Eval ( tMatch );
+			}
+		}
+
+		return FetchNumericAttr ( tMatch, m_tLocator, m_eValueType );
 	}
 
 	void AppendValue ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
 	{
-		double fVal = FetchNumericAttr ( tMatch, m_tLocator, m_eValueType );
+		double fVal = EvalInput ( tMatch );
 		static std::atomic<int> s_iDebugLogged { 0 };
 		int iPrev = s_iDebugLogged.load ( std::memory_order_relaxed );
 		if ( iPrev<10 && s_iDebugLogged.compare_exchange_strong ( iPrev, iPrev+1, std::memory_order_relaxed ) )

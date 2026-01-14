@@ -148,32 +148,19 @@ public:
 		if ( fQuantile>=1.0 )
 			return std::prev ( m_dMap.end() )->first;
 
-		double fTarget = fQuantile * m_iCount;
+		if ( m_iCount<=1 )
+			return m_dMap.begin()->first;
 
-		int64_t iTotalCount = 0;
-		auto iMapFirst = m_dMap.begin();
-		auto iMapLast = m_dMap.end();
-		--iMapLast;
+		double fRank = fQuantile * ( m_iCount - 1 );
+		int64_t iLower = (int64_t)std::floor ( fRank );
+		double fFrac = fRank - iLower;
 
-		for ( auto i = iMapFirst; i!=m_dMap.end(); ++i )
-		{
-			if ( fTarget < iTotalCount + i->second )
-			{
-				if ( i==iMapFirst || i==iMapLast )
-					return i->first;
+		double fLower = ValueAtRank ( iLower );
+		if ( fFrac==0.0 )
+			return fLower;
 
-				auto iPrev = std::prev ( i );
-				auto iNext = std::next ( i );
-
-				double fDelta = ( iNext->first - iPrev->first ) / 2.0;
-				double fLocal = ( fTarget - iTotalCount ) / i->second - 0.5;
-				return i->first + fLocal * fDelta;
-			}
-
-			iTotalCount += i->second;
-		}
-
-		return iMapLast->first;
+		double fUpper = ValueAtRank ( iLower+1 );
+		return fLower + fFrac * ( fUpper - fLower );
 	}
 
 	double Cdf ( double fValue ) const noexcept
@@ -304,6 +291,29 @@ private:
 			Add ( dValues[iValue].m_fMean, dValues[iValue].m_iCount );
 			dValues.RemoveFast(iValue);
 		}
+	}
+
+	double ValueAtRank ( int64_t iRank ) const
+	{
+		if ( m_dMap.empty() )
+			return 0.0;
+
+		if ( iRank<=0 )
+			return m_dMap.begin()->first;
+
+		int64_t iLastRank = m_iCount>0 ? (m_iCount-1) : 0;
+		if ( iRank>=iLastRank )
+			return std::prev ( m_dMap.end() )->first;
+
+		int64_t iAccum = 0;
+		for ( const auto & tEntry : m_dMap )
+		{
+			if ( iRank < iAccum + tEntry.second )
+				return tEntry.first;
+			iAccum += tEntry.second;
+		}
+
+		return std::prev ( m_dMap.end() )->first;
 	}
 };
 

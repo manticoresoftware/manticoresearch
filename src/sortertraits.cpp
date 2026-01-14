@@ -360,6 +360,7 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 			break;
 		case SPH_AGGR_MAD:
 			m_dAggregates.Add ( CreateAggrMad ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
 			break;
 
 		default: assert ( 0 && "internal error: unhandled aggregate function" );

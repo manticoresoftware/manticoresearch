@@ -1,4 +1,0 @@
----
-alwaysApply: true
----
-For C++ code changes, avoid adding new pointer parameters or nullable arguments when the caller already has a valid object. Prefer passing by reference instead of using pointers with default nullptr values. Do not redesign function signatures based on hypothetical future needs—keep them minimal, clear, and required only for the current use.

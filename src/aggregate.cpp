@@ -14,7 +14,9 @@
 
 #include "schema/columninfo.h"
 #include "std/tdigest.h"
+#include "sphinxutils.h"
 
+#include <atomic>
 #include <cmath>
 #include <cstring>
 
@@ -123,17 +125,24 @@ protected:
 	CSphAttrLocator	m_tLocator;
 	ESphAttr		m_eValueType;
 	double			m_fCompression;
+	CSphString		m_sName;
 
 	explicit AggrTDigestBase_c ( const CSphColumnInfo & tAttr )
 		: m_tLocator ( tAttr.m_tLocator )
 		, m_eValueType ( tAttr.m_eAggrInputType!=SPH_ATTR_NONE ? tAttr.m_eAggrInputType : tAttr.m_eAttrType )
 		, m_fCompression ( tAttr.m_fTdigestCompression ? tAttr.m_fTdigestCompression : 200.0 )
+		, m_sName ( tAttr.m_sName )
 	{
 	}
 
 	void AppendValue ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
 	{
 		double fVal = FetchNumericAttr ( tMatch, m_tLocator, m_eValueType );
+		static std::atomic<int> s_iDebugLogged { 0 };
+		int iPrev = s_iDebugLogged.load ( std::memory_order_relaxed );
+		if ( iPrev<10 && s_iDebugLogged.compare_exchange_strong ( iPrev, iPrev+1, std::memory_order_relaxed ) )
+			sphWarning ( "TDIGEST append value: %.6f type=%d locatorBits=%d dyn=%d attr=%s",
+				fVal, (int)m_eValueType, m_tLocator.m_iBitCount, (int)m_tLocator.m_bDynamic, m_sName.cstr() );
 		tDigest.Add ( fVal );
 	}
 

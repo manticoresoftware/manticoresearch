@@ -710,9 +710,19 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, nullptr, false ) )
 				YYERROR;
 		}
+	| TOK_KNN '(' ident ',' '(' const_list ')' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $6, nullptr, false ) )
+				YYERROR;
+		}
 	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->SetKNN ( $3, $5, $7, nullptr, true ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, nullptr, true ) )
 				YYERROR;
 		}
 	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
@@ -720,9 +730,19 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, &( pParser->GetNamedVec ( $12.GetValueInt() ) ), false ) )
 				YYERROR;
 		}
+	| TOK_KNN '(' ident ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $6, &( pParser->GetNamedVec ( $10.GetValueInt() ) ), false ) )
+				YYERROR;
+		}
 	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
 		{
 			if ( !pParser->SetKNN ( $3, $5, $7, &( pParser->GetNamedVec ( $10.GetValueInt() ) ), true ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, &( pParser->GetNamedVec ( $8.GetValueInt() ) ), true ) )
 				YYERROR;
 		}
 	;
@@ -765,6 +785,7 @@ filter_expr:
 	filter_item							{ pParser->SetOp ( $$ ); }
 	| filter_expr TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $3 ); }
 	| filter_expr TOK_OR filter_expr	{ pParser->FilterOr ( $$, $1, $3 ); }
+	| TOK_NOT filter_expr				{ pParser->FilterNot ( $$, $2 ); }
 	| '(' filter_expr ')'				{ pParser->FilterGroup ( $$, $2 ); }
 	;
 

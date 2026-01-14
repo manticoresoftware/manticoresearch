@@ -41,9 +41,6 @@ mysql -h0 -P3306 -e "JOIN CLUSTER test at '127.0.0.1:1312' 'test' as path"; echo
 ––– output –––
 0
 ––– input –––
-sleep 2
-––– output –––
-––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE tbl1 (id bigint, attr1 int)"; echo $?
 ––– output –––
 0

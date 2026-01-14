@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -293,6 +293,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
+	bool	AddKNNRescoreColumn();
 	bool	AddJoinAttrs();
 	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
@@ -1278,6 +1279,10 @@ bool QueueCreator_c::AddColumnarAttributeExpressions()
 		tItem.m_sExpr = tItem.m_sAlias = tAttr.m_sName;
 		if ( !ParseQueryItem ( tItem ) )
 			return false;
+
+		// copy knn settings
+		pSorterAttr = m_pSorterSchema->GetAttr ( tAttr.m_sName.cstr() );
+		const_cast<CSphColumnInfo *>(pSorterAttr)->m_tKNN = tAttr.m_tKNN;
 	}
 
 	return true;
@@ -1543,13 +1548,27 @@ bool QueueCreator_c::AddKNNDistColumn()
 	m_pSorterSchema->AddAttr ( tKNNDist, true );
 	m_hQueryColumns.Add ( tKNNDist.m_sName );
 
+	return true;
+}
+
+
+bool QueueCreator_c::AddKNNRescoreColumn()
+{
+	const auto & tKNN = m_tQuery.m_tKnnSettings;
+	if ( tKNN.m_sAttr.IsEmpty() )
+		return true;
+
+	if ( !tKNN.m_bRescore )
+		return true;
+
+	auto pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
 	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
 	tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
 
 	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
 	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
-
 
 	return true;
 }
@@ -2314,8 +2333,9 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 	const auto & tKNN = m_tQuery.m_tKnnSettings;
 	if ( !tKNN.m_sAttr.IsEmpty() && tKNN.m_fOversampling > 1.0f )
 	{
-		int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
-		return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
+		int64_t iRequested = tKNN.GetRequestedDocs();
+		if ( !tKNN.m_sAttr.IsEmpty() && iRequested > tKNN.m_iK )
+			return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
 	}
 
 	if ( m_tQuery.m_bExplicitMaxMatches || m_tQuery.m_bHasOuter || !m_tSettings.m_bComputeItems )
@@ -2435,7 +2455,8 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates()
-		&& AddNullBitmask();
+		&& AddNullBitmask()
+		&& AddKNNRescoreColumn();
 }
 
 bool QueueCreator_c::SetupGroupQueue ()
@@ -2451,29 +2472,71 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 	if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead )
 		return true;
 
-	// check for columnar attributes that have FINAL eval stage
-	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
-	CSphVector<int> dStoredColumnar;
 	auto & tSchema = *m_pSorterSchema;
+
+	// early-out if nothing to process
+	bool bFound = false;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tSchema.GetAttr(i);
 		bool bStored = false;
 		bool bColumnar = tAttr.m_pExpr && tAttr.m_pExpr->IsColumnar(&bStored);
 		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
-			dStoredColumnar.Add(i);
+		{
+			bFound = true;
+			break;
+		}
 	}
 
-	if ( dStoredColumnar.GetLength()<=1 )
+	if ( !bFound )
 		return true;
 
-	for ( auto i : dStoredColumnar )
+	// check for columnar attributes that have FINAL eval stage
+	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
+	IntVec_t dStoredColumnarFinal, dStoredColumnarPostlimit;
+	AttrDependencyMap_c tDepMap(tSchema);
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
-		auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bStored = false;
+		bool bColumnar = tAttr.m_pExpr && tAttr.m_pExpr->IsColumnar(&bStored);
+		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
+		{
+			// we need docids at the final stage if we want to fetch from docstore. so they must be evaluated before that
+			if ( tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
+				dStoredColumnarPostlimit.Add(i);
+			else
+				dStoredColumnarFinal.Add(i);
+		}
+	}
 
-		CSphString sColumnarAttrName;
-		tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
-		tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType );
+	const int MIN_FINAL_THRESH = 2;
+	if ( dStoredColumnarFinal.GetLength()>MIN_FINAL_THRESH )
+		for ( auto i : dStoredColumnarFinal )
+		{
+			auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
+
+			CSphString sColumnarAttrName;
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
+			tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType, false );
+		}
+
+	// fixme! benchmark and maybe remove the >1 condition
+	const int MIN_POSTLIMIT_THRESH = 1;
+	bool bDirectQueue = m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer;
+	if ( dStoredColumnarPostlimit.GetLength()>MIN_POSTLIMIT_THRESH && !bDirectQueue )
+	{
+		for ( auto i : dStoredColumnarPostlimit )
+		{
+			auto & tAttr = const_cast<CSphColumnInfo&>( tSchema.GetAttr(i) );
+
+			CSphString sColumnarAttrName;
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarAttrName );
+			tAttr.m_pExpr = CreateExpr_GetStoredAttr ( sColumnarAttrName, tAttr.m_eAttrType, true );
+			tAttr.m_eStage = SPH_EVAL_POSTLIMIT;
+		}
+
+		m_bExprsNeedDocids = true;
 	}
 
 	return true;

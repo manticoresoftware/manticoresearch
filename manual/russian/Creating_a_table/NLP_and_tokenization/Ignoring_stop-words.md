@@ -1,12 +1,12 @@
 # Игнорирование стоп-слов
 
-Стоп-слова — это слова, которые игнорируются при индексировании и поиске, обычно из-за их высокой частоты и низкой значимости для результатов поиска.
+Стоп-слова — это слова, которые игнорируются при индексации и поиске, обычно из-за их высокой частоты и низкой ценности для результатов поиска.
 
-Manticore Search по умолчанию применяет [стемминг](../../Creating_a_table/NLP_and_tokenization/Morphology.md) к стоп-словам, что может приводить к нежелательным результатам, но это можно отключить с помощью параметра [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
+Manticore Search по умолчанию применяет [стемминг](../../Creating_a_table/NLP_and_tokenization/Morphology.md) к стоп-словам, что может привести к нежелательным результатам, но это можно отключить с помощью параметра [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
 
-Небольшие файлы стоп-слов хранятся в заголовке таблицы, и существует ограничение на размер файлов, которые могут быть встроены, определяемое опцией [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit).
+Небольшие файлы стоп-слов хранятся в заголовке таблицы, и существует ограничение на размер файлов, которые могут быть встроены, как определено опцией [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit).
 
-Стоп-слова не индексируются, но они влияют на позиции ключевых слов. Например, если "the" является стоп-словом, и документ 1 содержит фразу "in office", а документ 2 — фразу "in the office", поиск точной фразы "in office" вернёт только первый документ, даже несмотря на то, что "the" пропускается как стоп-слово во втором документе. Это поведение можно изменить с помощью директивы [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step).
+Стоп-слова не индексируются, но они влияют на позиции ключевых слов. Например, если "the" является стоп-словом, и документ 1 содержит фразу "in office", а документ 2 содержит фразу "in the office", поиск точной фразы "in office" вернет только первый документ, даже несмотря на то, что "the" пропускается как стоп-слово во втором документе. Это поведение можно изменить с помощью директивы [stopword_step](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step).
 
 ## stopwords
 
@@ -15,11 +15,13 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 ```
 
 <!-- example stopwords -->
-Параметр stopwords является необязательным и по умолчанию пуст. Он позволяет указать путь к одному или нескольким файлам стоп-слов, разделённым пробелами. Все файлы будут загружены. В режиме реального времени разрешены только абсолютные пути.
+Параметр stopwords является необязательным и по умолчанию пустым. Он позволяет указать путь к одному или нескольким файлам стоп-слов, разделенным пробелами. Все файлы будут загружены. В режиме реального времени разрешены только абсолютные пути.
 
-Формат файла стоп-слов — простой текст с кодировкой UTF-8. Данные файла будут токенизироваться с учётом настроек [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), поэтому можно использовать те же разделители, что и в индексируемых данных.
+Формат файла стоп-слов — простой текстовый с кодировкой UTF-8. Данные файла будут токенизированы с учетом настроек [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), поэтому вы можете использовать те же разделители, что и в индексируемых данных.
 
-Файлы стоп-слов можно создавать вручную или полуавтоматически. [Индексатор](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) предоставляет режим, который создаёт частотный словарь таблицы, отсортированный по частоте ключевых слов. Верхние ключевые слова из этого словаря обычно можно использовать как стоп-слова. Подробнее см. переключатели [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) и [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments). Верхние ключевые слова из этого словаря обычно можно использовать как стоп-слова.
+Когда активна индексация [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), стоп-слова, состоящие из символов, подпадающих под [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars), сами токенизируются на N-граммы. Таким образом, каждая отдельная N-грамма становится отдельным стоп-словом. Например, при `ngram_len=1` и подходящих `ngram_chars` стоп-слово `test` будет интерпретировано как `t`, `e`, `s`, `t` — четыре различных стоп-слова.
+
+Файлы стоп-слов можно создавать вручную или полуавтоматически. [Индексатор](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) предоставляет режим, который создает частотный словарь таблицы, отсортированный по частоте ключевых слов. Верхние ключевые слова из этого словаря обычно можно использовать как стоп-слова. Подробнее см. переключатели [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) и [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments). Верхние ключевые слова из этого словаря обычно можно использовать как стоп-слова.
 
 
 <!-- intro -->
@@ -115,61 +117,61 @@ table products {
 ```
 <!-- end -->
 
-В качестве альтернативы можно использовать один из стандартных файлов стоп-слов, поставляемых с Manticore. В настоящее время доступны стоп-слова для 50 языков. Вот полный список их псевдонимов:
+В качестве альтернативы вы можете использовать один из стандартных файлов стоп-слов, поставляемых с Manticore. В настоящее время доступны стоп-слова для 50 языков. Вот полный список их псевдонимов:
 
-* af - африкаанс
-* ar - арабский
-* bg - болгарский
-* bn - бенгальский
-* ca - каталанский
-* ckb - курдский
-* cz - чешский
-* da - датский
-* de - немецкий
-* el - греческий
-* en - английский
-* eo - эсперанто
-* es - испанский
-* et - эстонский
-* eu - баскский
-* fa - персидский
-* fi - финский
-* fr - французский
-* ga - ирландский
-* gl - галисийский
-* hi - хинди
-* he - иврит
-* hr - хорватский
-* hu - венгерский
-* hy - армянский
-* id - индонезийский
-* it - итальянский
-* ja - японский
-* ko - корейский
-* la - латинский
-* lt - литовский
-* lv - латышский
-* mr - маратхи
-* nl - нидерландский
-* no - норвежский
-* pl - польский
-* pt - португальский
-* ro - румынский
-* ru - русский
-* sk - словацкий
-* sl - словенский
-* so - сомалийский
-* st - сото
-* sv - шведский
-* sw - суахили
-* th - тайский
-* tr - турецкий
-* yo - йоруба
-* zh - китайский
-* zu - зулу
+* af - Африкаанс
+* ar - Арабский
+* bg - Болгарский
+* bn - Бенгальский
+* ca - Каталанский
+* ckb- Курдский
+* cz - Чешский
+* da - Датский
+* de - Немецкий
+* el - Греческий
+* en - Английский
+* eo - Эсперанто
+* es - Испанский
+* et - Эстонский
+* eu - Баскский
+* fa - Персидский
+* fi - Финский
+* fr - Французский
+* ga - Ирландский
+* gl - Галисийский
+* hi - Хинди
+* he - Иврит
+* hr - Хорватский
+* hu - Венгерский
+* hy - Армянский
+* id - Индонезийский
+* it - Итальянский
+* ja - Японский
+* ko - Корейский
+* la - Латинский
+* lt - Литовский
+* lv - Латышский
+* mr - Маратхи
+* nl - Нидерландский
+* no - Норвежский
+* pl - Польский
+* pt - Португальский
+* ro - Румынский
+* ru - Русский
+* sk - Словацкий
+* sl - Словенский
+* so - Сомали
+* st - Сесото
+* sv - Шведский
+* sw - Суахили
+* th - Тайский
+* tr - Турецкий
+* yo - Йоруба
+* zh - Китайский
+* zu - Зулу
 
 <!-- example stopwords 1 -->
-Например, чтобы использовать стоп-слова для итальянского языка, просто добавьте следующую строку в ваш конфигурационный файл:
+Например, чтобы использовать стоп-слова для итальянского языка, просто добавьте следующую строку в конфигурационный файл:
 
 
 <!-- intro -->
@@ -265,7 +267,7 @@ table products {
 <!-- end -->
 
 <!-- example stopwords 2 -->
-Если необходимо использовать стоп-слова для нескольких языков, перечислите все их псевдонимы, разделённые запятыми (в режиме RT) или пробелами (в обычном режиме):
+Если вам нужно использовать стоп-слова для нескольких языков, вы должны перечислить все их псевдонимы, разделенные запятыми (режим RT) или пробелами (обычный режим):
 
 
 <!-- intro -->
@@ -367,7 +369,7 @@ stopword_step={0|1}
 ```
 
 <!-- example stopword_step -->
-Параметр position_increment в [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) является необязательным, допустимые значения — 0 и 1, по умолчанию 1.
+Параметр position_increment для [стоп-слов](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) является необязательным, допустимые значения — 0 и 1, по умолчанию используется 1.
 
 
 <!-- intro -->
@@ -471,11 +473,11 @@ stopwords_unstemmed={0|1}
 ```
 
 <!-- example stopwords_unstemmed -->
-Whether to apply stop words before or after stemming. Optional, default is 0 (apply stop word filter after stemming).
+Определяет, применять ли стоп-слова до или после стемминга. Необязательный параметр, по умолчанию равен 0 (применять фильтр стоп-слов после стемминга).
 
-By default, stop words are stemmed themselves, and then applied to tokens *after* stemming (or any other morphology processing). This means that a token is stopped when stem(token) is equal to stem(stopword). This default behavior can lead to unexpected results when a token is erroneously stemmed to a stopped root. For example, "Andes" might get stemmed to "and", so when "and" is a stopword, "Andes" is also skipped.
+По умолчанию стоп-слова сами подвергаются стеммингу, а затем применяются к токенам *после* стемминга (или любой другой морфологической обработки). Это означает, что токен отбрасывается, когда stem(токен) равен stem(стоп-слово). Такое поведение по умолчанию может привести к неожиданным результатам, если токен ошибочно сводится к стоп-корню. Например, "Andes" может быть приведено к "and", поэтому, когда "and" является стоп-словом, "Andes" также пропускается.
 
-However, you can change this behavior by enabling the `stopwords_unstemmed` directive. When this is enabled, stop words are applied before stemming (and therefore to the original word forms), and the tokens are skipped when the token is equal to the stopword.
+Однако вы можете изменить это поведение, включив директиву `stopwords_unstemmed`. Когда она включена, стоп-слова применяются до стемминга (и, следовательно, к исходным формам слов), и токены пропускаются, когда токен равен стоп-слову.
 
 <!-- intro -->
 ##### SQL:

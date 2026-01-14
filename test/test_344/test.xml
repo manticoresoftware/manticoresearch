@@ -29,6 +29,19 @@ index dist
 	type	= distributed
 	agent	= <my_address/>:test_rt
 }
+
+index test_t
+{
+	type = template
+	min_word_len = 2
+}
+
+index dist_t
+{
+	type	= distributed
+	agent	= <my_address/>:test_t
+}
+
 </config>
 
 <httpqueries>
@@ -85,6 +98,25 @@ index dist
 </query>
 
 <query endpoint="json/search">{ "table": "dist", "query": { "match_all": {} } } }</query>
+
+<!-- error from the agent for HTTP update and delete -->
+<query endpoint="json/delete">
+{
+	"table":"dist_t",
+	"id":1
+}
+</query>
+
+<query endpoint="json/update">
+{
+	"table":"dist",
+	"doc":
+	{
+	    "missed_attr" : 200
+	}
+}
+</query>
+
 
 </httpqueries>
 

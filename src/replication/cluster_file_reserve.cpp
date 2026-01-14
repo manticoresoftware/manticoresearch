@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -308,8 +308,13 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 	tRes.m_tmTimeoutFile = tmTimeoutFile / 1000;
 	tRes.m_tmTimeout = ( sphMicroTimer() - tmStartReserve ) / 1000;
 
-	assert ( !RecvState::HasState ( DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex ) ) );
-	RecvState::GetState ( DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex ) ).SetMerge ( *tCmd.m_pChunks, tRes, sLocalIndexPath, dLocalPaths );
+	uint64_t uKey = DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex );
+	if ( RecvState::HasState ( uKey ) )
+	{
+		sphLogDebugRpl ( "ClusterFileReserve: stale state for %s %s, resetting", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
+		RecvState::Free ( uKey );
+	}
+	RecvState::GetState ( uKey ).SetMerge ( *tCmd.m_pChunks, tRes, sLocalIndexPath, dLocalPaths );
 	return true;
 }
 

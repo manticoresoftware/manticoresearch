@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -849,9 +849,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	bool bHttpEndpoint = true;
-	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL )
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI_JSON )
 	{
-		bHttpEndpoint = false;
+		bHttpEndpoint = ( tRes.m_eEndpoint!=EHTTP_ENDPOINT::SQL );
 
 		// sql parser put \0 at error position at the reference string
 		// should use raw_query for buddy request
@@ -917,7 +917,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	dResult.Resize ( 0 );
 
 	HttpReplyTrait_t tReplyBuf { eHttpStatus, sDump };
-	tReplyBuf.m_bHtml = bNeedHttpResponse;
+	tReplyBuf.m_bSendHeaders = bNeedHttpResponse;
 	tReplyBuf.m_sContentType = tReplyParsed.m_sContentType.cstr();
 	ReplyBuf ( tReplyBuf, dResult );
 

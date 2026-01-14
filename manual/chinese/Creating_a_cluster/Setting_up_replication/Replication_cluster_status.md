@@ -2,39 +2,39 @@
 
 <!-- example Example -->
 
-您可以通过检查节点状态来查看集群状态信息。这可以使用[节点状态](../../Node_info_and_management/Node_status.md)命令完成，该命令显示有关节点的各种信息，包括集群状态变量。
+您可以通过检查节点状态来查看集群状态信息。可以使用[节点状态](../../Node_info_and_management/Node_status.md)命令来完成，此命令显示关于节点的各种信息，包括集群状态变量。
 
-集群状态变量的输出格式如下：`cluster_name_variable_name` `variable_value`。大多数变量在[Galera 文档状态变量](https://galeracluster.com/library/documentation/galera-status-variables.html)中有描述。除了这些变量外，Manticore Search 还显示：
+集群状态变量的输出格式如下：`cluster_name_variable_name` `variable_value`。大多数变量已在[Galera 文档状态变量](https://galeracluster.com/library/documentation/galera-status-variables.html)中进行了描述。除了这些变量外，Manticore Search 还显示：
 
-* `cluster_name` - 集群的名称，如[复制设置](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)中定义
-* `node_state` - 节点的当前状态：`closed`，`destroyed`，`joining`，`donor`，`synced`
+* `cluster_name` - 集群名称，定义于[复制设置](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)
+* `node_state` - 节点当前状态：`closed`、`destroyed`、`joining`、`donor`、`synced`
 * `indexes_count` - 集群管理的表的数量
 * `indexes` - 集群管理的表名列表
-* `nodes_set` - 使用 `CREATE`、`JOIN` 或 `ALTER UPDATE` 命令定义的集群节点列表
-* `nodes_view` - 当前节点可见的集群实际节点列表。
-* `state_uuid` - 集群的 UUID 状态。如果它与 local_state_uuid 中的值匹配，则本地和集群节点同步。
-* `conf_id` - 集群成员变更的总次数。
-* `status` - 集群组件状态。可能的值为 primary（主组配置，存在法定人数）、non_primary（非主组配置，失去法定人数）或 disconnected（未连接到组，正在重试）。
-* `size` - 当前集群中的节点数。
-* `local_index` - 节点在集群中的索引。
-* `last_error` - 与集群操作相关的最后记录的错误消息。该消息提供问题的高级摘要。有关更详细的上下文，应查阅 `searchd.log` 文件。
+* `nodes_set` - 使用 `CREATE`、`JOIN` 或 `ALTER UPDATE` 命令定义的集群中的节点列表
+* `nodes_view` - 当前节点可见的集群实际节点列表
+* `state_uuid` - 集群的 UUID 状态。如果它与 local_state_uuid 的值匹配，则本地和集群节点同步
+* `conf_id` - 发生的集群成员变更总数
+* `status` - 集群组件状态。可能的值为 primary（主组配置，有法定人数）、non_primary（非主组配置，失去法定人数）或 disconnected（未连接到组，正在重试）
+* `size` - 当前集群中的节点数量
+* `local_index` - 节点在集群中的索引
+* `last_error` - 与集群操作相关的最后一条记录错误消息。消息提供问题的高级摘要。有关更详细的上下文，您应查看 `searchd.log` 文件。
 
 ### SST 进度指标
 
-在状态快照传输（SST）期间，节点通过传输完整数据副本来为另一个节点提供数据。当新节点加入集群 [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) 或添加新表 [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster) 时会发生此情况。在 SST 活动期间，以下额外的状态变量将在捐赠节点和加入节点上可用，其进度保持同步。
+在状态快照传输（SST）期间，一个节点通过传输完整数据副本为另一个节点提供资源。当新节点加入集群[JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md)或添加新表[ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster)时，会发生此操作。当 SST 正在进行时，以下额外的状态变量会在供体和加入节点上可用，其进度保持同步。
 
-* `cluster_name_sst_total` - 整个 SST 操作的总体进度，范围从 0 到 100。这是主要的计数器。
-* `cluster_name_sst_stage` - 当前工作阶段的名称。该过程为每个传输的表循环经过以下阶段：
+* `cluster_name_sst_total` - 整个 SST 操作的总体进度，从 0 到 100。是主要的计数器。
+* `cluster_name_sst_stage` - 当前工作阶段的名称。此过程为每个传输的表循环经过以下阶段：
     * `await nodes sync`
     * `block checksum calculate`
     * `analyze remote`
     * `send files`
     * `activate tables`
-* `cluster_name_sst_stage_total` - 当前阶段的进度，范围从 0 到 100。
+* `cluster_name_sst_stage_total` - 当前阶段的进度，从 0 到 100。
 * `cluster_name_sst_tables` - SST 中传输的表的总数。
 * `cluster_name_sst_table` - 当前处理的表的名称和索引（例如，`3 (products)`）。
 
-对于大多数用例，`cluster_name_sst_total` 就足够了。然而，其他计数器对于调查特定 SST 阶段或特定表上的停滞或性能问题非常有用。
+对于大多数用例，`cluster_name_sst_total` 就足够了。但其他计数器在调查特定 SST 阶段或特定表的停顿或性能问题时非常有用。
 
 <!-- intro -->
 ##### SQL:

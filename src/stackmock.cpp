@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -123,7 +123,8 @@ public:
 						break;
 				}
 			}
-			if ( uPreviousStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			const int iRestStack = m_dMockStack.GetLengthBytes() - uPreviousStack;
+			if ( iDelta >= iRestStack )
 				break;
 		}
 

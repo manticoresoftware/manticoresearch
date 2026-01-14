@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 #include "cluster_file_reserve.h"
 #include "cluster_file_send.h"
 #include "cluster_index_add_local.h"
+#include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
 
 #include <cmath>
@@ -190,6 +191,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 
 	CSphVector<RemoteFileState_t> dSendStates;
 	CSphVector<const AgentDesc_t*> dActivateIndexes;
+	bool bNodesMatchedActive = true;
 
 	// collect remote file states and make list nodes and files to send
 	auto & sErr = TlsMsg::Err ();
@@ -200,6 +202,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		const CSphBitvec & tFilesDstMask = tRes.m_dNodeChunksMask;
 		if ( tSigSrc.m_dBaseNames.GetULength() != tRes.m_dRemotePaths.GetULength() && tSigSrc.m_dHashes.GetULength() != tFilesDstMask.GetSize() )
 		{
+			bNodesMatchedActive = false;
 			sErr.Sprintf ( "'%s:%d' wrong stored files %d (expected %d), hashes %d (expected %d)",
 					dNodes[iNode]->m_tDesc.m_sAddr.cstr (), dNodes[iNode]->m_tDesc.m_iPort,
 					tRes.m_dRemotePaths.GetLength(), tSigSrc.m_dBaseNames.GetLength (),
@@ -214,8 +217,9 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		for ( int iFile = 0; bFilesMatched && iFile < tSigSrc.m_dBaseNames.GetLength(); ++iFile )
 			bFilesMatched &= tFilesDstMask.BitGet ( iFile );
 
-		if ( bFilesMatched && tRes.m_bIndexActive )
-			continue;
+		// files do not match or index not active - send files/activate
+		if ( !bFilesMatched || !tRes.m_bIndexActive )
+			bNodesMatchedActive = false;
 
 		RemoteFileState_t tRemoteState;
 		tRemoteState.m_pAgentDesc = &dDesc[iNode];
@@ -226,7 +230,10 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 		if ( !bFilesMatched )
 			dSendStates.Add ( tRemoteState );
 
-		// after file send need also to re-activate index with new files
+		// always add node to dActivateIndexes if FILE_RESERVE succeeded even if files match and index is active
+		// required to send INDEX_ADD_LOCAL to free RecvState that was created by FILE_RESERVE
+
+		// after file send need also to re-activate index with new files (or just free RecvState if files matched)
 		dActivateIndexes.Add ( &dDesc[iNode] );
 	}
 	sErr.FinishBlock ();
@@ -246,7 +253,29 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	// allow index local write operations passed without replicator
 	tIndexSaveGuard.EnableSave ();
 
-	return ActivateIndexOnRemotes ( sCluster, sIndex, sUser, eType, bSendOk, dActivateIndexes, tmLongOpTimeout, tProgress ) && bSendOk;
+	// all nodes have files matched and index already active send cleanup command
+	if ( bNodesMatchedActive && dSendStates.IsEmpty() )
+	{
+		RecvStateCleanupRequest_t tCleanup;
+		tCleanup.m_sCluster = sCluster;
+		tCleanup.m_sIndex = sIndex;
+
+		VecAgentDesc_t dCleanupDesc;
+		dCleanupDesc.Reserve ( dActivateIndexes.GetLength() );
+		for ( const AgentDesc_t* pDesc : dActivateIndexes )
+			dCleanupDesc.Add ( *pDesc );
+
+		int64_t tmTimeout = ReplicationTimeoutQuery();
+		auto dCleanupNodes = ClusterRecvStateCleanup_c::MakeAgents ( dCleanupDesc, sUser, tmTimeout, tCleanup );
+		assert ( dCleanupDesc.GetLength() == dCleanupNodes.GetLength() );
+
+		ClusterRecvStateCleanup_c tReq;
+		bool bCleanupOk = PerformRemoteTasksWrap ( dCleanupNodes, tReq, tReq, true );
+		return bCleanupOk;
+	}
+
+	bool bActivateOk = ActivateIndexOnRemotes ( sCluster, sIndex, sUser, eType, bSendOk, dActivateIndexes, tmLongOpTimeout, tProgress ) && bSendOk;
+	return bActivateOk && bSendOk;
 }
 
 struct DistIndexSendRequest_t : public ClusterRequest_t

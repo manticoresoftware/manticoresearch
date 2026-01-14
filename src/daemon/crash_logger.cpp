@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -211,6 +211,21 @@ void HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
 LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !_WIN32
 {
+
+#if _WIN32
+	if ( pExc && pExc->ExceptionRecord )
+	{
+		switch ( pExc->ExceptionRecord->ExceptionCode )
+		{
+			case DBG_CONTROL_C:
+			case 0x406D1388: // MS_VC_EXCEPTION
+			case 0x40010006: // DBG_PRINTEXCEPTION_C
+			case 0xE06D7363: // C++ exception
+				CRASH_EXIT_CORE;
+		}
+	}
+#endif // _WIN32
+
 	sphSetDied();
 	auto iLogFile = GetDaemonLogFD();
 	if ( iLogFile < 0 )

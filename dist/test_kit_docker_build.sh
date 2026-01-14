@@ -212,6 +212,8 @@ docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
 
+docker exec manticore-test-kit bash -c "rm -rf /tmp/*"
+
 echo "Exporting image to ../manticore_test_kit.img"
 
 # exporting the image, it also squashes all the layers into one

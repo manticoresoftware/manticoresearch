@@ -1,18 +1,18 @@
-# 结果分组搜索
+# 分组搜索结果
 
 <!-- example general -->
-结果分组搜索通常有助于获取每个分组的匹配计数或其他聚合信息。例如，它对生成按月份显示匹配博客文章数量的图表有用，或者将网页搜索结果按网站分组，论坛帖子按作者分组等。
+分组搜索结果通常有助于获取每个组的匹配计数或其他聚合。例如，它对于创建一个图表来说明每个月匹配的博客文章数量或按站点分组网页搜索结果或按作者分组论坛帖子等非常有用。
 
-Manticore 支持按单列或多列以及计算表达式进行搜索结果分组。结果可以：
+Manticore 支持按单个或多个列和计算表达式对搜索结果进行分组。结果可以：
 
-* 在分组内排序
-* 每个分组返回多行
-* 对分组进行筛选
-* 对分组进行排序
+* 在组内排序
+* 每个组返回多于一行
+* 过滤组
+* 对组进行排序
 * 使用[聚合函数](../Searching/Grouping.md#Aggregation-functions)进行聚合
 
 <!-- intro -->
-通用语法为：
+一般的语法是：
 
 <!-- request SQL -->
 通用语法
@@ -29,7 +29,7 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 <!-- request JSON -->
-JSON 查询格式目前支持基本分组，可以检索聚合值及其 count(*)。
+JSON 查询格式目前支持基本的分组，可以检索聚合值及其 count(*)。
 
 ```json
 {
@@ -46,22 +46,22 @@ JSON 查询格式目前支持基本分组，可以检索聚合值及其 count(*)
 }
 ```
 
-标准查询输出返回未分组的结果集，可以使用 `limit` (或 `size`) 隐藏。
-聚合操作需要设置分组结果集的 `size`。
+标准查询输出返回未分组的结果集，可以使用 `limit`（或 `size`）隐藏。
+聚合需要为组的结果集大小设置 `size`。
 
 <!-- end -->
 
 <!-- example group1 -->
-### 仅进行分组
-分组非常简单，只需在 `SELECT` 查询结尾添加 "GROUP BY smth" 。这里的 "something" 可以是：
+### 只分组
+分组非常简单 - 只需在 `SELECT` 查询的末尾添加 "GROUP BY smth"。smth 可以是：
 
-* 表中的任何非全文字段：整数、浮点数、字符串、多值属性 (MVA)
-* 或者，如果您在 `SELECT` 列表中使用了别名，也可以按别名进行分组
+* 表中的任何非全文字段：整数、浮点数、字符串、MVA（多值属性）
+* 或者如果你在 `SELECT` 列表中使用了别名，你也可以按它分组
 
-您可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#Aggregation-functions)，依然有效：
+在 `SELECT` 列表中可以省略任何 [聚合函数](../Searching/Grouping.md#Aggregation-functions)，它仍然会工作：
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL -->
 ```sql
@@ -81,15 +81,15 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- end -->
 <!-- example group2 -->
-然而，大多数情况下，您可能想要获取每个分组的一些聚合数据，例如：
+然而，在大多数情况下，你可能希望为每个组获取一些聚合数据，例如：
 
-* `COUNT(*)` 用于简单获取每个分组中的元素数量
-* 或者 `AVG(field)` 用于计算组内某字段的平均值
+* `COUNT(*)` 以简单地获取每个组中的元素数量
+* 或 `AVG(field)` 计算组内字段的平均值
 
-对于 HTTP JSON 请求，在主查询级别使用带有 `limit=0` 的单个 `aggs` 桶，效果类似于带有 `GROUP BY` 和 `COUNT(*)` 的 SQL 查询，具有等效的行为和性能。
+对于 HTTP JSON 请求，使用主查询级别的单个 `aggs` 桶并设置 `limit=0` 与 SQL 查询中的 `GROUP BY` 和 `COUNT(*)` 具有类似的行为和性能。
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL1 -->
 ```sql
@@ -501,11 +501,11 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 <!-- example sort1 -->
-##### 对分组排序
-默认情况下，分组不排序，通常您接下来想做的就是按某些内容排序，比如按您分组的字段：
+#### 按组排序
+默认情况下，组不会排序，通常接下来要做的就是按某些内容对他们进行排序，比如你正在分组的字段：
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL -->
 ```sql
@@ -525,14 +525,14 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 ```
 <!-- end -->
 <!-- example sort2 -->
-另一种方式是按聚合排序：
+或者，你可以按聚合进行排序：
 
-* 按 `count(*)` 显示元素最多的分组优先
-* 按 `avg(rental_rate)` 显示评分最高的电影优先。示例中通过别名实现：`avg(rental_rate)` 先映射为 `avg` 在 `SELECT` 列表中，然后直接使用 `ORDER BY avg`
+* 按 `count(*)` 显示具有最多元素的组首先
+* 按 `avg(rental_rate)` 展示评分最高的电影首先。注意，在示例中，它是通过别名完成的：`avg(rental_rate)` 首先映射到 `avg` 在 `SELECT` 列表中，然后我们只需做 `ORDER BY avg`
 
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL1 -->
 ```sql
@@ -570,11 +570,11 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 <!-- end -->
 
 <!-- example group3 -->
-##### 同时按多个字段分组
-有时，您可能想不仅按单字段分组，而是同时按多个字段，比如电影的类别和年份：
+#### 同时按多个字段分组
+在某些情况下，你可能不仅想按单个字段分组，还想同时按多个字段分组，例如电影的类别和年份：
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL -->
 ```sql
@@ -687,11 +687,11 @@ POST /search -d '
 <!-- end -->
 
 <!-- example group4 -->
-##### 返回每组 N 行
-有时您想看到每个分组的不止一个元素。使用 `GROUP N BY` 可以轻松实现。例如，下面的例子显示每年两部电影，而不是简单 `GROUP BY release_year` 只返回一部电影。
+#### 给我 N 行
+有时查看每个组的不止一行是有用的。这可以通过 `GROUP N BY` 辅助轻松实现。例如，在以下情况下，我们将为每一年获取两部电影而不是只有一部，而简单的 `GROUP BY release_year` 将返回。
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL -->
 ```sql
@@ -713,17 +713,17 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 <!-- end -->
 
 <!-- example group5 -->
-##### 分组内排序
-另一个重要的分析需求是对组内元素排序。实现方式是使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，获取每年评分最高的电影。注意它和普通的 `ORDER BY` 是并行工作的：
+#### 组内的排序
+另一个关键的分析需求是在组内对元素进行排序。要实现这一点，请使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，让我们获取每一年评分最高的电影。请注意，它与仅 `ORDER BY` 并行工作：
 
-* `WITHIN GROUP ORDER BY` 排序**组内的结果**
-* 而普通的 `GROUP BY` 排序**分组本身**
+* `WITHIN GROUP ORDER BY` 对组内的结果进行排序
+* 而仅 `GROUP BY` 对组本身进行排序
 
-这两者相互独立地工作。
+这两个完全独立地工作。
 
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL -->
 ```sql
@@ -744,11 +744,11 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 <!-- end -->
 
 <!-- example group6 -->
-##### 筛选分组
-`HAVING expression` 是用来筛选分组的有用子句。`WHERE` 在分组前应用，而 `HAVING` 是针对分组进行过滤。例如，保留那些该年电影平均租金价格超过 3 的年份。结果只得到四个年份：
+#### 过滤组
+`HAVING expression` 是一个有用的子句，用于过滤组。虽然 `WHERE` 在分组之前应用，但 `HAVING` 作用于组。例如，让我们保留那些当年电影平均租赁价格高于 3 的年份。我们只得到四个年份：
 
 <!-- intro -->
-##### 示例：
+#### 示例：
 
 <!-- request SQL -->
 ```sql
@@ -767,15 +767,15 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
-**注意：** [搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的`total_found`值反映了符合`HAVING`条件的分组数量。这使得在使用`HAVING`子句和`GROUP BY`时能够实现正确的分页。
+**注意：** 在 [搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META) 中，`total_found` 值反映了满足 `HAVING` 条件的组的数量。当使用 `HAVING` 子句与 `GROUP BY` 结合时，这使得分页更加准确。
 
 <!-- example group7 -->
 ##### GROUPBY()
-有一个函数`GROUPBY()`，返回当前分组的键。在许多情况下都很有用，尤其是在你[按MVA分组](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29)或按[JSON值分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)时。
+有一个函数 `GROUPBY()` 返回当前分组的键。它在许多情况下都很有用，特别是当你[对 MVA 进行分组](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) 或者[对 JSON 值进行分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)。
 
-它也可以用于`HAVING`，例如，只保留年份2000和2002。
+它也可以用在 `HAVING` 中，例如，仅保留2000年和2002年的数据。
 
-注意，当你同时按多个字段GROUP BY时，不建议使用`GROUPBY()`。它仍然可以工作，但由于此时分组键是字段值的复合，可能不会以你期望的方式展示。
+注意，当你一次对多个字段进行 GROUP BY 时，不推荐使用 `GROUPBY()`。它仍然可以工作，但此时分组键是字段值的复合体，可能不会以你期望的方式出现。
 
 <!-- intro -->
 ##### 示例：
@@ -795,8 +795,8 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 ```
 <!-- end -->
 <!-- example mva -->
-##### 按MVA（多值属性）分组
-Manticore支持按[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)分组。为了演示其工作方式，我们创建一个名为"shoes"且带有MVA "sizes"的表，并插入几个文档：
+##### 按 MVA（多值属性）分组
+Manticore 支持按[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)进行分组。为了演示其工作原理，让我们创建一个名为 "shoes"、包含 MVA 字段 "sizes" 的表，并插入一些文档：
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
@@ -812,7 +812,7 @@ SELECT * FROM shoes;
 | 1657851069130080267 | 42,43    | reebook |
 +---------------------+----------+---------+
 ```
-如果现在我们按"sizes"分组，它会处理所有我们的多值属性，并为每个返回聚合结果，在本例中仅是计数：
+如果现在对 "sizes" 进行 GROUP BY，它将处理我们所有的多值属性，并为每个大小返回一次聚合，这里仅有计数：
 
 <!-- intro -->
 ##### 示例：
@@ -1495,10 +1495,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 ## 聚合函数
-除了返回每个分组元素个数的 `COUNT(*)` 外，你还可以使用各种其他聚合函数：
+除了返回每组元素数量的 `COUNT(*)`，你还可以使用各种其他聚合函数：
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
-虽然 `COUNT(*)` 返回组内所有元素的数量，`COUNT(DISTINCT field)` 返回该组内字段的唯一值数量，这可能与总数完全不同。例如，你可能有100个元素，但某个字段的值全部相同。`COUNT(DISTINCT field)` 有助于判断这一点。为了说明这一点，我们创建一个包含学生姓名、年龄和专业的表 "students"：
+虽然 `COUNT(*)` 返回组中所有元素的数量，`COUNT(DISTINCT field)` 返回组中特定字段的唯一值数量，这可能与总数完全不同。例如，你可以在组中有100个元素，但某字段的值全都相同。`COUNT(DISTINCT field)` 能帮助确定这一点。为演示此功能，我们创建一个名为 "students" 的表，包含学生姓名、年龄和专业：
 ```sql
 CREATE TABLE students(name text, age int, major string);
 INSERT INTO students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
@@ -1519,24 +1519,24 @@ MySQL [(none)]> SELECT * from students;
 +---------------------+------+----------+---------+
 ```
 
-在这个例子中，你可以看到，如果我们按照专业分组并显示 `COUNT(*)` 和 `COUNT(DISTINCT age)`，很明显，有两个选择了专业 "cs" 的学生，且年龄各不相同，但对专业 "arts" 来说，同样是两个学生，却只有一个唯一的年龄。
+在示例中，你可以看到如果按 major 分组并同时显示 `COUNT(*)` 和 `COUNT(DISTINCT age)`，就会清楚地知道选择专业为 "cs" 的有两名学生且年龄各不相同，但对于专业为 "arts" 的也有两名学生，却只有一个唯一年龄。
 
-每个查询最多只能有一个 `COUNT(DISTINCT)`。
+每个查询中最多只能有一个 `COUNT(DISTINCT)`。
 
 ** 默认情况下，计数是近似的 **
 
-实际上，有些计数是精确的，有些是近似的。下面会详细介绍。
+实际上，有些计数是精确的，有些则是近似的。下面会详细说明。
 
-Manticore 支持两种计算不同值计数的算法。一种是传统算法，使用大量内存且通常较慢。它收集 `{group; value}` 对，进行排序，并定期去除重复项。这种方法的优点是在普通表中保证计数的精确。你可以通过将 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置为 `0` 来启用它。
+Manticore 支持两种计算唯一值计数的算法。一种是使用大量内存通常较慢的传统算法，它收集 `{group; value}` 对，排序后周期性去重。该方法的优点是保证在普通表中的计数精确。你可以通过将 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置为 `0` 来启用它。
 
-另一种算法（默认启用）将计数加载到哈希表中，并返回其大小。如果哈希表过大，其内容会被转移到 `HyperLogLog` 中。此时计数变为近似，因为 `HyperLogLog` 是一种概率算法。优势是每个组的最大内存使用量是固定的，取决于 `HyperLogLog` 的精度。总体内存使用也取决于反映组数的 [max_matches](../Searching/Options.md#max_matches) 设置。
+另一种算法（默认启用）将计数加载到哈希表中并返回其大小。如果哈希表过大，其内容会被转移到 `HyperLogLog`。此时计数变为近似，因为 `HyperLogLog` 是一种概率算法。其优点是每组最大内存使用固定，依赖于 `HyperLogLog` 的精度。总体内存使用还受 [max_matches](../Searching/Options.md#max_matches) 设置影响，该值反映组数。
 
-[distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置了保证计数精确的阈值。`HyperLogLog` 的精度设置和“从哈希表转为 HyperLogLog”的阈值均由该设置决定。此选项需谨慎使用，因为其值加倍会使计算计数的最大内存需求加倍。内存最大使用量可以通过公式大致估算：`64 * max_matches * distinct_precision_threshold`。注意，这是最坏情况，通常计数计算所用内存远低于此值。
+[distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设定计数保证准确的阈值。`HyperLogLog` 的精度设置以及“从哈希表到 HyperLogLog”的转换阈值均基于该参数。使用此选项需谨慎，因为将其翻倍会使计数计算所需最大内存翻倍。最大内存使用大致可用公式估算：`64 * max_matches * distinct_precision_threshold`。注意，这是最坏情况，实际计数计算通常占用明显更少的内存。
 
-** 对于分布式表或多个磁盘块组成的实时表，`COUNT(DISTINCT)` 可能返回不准确结果 **，但对于由本地普通表或实时表（具有相同架构，即字段集/顺序相同，但可能分词设置不同）组成的分布式表，应返回准确结果。
+** 对于包含多个磁盘块的分布式表或实时表，`COUNT(DISTINCT)` 可能返回不准确结果，但对于由相同模式（相同字段集/顺序但分词设置可不同）的本地普通表或实时表组成的分布式表，结果应准确。**
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -1557,12 +1557,12 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-通常，你希望更好地理解每个分组的内容。你可以使用 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 实现，但会返回你可能不想要的额外行。`GROUP_CONCAT()` 通过将组内指定字段的值连接，丰富了分组信息。我们以上一个例子为例，改进为显示每个组内所有年龄。
+你通常想更好地了解每个分组的内容。你可以使用 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 实现，但它会返回额外的行，可能不想出现在结果中。`GROUP_CONCAT()` 通过连接组中特定字段的数值来丰富分组内容。继续使用前面的例子，这里改进为显示每组中的所有年龄。
 
-`GROUP_CONCAT(field)` 返回以逗号分隔的值列表。
+`GROUP_CONCAT(field)` 返回逗号分隔的值列表。
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -1581,10 +1581,10 @@ SELECT major, count(*), count(distinct age), group_concat(age) FROM students GRO
 <!-- end -->
 <!-- example sum -->
 ##### SUM(), MIN(), MAX(), AVG()
-当然，你也可以获取组内的和、平均值、最小值和最大值。
+当然，你也可以获取组内的求和、平均值、最小值和最大值。
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql
@@ -1605,18 +1605,18 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 <!-- end -->
 
 <!-- example accuracy -->
-## 分组准确性
+## 分组精度
 
-分组操作使用固定内存，大小由 [max_matches](../Searching/Options.md#max_matches) 设置决定。如果 `max_matches` 允许存储所有找到的组，结果将是100%准确的。但如果 `max_matches` 过小，结果将不够准确。
+分组使用固定内存，该内存大小依赖于 [max_matches](../Searching/Options.md#max_matches) 设置。如果 `max_matches` 足以存储所有找到的组，结果将是 100% 精确的。但若 `max_matches` 较小，结果的准确性会降低。
 
-当涉及并行处理时，情况会更复杂。当启用 `pseudo_sharding` 和/或使用多个磁盘块的 RT 表时，每个块或伪分片返回的结果集大小均不超过 `max_matches`，这可能导致多个线程的结果集合并时聚合和分组计数不准确。解决方法是增大 `max_matches` 或禁用并行处理。
+涉及并行处理时情况会更复杂。启用 `pseudo_sharding` 和/或使用包含多个磁盘块的 RT 表时，每个块或伪分片得到的结果集大小都不超过 `max_matches`。当不同线程结果集合并时，聚合和分组计数可能不准确。为解决这个问题，可以使用更大的 `max_matches` 值或禁用并行处理。
 
-如果 Manticore 侦测到分组可能返回不准确结果，会尝试将 `max_matches` 增加到 [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold)。侦测基于从辅助索引（如存在）获取的分组属性唯一值数量。
+如果检测到 groupby 可能返回不准确结果，Manticore 会尝试将 `max_matches` 增加到 [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold)。检测基于从次级索引（如有）检索到的 groupby 属性的唯一值数量。
 
-当使用 RT 表或 `pseudo_sharding` 时，为确保聚合和分组计数准确，可启用 `accurate_aggregation`。该选项将尝试将 `max_matches` 提升到阈值，若阈值不足以保证准确，则禁用查询的并行处理。
+为确保在使用 RT 表或 `pseudo_sharding` 时聚合和分组计数准确，可以启用 `accurate_aggregation`。这将尝试提升 `max_matches` 到阈值，如果阈值不足，Manticore 会禁用查询的并行处理。
 
 <!-- intro -->
-##### 示例：
+##### 例子：
 
 <!-- request SQL -->
 ```sql

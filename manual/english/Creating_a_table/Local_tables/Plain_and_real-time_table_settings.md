@@ -471,7 +471,9 @@ Each vector attribute stores an array of floating-point numbers that represent d
 
 ##### Configuring KNN for vector attributes
 
-To enable KNN searches on float vector attributes, you must add a `knn` configuration that specifies the indexing parameters:
+To enable KNN searches on float vector attributes, you must add a `knn` configuration that specifies the indexing parameters. You can configure KNN in two ways:
+
+**1. Manual vector insertion** (you provide pre-computed vectors):
 
 ```ini
 rt_attr_float_vector = image_vector
@@ -479,17 +481,35 @@ rt_attr_float_vector = text_vector
 knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200},{"name":"text_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
 ```
 
+**2. Auto embeddings** (Manticore generates vectors from text automatically):
+
+```ini
+rt_attr_float_vector = embedding_vector
+rt_field = title
+rt_field = description
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+```
+
 **Required KNN parameters:**
 - `name`: The name of the vector attribute (must match the `rt_attr_float_vector` name)
 - `type`: Index type, currently only `"hnsw"` is supported
-- `dims`: Number of dimensions in the vectors (must match your embedding model's output)
+- `dims`: Number of dimensions in the vectors. **Required** for manual vector insertion, **must be omitted** when using `model_name` (the model determines dimensions automatically)
 - `hnsw_similarity`: Distance function - `"L2"`, `"IP"` (inner product), or `"COSINE"`
 
 **Optional KNN parameters:**
-- `hnsw_m`: Maximum connections in the graph
-- `hnsw_ef_construction`: Construction time/accuracy trade-off
+- `hnsw_m`: Maximum connections in the graph (default: 16)
+- `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
-For more details on KNN vector search, see the [KNN documentation](../../Searching/KNN.md).
+**Auto-embeddings parameters** (when using `model_name`):
+- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
+- `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
+- `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
+- `use_gpu`: Optional boolean to enable GPU acceleration if available.
+
+**Important:** You cannot specify both `dims` and `model_name` in the same configuration - they are mutually exclusive. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings.
+
+For more details on KNN vector search and auto-embeddings, see the [KNN documentation](../../Searching/KNN.md).
 
 #### rt_attr_bool
 
@@ -584,11 +604,9 @@ In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influ
 
 * [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
 
-* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has
-  reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
 
-* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192),
-  the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192), the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 
@@ -657,8 +675,8 @@ For more information on data types, see [more about data types here](../../Creat
 | [bigint](../../Creating_a_table/Data_types.md#Big-Integer) | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint)	| big integer	 |   |
 | [float](../../Creating_a_table/Data_types.md#Float) | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float)   | float  |   |
 | [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | a vector of float values  |   |
-| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | multi-integer |   |
-| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | multi-bigint  |   |
+| [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi)   | multi-integer | mva |
+| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | multi-bigint  | mva64 |
 | [bool](../../Creating_a_table/Data_types.md#Boolean) | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | boolean |   |
 | [json](../../Creating_a_table/Data_types.md#JSON) | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON |   |
 | [string](../../Creating_a_table/Data_types.md#String) | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | string. Option `indexed, attribute` will make the value full-text indexed and filterable, sortable and groupable at the same time  |   |

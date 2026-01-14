@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -2615,7 +2615,11 @@ CSphRefcountedPtr<SstProgress_i> GetClusterProgress ( const CSphString & sCluste
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( pCluster )
-		return pCluster->m_pSstProgress;
+	{
+		CSphRefcountedPtr<SstProgress_i> pProgress { pCluster->m_pSstProgress };
+		return pProgress;
+	}
+
 	return nullptr;
 }
 

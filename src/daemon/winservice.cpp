@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -300,6 +300,7 @@ void WinSetConsoleCtrlHandler () noexcept
 }
 
 static StrVec_t g_dArgs;
+static CSphVector<char *> g_dArgPtrs;
 
 bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunction )
 {
@@ -336,9 +337,8 @@ bool ParseArgsAndStartWinService ( int argc, char ** argv, void * ServiceFunctio
 	return true;
 }
 
-void SetupWinService ( int argc, char ** argv )
+void SetupWinService ( int& argc, char **& argv )
 {
-	CSphVector<char *> dArgs;
 	if ( WinService() )
 	{
 		g_ssHandle = RegisterServiceCtrlHandler ( g_sServiceName, ServiceControl );
@@ -350,12 +350,12 @@ void SetupWinService ( int argc, char ** argv )
 
 		if ( argc <= 1 )
 		{
-			dArgs.Resize ( g_dArgs.GetLength() );
+			g_dArgPtrs.Resize ( g_dArgs.GetLength() );
 			ARRAY_FOREACH ( i, g_dArgs )
-				dArgs[i] = (char *) g_dArgs[i].cstr();
+				g_dArgPtrs[i] = (char *) g_dArgs[i].cstr();
 
 			argc = g_dArgs.GetLength();
-			argv = &dArgs[0];
+			argv = &g_dArgPtrs[0];
 		}
 	}
 

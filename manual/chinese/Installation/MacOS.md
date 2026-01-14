@@ -6,7 +6,7 @@
 brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
 ```
 
-以 brew 服务启动 Manticore：
+将 Manticore 作为 brew 服务启动：
 
 ```bash
 brew services start manticoresearch
@@ -14,7 +14,7 @@ brew services start manticoresearch
 
 Manticore 的默认配置文件位于 `/usr/local/etc/manticoresearch/manticore.conf` 或 `/opt/homebrew/etc/manticoresearch/manticore.conf`。
 
-如果您计划使用 [indexer](../Creating_a_table/Local_tables/Plain_table.md) 从 MySQL、PostgreSQL 或通过 ODBC 的其他数据库等源获取数据，您可能需要额外的库，例如 `mysql@5.7`、`libpq` 和 `unixodbc`。
+如果您计划使用 [indexer](../Creating_a_table/Local_tables/Plain_table.md) 从 MySQL、PostgreSQL 或其他使用 ODBC 的数据库等来源获取数据，可能需要额外的库，如 `mysql@5.7`、`libpq` 和 `unixodbc`。
 
 #### 开发包
 如果您更喜欢“Nightly”（开发）版本，请执行：
@@ -25,7 +25,7 @@ brew services start manticoresearch-dev
 ```
 
 <!--
-## 从带有二进制文件的 tar 包安装
+## 通过包含二进制文件的压缩包安装
 
 从[官网](https://manticoresearch.com/install/)下载并解压到一个文件夹：
 
@@ -49,7 +49,7 @@ FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticor
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 
-解压后，Manticore 的配置文件是 `./etc/manticoresearch/manticore.conf`。
+解压后 Manticore 的配置文件为 `./etc/manticoresearch/manticore.conf`。
 
 -->
 

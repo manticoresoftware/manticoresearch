@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -607,6 +607,12 @@ static void EvalPostlimitExprs ( CSphMatch & tMatch, const CSphColumnInfo * pCol
 		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) );
 		break;
 
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_INT64SET_PTR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t)pCol->m_pExpr->Int64Eval(tMatch) );
+		break;
+
 	default:
 		tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval ( tMatch ) );
 		break;
@@ -629,15 +635,6 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 	// collect unique tags from matches
 	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
 
-	// generates docstore session id
-	DocstoreSession_c tSession;
-	auto iSessionUID = tSession.GetUID();
-
-	// spawn buffered readers for the current session
-	// put them to a global hash
-	for ( int iTag : dDocstoreTags )
-		tRes.m_dResults[iTag].m_pDocstore->CreateReader ( iSessionUID );
-
 	int iLastTag = -1;
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
 	for ( auto & dMatch : dMatches )
@@ -652,7 +649,8 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 		if ( iTag!=iLastTag )
 		{
 			for ( const auto & pCol : dPostlimit )
-				SetupPostlimitExprs ( pDocstore, pCol, sQuery, iSessionUID );
+				SetupPostlimitExprs ( pDocstore, pCol, sQuery, -1 );
+
 			iLastTag = iTag;
 		}
 

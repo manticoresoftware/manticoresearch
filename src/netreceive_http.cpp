@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -199,6 +199,8 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
 		tParser.Reinit();
 
+		tIn.SetTimeoutUS ( S2US * (tSess.GetPersistent()?g_iClientTimeoutS:g_iReadTimeoutS) );
+
 		tSess.SetKilled ( false );
 
 		if ( bHttpLogging )
@@ -250,12 +252,16 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		if ( tParser.KeepAlive() )
 		{
 			if ( !tSess.GetPersistent() )
+			{
+				tSess.SetPersistent ( true );
 				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );
-			tSess.SetPersistent ( true );
+			}
 		} else {
 			if ( tSess.GetPersistent() )
+			{
+				tSess.SetPersistent ( false );
 				tIn.SetTimeoutUS ( S2US * g_iReadTimeoutS );
-			tSess.SetPersistent ( false );
+			}
 		}
 
 		// if first chunk is (most probably) pure header, we can proceed special headers here

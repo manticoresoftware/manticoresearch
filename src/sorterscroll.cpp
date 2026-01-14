@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -46,7 +46,7 @@ public:
 	int64_t	GetTotalCount() const override									{ return m_pSorter->GetTotalCount(); }
 
 	void	SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override { m_pSorter->SetFilteredAttrs ( hAttrs, bAddDocid ); }
-	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override { m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters ); }
+	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override;
 
 	bool	IsRandom() const override 										{ return m_pSorter->IsRandom(); }
 	void	SetRandom ( bool bRandom ) override								{ m_pSorter->SetRandom(bRandom); }
@@ -108,6 +108,13 @@ void ScrollSorter_T<COMP>::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 template <typename COMP>
+void ScrollSorter_T<COMP>::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters )
+{
+	FreeDataPtrAttrs();
+	m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters );
+}
+
+template <typename COMP>
 bool ScrollSorter_T<COMP>::PushMatch ( const CSphMatch & tEntry )
 {
 	if ( !COMP::IsLess ( tEntry, m_tRefMatch, m_tState ) )
@@ -122,8 +129,10 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
+	// Free old data pointer attributes before resetting
 	FreeDataPtrAttrs();
-	m_tRefMatch.Reset ( pSchema->GetRowSize() );
+	
+	m_tRefMatch.Reset ( pSchema->GetDynamicSize() );
 	m_dStatic.Resize ( pSchema->GetStaticSize() );
 	m_tRefMatch.m_pStatic = m_dStatic.Begin();
 
@@ -137,11 +146,29 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 		}
 
 		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
+		if ( !pAttr )
+			continue;
+
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// use the remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "%s%s", GetInternalAttrPrefix(), i.m_sSortAttr.cstr() );
+			auto pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				pAttr = pRemapped;
+		}
+
 		auto pRowData = pAttr->m_tLocator.m_bDynamic ? m_tRefMatch.m_pDynamic : m_dStatic.Begin();
 		switch ( i.m_eType )
 		{
 		case SPH_ATTR_STRINGPTR:
-			sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
+			{
+				assert ( pAttr->m_eAttrType==SPH_ATTR_STRINGPTR );
+				BYTE * pPacked = sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } );
+				sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)pPacked );
+			}
 			break;
 
 		case SPH_ATTR_FLOAT:
@@ -164,19 +191,14 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
-	for ( auto & i : m_tScroll.m_dAttrs )
+	for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
 	{
-		if ( i.m_sSortAttr=="weight()" )
-			continue;
-
-		const CSphColumnInfo * pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
-		assert(pAttr);
-		if ( sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
-		{
-			auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
-			sphDeallocatePacked(pData);
-		}
+		const auto & tAttr = pSchema->GetAttr(i);
+		if ( tAttr.IsDataPtr() )
+			sphDeallocatePacked ( (BYTE*)m_tRefMatch.GetAttr ( tAttr.m_tLocator ) );
 	}
+
+	m_tRefMatch.ResetDynamic();
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -218,9 +240,22 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		if ( !pAttr )
 			return false;
 
+		ESphAttr eCheckType = pAttr->m_eAttrType;
+		
+		// If the scroll token has a string type and the schema attribute is SPH_ATTR_STRING,
+		// check if there's a remapped STRINGPTR version (used for sorting)
+		if ( i.m_eType==SPH_ATTR_STRINGPTR && eCheckType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			auto pRemapped = tSchema.GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				eCheckType = SPH_ATTR_STRINGPTR;
+		}
+
 		bool bSupported = false;
 		for ( auto eType : dSupportedTypes )
-			if ( pAttr->m_eAttrType==eType )
+			if ( eCheckType==eType )
 			{
 				bSupported = true;
 				break;

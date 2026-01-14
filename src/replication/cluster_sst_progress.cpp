@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -117,9 +117,9 @@ private:
 	friend class SstProgress_i;
 };
 
-SstProgress_i * CreateProgress ()
+CSphRefcountedPtr<SstProgress_i> CreateProgress ()
 {
-	return new SstProgress_c();
+	return CSphRefcountedPtr<SstProgress_i> ( new SstProgress_c() );
 }
 
 void SstProgress_c::CollectFilesStats ( const VecTraits_T<CSphString> & dIndexes, int iAttempt, int iAgents )
@@ -205,6 +205,7 @@ void SstProgress_c::Finish()
 {
 	FinishPhase();
 	m_eStage = SstStage_e::TOTAL;
+	m_eRole = Role_e::NONE;
 	StopPushUpdates();
 
 	// log the final 100% progress
@@ -447,9 +448,10 @@ void PrepareSendStage ( const SyncSrc_t & tSigSrc, const VecTraits_T<AgentConn_t
 
 void SstProgress_c::UpdateFromRemote ( const SstProgressStatus_t & tStatus )
 {
-	assert ( m_eRole==Role_e::JOINER );
+	if ( m_eRole!=Role_e::JOINER )
+		Init ( Role_e::JOINER );
 
-   if ( LOG_LEVEL_SST_DBG && m_tRemoteStatus.m_eCurrentStage!=tStatus.m_eCurrentStage )
+	if ( LOG_LEVEL_SST_DBG && m_tRemoteStatus.m_eCurrentStage!=tStatus.m_eCurrentStage )
 	{
 		SST_DBG << "[SST] received new stage from donor: " << SstGetStageName ( tStatus.m_eCurrentStage );
 		LogProgress ( true );
@@ -460,7 +462,9 @@ void SstProgress_c::UpdateFromRemote ( const SstProgressStatus_t & tStatus )
 
 void SstProgress_c::StartLocalStage ( const SstProgressContext_t & tCtx, SstStage_e eStage )
 {
-	assert ( m_eRole==Role_e::JOINER );
+	if ( m_eRole!=Role_e::JOINER )
+		Init ( Role_e::JOINER );
+
 	m_tLocalCtx = tCtx;
 	m_eStage = eStage;
 	// reset the counter for the new stage
@@ -609,7 +613,6 @@ void ReceiveSstProgress ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphStr
 	{
 		TlsMsg::Err ( "%s missed cluster", sCluster.cstr() );
 		return;
-
 	}
 }
 

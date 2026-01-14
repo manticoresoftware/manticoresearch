@@ -24,6 +24,7 @@
 #include "std/tdigest.h"
 
 #include <cstring>
+#include <cmath>
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
@@ -2410,6 +2411,27 @@ static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInf
 	tDigest.Import ( dCentroids );
 }
 
+static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
+{
+	if ( tDigest.GetCount()==0 )
+		return false;
+
+	double fMedian = tDigest.Quantile ( 0.5 );
+
+	CSphVector<TDigestCentroid_t> dCentroids;
+	tDigest.Export ( dCentroids );
+
+	TDigest_c tDeviation ( tDigest.GetCompression() );
+	for ( const auto & tCentroid : dCentroids )
+	{
+		double fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
+		tDeviation.Add ( fDeviation, tCentroid.m_iCount );
+	}
+
+	fMad = tDeviation.Quantile ( 0.5 );
+	return true;
+}
+
 static CSphString FormatNumeric ( double fValue )
 {
 	CSphString sValue;
@@ -2656,11 +2678,16 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				break;
 			case Aggr_e::MAD:
 			{
-				JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "value", tMatch, tKey.m_pKey->m_tLocator );
-				double fMad = tMatch.GetAttrDouble ( tKey.m_pKey->m_tLocator );
-				CSphString sValue = FormatNumeric ( fMad );
-				tOut.AppendName ( "value_as_string" );
-				tOut.Sprintf ( "\"%s\"", sValue.cstr() );
+				TDigest_c tDigest ( GetTdigestCompression ( *tKey.m_pKey ) );
+				LoadTdigestFromMatch ( tMatch, *tKey.m_pKey, tDigest );
+
+				double fMad = 0.0;
+				if ( CalcMadFromDigest ( tDigest, fMad ) )
+				{
+					CSphString sValue = FormatNumeric ( fMad );
+					AppendValueStringFields ( tOut, sValue );
+				} else
+					AppendNullValueFields ( tOut );
 				break;
 			}
 			default:

@@ -234,36 +234,6 @@ public:
 	explicit AggrMad_c ( const CSphColumnInfo & tAttr )
 		: AggrTDigestBase_c ( tAttr )
 	{}
-
-	void Finalize ( CSphMatch & tDst ) override
-	{
-		TDigest_c tDigest ( m_fCompression );
-		LoadTDigestBlob ( tDst, m_tLocator, tDigest, m_fCompression );
-
-		if ( tDigest.GetCount()==0 )
-		{
-			FreeTDigestBlob ( tDst, m_tLocator );
-			tDst.SetAttrDouble ( m_tLocator, 0.0 );
-			return;
-		}
-
-		double fMedian = tDigest.Quantile ( 0.5 );
-
-		CSphVector<TDigestCentroid_t> dCentroids;
-		tDigest.Export ( dCentroids );
-
-		TDigest_c tDeviation ( m_fCompression );
-		for ( const auto & tCentroid : dCentroids )
-		{
-			double fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
-			tDeviation.Add ( fDeviation, tCentroid.m_iCount );
-		}
-
-		double fMad = tDeviation.Quantile ( 0.5 );
-
-		FreeTDigestBlob ( tDst, m_tLocator );
-		tDst.SetAttrDouble ( m_tLocator, fMad );
-	}
 };
 
 template<>

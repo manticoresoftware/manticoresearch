@@ -10430,9 +10430,9 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 
 	MergeGuardMulti_c pGuard { pA, pB };
 
-	const char * sAtionName = "common merge";
+	const char * sActionName = "common merge";
 
-	sphLogDebug ( "%s - merging %d (%d kb) with %d (%d kb)", sAtionName,
+	sphLogDebug ( "%s - merging %d (%d kb) with %d (%d kb)", sActionName,
 			iAID,
 			(int)( GetChunkSize ( pA->Cidx() ) / 1024 ),
 			iBID,
@@ -10442,9 +10442,9 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 	dChunks[0] = pA;
 	dChunks[1] = pB;
 
-	auto tBuilt = BuildMergedChunkN ( sAtionName, dChunks );
+	auto tBuilt = BuildMergedChunkN ( sActionName, dChunks );
 
-	if ( !FinalizeMergedChunkN ( sAtionName, dChunks, tBuilt, pAffected, sLog ) )
+	if ( !FinalizeMergedChunkN ( sActionName, dChunks, tBuilt, pAffected, sLog ) )
 		return false;
 
 	return true;

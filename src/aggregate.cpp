@@ -111,9 +111,6 @@ static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & 
 	tDigest.Import ( dCentroids );
 }
 
-static void FreeTDigestBlob ( const CSphMatch &, const CSphAttrLocator & )
-{
-}
 }
 
 class AggrTDigestBase_c : public AggrFunc_i

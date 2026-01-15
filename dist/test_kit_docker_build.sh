@@ -212,7 +212,12 @@ docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
 
-docker exec manticore-test-kit bash -c "rm -rf /tmp/*"
+# Copy the parent directory to /manticore/ inside the container
+parent_dir=$(realpath ..)
+echo "Copying $parent_dir to /manticore/ in the container"
+docker exec manticore-test-kit mkdir -p /manticore
+docker cp "$parent_dir" manticore-test-kit:/tmp/manticore_parent
+docker exec manticore-test-kit bash -c "shopt -s dotglob && cp -r /tmp/manticore_parent/* /manticore/ && rm -rf /tmp/*"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

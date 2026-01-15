@@ -1338,6 +1338,8 @@ public:
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
+	virtual bool					AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) { return false; }
+	virtual bool					AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 public:

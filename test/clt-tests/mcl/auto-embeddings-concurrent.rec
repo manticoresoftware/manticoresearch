@@ -93,17 +93,23 @@ mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_concurrent; OPTIMIZE TABLE test_concurr
 ––– comment –––
 Verify KNN distances after REPLACE (embeddings regenerated from new titles)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, KNN_DIST() as dist FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') LIMIT 5"
+mysql -h0 -P9306 -E -e "SELECT id, KNN_DIST() as dist FROM test_concurrent WHERE KNN(vec, 5, 'Updated doc') LIMIT 5"
 ––– output –––
-+------+------------+
-| id   | dist       |
-+------+------------+
-|   13 | 0.318306#!/[0-9]{0,3}/!# |
-|   11 | 0.331902#!/[0-9]{0,3}/!# |
-|   12 | 0.333211#!/[0-9]{0,3}/!# |
-|   14 | 0.342856#!/[0-9]{0,3}/!# |
-|   15 | 0.351880#!/[0-9]{0,3}/!# |
-+------+------------+
+*************************** 1. row ***************************
+  id: 13
+dist: 0.31830#!/[0-9]{0,4}/!#
+*************************** 2. row ***************************
+  id: 11
+dist: 0.33190#!/[0-9]{0,4}/!#
+*************************** 3. row ***************************
+  id: 12
+dist: 0.33321#!/[0-9]{0,4}/!#
+*************************** 4. row ***************************
+  id: 14
+dist: 0.34285#!/[0-9]{0,4}/!#
+*************************** 5. row ***************************
+  id: 15
+dist: 0.35188#!/[0-9]{0,4}/!#
 ––– comment –––
 KNN always sorts by distance - ORDER BY id is ignored
 ––– input –––

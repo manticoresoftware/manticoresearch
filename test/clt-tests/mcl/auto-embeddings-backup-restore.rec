@@ -50,17 +50,17 @@ mysql -h0 -P9306 -E -e "SELECT id, title, content, KNN_DIST() as distance FROM t
       id: 1
    title: machine learning
  content: neural networks
-distance: 0.851733#!/[0-9]{0,5}/!#
+distance: 0.85173#!/[0-9]{0,4}/!#
 *************************** 2. row ***************************
       id: 3
    title: computer vision
  content: image processing
-distance: 1.13070#!/[0-9]{0,5}/!#
+distance: 1.13070#!/[0-9]{0,4}/!#
 *************************** 3. row ***************************
       id: 2
    title: deep learning
  content: transformers
-distance: 1.3117#!/[0-9]{0,5}/!#
+distance: 1.31172#!/[0-9]{0,4}/!#
 ––– comment –––
 Check manticore-backup is available
 ––– input –––

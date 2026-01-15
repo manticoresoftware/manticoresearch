@@ -50,6 +50,7 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
+#include "conversion.h"
 
 // services
 #include "taskping.h"
@@ -10375,7 +10376,9 @@ enum class Alter_e
 	ModifyColumn,
 	RebuildSI,
 	RebuildKNN,
-	ApiKey
+	ApiKey,
+	ApiUrl,
+	ApiTimeout
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10468,6 +10471,19 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 		case Alter_e::ApiKey:
 			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiUrl:
+			WIdx_c(pServed)->AlterApiUrl ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiTimeout:
+			{
+				int iTimeout = 0;
+				if ( !ValidateAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
+					break;
+				WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
 			break;
 		}
 
@@ -11686,6 +11702,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_EMBEDDINGS_API_KEY:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_URL:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiUrl );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_TIMEOUT:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout );
 		return true;
 
 	case STMT_SHOW_PLAN:

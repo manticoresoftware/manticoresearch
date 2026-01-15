@@ -1,0 +1,192 @@
+Model/provider validation testing for embeddings
+
+This test validates that embedding models match their API provider endpoints. The test verifies that OpenAI models work with OpenAI providers, Voyage models work with Voyage providers, Jina models work with Jina providers, and that mismatched combinations fail with appropriate error messages. It also tests generic servers that accept any model and provider override functionality via input text.
+
+––– comment –––
+MOCK SERVER SETUP FOR MODEL/PROVIDER VALIDATION TESTING
+
+To test model/provider validation with local mock servers:
+
+OpenAI provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Voyage provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
+Jina provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8082 --provider jina
+Generic server (no provider): php test/clt-tests/mcl/mock-embeddings-server.php --port 8083
+
+The mock server validates that the model matches the provider when --provider is specified
+Provider Override: Use "provider=NAME" in input text to override provider per request
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+MOCK SERVER STARTUP
+
+Start mock server for OpenAI provider on port 8080
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+MOCK_PID_8080=$!
+echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
+sleep 1
+curl -s -X POST http://localhost:8080/v1/embeddings -H "Content-Type: application/json" -H "Authorization: Bearer test-key" -d '{"model":"text-embedding-ada-002","input":["test"]}' > /dev/null 2>&1 || true
+––– output –––
+Mock server started on port 8080 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start mock server for Voyage provider on port 8081
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage > /tmp/mock-server-8081.log 2>&1 &
+MOCK_PID_8081=$!
+echo "Mock server started on port 8081 (PID: $MOCK_PID_8081)"
+sleep 1
+curl -s -X POST http://localhost:8081/v1/embeddings -H "Content-Type: application/json" -H "Authorization: Bearer test-key" -d '{"model":"voyage-3.5-lite","input":["test"]}' > /dev/null 2>&1 || true
+––– output –––
+Mock server started on port 8081 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start mock server for Jina provider on port 8082
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8082 --provider jina > /tmp/mock-server-8082.log 2>&1 &
+MOCK_PID_8082=$!
+echo "Mock server started on port 8082 (PID: $MOCK_PID_8082)"
+sleep 1
+curl -s -X POST http://localhost:8082/v1/embeddings -H "Content-Type: application/json" -H "Authorization: Bearer test-key" -d '{"model":"jina-embeddings-v2-base-en","input":["test"]}' > /dev/null 2>&1 || true
+––– output –––
+Mock server started on port 8082 (PID: #!/[0-9]+/!#)
+––– comment –––
+Start generic mock server (no provider) on port 8083
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8083 > /tmp/mock-server-8083.log 2>&1 &
+MOCK_PID_8083=$!
+echo "Generic mock server started on port 8083 (PID: $MOCK_PID_8083)"
+sleep 1
+curl -s -X POST http://localhost:8083/v1/embeddings -H "Content-Type: application/json" -H "Authorization: Bearer test-key" -d '{"model":"text-embedding-ada-002","input":["test"]}' > /dev/null 2>&1 || true
+––– output –––
+Generic mock server started on port 8083 (PID: #!/[0-9]+/!#)
+––– comment –––
+OpenAI Model with OpenAI Provider
+
+Test: OpenAI model with OpenAI provider (should succeed)
+Expected: Table creation succeeds
+Verify: Model matches provider
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_openai (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+OpenAI Model with Voyage Provider (Mismatch)
+
+Test: OpenAI model with Voyage provider (should fail)
+Expected: Table creation fails with "invalid_model" error
+Verify: Error message: "Model 'text-embedding-ada-002' is not a valid Voyage model"
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_voyage_mismatch (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8081/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_openai_voyage_mismatch': prealloc: HTTP error from remote model: status code 400
+––– comment –––
+OpenAI Model with Jina Provider (Mismatch)
+
+Test: OpenAI model with Jina provider (should fail)
+Expected: Table creation fails with "invalid_model" error
+Verify: Error message indicates model/provider mismatch
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8082 --provider jina
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_jina_mismatch (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8082/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_openai_jina_mismatch': prealloc: HTTP error from remote model: status code 400
+––– comment –––
+Voyage Model with Voyage Provider
+
+Test: Voyage model with Voyage provider (should succeed)
+Expected: Table creation succeeds
+Verify: Model matches provider
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_voyage_voyage (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='voyage/voyage-3.5-lite' FROM='title' API_KEY='test-key' API_URL='http://localhost:8081/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Voyage Model with OpenAI Provider (Mismatch)
+
+Test: Voyage model with OpenAI provider (should fail)
+Expected: Table creation fails with "invalid_model" error
+Verify: Error message indicates model/provider mismatch
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_voyage_openai_mismatch (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='voyage/voyage-3.5-lite' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_voyage_openai_mismatch': prealloc: Unsupported remote model given (HTTP status code 400)
+––– comment –––
+Jina Model with Jina Provider
+
+Test: Jina model with Jina provider (should succeed)
+Expected: Table creation succeeds
+Verify: Model matches provider
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8082 --provider jina
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_jina_jina (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='jina/jina-embeddings-v2-base-en' FROM='title' API_KEY='test-key' API_URL='http://localhost:8082/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Jina Model with OpenAI Provider (Mismatch)
+
+Test: Jina model with OpenAI provider (should fail)
+Expected: Table creation fails with "invalid_model" error
+Verify: Error message indicates model/provider mismatch
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_jina_openai_mismatch (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='jina/jina-embeddings-v2-base-en' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_jina_openai_mismatch': prealloc: Unsupported remote model given (HTTP status code 400)
+––– comment –––
+Generic Server (No Provider)
+
+Test: Any model with generic server (no provider specified)
+Expected: Table creation succeeds (generic server accepts any model)
+Verify: Works with any model
+Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8083 (no --provider)
+
+Test Case 1: OpenAI model with generic server
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_generic_openai (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8083/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Test Case 2: Voyage model with generic server
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_generic_voyage (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='voyage/voyage-3.5-lite' FROM='title' API_KEY='test-key' API_URL='http://localhost:8083/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Test Case 3: Jina model with generic server
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_generic_jina (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='jina/jina-embeddings-v2-base-en' FROM='title' API_KEY='test-key' API_URL='http://localhost:8083/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Provider Override in Input Text
+
+Test: Provider override using "provider=NAME" in input text
+Expected: INSERT succeeds, provider validation uses "openai" from input text
+Verify: Input text provider override works
+Setup: Requires generic mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8083 (no --provider)
+
+Create table with generic server (no provider specified)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_provider_override (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8083/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert with provider=openai in input text (should trigger provider validation)
+
+Note: The provider=... parameter is removed from text before generating embeddings
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_provider_override (id, title) VALUES (1, 'test provider=openai')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+Insert with provider=voyage in input text (should fail if model doesn't match)
+
+Note: This tests that provider override in input text is used for validation
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_provider_override (id, title) VALUES (2, 'test provider=voyage')" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: HTTP error from remote model: status code 400

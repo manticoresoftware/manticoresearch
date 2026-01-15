@@ -1,0 +1,217 @@
+Comprehensive SHOW CREATE TABLE testing for embeddings parameters
+
+This test validates that SHOW CREATE TABLE correctly displays or omits API_URL, API_TIMEOUT, and FROM parameters based on how tables were created. It verifies that API_KEY is never displayed for security reasons.
+
+––– comment –––
+MOCK SERVER SETUP FOR SHOW CREATE TABLE TESTING
+
+To test SHOW CREATE TABLE with a local mock server:
+
+OpenAI provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+The mock server returns deterministic random embeddings seeded by input text
+API Key Validation: All keys are valid except "wrong" (returns 401 error)
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+MOCK SERVER STARTUP
+
+Start mock server for OpenAI provider on port 8080
+––– input –––
+php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+MOCK_PID_8080=$!
+echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
+sleep 1
+––– output –––
+Mock server started on port 8080 (PID: #!/[0-9]+/!#)
+––– comment –––
+With api_url Specified
+
+Test: SHOW CREATE TABLE for table created with API_URL='http://localhost:8080/v1/embeddings'
+Expected: Output includes api_url='http://localhost:8080/v1/embeddings'
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table with api_url
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should display api_url
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_url" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_api_url
+Create Table: CREATE TABLE test_show_api_url (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+)
+––– comment –––
+With api_url Not Specified
+
+Test: SHOW CREATE TABLE for table created without API_URL
+Expected: Output does NOT include api_url
+
+Note: Remote models require API_URL, so this test uses a local model which doesn't use API_URL
+Create table without api_url (using local model)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_no_api_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should NOT display api_url
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_no_api_url" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_no_api_url
+Create Table: CREATE TABLE test_show_no_api_url (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title'
+)
+––– comment –––
+With api_timeout Specified (Non-Default)
+
+Test: SHOW CREATE TABLE for table created with API_TIMEOUT='30'
+Expected: Output includes api_timeout='30'
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table with api_timeout
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should display api_timeout='30'
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_timeout" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_api_timeout
+Create Table: CREATE TABLE test_show_api_timeout (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+)
+––– comment –––
+With api_timeout Not Specified (Default)
+
+Test: SHOW CREATE TABLE for table created without API_TIMEOUT
+Expected: Output does NOT include api_timeout
+
+Create table without api_timeout (using default)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_no_api_timeout (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should NOT display api_timeout
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_no_api_timeout" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_no_api_timeout
+Create Table: CREATE TABLE test_show_no_api_timeout (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+)
+––– comment –––
+With api_timeout = 0 (Default)
+
+Test: SHOW CREATE TABLE for table created with API_TIMEOUT='0'
+Expected: Output does NOT include api_timeout (treated as default)
+
+Create table with api_timeout='0' (treated as default)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_api_timeout_zero (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='0')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should NOT display api_timeout (treated as default)
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_timeout_zero" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_api_timeout_zero
+Create Table: CREATE TABLE test_show_api_timeout_zero (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+)
+––– comment –––
+With from Specified
+
+Test: SHOW CREATE TABLE for table created with FROM='title'
+Expected: Output includes from='title'
+
+Create table with from
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_from (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should display from='title'
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_from" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_from
+Create Table: CREATE TABLE test_show_from (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+)
+––– comment –––
+api_key Should NOT Appear (Security)
+
+Test: SHOW CREATE TABLE for table created with API_KEY='secret-key'
+Expected: Output does NOT include api_key
+Verify: api_key never appears in output (security requirement)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table with api_key
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_api_key_security (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='secret-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should NOT display api_key (security requirement)
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_key_security" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_api_key_security
+Create Table: CREATE TABLE test_show_api_key_security (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+)
+––– comment –––
+All Parameters Together
+
+Test: SHOW CREATE TABLE for table with api_url, api_timeout, and from specified
+Expected: Output includes all three (but not api_key)
+Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+
+Create table with all parameters
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_show_all_params (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
+––– output –––
+0
+––– comment –––
+SHOW CREATE TABLE should display api_url, api_timeout, and from (but not api_key)
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_all_params" 2>&1
+––– output –––
+*************************** 1. row ***************************
+       Table: test_show_all_params
+Create Table: CREATE TABLE test_show_all_params (
+id bigint,
+title text,
+embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+)

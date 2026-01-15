@@ -1,44 +1,44 @@
 # 数据类型
 
-## 全文字段与属性
+## 全文字段和属性
 
 Manticore 的数据类型可以分为两类：全文字段和属性。
 
-### 字段名语法
+### 字段名称语法
 
-Manticore 中的字段名必须遵循以下规则：
+Manticore 中的字段名称必须遵循以下规则：
 
 * 可以包含字母（a-z, A-Z）、数字（0-9）和连字符（-）
 * 必须以字母开头
 * 数字只能出现在字母之后
 * 下划线（`_`）是唯一允许的特殊字符
-* 字段名不区分大小写
+* 字段名称不区分大小写
 
 例如：
-* 有效的字段名：`title`、`product_id`、`user_name_2`
-* 无效的字段名：`2title`、`-price`、`user@name`
+* 有效字段名称：`title`，`product_id`，`user_name_2`
+* 无效字段名称：`2title`，`-price`，`user@name`
 
 ### 全文字段
 
 全文字段：
 * 可以使用自然语言处理算法进行索引，因此可以搜索关键词
 * 不能用于排序或分组
-* 可以检索原始文档内容
-* 原始文档内容可用于高亮显示
+* 可以检索原始文档的内容
+* 可以使用原始文档的内容进行高亮显示
 
-全文字段由数据类型 `text` 表示。所有其他数据类型都称为“属性”。
+全文字段由数据类型 `text` 表示。所有其他数据类型称为“属性”。
 
 ### 属性
 
-属性是与每个文档关联的非全文值，可用于在搜索期间执行非全文过滤、排序和分组。
+属性是与每个文档相关联的非全文值，可用于在搜索期间执行非全文过滤、排序和分组。
 
-通常，不仅需要根据匹配的文档 ID 及其排名来处理全文搜索结果，还需要基于许多其他每文档值进行处理。例如，可能需要按日期和相关性对新闻搜索结果进行排序，或在指定价格范围内搜索产品，或将博客搜索限制在选定用户发布的帖子中，或按月份对结果进行分组。为了实现这一点，Manticore 不仅支持全文字段，还允许为每个文档添加额外的属性。这些属性可用于过滤、排序或分组全文匹配项，或仅按属性进行搜索。
+通常，除了根据匹配的文档 ID 和其排名处理全文搜索结果外，还可能需要根据许多其他每文档值进行处理。例如，可能需要按日期对新闻搜索结果进行排序，然后按相关性排序，或在指定的价格范围内搜索产品，或限制博客搜索仅限于选定用户发布的帖子，或按月份对结果进行分组。为了高效地实现这些功能，Manticore 不仅支持全文字段，还支持为每个文档添加额外的属性。这些属性可用于过滤、排序或分组全文匹配，或仅根据属性进行搜索。
 
-与全文字段不同，属性不进行全文索引。它们存储在表中，但无法像全文那样进行搜索。
+与全文字段不同，属性不会被全文索引。它们存储在表中，但无法作为全文进行搜索。
 
 <!-- example attributes or fields -->
 
-属性的一个很好的例子是论坛帖子表。假设只有标题和内容字段需要进行全文搜索——但有时还需要将搜索限制在特定作者或子论坛（即，仅搜索那些具有特定 author_id 或 forum_id 值的行）；或按 post_date 列对匹配项进行排序；或按 post_date 的月份对匹配的帖子进行分组并计算每组的匹配计数。
+属性的一个好例子是论坛帖子表。假设只需要标题和内容字段是全文可搜索的 - 但有时还需要限制搜索到特定作者或子论坛（即仅搜索具有某些特定 author_id 或 forum_id 值的行）；或者按 post_date 列对匹配项进行排序；或者按 post_date 的月份对匹配帖子进行分组并计算每组的匹配数。
 
 <!-- intro -->
 ##### SQL:
@@ -154,7 +154,7 @@ table forum
 
 <!-- example filtered query -->
 
-此示例展示了按 `author_id`、`forum_id` 过滤并按 `post_date` 排序的全文查询。
+此示例展示了通过 `author_id`、`forum_id` 过滤并按 `post_date` 排序运行全文查询。
 
 <!-- intro -->
 ##### SQL:
@@ -310,40 +310,40 @@ let search_res = search_api.search(search_req).await;
 
 <!-- end -->
 
-### 行式与列式属性存储
+### 行式和列式属性存储
 
 Manticore 支持两种类型的属性存储：
-* 行式 - Manticore Search 开箱即用的传统存储
-* 列式 - 由 [Manticore 列式库](https://github.com/manticoresoftware/columnar) 提供
+* 行式 - Manticore Search 默认提供的传统存储
+* 列式 - 由 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) 提供
 
 从它们的名称可以理解，它们以不同的方式存储数据。传统的 **行式存储**：
 * 以未压缩的方式存储属性
-* 同一文档的所有属性存储在彼此靠近的一行中
-* 行按顺序存储
-* 访问属性基本上是通过将行 ID 乘以步幅（单个向量的长度）并从计算出的内存位置获取请求的属性来实现。这提供了非常低的随机访问延迟。
-* 属性必须位于内存中才能获得可接受的性能，否则由于存储的行式特性，Manticore 可能不得不从磁盘读取太多不需要的数据，这在许多情况下是次优的。
+* 相同文档的所有属性存储在一行中，彼此靠近
+* 行依次存储
+* 访问属性基本上是通过将行 ID 乘以步长（单个向量的长度）并从计算出的内存位置获取请求的属性。这提供了非常低的随机访问延迟。
+* 为了获得可接受的性能，属性必须在内存中，否则由于存储的行式特性，Manticore 可能需要从磁盘读取过多不必要的数据，这在许多情况下是次优的。
 
-使用 **列式存储**：
-* 每个属性都独立于所有其他属性存储在其单独的“列”中
-* 存储被分成 65536 个条目的块
-* 块以压缩形式存储。这通常允许仅存储几个不同的值，而不是像行式存储那样存储所有值。高压缩比允许更快地从磁盘读取，并大大降低内存需求
-* 当数据被索引时，每个块独立选择存储方案。例如，如果一个块中的所有值都相同，则采用“常量”存储，整个块只存储一个值。如果每个块的唯一值少于 256 个，则采用“表”存储，存储值表的索引而不是值本身
-* 如果明确请求的值不在块中，可以提前拒绝在块中的搜索。
+**列式存储**：
+* 每个属性独立存储在自己的单独“列”中
+* 存储被分割成 65536 条目的块
+* 块被压缩存储。这通常允许仅存储几个不同的值，而不是像行式存储那样存储所有值。高压缩比允许更快地从磁盘读取，并大大降低内存需求
+* 当数据被索引时，每个块独立选择存储方案。例如，如果块中的所有值都相同，它会获得“const”存储，并为整个块仅存储一个值。如果每个块中的唯一值少于 256 个，它会获得“table”存储，并存储到值表的索引而不是值本身
+* 如果可以明确看出请求的值不在块中，可以在块中提前拒绝搜索。
 
-列式存储旨在处理无法放入 RAM 的大数据量，因此建议如下：
-* 如果您有足够的内存容纳所有属性，您将从行式存储中受益
-* 否则，列式存储仍然可以为您提供不错的性能，同时内存占用低得多，这将允许您在表中存储更多的文档
+列式存储旨在处理无法完全装入 RAM 的大数据量，因此建议如下：
+* 如果您有足够的内存存储所有属性，行式存储将使您受益
+* 否则，列式存储仍能提供相当不错的性能，但内存占用要低得多，这将允许您在表中存储更多文档
 
-### 如何在存储类型之间切换
+### 如何在存储之间切换
 
-传统的行式存储是默认方式，因此如果您希望所有内容都以行式存储，创建表时无需进行任何操作。
+传统行式存储是默认方式，因此如果你想让所有内容都以行式方式存储，在创建表时无需进行任何操作。
 
-要启用列式存储，您需要：
-* 在 [CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) 中指定 `engine='columnar'`，使表的所有属性变为列式。然后，如果您希望保留特定属性为行式，需要在声明该属性时添加 `engine='rowwise'`。例如：
+要启用列式存储，你需要：
+* 在 [CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE) 中指定 `engine='columnar'`，使表的所有属性都为列式存储。然后，如果你想让某个特定属性保持行式存储，声明时需要添加 `engine='rowwise'`。例如：
 ```sql
 create table tbl(title text, type int, price float engine='rowwise') engine='columnar'
 ```
-* 在 `CREATE TABLE` 中为特定属性指定 `engine='columnar'`，使其变为列式。例如：
+* 在 `CREATE TABLE` 中为特定属性指定 `engine='columnar'` 以使其为列式存储。例如：
 ```sql
 create table tbl(title text, type int, price float engine='columnar');
 ```
@@ -351,16 +351,16 @@ create table tbl(title text, type int, price float engine='columnar');
 ```sql
 create table tbl(title text, type int, price float engine='columnar') engine='rowwise';
 ```
-* 在 [plain 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode) 下，您需要在 [columnar_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) 中列出希望为列式的属性。
+* 在 [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) 中，你需要在 [columnar_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) 中列出你希望为列式存储的属性。
 
 
 以下是 Manticore Search 支持的数据类型列表：
 
 ## 文档 ID
 
-文档标识符是一个必需的属性，必须是唯一的 64 位无符号整数。创建表时可以显式指定文档 ID，但即使未指定，文档 ID 也始终会被启用。文档 ID 无法更新。
+文档标识符是一个必填属性，必须是唯一的 64 位无符号整数。创建表时可以显式指定文档 ID，但即使未指定，它们也始终启用。文档 ID 无法更新。
 
-创建表时，您可以显式指定 ID，但无论您使用何种数据类型，其行为始终如上所述——以无符号 64 位存储，但以有符号 64 位整数形式暴露。
+创建表时，你可以显式指定 ID，但无论使用哪种数据类型，它始终会按照上述描述进行处理 - 以无符号 64 位存储，但以有符号 64 位整数形式暴露。
 
 ```sql
 mysql> CREATE TABLE tbl(id bigint, content text);
@@ -374,7 +374,7 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-您也可以完全省略指定 ID，它将自动启用。
+你也可以完全省略指定 ID，它将自动启用。
 ```sql
 mysql> CREATE TABLE tbl(content text);
 DESC tbl;
@@ -387,16 +387,16 @@ DESC tbl;
 2 rows in set (0.00 sec)
 ```
 
-处理文档 ID 时，重要的是要知道它们在内部以无符号 64 位整数存储，但根据接口的不同，处理方式也有所不同：
+在处理文档 ID 时，重要的是要知道它们在内部存储为无符号 64 位整数，但根据接口的不同，处理方式会有所不同：
 
 **MySQL/SQL 接口：**
-* 大于 2^63-1 的 ID 将显示为负数。
-* 过滤此类大 ID 时，必须使用其有符号表示。
+* 大于 2^63-1 的 ID 会显示为负数。
+* 在使用如此大的 ID 进行过滤时，必须使用其有符号表示。
 * 使用 [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) 函数查看实际的无符号值。
 
 **JSON/HTTP 接口：**
-* ID 始终以其原始无符号值显示，无论大小。
-* 过滤时可以使用有符号或无符号表示。
+* ID 始终显示为其原始无符号值，无论大小。
+* 过滤时可以使用有符号和无符号表示。
 * 插入操作接受完整的无符号 64 位范围。
 
 例如，让我们创建一个表并插入一些接近 2^63 的值：
@@ -408,7 +408,7 @@ mysql> insert into t values(9223372036854775807, '2 ^ 63 - 1'),(9223372036854775
 Query OK, 2 rows affected (0.00 sec)
 ```
 
-一些 ID 在结果中显示为负数，因为它们超过了 2^63-1。然而，使用 `UINT64(id)` 可以揭示它们的实际无符号值：
+某些 ID 在结果中显示为负数，因为它们超过了 2^63-1。然而，使用 `UINT64(id)` 可以揭示它们的实际无符号值：
 ```sql
 mysql> select *, uint64(id) from t;
 +----------------------+------------+---------------------+
@@ -421,7 +421,7 @@ mysql> select *, uint64(id) from t;
 --- 2 out of 2 results in 0ms ---
 ```
 
-对于查询 ID 小于 2^63 的文档，可以直接使用无符号值：
+对于查询 ID 小于 2^63 的文档，你可以直接使用无符号值：
 ```sql
 mysql> select * from t where id = 9223372036854775807;
 +---------------------+------------+
@@ -433,7 +433,7 @@ mysql> select * from t where id = 9223372036854775807;
 --- 1 out of 1 results in 0ms ---
 ```
 
-但是，对于从 2^63 开始的 ID，需要使用有符号值：
+然而，对于从 2^63 开始的 ID，你需要使用有符号值：
 ```sql
 mysql> select * from t where id = -9223372036854775808;
 +----------------------+---------+
@@ -445,13 +445,13 @@ mysql> select * from t where id = -9223372036854775808;
 --- 1 out of 1 results in 0ms ---
 ```
 
-如果使用无符号值，将会出错：
+如果你使用无符号值，将会得到错误：
 ```sql
 mysql> select * from t where id = 9223372036854775808;
 ERROR 1064 (42000): number 9223372036854775808 is out of range [-9223372036854775808..9223372036854775807]
 ```
 
-超出 64 位范围的值将触发类似错误：
+无法容纳在 64 位内的值将触发类似的错误：
 
 ```sql
 mysql> select * from t where id = -9223372036854775809;
@@ -460,7 +460,7 @@ ERROR 1064 (42000): number -9223372036854775809 is out of range [-92233720368547
 
 ### 大 ID 的接口差异
 
-MySQL/SQL 和 JSON/HTTP 接口之间的行为差异在处理非常大的文档 ID 时变得更加明显。以下是一个全面的示例：
+当文档 ID 非常大时，MySQL/SQL 和 JSON/HTTP 接口之间的行为差异会更加明显。以下是一个全面的示例：
 
 **MySQL/SQL 接口：**
 ```sql
@@ -521,8 +521,8 @@ curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
 ```
 
 这意味着在处理大文档 ID 时：
-1. **MySQL 接口** 要求查询时使用有符号表示，但可以通过 `UINT64()` 显示无符号值
-2. **JSON 接口** 始终使用无符号值显示，并接受两种表示进行过滤
+1. **MySQL 接口**需要使用有符号表示进行查询，但可以使用 `UINT64()` 显示无符号值
+2. **JSON 接口**始终使用无符号值进行显示，并接受两种表示用于过滤
 
 ## 字符数据类型
 
@@ -534,27 +534,27 @@ string|text [stored|attribute] [indexed]
 **属性：**
 
 1. `indexed` - 全文索引（可用于全文查询）
-2. `stored` - 存储在文档存储中（存储在磁盘上，而非 RAM 中，惰性读取）
+2. `stored` - 存储在文档存储中（存储在磁盘上，不在 RAM 中，延迟读取）
 3. `attribute` - 使其成为字符串属性（可以按其排序/分组）
 
-指定至少一个属性会覆盖所有默认属性（见下文），即，如果您决定使用自定义属性组合，需要列出所有您想要的属性。
+指定至少一个属性将覆盖所有默认属性（见下文），即，如果你决定使用自定义属性组合，需要列出所有你想要的属性。
 
 **未指定任何属性：**
 
-`string` 和 `text` 是别名，但如果您不指定任何属性，它们默认表示不同的含义：
+`string` 和 `text` 是别名，但如果你未指定任何属性，默认情况下它们意味着不同的内容：
 
-* 仅 `string` 默认表示 `attribute`（详见 [下文](../Creating_a_table/Data_types.md#Text)）。
-* 仅 `text` 默认表示 `stored` + `indexed`（详见 [下文](../Creating_a_table/Data_types.md#String)）。
+* 仅 `string` 默认意味着 `attribute`（详见[下方](../Creating_a_table/Data_types.md#Text)）。
+* 仅 `text` 默认意味着 `stored` + `indexed`（详见[下方](../Creating_a_table/Data_types.md#String)）。
 
 ### 文本
 
 <!-- example working with text -->
 
-文本（仅 `text` 或 `text/string indexed`）数据类型构成表的全文部分。文本字段被索引，可以用于搜索关键词。
+文本（仅 `text` 或 `text/string indexed`）数据类型构成表的全文部分。文本字段被索引，可以搜索关键字。
 
-文本通过分析器管道处理，将文本转换为单词，应用词形变换等。最终，从该文本构建出全文表（一种特殊的数据结构，能够快速搜索关键词）。
+文本通过分析器管道传递，将文本转换为单词，应用形态变换等。最终，从该文本构建一个全文表（一种特殊的数据结构，可快速搜索关键字）。
 
-全文字段只能在 `MATCH()` 子句中使用，不能用于排序或聚合。单词存储在倒排索引中，并带有它们所属字段的引用和字段中的位置。这允许在每个字段内搜索单词，并使用邻近等高级运算符。默认情况下，字段的原始文本既被索引，也被存储在文档存储中。这意味着原始文本可以随查询结果返回，并用于 [搜索结果高亮](../Searching/Highlighting.md)。
+全文字段只能在 `MATCH()` 子句中使用，不能用于排序或聚合。单词存储在倒排索引中，同时存储它们所属字段的引用和字段中的位置。这允许在每个字段内搜索单词并使用高级操作符如邻近性。默认情况下，字段的原始文本既被索引又被存储在文档存储中。这意味着原始文本可以与查询结果一起返回，并用于[搜索结果高亮](../Searching/Highlighting.md)。
 
 <!-- intro -->
 ##### SQL:
@@ -765,7 +765,7 @@ table products
 
 <!-- example for field naming  -->
 
-字段是有名称的，您可以将搜索限制在单个字段（例如仅搜索"title"）或字段子集（例如仅"title"和"abstract"）。您最多可以拥有256个全文字段。
+字段会被命名，你可以将搜索限制在单个字段（例如仅搜索“title”）或字段的子集（例如仅“title”和“abstract”）。你可以最多拥有256个全文字段。
 
 <!-- intro -->
 ##### SQL:
@@ -861,9 +861,9 @@ utils_api.sql("CREATE TABLE products(title text indexed)", Some(true)).await;
 
 <!-- example for string attributes  -->
 
-与全文字段不同，字符串属性（仅`string`或`string/text attribute`）按接收时的原样存储，不能用于全文搜索。相反，它们会在结果中返回，可以在`WHERE`子句中用于比较过滤或`REGEX`，并且可以用于排序和聚合。通常，不建议在字符串属性中存储大文本，而是将字符串属性用于元数据，如名称、标题、标签、键。
+与全文字段不同，字符串属性（仅 `string` 或 `string/text attribute`）会按原样存储，不能用于全文搜索。相反，它们会在结果中返回，可用于 `WHERE` 子句中的比较过滤或 `REGEX`，并可用于排序和聚合。通常不建议将大文本存储在字符串属性中，而是将字符串属性用于元数据，如名称、标题、标签、键。
 
-如果您还想索引字符串属性，可以同时指定为`string attribute indexed`。这将允许全文搜索并作为属性使用。
+如果你想同时对字符串属性进行索引，可以指定为 `string attribute indexed`。这将允许全文搜索，并作为属性使用。
 
 <!-- intro -->
 ##### SQL:
@@ -972,12 +972,12 @@ table products
 
 <!-- example string field -->
 
-您可以创建一个同时存储为字符串属性的全文字段。这种方法会创建一个同名的全文字段和字符串属性。请注意，您不能添加`stored`属性来同时将数据存储为字符串属性和文档存储中。
+你可以创建一个同时作为字符串属性存储的全文字段。这种方法会创建一个与字符串属性同名的全文字段和字符串属性。请注意，你不能同时添加 `stored` 属性来将数据作为字符串属性存储并在文档存储中存储。
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-`string attribute indexed`意味着我们正在处理一种字符串数据类型，它作为属性存储并作为全文字段索引。
+`string attribute indexed` 表示我们正在处理一种字符串数据类型，它作为属性存储并作为全文字段进行索引。
 
 ```sql
 CREATE TABLE products ( title string attribute indexed );
@@ -1077,13 +1077,13 @@ table products
 
 </details>
 
-### 在Manticore中存储二进制数据
+### 在 Manticore 中存储二进制数据
 
 <!-- example binary -->
 
-Manticore没有专门的二进制数据类型字段，但您可以通过使用base64编码和`text stored`或`string stored`字段类型（它们是同义词）来安全地存储它。如果您不对二进制数据进行编码，部分数据可能会丢失——例如，如果遇到空字节，Manticore会修剪字符串的末尾。
+Manticore 没有专门用于二进制数据的字段类型，但你可以通过使用 base64 编码和 `text stored` 或 `string stored` 字段类型（它们是同义词）来安全地存储它。如果你不编码二进制数据，其中一部分可能会丢失——例如，Manticore 会在遇到空字节时修剪字符串的末尾。
 
-这是一个示例，我们使用base64编码`ls`命令，将其存储在Manticore中，然后解码以验证MD5校验和保持不变：
+以下是一个示例，我们使用 base64 编码 `ls` 命令，将其存储在 Manticore 中，然后解码以验证 MD5 校验和是否保持不变：
 
 <!-- request Example -->
 ```bash
@@ -1100,7 +1100,7 @@ Manticore没有专门的二进制数据类型字段，但您可以通过使用ba
 
 <!-- example for integers  -->
 
-整数类型允许存储32位**无符号**整数值。
+整数类型允许存储 32 位 **无符号** 整数值。
 
 <!-- intro -->
 ##### SQL:
@@ -1207,7 +1207,7 @@ table products
 
 <!-- example for bit integers  -->
 
-整数可以通过指定位数以比32位更短的尺寸存储。例如，如果我们想存储一个我们知道不会大于8的数值，类型可以定义为`bit(3)`。位计数整数比全尺寸整数性能更慢，但它们需要更少的RAM。它们以32位块保存，因此为了节省空间，它们应该分组在属性定义的末尾（否则，在两个全尺寸整数之间的位计数整数也将占用32位）。
+通过指定位数，整数可以以比 32 位更短的大小存储。例如，如果我们知道要存储的数值不会超过 8，类型可以定义为 `bit(3)`。位数整数的性能比全尺寸整数慢，但它们需要更少的 RAM。它们以 32 位块保存，因此为了节省空间，应将它们分组在属性定义的末尾（否则，两个全尺寸整数之间的位数整数也会占用 32 位）。
 
 <!-- intro -->
 ##### SQL:
@@ -1317,7 +1317,7 @@ table products
 
 <!-- example for bigints  -->
 
-大整数（bigint）是64位宽的**有符号**整数。
+大整数（bigint）是64位宽的 **有符号** 整数。
 
 <!-- intro -->
 ##### SQL:
@@ -1422,11 +1422,11 @@ table products
 
 <!-- end -->
 
-## 布尔类型
+## 布尔值
 
 <!-- example for boolean  -->
 
-声明一个布尔属性。等同于位数为1的整数属性。
+声明一个布尔属性。它等同于一个位数为1的整数属性。
 
 <!-- intro -->
 ##### SQL:
@@ -1535,9 +1535,9 @@ table products
 
 <!-- example for timestamps  -->
 
-时间戳类型表示Unix时间戳，以32位整数存储。与基本整数不同，时间戳类型允许使用[时间和日期](../Functions/Date_and_time_functions.md)函数。从字符串值转换遵循以下规则：
+时间戳类型表示Unix时间戳，存储为32位整数。与基本整数不同，时间戳类型允许使用[时间与日期](../Functions/Date_and_time_functions.md)函数。从字符串值转换遵循以下规则：
 
-- 不带分隔符的数字，且长度至少为10个字符，按原样转换为时间戳。
+- 没有分隔符且至少10个字符的数字将直接转换为时间戳。
 - `%Y-%m-%dT%H:%M:%E*S%Z`
 - `%Y-%m-%d'T'%H:%M:%S%Z`
 - `%Y-%m-%dT%H:%M:%E*S`
@@ -1548,9 +1548,9 @@ table products
 - `%Y-%m`
 - `%Y`
 
-这些转换格式的含义详见[strptime手册](https://man7.org/linux/man-pages/man3/strptime.3.html)，除`%E*S`表示毫秒外。
+这些转换说明符的含义在[strptime手册](https://man7.org/linux/man-pages/man3/strptime.3.html)中有详细说明，除了`%E*S`，它表示毫秒。
 
-注意，纯表中不支持时间戳的自动转换。
+请注意，普通表不支持时间戳的自动转换。
 
 <!-- intro -->
 ##### SQL:
@@ -1766,7 +1766,7 @@ table products
 
 <!-- example for eps comparison -->
 
-与整数类型不同，不建议直接比较两个浮点数是否相等，因为可能存在舍入误差。更可靠的做法是使用近似比较，通过检查绝对误差范围。
+与整数类型不同，由于可能存在舍入误差，不建议直接比较两个浮点数是否相等。更可靠的方法是使用近似相等比较，通过检查绝对误差范围。
 
 <!-- intro -->
 ##### SQL:
@@ -1878,7 +1878,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for float mul -->
 
-另一个替代方案，也可用于执行`IN(attr,val1,val2,val3)`，是通过选择一个乘数因子将浮点数转换为整数进行比较操作。以下例子展示了如何将`IN(attr,2.0,2.5,3.5)`修改为整型值。
+另一种替代方法，也可以用于执行`IN(attr,val1,val2,val3)`的是通过选择一个乘数因子，将浮点数转换为整数进行比较。以下示例说明了如何修改`IN(attr,2.0,2.5,3.5)`以使用整数值进行操作。
 
 <!-- intro -->
 ##### SQL:
@@ -1990,11 +1990,11 @@ let search_res = search_api.search(search_req).await;
 <!-- end -->
 
 <!-- example float_accuracy -->
-浮点值在Manticore中以精确的方式显示，以确保它们反映存储的确切值。这种方法是为了防止精度丢失，特别是在地理坐标等情况下，四舍五入到6位小数会导致不准确。
+Manticore 中的浮点值会以精确度显示，以确保它们反映存储的精确值。这种方法的引入是为了防止精度损失，特别是在地理坐标等情况下，四舍五入到小数点后六位会导致不准确。
 
-现在，Manticore首先输出一个带有6位数字的数字，然后解析并将其与原始值进行比较。如果不匹配，则会添加更多位数，直到匹配为止。
+现在，Manticore 首先输出一个六位数字，然后将其解析并与原始值进行比较。如果不匹配，将添加更多数字，直到匹配为止。
 
-例如，如果浮点值插入为`19.45`，Manticore将显示为`19.450001`以准确表示存储的值。
+例如，如果浮点值被插入为 `19.45`，Manticore 会将其显示为 `19.450001`，以准确表示存储的值。
 
 <!-- request Example -->
 ```sql
@@ -2023,7 +2023,7 @@ select * from t
 
 <!-- example for creating json -->
 
-此数据类型允许存储JSON对象，特别适用于处理无模式数据。在定义JSON值时，请确保对象的开闭花括号`{`和`}`包含，或数组的开闭方括号`[`和`]`包含。虽然JSON不支持列存储，但它可以存储在传统的行存储中。值得注意的是，这两种存储类型可以在同一表中结合使用。
+此数据类型允许存储 JSON 对象，这对于处理无模式数据特别有用。在定义 JSON 值时，请确保包含对象的开闭大括号 `{` 和 `}`，或数组的方括号 `[` 和 `]`。虽然 JSON 不被列存储支持，但可以存储在传统的行存储中。值得注意的是，这两种存储类型可以在同一张表中结合使用。
 
 <!-- intro -->
 ##### SQL:
@@ -2131,7 +2131,7 @@ table products
 
 <!-- example for INDEXOF() json -->
 
-JSON属性可以在大多数操作中使用。还有一些特殊函数，如[ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)、[ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)、[GREATEST()](../Functions/Mathematical_functions.md#GREATEST%28%29)、[LEAST()](../Functions/Mathematical_functions.md#LEAST%28%29)和[INDEXOF()](../Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29)，允许遍历属性数组。
+JSON 属性可以用于大多数操作。还有一些特殊函数，如 [ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)、[ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)、[GREATEST()](../Functions/Mathematical_functions.md#GREATEST%28%29)、[LEAST()](../Functions/Mathematical_functions.md#LEAST%28%29) 和 [INDEXOF()](../Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29)，允许遍历属性数组。
 
 <!-- intro -->
 ##### SQL:
@@ -2246,7 +2246,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for REGEX() json -->
 
-文本属性与字符串相同，因此无法在全文匹配表达式中使用。但是，可以使用字符串函数，如[REGEX()](../Functions/String_functions.md#REGEX%28%29)。
+文本属性与字符串的处理方式相同，因此无法在全文匹配表达式中使用它们。但是，可以使用诸如 [REGEX()](../Functions/String_functions.md#REGEX%28%29) 等字符串函数。
 
 <!-- intro -->
 ##### SQL:
@@ -2373,7 +2373,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for DOUBLE() -->
 
-在处理浮点值的情况下，可能需要强制执行数据类型以确保某些情况下的正确功能。例如，当处理浮点值时，必须使用[DOUBLE()](../Functions/Type_casting_functions.md#DOUBLE%28%29)以确保正确的排序。
+在 JSON 属性的情况下，某些情况下可能需要强制数据类型以确保正常功能。例如，在处理浮点值时，必须使用 [DOUBLE()](../Functions/Type_casting_functions.md#DOUBLE%28%29) 进行正确排序。
 
 <!-- intro -->
 ##### SQL:
@@ -2481,307 +2481,319 @@ let search_res = search_api.search(search_req).await;
 
 <!-- end -->
 
-## Float vector
+## 浮点向量
 
 <!-- example float_vector_auto -->
 
-浮点向量属性允许存储可变长度的浮点数列表，主要用于机器学习应用和相似性搜索。此类型与[多值整数（MVA）](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)（MVAs）在几个重要方面不同：
-- 保留值的确切顺序（与MVAs不同，MVAs可能会重新排序）
-- 保留重复值（与MVAs不同，MVAs会去重）
-- 插入时无需额外处理（与MVAs不同，MVAs会排序和去重）
+浮点向量属性允许存储可变长度的浮点数列表，主要用于机器学习应用和相似性搜索。此类型与 [多值属性](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)（MVA）在几个重要方面有所不同：
+- 保留值的精确顺序（与可能重新排序的 MVA 不同）
+- 保留重复值（与去重的 MVA 不同）
+- 插入时没有额外处理（与排序和去重的 MVA 不同）
 
 浮点向量属性允许存储可变长度的浮点数列表，主要用于机器学习应用和相似性搜索。
 
-### 使用和限制
-- 目前仅支持实时表
-- 仅可在KNN（k-最近邻）搜索中使用
-- 不支持在普通表或其他函数/表达式中使用
-- 当与KNN设置一起使用时，不能`UPDATE` `float_vector`值。请使用`REPLACE`代替
-- 当未使用KNN设置时，可以`UPDATE` `float_vector`值
-- 浮点向量不能用于常规过滤或排序
-- 通过向量搜索操作（KNN）是过滤`float_vector`值的唯一方式
+### 使用和限制  
+- 目前仅支持实时表格  
+- 只能用于 KNN（k-最近邻）搜索  
+- 不支持在普通表格或其他函数/表达式中使用  
+- 当使用 KNN 设置时，您不能更新 `float_vector` 值。使用 `REPLACE` 替代  
+- 当不使用 KNN 设置时，您可以更新 `float_vector` 值  
+- `float_vector` 数据类型不能用于常规过滤或排序  
+- 仅通过向量搜索操作（KNN）才能过滤 `float_vector` 值  
 
-### 常见用例
-- 用于语义搜索的文本嵌入
-- 推荐系统向量
-- 用于相似性搜索的图像嵌入
-- 用于机器学习的特征向量
+### 常见使用案例  
+- 文本向量用于语义搜索  
+- 推荐系统向量  
+- 图像向量用于相似搜索  
+- 特征向量用于机器学习  
 
-**请记住，`float_vector`数据类型与[自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)机制不兼容。**
+**请注意，`float_vector` 数据类型与 [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) 机制不兼容。**
 
-有关设置浮点向量并在搜索中使用它们的详细信息，请参阅[KNN搜索](../Searching/KNN.md)。
+对于设置 float 向量和使用它们在搜索中的更多细节，请参阅 [KNN 搜索](../Searching/KNN.md)。
 
-### 自动嵌入（推荐）
+### 推荐的 Auto Embeddings（最方便的方式）  
 
-处理浮点向量最简便的方式是使用**自动嵌入**。此功能使用机器学习模型自动从您的文本数据生成嵌入，从而消除手动计算和插入向量的需要。
+使用 **自动向量** 最方便地工作。该功能自动从您的文本数据中生成向量，无需手动计算和插入向量。
 
-#### 自动嵌入的优势
-- **简化的工作流程**：只需插入文本，嵌入会自动生成
-- **无需手动计算向量**：无需运行单独的嵌入模型
-- **一致的嵌入**：相同的模型确保一致的向量表示
-- **支持多种模型**：可以选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、OpenAI、Voyage 和 Jina 模型
-- **灵活的字段选择**：控制用于生成嵌入的字段
+#### 自动向量的优势  
+- **简化流程**：只需插入文本，向量即自动生成  
+- **无需手动向量计算**：无需运行单独的向量模型  
+- **一致的向量表示**：使用相同的模型确保向量表示的一致性  
+- **支持多种模型**：可选择使用 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、OpenAI、Voyage 和 Jina 等模型  
+- **灵活的字段选择**：控制用于向量生成的字段  
 
-#### 创建带有自动嵌入的表
+#### 创建表格时的参数  
 
-在创建带有自动嵌入的表时，指定以下附加参数：
-- `MODEL_NAME`：用于自动向量生成的嵌入模型
-- `FROM`：用于生成嵌入的字段（空字符串表示所有文本/字符串字段）
+当创建表格时，指定以下参数：  
+- `MODEL_NAME`：自动向量生成的模型  
+- `FROM`：用于向量生成的字段（空字符串表示所有文本/字符串字段）  
+- `API_KEY`：远程模型（OpenAI、Voyage、Jina）需要的参数  
+- `API_URL`：可选。自定义 API 地址。若未指定，使用默认的提供者端点（例如 OpenAI 的默认端点 `https://api.openai.com/v1/embeddings`）  
+- `API_TIMEOUT`：可选。API 请求的超时时间（默认为 10 秒）。设置为 `'0'` 以使用默认超时时间。适用于创建表格时的验证请求和向量插入操作。
 
-**支持的嵌入模型：**
-- **Sentence Transformers**：任何 [适合的 BERT 基础 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。Manticore 在创建表时下载模型。
-- **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002` - 需要 `API_KEY='<OPENAI_API_KEY>'` 参数
-- **Voyage**：Voyage AI 嵌入模型 - 需要 `API_KEY='<VOYAGE_API_KEY>'` 参数
-- **Jina**：Jina AI 嵌入模型 - 需要 `API_KEY='<JINA_API_KEY>'` 参数
+**支持的向量模型**：  
+- **Sentence Transformers**：任何适合的 BERT 基础 Hugging Face 模型（例如 `sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。Manticore 会下载模型。  
+- **OpenAI、Voyage、Jina**：远程模型（例如 `openai/text-embedding-ada-002`、`voyage/voyage-3.5-lite`、`jina/jina-embeddings-v2-base-en`）——需 `API_KEY='<API_KEY>'` 参数。可选地指定 `API_URL='<CUSTOM_URL>'` 使用自定义 API 端点，以及 `API_TIMEOUT='<SECONDS>'` 设置 HTTP 超时时间（默认为 10 秒）。
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 <!-- request SQL -->
 
-使用 [sentence-transformers 模型](https://huggingface.co/sentence-transformers/models)（无需 API 密钥）
-```sql
 CREATE TABLE products (
+```sql
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
 );
+Using OpenAI model (requires API_KEY parameter)
 ```
 
-使用 OpenAI 模型（需要 API_KEY 参数）
-```sql
 CREATE TABLE products_openai (
+```sql
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
+Using OpenAI with custom API URL and timeout (optional)
 ```
 
-使用所有文本字段进行嵌入（FROM 为空）
+CREATE TABLE products_openai_custom (
 ```sql
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' 
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+Using all text fields for embeddings (FROM is empty)
+```
+
 CREATE TABLE products_all_fields (
+```sql
     title TEXT,
     description TEXT,
     tags TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM=''
 );
+#### `FROM` 参数使用  
 ```
 
 <!-- end -->
 
-#### FROM 参数使用
+`FROM` 参数控制向量生成使用的字段：  
 
-`FROM` 参数控制用于生成嵌入的字段：
+**特定字段**：`FROM='title'` - 只使用标题字段  
 
-- **特定字段**：`FROM='title'` - 仅使用标题字段
-- **多个字段**：`FROM='title,description'` - 将标题和描述字段连接并使用
-- **所有文本字段**：`FROM=''`（空）- 表中的所有 `text`（全文字段）和 `string`（字符串属性）字段用于嵌入生成
-- **空向量**：仍然可以使用 `()` 插入空向量以排除文档从向量搜索
+- **多个字段**：`FROM='title,description'` - 标题和描述字段合并使用  
+- **所有文本字段**：`FROM=''`（空字符串） - 所有 `text`（全文字段）和 `string`（字符串属性）字段使用  
+- **空向量**：仍可通过 `()` 插入空向量，以排除向量搜索的文档  
+- #### 使用自动向量插入数据  
 
-#### 使用自动嵌入插入数据
+当使用自动向量时，**不要在 INSERT 语句中指定向量字段**。向量将自动从指定的文本字段中生成：  
 
-使用自动嵌入时，**不要在 INSERT 语句中指定向量字段**。嵌入会自动从指定的文本字段生成：
+-- Insert text data - embeddings generated automatically
 
 ```sql
--- Insert text data - embeddings generated automatically
 INSERT INTO products (title, description) VALUES 
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
-
 -- Insert with empty vector (excluded from vector search)
+
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
+### 手动浮点向量使用  
 ```
 
-### 手动使用浮点向量
+Alternatively, you can work with manually computed float vectors.  
 
 <!-- example for creating float_vector -->
-也可以使用手动计算的浮点向量。
+##### SQL:
 
 <!-- intro -->
-##### SQL：
+CREATE TABLE products(title text, image_vector float_vector);
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, image_vector float_vector);
+##### JSON:
 ```
 
 <!-- intro -->
-##### JSON：
+POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
 
 <!-- request JSON -->
 
 ```JSON
-POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
+##### PHP:
 ```
 
 <!-- intro -->
-##### PHP：
+$index = new \Manticoresearch\Index($client);
 
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
 $index->setName('products');
 $index->create([
     'title'=>['type'=>'text'],
 	'image_vector'=>['type'=>'float_vector']
 ]);
+##### Python:
 ```
 
 <!-- intro -->
-##### Python：
+utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
 
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
+##### Python-asyncio:
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
 
 <!-- request Python-asyncio -->
 
 ```python
-await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
+##### JavaScript:
 ```
 
 <!-- intro -->
-##### Javascript：
+res = await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)');
 
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)');
+##### Java:
 ```
 <!-- intro -->
-##### java：
+utilsApi.sql("CREATE TABLE products(title text, image_vector float_vector)");
 
 <!-- request java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, image_vector float_vector)");
+##### C#:
 ```
 
 <!-- intro -->
-##### C#：
+utilsApi.Sql("CREATE TABLE products(title text, image_vector float_vector)");
 
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, image_vector float_vector)");
+##### Rust:
 ```
 
 <!-- intro -->
-##### Rust：
+utils_api.sql("CREATE TABLE products(title text, image_vector float_vector)", Some(true)).await;
 
 <!-- request Rust -->
 
 ```rust
-utils_api.sql("CREATE TABLE products(title text, image_vector float_vector)", Some(true)).await;
+##### config:
 ```
 
 <!-- intro -->
-##### config：
+table products
 
 <!-- request config -->
 
 ```ini
-table products
 {
 	type = rt
 	path = products
-
 	rt_field = title
-	stored_fields = title
 
+	stored_fields = title
 	rt_attr_float_vector = image_vector
+
 }
+## 多值整数（MVA）  
 ```
 
 <!-- end -->
 
-## 多值整数（MVA）
+Multi-value attributes allow storing variable-length lists of 32-bit unsigned integers. This can be useful for storing one-to-many numeric values, such as tags, product categories, and properties.  
 
 <!-- example for creating MVA32 -->
 
-多值属性允许存储可变长度的32位无符号整数列表。这在存储一对多的数值时非常有用，例如标签、产品类别和属性。
+##### SQL:
 
 <!-- intro -->
-##### SQL：
+CREATE TABLE products(title text, product_codes multi);
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, product_codes multi);
+or
 ```
-或
-```sql
 CREATE TABLE products(title text, product_codes mva);
+```sql
+##### JSON:
 ```
 
 <!-- intro -->
-##### JSON：
+POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 
 <!-- request JSON -->
 
 ```JSON
-POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
+##### PHP:
 ```
 
 <!-- intro -->
-##### PHP：
+$index = new \Manticoresearch\Index($client);
 
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
 $index->setName('products');
 $index->create([
     'title'=>['type'=>'text'],
 	'product_codes'=>['type'=>'multi']
 ]);
+##### Python:
 ```
 
 <!-- intro -->
-##### Python：
+utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
 
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
+##### Python-asyncio:
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
 
 <!-- request Python-asyncio -->
 
 ```python
-await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
+##### JavaScript:
 ```
 
 <!-- intro -->
-##### Javascript：
+res = await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)');
 
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)');
+##### Java:
 ```
 <!-- intro -->
-##### java：
+utilsApi.sql("CREATE TABLE products(title text, product_codes multi)");
 
 <!-- request java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, product_codes multi)");
+##### C#:
 ```
 
 <!-- intro -->
-##### C#：
+utilsApi.Sql("CREATE TABLE products(title text, product_codes multi)");
 
 <!-- request C# -->
 
@@ -2790,7 +2802,7 @@ utilsApi.Sql("CREATE TABLE products(title text, product_codes multi)");
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -2799,7 +2811,7 @@ utils_api.sql("CREATE TABLE products(title text, product_codes multi)", Some(tru
 ```
 
 <!-- intro -->
-##### config：
+##### config:
 
 <!-- request config -->
 
@@ -2820,18 +2832,18 @@ table products
 
 
 <!-- example for any/all MVA -->
-它支持过滤和聚合，但不支持排序。过滤可以通过至少一个元素通过（使用 [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)）或所有元素 ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)) 来完成。
+它支持过滤和聚合，但不支持排序。过滤可以通过至少一个元素通过的条件（使用 [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)）或所有元素（[ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)）通过来实现。
 
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 <!-- request SQL -->
 
 ```sql
 select * from products where any(product_codes)=3
 ```
 <!-- intro -->
-##### JSON：
+##### JSON:
 
 <!-- request JSON -->
 
@@ -2848,7 +2860,7 @@ POST /search
 ```
 
 <!-- intro -->
-##### PHP：
+##### PHP:
 
 <!-- request PHP -->
 
@@ -2929,7 +2941,7 @@ let search_res = search_api.search(search_req).await;
 
 <!-- example for least/greatest MVA -->
 
-可以提取诸如[最小](../Functions/Mathematical_functions.md#LEAST%28%29)或[最大](../Functions/Mathematical_functions.md#GREATEST%28%29)元素以及列表长度等信息。以下示例展示了如何按多值属性的最小元素进行排序。
+像 [least](../Functions/Mathematical_functions.md#LEAST%28%29) 或 [greatest](../Functions/Mathematical_functions.md#GREATEST%28%29) 元素以及列表长度等信息可以被提取。一个示例展示了如何按多值属性的最小元素进行排序。
 
 <!-- intro -->
 ##### SQL:
@@ -3043,7 +3055,7 @@ let search_res = search_api.search(search_req).await;
 <!-- end -->
 
 <!-- example for grouping by MVA -->
-当按多值属性分组时，一个文档将贡献给与该文档关联的不同值数量相同的多个组。例如，如果一个集合恰好包含一个文档，其'product_codes'多值属性的值为5、7和11，那么按'product_codes'分组将产生3个组，`COUNT(*)`等于1，`GROUPBY()`键值分别为5、7和11。另外请注意，按多值属性分组可能导致结果集中出现重复文档，因为每个文档可以参与多个组。
+当按多值属性进行分组时，一个文档将贡献给与该文档相关联的不同值的数量相同数量的组。例如，如果一个集合恰好包含一个文档，该文档具有名为 'product_codes' 的多值属性，其值为 5、7 和 11，那么在 'product_codes' 上分组将生成 3 个组，`COUNT(*)` 等于 1，`GROUPBY()` 键值分别为 5、7 和 11。此外，请注意按多值属性分组可能导致结果集中出现重复文档，因为每个文档可以参与多个组。
 
 <!-- intro -->
 ##### SQL:
@@ -3072,7 +3084,7 @@ Query OK, 1 row affected (0.00 sec)
 <!-- end -->
 
 <!-- example for MVA value order -->
-作为多值属性值插入的数字顺序不会被保留。值在内部以排序集合的形式存储。
+插入为多值属性值的数字顺序不会被保留。值在内部以排序后的集合形式存储。
 
 <!-- intro -->
 ##### SQL:
@@ -3385,11 +3397,11 @@ class SearchResponse {
 <!-- end -->
 
 
-## 多值大整数
+## Multi-value big integer
 
 <!-- example for creating MVA64 -->
 
-一种允许存储可变长度64位有符号整数列表的数据类型。其功能与多值整数相同。
+一种允许存储可变长度的 64 位带符号整数列表的数据类型。它与多值整数具有相同的功能。
 
 <!-- intro -->
 ##### SQL:
@@ -3480,7 +3492,7 @@ utils_api.sql("CREATE TABLE products(title text, values multi64))", Some(true)).
 ```
 
 <!-- intro -->
-##### 配置:
+##### config:
 
 <!-- request config -->
 
@@ -3499,14 +3511,14 @@ table products
 
 <!-- end -->
 
-## 列式属性特性
+## Columnar attribute properties
 
-当使用列式存储时，可以为属性指定以下特性。
+当你使用列式存储时，可以为属性指定以下属性。
 
 <!-- example fast_fetch -->
 ### fast_fetch
 
-默认情况下，Manticore 列式存储以列式方式存储所有属性，同时也在特殊的文档存储中按行存储。这使得像 `SELECT * FROM ...` 这样的查询能够快速执行，尤其是在一次获取大量记录时。但是，如果您确定不需要此功能或希望节省磁盘空间，可以在创建表时通过指定 `fast_fetch='0'` 来禁用它，或者（如果您在配置中定义表）使用 `columnar_no_fast_fetch`，如下例所示。
+默认情况下，Manticore 列式存储以列式方式存储所有属性，同时以特殊 docstore 的方式逐行存储。这使得执行如 `SELECT * FROM ...` 的查询变得快速，尤其是在一次获取大量记录时。但是，如果你确定不需要它或希望节省磁盘空间，可以通过在创建表时指定 `fast_fetch='0'` 或（如果你在配置中定义表）使用 `columnar_no_fast_fetch` 来禁用它，如以下示例所示。
 
 <!-- request RT mode -->
 ```sql

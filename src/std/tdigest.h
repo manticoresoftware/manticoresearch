@@ -40,6 +40,9 @@ public:
 	double Percentile ( double fPercent ) const noexcept;
 	double Quantile ( double fQuantile ) const noexcept;
 	double Cdf ( double fValue ) const noexcept;
+	double GetMin () const noexcept;
+	double GetMax () const noexcept;
+	void SetExtremes ( double fMin, double fMax, bool bHasData );
 
 	void Clear();
 	int64_t GetCount () const noexcept;

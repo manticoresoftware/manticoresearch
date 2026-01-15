@@ -20,6 +20,7 @@
 #include <cmath>
 #include <algorithm>
 #include <iterator>
+#include <limits>
 
 #if _WIN32
 #pragma warning(push,1)
@@ -51,6 +52,17 @@ public:
 
 	void Add ( double fValue, int64_t iWeight )
 	{
+		if ( std::isinf ( m_fMin ) )
+		{
+			m_fMin = fValue;
+			m_fMax = fValue;
+		}
+		else
+		{
+			m_fMin = std::min ( m_fMin, fValue );
+			m_fMax = std::max ( m_fMax, fValue );
+		}
+
 		if ( m_dMap.empty() )
 		{
 			m_dMap.insert ( std::pair<double, int64_t> ( fValue, iWeight ) );
@@ -144,23 +156,76 @@ public:
 			return 0.0;
 
 		if ( fQuantile<=0.0 )
-			return m_dMap.begin()->first;
+			return m_fMin;
 		if ( fQuantile>=1.0 )
-			return std::prev ( m_dMap.end() )->first;
+			return m_fMax;
 
-		if ( m_iCount<=1 )
+		if ( m_dMap.size()==1 )
 			return m_dMap.begin()->first;
 
-		double fRank = fQuantile * ( m_iCount - 1 );
-		int64_t iLower = (int64_t)std::floor ( fRank );
-		double fFrac = fRank - iLower;
+		const double fTotalWeight = (double)m_iCount;
+		const double fIndex = fQuantile * fTotalWeight;
 
-		double fLower = ValueAtRank ( iLower );
-		if ( fFrac==0.0 )
-			return fLower;
+		if ( fIndex < 1.0 )
+			return m_fMin;
 
-		double fUpper = ValueAtRank ( iLower+1 );
-		return fLower + fFrac * ( fUpper - fLower );
+		auto itFirst = m_dMap.begin();
+		if ( itFirst->second>1 && fIndex < itFirst->second / 2.0 )
+		{
+			double fDen = itFirst->second / 2.0 - 1.0;
+			if ( fDen>0.0 )
+				return m_fMin + ( fIndex - 1.0 ) / fDen * ( itFirst->first - m_fMin );
+			return itFirst->first;
+		}
+
+		if ( fIndex > fTotalWeight - 1.0 )
+			return m_fMax;
+
+		auto itLast = std::prev ( m_dMap.end() );
+		if ( itLast->second>1 && fTotalWeight - fIndex <= itLast->second / 2.0 )
+		{
+			double fDen = itLast->second / 2.0 - 1.0;
+			if ( fDen>0.0 )
+				return m_fMax - ( ( fTotalWeight - fIndex - 1.0 ) / fDen ) * ( m_fMax - itLast->first );
+			return itLast->first;
+		}
+
+		double fWeightSoFar = itFirst->second / 2.0;
+		auto it = itFirst;
+		auto itNext = std::next ( it );
+		while ( itNext!=m_dMap.end() )
+		{
+			double fDw = ( it->second + itNext->second ) / 2.0;
+			if ( fWeightSoFar + fDw > fIndex )
+			{
+				double fLeftUnit = 0.0;
+				if ( it->second==1 )
+				{
+					if ( fIndex - fWeightSoFar < 0.5 )
+						return it->first;
+					fLeftUnit = 0.5;
+				}
+
+				double fRightUnit = 0.0;
+				if ( itNext->second==1 )
+				{
+					if ( fWeightSoFar + fDw - fIndex <= 0.5 )
+						return itNext->first;
+					fRightUnit = 0.5;
+				}
+
+				double fZ1 = fIndex - fWeightSoFar - fLeftUnit;
+				double fZ2 = fWeightSoFar + fDw - fIndex - fRightUnit;
+				return WeightedAverage ( it->first, fZ2, itNext->first, fZ1 );
+			}
+			fWeightSoFar += fDw;
+			++it;
+			++itNext;
+		}
+
+		double fZ1 = fIndex - fTotalWeight - itLast->second / 2.0;
+		double fZ2 = itLast->second / 2.0 - fZ1;
+		return WeightedAverage ( itLast->first, fZ1, m_fMax, fZ2 );
 	}
 
 	double Cdf ( double fValue ) const noexcept
@@ -168,36 +233,107 @@ public:
 		if ( m_dMap.empty() )
 			return 0.0;
 
-		auto iMapFirst = m_dMap.begin();
-		auto iMapLast = std::prev ( m_dMap.end() );
+		const double fTotalWeight = (double)m_iCount;
 
-		if ( fValue <= iMapFirst->first )
+		if ( m_dMap.size()==1 )
+		{
+			if ( fValue < m_fMin )
+				return 0.0;
+			if ( fValue > m_fMax )
+				return 1.0;
+
+			double fWidth = m_fMax - m_fMin;
+			if ( fWidth<=0.0 )
+				return 0.5;
+
+			return ( fValue - m_fMin ) / fWidth;
+		}
+
+		if ( fValue < m_fMin )
 			return 0.0;
-		if ( fValue >= iMapLast->first )
+		if ( fValue > m_fMax )
 			return 1.0;
 
-		double fCumulative = 0.0;
-		auto iPrev = iMapFirst;
-		for ( auto i = m_dMap.begin(); i!=m_dMap.end(); ++i )
+		auto itFirst = m_dMap.begin();
+		auto itLast = std::prev ( m_dMap.end() );
+
+		if ( fValue < itFirst->first )
 		{
-			double fMean = i->first;
-			if ( fValue < fMean )
+			double fDelta = itFirst->first - m_fMin;
+			if ( fDelta>0.0 )
 			{
-				if ( i==iMapFirst )
-					return 0.0;
-
-				double fLeft = iPrev->first;
-				double fSpan = fMean - fLeft;
-				double fFraction = ( fSpan>0.0 ) ? ( ( fValue - fLeft ) / fSpan ) : 0.0;
-				double fBetween = ( iPrev->second + i->second ) / 2.0;
-				double fBefore = fCumulative - iPrev->second;
-				double fValueCount = ( iPrev->second / 2.0 ) + fFraction * fBetween;
-				return std::min ( 1.0, std::max ( 0.0, ( fBefore + fValueCount ) / m_iCount ) );
+				if ( fValue==m_fMin )
+					return 0.5 / fTotalWeight;
+				return ( 1.0 + ( fValue - m_fMin ) / fDelta * ( itFirst->second / 2.0 - 1.0 ) ) / fTotalWeight;
 			}
-
-			fCumulative += i->second;
-			iPrev = i;
+			return 0.0;
 		}
+
+		if ( fValue > itLast->first )
+		{
+			double fDelta = m_fMax - itLast->first;
+			if ( fDelta>0.0 )
+			{
+				if ( fValue==m_fMax )
+					return 1.0 - 0.5 / fTotalWeight;
+				double fDq = ( 1.0 + ( m_fMax - fValue ) / fDelta * ( itLast->second / 2.0 - 1.0 ) ) / fTotalWeight;
+				return 1.0 - fDq;
+			}
+			return 1.0;
+		}
+
+		double fWeightSoFar = 0.0;
+		for ( auto it = m_dMap.begin(); it!=itLast; ++it )
+		{
+			auto itNext = std::next ( it );
+
+			if ( it->first==fValue )
+			{
+				double fDw = 0.0;
+				auto itEqual = it;
+				while ( itEqual!=m_dMap.end() && itEqual->first==fValue )
+				{
+					fDw += itEqual->second;
+					++itEqual;
+				}
+				return ( fWeightSoFar + fDw / 2.0 ) / fTotalWeight;
+			}
+			else if ( it->first<=fValue && fValue < itNext->first )
+			{
+				if ( itNext->first - it->first > 0.0 )
+				{
+					double fLeftExcluded = 0.0;
+					double fRightExcluded = 0.0;
+					if ( it->second==1 )
+					{
+						if ( itNext->second==1 )
+							return ( fWeightSoFar + 1.0 ) / fTotalWeight;
+						fLeftExcluded = 0.5;
+					}
+					else if ( itNext->second==1 )
+					{
+						fRightExcluded = 0.5;
+					}
+
+					double fDw = ( it->second + itNext->second ) / 2.0;
+					double fDwNoSingleton = fDw - fLeftExcluded - fRightExcluded;
+					double fBase = fWeightSoFar + it->second / 2.0 + fLeftExcluded;
+					return ( fBase + fDwNoSingleton * ( fValue - it->first ) / ( itNext->first - it->first ) ) / fTotalWeight;
+				}
+				else
+				{
+					double fDw = ( it->second + itNext->second ) / 2.0;
+					return ( fWeightSoFar + fDw ) / fTotalWeight;
+				}
+			}
+			else
+			{
+				fWeightSoFar += it->second;
+			}
+		}
+
+		if ( fValue==itLast->first )
+			return 1.0 - 0.5 / fTotalWeight;
 
 		return 1.0;
 	}
@@ -211,6 +347,20 @@ public:
 	{
 		for ( const auto & tEntry : tOther.m_dMap )
 			Add ( tEntry.first, tEntry.second );
+
+		if ( tOther.m_iCount )
+		{
+			if ( std::isinf ( m_fMin ) )
+			{
+				m_fMin = tOther.m_fMin;
+				m_fMax = tOther.m_fMax;
+			}
+			else
+			{
+				m_fMin = std::min ( m_fMin, tOther.m_fMin );
+				m_fMax = std::max ( m_fMax, tOther.m_fMax );
+			}
+		}
 	}
 
 	int64_t GetCount () const
@@ -249,21 +399,71 @@ public:
 			Add ( tCentroid.m_fMean, tCentroid.m_iCount );
 	}
 
+	double GetMin () const noexcept
+	{
+		return m_iCount ? m_fMin : 0.0;
+	}
+
+	double GetMax () const noexcept
+	{
+		return m_iCount ? m_fMax : 0.0;
+	}
+
+	void SetExtremes ( double fMin, double fMax, bool bHasData )
+	{
+		if ( bHasData )
+		{
+			m_fMin = fMin;
+			m_fMax = fMax;
+		}
+		else
+		{
+			m_fMin = std::numeric_limits<double>::infinity();
+			m_fMax = -std::numeric_limits<double>::infinity();
+		}
+	}
+
 private:
 	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator<std::pair<const double, int64_t>>>;
 	BalancedTree_c		m_dMap;
 	int64_t				m_iCount;
 	double				m_fCompression;
+	double				m_fMin;
+	double				m_fMax;
 
 	double WeightedAvg ( double fX1, int64_t iW1, double fX2, int64_t iW2 )
 	{
 		return ( fX1*iW1 + fX2*iW2 ) / ( iW1 + iW2 );
 	}
 
+	double WeightedAverage ( double fX1, double fW1, double fX2, double fW2 ) const
+	{
+		if ( fX1<=fX2 )
+			return WeightedAverageSorted ( fX1, fW1, fX2, fW2 );
+		return WeightedAverageSorted ( fX2, fW2, fX1, fW1 );
+	}
+
+	double WeightedAverageSorted ( double fX1, double fW1, double fX2, double fW2 ) const
+	{
+		if ( fX1>fX2 )
+			std::swap ( fX1, fX2 );
+		double fSum = fW1 + fW2;
+		if ( fSum==0.0 )
+			return ( fX1 + fX2 ) / 2.0;
+		double fValue = ( fX1*fW1 + fX2*fW2 ) / fSum;
+		if ( fValue < fX1 )
+			return fX1;
+		if ( fValue > fX2 )
+			return fX2;
+		return fValue;
+	}
+
 	void Reset()
 	{
 		m_dMap.clear();
 		m_iCount = 0;
+		m_fMin = std::numeric_limits<double>::infinity();
+		m_fMax = -std::numeric_limits<double>::infinity();
 	}
 
 	void Compress()
@@ -283,7 +483,15 @@ private:
 			tCentroid.m_iCount = i.second;
 		}
 
+		double fMin = m_fMin;
+		double fMax = m_fMax;
+		bool bHadData = ( m_iCount>0 );
 		Reset();
+		if ( bHadData )
+		{
+			m_fMin = fMin;
+			m_fMax = fMax;
+		}
 
 		while ( dValues.GetLength() )
 		{
@@ -291,29 +499,6 @@ private:
 			Add ( dValues[iValue].m_fMean, dValues[iValue].m_iCount );
 			dValues.RemoveFast(iValue);
 		}
-	}
-
-	double ValueAtRank ( int64_t iRank ) const
-	{
-		if ( m_dMap.empty() )
-			return 0.0;
-
-		if ( iRank<=0 )
-			return m_dMap.begin()->first;
-
-		int64_t iLastRank = m_iCount>0 ? (m_iCount-1) : 0;
-		if ( iRank>=iLastRank )
-			return std::prev ( m_dMap.end() )->first;
-
-		int64_t iAccum = 0;
-		for ( const auto & tEntry : m_dMap )
-		{
-			if ( iRank < iAccum + tEntry.second )
-				return tEntry.first;
-			iAccum += tEntry.second;
-		}
-
-		return std::prev ( m_dMap.end() )->first;
 	}
 };
 
@@ -350,6 +535,21 @@ double TDigest_c::Quantile ( double fQuantile ) const noexcept
 double TDigest_c::Cdf ( double fValue ) const noexcept
 {
 	return m_pImpl->Cdf ( fValue );
+}
+
+double TDigest_c::GetMin () const noexcept
+{
+	return m_pImpl->GetMin();
+}
+
+double TDigest_c::GetMax () const noexcept
+{
+	return m_pImpl->GetMax();
+}
+
+void TDigest_c::SetExtremes ( double fMin, double fMax, bool bHasData )
+{
+	m_pImpl->SetExtremes ( fMin, fMax, bHasData );
 }
 
 void TDigest_c::Clear()

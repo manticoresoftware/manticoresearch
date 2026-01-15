@@ -75,6 +75,12 @@ static void StoreTDigestBlob ( const TDigest_c & tDigest, const CSphMatch & tDst
 	BYTE * pCount = dOut.AddN ( sizeof ( int ) );
 	sphUnalignedWrite ( pCount, iCount );
 
+	double fMin = tDigest.GetMin();
+	double fMax = tDigest.GetMax();
+	BYTE * pBounds = dOut.AddN ( sizeof ( double ) * 2 );
+	memcpy ( pBounds, &fMin, sizeof ( double ) );
+	memcpy ( pBounds + sizeof ( double ), &fMax, sizeof ( double ) );
+
 	if ( iCount>0 )
 	{
 		size_t uSize = sizeof(TDigestCentroid_t) * (size_t)iCount;
@@ -101,6 +107,13 @@ static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & 
 	memcpy ( &iCount, pData, sizeof(int) );
 	pData += sizeof(int);
 
+	double fMin = 0.0;
+	double fMax = 0.0;
+	memcpy ( &fMin, pData, sizeof(double) );
+	pData += sizeof(double);
+	memcpy ( &fMax, pData, sizeof(double) );
+	pData += sizeof(double);
+
 	CSphVector<TDigestCentroid_t> dCentroids;
 	if ( iCount>0 )
 	{
@@ -109,6 +122,7 @@ static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & 
 	}
 	tDigest.SetCompression ( fCompression );
 	tDigest.Import ( dCentroids );
+	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 
 }

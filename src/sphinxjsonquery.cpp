@@ -2401,6 +2401,13 @@ static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInf
 	memcpy ( &iCount, pData, sizeof(int) );
 	pData += sizeof(int);
 
+	double fMin = 0.0;
+	double fMax = 0.0;
+	memcpy ( &fMin, pData, sizeof(double) );
+	pData += sizeof(double);
+	memcpy ( &fMax, pData, sizeof(double) );
+	pData += sizeof(double);
+
 	CSphVector<TDigestCentroid_t> dCentroids;
 	if ( iCount>0 )
 	{
@@ -2409,6 +2416,7 @@ static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInf
 	}
 
 	tDigest.Import ( dCentroids );
+	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 
 static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )

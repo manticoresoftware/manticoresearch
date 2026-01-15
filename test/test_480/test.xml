@@ -1,0 +1,443 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>boolean_simplify optimizations</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+global $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ( $sd_address == "localhost" )
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+
+$sock = @mysql_test_connect ( $sockStr );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+function t480_exec_query ( $sock, $sql, &$results )
+{
+	$res = @mysql_query ( $sql, $sock );
+	if ( $res === false )
+	{
+		$results[] = "error: query: " . $sql;
+		$results[] = "error: mysql: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return false;
+	}
+	return true;
+}
+
+function t480_fetch_ids ( $sock, $sql, &$results, $label )
+{
+	$res = @mysql_query ( $sql, $sock );
+	if ( $res === false )
+	{
+		$results[] = "error: query: " . $label;
+		$results[] = "error: mysql: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return null;
+	}
+
+	$ids = array();
+	while ( $row = @mysql_fetch_array ( $res, MYSQL_ASSOC ) )
+		$ids[] = $row['id'];
+
+	return $ids;
+}
+
+function t480_fetch_plan ( $sock, $sql, &$results, $label )
+{
+	$res = @mysql_query ( $sql, $sock );
+	if ( $res === false )
+	{
+		$results[] = "error: query: " . $label;
+		$results[] = "error: mysql: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return null;
+	}
+
+	$plan = @mysql_query ( "show plan", $sock );
+	if ( $plan === false )
+	{
+		$results[] = "error: plan: " . $label;
+		$results[] = "error: mysql: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return null;
+	}
+
+	$rows = array();
+	while ( $row = @mysql_fetch_array ( $plan, MYSQL_ASSOC ) )
+		$rows[] = $row;
+
+	return $rows;
+}
+
+function t480_skip_ws ( $s, &$pos )
+{
+	$len = strlen ( $s );
+	while ( $pos < $len )
+	{
+		$ch = $s[$pos];
+		if ( $ch==" " || $ch=="\n" || $ch=="\t" || $ch=="\r" )
+			++$pos;
+		else
+			break;
+	}
+}
+
+function t480_parse_item ( $s, &$pos )
+{
+	t480_skip_ws ( $s, $pos );
+	$len = strlen ( $s );
+	if ( $pos >= $len )
+		return null;
+
+	$ch = $s[$pos];
+	if ( $ch==')' || $ch==',' )
+		return null;
+
+	$start = $pos;
+	while ( $pos < $len )
+	{
+		$ch = $s[$pos];
+		if ( ctype_alnum ( $ch ) || $ch=='_' )
+			++$pos;
+		else
+			break;
+	}
+	$name = substr ( $s, $start, $pos - $start );
+	t480_skip_ws ( $s, $pos );
+
+	if ( $name!=='' && $pos < $len && $s[$pos]=='(' )
+	{
+		++$pos;
+		$children = array();
+		while ( true )
+		{
+			t480_skip_ws ( $s, $pos );
+			if ( $pos >= $len )
+				break;
+			if ( $s[$pos]==')' )
+			{
+				++$pos;
+				break;
+			}
+			$child = t480_parse_item ( $s, $pos );
+			if ( $child !== null )
+				$children[] = $child;
+			t480_skip_ws ( $s, $pos );
+			if ( $pos < $len && $s[$pos]==',' )
+			{
+				++$pos;
+				continue;
+			}
+			if ( $pos < $len && $s[$pos]==')' )
+			{
+				++$pos;
+				break;
+			}
+		}
+		return array ( 'name' => $name, 'children' => $children );
+	}
+
+	$pos = $start;
+	$depth = 0;
+	while ( $pos < $len )
+	{
+		$ch = $s[$pos];
+		if ( $ch=='(' )
+			++$depth;
+		else if ( $ch==')' )
+		{
+			if ( $depth==0 )
+				break;
+			--$depth;
+		}
+		else if ( $ch==',' && $depth==0 )
+			break;
+		++$pos;
+	}
+	$leaf = trim ( substr ( $s, $start, $pos - $start ) );
+	return $leaf==='' ? null : $leaf;
+}
+
+function t480_plan_signature ( $rows )
+{
+	$signature = array();
+	foreach ( $rows as $row )
+	{
+		if ( isset ( $row['Variable'] ) && isset ( $row['Value'] ) )
+		{
+			$pos = 0;
+			$node = t480_parse_item ( $row['Value'], $pos );
+			if ( $node !== null )
+			{
+				$node = t480_normalize_node ( $node );
+				$row['Value'] = t480_node_to_string ( $node );
+			} else
+			{
+				$row['Value'] = t480_normalize_leaf ( $row['Value'] );
+			}
+		}
+		$signature[] = $row;
+	}
+	return $signature;
+}
+
+function t480_normalize_leaf ( $s )
+{
+	$s = preg_replace ( '/\\s*querypos=\\d+/', '', $s );
+	$s = preg_replace ( '/\\s+/', ' ', trim ( $s ) );
+	return $s;
+}
+
+function t480_normalize_node ( $node )
+{
+	if ( !is_array ( $node ) )
+		return t480_normalize_leaf ( $node );
+
+	$name = $node['name'];
+	$children = array();
+	foreach ( $node['children'] as $child )
+	{
+		$norm = t480_normalize_node ( $child );
+		if ( $norm === '' || $norm === null )
+			continue;
+		$children[] = $norm;
+	}
+
+	if ( $name=='NOT' && count ( $children )==1 && is_array ( $children[0] ) && $children[0]['name']=='OR' )
+	{
+		$demorgan = array();
+		foreach ( $children[0]['children'] as $or_child )
+			$demorgan[] = array ( 'name' => 'NOT', 'children' => array ( $or_child ) );
+		$name = 'OR';
+		$children = $demorgan;
+	}
+
+	if ( $name=='OR' || $name=='AND' )
+	{
+		$sort_keys = array();
+		foreach ( $children as $child )
+			$sort_keys[] = t480_node_to_string ( $child );
+		array_multisort ( $sort_keys, SORT_STRING, $children );
+	}
+
+	return array ( 'name' => $name, 'children' => $children );
+}
+
+function t480_node_to_string ( $node )
+{
+	if ( !is_array ( $node ) )
+		return $node;
+
+	$parts = array();
+	foreach ( $node['children'] as $child )
+		$parts[] = t480_node_to_string ( $child );
+
+	return $node['name'] . '(' . implode ( ',', $parts ) . ')';
+}
+
+if ( !t480_exec_query ( $sock, "drop table if exists t_bool_simplify_fields", $results ) )
+	return;
+if ( !t480_exec_query ( $sock, "create table t_bool_simplify_fields (content text, f text, f2 text, f3 text)", $results ) )
+	return;
+
+$insert = "insert into t_bool_simplify_fields (id, content, f, f2, f3) values
+	(1, '', 'a b', 'a b', ''),
+	(2, '', '', '', 'a b'),
+	(10, 'alpha beta gamma', '', '', ''),
+	(11, 'alpha beta', '', '', ''),
+	(12, 'alpha', '', '', ''),
+	(13, 'beta', '', '', ''),
+	(14, 'alpha neg alphax', '', '', ''),
+	(15, 'alpha neg', '', '', ''),
+	(16, 'beta neg betax', '', '', ''),
+	(17, 'beta neg', '', '', ''),
+	(18, 'alpha alphax', '', '', ''),
+	(19, 'beta betax', '', '', ''),
+	(20, 'xray alpha beta', '', '', ''),
+	(21, 'yankee alpha beta', '', '', ''),
+	(22, 'alpha xray', '', '', ''),
+	(23, 'alpha xray yankee zulu', '', '', ''),
+	(24, 'alpha nega', '', '', ''),
+	(25, 'beta negb', '', '', ''),
+	(26, 'alpha negb', '', '', ''),
+	(27, 'neg', '', '', ''),
+	(28, 'neg', '', '', ''),
+	(29, 'neg', '', '', ''),
+	(30, 'neg', '', '', ''),
+	(31, 'neg', '', '', ''),
+	(32, 'neg', '', '', ''),
+	(33, 'neg', '', '', ''),
+	(34, 'neg', '', '', ''),
+	(35, 'neg', '', '', ''),
+	(36, 'neg', '', '', ''),
+	(37, 'neg', '', '', ''),
+	(38, 'neg', '', '', ''),
+	(39, 'neg', '', '', ''),
+	(40, 'neg', '', '', ''),
+	(41, 'neg', '', '', ''),
+	(42, 'neg', '', '', ''),
+	(43, 'neg', '', '', ''),
+	(44, 'neg', '', '', ''),
+	(45, 'neg', '', '', ''),
+	(46, 'neg', '', '', '')";
+
+if ( !t480_exec_query ( $sock, $insert, $results ) )
+	return;
+if ( !t480_exec_query ( $sock, "set profiling=1", $results ) )
+	return;
+
+$tests = array(
+	array ( 'label' => 'field_scoped_phrase', 'match' => '(@f "a b") | (@f2 "a b")' ),
+	array ( 'label' => 'excess_brackets_or', 'match' => '@content ((alpha | beta) | gamma)' ),
+	array ( 'label' => 'excess_brackets_and', 'match' => '@content ((alpha beta) gamma)' ),
+	array ( 'label' => 'excess_and_not', 'match' => '@content ((alpha !nega) !negb)' ),
+	array ( 'label' => 'common_not', 'match' => '@content ((alpha !neg) | (beta !neg))' ),
+	array ( 'label' => 'common_compound_not', 'match' => '@content ((alpha !(neg alphax)) | (beta !(neg betax)))' ),
+	array ( 'label' => 'common_subterm', 'match' => '@content ((alpha (neg | alphax)) | (beta (neg | betax)))' ),
+	array ( 'label' => 'common_keywords_term_vs_proximity', 'match' => '@content (alpha | "alpha beta"~1)' ),
+	array ( 'label' => 'common_keywords_phrase', 'match' => '@content ("alpha beta" | "alpha beta gamma")' ),
+	array ( 'label' => 'common_keywords_proximity', 'match' => '@content ("alpha beta"~1 | "alpha beta gamma"~1)' ),
+	array ( 'label' => 'common_phrase', 'match' => '@content ("xray alpha beta" | "yankee alpha beta")' ),
+	array ( 'label' => 'common_and_not', 'match' => '@content ((alpha !xray) | (alpha !yankee) | (alpha !zulu))' ),
+	array ( 'label' => 'common_or_not', 'match' => '@content ((alpha !(neg | nega)) | (beta !(neg | negb)))' ),
+);
+
+$mismatches = array();
+
+foreach ( $tests as $test )
+{
+	$base = "select id from t_bool_simplify_fields where match('" . $test['match'] . "') order by id asc";
+	$ids_no_simplify = t480_fetch_ids ( $sock, $base . " option boolean_simplify=0", $results, $test['label'] . " no_simplify" );
+	if ( $ids_no_simplify === null )
+		return;
+
+	$ids_simplify = t480_fetch_ids ( $sock, $base . " option boolean_simplify=1", $results, $test['label'] . " simplify" );
+	if ( $ids_simplify === null )
+		return;
+
+	if ( $ids_no_simplify !== $ids_simplify )
+		$mismatches[] = array ( 'label' => $test['label'], 'no_simplify' => $ids_no_simplify, 'simplify' => $ids_simplify );
+}
+
+$results[] = "mismatches=" . count ( $mismatches );
+foreach ( $mismatches as $mismatch )
+	$results[] = $mismatch;
+
+$plan_tests = array(
+	array ( 'label' => 'excess_brackets_or', 'left' => '@content ((alpha | beta) | gamma)', 'right' => '@content (alpha | beta | gamma)' ),
+	array ( 'label' => 'excess_brackets_and', 'left' => '@content ((alpha beta) gamma)', 'right' => '@content (alpha beta gamma)' ),
+	array ( 'label' => 'excess_and_not', 'left' => '@content ((alpha !nega) !negb)', 'right' => '@content (alpha !(nega | negb))' ),
+	array ( 'label' => 'common_not', 'left' => '@content ((alpha !neg) | (beta !neg))', 'right' => '@content ((alpha | beta) !neg)' ),
+	array ( 'label' => 'common_compound_not', 'left' => '@content ((alpha !(neg alphax)) | (beta !(neg betax)))', 'right' => '@content (((alpha | beta) !neg) | (alpha !alphax) | (beta !betax))' ),
+	array ( 'label' => 'common_subterm', 'left' => '@content ((alpha (neg | alphax)) | (beta (neg | betax)))', 'right' => '@content (((alpha | beta) neg) | (alpha alphax) | (beta betax))' ),
+	array ( 'label' => 'common_keywords_term_vs_proximity', 'left' => '@content (alpha | "alpha beta"~1)', 'right' => '@content alpha' ),
+	array ( 'label' => 'common_keywords_phrase', 'left' => '@content ("alpha beta" | "alpha beta gamma")', 'right' => '@content "alpha beta"' ),
+	array ( 'label' => 'common_keywords_proximity', 'left' => '@content ("alpha beta"~1 | "alpha beta gamma"~1)', 'right' => '@content "alpha beta"~1' ),
+	array ( 'label' => 'common_phrase', 'left' => '@content ("xray alpha beta" | "yankee alpha beta")', 'right' => '@content "(xray|yankee) alpha beta"' ),
+	array ( 'label' => 'common_and_not', 'left' => '@content ((alpha !xray) | (alpha !yankee) | (alpha !zulu))', 'right' => '@content (alpha !(xray yankee zulu))' ),
+	array ( 'label' => 'common_or_not', 'left' => '@content ((alpha !(neg | nega)) | (beta !(neg | negb)))', 'right' => '@content (((alpha !nega) | (beta !negb)) !neg)' ),
+);
+
+$plan_mismatches = array();
+foreach ( $plan_tests as $test )
+{
+	$left_sql = "select id from t_bool_simplify_fields where match('" . $test['left'] . "') order by id asc option boolean_simplify=1";
+	$right_sql = "select id from t_bool_simplify_fields where match('" . $test['right'] . "') order by id asc option boolean_simplify=1";
+
+	$left_plan = t480_fetch_plan ( $sock, $left_sql, $results, $test['label'] . " left" );
+	if ( $left_plan === null )
+		return;
+
+	$right_plan = t480_fetch_plan ( $sock, $right_sql, $results, $test['label'] . " right" );
+	if ( $right_plan === null )
+		return;
+
+	$left_sig = t480_plan_signature ( $left_plan );
+	$right_sig = t480_plan_signature ( $right_plan );
+	if ( $left_sig !== $right_sig )
+		$plan_mismatches[] = array ( 'label' => $test['label'], 'left' => $left_sig, 'right' => $right_sig );
+}
+
+$results[] = "plan_mismatches=" . count ( $plan_mismatches );
+foreach ( $plan_mismatches as $mismatch )
+	$results[] = $mismatch;
+
+]]></custom_test>
+
+<queries>
+	<sphinxql>
+		set profiling=1;
+		select id from t_bool_simplify_fields
+			where match('(@f "a b") | (@f2 "a b")')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha | beta) | gamma)')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha beta) gamma)')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha !nega) !negb)')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha !neg) | (beta !neg))')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha !(neg alphax)) | (beta !(neg betax)))')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha (neg | alphax)) | (beta (neg | betax)))')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content (alpha | "alpha beta"~1)')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ("alpha beta" | "alpha beta gamma")')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ("alpha beta"~1 | "alpha beta gamma"~1)')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ("xray alpha beta" | "yankee alpha beta")')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha !xray) | (alpha !yankee) | (alpha !zulu))')
+			order by id asc;
+		show plan;
+		select id from t_bool_simplify_fields
+			where match('@content ((alpha !(neg | nega)) | (beta !(neg | negb)))')
+			order by id asc;
+		show plan;
+		drop table if exists t_bool_simplify_fields;
+	</sphinxql>
+</queries>
+
+</test>

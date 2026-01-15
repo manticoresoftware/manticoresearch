@@ -1,0 +1,101 @@
+a:1:{i:0;a:29:{i:0;a:2:{i:0;s:12:"mismatches=0";i:1;s:17:"plan_mismatches=0";}i:1;a:2:{s:8:"sphinxql";s:15:"set profiling=1";s:14:"total_affected";i:0;}i:2;a:3:{s:8:"sphinxql";s:99:"select id from t_bool_simplify_fields
+			where match('(@f "a b") | (@f2 "a b")')
+			order by id asc";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:1:"1";}}}i:3;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:145:"OR(
+  PHRASE(fields=(f), KEYWORD(a, querypos=1), KEYWORD(b, querypos=2)), 
+  PHRASE(fields=(f2), KEYWORD(a, querypos=3), KEYWORD(b, querypos=4)))";}}}i:4;a:3:{s:8:"sphinxql";s:108:"select id from t_bool_simplify_fields
+			where match('@content ((alpha | beta) | gamma)')
+			order by id asc";s:10:"total_rows";i:17;s:4:"rows";a:17:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"13";}i:4;a:1:{s:2:"id";s:2:"14";}i:5;a:1:{s:2:"id";s:2:"15";}i:6;a:1:{s:2:"id";s:2:"16";}i:7;a:1:{s:2:"id";s:2:"17";}i:8;a:1:{s:2:"id";s:2:"18";}i:9;a:1:{s:2:"id";s:2:"19";}i:10;a:1:{s:2:"id";s:2:"20";}i:11;a:1:{s:2:"id";s:2:"21";}i:12;a:1:{s:2:"id";s:2:"22";}i:13;a:1:{s:2:"id";s:2:"23";}i:14;a:1:{s:2:"id";s:2:"24";}i:15;a:1:{s:2:"id";s:2:"25";}i:16;a:1:{s:2:"id";s:2:"26";}}}i:5;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:163:"OR(
+  AND(fields=(content), KEYWORD(alpha, querypos=1)), 
+  AND(fields=(content), KEYWORD(beta, querypos=2)), 
+  AND(fields=(content), KEYWORD(gamma, querypos=3)))";}}}i:6;a:3:{s:8:"sphinxql";s:104:"select id from t_bool_simplify_fields
+			where match('@content ((alpha beta) gamma)')
+			order by id asc";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:2:"id";s:2:"10";}}}i:7;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:164:"AND(
+  AND(fields=(content), KEYWORD(alpha, querypos=1)), 
+  AND(fields=(content), KEYWORD(beta, querypos=2)), 
+  AND(fields=(content), KEYWORD(gamma, querypos=3)))";}}}i:8;a:3:{s:8:"sphinxql";s:105:"select id from t_bool_simplify_fields
+			where match('@content ((alpha !nega) !negb)')
+			order by id asc";s:10:"total_rows";i:10;s:4:"rows";a:10:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"14";}i:4;a:1:{s:2:"id";s:2:"15";}i:5;a:1:{s:2:"id";s:2:"18";}i:6;a:1:{s:2:"id";s:2:"20";}i:7;a:1:{s:2:"id";s:2:"21";}i:8;a:1:{s:2:"id";s:2:"22";}i:9;a:1:{s:2:"id";s:2:"23";}}}i:9;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:231:"ANDNOT(
+  AND(
+    AND(fields=(content), KEYWORD(alpha, querypos=1))), 
+  OR(
+    NOT(
+      AND(fields=(content), KEYWORD(nega, querypos=2, excluded))), 
+    NOT(
+      AND(fields=(content), KEYWORD(negb, querypos=3, excluded)))))";}}}i:10;a:3:{s:8:"sphinxql";s:112:"select id from t_bool_simplify_fields
+			where match('@content ((alpha !neg) | (beta !neg))')
+			order by id asc";s:10:"total_rows";i:13;s:4:"rows";a:13:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"13";}i:4;a:1:{s:2:"id";s:2:"18";}i:5;a:1:{s:2:"id";s:2:"19";}i:6;a:1:{s:2:"id";s:2:"20";}i:7;a:1:{s:2:"id";s:2:"21";}i:8;a:1:{s:2:"id";s:2:"22";}i:9;a:1:{s:2:"id";s:2:"23";}i:10;a:1:{s:2:"id";s:2:"24";}i:11;a:1:{s:2:"id";s:2:"25";}i:12;a:1:{s:2:"id";s:2:"26";}}}i:11;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:210:"ANDNOT(
+  AND(
+    OR(
+      AND(fields=(content), KEYWORD(alpha, querypos=1)), 
+      AND(fields=(content), KEYWORD(beta, querypos=3)))), 
+  NOT(
+    AND(fields=(content), KEYWORD(neg, querypos=2, excluded))))";}}}i:12;a:3:{s:8:"sphinxql";s:129:"select id from t_bool_simplify_fields
+			where match('@content ((alpha !(neg alphax)) | (beta !(neg betax)))')
+			order by id asc";s:10:"total_rows";i:15;s:4:"rows";a:15:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"13";}i:4;a:1:{s:2:"id";s:2:"15";}i:5;a:1:{s:2:"id";s:2:"17";}i:6;a:1:{s:2:"id";s:2:"18";}i:7;a:1:{s:2:"id";s:2:"19";}i:8;a:1:{s:2:"id";s:2:"20";}i:9;a:1:{s:2:"id";s:2:"21";}i:10;a:1:{s:2:"id";s:2:"22";}i:11;a:1:{s:2:"id";s:2:"23";}i:12;a:1:{s:2:"id";s:2:"24";}i:13;a:1:{s:2:"id";s:2:"25";}i:14;a:1:{s:2:"id";s:2:"26";}}}i:13;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:543:"OR(
+  ANDNOT(
+    AND(
+      AND(fields=(content), KEYWORD(alpha, querypos=1))), 
+    NOT(
+      AND(fields=(content), KEYWORD(alphax, querypos=3, excluded)))), 
+  ANDNOT(
+    AND(
+      AND(fields=(content), KEYWORD(beta, querypos=4))), 
+    NOT(
+      AND(fields=(content), KEYWORD(betax, querypos=6, excluded)))), 
+  ANDNOT(
+    AND(
+      OR(
+        AND(fields=(content), KEYWORD(alpha, querypos=1)), 
+        AND(fields=(content), KEYWORD(beta, querypos=4)))), 
+    NOT(
+      AND(fields=(content), KEYWORD(neg, querypos=2, excluded)))))";}}}i:14;a:3:{s:8:"sphinxql";s:131:"select id from t_bool_simplify_fields
+			where match('@content ((alpha (neg | alphax)) | (beta (neg | betax)))')
+			order by id asc";s:10:"total_rows";i:6;s:4:"rows";a:6:{i:0;a:1:{s:2:"id";s:2:"14";}i:1;a:1:{s:2:"id";s:2:"15";}i:2;a:1:{s:2:"id";s:2:"16";}i:3;a:1:{s:2:"id";s:2:"17";}i:4;a:1:{s:2:"id";s:2:"18";}i:5;a:1:{s:2:"id";s:2:"19";}}}i:15;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:428:"OR(
+  AND(
+    AND(fields=(content), KEYWORD(alpha, querypos=1)), 
+    AND(fields=(content), KEYWORD(alphax, querypos=3))), 
+  AND(
+    AND(fields=(content), KEYWORD(beta, querypos=4)), 
+    AND(fields=(content), KEYWORD(betax, querypos=6))), 
+  AND(
+    OR(
+      AND(fields=(content), KEYWORD(alpha, querypos=1)), 
+      AND(fields=(content), KEYWORD(beta, querypos=4))), 
+    AND(fields=(content), KEYWORD(neg, querypos=2))))";}}}i:16;a:3:{s:8:"sphinxql";s:108:"select id from t_bool_simplify_fields
+			where match('@content (alpha | "alpha beta"~1)')
+			order by id asc";s:10:"total_rows";i:12;s:4:"rows";a:12:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"14";}i:4;a:1:{s:2:"id";s:2:"15";}i:5;a:1:{s:2:"id";s:2:"18";}i:6;a:1:{s:2:"id";s:2:"20";}i:7;a:1:{s:2:"id";s:2:"21";}i:8;a:1:{s:2:"id";s:2:"22";}i:9;a:1:{s:2:"id";s:2:"23";}i:10;a:1:{s:2:"id";s:2:"24";}i:11;a:1:{s:2:"id";s:2:"26";}}}i:17;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:49:"AND(fields=(content), KEYWORD(alpha, querypos=1))";}}}i:18;a:3:{s:8:"sphinxql";s:119:"select id from t_bool_simplify_fields
+			where match('@content ("alpha beta" | "alpha beta gamma")')
+			order by id asc";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"20";}i:3;a:1:{s:2:"id";s:2:"21";}}}i:19;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:79:"PHRASE(fields=(content), KEYWORD(alpha, querypos=1), KEYWORD(beta, querypos=2))";}}}i:20;a:3:{s:8:"sphinxql";s:123:"select id from t_bool_simplify_fields
+			where match('@content ("alpha beta"~1 | "alpha beta gamma"~1)')
+			order by id asc";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"20";}i:3;a:1:{s:2:"id";s:2:"21";}}}i:21;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:94:"PROXIMITY(distance=1, fields=(content), KEYWORD(alpha, querypos=1), KEYWORD(beta, querypos=2))";}}}i:22;a:3:{s:8:"sphinxql";s:125:"select id from t_bool_simplify_fields
+			where match('@content ("xray alpha beta" | "yankee alpha beta")')
+			order by id asc";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:1:{s:2:"id";s:2:"20";}i:1;a:1:{s:2:"id";s:2:"21";}}}i:23;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:209:"PHRASE(
+  OR(
+    AND(fields=(content), KEYWORD(xray, querypos=4)), 
+    AND(fields=(content), KEYWORD(yankee, querypos=4))), 
+  PHRASE(fields=(content), KEYWORD(alpha, querypos=5), KEYWORD(beta, querypos=6)))";}}}i:24;a:3:{s:8:"sphinxql";s:133:"select id from t_bool_simplify_fields
+			where match('@content ((alpha !xray) | (alpha !yankee) | (alpha !zulu))')
+			order by id asc";s:10:"total_rows";i:11;s:4:"rows";a:11:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"14";}i:4;a:1:{s:2:"id";s:2:"15";}i:5;a:1:{s:2:"id";s:2:"18";}i:6;a:1:{s:2:"id";s:2:"20";}i:7;a:1:{s:2:"id";s:2:"21";}i:8;a:1:{s:2:"id";s:2:"22";}i:9;a:1:{s:2:"id";s:2:"24";}i:10;a:1:{s:2:"id";s:2:"26";}}}i:25;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:291:"ANDNOT(
+  AND(
+    AND(fields=(content), KEYWORD(alpha, querypos=1))), 
+  NOT(
+    AND(
+      AND(fields=(content), KEYWORD(xray, querypos=2, excluded)), 
+      AND(fields=(content), KEYWORD(yankee, querypos=4, excluded)), 
+      AND(fields=(content), KEYWORD(zulu, querypos=6, excluded)))))";}}}i:26;a:3:{s:8:"sphinxql";s:130:"select id from t_bool_simplify_fields
+			where match('@content ((alpha !(neg | nega)) | (beta !(neg | negb)))')
+			order by id asc";s:10:"total_rows";i:11;s:4:"rows";a:11:{i:0;a:1:{s:2:"id";s:2:"10";}i:1;a:1:{s:2:"id";s:2:"11";}i:2;a:1:{s:2:"id";s:2:"12";}i:3;a:1:{s:2:"id";s:2:"13";}i:4;a:1:{s:2:"id";s:2:"18";}i:5;a:1:{s:2:"id";s:2:"19";}i:6;a:1:{s:2:"id";s:2:"20";}i:7;a:1:{s:2:"id";s:2:"21";}i:8;a:1:{s:2:"id";s:2:"22";}i:9;a:1:{s:2:"id";s:2:"23";}i:10;a:1:{s:2:"id";s:2:"26";}}}i:27;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:446:"ANDNOT(
+  AND(
+    OR(
+      ANDNOT(
+        AND(
+          AND(fields=(content), KEYWORD(alpha, querypos=1))), 
+        NOT(
+          AND(fields=(content), KEYWORD(nega, querypos=3, excluded)))), 
+      ANDNOT(
+        AND(
+          AND(fields=(content), KEYWORD(beta, querypos=4))), 
+        NOT(
+          AND(fields=(content), KEYWORD(negb, querypos=6, excluded)))))), 
+  NOT(
+    AND(fields=(content), KEYWORD(neg, querypos=2, excluded))))";}}}i:28;a:2:{s:8:"sphinxql";s:43:"drop table if exists t_bool_simplify_fields";s:14:"total_affected";i:0;}}}

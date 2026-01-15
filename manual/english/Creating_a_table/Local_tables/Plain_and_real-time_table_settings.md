@@ -471,7 +471,9 @@ Each vector attribute stores an array of floating-point numbers that represent d
 
 ##### Configuring KNN for vector attributes
 
-To enable KNN searches on float vector attributes, you must add a `knn` configuration that specifies the indexing parameters:
+To enable KNN searches on float vector attributes, you must add a `knn` configuration that specifies the indexing parameters. You can configure KNN in two ways:
+
+**1. Manual vector insertion** (you provide pre-computed vectors):
 
 ```ini
 rt_attr_float_vector = image_vector
@@ -479,17 +481,35 @@ rt_attr_float_vector = text_vector
 knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200},{"name":"text_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
 ```
 
+**2. Auto embeddings** (Manticore generates vectors from text automatically):
+
+```ini
+rt_attr_float_vector = embedding_vector
+rt_field = title
+rt_field = description
+knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}
+```
+
 **Required KNN parameters:**
 - `name`: The name of the vector attribute (must match the `rt_attr_float_vector` name)
 - `type`: Index type, currently only `"hnsw"` is supported
-- `dims`: Number of dimensions in the vectors (must match your embedding model's output)
+- `dims`: Number of dimensions in the vectors. **Required** for manual vector insertion, **must be omitted** when using `model_name` (the model determines dimensions automatically)
 - `hnsw_similarity`: Distance function - `"L2"`, `"IP"` (inner product), or `"COSINE"`
 
 **Optional KNN parameters:**
-- `hnsw_m`: Maximum connections in the graph
-- `hnsw_ef_construction`: Construction time/accuracy trade-off
+- `hnsw_m`: Maximum connections in the graph (default: 16)
+- `hnsw_ef_construction`: Construction time/accuracy trade-off (default: 200)
 
-For more details on KNN vector search, see the [KNN documentation](../../Searching/KNN.md).
+**Auto-embeddings parameters** (when using `model_name`):
+- `model_name`: The embedding model to use (e.g., `"sentence-transformers/all-MiniLM-L6-v2"`, `"openai/text-embedding-ada-002"`). When specified, `dims` must be omitted as the model determines the dimensions automatically.
+- `from`: Comma-separated list of field names to use for embedding generation, or empty string `""` to use all text/string fields. This parameter is required when `model_name` is specified.
+- `api_key`: API key for API-based models (OpenAI, Voyage, Jina). Only required for API-based embedding services.
+- `cache_path`: Optional path for caching downloaded models (for sentence-transformers models).
+- `use_gpu`: Optional boolean to enable GPU acceleration if available.
+
+**Important:** You cannot specify both `dims` and `model_name` in the same configuration - they are mutually exclusive. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings. Use `dims` for manual vector insertion, or `model_name` for auto-embeddings.
+
+For more details on KNN vector search and auto-embeddings, see the [KNN documentation](../../Searching/KNN.md).
 
 #### rt_attr_bool
 

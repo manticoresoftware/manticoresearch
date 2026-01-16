@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339814
+    },
+    "__meta": {
+        "source_text": "# DELETE PLUGIN\n\n```sql\nDROP PLUGIN plugin_name TYPE 'plugin_type'\n```\n\nMarks the designated plugin for unloading. The unloading process is **not** instantaneous, as concurrent queries may still be utilizing it. Nevertheless, following a `DROP`, new queries will no longer have access to the plugin. Subsequently, when all ongoing queries involving the plugin have finished, the plugin will be unloaded. If all plugins from the specified library are unloaded, the library will also be automatically unloaded.\n\n```sql\nmysql> DROP PLUGIN myranker TYPE 'ranker';\nQuery OK, 0 rows affected (0.00 sec)\n```\n\n## DELETE BUDDY PLUGIN\n\n<!-- example delete_buddy_plugin -->\n\n```sql\nDELETE BUDDY PLUGIN <username/package name on https://packagist.org/>\n```\n\n> NOTE: `DELETE BUDDY PLUGIN` requires [Manticore Buddy](../../../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.\n\nThis action instantly and permanently removes the installed plugin from the [plugin_dir](../../../Server_settings/Common.md#plugin_dir). Once removed, the plugin's features will no longer be available.\n\n<!-- intro -->\n### Example\n\n<!-- request Example -->\n```sql\nDELETE BUDDY PLUGIN manticoresoftware/buddy-plugin-show-hostname\n```\n\n<!-- end -->\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "c023210146c2f7dd35001a0100b1b528"
     }
 }

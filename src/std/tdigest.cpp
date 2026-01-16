@@ -251,7 +251,7 @@ public:
 
 		if ( fValue < m_fMin )
 			return 0.0;
-		if ( fValue > m_fMax )
+		if ( fValue >= m_fMax )
 			return 1.0;
 
 		auto itFirst = m_dMap.begin();
@@ -274,8 +274,6 @@ public:
 			double fDelta = m_fMax - itLast->first;
 			if ( fDelta>0.0 )
 			{
-				if ( fValue==m_fMax )
-					return 1.0 - 0.5 / fTotalWeight;
 				double fDq = ( 1.0 + ( m_fMax - fValue ) / fDelta * ( itLast->second / 2.0 - 1.0 ) ) / fTotalWeight;
 				return 1.0 - fDq;
 			}

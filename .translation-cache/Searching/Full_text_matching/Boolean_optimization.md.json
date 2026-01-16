@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "qwen/qwen-2.5-7b-instruct",
         "updated_at": 1766375764
+    },
+    "__meta": {
+        "source_text": "# Boolean optimization\nFull-text queries are automatically optimized when the `boolean_simplify` search option (or the corresponding [global setting](../../Server_settings/Searchd.md#boolean_simplify)) is set to `1` (enabled by default). Some of the changes made by this optimization include:\n\n* Excess brackets: `((A | B) | C)` becomes `(A | B | C)`; `((A B) C)` becomes `(A B C)`\n* Excess AND NOT: `((A !N1) !N2)` becomes `(A !(N1 | N2))`\n* Common NOT: `((A !N) | (B !N))` becomes `((A | B) !N)`\n* Common Compound NOT: `((A !(N AA)) | (B !(N BB)))` becomes `(((A | B) !N) | (A !AA) | (B !BB))` if the cost of evaluating N is greater than the sum of evaluating A and B\n* Common subterm: `((A (N | AA)) | (B (N | BB)))` becomes `(((A | B) N) | (A AA) | (B BB))` if the cost of evaluating N is greater than the sum of evaluating A and B\n* Common keywords: `(A | \"A B\"~N)` becomes `A`; `(\"A B\" | \"A B C\")` becomes `\"A B\"`; `(\"A B\"~N | \"A B C\"~N)` becomes `(\"A B\"~N)`\n* Common phrase: `(\"X A B\" | \"Y A B\")` becomes `(\"(\"X\"|\"Y\") A B\")`\n* Common AND NOT: `((A !X) | (A !Y) | (A !Z))` becomes `(A !(X Y Z))`\n* Common OR NOT: `((A !(N | N1)) | (B !(N | N2)))` becomes `(( (A !N1) | (B !N2) ) !N)`\nNote that optimizing queries consumes CPU time, so in some cases for very simple queries or hand-optimized queries, you may achieve better results by disabling optimization with `boolean_simplify=0`.\n\nQueries like `-dog`, which could potentially include all documents from the collection are not allowed by default. To allow them, you must specify `not_terms_only_allowed=1` either as a [global setting](../../Server_settings/Searchd.md#not_terms_only_allowed) or as a [search option](../../Server_settings/Searchd.md#not_terms_only_allowed).\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "ec69041e4f95354af0641401a37aad06"
     }
 }

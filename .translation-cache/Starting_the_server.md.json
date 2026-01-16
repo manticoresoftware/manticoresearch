@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339846
+    },
+    "__meta": {
+        "source_text": "# Starting the server\n\nManticore Search server can be started using different methods, depending on the installation type.\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "598bdd54907b881b11f09ae7c5e9e4ce"
     }
 }

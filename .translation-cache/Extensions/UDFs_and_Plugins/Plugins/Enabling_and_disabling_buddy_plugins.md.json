@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339818
+    },
+    "__meta": {
+        "source_text": "# Enabling and disabling Buddy plugins\n\nTo simplify the control of Buddy plugins, especially when developing a new one or modifying an existing one, the enable and disable Buddy plugin commands are provided. These commands act temporarily during runtime and will reset to their defaults after restarting the daemon or performing a Buddy reset. To permanently disable a plugin, it must be removed.\n\nYou need the fully qualified package name of the plugin to enable or disable it. To find it, you can run the `SHOW BUDDY PLUGINS` query and look for the full qualified name in the `package` field. For example, the `SHOW` plugin has the fully qualified name `manticoresoftware/buddy-plugin-show`.\n\n<!-- example enable_buddy_plugin -->\n## ENABLE BUDDY PLUGIN\n\n```sql\nENABLE BUDDY PLUGIN <username/package name on https://packagist.org/>\n```\n\n> NOTE: `ENABLE BUDDY PLUGIN` requires [Manticore Buddy](../../../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.\n\nThis command reactivates a previously disabled Buddy plugin, allowing it to process your requests again.\n\n<!-- intro -->\n### Example\n\n<!-- request SQL -->\n```sql\nENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show\n```\n<!-- end -->\n\n<!-- example disable_buddy_plugin -->\n## DISABLE BUDDY PLUGIN\n\n```sql\nDISABLE BUDDY PLUGIN <username/package name on https://packagist.org/>\n```\n\nThis command deactivates an active Buddy plugin, preventing it from processing any further requests.\n\n<!-- intro -->\n### Example\n\n<!-- request SQL -->\n```sql\nDISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show\n```\n\nAfter disabling, if you try the `SHOW QUERIES` command, you'll encounter an error because the plugin is disabled.\n<!-- end -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "57b55cdcdce0bad26146ea7cd4bda966"
     }
 }

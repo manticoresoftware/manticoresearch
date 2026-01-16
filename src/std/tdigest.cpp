@@ -291,7 +291,7 @@ public:
 			double fRightWidth = ( itNext->first - it->first ) / 2.0;
 			if ( fValue < it->first + fRightWidth )
 			{
-				double fInterp = Interpolate ( fValue, it->first - fLeftWidth, it->first + fRightWidth );
+				double fInterp = TdInterpolate ( fValue, it->first - fLeftWidth, it->first + fRightWidth );
 				double fValueCdf = ( fWeightSoFar + it->second * fInterp ) / fTotalWeight;
 				return std::max ( fValueCdf, 0.0 );
 			}
@@ -302,7 +302,7 @@ public:
 		double fRightWidth = ( itLast->first - std::prev ( itLast )->first ) / 2.0;
 		if ( fValue < itLast->first + fRightWidth )
 		{
-			double fInterp = Interpolate ( fValue, itLast->first - fRightWidth, itLast->first + fRightWidth );
+			double fInterp = TdInterpolate ( fValue, itLast->first - fRightWidth, itLast->first + fRightWidth );
 			return ( fWeightSoFar + itLast->second * fInterp ) / fTotalWeight;
 		}
 
@@ -429,6 +429,17 @@ private:
 		return fValue;
 	}
 
+	static double TdInterpolate ( double fValue, double fLeft, double fRight )
+	{
+		if ( fRight<=fLeft )
+			return 0.0;
+		if ( fValue<=fLeft )
+			return 0.0;
+		if ( fValue>=fRight )
+			return 1.0;
+		return ( fValue - fLeft ) / ( fRight - fLeft );
+	}
+
 	void Reset()
 	{
 		m_dMap.clear();
@@ -439,16 +450,6 @@ private:
 
 	void Compress()
 	{
-	double Interpolate ( double fValue, double fLeft, double fRight ) const
-	{
-		if ( fRight<=fLeft )
-			return 0.0;
-		if ( fValue<=fLeft )
-			return 0.0;
-		if ( fValue>=fRight )
-			return 1.0;
-		return ( fValue - fLeft ) / ( fRight - fLeft );
-	}
 		struct Centroid_t
 		{
 			double	m_fMean;

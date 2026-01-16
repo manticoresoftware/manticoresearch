@@ -24,6 +24,6 @@ struct ClusterSyncedRequest_t : ClusterRequest_t
 	CSphString m_sMsg;
 };
 
-bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest_t& tRequest );
+bool SendClusterSynced ( const VecAgentDesc_t & dDesc, const ClusterSyncedRequest_t & tRequest, const CSphString & sUser );
 
 

@@ -110,3 +110,11 @@ inline void SaveArray ( const VecTraits_T<CSphString>& dBuf, MemoryWriter_c& tOu
 	for ( const CSphString& sVal : dBuf )
 		tOut.PutString ( sVal );
 }
+
+template<typename T>
+inline void SaveArray ( const std::vector<T> & dBuf, MemoryWriter_c& tOut )
+{
+	tOut.PutDword ( dBuf.size() );
+	if ( dBuf.size() )
+		tOut.PutBytes ( dBuf.data(), dBuf.size() * sizeof ( T ) );
+}

@@ -21,5 +21,5 @@ struct UpdateNodesRequest_t : public ClusterRequest_t
 	NODES_E m_eKindNodes;
 };
 
-bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes );
+bool SendClusterUpdateNodes ( const CSphString & sCluster, const CSphString & sUser, NODES_E eNodes, const VecTraits_T<CSphString> & dNodes );
 

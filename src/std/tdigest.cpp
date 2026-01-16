@@ -209,7 +209,7 @@ public:
 				double fRightUnit = 0.0;
 				if ( itNext->second==1 )
 				{
-					if ( fWeightSoFar + fDw - fIndex <= 0.5 )
+					if ( fWeightSoFar + fDw - fIndex < 0.5 )
 						return itNext->first;
 					fRightUnit = 0.5;
 				}
@@ -282,58 +282,29 @@ public:
 			return 1.0;
 		}
 
+		double fLeftWidth = ( std::next ( itFirst )->first - itFirst->first ) / 2.0;
 		double fWeightSoFar = 0.0;
-		for ( auto it = m_dMap.begin(); it!=itLast; ++it )
+
+		for ( auto it = itFirst; it!=itLast; ++it )
 		{
 			auto itNext = std::next ( it );
-
-			if ( it->first==fValue )
+			double fRightWidth = ( itNext->first - it->first ) / 2.0;
+			if ( fValue < it->first + fRightWidth )
 			{
-				double fDw = 0.0;
-				auto itEqual = it;
-				while ( itEqual!=m_dMap.end() && itEqual->first==fValue )
-				{
-					fDw += itEqual->second;
-					++itEqual;
-				}
-				return ( fWeightSoFar + fDw / 2.0 ) / fTotalWeight;
+				double fInterp = Interpolate ( fValue, it->first - fLeftWidth, it->first + fRightWidth );
+				double fValueCdf = ( fWeightSoFar + it->second * fInterp ) / fTotalWeight;
+				return std::max ( fValueCdf, 0.0 );
 			}
-			else if ( it->first<=fValue && fValue < itNext->first )
-			{
-				if ( itNext->first - it->first > 0.0 )
-				{
-					double fLeftExcluded = 0.0;
-					double fRightExcluded = 0.0;
-					if ( it->second==1 )
-					{
-						if ( itNext->second==1 )
-							return ( fWeightSoFar + 1.0 ) / fTotalWeight;
-						fLeftExcluded = 0.5;
-					}
-					else if ( itNext->second==1 )
-					{
-						fRightExcluded = 0.5;
-					}
-
-					double fDw = ( it->second + itNext->second ) / 2.0;
-					double fDwNoSingleton = fDw - fLeftExcluded - fRightExcluded;
-					double fBase = fWeightSoFar + it->second / 2.0 + fLeftExcluded;
-					return ( fBase + fDwNoSingleton * ( fValue - it->first ) / ( itNext->first - it->first ) ) / fTotalWeight;
-				}
-				else
-				{
-					double fDw = ( it->second + itNext->second ) / 2.0;
-					return ( fWeightSoFar + fDw ) / fTotalWeight;
-				}
-			}
-			else
-			{
-				fWeightSoFar += it->second;
-			}
+			fWeightSoFar += it->second;
+			fLeftWidth = fRightWidth;
 		}
 
-		if ( fValue==itLast->first )
-			return 1.0 - 0.5 / fTotalWeight;
+		double fRightWidth = ( itLast->first - std::prev ( itLast )->first ) / 2.0;
+		if ( fValue < itLast->first + fRightWidth )
+		{
+			double fInterp = Interpolate ( fValue, itLast->first - fRightWidth, itLast->first + fRightWidth );
+			return ( fWeightSoFar + itLast->second * fInterp ) / fTotalWeight;
+		}
 
 		return 1.0;
 	}
@@ -468,6 +439,16 @@ private:
 
 	void Compress()
 	{
+	double Interpolate ( double fValue, double fLeft, double fRight ) const
+	{
+		if ( fRight<=fLeft )
+			return 0.0;
+		if ( fValue<=fLeft )
+			return 0.0;
+		if ( fValue>=fRight )
+			return 1.0;
+		return ( fValue - fLeft ) / ( fRight - fLeft );
+	}
 		struct Centroid_t
 		{
 			double	m_fMean;

@@ -2573,26 +2573,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
 
-	static bool bDumpedSchema = false;
-	if ( !bDumpedSchema && ( tAggr.m_eAggrFunc==Aggr_e::PERCENTILES || tAggr.m_eAggrFunc==Aggr_e::PERCENTILE_RANKS || tAggr.m_eAggrFunc==Aggr_e::MAD ) )
-	{
-		StringBuilder_c sAttrs;
-		sAttrs += "schema=[";
-		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
-		{
-			if ( i )
-				sAttrs += ",";
-			sAttrs += tRes.m_tSchema.GetAttr(i).m_sName.cstr();
-		}
-		sAttrs += "]";
-		sAttrs += " aggrName=";
-		sAttrs += GetAggrName ( iAggrItem, tAggr.m_sCol ).cstr();
-		sAttrs += " bucket=";
-		sAttrs += tAggr.m_sBucketName.cstr();
-		sphWarning ( "%s", sAttrs.cstr() );
-		bDumpedSchema = true;
-	}
-
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 	AggrKeyTrait_t tKey;
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );

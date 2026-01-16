@@ -28,9 +28,45 @@ Note, you can filter only by id in this mode.
 
 > NOTE: Partial replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
+**To replace from a SELECT:**
+```sql
+REPLACE INTO table
+    SELECT ... FROM source
+```
+```sql
+REPLACE INTO table (column1, column2, column3)
+    SELECT ... FROM source
+```
+This syntax is parsed and validated by the payload parser and requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
+
+<!-- intro -->
+##### REPLACE ... SELECT:
+<!-- request REPLACE SELECT -->
+
+```sql
+CREATE TABLE products_src (id int, title text, price float, category_id int);
+CREATE TABLE products (id int, title text, price float, category_id int);
+
+INSERT INTO products_src VALUES
+    (1, 'Notebook Stand', 45.00, 10),
+    (2, 'USB-C Hub', 79.90, 12),
+    (3, 'Wireless Mouse', 129.00, 10);
+
+REPLACE INTO products_a (id, price)
+    SELECT id, price FROM products_src;
+
+REPLACE INTO products_b
+    SELECT * FROM products_src;
+
+REPLACE INTO products_c (id, title, category_id)
+    SELECT id, title, category_id
+    FROM products_src
+    WHERE price >= 100;
+```
 
 ## JSON REPLACE
 
@@ -758,4 +794,3 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 <!-- end -->
 
 <!-- proofread -->
-

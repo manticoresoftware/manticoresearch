@@ -290,9 +290,6 @@ You can also enforce a guaranteed groupby/aggregate accuracy mode using the [acc
 ### max_query_time
 Sets the maximum search query time in milliseconds. Must be a non-negative integer. The default value is 0, which means "do not limit." Local search queries will be stopped once the specified time has elapsed. Note that if you're performing a search that queries multiple local tables, this limit applies to each table separately. Be aware that this may slightly increase the query's response time due to the overhead caused by constantly tracking whether it's time to stop the query.
 
-### max_predicted_time
-Integer. Maximum predicted search time; see [predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs).
-
 ### morphology
 `none` allows replacing all query terms with their exact forms if the table was built with [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. This is useful for preventing stemming or lemmatizing query terms.
 

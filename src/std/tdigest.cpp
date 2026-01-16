@@ -306,6 +306,16 @@ public:
 			return ( fWeightSoFar + itLast->second * fInterp ) / fTotalWeight;
 		}
 
+		if ( fValue < m_fMax )
+		{
+			double fTailWidth = ( m_fMax - itLast->first );
+			if ( fTailWidth>0.0 )
+			{
+				double fInterp = TdInterpolate ( fValue, itLast->first, itLast->first + fTailWidth );
+				return ( fWeightSoFar + itLast->second + ( fInterp * ( fTotalWeight - fWeightSoFar - itLast->second ) ) ) / fTotalWeight;
+			}
+		}
+
 		return 1.0;
 	}
 

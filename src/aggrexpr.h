@@ -104,7 +104,7 @@ struct AggrPercentileRanksSetting_t
 
 struct AggrMadSetting_t
 {
-	double m_fCompression = 200.0;
+	double m_fCompression = 1000.0;
 };
 
 struct AggrSettings_t

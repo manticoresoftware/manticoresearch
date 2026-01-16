@@ -89,7 +89,7 @@ public:
 	void			HandleModifiers ( XQKeyword_t & tKeyword ) const noexcept;
 
 	void			AddQuery ( XQNode_t * pNode );
-	XQNode_t *		AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken=0 );
+	XQNode_t *		AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken=0, bool bFrontModified=false );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
 	void			SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp );
@@ -414,6 +414,7 @@ static bool GetNearToken ( const char * sTok, int iTokLen, int iTokType, const c
 int XQParser_t::GetToken ( YYSTYPE * lvalp )
 {
 	bool bWasFrontModifier = false; // used to print warning
+	bool bHasPreviousStartModifier = false;
 
 	// what, noone's pending for a bending?!
 	if ( !m_iPendingType )
@@ -421,8 +422,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	{
 //		assert ( m_iPendingNulls==0 );
 
-		bool bWasKeyword = m_bWasKeyword;
-		m_bWasKeyword = false;
+		const bool bPreviousWasKeyword = std::exchange(m_bWasKeyword, false);
 
 		int iSkippedPosBeforeToken = 0;
 		if ( m_bWasBlended )
@@ -644,16 +644,26 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			if ( sToken[0]=='^' )
 			{
 				const char * pTokEnd = m_pTokenizer->GetTokenEnd();
-				if ( pTokEnd<m_pTokenizer->GetBufferEnd() && !sphIsSpace ( pTokEnd[0] ) )
-					bWasFrontModifier = true;
+				if ( pTokEnd<m_pTokenizer->GetBufferEnd() )
+				{
+					bHasPreviousStartModifier = true;
+					if ( !sphIsSpace ( pTokEnd[0] ) )
+					   bWasFrontModifier = true;
+				}
 
 				// this special is handled in HandleModifiers()
 				continue;
 			}
 			if ( sToken[0]=='$' )
 			{
-				if ( bWasKeyword )
+				if ( bPreviousWasKeyword )
+				{
+					lvalp->pNode->WithWords ( [this] ( auto& dWords ) {
+						if ( !dWords.IsEmpty() && !dWords.Last().m_bBoosted )
+							dWords.Last().m_bFieldEnd = true;
+					} );
 					continue;
+				}
 //				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) ) // crashes with fuzzy on single "$"
 //					continue;
 
@@ -739,7 +749,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_bWasKeyword = true;
 		} else
 		{
-			m_tPendingToken.pNode = AddKeyword ( sToken, iSkippedPosBeforeToken );
+			m_tPendingToken.pNode = AddKeyword ( sToken, iSkippedPosBeforeToken, bHasPreviousStartModifier );
 			m_iPendingType = TOK_KEYWORD;
 		}
 
@@ -820,17 +830,20 @@ void XQParser_t::HandleModifiers ( XQKeyword_t & tKeyword ) const noexcept
 			// We do have a boost.
 			// FIXME Handle ERANGE errno here.
 			tKeyword.m_fBoost = fBoost;
+			tKeyword.m_bBoosted = true;
 			m_pTokenizer->SetBufferPtr ( pEnd );
 		}
 	}
 }
 
 
-XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken )
+XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken, bool bFrontModified )
 {
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
 	tAW.m_iSkippedBefore = iSkippedPosBeforeToken;
 	HandleModifiers ( tAW );
+	if ( bFrontModified )
+		tAW.m_bFieldStart = true;
 	XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
 	pNode->AddDirtyWord ( std::move(tAW) );
 	return pNode;

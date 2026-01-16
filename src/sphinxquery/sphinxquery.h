@@ -32,6 +32,7 @@ struct XQKeyword_t
 	mutable bool		m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
 	mutable void *		m_pPayload = nullptr;
 	mutable bool		m_bRegex = false;
+	mutable bool		m_bBoosted = false;		///< if field m_fBoost is modified, so terminating $ should not be processed
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )

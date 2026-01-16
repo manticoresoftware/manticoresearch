@@ -26,7 +26,7 @@ enum
 {
 	QFLAG_REVERSE_SCAN			= 1UL << 0,		// deprecated
 	QFLAG_SORT_KBUFFER			= 1UL << 1,
-	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,
+	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,		// deprecated
 	QFLAG_SIMPLIFY				= 1UL << 3,
 	QFLAG_PLAIN_IDF				= 1UL << 4,
 	QFLAG_GLOBAL_IDF			= 1UL << 5,
@@ -60,7 +60,6 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	// reason being, i might add flags that affect *any* of the subsequent data (eg. qflag_pack_ints)
 	DWORD uFlags = 0;
 	uFlags |= QFLAG_SORT_KBUFFER * q.m_bSortKbuffer;
-	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
 	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify.value_or ( CSphQuery::m_bDefaultSimplify );
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
@@ -202,8 +201,6 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendString ( q.m_sComment.cstr() );
 	tOut.SendInt ( 0 ); // WAS: overrides
 	tOut.SendString ( q.m_sSelect.cstr() );
-	if ( q.m_iMaxPredictedMsec>0 )
-		tOut.SendInt ( q.m_iMaxPredictedMsec );
 
 	// emulate empty sud-select for agent (client ver 1.29) as master sends fixed outer offset+limits
 	tOut.SendString ( NULL );
@@ -543,7 +540,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			tRes.m_iCpuTime = tReq.GetUint64();
 
 		if ( uStatMask & 4U )
-			tRes.m_iPredictedTime = tReq.GetUint64();
+			tReq.GetUint64(); // was predicted time; removed
 
 		tRes.m_iAgentFetchedDocs = tReq.GetDword();
 		tRes.m_iAgentFetchedHits = tReq.GetDword();
@@ -928,7 +925,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 		// fetch optional stuff
 		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )
-			tQuery.m_iMaxPredictedMsec = tReq.GetInt();
+			tReq.GetInt(); // predicted time was removed, but if bit is present - we need to read (skip) int stub here.
 	}
 
 	// v.1.29
@@ -1450,9 +1447,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 
 	if ( iVer>=0x11A && bAgentMode )
 	{
-		bool bNeedPredictedTime = tQuery.m_iMaxPredictedMsec > 0;
-
-		BYTE uStatMask = ( bNeedPredictedTime ? 4U : 0U ) | ( g_bCpuStats ? 2U : 0U ) | ( g_bIOStats ? 1U : 0U );
+		BYTE uStatMask = ( g_bCpuStats ? 2U : 0U ) | ( g_bIOStats ? 1U : 0U );
 		tOut.SendByte ( uStatMask );
 
 		if ( g_bIOStats )
@@ -1473,8 +1468,6 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 			tOut.SendUint64 ( iCpuTime );
 		}
 
-		if ( bNeedPredictedTime )
-			tOut.SendUint64 ( tRes.m_iPredictedTime + tRes.m_iAgentPredictedTime );
 	}
 	if ( bAgentMode && uMasterVer>=7 )
 	{

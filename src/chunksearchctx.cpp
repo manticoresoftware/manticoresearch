@@ -43,10 +43,6 @@ void DiskChunkSearcherCtx_t::MergeChild ( DiskChunkSearcherCtx_t tChild ) const
 	if ( !tChildRes.m_sWarning.IsEmpty ())
 		m_tMeta.m_sWarning = tChildRes.m_sWarning;
 
-	// prediction counters
-	if ( m_tMeta.m_bHasPrediction )
-		m_tMeta.m_tStats.Add ( tChildRes.m_tStats );
-
 	// profiling
 	if ( tChildRes.m_pProfile )
 		m_tMeta.m_pProfile->AddMetric ( *tChildRes.m_pProfile );
@@ -69,7 +65,6 @@ DiskChunkSearcherCloneCtx_t::DiskChunkSearcherCloneCtx_t ( const DiskChunkSearch
 	ARRAY_FOREACH ( i, m_dSorters )
 		m_dSorters[i] = dParent.m_dSorters[i]->Clone();
 
-	m_tMeta.m_bHasPrediction = dParent.m_tMeta.m_bHasPrediction;
 	if ( dParent.m_tMeta.m_pProfile )
 		m_tMeta.m_pProfile = new QueryProfile_c;
 }

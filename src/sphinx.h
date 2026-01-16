@@ -605,7 +605,6 @@ struct CSphQuery
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec = 0;	///< max local index search time, in milliseconds (default is 0; means no limit)
-	int				m_iMaxPredictedMsec = 0; ///< max predicted (!) search time limit, in milliseconds (0 means no limit)
 	CSphString		m_sComment;				///< comment to pass verbatim in the log file
 
 	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
@@ -667,7 +666,6 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 /// some low-level query stats
 struct CSphQueryStats
 {
-	int64_t *	m_pNanoBudget = nullptr;///< pointer to max_predicted_time budget (counted in nanosec)
 	DWORD		m_iFetchedDocs = 0;		///< processed documents
 	DWORD		m_iFetchedHits = 0;		///< processed hits (aka positions)
 	DWORD		m_iSkips = 0;			///< number of Skip() calls
@@ -718,14 +716,11 @@ public:
 	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)
 	CSphIOStats				m_tAgentIOStats;		///< agent IO stats (for distributed searches)
 
-	int64_t					m_iPredictedTime = 0;		///< local predicted time
-	int64_t					m_iAgentPredictedTime = 0;	///< distributed predicted time
 	DWORD					m_iAgentFetchedDocs = 0;	///< distributed fetched docs
 	DWORD					m_iAgentFetchedHits = 0;	///< distributed fetched hits
 	DWORD					m_iAgentFetchedSkips = 0;	///< distributed fetched skips
 
 	CSphQueryStats 			m_tStats;					///< query prediction counters
-	bool					m_bHasPrediction = false;	///< is prediction counters set?
 
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message

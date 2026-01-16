@@ -411,18 +411,6 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, CSphVector<Joined
 	return CreateSingleSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook, szParent );
 }
 
-static int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
-{
-	assert ( tMeta.m_bHasPrediction );
-
-	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
-		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
-		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
-		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
-
-	return iNanoResult/1000000;
-}
-
 struct LocalSearchRef_t
 {
 	ExprHook_c&	m_tHook;
@@ -466,14 +454,6 @@ struct LocalSearchRef_t
 			// warnings
 			if ( !tChild.m_sWarning.IsEmpty ())
 				tResult.m_sWarning = tChild.m_sWarning;
-
-			// prediction counters
-			tResult.m_bHasPrediction |= tChild.m_bHasPrediction;
-			if ( tChild.m_bHasPrediction )
-			{
-				tResult.m_tStats.Add ( tChild.m_tStats );
-				tResult.m_iPredictedTime = CalcPredictedTimeMsec ( tResult );
-			}
 
 			// profiling
 			if ( tChild.m_pProfile )
@@ -955,7 +935,6 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 	++tNRes.m_iSuccesses;
 	tNRes.m_iCpuTime = iCpuTime;
 	tNRes.m_iTotalMatches += pSorter->GetTotalCount();
-	tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
 
 	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_iSuccesses = 1;
 	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = iQTimeForStats * 1000; // FIME!!! change time in meta into miscroseconds
@@ -2109,11 +2088,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 					tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
-					tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
 					tRes.m_iAgentFetchedDocs += tRemoteResult.m_iAgentFetchedDocs;
 					tRes.m_iAgentFetchedHits += tRemoteResult.m_iAgentFetchedHits;
 					tRes.m_iAgentFetchedSkips += tRemoteResult.m_iAgentFetchedSkips;
-					tRes.m_bHasPrediction |= ( m_dNQueries[iRes].m_iMaxPredictedMsec>0 );
 
 					if ( pDistr )
 					{

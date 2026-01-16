@@ -930,18 +930,6 @@ DistributedIndex_t * DistributedIndex_t::Clone() const
 
 void UpdateLastMeta ( VecTraits_T<AggrResult_t> tResults )
 {
-	int64_t iTotalPredictedTime = 0;
-	int64_t iTotalAgentPredictedTime = 0;
-	for ( const auto & dResult: tResults )
-	{
-		iTotalPredictedTime += dResult.m_iPredictedTime;
-		iTotalAgentPredictedTime += dResult.m_iAgentPredictedTime;
-	}
-
-	auto & g_tStats = gStats();
-	g_tStats.m_iPredictedTime.fetch_add ( iTotalPredictedTime, std::memory_order_relaxed );
-	g_tStats.m_iAgentPredictedTime.fetch_add ( iTotalAgentPredictedTime, std::memory_order_relaxed );
-
 	ScWL_t dLastMetaLock ( g_tLastMetaLock );
 	g_tLastMeta = tResults.Last();
 }
@@ -2760,12 +2748,6 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.MatchTuplet ( "query_readtime", OFF );
 	}
 
-	if ( tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) || tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
-	{
-		dStatus.MatchTupletf ( "predicted_time", "%l", tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
-		dStatus.MatchTupletf ( "dist_predicted_time", "%l", tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
-	}
-
 	dStatus.MatchTupletf ( "avg_query_wall", "%0.3F", tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iDiv1000 );
 
 	if ( g_bCpuStats )
@@ -3019,23 +3001,6 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		AddIOStatsToMeta ( dStatus, tMeta.m_tAgentIOStats, "agent_" );
 	}
 
-	if ( tMeta.m_bHasPrediction )
-	{
-		dStatus.MatchTupletf ( "local_fetched_docs", "%d", tMeta.m_tStats.m_iFetchedDocs );
-		dStatus.MatchTupletf ( "local_fetched_hits", "%d", tMeta.m_tStats.m_iFetchedHits );
-		dStatus.MatchTupletf ( "local_fetched_skips", "%d", tMeta.m_tStats.m_iSkips );
-
-		dStatus.MatchTupletf ( "predicted_time", "%l", tMeta.m_iPredictedTime );
-		if ( tMeta.m_iAgentPredictedTime )
-			dStatus.MatchTupletf ( "dist_predicted_time", "%l", tMeta.m_iAgentPredictedTime );
-		if ( tMeta.m_iAgentFetchedDocs || tMeta.m_iAgentFetchedHits || tMeta.m_iAgentFetchedSkips )
-		{
-			dStatus.MatchTupletf ( "dist_fetched_docs", "%d", tMeta.m_tStats.m_iFetchedDocs+tMeta.m_iAgentFetchedDocs );
-			dStatus.MatchTupletf ( "dist_fetched_hits", "%d", tMeta.m_tStats.m_iFetchedHits+tMeta.m_iAgentFetchedHits );
-			dStatus.MatchTupletf ( "dist_fetched_skips", "%d", tMeta.m_tStats.m_iSkips+tMeta.m_iAgentFetchedSkips );
-		}
-	}
-
 	auto dWords = tMeta.MakeSortedWordStat();
 	ARRAY_CONSTFOREACH( iWord, dWords )
 	{
@@ -3074,14 +3039,7 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	else
 	{
 		ScRL_t dMetaRlock ( g_tLastMetaLock );
-		auto & g_tStats = gStats ();
 		BuildMeta ( dStatus, g_tLastMeta );
-		if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed )
-			|| g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
-		{
-			dStatus.MatchTupletf ( "predicted_time", "%l", g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
-			dStatus.MatchTupletf ( "dist_predicted_time", "%l", g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
-		}
 	}
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_STATUS );

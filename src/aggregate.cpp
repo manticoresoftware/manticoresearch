@@ -143,6 +143,10 @@ protected:
 		, m_sName ( tAttr.m_sName )
 		, m_pInputExpr ( tAttr.m_pExpr )
 	{
+		static std::atomic<int> s_iSetupLogged { 0 };
+		int iPrev = s_iSetupLogged.load ( std::memory_order_relaxed );
+		if ( iPrev<10 && s_iSetupLogged.compare_exchange_strong ( iPrev, iPrev+1, std::memory_order_relaxed ) )
+			sphWarning ( "TDIGEST setup attr=%s compression=%.1f", m_sName.cstr(), m_fCompression );
 	}
 
 	double EvalInput ( const CSphMatch & tMatch ) const

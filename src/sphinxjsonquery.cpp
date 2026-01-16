@@ -2430,27 +2430,13 @@ static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
 	tDigest.Export ( dCentroids );
 
 	TDigest_c tDeviation ( tDigest.GetCompression() );
-	static std::atomic<int> s_iDumpLeft { 3 };
-	bool bDump = false;
-	if ( s_iDumpLeft>0 )
-	{
-		int iPrev = s_iDumpLeft.fetch_sub ( 1 );
-		bDump = ( iPrev>0 );
-		if ( bDump )
-			sphWarning ( "MAD debug: median=%.6f count=%d centroids=%d", fMedian, (int)tDigest.GetCount(), dCentroids.GetLength() );
-	}
-
 	for ( const auto & tCentroid : dCentroids )
 	{
 		double fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
 		tDeviation.Add ( fDeviation, tCentroid.m_iCount );
-		if ( bDump )
-			sphWarning ( "MAD debug: centroid mean=%.6f count=%d deviation=%.6f", tCentroid.m_fMean, (int)tCentroid.m_iCount, fDeviation );
 	}
 
 	fMad = tDeviation.Quantile ( 0.5 );
-	if ( bDump )
-		sphWarning ( "MAD debug: result=%.6f", fMad );
 	return true;
 }
 
@@ -2714,7 +2700,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 			}
 			default:
 				if ( pCount )
-					JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "value", tMatch, tKey.m_pKey->m_tLocator );
+			JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "value", tMatch, tKey.m_pKey->m_tLocator );
 				break;
 			}
 		}

@@ -16,7 +16,6 @@
 #include "std/tdigest.h"
 #include "sphinxutils.h"
 
-#include <atomic>
 #include <cmath>
 #include <cstring>
 
@@ -143,10 +142,6 @@ protected:
 		, m_sName ( tAttr.m_sName )
 		, m_pInputExpr ( tAttr.m_pExpr )
 	{
-		static std::atomic<int> s_iSetupLogged { 0 };
-		int iPrev = s_iSetupLogged.load ( std::memory_order_relaxed );
-		if ( iPrev<10 && s_iSetupLogged.compare_exchange_strong ( iPrev, iPrev+1, std::memory_order_relaxed ) )
-			sphWarning ( "TDIGEST setup attr=%s compression=%.1f", m_sName.cstr(), m_fCompression );
 	}
 
 	double EvalInput ( const CSphMatch & tMatch ) const
@@ -174,11 +169,6 @@ protected:
 	void AppendValue ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
 	{
 		double fVal = EvalInput ( tMatch );
-		static std::atomic<int> s_iDebugLogged { 0 };
-		int iPrev = s_iDebugLogged.load ( std::memory_order_relaxed );
-		if ( iPrev<10 && s_iDebugLogged.compare_exchange_strong ( iPrev, iPrev+1, std::memory_order_relaxed ) )
-			sphWarning ( "TDIGEST append value: %.6f type=%d locatorBits=%d dyn=%d attr=%s",
-				fVal, (int)m_eValueType, m_tLocator.m_iBitCount, (int)m_tLocator.m_bDynamic, m_sName.cstr() );
 		tDigest.Add ( fVal );
 	}
 

@@ -37,7 +37,7 @@ REPLACE INTO table
 REPLACE INTO table (column1, column2, column3)
     SELECT ... FROM source
 ```
-This syntax requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: This syntax requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 

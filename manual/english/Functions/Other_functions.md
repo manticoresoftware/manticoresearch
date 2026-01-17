@@ -75,5 +75,16 @@ mysql> select uuid_short();
 1 row in set (0.00 sec)
 ```
 
+
+### TO_VECTOR()
+
+Marks a parameter as a vector/MVA list when using MySQL protocol prepared statements.
+Use it when binding `float_vector`, `multi`, or `multi64` parameters to ensure the server treats the parameter as a raw list in `(...)` format.
+
+```sql
+UPDATE products SET image_vector = TO_VECTOR(?) WHERE id = ?;
+UPDATE products SET tags = TO_MULTI(?) WHERE id = ?;
+```
+
 <!-- proofread -->
 

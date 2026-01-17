@@ -7799,7 +7799,10 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 
 		if ( IsNullSet ( tMatch, i, tNullMask, pNullBitmaskAttr ) )
 		{
-			dRows.PutString("NULL");
+			if ( dRows.IsBinary() )
+				dRows.PutNULL();
+			else
+				dRows.PutString("NULL");
 			continue;
 		}
 
@@ -7911,8 +7914,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		break;
 
 		default:
-			dRows.Add(1);
-			dRows.Add('-');
+			dRows.PutString ( "-" );
 			break;
 		}
 	}
@@ -11288,6 +11290,56 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta.m_sWarning = "";
 }
 
+PreparedStmt_t * ClientSession_c::CreatePreparedStmt ( CSphString sTemplate, int iParamCount, int iColumnCount )
+{
+	PreparedStmt_t tStmt;
+	tStmt.m_uId = m_uNextStmtId++;
+	tStmt.m_sTemplate = std::move ( sTemplate );
+	tStmt.m_iParamCount = iParamCount;
+	tStmt.m_iColumnCount = iColumnCount;
+	tStmt.m_dParamTypes.Resize ( iParamCount );
+	for ( auto & tType : tStmt.m_dParamTypes )
+		tType = 0;
+	tStmt.m_dLongData.Resize ( iParamCount );
+	m_dPrepared.Add ( std::move ( tStmt ) );
+	return &m_dPrepared.Last();
+}
+
+PreparedStmt_t * ClientSession_c::FindPreparedStmt ( uint32_t uId )
+{
+	for ( auto & tStmt : m_dPrepared )
+		if ( tStmt.m_uId==uId )
+			return &tStmt;
+	return nullptr;
+}
+
+bool ClientSession_c::ResetPreparedStmt ( uint32_t uId )
+{
+	auto * pStmt = FindPreparedStmt ( uId );
+	if ( !pStmt )
+		return false;
+	pStmt->m_dParamTypes.Resize ( pStmt->m_iParamCount );
+	for ( auto & tType : pStmt->m_dParamTypes )
+		tType = 0;
+	pStmt->m_dLongData.Resize ( pStmt->m_iParamCount );
+	for ( auto & sBlob : pStmt->m_dLongData )
+		sBlob = "";
+	return true;
+}
+
+bool ClientSession_c::RemovePreparedStmt ( uint32_t uId )
+{
+	for ( int i = 0; i < m_dPrepared.GetLength(); ++i )
+	{
+		if ( m_dPrepared[i].m_uId==uId )
+		{
+			m_dPrepared.Remove ( i );
+			return true;
+		}
+	}
+	return false;
+}
+
 ClientSession_c::~ClientSession_c ()
 {
 	UnlockTables(this);
@@ -11881,6 +11933,16 @@ void session::SetDeprecatedEOF ( bool bDeprecatedEOF )
 bool session::GetDeprecatedEOF()
 {
 	return GetClientSession()->m_bDeprecatedEOF;
+}
+
+void session::SetForceMetadataEof ( bool bForceMetadataEof )
+{
+	GetClientSession()->m_bForceMetadataEof = bForceMetadataEof;
+}
+
+bool session::GetForceMetadataEof()
+{
+	return GetClientSession()->m_bForceMetadataEof;
 }
 
 bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )

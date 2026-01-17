@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>blended token expansion during search</name>
+
+<requires>
+<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+index t
+{
+	type			= rt
+	path			= <data_path/>/t
+	rt_field		= f
+	blend_chars		= -
+	blend_mode		= trim_all, trim_none
+}
+
+index t1
+{
+	type			= rt
+	path			= <data_path/>/t1
+	rt_field		= f
+	blend_chars		= -
+	blend_mode		= trim_all, trim_none
+}
+
+index t2
+{
+	type			= rt
+	path			= <data_path/>/t2
+	rt_field		= f
+	blend_chars		= -
+	blend_mode		= trim_all
+}
+
+index dist1
+{
+    type = distributed
+    agent = <my_address/>:t
+}
+</config>
+
+<queries>
+<sphinxql>
+	INSERT INTO t (id, f) VALUES (1, 'well being'), (2, 'well-being'), (3, 'wellbeing');
+    
+	SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC;
+	SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- two blended token -->
+	INSERT INTO t1 (id, f) VALUES
+	(4, 'well-being test-case'),
+	(5, 'well-being test'),
+	(6, 'well-being case'),
+	(7, 'well test-case'),
+	(8, 'being test-case'),
+	(9, 'wellbeing testcase'),
+	(10, 'well-being'),
+	(11, 'test-case'),
+	(12, 'well being test case');
+</sphinxql>
+
+<sphinxql>
+	<!-- Should create: OR(well-being, well, being, wellbeing) AND OR(test-case, test, case, testcase) -->
+	<!-- Should match documents 4, 5, 6, 7, 8, 9, 12 (both tokens present) -->
+	<!-- Should NOT match documents 10, 11 (only one token present) -->
+	SELECT * FROM t1 WHERE MATCH('well-being test-case') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	INSERT INTO t2 (id, f) VALUES
+	(1, 'well test'),
+	(2, 'well- test-'),
+	(3, 'well-test'),
+	(4, 'well'),
+	(5, 'test'),
+	(6, 'well-'),
+	(7, 'test-'),
+	(8, 'well being'),
+	(9, 'test case'),
+	(10, 'well- case'),
+	(11, 'well test-');
+</sphinxql>
+
+<sphinxql>
+	<!-- Should match documents 1, 2, 3, 11 (both "well" and "test" present) -->
+	<!-- Should NOT match documents 4, 5, 6, 7, 8, 9, 10 (only one token present) -->
+	SELECT * FROM t2 WHERE MATCH('well- test-') ORDER BY id ASC OPTION expand_blended='1';
+	</sphinxql>
+
+<sphinxql>
+	<!-- phrase mode - blended tokens should NOT expand inside phrases -->
+	INSERT INTO t1 (id, f) VALUES
+	(20, 'well-being test-case'),
+	(21, 'well being test case'),
+	(22, 'wellbeing testcase'),
+	(23, 'well-being test'),
+	(24, 'well test-case');
+	
+	SELECT * FROM t1 WHERE MATCH('"well-being test-case"') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	INSERT INTO t1 (id, f) VALUES
+	(30, 'hello well-being world'),
+	(31, 'hello well being world'),
+	(32, 'hello wellbeing world'),
+	(33, 'hello well-being'),
+	(34, 'hello world'),
+	(35, 'well-being world');
+	
+	SELECT * FROM t1 WHERE MATCH('hello well-being world') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- field modifiers with blended tokens -->
+	INSERT INTO t (id, f) VALUES
+	(10, 'well-being'),
+	(11, 'well-being test'),
+	(12, 'test well-being'),
+	(13, 'wellbeing'),
+	(14, 'well being');
+	
+	SELECT * FROM t WHERE MATCH('^well-being$') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- three blended tokens -->
+	INSERT INTO t1 (id, f) VALUES
+	(40, 'well-being test-case multi-part'),
+	(41, 'well being test case multi part'),
+	(42, 'wellbeing testcase multipart'),
+	(43, 'well-being test-case'),
+	(44, 'multi-part'),
+	(45, 'well-being multi-part');
+	
+	SELECT * FROM t1 WHERE MATCH('well-being test-case multi-part') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- position consistency -->
+	INSERT INTO t1 (id, f) VALUES
+	(70, 'a well-being b'),
+	(71, 'a well being b'),
+	(72, 'a well-being'),
+	(73, 'well-being b'),
+	(74, 'a b');
+	
+	<!-- First verify matching behavior -->
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC;
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC OPTION expand_blended='1';
+    
+	set profiling=1;
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC;
+	show plan;
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC OPTION expand_blended='1';
+	show plan;
+</sphinxql>
+
+<sphinxql>
+<!-- expand set in options -->
+SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='1';
+show plan;
+SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none';
+show plan;
+
+<!-- expand to distirbuted agent -->
+SELECT * FROM dist1 WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none';
+</sphinxql>
+
+</queries>
+</test>

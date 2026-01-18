@@ -258,6 +258,9 @@ struct MYSQL_CHARSET
 //	static constexpr BYTE binary = 0x3f;
 };
 
+namespace prepared
+{
+
 enum class PreparedScanState_e
 {
 	NORMAL,
@@ -268,14 +271,28 @@ enum class PreparedScanState_e
 	BLOCK_COMMENT
 };
 
-static bool IsLineCommentStart ( const char * p, int iPos, int iLen );
-
 enum class ScanControl_e
 {
 	CONTINUE,
 	SKIP_APPEND,
 	STOP
 };
+
+static bool IsLineCommentStart ( const char * p, int iPos, int iLen )
+{
+	if ( iPos + 1 >= iLen )
+		return false;
+	if ( p[iPos]=='#' )
+		return true;
+	if ( p[iPos]=='-' && p[iPos+1]=='-' )
+	{
+		if ( iPos + 2 >= iLen )
+			return true;
+		char c = p[iPos+2];
+		return c==' ' || c=='\t' || c=='\r' || c=='\n';
+	}
+	return false;
+}
 
 template <typename FnNormal>
 static bool ScanPreparedSql ( Str_t tQuery, FnNormal fnNormal, StringBuilder_c * pOut )
@@ -366,22 +383,6 @@ static bool ScanPreparedSql ( Str_t tQuery, FnNormal fnNormal, StringBuilder_c *
 	}
 
 	return true;
-}
-
-static bool IsLineCommentStart ( const char * p, int iPos, int iLen )
-{
-	if ( iPos + 1 >= iLen )
-		return false;
-	if ( p[iPos]=='#' )
-		return true;
-	if ( p[iPos]=='-' && p[iPos+1]=='-' )
-	{
-		if ( iPos + 2 >= iLen )
-			return true;
-		char c = p[iPos+2];
-		return c==' ' || c=='\t' || c=='\r' || c=='\n';
-	}
-	return false;
 }
 
 static int CountPreparedParams ( Str_t tQuery )
@@ -709,6 +710,8 @@ static bool ExtractUpdateParamColumns ( Str_t tQuery, CSphString & sTable, CSphV
 	return !sTable.IsEmpty();
 }
 
+} // namespace prepared
+
 struct PreparedColumnDef_t
 {
 	CSphString m_sName;
@@ -825,7 +828,7 @@ static CSphString FormatTimeLiteral ( bool bNegative, int iDays, int iHour, int 
 	return sVal;
 }
 
-static bool IsLongDataKind ( BYTE uKind )
+static bool IsStringLikeMysqlType ( BYTE uKind )
 {
 	switch ( uKind )
 	{
@@ -845,6 +848,14 @@ static bool IsLongDataKind ( BYTE uKind )
 	default:
 		return false;
 	}
+}
+
+static CSphString ReadStringLiteral ( InputBuffer_c & tIn )
+{
+	auto iLen = MysqlReadPackedInt ( tIn );
+	auto sVal = tIn.GetRawString ( iLen );
+	Str_t tVal ( sVal.cstr(), sVal.Length() );
+	return BuildSqlStringLiteral ( tVal );
 }
 
 static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, CSphVector<CSphString> & dParams, CSphString & sError )
@@ -1023,13 +1034,8 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		case MYSQL_TYPE_NEWDECIMAL:
 		case MYSQL_TYPE_SET:
 		case MYSQL_TYPE_ENUM:
-		{
-			auto iLen = MysqlReadPackedInt ( tIn );
-			auto sVal = tIn.GetRawString ( iLen );
-			Str_t tVal ( sVal.cstr(), sVal.Length() );
-			sLiteral = BuildSqlStringLiteral ( tVal );
+			sLiteral = ReadStringLiteral ( tIn );
 			break;
-		}
 
 		case MYSQL_TYPE_BIT:
 		{
@@ -1044,18 +1050,13 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		}
 
 		default:
-		{
-			auto iLen = MysqlReadPackedInt ( tIn );
-			auto sVal = tIn.GetRawString ( iLen );
-			Str_t tVal ( sVal.cstr(), sVal.Length() );
-			sLiteral = BuildSqlStringLiteral ( tVal );
+			sLiteral = ReadStringLiteral ( tIn );
 			break;
-		}
 		}
 
 		if ( bHasLongData )
 		{
-			if ( !IsLongDataKind ( uKind ) )
+			if ( !IsStringLikeMysqlType ( uKind ) )
 			{
 				sError.SetSprintf ( "long data is not supported for parameter %d", i );
 				return false;
@@ -1272,6 +1273,18 @@ void SendMysqlEofPacketRaw ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns
 	tOut.SendByte ( 0xfe );
 	tOut.SendLSBWord ( iWarns < 0 ? 0 : ( iWarns > 65536 ? 65535 : iWarns ) );
 	tOut.SendLSBWord ( MysqlStatus ( bMoreResults, bAutoCommit, bIsInTrans ) );
+}
+
+static void SendMysqlMetadataTerminator ( ISphOutputBuffer & tOut, BYTE & uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
+{
+	if ( OmitEof() )
+	{
+		if ( session::GetForceMetadataEof() )
+			SendMysqlEofPacketRaw ( tOut, uPacketID++, iWarns, bMoreResults, bAutoCommit, bIsInTrans );
+		return;
+	}
+
+	SendMysqlEofPacket ( tOut, uPacketID++, iWarns, bMoreResults, bAutoCommit, bIsInTrans );
 }
 
 void SendMysqlFieldPacket ( ISphOutputBuffer & tOut, BYTE & uPacketID, const char * szDB, const char * sTable, const char * sCol, MysqlColumnType_e eType )
@@ -2475,7 +2488,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
 
 			CSphString sTemplate ( tSrcQueryReference );
-			int iParamCount = CountPreparedParams ( tSrcQueryReference );
+			int iParamCount = prepared::CountPreparedParams ( tSrcQueryReference );
 
 			CSphVector<PreparedColumnDef_t> dColumns;
 			int iColumnCount = 0;
@@ -2487,7 +2500,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 				for ( auto & sVal : dDummy )
 					sVal = "0";
 				CSphString sErr;
-				if ( !RenderPreparedQuery ( tSrcQueryReference, dDummy, sDummyQuery, sErr, nullptr ) )
+				if ( !prepared::RenderPreparedQuery ( tSrcQueryReference, dDummy, sDummyQuery, sErr, nullptr ) )
 					sDummyQuery = sTemplate;
 			}
 
@@ -2522,12 +2535,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 					sName.SetSprintf ( "param_%d", i+1 );
 					SendMysqlFieldPacket ( tOut, uPacketID, szDB, "", sName.cstr(), MYSQL_COL_STRING );
 				}
-				if ( OmitEof() )
-				{
-					if ( session::GetForceMetadataEof() )
-						SendMysqlEofPacketRaw ( tOut, uPacketID++, 0, false, session::IsAutoCommit (), session::IsInTrans() );
-				} else
-					SendMysqlEofPacket ( tOut, uPacketID++, 0, false, session::IsAutoCommit (), session::IsInTrans() );
+				SendMysqlMetadataTerminator ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
 			}
 
 			if ( iColumnCount>0 )
@@ -2546,12 +2554,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 						sName.SetSprintf ( "col_%d", i+1 );
 					SendMysqlFieldPacket ( tOut, uPacketID, szDB, "", sName.cstr(), eType );
 				}
-				if ( OmitEof() )
-				{
-					if ( session::GetForceMetadataEof() )
-						SendMysqlEofPacketRaw ( tOut, uPacketID++, 0, false, session::IsAutoCommit (), session::IsInTrans() );
-				} else
-					SendMysqlEofPacket ( tOut, uPacketID++, 0, false, session::IsAutoCommit (), session::IsInTrans() );
+				SendMysqlMetadataTerminator ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
 			}
 			break;
 		}
@@ -2606,7 +2609,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			CSphString sExpanded;
 			CSphString sNormalized;
 			CSphVector<int> dExplicitRaw;
-			NormalizeVectorFunctions ( FromStr ( pStmt->m_sTemplate ), sNormalized, dExplicitRaw, sErr );
+			prepared::NormalizeVectorFunctions ( FromStr ( pStmt->m_sTemplate ), sNormalized, dExplicitRaw, sErr );
 
 			CSphVector<bool> dRawParams;
 			dRawParams.Resize ( pStmt->m_iParamCount );
@@ -2618,7 +2621,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			{
 				const char * sPrefix = "__mps_param_";
 				CSphString sProbe;
-				ReplacePreparedParams ( FromStr ( sNormalized ), sProbe, [sPrefix]( int iParam )
+				prepared::ReplacePreparedParams ( FromStr ( sNormalized ), sProbe, [sPrefix]( int iParam )
 				{
 					CSphString sVal;
 					sVal.SetSprintf ( "'%s%d'", sPrefix, iParam );
@@ -2634,13 +2637,13 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 					{
 						auto pServed = GetServed ( tParsed.m_sIndex );
 						if ( pServed )
-							ApplyImplicitInsertTypes ( tParsed, RIdx_c ( pServed )->GetMatchSchema(), sPrefix, dRawParams );
+							prepared::ApplyImplicitInsertTypes ( tParsed, RIdx_c ( pServed )->GetMatchSchema(), sPrefix, dRawParams );
 					}
 				}
 
 				CSphString sUpdTable;
 				CSphVector<std::pair<int, CSphString>> dUpdParams;
-				if ( ExtractUpdateParamColumns ( FromStr ( sNormalized ), sUpdTable, dUpdParams ) )
+				if ( prepared::ExtractUpdateParamColumns ( FromStr ( sNormalized ), sUpdTable, dUpdParams ) )
 				{
 					auto pServed = GetServed ( sUpdTable );
 					if ( pServed )
@@ -2659,7 +2662,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 				}
 			}
 
-			if ( !RenderPreparedQuery ( FromStr ( sNormalized ), dParams, sExpanded, sErr, &dRawParams ) )
+			if ( !prepared::RenderPreparedQuery ( FromStr ( sNormalized ), dParams, sExpanded, sErr, &dRawParams ) )
 			{
 				SendMysqlErrorPacket ( tOut, uPacketID, FromStr ( sErr ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				break;

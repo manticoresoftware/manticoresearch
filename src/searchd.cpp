@@ -11290,6 +11290,24 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta.m_sWarning = "";
 }
 
+static int FindPreparedStmtIndex ( const CSphVector<PreparedStmt_t> & dPrepared, uint32_t uId )
+{
+	for ( int i = 0; i < dPrepared.GetLength(); ++i )
+		if ( dPrepared[i].m_uId==uId )
+			return i;
+	return -1;
+}
+
+static void ResetPreparedStmtParams ( PreparedStmt_t & tStmt )
+{
+	tStmt.m_dParamTypes.Resize ( tStmt.m_iParamCount );
+	for ( auto & tType : tStmt.m_dParamTypes )
+		tType = 0;
+	tStmt.m_dLongData.Resize ( tStmt.m_iParamCount );
+	for ( auto & sBlob : tStmt.m_dLongData )
+		sBlob = "";
+}
+
 PreparedStmt_t * ClientSession_c::CreatePreparedStmt ( CSphString sTemplate, int iParamCount, int iColumnCount )
 {
 	PreparedStmt_t tStmt;
@@ -11297,47 +11315,33 @@ PreparedStmt_t * ClientSession_c::CreatePreparedStmt ( CSphString sTemplate, int
 	tStmt.m_sTemplate = std::move ( sTemplate );
 	tStmt.m_iParamCount = iParamCount;
 	tStmt.m_iColumnCount = iColumnCount;
-	tStmt.m_dParamTypes.Resize ( iParamCount );
-	for ( auto & tType : tStmt.m_dParamTypes )
-		tType = 0;
-	tStmt.m_dLongData.Resize ( iParamCount );
+	ResetPreparedStmtParams ( tStmt );
 	m_dPrepared.Add ( std::move ( tStmt ) );
 	return &m_dPrepared.Last();
 }
 
 PreparedStmt_t * ClientSession_c::FindPreparedStmt ( uint32_t uId )
 {
-	for ( auto & tStmt : m_dPrepared )
-		if ( tStmt.m_uId==uId )
-			return &tStmt;
-	return nullptr;
+	const int iIdx = FindPreparedStmtIndex ( m_dPrepared, uId );
+	return iIdx>=0 ? &m_dPrepared[iIdx] : nullptr;
 }
 
 bool ClientSession_c::ResetPreparedStmt ( uint32_t uId )
 {
-	auto * pStmt = FindPreparedStmt ( uId );
-	if ( !pStmt )
+	const int iIdx = FindPreparedStmtIndex ( m_dPrepared, uId );
+	if ( iIdx<0 )
 		return false;
-	pStmt->m_dParamTypes.Resize ( pStmt->m_iParamCount );
-	for ( auto & tType : pStmt->m_dParamTypes )
-		tType = 0;
-	pStmt->m_dLongData.Resize ( pStmt->m_iParamCount );
-	for ( auto & sBlob : pStmt->m_dLongData )
-		sBlob = "";
+	ResetPreparedStmtParams ( m_dPrepared[iIdx] );
 	return true;
 }
 
 bool ClientSession_c::RemovePreparedStmt ( uint32_t uId )
 {
-	for ( int i = 0; i < m_dPrepared.GetLength(); ++i )
-	{
-		if ( m_dPrepared[i].m_uId==uId )
-		{
-			m_dPrepared.Remove ( i );
-			return true;
-		}
-	}
-	return false;
+	const int iIdx = FindPreparedStmtIndex ( m_dPrepared, uId );
+	if ( iIdx<0 )
+		return false;
+	m_dPrepared.Remove ( iIdx );
+	return true;
 }
 
 ClientSession_c::~ClientSession_c ()

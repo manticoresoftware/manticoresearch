@@ -4,7 +4,22 @@ Manticore Search 通过使用 MySQL 协议实现了 SQL 接口，允许使用任
 
 然而，SQL 方言有所不同，仅实现了 MySQL 中可用的 SQL 命令或函数的一个子集。此外，还存在 Manticore Search 特有的子句和函数，例如用于全文搜索的 `MATCH()` 子句。
 
-Manticore Search 不支持服务器端的预准备语句，但可以使用客户端预准备语句。需要注意的是，Manticore 实现了多值（MVA）数据类型，这在 MySQL 或实现预准备语句的库中没有对应类型。在这些情况下，MVA 值必须在原始查询中构造。
+Manticore Search 支持通过 MySQL 协议的服务器端预处理语句。也可以使用客户端预处理语句。需要注意的是，Manticore 实现了多值（MVA）和 `float_vector` 数据类型，这些在 MySQL 或实现预处理语句的库中没有等价物。在这些情况下，值必须在原始查询中以列表字面量的形式构造。
+
+## 预处理语句
+
+Manticore 支持通过 MySQL 协议的 COM_STMT_PREPARE/COM_STMT_EXECUTE。
+这仅通过 MySQL 协议可用（而不是通过 HTTP SQL 端点），并且不支持基于游标的获取。
+
+### MVA 和 float_vector 的列表参数
+
+预处理语句仅接受 `(1,2,3)` 格式的列表参数用于 `multi`、`multi64` 和 `float_vector`。
+使用 `TO_MULTI(?)` 或 `TO_VECTOR(?)` 显式标记参数为列表。
+
+### 兼容性说明
+
+某些驱动程序将数字参数作为 DOUBLE 发送（例如 Node.js 的 mysql2）。
+如果您需要严格的整数行为（例如拒绝负 id），请将整数作为字符串或驱动程序特定的整数类型（例如 BigInt）发送。
 
 部分 MySQL 客户端/连接器需要用户/密码和/或数据库名称的值。由于 Manticore Search 没有数据库概念，也没有实现用户访问控制，这些值可以随意设置，因为 Manticore 会直接忽略它们。
 
@@ -93,4 +108,3 @@ Server=127.0.0.1;Port=9306;Database=somevalue;Uid=somevalue;Pwd=;Allow Batch=Tru
 SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 ```
 <!-- proofread -->
-

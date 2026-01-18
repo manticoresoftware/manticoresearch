@@ -75,5 +75,16 @@ mysql> select uuid_short();
 1 row in set (0.00 sec)
 ```
 
+
+### TO_VECTOR()
+
+Помечает параметр как вектор/список MVA при использовании подготовленных выражений протокола MySQL.
+Используйте его при привязке параметров `float_vector`, `multi` или `multi64`, чтобы гарантировать, что сервер обрабатывает параметр как необработанный список в формате `(...)`.
+
+```sql
+UPDATE products SET image_vector = TO_VECTOR(?) WHERE id = ?;
+UPDATE products SET tags = TO_MULTI(?) WHERE id = ?;
+```
+
 <!-- proofread -->
 

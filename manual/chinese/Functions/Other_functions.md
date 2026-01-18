@@ -75,5 +75,16 @@ mysql> select uuid_short();
 1 row in set (0.00 sec)
 ```
 
+
+### TO_VECTOR()
+
+在使用MySQL协议预处理语句时，将参数标记为向量/MVA列表。
+当绑定`float_vector`、`multi`或`multi64`参数时使用它，以确保服务器将参数视为`(...)`格式的原始列表。
+
+```sql
+UPDATE products SET image_vector = TO_VECTOR(?) WHERE id = ?;
+UPDATE products SET tags = TO_MULTI(?) WHERE id = ?;
+```
+
 <!-- proofread -->
 

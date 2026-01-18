@@ -7799,7 +7799,10 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 
 		if ( IsNullSet ( tMatch, i, tNullMask, pNullBitmaskAttr ) )
 		{
-			dRows.PutString("NULL");
+			if ( dRows.IsBinary() )
+				dRows.PutNULL();
+			else
+				dRows.PutString("NULL");
 			continue;
 		}
 
@@ -7911,8 +7914,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		break;
 
 		default:
-			dRows.Add(1);
-			dRows.Add('-');
+			dRows.PutString ( "-" );
 			break;
 		}
 	}
@@ -11288,6 +11290,60 @@ void ClientSession_c::FreezeLastMeta()
 	m_tLastMeta.m_sWarning = "";
 }
 
+static int FindPreparedStmtIndex ( const CSphVector<PreparedStmt_t> & dPrepared, uint32_t uId )
+{
+	for ( int i = 0; i < dPrepared.GetLength(); ++i )
+		if ( dPrepared[i].m_uId==uId )
+			return i;
+	return -1;
+}
+
+static void ResetPreparedStmtParams ( PreparedStmt_t & tStmt )
+{
+	tStmt.m_dParamTypes.Resize ( tStmt.m_iParamCount );
+	for ( auto & tType : tStmt.m_dParamTypes )
+		tType = 0;
+	tStmt.m_dLongData.Resize ( tStmt.m_iParamCount );
+	for ( auto & sBlob : tStmt.m_dLongData )
+		sBlob = "";
+}
+
+PreparedStmt_t * ClientSession_c::CreatePreparedStmt ( CSphString sTemplate, int iParamCount, int iColumnCount )
+{
+	PreparedStmt_t tStmt;
+	tStmt.m_uId = m_uNextStmtId++;
+	tStmt.m_sTemplate = std::move ( sTemplate );
+	tStmt.m_iParamCount = iParamCount;
+	tStmt.m_iColumnCount = iColumnCount;
+	ResetPreparedStmtParams ( tStmt );
+	m_dPrepared.Add ( std::move ( tStmt ) );
+	return &m_dPrepared.Last();
+}
+
+PreparedStmt_t * ClientSession_c::FindPreparedStmt ( uint32_t uId )
+{
+	const int iIdx = FindPreparedStmtIndex ( m_dPrepared, uId );
+	return iIdx>=0 ? &m_dPrepared[iIdx] : nullptr;
+}
+
+bool ClientSession_c::ResetPreparedStmt ( uint32_t uId )
+{
+	const int iIdx = FindPreparedStmtIndex ( m_dPrepared, uId );
+	if ( iIdx<0 )
+		return false;
+	ResetPreparedStmtParams ( m_dPrepared[iIdx] );
+	return true;
+}
+
+bool ClientSession_c::RemovePreparedStmt ( uint32_t uId )
+{
+	const int iIdx = FindPreparedStmtIndex ( m_dPrepared, uId );
+	if ( iIdx<0 )
+		return false;
+	m_dPrepared.Remove ( iIdx );
+	return true;
+}
+
 ClientSession_c::~ClientSession_c ()
 {
 	UnlockTables(this);
@@ -11881,6 +11937,16 @@ void session::SetDeprecatedEOF ( bool bDeprecatedEOF )
 bool session::GetDeprecatedEOF()
 {
 	return GetClientSession()->m_bDeprecatedEOF;
+}
+
+void session::SetForceMetadataEof ( bool bForceMetadataEof )
+{
+	GetClientSession()->m_bForceMetadataEof = bForceMetadataEof;
+}
+
+bool session::GetForceMetadataEof()
+{
+	return GetClientSession()->m_bForceMetadataEof;
 }
 
 bool session::Execute ( Str_t sQuery, RowBuffer_i& tOut )

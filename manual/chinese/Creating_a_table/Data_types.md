@@ -2501,6 +2501,9 @@ let search_res = search_api.search(search_req).await;
 - 浮点向量不能用于常规过滤或排序
 - 通过向量搜索操作（KNN）是过滤`float_vector`值的唯一方式
 
+当使用 MySQL 协议预处理语句时，`float_vector` 参数必须以 `(…)` 格式的列表字面量传递。
+您也可以使用 `TO_VECTOR(?)` 明确标记参数为向量列表。
+
 ### 常见用例
 - 用于语义搜索的文本嵌入
 - 推荐系统向量
@@ -3561,4 +3564,3 @@ table tbl {
 ```
 
 <!-- end -->
-

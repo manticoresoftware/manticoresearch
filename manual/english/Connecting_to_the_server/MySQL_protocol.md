@@ -4,7 +4,22 @@ Manticore Search implements an SQL interface using the MySQL protocol, allowing 
 
 However, the SQL dialect is different and implements only a subset of the SQL commands or functions available in MySQL. Additionally, there are clauses and functions that are specific to Manticore Search, such as the `MATCH()` clause for full-text search.
 
-Manticore Search does not support server-side prepared statements, but client-side prepared statements can be used. It is important to note that Manticore implements the multi-value (MVA) data type, which has no equivalent in MySQL or libraries implementing prepared statements. In these cases, the MVA values must be crafted in the raw query.
+Manticore Search supports server-side prepared statements over the MySQL protocol. Client-side prepared statements can also be used. It is important to note that Manticore implements the multi-value (MVA) and `float_vector` data types, which have no equivalents in MySQL or libraries implementing prepared statements. In these cases, values must be crafted in the raw query as list literals.
+
+## Prepared statements
+
+Manticore supports COM_STMT_PREPARE/COM_STMT_EXECUTE over the MySQL protocol.
+This is only available via the MySQL protocol (not via HTTP SQL endpoints), and cursor-based fetching is not supported.
+
+### List parameters for MVA and float_vector
+
+Prepared statements accept list parameters for `multi`, `multi64`, and `float_vector` only in `(1,2,3)` format.
+Use `TO_MULTI(?)` or `TO_VECTOR(?)` to explicitly mark a parameter as a list.
+
+### Compatibility notes
+
+Some drivers send numeric parameters as DOUBLE (for example, mysql2 for Node.js).
+If you need strict integer behavior (such as rejecting negative ids), send integers as strings or driver-specific integer types (e.g., BigInt).
 
 Some MySQL clients/connectors require values for user/password and/or database name. Since Manticore Search does not have the concept of databases and there is no user access control implemented, these values can be set arbitrarily as Manticore will simply ignore them.
 
@@ -93,4 +108,3 @@ Manticore SQL over MySQL supports C-style comment syntax. Everything from an ope
 SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 ```
 <!-- proofread -->
-

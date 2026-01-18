@@ -1357,6 +1357,8 @@ namespace session {
 	bool GetOptimizeById();
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );
 	bool GetDeprecatedEOF();
+	void SetForceMetadataEof ( bool bForceMetadataEof );
+	bool GetForceMetadataEof();
 }
 
 // that is used from sphinxql command over API
@@ -1530,6 +1532,7 @@ public:
 	virtual void Add ( BYTE uVal ) = 0;
 
 	virtual bool SomethingWasSent() { return false; }
+	virtual bool IsBinary() const { return false; }
 
 	// common implementations
 	void PutArray ( const StringBuilder_c & dData, bool bSendEmpty=true )

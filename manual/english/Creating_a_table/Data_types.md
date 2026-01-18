@@ -2501,6 +2501,9 @@ Float vector attributes allow storing variable-length lists of floats, primarily
 - Float vectors cannot be used in regular filters or sorting
 - The only way to filter by `float_vector` values is through vector search operations (KNN)
 
+When using MySQL protocol prepared statements, `float_vector` parameters must be passed as a list literal in `(…)` format.
+You can also use `TO_VECTOR(?)` to explicitly mark a parameter as a vector list.
+
 ### Common Use Cases
 - Text embeddings for semantic search
 - Recommendation system vectors
@@ -3561,4 +3564,3 @@ table tbl {
 ```
 
 <!-- end -->
-

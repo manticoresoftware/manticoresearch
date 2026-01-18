@@ -133,7 +133,23 @@ func main() {
 	} else {
 		fmt.Printf("bad vector/mva update rejected as expected: %v\n", err)
 	}
+	if _, err := typeUpdate.Exec(nil, nil, nil, int64(1)); err == nil {
+		fmt.Println("NULL vector/mva update unexpectedly succeeded")
+	} else {
+		fmt.Printf("NULL vector/mva update rejected as expected: %v\n", err)
+	}
 	_ = typeUpdate.Close()
+
+	exprUpdate, err := db.Prepare("UPDATE ps_types SET m = m + ? WHERE id = ?")
+	if err != nil {
+		panic(err)
+	}
+	if _, err := exprUpdate.Exec("(1,2)", int64(1)); err == nil {
+		fmt.Println("expression update unexpectedly succeeded")
+	} else {
+		fmt.Printf("expression update rejected as expected: %v\n", err)
+	}
+	_ = exprUpdate.Close()
 
 	typeSelect, err := db.Prepare("SELECT id, title, i, b, ts, f, s, j, m, m64, vec FROM ps_types WHERE id = ?")
 	if err != nil {

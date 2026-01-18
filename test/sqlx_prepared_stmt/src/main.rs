@@ -183,6 +183,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(_) => ok("bad vector/mva update unexpectedly succeeded"),
             Err(e) => ok(&format!("bad vector/mva update rejected as expected: {}", e)),
         }
+
+        match sqlx::query("UPDATE ps_types SET m = TO_MULTI(?), m64 = TO_MULTI(?), vec = TO_VECTOR(?) WHERE id = ?")
+            .bind(Option::<&str>::None)
+            .bind(Option::<&str>::None)
+            .bind(Option::<&str>::None)
+            .bind(1_i64)
+            .execute(&pool)
+            .await
+        {
+            Ok(_) => ok("NULL vector/mva update unexpectedly succeeded"),
+            Err(e) => ok(&format!("NULL vector/mva update rejected as expected: {}", e)),
+        }
+
+        match sqlx::query("UPDATE ps_types SET m = m + ? WHERE id = ?")
+            .bind("(1,2)")
+            .bind(1_i64)
+            .execute(&pool)
+            .await
+        {
+            Ok(_) => ok("expression update unexpectedly succeeded"),
+            Err(e) => ok(&format!("expression update rejected as expected: {}", e)),
+        }
     }
 
     if mysql_mode {

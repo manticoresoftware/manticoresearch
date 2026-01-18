@@ -24,6 +24,16 @@ function ok($msg) {
     fwrite(STDOUT, $msg . "\n");
 }
 
+function fetch_blob($stmt, $id) {
+    $stmt->bind_param("i", $id);
+    if (!$stmt->execute()) {
+        fail("Execute blob select failed: {$stmt->error}");
+    }
+    $res = $stmt->get_result();
+    $row = $res->fetch_assoc();
+    return $row ? $row['blob'] : null;
+}
+
 function create_table($mysqli, $name, $schema) {
     $mysqli->query("DROP TABLE IF EXISTS {$name}");
     if (!$mysqli->query("CREATE TABLE {$name} ({$schema})")) {
@@ -110,14 +120,21 @@ ok("edge inserts ok");
 // Test long data (bind_param + send_long_data) via insert + select.
 create_table($mysqli, "ps_blob", "id bigint, blob string");
 
+$selectBlob = $mysqli->prepare("SELECT blob FROM ps_blob WHERE id = ?");
+if (!$selectBlob) {
+    fwrite(STDERR, "Prepare long data select failed: {$mysqli->error}\n");
+    exit(1);
+}
+
 $insertBlob = $mysqli->prepare("INSERT INTO ps_blob (id, blob) VALUES (?, ?)");
 if (!$insertBlob) {
     fwrite(STDERR, "Prepare long data insert failed: {$mysqli->error}\n");
     exit(1);
 }
 
+// Long data only.
 $blobId = 1;
-$blob = null;
+$blob = "";
 $insertBlob->bind_param("ib", $blobId, $blob);
 $insertBlob->send_long_data(1, str_repeat("x", 1024));
 $insertBlob->send_long_data(1, str_repeat("y", 512));
@@ -125,22 +142,40 @@ if (!$insertBlob->execute()) {
     fwrite(STDERR, "Execute long data insert failed: {$insertBlob->error}\n");
     exit(1);
 }
+$blobVal = fetch_blob($selectBlob, $blobId);
+echo "blob_col length: " . strlen($blobVal) . "\n";
+
+// Long data should ignore inline value.
+$blobId = 2;
+$blob = "tail";
+$insertBlob->send_long_data(1, "head");
+if (!$insertBlob->execute()) {
+    fwrite(STDERR, "Execute long data+inline insert failed: {$insertBlob->error}\n");
+    exit(1);
+}
+$blobVal = fetch_blob($selectBlob, $blobId);
+if ($blobVal !== "head") {
+    fail("Long data+inline mismatch: expected 'head', got '" . ($blobVal === null ? "NULL" : $blobVal) . "'");
+}
+
+// NULL should override long data.
+$blobId = 3;
+$blob = null;
+$insertBlob->send_long_data(1, "should_be_ignored");
+try {
+    if ($insertBlob->execute()) {
+        $blobVal = fetch_blob($selectBlob, $blobId);
+        if (!is_null($blobVal)) {
+            fail("Long data+NULL mismatch: expected NULL, got '" . $blobVal . "'");
+        }
+    } else {
+        ok("long data+NULL insert rejected as expected: {$insertBlob->error}");
+    }
+} catch (Throwable $e) {
+    ok("long data+NULL insert rejected as expected: " . $e->getMessage());
+}
+
 $insertBlob->close();
-
-$selectBlob = $mysqli->prepare("SELECT blob FROM ps_blob WHERE id = ?");
-if (!$selectBlob) {
-    fwrite(STDERR, "Prepare long data select failed: {$mysqli->error}\n");
-    exit(1);
-}
-$selectBlob->bind_param("i", $blobId);
-if (!$selectBlob->execute()) {
-    fwrite(STDERR, "Execute long data select failed: {$selectBlob->error}\n");
-    exit(1);
-}
-
-$res = $selectBlob->get_result();
-$row = $res->fetch_assoc();
-echo "blob_col length: " . strlen($row['blob']) . "\n";
 $selectBlob->close();
 
 // Test prepared statements with all supported types.
@@ -197,6 +232,42 @@ try {
     ok("bad vector/mva update rejected as expected: " . $e->getMessage());
 }
 $badTypes->close();
+
+$nullTypes = $mysqli->prepare("UPDATE ps_types SET m = TO_MULTI(?), m64 = TO_MULTI(?), vec = TO_VECTOR(?) WHERE id = ?");
+if (!$nullTypes) {
+    fail("Prepare types NULL update failed: {$mysqli->error}");
+}
+$nullM = null;
+$nullM64 = null;
+$nullVec = null;
+$nullTypes->bind_param("sssi", $nullM, $nullM64, $nullVec, $typeId);
+try {
+    if ($nullTypes->execute()) {
+        ok("NULL vector/mva update unexpectedly succeeded");
+    } else {
+        ok("NULL vector/mva update rejected as expected: {$nullTypes->error}");
+    }
+} catch (Throwable $e) {
+    ok("NULL vector/mva update rejected as expected: " . $e->getMessage());
+}
+$nullTypes->close();
+
+$exprTypes = $mysqli->prepare("UPDATE ps_types SET m = m + ? WHERE id = ?");
+if (!$exprTypes) {
+    fail("Prepare types expr update failed: {$mysqli->error}");
+}
+$exprVal = "(1,2)";
+$exprTypes->bind_param("si", $exprVal, $typeId);
+try {
+    if ($exprTypes->execute()) {
+        ok("expression update unexpectedly succeeded");
+    } else {
+        ok("expression update rejected as expected: {$exprTypes->error}");
+    }
+} catch (Throwable $e) {
+    ok("expression update rejected as expected: " . $e->getMessage());
+}
+$exprTypes->close();
 
 $selectTypes = $mysqli->prepare("SELECT id, title, i, b, ts, f, s, j, m, m64, vec FROM ps_types WHERE id = ?");
 if (!$selectTypes) {

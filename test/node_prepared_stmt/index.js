@@ -111,6 +111,24 @@ async function main() {
   } catch (err) {
     console.log(`bad vector/mva update rejected as expected: ${err.message}`);
   }
+  try {
+    await conn.execute(
+      "UPDATE ps_types SET m = TO_MULTI(?), m64 = TO_MULTI(?), vec = TO_VECTOR(?) WHERE title = ?",
+      [null, null, null, "types"]
+    );
+    console.log("NULL vector/mva update unexpectedly succeeded");
+  } catch (err) {
+    console.log(`NULL vector/mva update rejected as expected: ${err.message}`);
+  }
+  try {
+    await conn.execute("UPDATE ps_types SET m = m + ? WHERE title = ?", [
+      "(1,2)",
+      "types",
+    ]);
+    console.log("expression update unexpectedly succeeded");
+  } catch (err) {
+    console.log(`expression update rejected as expected: ${err.message}`);
+  }
 
   const [typesRows] = await conn.execute(
     "SELECT id, title, i, b, ts, f, s, j, m, m64, vec FROM ps_types WHERE title = ?",

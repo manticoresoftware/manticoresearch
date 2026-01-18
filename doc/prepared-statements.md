@@ -36,6 +36,9 @@ All changes are in `src/netreceive_ql.cpp` unless noted.
 - ParseStmtParamValues:
   - Parses binary-encoded parameter values from COM_STMT_EXECUTE.
   - Handles numeric, string, date/time, JSON, blob types, NULL, and long-data accumulation (COM_STMT_SEND_LONG_DATA).
+  - "Long data" refers to parameter values sent in chunks via COM_STMT_SEND_LONG_DATA prior to COM_STMT_EXECUTE, typically for large strings/blobs.
+  - Long data is accepted only for string-like parameter types and overrides any inline parameter value.
+  - NULL bitmap overrides any accumulated long data (the parameter becomes SQL NULL).
 
 3) Column metadata inference for prepared SELECT
 - BuildPreparedColumnDefs:
@@ -61,9 +64,14 @@ Specifics and Behavior Notes
   - JSON and blob are transmitted as strings and stored as string literals.
   - DATETIME/TIMESTAMP/DATE/TIME are rendered as SQL literals via formatted strings.
   - NULL is rendered as SQL NULL.
+- Long data:
+  - COM_STMT_SEND_LONG_DATA can be used only with string-like parameter types; other types are rejected.
+  - When present, long data replaces the inline parameter value for that index.
+  - If the NULL bitmap is set for a parameter, the result is SQL NULL even if long data was sent.
 - Vector/MVA:
   - Accepted input: "(1,2,3)" only.
   - Rejected input: "1,2", "[1,2]", or any list with invalid tokens (eg. "(1, bad)").
+  - NULL parameters are rejected for raw list bindings (TO_MULTI/TO_VECTOR or inferred MVA/float_vector).
 - Prepared metadata termination:
   - For libmysql/mysql CLI clients, EOF packets are sent as raw EOF (0xFE) after metadata, even if the client advertises DEPRECATE_EOF.
   - For other clients, EOF is omitted when CLIENT_DEPRECATE_EOF is set; otherwise EOF packets are sent.
@@ -77,9 +85,13 @@ All tests were run against a local daemon instance using the MySQL protocol.
   - Prepared INSERT/SELECT
   - Edge values (0, empty string, negative id rejection, big integer)
   - Long data (send_long_data)
+  - Long data with inline values (inline ignored)
+  - Long data with NULL bitmap (NULL wins, may be rejected depending on column)
   - All supported types (int, bool, timestamp, float, string, json, multi, multi64, float_vector)
   - Update with TO_MULTI/TO_VECTOR
   - Bad list formats rejected
+  - NULL vector/MVA binding rejected
+  - Unsupported update expression rejected (eg. `SET m = m + ?`)
   - Transaction rollback behavior
   - Load and concurrency
 

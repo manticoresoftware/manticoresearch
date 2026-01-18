@@ -268,32 +268,34 @@ enum class PreparedScanState_e
 	BLOCK_COMMENT
 };
 
-static bool IsLineCommentStart ( const char * p, int iPos, int iLen )
-{
-	if ( iPos + 1 >= iLen )
-		return false;
-	if ( p[iPos]=='#' )
-		return true;
-	if ( p[iPos]=='-' && p[iPos+1]=='-' )
-	{
-		if ( iPos + 2 >= iLen )
-			return true;
-		char c = p[iPos+2];
-		return c==' ' || c=='\t' || c=='\r' || c=='\n';
-	}
-	return false;
-}
+static bool IsLineCommentStart ( const char * p, int iPos, int iLen );
 
-static int CountPreparedParams ( Str_t tQuery )
+enum class ScanControl_e
+{
+	CONTINUE,
+	SKIP_APPEND,
+	STOP
+};
+
+template <typename FnNormal>
+static bool ScanPreparedSql ( Str_t tQuery, FnNormal fnNormal, StringBuilder_c * pOut )
 {
 	const char * p = tQuery.first;
 	int iLen = (int)tQuery.second;
-	int iCount = 0;
 	auto eState = PreparedScanState_e::NORMAL;
 
 	for ( int i = 0; i < iLen; ++i )
 	{
 		char c = p[i];
+		bool bSkipAppend = false;
+		if ( eState==PreparedScanState_e::NORMAL )
+		{
+			ScanControl_e eCtrl = fnNormal ( i, c, p, iLen, eState );
+			if ( eCtrl==ScanControl_e::STOP )
+				return false;
+			bSkipAppend = ( eCtrl==ScanControl_e::SKIP_APPEND );
+		}
+
 		switch ( eState )
 		{
 		case PreparedScanState_e::NORMAL:
@@ -307,20 +309,26 @@ static int CountPreparedParams ( Str_t tQuery )
 				eState = PreparedScanState_e::LINE_COMMENT;
 			else if ( c=='/' && i+1<iLen && p[i+1]=='*' )
 				eState = PreparedScanState_e::BLOCK_COMMENT;
-			else if ( c=='?' )
-				++iCount;
 			break;
 
 		case PreparedScanState_e::SINGLE_QUOTE:
 			if ( c=='\\' && i+1<iLen )
+			{
+				if ( pOut )
+					pOut->AppendRawChunk ( Str_t { p + i, 1 } );
 				++i;
+			}
 			else if ( c=='\'' )
 				eState = PreparedScanState_e::NORMAL;
 			break;
 
 		case PreparedScanState_e::DOUBLE_QUOTE:
 			if ( c=='\\' && i+1<iLen )
+			{
+				if ( pOut )
+					pOut->AppendRawChunk ( Str_t { p + i, 1 } );
 				++i;
+			}
 			else if ( c=='\"' )
 				eState = PreparedScanState_e::NORMAL;
 			break;
@@ -329,7 +337,11 @@ static int CountPreparedParams ( Str_t tQuery )
 			if ( c=='`' )
 			{
 				if ( i+1<iLen && p[i+1]=='`' )
+				{
+					if ( pOut )
+						pOut->AppendRawChunk ( Str_t { p + i, 1 } );
 					++i;
+				}
 				else
 					eState = PreparedScanState_e::NORMAL;
 			}
@@ -348,7 +360,39 @@ static int CountPreparedParams ( Str_t tQuery )
 			}
 			break;
 		}
+
+		if ( pOut && !bSkipAppend )
+			pOut->AppendRawChunk ( Str_t { p + i, 1 } );
 	}
+
+	return true;
+}
+
+static bool IsLineCommentStart ( const char * p, int iPos, int iLen )
+{
+	if ( iPos + 1 >= iLen )
+		return false;
+	if ( p[iPos]=='#' )
+		return true;
+	if ( p[iPos]=='-' && p[iPos+1]=='-' )
+	{
+		if ( iPos + 2 >= iLen )
+			return true;
+		char c = p[iPos+2];
+		return c==' ' || c=='\t' || c=='\r' || c=='\n';
+	}
+	return false;
+}
+
+static int CountPreparedParams ( Str_t tQuery )
+{
+	int iCount = 0;
+	ScanPreparedSql ( tQuery, [&iCount]( int &, char c, const char *, int, PreparedScanState_e & )
+	{
+		if ( c=='?' )
+			++iCount;
+		return ScanControl_e::CONTINUE;
+	}, nullptr );
 
 	return iCount;
 }
@@ -386,104 +430,37 @@ static bool IsVectorListParam ( const CSphString & sParam, CSphString & sError )
 
 static bool RenderPreparedQuery ( Str_t tQuery, const CSphVector<CSphString> & dParams, CSphString & sOut, CSphString & sError, const CSphVector<bool> * pRawParams )
 {
-	const char * p = tQuery.first;
-	int iLen = (int)tQuery.second;
 	StringBuilder_c sSql;
-	auto eState = PreparedScanState_e::NORMAL;
 	int iParam = 0;
 
-	for ( int i = 0; i < iLen; ++i )
+	if ( !ScanPreparedSql ( tQuery, [&]( int &, char c, const char *, int, PreparedScanState_e & )
 	{
-		char c = p[i];
-		switch ( eState )
+		if ( c!='?' )
+			return ScanControl_e::CONTINUE;
+		if ( iParam>=dParams.GetLength() )
 		{
-		case PreparedScanState_e::NORMAL:
-			if ( c=='\'' )
-				eState = PreparedScanState_e::SINGLE_QUOTE;
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::DOUBLE_QUOTE;
-			else if ( c=='`' )
-				eState = PreparedScanState_e::BACKTICK;
-			else if ( IsLineCommentStart ( p, i, iLen ) )
-				eState = PreparedScanState_e::LINE_COMMENT;
-			else if ( c=='/' && i+1<iLen && p[i+1]=='*' )
-				eState = PreparedScanState_e::BLOCK_COMMENT;
-			else if ( c=='?' )
-			{
-				if ( iParam>=dParams.GetLength() )
-				{
-					sError = "not enough parameters for prepared statement";
-					return false;
-				}
-				if ( pRawParams && iParam < pRawParams->GetLength() && (*pRawParams)[iParam] )
-				{
-					CSphString sVal = dParams[iParam];
-					sVal.Unquote();
-					CSphString sErr;
-					if ( !IsVectorListParam ( sVal, sErr ) )
-					{
-						sError.SetSprintf ( "invalid list parameter %d: %s", iParam+1, sErr.cstr() );
-						return false;
-					}
-					sSql << sVal.cstr();
-					iParam++;
-				} else
-				{
-					sSql << dParams[iParam++].cstr();
-				}
-				continue;
-			}
-			break;
-
-		case PreparedScanState_e::SINGLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-			{
-				sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-				++i;
-			}
-			else if ( c=='\'' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::DOUBLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-			{
-				sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-				++i;
-			}
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BACKTICK:
-			if ( c=='`' )
-			{
-				if ( i+1<iLen && p[i+1]=='`' )
-				{
-					sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-					++i;
-				}
-				else
-					eState = PreparedScanState_e::NORMAL;
-			}
-			break;
-
-		case PreparedScanState_e::LINE_COMMENT:
-			if ( c=='\n' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BLOCK_COMMENT:
-			if ( c=='*' && i+1<iLen && p[i+1]=='/' )
-			{
-				++i;
-				eState = PreparedScanState_e::NORMAL;
-			}
-			break;
+			sError = "not enough parameters for prepared statement";
+			return ScanControl_e::STOP;
 		}
-
-		sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-	}
+		if ( pRawParams && iParam < pRawParams->GetLength() && (*pRawParams)[iParam] )
+		{
+			CSphString sVal = dParams[iParam];
+			sVal.Unquote();
+			CSphString sErr;
+			if ( !IsVectorListParam ( sVal, sErr ) )
+			{
+				sError.SetSprintf ( "invalid list parameter %d: %s", iParam+1, sErr.cstr() );
+				return ScanControl_e::STOP;
+			}
+			sSql << sVal.cstr();
+			++iParam;
+		} else
+		{
+			sSql << dParams[iParam++].cstr();
+		}
+		return ScanControl_e::SKIP_APPEND;
+	}, &sSql ) )
+		return false;
 
 	if ( iParam!=dParams.GetLength() )
 	{
@@ -512,126 +489,60 @@ static bool TokenEq ( const char * sTok, int iLen, const char * sRef )
 
 static bool NormalizeVectorFunctions ( Str_t tQuery, CSphString & sOut, CSphVector<int> & dExplicitRaw, CSphString & sError )
 {
-	const char * p = tQuery.first;
-	int iLen = (int)tQuery.second;
 	StringBuilder_c sSql;
-	auto eState = PreparedScanState_e::NORMAL;
 	int iParam = 0;
 
-	for ( int i = 0; i < iLen; ++i )
+	ScanPreparedSql ( tQuery, [&]( int & i, char c, const char * p, int iLen, PreparedScanState_e & )
 	{
-		char c = p[i];
-		switch ( eState )
+		if ( ( c>='A' && c<='Z' ) || ( c>='a' && c<='z' ) || c=='_' )
 		{
-		case PreparedScanState_e::NORMAL:
-			if ( c=='\'' )
-				eState = PreparedScanState_e::SINGLE_QUOTE;
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::DOUBLE_QUOTE;
-			else if ( c=='`' )
-				eState = PreparedScanState_e::BACKTICK;
-			else if ( IsLineCommentStart ( p, i, iLen ) )
-				eState = PreparedScanState_e::LINE_COMMENT;
-			else if ( c=='/' && i+1<iLen && p[i+1]=='*' )
-				eState = PreparedScanState_e::BLOCK_COMMENT;
-			else if ( ( c>='A' && c<='Z' ) || ( c>='a' && c<='z' ) || c=='_' )
+			int iStart = i;
+			int iEnd = i + 1;
+			while ( iEnd<iLen )
 			{
-				int iStart = i;
-				int iEnd = i + 1;
-				while ( iEnd<iLen )
+				char cc = p[iEnd];
+				if ( ( cc>='A' && cc<='Z' ) || ( cc>='a' && cc<='z' ) || ( cc>='0' && cc<='9' ) || cc=='_' )
+					++iEnd;
+				else
+					break;
+			}
+			if ( TokenEq ( p + iStart, iEnd - iStart, "to_vector" ) || TokenEq ( p + iStart, iEnd - iStart, "to_multi" ) )
+			{
+				int k = iEnd;
+				while ( k<iLen && sphIsSpace ( p[k] ) )
+					++k;
+				if ( k<iLen && p[k]=='(' )
 				{
-					char cc = p[iEnd];
-					if ( ( cc>='A' && cc<='Z' ) || ( cc>='a' && cc<='z' ) || ( cc>='0' && cc<='9' ) || cc=='_' )
-						++iEnd;
-					else
-						break;
-				}
-				if ( TokenEq ( p + iStart, iEnd - iStart, "to_vector" ) || TokenEq ( p + iStart, iEnd - iStart, "to_multi" ) )
-				{
-					int k = iEnd;
+					++k;
 					while ( k<iLen && sphIsSpace ( p[k] ) )
 						++k;
-					if ( k<iLen && p[k]=='(' )
+					if ( k<iLen && p[k]=='?' )
 					{
 						++k;
 						while ( k<iLen && sphIsSpace ( p[k] ) )
 							++k;
-						if ( k<iLen && p[k]=='?' )
+						if ( k<iLen && p[k]==')' )
 						{
-							++k;
-							while ( k<iLen && sphIsSpace ( p[k] ) )
-								++k;
-							if ( k<iLen && p[k]==')' )
-							{
-								sSql << '?';
-								dExplicitRaw.Add ( iParam++ );
-								i = k;
-								continue;
-							}
+							sSql << '?';
+							dExplicitRaw.Add ( iParam++ );
+							i = k;
+							return ScanControl_e::SKIP_APPEND;
 						}
 					}
 				}
-				sSql.AppendRawChunk ( Str_t { p + iStart, iEnd - iStart } );
-				i = iEnd - 1;
-				continue;
 			}
-			else if ( c=='?' )
-			{
-				sSql << '?';
-				++iParam;
-				continue;
-			}
-			break;
-
-		case PreparedScanState_e::SINGLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-			{
-				sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-				++i;
-			}
-			else if ( c=='\'' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::DOUBLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-			{
-				sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-				++i;
-			}
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BACKTICK:
-			if ( c=='`' )
-			{
-				if ( i+1<iLen && p[i+1]=='`' )
-				{
-					sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-					++i;
-				}
-				else
-					eState = PreparedScanState_e::NORMAL;
-			}
-			break;
-
-		case PreparedScanState_e::LINE_COMMENT:
-			if ( c=='\n' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BLOCK_COMMENT:
-			if ( c=='*' && i+1<iLen && p[i+1]=='/' )
-			{
-				++i;
-				eState = PreparedScanState_e::NORMAL;
-			}
-			break;
+			sSql.AppendRawChunk ( Str_t { p + iStart, iEnd - iStart } );
+			i = iEnd - 1;
+			return ScanControl_e::SKIP_APPEND;
 		}
-
-		sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-	}
+		if ( c=='?' )
+		{
+			sSql << '?';
+			++iParam;
+			return ScanControl_e::SKIP_APPEND;
+		}
+		return ScanControl_e::CONTINUE;
+	}, &sSql );
 
 	sOut = sSql.cstr();
 	return true;
@@ -639,85 +550,18 @@ static bool NormalizeVectorFunctions ( Str_t tQuery, CSphString & sOut, CSphVect
 
 static bool ReplacePreparedParams ( Str_t tQuery, CSphString & sOut, const std::function<CSphString(int)> & fnRepl, CSphString & sError )
 {
-	const char * p = tQuery.first;
-	int iLen = (int)tQuery.second;
 	StringBuilder_c sSql;
-	auto eState = PreparedScanState_e::NORMAL;
 	int iParam = 0;
 
-	for ( int i = 0; i < iLen; ++i )
+	if ( !ScanPreparedSql ( tQuery, [&]( int &, char c, const char *, int, PreparedScanState_e & )
 	{
-		char c = p[i];
-		switch ( eState )
-		{
-		case PreparedScanState_e::NORMAL:
-			if ( c=='\'' )
-				eState = PreparedScanState_e::SINGLE_QUOTE;
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::DOUBLE_QUOTE;
-			else if ( c=='`' )
-				eState = PreparedScanState_e::BACKTICK;
-			else if ( IsLineCommentStart ( p, i, iLen ) )
-				eState = PreparedScanState_e::LINE_COMMENT;
-			else if ( c=='/' && i+1<iLen && p[i+1]=='*' )
-				eState = PreparedScanState_e::BLOCK_COMMENT;
-			else if ( c=='?' )
-			{
-				CSphString sVal = fnRepl ( iParam++ );
-				sSql << sVal.cstr();
-				continue;
-			}
-			break;
-
-		case PreparedScanState_e::SINGLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-			{
-				sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-				++i;
-			}
-			else if ( c=='\'' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::DOUBLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-			{
-				sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-				++i;
-			}
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BACKTICK:
-			if ( c=='`' )
-			{
-				if ( i+1<iLen && p[i+1]=='`' )
-				{
-					sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-					++i;
-				}
-				else
-					eState = PreparedScanState_e::NORMAL;
-			}
-			break;
-
-		case PreparedScanState_e::LINE_COMMENT:
-			if ( c=='\n' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BLOCK_COMMENT:
-			if ( c=='*' && i+1<iLen && p[i+1]=='/' )
-			{
-				++i;
-				eState = PreparedScanState_e::NORMAL;
-			}
-			break;
-		}
-
-		sSql.AppendRawChunk ( Str_t { p + i, 1 } );
-	}
+		if ( c!='?' )
+			return ScanControl_e::CONTINUE;
+		CSphString sVal = fnRepl ( iParam++ );
+		sSql << sVal.cstr();
+		return ScanControl_e::SKIP_APPEND;
+	}, &sSql ) )
+		return false;
 
 	sOut = sSql.cstr();
 	return true;
@@ -790,127 +634,77 @@ static void ApplyImplicitInsertTypes ( const SqlStmt_t & tStmt, const CSphSchema
 
 static bool ExtractUpdateParamColumns ( Str_t tQuery, CSphString & sTable, CSphVector<std::pair<int, CSphString>> & dParamCols )
 {
-	const char * p = tQuery.first;
-	int iLen = (int)tQuery.second;
-	auto eState = PreparedScanState_e::NORMAL;
 	int iParam = 0;
 	bool bAfterUpdate = false;
 	bool bInSet = false;
 	bool bExpectValue = false;
 	CSphString sCurCol;
 
-	for ( int i = 0; i < iLen; ++i )
+	ScanPreparedSql ( tQuery, [&]( int & i, char c, const char * p, int iLen, PreparedScanState_e & )
 	{
-		char c = p[i];
-		switch ( eState )
+		if ( ( c>='A' && c<='Z' ) || ( c>='a' && c<='z' ) || c=='_' )
 		{
-		case PreparedScanState_e::NORMAL:
-			if ( c=='\'' )
-				eState = PreparedScanState_e::SINGLE_QUOTE;
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::DOUBLE_QUOTE;
-			else if ( c=='`' )
-				eState = PreparedScanState_e::BACKTICK;
-			else if ( IsLineCommentStart ( p, i, iLen ) )
-				eState = PreparedScanState_e::LINE_COMMENT;
-			else if ( c=='/' && i+1<iLen && p[i+1]=='*' )
-				eState = PreparedScanState_e::BLOCK_COMMENT;
-			else if ( ( c>='A' && c<='Z' ) || ( c>='a' && c<='z' ) || c=='_' )
+			int iStart = i;
+			int iEnd = i + 1;
+			while ( iEnd<iLen )
 			{
-				int iStart = i;
-				int iEnd = i + 1;
-				while ( iEnd<iLen )
-				{
-					char cc = p[iEnd];
-					if ( ( cc>='A' && cc<='Z' ) || ( cc>='a' && cc<='z' ) || ( cc>='0' && cc<='9' ) || cc=='_' || cc=='.' )
-						++iEnd;
-					else
-						break;
-				}
-				const char * sTok = p + iStart;
-				const int iTokLen = iEnd - iStart;
-				if ( TokenEq ( sTok, iTokLen, "update" ) )
-				{
-					bAfterUpdate = true;
-				} else if ( bAfterUpdate && sTable.IsEmpty() )
-				{
-					sTable.SetBinary ( sTok, iTokLen );
-					sTable.ToLower();
-					bAfterUpdate = false;
-				} else if ( TokenEq ( sTok, iTokLen, "set" ) )
-				{
-					bInSet = true;
-					bExpectValue = false;
-					sCurCol = "";
-				} else if ( bInSet && TokenEq ( sTok, iTokLen, "where" ) )
-				{
-					bInSet = false;
-					bExpectValue = false;
-					sCurCol = "";
-				} else if ( bInSet )
-				{
-					sCurCol.SetBinary ( sTok, iTokLen );
-					sCurCol.ToLower();
-				}
-				i = iEnd - 1;
-				continue;
+				char cc = p[iEnd];
+				if ( ( cc>='A' && cc<='Z' ) || ( cc>='a' && cc<='z' ) || ( cc>='0' && cc<='9' ) || cc=='_' || cc=='.' )
+					++iEnd;
+				else
+					break;
 			}
-			else if ( c=='?' )
+			const char * sTok = p + iStart;
+			const int iTokLen = iEnd - iStart;
+			if ( TokenEq ( sTok, iTokLen, "update" ) )
 			{
-				if ( bInSet && bExpectValue && !sCurCol.IsEmpty() )
-					dParamCols.Add ( { iParam, sCurCol } );
-				++iParam;
+				bAfterUpdate = true;
+			} else if ( bAfterUpdate && sTable.IsEmpty() )
+			{
+				sTable.SetBinary ( sTok, iTokLen );
+				sTable.ToLower();
+				bAfterUpdate = false;
+			} else if ( TokenEq ( sTok, iTokLen, "set" ) )
+			{
+				bInSet = true;
 				bExpectValue = false;
-				continue;
-			}
-			else if ( c=='=' )
+				sCurCol = "";
+			} else if ( bInSet && TokenEq ( sTok, iTokLen, "where" ) )
 			{
-				if ( bInSet && !sCurCol.IsEmpty() )
-					bExpectValue = true;
-			}
-			else if ( c==',' )
+				bInSet = false;
+				bExpectValue = false;
+				sCurCol = "";
+			} else if ( bInSet )
 			{
-				if ( bInSet )
-				{
-					sCurCol = "";
-					bExpectValue = false;
-				}
+				sCurCol.SetBinary ( sTok, iTokLen );
+				sCurCol.ToLower();
 			}
-			break;
-
-		case PreparedScanState_e::SINGLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-				++i;
-			else if ( c=='\'' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::DOUBLE_QUOTE:
-			if ( c=='\\' && i+1<iLen )
-				++i;
-			else if ( c=='\"' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BACKTICK:
-			if ( c=='`' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::LINE_COMMENT:
-			if ( c=='\n' )
-				eState = PreparedScanState_e::NORMAL;
-			break;
-
-		case PreparedScanState_e::BLOCK_COMMENT:
-			if ( c=='*' && i+1<iLen && p[i+1]=='/' )
-			{
-				++i;
-				eState = PreparedScanState_e::NORMAL;
-			}
-			break;
+			i = iEnd - 1;
+			return ScanControl_e::SKIP_APPEND;
 		}
-	}
+		if ( c=='?' )
+		{
+			if ( bInSet && bExpectValue && !sCurCol.IsEmpty() )
+				dParamCols.Add ( { iParam, sCurCol } );
+			++iParam;
+			bExpectValue = false;
+			return ScanControl_e::SKIP_APPEND;
+		}
+		if ( c=='=' )
+		{
+			if ( bInSet && !sCurCol.IsEmpty() )
+				bExpectValue = true;
+		}
+		else if ( c==',' )
+		{
+			if ( bInSet )
+			{
+				sCurCol = "";
+				bExpectValue = false;
+			}
+		}
+		return ScanControl_e::CONTINUE;
+	}, nullptr );
 
 	return !sTable.IsEmpty();
 }
@@ -1031,6 +825,28 @@ static CSphString FormatTimeLiteral ( bool bNegative, int iDays, int iHour, int 
 	return sVal;
 }
 
+static bool IsLongDataKind ( BYTE uKind )
+{
+	switch ( uKind )
+	{
+	case MYSQL_TYPE_STRING:
+	case MYSQL_TYPE_VAR_STRING:
+	case MYSQL_TYPE_VARCHAR:
+	case MYSQL_TYPE_BLOB:
+	case MYSQL_TYPE_TINY_BLOB:
+	case MYSQL_TYPE_MEDIUM_BLOB:
+	case MYSQL_TYPE_LONG_BLOB:
+	case MYSQL_TYPE_JSON:
+	case MYSQL_TYPE_DECIMAL:
+	case MYSQL_TYPE_NEWDECIMAL:
+	case MYSQL_TYPE_SET:
+	case MYSQL_TYPE_ENUM:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, CSphVector<CSphString> & dParams, CSphString & sError )
 {
 	const int iParamCount = tStmt.m_iParamCount;
@@ -1056,15 +872,7 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		bool bNull = ( dNull[i/8] >> ( i % 8 ) ) & 1;
 		if ( bNull )
 		{
-			if ( i < tStmt.m_dLongData.GetLength() && !tStmt.m_dLongData[i].IsEmpty() )
-			{
-				Str_t tVal ( tStmt.m_dLongData[i].cstr(), tStmt.m_dLongData[i].Length() );
-				dParams[i] = BuildSqlStringLiteral ( tVal );
-			}
-			else
-			{
-				dParams[i] = "NULL";
-			}
+			dParams[i] = "NULL";
 			continue;
 		}
 
@@ -1078,6 +886,7 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		BYTE uKind = BYTE ( uType & 0xFF );
 		BYTE uFlags = BYTE ( uType >> 8 );
 		bool bUnsigned = ( uFlags & 0x80 )!=0;
+		const bool bHasLongData = ( i < tStmt.m_dLongData.GetLength() && !tStmt.m_dLongData[i].IsEmpty() );
 		CSphString sLiteral;
 
 		switch ( uKind )
@@ -1244,12 +1053,14 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		}
 		}
 
-		if ( i < tStmt.m_dLongData.GetLength() && !tStmt.m_dLongData[i].IsEmpty() )
+		if ( bHasLongData )
 		{
-			StringBuilder_c sCombined;
-			sCombined.AppendRawChunk ( Str_t { tStmt.m_dLongData[i].cstr(), tStmt.m_dLongData[i].Length() } );
-			sCombined.AppendRawChunk ( Str_t { sLiteral.cstr(), sLiteral.Length() } );
-			Str_t tVal ( sCombined.cstr(), (int)sCombined.GetLength() );
+			if ( !IsLongDataKind ( uKind ) )
+			{
+				sError.SetSprintf ( "long data is not supported for parameter %d", i );
+				return false;
+			}
+			Str_t tVal ( tStmt.m_dLongData[i].cstr(), tStmt.m_dLongData[i].Length() );
 			sLiteral = BuildSqlStringLiteral ( tVal );
 		}
 

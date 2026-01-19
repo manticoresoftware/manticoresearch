@@ -290,9 +290,6 @@ IDF 标志可以组合；`plain` 和 `normalized` 互斥；`tfidf_unnormalized` 
 ### max_query_time
 设置最大搜索查询时间，单位为毫秒。必须是非负整数。默认值为 0，表示“不限制”。本地搜索查询将在指定时间结束后停止。请注意，如果您执行的是查询多个本地表的搜索，则此限制分别适用于每个表。需注意，由于不断检查是否应停止查询的开销，这可能会稍微增加查询的响应时间。
 
-### max_predicted_time
-整数。最大预测搜索时间；详见 [predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs)。
-
 ### morphology
 `none` 允许用它们的精确形式替换所有查询词，如果表格是使用启用的 [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) 构建的。这对于防止查询词被词干化或词形还原非常有用。
 

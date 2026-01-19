@@ -54,6 +54,23 @@ async function main() {
   }
 
   await conn.execute("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)", [
+    2n,
+    "hello'; DROP TABLE ps_test; --",
+    1.23,
+  ]);
+  const [injRows] = await conn.execute(
+    "SELECT id, title FROM ps_test WHERE title = ?",
+    ["hello'; DROP TABLE ps_test; --"]
+  );
+  if (
+    injRows.length !== 1 ||
+    Number(injRows[0].id) !== 2 ||
+    injRows[0].title !== "hello'; DROP TABLE ps_test; --"
+  ) {
+    throw new Error("injection select returned unexpected id");
+  }
+
+  await conn.execute("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)", [
     0n,
     "",
     0.0,

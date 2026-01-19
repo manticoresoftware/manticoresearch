@@ -85,6 +85,69 @@ while ($row = $result->fetch_assoc()) {
 }
 $select->close();
 
+// Injection attempts: ensure prepared statements treat values as data.
+$injInsert = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");
+if (!$injInsert) {
+    fail("Prepare injection insert failed: {$mysqli->error}");
+}
+$injId = 2;
+$injTitle = "hello'; DROP TABLE ps_test; --";
+$injPrice = 1.23;
+$injInsert->bind_param("isd", $injId, $injTitle, $injPrice);
+if (!$injInsert->execute()) {
+    fail("Execute injection insert failed: {$injInsert->error}");
+}
+$injInsert->close();
+
+$injSelect = $mysqli->prepare("SELECT id FROM ps_test WHERE title = ?");
+if (!$injSelect) {
+    fail("Prepare injection select failed: {$mysqli->error}");
+}
+$injSelect->bind_param("s", $injTitle);
+if (!$injSelect->execute()) {
+    fail("Execute injection select failed: {$injSelect->error}");
+}
+$injRes = $injSelect->get_result();
+if ($injRes->num_rows !== 1) {
+    fail("Injection select expected 1 row, got {$injRes->num_rows}");
+}
+$injRow = $injRes->fetch_assoc();
+if ((int)$injRow['id'] !== $injId) {
+    fail("Injection select returned unexpected id: {$injRow['id']}");
+}
+$injCheck = $mysqli->prepare("SELECT title FROM ps_test WHERE id = ?");
+if (!$injCheck) {
+    fail("Prepare injection value check failed: {$mysqli->error}");
+}
+$injCheck->bind_param("i", $injId);
+if (!$injCheck->execute()) {
+    fail("Execute injection value check failed: {$injCheck->error}");
+}
+$injCheckRes = $injCheck->get_result();
+$injCheckRow = $injCheckRes->fetch_assoc();
+if ($injCheckRow['title'] !== $injTitle) {
+    fail("Injection value mismatch: expected '{$injTitle}', got '{$injCheckRow['title']}'");
+}
+$injCheck->close();
+$injSelect->close();
+
+// Confirm table still exists and original row is present.
+$check = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM ps_test WHERE title = ?");
+if (!$check) {
+    fail("Prepare injection check failed: {$mysqli->error}");
+}
+$checkTitle = "hello world";
+$check->bind_param("s", $checkTitle);
+if (!$check->execute()) {
+    fail("Execute injection check failed: {$check->error}");
+}
+$checkRes = $check->get_result();
+$checkRow = $checkRes->fetch_assoc();
+if ((int)$checkRow['cnt'] !== 1) {
+    fail("Injection check failed: expected 1 row, got {$checkRow['cnt']}");
+}
+$check->close();
+
 // Edge cases: empty string, zero, negative, big integer.
 $edgeInsert = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");
 if (!$edgeInsert) {

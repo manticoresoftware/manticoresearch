@@ -777,6 +777,31 @@ static CSphString BuildSqlStringLiteral ( Str_t sVal )
 	return CSphString ( sEscaped.cstr() );
 }
 
+static CSphString NormalizeSqlStringLiteral ( const CSphString & sVal )
+{
+	const int iLen = sVal.Length();
+	const char * pVal = sVal.cstr();
+	if ( iLen < 2 || !pVal || pVal[0] != '\'' || pVal[iLen - 1] != '\'' )
+		return sVal;
+
+	StringBuilder_c sRaw;
+	for ( int i = 1; i < iLen - 1; ++i )
+	{
+		char c = pVal[i];
+		if ( c=='\\' && i + 1 < iLen - 1 )
+		{
+			sRaw << pVal[i + 1];
+			++i;
+		} else
+		{
+			sRaw << c;
+		}
+	}
+
+	Str_t tRaw ( sRaw.cstr(), (int)sRaw.GetLength() );
+	return BuildSqlStringLiteral ( tRaw );
+}
+
 static int64_t ReadSignedLE ( InputBuffer_c & tIn, int iBytes )
 {
 	uint64_t uVal = 0;
@@ -865,15 +890,33 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 	if ( iParamCount==0 )
 		return true;
 
+	auto fnEnsure = [&tIn, &sError]( int iBytes, const char * szWhat )
+	{
+		if ( tIn.HasBytes() < iBytes )
+		{
+			sError.SetSprintf ( "malformed COM_STMT_EXECUTE packet (%s)", szWhat );
+			return false;
+		}
+		return true;
+	};
+
 	const int iNullBytes = ( iParamCount + 7 ) / 8;
 	CSphVector<BYTE> dNull;
 	dNull.Resize ( iNullBytes );
 	if ( iNullBytes )
+	{
+		if ( !fnEnsure ( iNullBytes, "null-bitmap" ) )
+			return false;
 		tIn.GetBytes ( dNull.Begin(), iNullBytes );
+	}
 
+	if ( !fnEnsure ( 1, "new-params flag" ) )
+		return false;
 	BYTE bNewParams = tIn.GetByte();
 	if ( bNewParams )
 	{
+		if ( !fnEnsure ( iParamCount * 2, "parameter types" ) )
+			return false;
 		for ( int i = 0; i < iParamCount; ++i )
 			tStmt.m_dParamTypes[i] = MysqlReadLSBWord ( tIn );
 	}
@@ -900,6 +943,30 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		const bool bHasLongData = ( i < tStmt.m_dLongData.GetLength() && !tStmt.m_dLongData[i].IsEmpty() );
 		CSphString sLiteral;
 
+		if ( tIn.HasBytes()<=0 )
+		{
+			if ( bHasLongData && IsStringLikeMysqlType ( uKind ) )
+			{
+				Str_t tVal ( tStmt.m_dLongData[i].cstr(), tStmt.m_dLongData[i].Length() );
+				dParams[i] = BuildSqlStringLiteral ( tVal );
+				continue;
+			}
+			sError.SetSprintf ( "missing value for parameter %d", i );
+			return false;
+		}
+
+		if ( bHasLongData )
+		{
+			if ( !IsStringLikeMysqlType ( uKind ) )
+			{
+				sError.SetSprintf ( "long data is not supported for parameter %d", i );
+				return false;
+			}
+			Str_t tVal ( tStmt.m_dLongData[i].cstr(), tStmt.m_dLongData[i].Length() );
+			dParams[i] = BuildSqlStringLiteral ( tVal );
+			continue;
+		}
+
 		switch ( uKind )
 		{
 		case MYSQL_TYPE_NULL:
@@ -907,15 +974,21 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 			break;
 
 		case MYSQL_TYPE_TINY:
+			if ( !fnEnsure ( 1, "tinyint" ) )
+				return false;
 			sLiteral.SetSprintf ( "%d", (int)ReadSignedLE ( tIn, 1 ) );
 			break;
 
 		case MYSQL_TYPE_SHORT:
+			if ( !fnEnsure ( 2, "shortint" ) )
+				return false;
 			sLiteral.SetSprintf ( "%d", (int)ReadSignedLE ( tIn, 2 ) );
 			break;
 
 		case MYSQL_TYPE_LONG:
 		case MYSQL_TYPE_INT24:
+			if ( !fnEnsure ( 4, "longint" ) )
+				return false;
 			if ( bUnsigned )
 				sLiteral.SetSprintf ( "%u", (unsigned)ReadUnsignedLE ( tIn, 4 ) );
 			else
@@ -923,6 +996,8 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 			break;
 
 		case MYSQL_TYPE_LONGLONG:
+			if ( !fnEnsure ( 8, "longlong" ) )
+				return false;
 			if ( bUnsigned )
 			{
 				StringBuilder_c sVal;
@@ -938,6 +1013,8 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 			break;
 
 		case MYSQL_TYPE_FLOAT:
+			if ( !fnEnsure ( 4, "float" ) )
+				return false;
 			{
 				DWORD uVal = MysqlReadLSBDword ( tIn );
 				float fVal = sphDW2F ( uVal );
@@ -948,6 +1025,8 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 			break;
 
 		case MYSQL_TYPE_DOUBLE:
+			if ( !fnEnsure ( 8, "double" ) )
+				return false;
 			{
 				uint64_t uVal = MysqlReadLSBQword ( tIn );
 				double fVal = sphQW2D ( uVal );
@@ -959,11 +1038,15 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 
 		case MYSQL_TYPE_DATE:
 		{
+			if ( !fnEnsure ( 1, "date length" ) )
+				return false;
 			BYTE uLen = tIn.GetByte();
 			if ( !uLen )
 				sLiteral = FormatDateLiteral ( 0, 0, 0 );
 			else
 			{
+				if ( !fnEnsure ( 4, "date payload" ) )
+					return false;
 				int iYear = MysqlReadLSBWord ( tIn );
 				int iMonth = tIn.GetByte();
 				int iDay = tIn.GetByte();
@@ -975,12 +1058,16 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		case MYSQL_TYPE_DATETIME:
 		case MYSQL_TYPE_TIMESTAMP:
 		{
+			if ( !fnEnsure ( 1, "datetime length" ) )
+				return false;
 			BYTE uLen = tIn.GetByte();
 			if ( !uLen )
 			{
 				sLiteral = FormatDateTimeLiteral ( 0, 0, 0, 0, 0, 0, 0 );
 			} else
 			{
+				if ( !fnEnsure ( 4, "datetime date" ) )
+					return false;
 				int iYear = MysqlReadLSBWord ( tIn );
 				int iMonth = tIn.GetByte();
 				int iDay = tIn.GetByte();
@@ -990,12 +1077,18 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 				int iMicrosec = 0;
 				if ( uLen>=7 )
 				{
+					if ( !fnEnsure ( 3, "datetime time" ) )
+						return false;
 					iHour = tIn.GetByte();
 					iMinute = tIn.GetByte();
 					iSecond = tIn.GetByte();
 				}
 				if ( uLen>=11 )
+				{
+					if ( !fnEnsure ( 4, "datetime microseconds" ) )
+						return false;
 					iMicrosec = (int)MysqlReadLSBDword ( tIn );
+				}
 				sLiteral = FormatDateTimeLiteral ( iYear, iMonth, iDay, iHour, iMinute, iSecond, iMicrosec );
 			}
 			break;
@@ -1003,12 +1096,16 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 
 		case MYSQL_TYPE_TIME:
 		{
+			if ( !fnEnsure ( 1, "time length" ) )
+				return false;
 			BYTE uLen = tIn.GetByte();
 			if ( !uLen )
 			{
 				sLiteral = FormatTimeLiteral ( false, 0, 0, 0, 0, 0 );
 			} else
 			{
+				if ( !fnEnsure ( 8, "time payload" ) )
+					return false;
 				bool bNegative = tIn.GetByte()!=0;
 				int iDays = (int)MysqlReadLSBDword ( tIn );
 				int iHour = tIn.GetByte();
@@ -1016,7 +1113,11 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 				int iSecond = tIn.GetByte();
 				int iMicrosec = 0;
 				if ( uLen>=12 )
+				{
+					if ( !fnEnsure ( 4, "time microseconds" ) )
+						return false;
 					iMicrosec = (int)MysqlReadLSBDword ( tIn );
+				}
 				sLiteral = FormatTimeLiteral ( bNegative, iDays, iHour, iMinute, iSecond, iMicrosec );
 			}
 			break;
@@ -1034,12 +1135,18 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		case MYSQL_TYPE_NEWDECIMAL:
 		case MYSQL_TYPE_SET:
 		case MYSQL_TYPE_ENUM:
+			if ( !fnEnsure ( 1, "string length" ) )
+				return false;
 			sLiteral = ReadStringLiteral ( tIn );
 			break;
 
 		case MYSQL_TYPE_BIT:
 		{
+			if ( !fnEnsure ( 1, "bit length" ) )
+				return false;
 			auto iLen = MysqlReadPackedInt ( tIn );
+			if ( !fnEnsure ( iLen, "bit payload" ) )
+				return false;
 			uint64_t uVal = 0;
 			for ( int j = 0; j < iLen; ++j )
 				uVal = ( uVal << 8 ) | tIn.GetByte();
@@ -1050,19 +1157,10 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		}
 
 		default:
+			if ( !fnEnsure ( 1, "default length" ) )
+				return false;
 			sLiteral = ReadStringLiteral ( tIn );
 			break;
-		}
-
-		if ( bHasLongData )
-		{
-			if ( !IsStringLikeMysqlType ( uKind ) )
-			{
-				sError.SetSprintf ( "long data is not supported for parameter %d", i );
-				return false;
-			}
-			Str_t tVal ( tStmt.m_dLongData[i].cstr(), tStmt.m_dLongData[i].Length() );
-			sLiteral = BuildSqlStringLiteral ( tVal );
 		}
 
 		dParams[i] = sLiteral;
@@ -1072,6 +1170,22 @@ static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, 
 		sBlob = "";
 
 	return true;
+}
+
+static bool ShouldNormalizeLiteral ( BYTE uKind )
+{
+	if ( IsStringLikeMysqlType ( uKind ) )
+		return true;
+	switch ( uKind )
+	{
+	case MYSQL_TYPE_DATE:
+	case MYSQL_TYPE_DATETIME:
+	case MYSQL_TYPE_TIMESTAMP:
+	case MYSQL_TYPE_TIME:
+		return true;
+	default:
+		return false;
+	}
 }
 
 // our copy of enum_field_types
@@ -2378,6 +2492,9 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 	auto& tOut = *(GenericOutputBuffer_c *) pBuf;
 
+	if ( iPacketLen<=0 || tIn.HasBytes()<=0 )
+		return true;
+
 	auto uHasBytesIn = tIn.HasBytes ();
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
@@ -2560,6 +2677,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		}
 		case MYSQL_COM_STMT_SEND_LONG_DATA:
 		{
+			if ( iPacketLen < 1 + 4 + 2 )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, FromSz ( "malformed COM_STMT_SEND_LONG_DATA packet" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+				break;
+			}
 			DWORD uStmtId = MysqlReadLSBDword ( tIn );
 			WORD uParamId = MysqlReadLSBWord ( tIn );
 			int iDataLen = iPacketLen - 1 - 4 - 2;
@@ -2587,6 +2709,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		}
 		case MYSQL_COM_STMT_EXECUTE:
 		{
+			if ( tIn.HasBytes() < 4 + 1 + 4 )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, FromSz ( "malformed COM_STMT_EXECUTE packet" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+				break;
+			}
 			DWORD uStmtId = MysqlReadLSBDword ( tIn );
 			tIn.GetByte(); // flags
 			MysqlReadLSBDword ( tIn ); // iteration count
@@ -2604,6 +2731,18 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			{
 				SendMysqlErrorPacket ( tOut, uPacketID, FromStr ( sErr ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				break;
+			}
+
+			if ( pStmt->m_iParamCount && pStmt->m_dParamTypes.GetLength() )
+			{
+				const int iLimit = Min ( dParams.GetLength(), pStmt->m_dParamTypes.GetLength() );
+				for ( int i = 0; i < iLimit; ++i )
+				{
+					const WORD uType = pStmt->m_dParamTypes[i];
+					const BYTE uKind = BYTE ( uType & 0xFF );
+					if ( ShouldNormalizeLiteral ( uKind ) )
+						dParams[i] = NormalizeSqlStringLiteral ( dParams[i] );
+				}
 			}
 
 			CSphString sExpanded;
@@ -2693,6 +2832,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		}
 		case MYSQL_COM_STMT_RESET:
 		{
+			if ( iPacketLen < 1 + 4 )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, FromSz ( "malformed COM_STMT_RESET packet" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+				break;
+			}
 			DWORD uStmtId = MysqlReadLSBDword ( tIn );
 			if ( !session::GetClientSession()->ResetPreparedStmt ( uStmtId ) )
 			{
@@ -2704,6 +2848,8 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		}
 		case MYSQL_COM_STMT_CLOSE:
 		{
+			if ( iPacketLen < 1 + 4 )
+				break;
 			DWORD uStmtId = MysqlReadLSBDword ( tIn );
 			session::GetClientSession()->RemovePreparedStmt ( uStmtId );
 			break; // no response for COM_STMT_CLOSE
@@ -2729,15 +2875,19 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			LogSphinxqlError ( "", Str_t ( sError ) );
 			SendMysqlErrorPacket ( tOut, uPacketID, Str_t(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 			break;
-	}
+		}
 
-	auto uBytesConsumed = uHasBytesIn - tIn.HasBytes ();
-	if ( uBytesConsumed<iPacketLen )
-	{
+		auto uBytesConsumed = uHasBytesIn - tIn.HasBytes ();
+		if ( uBytesConsumed<iPacketLen )
+		{
 		uBytesConsumed = iPacketLen - uBytesConsumed;
+		const int iAvailable = tIn.HasBytes();
+		if ( uBytesConsumed > iAvailable )
+			uBytesConsumed = iAvailable;
 		sphLogDebugv ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
 		const BYTE* pFoo = nullptr;
-		tIn.GetBytesZerocopy (&pFoo, uBytesConsumed);
+		if ( uBytesConsumed>0 )
+			tIn.GetBytesZerocopy (&pFoo, uBytesConsumed);
 	}
 
 	// send the response packet

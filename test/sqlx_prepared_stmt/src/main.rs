@@ -94,6 +94,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let price: f32 = row.try_get("price")?;
     println!("{{\"id\":{},\"price\":\"{:.6}\"}}", id, price);
 
+    // Injection attempts: ensure prepared statements treat values as data.
+    sqlx::query("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)")
+        .bind(2_i64)
+        .bind("hello'; DROP TABLE ps_test; --")
+        .bind(1.23_f64)
+        .execute(&pool)
+        .await?;
+
+    let row = sqlx::query("SELECT id FROM ps_test WHERE title = ?")
+        .bind("hello'; DROP TABLE ps_test; --")
+        .fetch_one(&pool)
+        .await?;
+    let inj_id: i64 = row.try_get("id")?;
+    if inj_id != 2 {
+        return fail(&format!("injection select returned unexpected id: {}", inj_id));
+    }
+
+    let row = sqlx::query("SELECT title FROM ps_test WHERE id = ?")
+        .bind(2_i64)
+        .fetch_one(&pool)
+        .await?;
+    let inj_title: String = row.try_get("title")?;
+    if inj_title != "hello'; DROP TABLE ps_test; --" {
+        return fail(&format!(
+            "injection value mismatch: expected '{}', got '{}'",
+            "hello'; DROP TABLE ps_test; --",
+            inj_title
+        ));
+    }
+
     // Edge cases.
     sqlx::query("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)")
         .bind(0_i64)

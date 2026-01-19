@@ -94,6 +94,31 @@ func main() {
 	}
 	fmt.Printf("{\"id\":%d,\"price\":\"%.6f\"}\n", id, price)
 
+	if _, err := insertStmt.Exec(int64(2), "hello'; DROP TABLE ps_test; --", 1.23); err != nil {
+		panic(err)
+	}
+	injRow := selectStmt.QueryRow(int64(0), "hello'; DROP TABLE ps_test; --")
+	var injID int64
+	var injPrice float64
+	if err := injRow.Scan(&injID, &injPrice); err != nil {
+		panic(err)
+	}
+	if injID != 2 {
+		panic(fmt.Sprintf("injection select returned unexpected id: %d", injID))
+	}
+	checkStmt, err := db.Prepare("SELECT title FROM ps_test WHERE id = ?")
+	if err != nil {
+		panic(err)
+	}
+	defer checkStmt.Close()
+	var injTitle string
+	if err := checkStmt.QueryRow(int64(2)).Scan(&injTitle); err != nil {
+		panic(err)
+	}
+	if injTitle != "hello'; DROP TABLE ps_test; --" {
+		panic(fmt.Sprintf("injection value mismatch: expected '%s', got '%s'", "hello'; DROP TABLE ps_test; --", injTitle))
+	}
+
 	if _, err := insertStmt.Exec(int64(0), "", 0.0); err != nil {
 		panic(err)
 	}

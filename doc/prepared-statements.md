@@ -74,6 +74,7 @@ Specifics and Behavior Notes
   - JSON and blob are transmitted as strings and stored as string literals.
   - DATETIME/TIMESTAMP/DATE/TIME are rendered as SQL literals via formatted strings.
   - NULL is rendered as SQL NULL.
+  - Query log entries escape string values so expanded prepared statements can be safely replayed.
 - Long data:
   - COM_STMT_SEND_LONG_DATA can be used only with string-like parameter types; other types are rejected.
   - When present, long data replaces the inline parameter value for that index.

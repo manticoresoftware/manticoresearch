@@ -2714,6 +2714,27 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
 		{
+			auto fnAppendEscapedRaw = []( StringBuilder_c & tOut, const CSphString & sVal )
+			{
+				const char * pVal = sVal.cstr();
+				if ( !pVal )
+					return;
+				for ( const char * p = pVal; *p; ++p )
+				{
+					const char c = *p;
+					if ( c=='\\' || c=='\'' || c=='\t' )
+						tOut << '\\';
+					tOut << c;
+				}
+			};
+
+			auto fnAppendEscapedLiteral = [&]( StringBuilder_c & tOut, const CSphString & sVal )
+			{
+				tOut << '\'';
+				fnAppendEscapedRaw ( tOut, sVal );
+				tOut << '\'';
+			};
+
 			const char * sOp = ([&]() {
 				switch ( f.m_eStrCmpDir )
 				{
@@ -2724,7 +2745,11 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 				}
 			})();
 
-			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), sOp, ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].scstr() : "" ) );
+			tBuf << f.m_sAttrName << sOp;
+			if ( f.m_dStrings.GetLength()==1 )
+				fnAppendEscapedLiteral ( tBuf, f.m_dStrings[0] );
+			else
+				fnAppendEscapedLiteral ( tBuf, CSphString() );
 			break;
 		}
 
@@ -2743,7 +2768,18 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 			else
 				tBuf.StartBlock ( "', '", " IN ('", "')" );
 			for ( const auto &sString : f.m_dStrings )
-				tBuf << sString;
+			{
+				const char * pVal = sString.cstr();
+				if ( !pVal )
+					continue;
+				for ( const char * p = pVal; *p; ++p )
+				{
+					const char c = *p;
+					if ( c=='\\' || c=='\'' || c=='\t' )
+						tBuf << '\\';
+					tBuf << c;
+				}
+			}
 
 			tBuf.FinishBlock ();
 			break;
@@ -2835,4 +2871,3 @@ void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const V
 	else
 		tBuf << LogFilterTree ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
-

@@ -20,9 +20,19 @@ How It Works
   - Implicit binding: For INSERT/REPLACE/UPDATE, the daemon detects which parameters map to MVA/float_vector attributes and treats them as raw list parameters.
   - Explicit binding: TO_VECTOR(?) and TO_MULTI(?) are recognized in prepared statements to force raw list binding regardless of schema inference.
   - Only "(1,2)" style lists are accepted for vector/MVA parameters; "1,2" and "[1,2]" are rejected.
+  - UPDATE implicit binding uses a lightweight parser to map `?` parameters to columns in the `SET` clause so MVA/float_vector params can be treated as raw lists without requiring TO_MULTI/TO_VECTOR (eg. `UPDATE idx SET m = ? WHERE id = ?`).
 
 What Changed (by file/function)
 All changes are in `src/netreceive_ql.cpp` unless noted.
+
+Implementation Notes
+Prepared statements required a full execution path parallel to COM_QUERY inside the MySQL protocol handler (LoopClientMySQL). The bulk of the changes are from:
+- New COM_STMT_* handlers: PREPARE, EXECUTE, SEND_LONG_DATA, RESET, CLOSE, FETCH (packet parsing, validation, response framing).
+- Parameter lifecycle: storing templates, counting params, tracking types/NULL bitmap, accumulating long data, clearing state on execute/reset.
+- Template expansion: normalize/replace `?` while honoring quoting/comments and enforcing raw list handling for MVA/float_vector (explicit TO_MULTI/TO_VECTOR and schema-inferred).
+- Metadata build for PREPARE: parse a dummy query to infer column types/names and emit parameter/result definitions.
+- Binary result path: EXECUTE returns binary rows and uses the binary row buffer plus prepared metadata.
+- Session integration: add/remove/reset prepared statements, update profiling, handle buddy fallback on errors, and preserve autocommit/in-transaction status.
 
 1) MySQL protocol capability / EOF handling
 - HandshakeV10_c: does not advertise CLIENT_DEPRECATE_EOF to keep libmysql/mysql CLI compatibility.

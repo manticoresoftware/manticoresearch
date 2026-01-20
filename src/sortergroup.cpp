@@ -337,6 +337,7 @@ protected:
 	using KBufferGroupSorter::RemoveDistinct;
 	using KBufferGroupSorter::FreeMatchPtrs;
 	using KBufferGroupSorter::m_bAvgFinal;
+	using CSphMatchQueueTraits::OnMatchFree;
 
 	using CSphGroupSorterSettings::m_tLocGroupby;
 	using CSphGroupSorterSettings::m_tLocCount;
@@ -356,6 +357,7 @@ protected:
 	using CSphMatchQueueTraits::ResetAfterFlatten;
 	using CSphMatchQueueTraits::ResetDynamic;
 	using CSphMatchQueueTraits::ResetDynamicFreeData;
+	using CSphMatchQueueTraits::OnMatchFree;
 
 	using MatchSorter_c::m_iTotal;
 	using MatchSorter_c::m_tJustPushed;

@@ -132,12 +132,12 @@ lrwxrwxrwx. 1 root root 27 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1
 ### 上传您的数据
 
 <!-- example s3 -->
-为修复您的问题，开发人员通常需要在本地重现它。为此，他们需要您的配置文件、表文件、二进制日志（如果存在），有时还需要源数据（如来自外部存储或 XML/CSV 文件的数据）和查询。
+为了解决您的错误，开发人员通常需要在本地重现它。为此，他们需要您的配置文件、表文件、binlog（如果存在），有时还需要源数据（如来自外部存储或 XML/CSV 文件的数据）和查询。
 
-当您 [在Github上创建工单](https://github.com/manticoresoftware/manticoresearch/issues/new) 时，请附上您的数据。如果数据太大或敏感，您可以将其上传到我们的只写 S3 存储中：`s3://s3.manticoresearch.com/write-only/`。
+当您 [在 GitHub 上创建工单](https://github.com/manticoresoftware/manticoresearch/issues/new) 时，请附上您的数据。如果数据太大或敏感，您可以将其上传到我们的只写 S3 存储中：`s3://s3.manticoresearch.com/write-only/`。
 
 
-为了方便您上传，我们提供了一个使用 Docker 镜像的上传机制。该镜像从我们的开源仓库 [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) 构建，可帮助您轻松将数据上传到 Manticore 的只写 S3 存储。操作方法如下：
+为了方便您上传，我们提供了一个使用 Docker 镜像的上传机制。该镜像从我们的开源仓库 [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) 构建，可帮助您轻松将数据上传到 Manticore 的只写 S3 存储。操作步骤如下：
 1. 导航到包含您要上传文件的目录并运行：
    ```bash
    docker run -it --rm -v $(pwd):/upload manticoresearch/upload
@@ -229,7 +229,7 @@ issue-20250219-123
 或者，您可以使用 S3 [Minio 客户端](https://min.io/docs/minio/linux/reference/minio-mc.html) 或 Amazon [s3cmd](https://s3tools.org/s3cmd) 工具完成相同操作，例如：
 
 1. 安装客户端 https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc
-在 64 位 Linux 上的示例：
+例如在 64 位 Linux 上：
    ```
    curl https://dl.min.io/client/mc/release/linux-amd64/mc \
    --create-dirs \
@@ -238,15 +238,15 @@ issue-20250219-123
    export PATH=$PATH:$HOME/minio-binaries/
    ```
 2. 添加我们的 s3 主机（使用可执行文件的完整路径或切换到其目录）：`cd $HOME/minio-binaries` 然后 `./mc alias set manticore http://s3.manticoresearch.com:9000 manticore manticore`
-3. 复制您的文件（使用可执行文件的完整路径或切换到其目录）：`cd $HOME/minio-binaries` 然后 `./mc cp -r issue-1234/ manticore/write-only/issue-1234` 。确保文件夹名称是唯一的，并且最好与您描述问题的 GitHub 上的问题编号对应。
+3. 复制您的文件（使用可执行文件的完整路径或切换到其目录）：`cd $HOME/minio-binaries` 然后 `./mc cp -r issue-1234/ manticore/write-only/issue-1234` 。确保文件夹名称是唯一的，并且最好与您在 GitHub 上描述错误的问题编号对应。
 
-### 调试
+### DEBUG
 
 ```sql
 DEBUG [ subcommand ]
 ```
 
-`DEBUG` 语句是为开发人员和测试人员设计的，用于调用各种内部或 VIP 命令。但不建议在生产环境中使用，因为 `subcommand` 组件的语法可能在任何构建中自由更改。
+`DEBUG` 语句是为开发人员和测试人员设计的，用于调用各种内部或 VIP 命令。但此语句不适用于生产环境，因为 `subcommand` 组件的语法可能在任何构建中自由更改。
 
 要查看当前上下文中可用的有用命令和 `DEBUG` 语句的子命令列表，只需调用 `DEBUG` 而不带任何参数。
 
@@ -314,7 +314,7 @@ mysql> debug;
 
 所有 `debug XXX` 命令都应被视为非稳定状态，随时可能修改，因此如果它们发生变化请不要感到惊讶。此示例输出可能不反映实际可用的命令，因此请在您的系统上尝试以查看您的实例上有哪些可用命令。此外，除了这个简短的“含义”列外，没有提供详细的文档。
 
-作为快速说明，下面描述了仅对 VIP 客户端可用的两个命令——shutdown 和 crash。两者都需要一个令牌，该令牌可以通过 debug token 子命令生成，并添加到配置文件中 searchd 部分的 [shutdown_token](Server_settings/Searchd.md#shutdown_token) 参数中。如果不存在此类部分，或提供的密码哈希与配置中存储的令牌不匹配，子命令将不会执行任何操作。
+作为快速说明，下面描述了仅对 VIP 客户端可用的两个命令——shutdown 和 crash。两者都需要一个令牌，该令牌可以通过 debug token 子命令生成，并添加到配置文件中 searchd 部分的 [shutdown_token](Server_settings/Searchd.md#shutdown_token) 参数中。如果不存在此类部分，或者提供的密码哈希与配置中存储的令牌不匹配，子命令将不会执行任何操作。
 
 ```sql
 mysql> debug token hello;
@@ -326,11 +326,11 @@ mysql> debug token hello;
 1 row in set (0,00 sec)
 ```
 
-子命令 `shutdown` 将向服务器发送 TERM 信号，导致其关闭。这可能很危险，因为没有人希望意外停止生产服务。因此，它需要 VIP 连接和密码。
+子命令 `shutdown` 会向服务器发送 TERM 信号，导致其关闭。这可能很危险，因为没有人希望意外停止生产服务。因此，它需要 VIP 连接和密码。
 
 子命令 `crash` 会实际导致崩溃。它可能用于测试目的，例如测试系统管理器如何维护服务的活跃性，或测试跟踪核心转储的可行性。
 
-如果某些命令被发现在更一般的上下文中很有用，它们可能会从 debug 子命令移动到更稳定和通用的位置（如表中所示的 `debug tasks` 和 `debug sched`）。
+如果某些命令被发现在更通用的上下文中很有用，它们可能会从 debug 子命令移动到更稳定和通用的位置（如表中所示的 `debug tasks` 和 `debug sched`）。
 
 <!-- proofread -->
 

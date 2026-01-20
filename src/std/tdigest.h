@@ -35,6 +35,11 @@ public:
 	explicit TDigest_c ( double fCompression = 200.0 );
 	~TDigest_c();
 
+	TDigest_c ( TDigest_c && ) noexcept = default;
+	TDigest_c & operator= ( TDigest_c && ) noexcept = default;
+	TDigest_c ( const TDigest_c & ) = delete;
+	TDigest_c & operator= ( const TDigest_c & ) = delete;
+
 	void Add ( double fValue, int64_t iWeight = 1 );
 	double Percentile ( int iPercent ) const noexcept;
 	double Percentile ( double fPercent ) const noexcept;

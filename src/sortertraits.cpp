@@ -142,7 +142,11 @@ CSphMatchQueueTraits::CSphMatchQueueTraits ( int iSize )
 CSphMatchQueueTraits::~CSphMatchQueueTraits ()
 {
 	if ( m_pSchema )
-		m_dData.Apply ( [this] ( CSphMatch& tMatch ) { m_pSchema->FreeDataPtrs ( tMatch ); } );
+		m_dData.Apply ( [this] ( CSphMatch& tMatch )
+		{
+			OnMatchFree ( tMatch );
+			m_pSchema->FreeDataPtrs ( tMatch );
+		} );
 }
 
 
@@ -183,6 +187,7 @@ int CSphMatchQueueTraits::ResetDynamicFreeData ( int iMaxUsed )
 {
 	for ( int i=0; i<iMaxUsed; i++ )
 	{
+		OnMatchFree ( m_dData[i] );
 		m_pSchema->FreeDataPtrs ( m_dData[i] );
 		m_dData[i].ResetDynamic();
 	}
@@ -398,6 +403,13 @@ void BaseGroupSorter_c::AggrUngroup ( CSphMatch & tMatch )
 {
 	for ( auto * pAggregate : this->m_dAggregates )
 		pAggregate->Ungroup ( tMatch );
+}
+
+
+void BaseGroupSorter_c::AggrDiscard ( CSphMatch & tMatch )
+{
+	for ( auto * pAggregate : this->m_dAggregates )
+		pAggregate->Discard ( tMatch );
 }
 
 

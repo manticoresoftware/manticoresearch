@@ -81,6 +81,7 @@ class KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSor
 {
 	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>;
 	using BASE = CSphMatchQueueTraits;
+	using BaseGroupSorter_c::AggrDiscard;
 
 public:
 	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
@@ -181,6 +182,10 @@ public:
 
 protected:
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
+	void OnMatchFree ( CSphMatch & tMatch ) override
+	{
+		AggrDiscard ( tMatch );
+	}
 	int							m_iLimit;		///< max matches to be retrieved
 	UNIQ						m_tUniq;
 	bool						m_bSortByDistinct = false;
@@ -265,6 +270,7 @@ protected:
 		if ( NOTIFICATIONS && bNotify )
 			m_dJustPopped.Add ( RowTagged_t ( m_dData[iMatch] ) );
 
+		OnMatchFree ( m_dData[iMatch] );
 		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
 
 		// on final pass we totally wipe match.
@@ -340,6 +346,7 @@ protected:
 	using BaseGroupSorter_c::AggrSetup;
 	using BaseGroupSorter_c::AggrUpdate;
 	using BaseGroupSorter_c::AggrUngroup;
+	using BaseGroupSorter_c::AggrDiscard;
 
 	using CSphMatchQueueTraits::m_iSize;
 	using CSphMatchQueueTraits::m_dData;
@@ -483,6 +490,7 @@ public:
 			{
 				int iId = *(this->m_dIData.Begin()+i);
 				CSphMatch & tMatch = m_dData[iId];
+				OnMatchFree ( tMatch );
 				m_pSchema->FreeDataPtrs(tMatch);
 				tMatch.ResetDynamic();
 			}
@@ -1782,6 +1790,7 @@ public:
 			Swap ( *pTo, m_tData );
 		} else
 		{
+			OnMatchFree ( m_tData );
 			m_pSchema->FreeDataPtrs ( m_tData );
 			m_tData.ResetDynamic ();
 		}

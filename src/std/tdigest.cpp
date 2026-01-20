@@ -374,8 +374,15 @@ public:
 	void Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids )
 	{
 		Reset();
+		if ( dCentroids.IsEmpty() )
+			return;
+
+		auto itHint = m_dMap.begin();
 		for ( const TDigestCentroid_t & tCentroid : dCentroids )
-			Add ( tCentroid.m_fMean, tCentroid.m_iCount );
+		{
+			itHint = m_dMap.emplace_hint ( itHint, tCentroid.m_fMean, tCentroid.m_iCount );
+			m_iCount += tCentroid.m_iCount;
+		}
 	}
 
 	double GetMin () const noexcept

@@ -136,6 +136,7 @@ To fix your bug, developers often need to reproduce it locally. To do this, they
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`.
 
+
 To do that easily we provide an upload mechanism using a Docker image. This image is built from our open-source repository at [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) and helps you easily upload data to Manticore's write-only S3 storage. Here's how you can do it:
 1. Navigate to the directory containing the files you want to upload and run:
    ```bash

@@ -64,7 +64,7 @@ EOF
 |        4 |
 +----------+
 ––– comment –––
-Verify data persisted after unlock
+Verify data persisted (UNLOCK was no-op since WRITE lock is not implemented)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
 ––– output –––
@@ -127,14 +127,9 @@ Insert test data into second table
 mysql -h0 -P9306 -e "INSERT INTO products2 VALUES (1, 'test1'), (2, 'test2');"
 ––– output –––
 ––– comment –––
-Lock both tables for READ
+Test cross-session multi-table READ lock allows SELECT (session 1 locks both tables, session 2 can read)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ;"
-––– output –––
-––– comment –––
-Verify we can read from both locked tables
-––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;"
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;"; wait $LOCK_PID 2>/dev/null
 ––– output –––
 +----------+
 | count(*) |
@@ -146,11 +141,6 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM product
 +----------+
 |        2 |
 +----------+
-––– comment –––
-Release locks
-––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
 ––– comment –––
 Create second table for multi-table lock test
 ––– input –––
@@ -202,44 +192,21 @@ mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW TABLES; UNLOCK TABLES;"
 | products2     | rt          |
 +---------------+-------------+
 ––– comment –––
-Verify SHOW TABLES works without locks
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES;"
-––– output –––
-+---------------+-------------+
-| Table         | Type        |
-+---------------+-------------+
-| dist_products | distributed |
-| orders        | rt          |
-| products      | rt          |
-| products2     | rt          |
-+---------------+-------------+
-––– comment –––
-Test re-locking (LOCK replaces previous lock)
-Lock WRITE first, then re-lock with READ in same session
+Test re-locking (consecutive LOCK replaces previous lock, not accumulates)
+Two separate LOCK commands on same table should result in Count: 1
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
-LOCK TABLES products WRITE;
 LOCK TABLES products READ;
-SELECT * FROM products WHERE id = 1;
+LOCK TABLES products READ;
+SHOW LOCKS;
 UNLOCK TABLES;
 EOF
 ––– output –––
-+------+-----------+------------+
-| id   | title     | price      |
-+------+-----------+------------+
-|    1 | iPhone 15 | 999.989990 |
-+------+-----------+------------+
-––– comment –––
-Lock table with WRITE lock and verify warning (WRITE lock is not implemented)
-––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
-––– output –––
-+---------+------+--------------------------------+
-| Level   | Code | Message                        |
-+---------+------+--------------------------------+
-| warning | 1000 | Write lock is not implemented. |
-+---------+------+--------------------------------+
++------+----------+-----------+-----------------+
+| Type | Name     | Lock Type | Additional Info |
++------+----------+-----------+-----------------+
+| rt   | products | read      | Count: 1        |
++------+----------+-----------+-----------------+
 ––– comment –––
 WRITE lock doesn't block modifications (not implemented), test within same session
 ––– input –––
@@ -272,9 +239,11 @@ mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; SHOW LOCKS; UNLO
 | rt   | products2 | read      | Count: 1        |
 +------+-----------+-----------+-----------------+
 ––– comment –––
-Duplicate table names are allowed (increment lock counter, aliases not supported)
+Test cross-session READ locks: two sessions lock same table, SHOW LOCKS displays Count: 2
+Session 1: LOCK products READ + hold via debug sleep
+Session 2: LOCK products READ + SHOW LOCKS (should show Count: 2)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ, products READ; SHOW LOCKS; UNLOCK TABLES;"
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW LOCKS; UNLOCK TABLES;"; wait $LOCK_PID 2>/dev/null
 ––– output –––
 +------+----------+-----------+-----------------+
 | Type | Name     | Lock Type | Additional Info |

@@ -1,8 +1,19 @@
-––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Creating a config with kibana_version_string = 3.4.0 for OpenSearch Dashboards compatibility
+––– input –––
+echo -e "searchd {\n  listen = 9306:mysql\n  listen = 9312\n  listen = 9308:http\n  log = /var/log/manticore/searchd.log\n  query_log = /var/log/manticore/query.log\n  pid_file = /run/manticore/searchd.pid\n  data_dir = /var/lib/manticore\n  kibana_version_string = 3.4.0\n}" > /etc/manticoresearch/manticore.conf; echo $?
+––– output –––
+0
+––– comment –––
+Starting searchd with OpenSearch-compatible version
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Buddy started!
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/_nodes?filter_path=nodes.*.version%2Cnodes.*.http.publish_address%2Cnodes.*.ip'
 ––– output –––
-{"nodes":{"fWM984kTSbGjOAoF1qWQew":{"http":{"publish_address":"127.0.0.1:9308"},"ip":"127.0.0.1","version":"3.4.0"}}}
+{"nodes":{"#!/[A-Za-z0-9]+/!#":{"http":{"publish_address":"127.0.0.1:9308"},"ip":"127.0.0.1","version":"3.4.0"}}}
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/.kibana'
 ––– output –––
@@ -30,7 +41,7 @@ curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0'
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/_nodes?filter_path=nodes.*.version%2Cnodes.*.http.publish_address%2Cnodes.*.ip'
 ––– output –––
-{"nodes":{"fWM984kTSbGjOAoF1qWQew":{"http":{"publish_address":"127.0.0.1:9308"},"ip":"127.0.0.1","version":"3.4.0"}}}
+{"nodes":{"#!/[A-Za-z0-9]+/!#":{"http":{"publish_address":"127.0.0.1:9308"},"ip":"127.0.0.1","version":"3.4.0"}}}
 ––– input –––
 curl -s -X GET -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'Content-Length: 0' -H 'Connection: keep-alive' 'localhost:9308/.kibana/_doc/config%3A3.4.0'
 ––– output –––

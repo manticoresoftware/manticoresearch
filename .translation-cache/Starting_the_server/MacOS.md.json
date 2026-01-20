@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339819
+    },
+    "__meta": {
+        "source_text": "# Starting Manticore in MacOS\n\n## Starting Manticore via HomeBrew package manager\n\nIf Manticore is installed using HomeBrew, you can run it as a Brew service.\n\nTo start Manticore, run the following command:\n\n```bash\nbrew services start manticoresearch\n```\nTo stop Manticore, run the following command:\n\n```bash\nbrew services stop manticoresearch\n```\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "f214dc96919ec4560004ed7d4c6cee5a"
     }
 }

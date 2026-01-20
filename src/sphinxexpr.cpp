@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -4338,7 +4338,7 @@ private:
 	int						ProcessRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
 	int						ProcessAtRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
 	int						ErrLex ( const char * sTemplate, ...); // issue lexer error
-	int						CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp );
+	int						CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp, Str_t sTok ) noexcept;
 
 	CSphVector<int>			GatherArgTypes ( int iNode );
 	CSphVector<int>			GatherArgNodes ( int iNode );
@@ -4347,9 +4347,9 @@ private:
 	void					GatherArgFN ( int iNode, FN && fnFunctor );
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
-	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
-	static int				ParseField ( int iField, const char* sTok, YYSTYPE * lvalp );
-	int						ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp );
+	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noexcept;
+	static int				ParseField ( int iField, const char* sTok, YYSTYPE * lvalp ) noexcept;
+	int						ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp ) noexcept;
 	int						ParseJoinAttr ( const char * szTable, uint64_t uOffset );
 
 	template < typename T >
@@ -4502,7 +4502,7 @@ static int ConvertToColumnarType ( ESphAttr eAttr )
 }
 
 
-int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
+int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noexcept
 {
 	// check attribute type and width
 	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
@@ -4563,7 +4563,7 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 }
 
 
-int ExprParser_t::ParseField ( int iField, const char* sTok, YYSTYPE * lvalp )
+int ExprParser_t::ParseField ( int iField, const char* sTok, YYSTYPE * lvalp ) noexcept
 {
 	lvalp->iAttrLocator = iField;
 	return TOK_FIELD;
@@ -4586,7 +4586,7 @@ void ExprParser_t::AddUservar ( const char* sBegin, int iLen, YYSTYPE * lvalp )
 	m_dUservars.Add ( sTok );
 }
 
-int ExprParser_t::ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp )
+int ExprParser_t::ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp ) noexcept
 {
 	// check for attribute
 	int iCol = m_pSchema->GetAttrIndex ( szTok );
@@ -4633,14 +4633,36 @@ inline static bool IsTok ( Tokh_e e )
 }
 
 
-int ExprParser_t::CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp )
+int ExprParser_t::CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp, Str_t sTok ) noexcept
 {
-	if ( eTok==TOKH_COUNT ) // in case someone used 'count' as a name for an attribute
-		return ParseAttrsAndFields ("count", lvalp);
+	switch (eTok)
+	{
+	case TOKH_COUNT:
+	case TOKH_WEIGHT:
+	case TOKH_GROUPBY:
+	case TOKH_DISTINCT:
+	case TOKH_AND:
+	case TOKH_OR:
+	case TOKH_NOT:
+	case TOKH_DIV:
+	case TOKH_MOD:
+	case TOKH_FOR:
+	case TOKH_IS:
+	case TOKH_NULL:
+		{
+			auto& cLast = (char&)sTok.first[sTok.second];
+			if (!cLast)
+				return ParseAttrsAndFields ( sTok.first, lvalp );
 
-	if ( eTok==TOKH_WEIGHT ) // in case someone used 'weight' as a name for an attribute
-		return ParseAttrsAndFields ("weight", lvalp);
+			// in case of backticked token last symbol might be ` instead of \0
+			const char cPrevLast = std::exchange ( cLast, '\0' );
+			const int iRes = ParseAttrsAndFields ( sTok.first, lvalp );
+			cLast = cPrevLast;
+			return iRes;
+		}
 
+	default: break;
+	}
 	return -1;
 }
 
@@ -4662,7 +4684,7 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	{
 		if ( !bFunc )
 		{
-			iRes = CheckForFields ( eTok, lvalp );
+			iRes = CheckForFields ( eTok, lvalp, { sToken, iLen } );
 			if ( iRes>=0 )
 				return iRes;
 		}
@@ -10933,16 +10955,27 @@ ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr )
 
 void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema )
 {
-	for ( const auto & i : dAttrNames )
+	sph::StringSet hProcessed;
+	
+	ARRAY_FOREACH ( i, dAttrNames )
 	{
-		const CSphColumnInfo * pAttr = tSchema.GetAttr ( i.cstr() );
+		const CSphString & sAttr = dAttrNames[i];
+		
+		// skip if already processed to avoid redundant work and cycles
+		if ( hProcessed[sAttr] )
+			continue;
+		
+		hProcessed.Add(sAttr);
+		
+		const CSphColumnInfo * pAttr = tSchema.GetAttr ( sAttr.cstr() );
 		if ( !pAttr || !pAttr->m_pExpr )
 			continue;
 
 		int iOldLen = dAttrNames.GetLength();
 		pAttr->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dAttrNames );
+		
 		for ( int iNewAttr = iOldLen; iNewAttr < dAttrNames.GetLength(); iNewAttr++ )
-			if ( dAttrNames[iNewAttr]==i )
+			if ( dAttrNames[iNewAttr]==dAttrNames[i] )
 				dAttrNames.Remove(iNewAttr);
 	}
 
@@ -10950,21 +10983,34 @@ void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema )
 }
 
 
-bool IsIndependentAttr ( const CSphString & sAttr, const ISphSchema & tSchema )
+AttrDependencyMap_c::AttrDependencyMap_c ( const ISphSchema & tSchema )
 {
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_sName==sAttr )
+		if ( !tAttr.m_pExpr )
 			continue;
 
 		StrVec_t dDeps;
 		dDeps.Add ( tAttr.m_sName );
 		FetchAttrDependencies ( dDeps, tSchema );
 
-		if ( dDeps.any_of ( [&sAttr]( auto & sDep ){ return sDep==sAttr; } ) )
-			return false;
-	}
+		for ( const auto & sDep : dDeps )
+		{
+			if ( sDep==tAttr.m_sName )
+				continue;
 
-	return true;
+			m_hDependents.AddUnique(sDep).Add ( tAttr.m_sName );
+		}
+	}
+}
+
+
+bool AttrDependencyMap_c::IsIndependent ( const CSphString & sAttr ) const
+{
+	auto * pDependents = m_hDependents(sAttr);
+	if ( !pDependents )
+		return true;
+
+	return pDependents->IsEmpty();
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -45,6 +45,8 @@ bool GetBooleanSimplify ( const CSphQuery & tQuery )
 {
 	return tQuery.m_bSimplify.value_or ( g_bBooleanSimplify );
 }
+
+bool	GetBooleanSimplify () { return g_bBooleanSimplify; }
 
 namespace {
 /// helper find-or-add (make it generic and move to sphinxstd?)

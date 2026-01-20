@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -863,6 +863,8 @@ public:
 	{
 		m_dNodes.Add ( tNode );
 	}
+
+	int ParseNumber ( const char * szText, JsonNode_t * pNode );
 };
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
@@ -1242,11 +1244,19 @@ void sphJsonFormat ( JsonEscapedBuilder & sOut, const BYTE * pData )
 		sphJsonFieldFormat ( sOut, pData, eType );
 }
 
+static int PrintDouble ( char * sBuf, int iBufSize, double fVal )
+{
+	auto iLen = snprintf ( sBuf, iBufSize, "%lf", fVal );
+	if ( iLen>iBufSize )
+		iLen = snprintf ( sBuf, iBufSize, "%lg", fVal );
+
+	return iLen;
+}
 
 const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString )
 {
-	const BYTE szDouble = 32;
-	char sDouble[szDouble];
+	const BYTE iLenDouble = 32;
+	char sDouble[iLenDouble];
 
 	// format value
 	const BYTE * p = pData;
@@ -1262,7 +1272,8 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_DOUBLE:
 		{
-			auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+			double fVal = sphQW2D ( sphJsonLoadBigint ( &p ) );
+			auto iLen = PrintDouble ( sDouble, iLenDouble, fVal );
 			sOut.AppendChunk ( {sDouble, iLen} );
 			break;
 		}
@@ -1298,7 +1309,8 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 				auto _ = sOut.Array ();
 				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
-					auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+					double fVal = sphQW2D ( sphJsonLoadBigint ( &p ) );
+					auto iLen = PrintDouble ( sDouble, iLenDouble, fVal );
 					sOut.AppendChunk ( {sDouble, iLen} );
 				}
 				break;
@@ -4285,3 +4297,21 @@ void bson::DoubleVector_c::AddValues ( const VecTraits_T<double> & dData )
 	dData.Apply ( [this] ( double f ) { StoreBigint ( m_dBson, sphD2QW ( f ) ); } );
 }
 
+int JsonParser_c::ParseNumber ( const char * szText, JsonNode_t * pNode )
+{
+	errno = 0;
+	int64_t iValue = strtoll ( szText, NULL, 10 );
+	if ( errno==ERANGE )
+	{
+		// overflow set double value
+		pNode->m_eType = JSON_DOUBLE;
+		pNode->m_fValue = strtod ( szText, NULL );
+		return TOK_FLOAT;
+
+	} else
+	{
+		pNode->m_eType = JSON_INT64;
+		pNode->m_iValue = iValue;
+		return TOK_INT;
+	}
+}

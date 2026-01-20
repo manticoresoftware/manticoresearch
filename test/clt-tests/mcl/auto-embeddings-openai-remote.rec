@@ -141,3 +141,100 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) as count FROM test_openai_remote WHERE knn(
 +-------+
 |     2 |
 +-------+
+––– comment –––
+=== PLAIN MODE TESTS ===
+––– comment –––
+Test plain mode: Create config file with OpenAI auto-embeddings and api_key
+––– input –––
+API_KEY_VAL="${OPENAI_API_KEY}"; cat > /etc/manticoresearch/manticore.conf << CONFEOF
+searchd {
+    listen = 127.0.0.1:9306:mysql41
+    listen = 127.0.0.1:9308:http
+    log = /var/log/manticore/searchd.log
+    pid_file = /var/run/manticore/searchd.pid
+}
+
+table test_openai_plain {
+    type = rt
+    path = /var/lib/manticore/test_openai_plain
+    rt_field = title
+    rt_field = content
+    rt_attr_float_vector = embedding
+    knn = {"attrs":[{"name":"embedding","type":"hnsw","hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"model_name":"openai/text-embedding-ada-002","from":"title,content","api_key":"${API_KEY_VAL}"}]}
+}
+CONFEOF
+––– output –––
+––– comment –––
+Test plain mode: Restart searchd with new config
+––– input –––
+searchd --stopwait --quiet
+––– output –––
+––– block: ../base/start-searchd –––
+––– comment –––
+Test plain mode: Verify table is available
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++-------------------+------+
+| Table             | Type |
++-------------------+------+
+| test_openai_plain | rt   |
++-------------------+------+
+––– comment –––
+Test plain mode: Insert data and verify auto-embeddings work
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_openai_plain (id, title, content) VALUES(1, 'bread', 'food item'), (2, 'cat', 'animal pet')"; echo $?
+––– output –––
+0
+––– comment –––
+Test plain mode: Verify data was inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as count FROM test_openai_plain"
+––– output –––
++-------+
+| count |
++-------+
+|     2 |
++-------+
+––– comment –––
+Test plain mode: KNN search with 'dog' should return 'cat' first
+––– input –––
+mysql -h0 -P9306 -E -e "SELECT id, title FROM test_openai_plain WHERE knn(embedding, 2, 'dog')"
+––– output –––
+*************************** 1. row ***************************
+   id: 2
+title: cat
+*************************** 2. row ***************************
+   id: 1
+title: bread
+––– comment –––
+Test plain mode: Error case - config with model_name but missing api_key
+––– input –––
+cat > /etc/manticoresearch/manticore.conf << 'EOF'
+searchd {
+    listen = 127.0.0.1:9306:mysql41
+    listen = 127.0.0.1:9308:http
+    log = /var/log/manticore/searchd.log
+    pid_file = /var/run/manticore/searchd.pid
+}
+
+table test_openai_no_key {
+    type = rt
+    path = /var/lib/manticore/test_openai_no_key
+    rt_field = title
+    rt_attr_float_vector = embedding
+    knn = {"attrs":[{"name":"embedding","type":"hnsw","hnsw_similarity":"L2","model_name":"openai/text-embedding-ada-002","from":"title"}]}
+}
+EOF
+––– output –––
+––– comment –––
+Test plain mode: Restart searchd with error config (missing api_key)
+––– input –––
+searchd --stopwait --quiet
+––– output –––
+––– comment –––
+Test plain mode: Start searchd and verify warning is shown for missing api_key
+––– input –––
+searchd 2>&1|grep WARNING
+––– output –––
+WARNING: table 'test_openai_no_key': prealloc: Invalid API key for remote model - NOT SERVING

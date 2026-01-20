@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -381,6 +381,7 @@ public:
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
 	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -458,7 +459,9 @@ private:
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
+	bool			SetKNN ( const SqlNode_t & tAttr, int iK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
 	void			NegateFilterTree ( int iNode );
+	void			FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept;
 };
 
 using YYSTYPE = SqlNode_t;
@@ -707,6 +710,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 		return CHKOPT( dShowOptions, eOption );
 
 	case STMT_DROP_TABLE:
+	case STMT_DROP_CACHE:
 	case STMT_ALTER_INDEX_SETTINGS:
 	case STMT_DESCRIBE:
 	case STMT_SHOW_CREATE_TABLE:
@@ -1190,9 +1194,28 @@ void SqlParser_c::AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode
 	SetSelect ( pStart, pEnd );
 }
 
+// fixup expressions like 1+`column` - which came from parser as 1+`column - without terminating `
+void SqlParser_c::FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept
+{
+	if ( !pExpr || !m_pLastTokenStart )
+		return;
+
+	if ( (m_pLastTokenStart - m_pBuf) <= pExpr->m_iEnd )
+		return;
+
+	if ( m_pBuf[pExpr->m_iEnd] != '`')
+		return;
+
+	// if we have odd number of backticks - extend expression to include last backtick also
+	auto iBackticks = count_of ( VecTraits_T<const char> { m_pBuf + pExpr->m_iStart, pExpr->m_iEnd-pExpr->m_iStart }, [](const char c) { return c=='`';} );
+	if ( iBackticks & 1 )
+		++pExpr->m_iEnd;
+}
+
 void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	FixupLastBacktick ( pExpr );
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
@@ -1423,6 +1446,14 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		tKNN.m_bRescore = !!tOpt.m_iValue;
 		return true;
 	}
+	else if ( sName=="k" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_iK = tOpt.m_iValue;
+		return true;
+	}
 
 	return false;
 }
@@ -1430,15 +1461,31 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 
 bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
 {
-	auto & tKNN = m_pQuery->m_tKnnSettings;
-
-	ToString ( tKNN.m_sAttr, tAttr );
-	tKNN.m_iK = tK.GetValueInt();
-	if ( tKNN.m_iK <= 0 )
+	int iK = tK.GetValueInt();
+	if ( iK <= 0 )
 	{
 		yyerror ( this, "k parameter must be positive" );
 		return false;
 	}
+
+	return SetKNN ( tAttr, iK, tValues, pOpts, bAutoEmb );
+}
+
+
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
+{
+	return SetKNN ( tAttr, -1, tValues, pOpts, bAutoEmb );
+}
+
+
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, int iK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
+{
+	auto & tKNN = m_pQuery->m_tKnnSettings;
+
+	tKNN.m_iK = iK;
+
+	ToString ( tKNN.m_sAttr, tAttr );
+
 	if ( pOpts )
 		for ( auto & i : *pOpts )
 			if ( !ParseKNNOption ( i, tKNN ) )
@@ -2222,7 +2269,6 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 }
 
 
-
 bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	if ( !IsFilled ( sQuery ) )
@@ -2287,6 +2333,8 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,
 				tQuery.m_iSQLSelectEnd - tQuery.m_iSQLSelectStart );
 		}
+
+		SetupKNNLimit(tQuery);
 
 		// validate tablefuncs
 		// tablefuncs are searchd-level builtins rather than common expression-level functions

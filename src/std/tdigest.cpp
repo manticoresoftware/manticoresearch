@@ -513,6 +513,27 @@ TDigest_c::~TDigest_c () = default;
 TDigest_c::TDigest_c ( TDigest_c && ) noexcept = default;
 TDigest_c & TDigest_c::operator= ( TDigest_c && ) noexcept = default;
 
+TDigest_c::TDigest_c ( const TDigest_c & rhs )
+{
+	if ( rhs.m_pImpl )
+		m_pImpl = std::make_unique<TDigest_c::Impl_c> ( *rhs.m_pImpl );
+	else
+		m_pImpl.reset();
+}
+
+TDigest_c & TDigest_c::operator= ( const TDigest_c & rhs )
+{
+	if ( this==&rhs )
+		return *this;
+
+	if ( rhs.m_pImpl )
+		m_pImpl = std::make_unique<TDigest_c::Impl_c> ( *rhs.m_pImpl );
+	else
+		m_pImpl.reset();
+
+	return *this;
+}
+
 
 void TDigest_c::Add ( double fValue, int64_t iWeight )
 {

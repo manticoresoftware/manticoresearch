@@ -9,6 +9,7 @@
 //
 
 #include "attribute.h"
+#include "std/tdigest_runtime.h"
 
 #include "sphinxint.h"
 #include "sphinxjson.h"
@@ -1137,6 +1138,34 @@ ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 
 	auto iLen = (int)UnzipIntBE ( pData );
 	return { pData, iLen };
+}
+
+BYTE * sphCopyPackedAttr ( const BYTE * pData )
+{
+	ByteBlob_t dBlob = sphUnpackPtrAttr ( pData );
+	if ( sphIsTDigestRuntimeBlob ( dBlob ) )
+		return sphCloneTDigestRuntimeBlob ( dBlob );
+	return sphPackPtrAttr ( dBlob );
+}
+
+
+void sphDeallocatePacked ( const BYTE* pBlob )
+{
+	if ( !pBlob )
+		return;
+
+	const BYTE * pPayload = pBlob;
+	int iLen = (int)UnzipIntBE ( pPayload );
+	ByteBlob_t dBlob { pPayload, iLen };
+
+	if ( sphIsTDigestRuntimeBlob ( dBlob ) )
+		sphDestroyTDigestRuntimeBlob ( dBlob );
+
+#if WITH_SMALLALLOC
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( iLen ) );
+#else
+	sphDeallocateSmall ( pBlob );
+#endif
 }
 
 

@@ -37,8 +37,8 @@ public:
 
 	TDigest_c ( TDigest_c && ) noexcept;
 	TDigest_c & operator= ( TDigest_c && ) noexcept;
-	TDigest_c ( const TDigest_c & ) = delete;
-	TDigest_c & operator= ( const TDigest_c & ) = delete;
+	TDigest_c ( const TDigest_c & );
+	TDigest_c & operator= ( const TDigest_c & );
 
 	void Add ( double fValue, int64_t iWeight = 1 );
 	double Percentile ( int iPercent ) const noexcept;

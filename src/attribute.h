@@ -134,7 +134,7 @@ ESphAttr			sphPlainAttrToPtrAttr ( ESphAttr eAttrType );
 bool				sphIsDataPtrAttr ( ESphAttr eAttrType );
 
 // just repack (matter of optimizing)
-FORCE_INLINE BYTE * sphCopyPackedAttr ( const BYTE * pData ) { return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ) ); }
+BYTE *				sphCopyPackedAttr ( const BYTE * pData );
 
 //////////////////////////////////////////////////////////////////////////
 // misc attribute-related
@@ -159,17 +159,7 @@ FORCE_INLINE DocID_t sphGetDocID ( const CSphRowitem * pData )
 #endif
 }
 
-FORCE_INLINE void sphDeallocatePacked ( const BYTE* pBlob )
-{
-	if ( !pBlob )
-		return;
-#if WITH_SMALLALLOC
-	const BYTE * pFoo = pBlob;
-	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( UnzipIntBE ( pFoo ) ) );
-#else
-	sphDeallocateSmall ( pBlob );
-#endif
-}
+void				sphDeallocatePacked ( const BYTE* pBlob );
 
 const char * AttrType2Str ( ESphAttr eAttrType );
 

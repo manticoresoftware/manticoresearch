@@ -14,6 +14,7 @@
 
 #include "schema/columninfo.h"
 #include "std/tdigest.h"
+#include "std/tdigest_runtime.h"
 #include "sphinxutils.h"
 
 #include <cmath>
@@ -39,51 +40,6 @@ protected:
 namespace
 {
 using BStream_c = TightPackedVec_T<BYTE>;
-constexpr uint32_t TDIGEST_RUNTIME_MAGIC = 0x54444947;
-
-struct TDigestRuntimeState_t
-{
-	uint32_t	m_uMagic { TDIGEST_RUNTIME_MAGIC };
-	TDigest_c	m_tDigest;
-
-	explicit TDigestRuntimeState_t ( double fCompression )
-		: m_tDigest ( fCompression )
-	{}
-};
-
-struct RuntimeAlloc_t
-{
-	TDigestRuntimeState_t * m_pState = nullptr;
-	BYTE *					m_pPacked = nullptr;
-};
-
-static RuntimeAlloc_t AllocateRuntimeState ( double fCompression )
-{
-	BYTE * pPayload = nullptr;
-	BYTE * pPacked = sphPackPtrAttr ( (int)sizeof ( TDigestRuntimeState_t ), &pPayload );
-	auto * pState = new ( pPayload ) TDigestRuntimeState_t ( fCompression );
-	return { pState, pPacked };
-}
-
-static bool IsRuntimeBlob ( ByteBlob_t dBlob )
-{
-	if ( !dBlob.first || dBlob.second < (int)sizeof ( uint32_t ) )
-		return false;
-
-	uint32_t uMagic = 0;
-	memcpy ( &uMagic, dBlob.first, sizeof ( uint32_t ) );
-	return uMagic==TDIGEST_RUNTIME_MAGIC;
-}
-
-static void DestroyRuntimeBlob ( ByteBlob_t dBlob )
-{
-	if ( !dBlob.first )
-		return;
-
-	auto * pState = reinterpret_cast<TDigestRuntimeState_t*>( const_cast<BYTE*>( dBlob.first ) );
-	pState->~TDigestRuntimeState_t();
-	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
-}
 
 static double FetchNumericAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, ESphAttr eType )
 {
@@ -230,9 +186,8 @@ protected:
 		if ( !dBlob.first )
 			return;
 
-		if ( IsRuntimeBlob ( dBlob ) )
+		if ( auto * pRuntime = sphTDigestRuntimeAccess ( dBlob ) )
 		{
-			auto * pRuntime = reinterpret_cast<const TDigestRuntimeState_t*>( dBlob.first );
 			tDigest.Merge ( pRuntime->m_tDigest );
 			return;
 		}
@@ -280,7 +235,7 @@ public:
 
 TDigestRuntimeState_t * AggrTDigestBase_c::CreateRuntime ( CSphMatch & tMatch ) const
 {
-	auto tAlloc = AllocateRuntimeState ( m_fCompression );
+	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
 	tMatch.SetAttr ( m_tLocator, (SphAttr_t)tAlloc.m_pPacked );
 	return tAlloc.m_pState;
 }
@@ -291,13 +246,13 @@ TDigestRuntimeState_t * AggrTDigestBase_c::EnsureRuntime ( CSphMatch & tMatch ) 
 	if ( !dBlob.first )
 		return CreateRuntime ( tMatch );
 
-	if ( IsRuntimeBlob ( dBlob ) )
-		return reinterpret_cast<TDigestRuntimeState_t*>( const_cast<BYTE*>( dBlob.first ) );
+	if ( auto * pRuntime = sphTDigestRuntimeAccess ( dBlob ) )
+		return pRuntime;
 
 	TDigest_c tTemp ( m_fCompression );
 	LoadTDigestFromBlob ( dBlob, tTemp, m_fCompression );
 
-	auto tAlloc = AllocateRuntimeState ( m_fCompression );
+	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
 	tAlloc.m_pState->m_tDigest = std::move ( tTemp );
 
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
@@ -312,22 +267,18 @@ TDigest_c & AggrTDigestBase_c::AccessDigest ( CSphMatch & tMatch ) const
 
 const TDigestRuntimeState_t * AggrTDigestBase_c::TryGetRuntime ( const CSphMatch & tMatch ) const
 {
-	ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
-	if ( !dBlob.first || !IsRuntimeBlob ( dBlob ) )
-		return nullptr;
-
-	return reinterpret_cast<const TDigestRuntimeState_t*>( dBlob.first );
+	return sphTDigestRuntimeAccess ( tMatch.FetchAttrData ( m_tLocator, nullptr ) );
 }
 
 void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
 {
 	ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
-	if ( !dBlob.first || !IsRuntimeBlob ( dBlob ) )
+	auto * pRuntime = sphTDigestRuntimeAccess ( dBlob );
+	if ( !pRuntime )
 		return;
 
-	auto * pRuntime = reinterpret_cast<TDigestRuntimeState_t*>( const_cast<BYTE*>( dBlob.first ) );
 	TDigest_c tDigest = std::move ( pRuntime->m_tDigest );
-	pRuntime->~TDigestRuntimeState_t();
+	sphDestroyTDigestRuntimeBlob ( dBlob );
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
 	StoreTDigestBlob ( tDigest, tMatch, m_tLocator );
 }
@@ -335,10 +286,11 @@ void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
 void AggrTDigestBase_c::DropRuntime ( CSphMatch & tMatch ) const
 {
 	ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
-	if ( !dBlob.first || !IsRuntimeBlob ( dBlob ) )
+	if ( !sphIsTDigestRuntimeBlob ( dBlob ) )
 		return;
 
-	DestroyRuntimeBlob ( dBlob );
+	sphDestroyTDigestRuntimeBlob ( dBlob );
+	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, 0 );
 }
 

@@ -195,6 +195,11 @@ int CSphMatchQueueTraits::ResetDynamicFreeData ( int iMaxUsed )
 	return -1;
 }
 
+
+void CSphMatchQueueTraits::OnMatchFree ( CSphMatch & tMatch )
+{
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void MatchCloner_c::SetSchema ( const ISphSchema * pSchema )

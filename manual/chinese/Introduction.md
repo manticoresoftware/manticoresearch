@@ -1,6 +1,6 @@
 # 介绍
 
-Manticore Search 是一个高性能、多存储数据库，专为搜索和分析设计，提供极速的全文搜索、实时索引以及向量搜索和列存储等高级功能，实现高效的数据分析。它既能处理小型数据集，也能处理大型数据集，为现代应用提供无缝扩展性和强大的洞察能力。
+Manticore Search 是一款高性能、多存储数据库，专为搜索和分析而设计，提供闪电般的全文搜索、实时索引以及其他高级功能，如向量搜索和列式存储，以实现高效的数据分析。它旨在处理小数据集和大数据集，为现代应用程序提供无缝的可扩展性和强大的洞察力。
 
 作为一个开源数据库（可在 [GitHub](https://github.com/manticoresoftware/manticoresearch/) 获取），Manticore Search 于2017年创建，是对 [Sphinx Search](https://sphinxsearch.com/) 引擎的延续。我们的开发团队汇集了 Sphinx 的所有优点，并显著提升了其功能，修复了数百个漏洞（详见我们的 [更新日志](https://manual.manticoresearch.com/Changelog)）。Manticore Search 是一个现代的、快速且轻量级的数据库，拥有卓越的全文搜索能力，基于对其前身近乎完全的重写构建。
 
@@ -63,7 +63,7 @@ Manticore Search守护进程用C++编写，提供快速启动时间和高效的�
 虽然Manticore不完全符合ACID标准，但它支持隔离事务以实现原子更改，并支持二进制日志以确保安全写入。
 
 #### 内置复制和负载均衡
-数据可以分布在服务器和数据中心之间，任何Manticore Search节点都可以作为负载均衡器和数据节点。Manticore使用[Galera库](https://galeracluster.com/)实现近乎同步的多主[复制](https://play.manticoresearch.com/replication/)，确保所有节点的数据一致性，防止数据丢失，并提供出色的复制性能。
+数据可以分布在服务器和数据中心之间，任何Manticore Search节点都可以作为负载均衡器和数据节点。Manticore使用[Galera库](https://play.manticoresearch.com/replication/)实现近乎同步的多主[复制](https://galeracluster.com/)，确保所有节点的数据一致性，防止数据丢失，并提供出色的复制性能。
 
 #### 内置备份功能
 Manticore配备了外部工具[manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md)和[BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL命令，简化了备份和恢复数据的过程。或者，您可以使用[mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html)进行[逻辑备份](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。

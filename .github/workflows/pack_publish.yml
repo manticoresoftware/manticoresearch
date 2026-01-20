@@ -624,24 +624,24 @@ jobs:
 
         # Config with a unique RT table to verify custom config is being used
         @"
-searchd {
-    listen = 127.0.0.1:9306:mysql
-    listen = 127.0.0.1:9308:http
-    listen = 127.0.0.1:9312
-    log = $customConfigDir\searchd.log
-    query_log = $customConfigDir\query.log
-    pid_file = $customConfigDir\searchd.pid
-    data_dir = $customDataDir
-    buddy_path =
-}
+        searchd {
+            listen = 127.0.0.1:9306:mysql
+            listen = 127.0.0.1:9308:http
+            listen = 127.0.0.1:9312
+            log = $customConfigDir\searchd.log
+            query_log = $customConfigDir\query.log
+            pid_file = $customConfigDir\searchd.pid
+            data_dir = $customDataDir
+            buddy_path =
+        }
 
-table test_custom_config_marker {
-    type = rt
-    path = $customDataDir\test_custom_config_marker
-    rt_field = content
-    rt_attr_uint = id
-}
-"@ | Out-File -FilePath $customConfig -Encoding ASCII
+        table test_custom_config_marker {
+            type = rt
+            path = $customDataDir\test_custom_config_marker
+            rt_field = content
+            rt_attr_uint = id
+        }
+        "@  | Out-File -FilePath $customConfig -Encoding ASCII
 
         echo "Created custom config at: $customConfig"
         echo "Custom config contains table 'test_custom_config_marker' as verification marker"

@@ -169,11 +169,6 @@ static void LoadTDigestFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double 
 	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 
-static void LoadTDigestBlob ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, TDigest_c & tDigest, double fCompression )
-{
-	LoadTDigestFromBlob ( tMatch.FetchAttrData ( tLoc, nullptr ), tDigest, fCompression );
-}
-
 }
 
 class AggrTDigestBase_c : public AggrFunc_i

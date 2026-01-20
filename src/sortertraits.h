@@ -81,7 +81,7 @@ protected:
 	int			ResetDynamicFreeData ( int iMaxUsed );
 
 protected:
-	void	OnMatchFree ( CSphMatch & tMatch );
+	virtual void	OnMatchFree ( CSphMatch & tMatch );
 };
 
 

@@ -125,5 +125,6 @@ bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants
 CSphString DumpAggr ( const CSphString & sCol, const AggrSettings_t & tAggr );
 
 void FixFloat ( AggrHistSetting_t & tHist );
+void PromoteHistogramToFloat ( AggrHistSetting_t & tHist );
 
 #endif // _aggsexpr_

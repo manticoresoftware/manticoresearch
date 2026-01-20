@@ -526,6 +526,13 @@ void FixFloat ( AggrHistSetting_t & tHist )
 	}
 }
 
+void PromoteHistogramToFloat ( AggrHistSetting_t & tHist )
+{
+	ConvertIntoFloat ( tHist.m_tInterval );
+	ConvertIntoFloat ( tHist.m_tOffset );
+	tHist.m_bFloat = true;
+}
+
 static void SetValue ( const CSphNamedVariant & tPair, AggrBound_t & tVal )
 {
 	switch ( tPair.m_eType )

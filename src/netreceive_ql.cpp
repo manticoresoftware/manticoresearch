@@ -278,6 +278,7 @@ enum class ScanControl_e
 	STOP
 };
 
+// MySQL line comments support '#' and '-- ' (double dash followed by whitespace).
 static bool IsLineCommentStart ( const char * p, int iPos, int iLen )
 {
 	if ( iPos + 1 >= iLen )
@@ -295,6 +296,7 @@ static bool IsLineCommentStart ( const char * p, int iPos, int iLen )
 }
 
 template <typename FnNormal>
+// Scan SQL while honoring quotes/comments; lets the caller inspect tokens safely.
 static bool ScanPreparedSql ( Str_t tQuery, FnNormal fnNormal, StringBuilder_c * pOut )
 {
 	const char * p = tQuery.first;
@@ -398,6 +400,7 @@ static int CountPreparedParams ( Str_t tQuery )
 	return iCount;
 }
 
+// Validate raw list parameters for MVA/float_vector bindings.
 static bool IsVectorListParam ( const CSphString & sParam, CSphString & sError )
 {
 	const char * p = sParam.cstr();
@@ -429,6 +432,7 @@ static bool IsVectorListParam ( const CSphString & sParam, CSphString & sError )
 	return true;
 }
 
+// Replace '?' markers with serialized values; raw-list params bypass quoting.
 static bool RenderPreparedQuery ( Str_t tQuery, const CSphVector<CSphString> & dParams, CSphString & sOut, CSphString & sError, const CSphVector<bool> * pRawParams )
 {
 	StringBuilder_c sSql;
@@ -488,6 +492,7 @@ static bool TokenEq ( const char * sTok, int iLen, const char * sRef )
 	return true;
 }
 
+// Normalize TO_VECTOR/TO_MULTI into '?' so we can track explicit raw-list params.
 static bool NormalizeVectorFunctions ( Str_t tQuery, CSphString & sOut, CSphVector<int> & dExplicitRaw, CSphString & sError )
 {
 	StringBuilder_c sSql;
@@ -583,6 +588,7 @@ static bool ParseMarkerIndex ( const CSphString & sVal, const char * sPrefix, in
 	return true;
 }
 
+// Build the implicit INSERT column order (all non-internal attrs + fields).
 static void BuildDefaultInsertSchema ( const CSphSchema & tSchema, StrVec_t & dOut )
 {
 	dOut.Reset();
@@ -602,6 +608,7 @@ static void BuildDefaultInsertSchema ( const CSphSchema & tSchema, StrVec_t & dO
 	}
 }
 
+// Mark raw-list params for INSERT/REPLACE based on schema attribute types.
 static void ApplyImplicitInsertTypes ( const SqlStmt_t & tStmt, const CSphSchema & tSchema, const char * sPrefix, CSphVector<bool> & dRawParams )
 {
 	StrVec_t dCols;
@@ -633,6 +640,7 @@ static void ApplyImplicitInsertTypes ( const SqlStmt_t & tStmt, const CSphSchema
 	}
 }
 
+// Lightweight scan of UPDATE ... SET to map params to columns without parsing expressions.
 static bool ExtractUpdateParamColumns ( Str_t tQuery, CSphString & sTable, CSphVector<std::pair<int, CSphString>> & dParamCols )
 {
 	int iParam = 0;
@@ -731,6 +739,7 @@ static const CSphSchema * GetPreparedSchema ( const CSphQuery & tQuery )
 	return nullptr;
 }
 
+// Infer MySQL column type using schema/expr parsing for PREPARE metadata.
 static MysqlColumnType_e GuessPreparedColumnType ( const ISphSchema * pSchema, const CSphQueryItem & tItem, const CSphQuery & tQuery )
 {
 	if ( !pSchema )
@@ -777,6 +786,7 @@ static CSphString BuildSqlStringLiteral ( Str_t sVal )
 	return CSphString ( sEscaped.cstr() );
 }
 
+// Re-escape a quoted literal so log output remains replay-safe.
 static CSphString NormalizeSqlStringLiteral ( const CSphString & sVal )
 {
 	const int iLen = sVal.Length();
@@ -883,6 +893,7 @@ static CSphString ReadStringLiteral ( InputBuffer_c & tIn )
 	return BuildSqlStringLiteral ( tVal );
 }
 
+// Parse COM_STMT_EXECUTE payload into SQL literals and apply long-data rules.
 static bool ParseStmtParamValues ( InputBuffer_c & tIn, PreparedStmt_t & tStmt, CSphVector<CSphString> & dParams, CSphString & sError )
 {
 	const int iParamCount = tStmt.m_iParamCount;
@@ -1389,6 +1400,7 @@ void SendMysqlEofPacketRaw ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns
 	tOut.SendLSBWord ( MysqlStatus ( bMoreResults, bAutoCommit, bIsInTrans ) );
 }
 
+// Send metadata terminator honoring CLIENT_DEPRECATE_EOF and forced EOF behavior.
 static void SendMysqlMetadataTerminator ( ISphOutputBuffer & tOut, BYTE & uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
 	if ( OmitEof() )
@@ -1821,6 +1833,7 @@ class BinarySqlRowBuffer_c final : public RowBuffer_i
 		m_dNullBitmap.Resize ( 0 );
 		if ( m_iCols>0 )
 		{
+			// MySQL NULL bitmap uses 2 reserved bits; +7 rounds up to a full byte.
 			int iNullBytes = ( m_iCols + 7 + 2 ) / 8;
 			m_dNullBitmap.Resize ( iNullBytes );
 			memset ( m_dNullBitmap.Begin(), 0, iNullBytes );

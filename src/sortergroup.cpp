@@ -1719,6 +1719,7 @@ class CSphImplicitGroupSorter final : public MatchSorter_c, ISphNoncopyable, pro
 {
 	using MYTYPE = CSphImplicitGroupSorter<COMPGROUP, UNIQ, DISTINCT, NOTIFICATIONS, HAS_AGGREGATES>;
 	using BASE = MatchSorter_c;
+	using BaseGroupSorter_c::AggrDiscard;
 
 public:
 	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
@@ -1791,7 +1792,7 @@ public:
 			Swap ( *pTo, m_tData );
 		} else
 		{
-			this->OnMatchFree ( m_tData );
+			AggrDiscard ( m_tData );
 			m_pSchema->FreeDataPtrs ( m_tData );
 			m_tData.ResetDynamic ();
 		}

@@ -357,7 +357,6 @@ protected:
 	using CSphMatchQueueTraits::ResetAfterFlatten;
 	using CSphMatchQueueTraits::ResetDynamic;
 	using CSphMatchQueueTraits::ResetDynamicFreeData;
-	using CSphMatchQueueTraits::OnMatchFree;
 
 	using MatchSorter_c::m_iTotal;
 	using MatchSorter_c::m_tJustPushed;
@@ -492,7 +491,7 @@ public:
 			{
 				int iId = *(this->m_dIData.Begin()+i);
 				CSphMatch & tMatch = m_dData[iId];
-				OnMatchFree ( tMatch );
+				this->OnMatchFree ( tMatch );
 				m_pSchema->FreeDataPtrs(tMatch);
 				tMatch.ResetDynamic();
 			}
@@ -1792,7 +1791,7 @@ public:
 			Swap ( *pTo, m_tData );
 		} else
 		{
-			OnMatchFree ( m_tData );
+			this->OnMatchFree ( m_tData );
 			m_pSchema->FreeDataPtrs ( m_tData );
 			m_tData.ResetDynamic ();
 		}

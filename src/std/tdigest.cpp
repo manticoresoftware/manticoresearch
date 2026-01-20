@@ -510,6 +510,9 @@ TDigest_c::TDigest_c ( double fCompression )
 
 TDigest_c::~TDigest_c () = default;
 
+TDigest_c::TDigest_c ( TDigest_c && ) noexcept = default;
+TDigest_c & TDigest_c::operator= ( TDigest_c && ) noexcept = default;
+
 
 void TDigest_c::Add ( double fValue, int64_t iWeight )
 {

@@ -35,8 +35,8 @@ public:
 	explicit TDigest_c ( double fCompression = 200.0 );
 	~TDigest_c();
 
-	TDigest_c ( TDigest_c && ) noexcept = default;
-	TDigest_c & operator= ( TDigest_c && ) noexcept = default;
+	TDigest_c ( TDigest_c && ) noexcept;
+	TDigest_c & operator= ( TDigest_c && ) noexcept;
 	TDigest_c ( const TDigest_c & ) = delete;
 	TDigest_c & operator= ( const TDigest_c & ) = delete;
 

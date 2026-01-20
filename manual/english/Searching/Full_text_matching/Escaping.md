@@ -43,7 +43,7 @@ MySQL drivers provide escaping functions (e.g., `mysqli_real_escape_string` in P
 You will still need to add escaping for the characters from the previously mentioned list that are not escaped by their respective functions.
 Because these functions will escape the backslash for you, you only need to add one backslash.
 
-This also applies to drivers that support (client-side) prepared statements. For example, with PHP PDO prepared statements, you need to add a backslash for the `$` character:
+This also applies to drivers that use prepared statements (client-side or server-side). Manticore supports server-side prepared statements over the MySQL protocol, but `MATCH()` still expects an escaped query string. For example, with PHP PDO prepared statements, you need to add a backslash for the `$` character:
 
 ```php
 $statement = $ln_sph->prepare( "SELECT * FROM index WHERE MATCH(:match)");
@@ -99,4 +99,3 @@ MySQL [(none)]> select * from t where json.`a:b`=123;
 +---------------------+-------------+------+
 ```
 <!-- proofread -->
-

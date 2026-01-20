@@ -43,7 +43,7 @@ MySQL 驱动程序提供转义函数（例如 PHP 中的 `mysqli_real_escape_str
 您仍然需要为前面提到的列表中未被其相应函数转义的字符添加转义。
 由于这些函数会为您转义反斜杠，您只需添加一个反斜杠。
 
-这也适用于支持（客户端）预处理语句的驱动程序。例如，使用 PHP PDO 预处理语句时，您需要为 `$` 字符添加一个反斜杠：
+这也适用于使用预处理语句的驱动程序（客户端或服务器端）。Manticore 支持通过 MySQL 协议的服务器端预处理语句，但 `MATCH()` 仍期望转义的查询字符串。例如，使用 PHP PDO 预处理语句时，您需要为 `$` 字符添加反斜杠：
 
 ```php
 $statement = $ln_sph->prepare( "SELECT * FROM index WHERE MATCH(:match)");
@@ -99,4 +99,3 @@ MySQL [(none)]> select * from t where json.`a:b`=123;
 +---------------------+-------------+------+
 ```
 <!-- proofread -->
-

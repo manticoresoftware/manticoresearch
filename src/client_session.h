@@ -21,6 +21,16 @@
 
 constexpr const char* szManticore = "Manticore";
 
+struct PreparedStmt_t
+{
+	uint32_t m_uId = 0;
+	CSphString m_sTemplate;
+	int m_iParamCount = 0;
+	int m_iColumnCount = 0;
+	CSphVector<WORD> m_dParamTypes;
+	CSphVector<CSphString> m_dLongData;
+};
+
 class ClientSession_c final
 {
 public:
@@ -42,12 +52,19 @@ public:
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
 	bool m_bDeprecatedEOF = false;
+	bool m_bForceMetadataEof = false;
 	StrVec_t m_dLockedTables;
+	CSphVector<PreparedStmt_t> m_dPrepared;
+	uint32_t m_uNextStmtId = 1;
 
 public:
 	NONCOPYMOVABLE ( ClientSession_c );
 	ClientSession_c() = default;
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void FreezeLastMeta();
+	PreparedStmt_t * CreatePreparedStmt ( CSphString sTemplate, int iParamCount, int iColumnCount );
+	PreparedStmt_t * FindPreparedStmt ( uint32_t uId );
+	bool ResetPreparedStmt ( uint32_t uId );
+	bool RemovePreparedStmt ( uint32_t uId );
 	~ClientSession_c();
 };

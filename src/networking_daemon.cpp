@@ -836,6 +836,8 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 		{
 			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
 			iErr = sphSockGetErrno();
+			if ( iErr==EAGAIN || iErr==EWOULDBLOCK )
+				continue;
 			if ( iErr==EINTR )
 			{
 				if ( !( sphInterrupted () && bIntr ))

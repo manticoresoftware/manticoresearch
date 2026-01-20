@@ -22,25 +22,6 @@
 #include <iterator>
 #include <limits>
 
-#if _WIN32
-#pragma warning(push,1)
-#pragma warning(disable:4530)
-#endif
-
-#if NEW_IS_OVERRIDED
-#undef new
-#endif
-
-#include <map>
-
-#if NEW_IS_OVERRIDED
-#define new        new(__FILE__,__LINE__)
-#endif
-
-#if _WIN32
-#pragma warning(pop)
-#endif
-
 class TDigest_c::Impl_c final
 {
 public:
@@ -52,86 +33,80 @@ public:
 
 	void Add ( double fValue, int64_t iWeight )
 	{
-		if ( std::isinf ( m_fMin ) )
-		{
-			m_fMin = fValue;
-			m_fMax = fValue;
-		}
-		else
-		{
-			m_fMin = std::min ( m_fMin, fValue );
-			m_fMax = std::max ( m_fMax, fValue );
-		}
+		if ( iWeight<=0 )
+			return;
 
-		if ( m_dMap.empty() )
+		UpdateExtremes ( fValue );
+
+		if ( m_dCentroids.IsEmpty() )
 		{
-			m_dMap.insert ( std::pair<double, int64_t> ( fValue, iWeight ) );
+			auto & tCentroid = m_dCentroids.Add();
+			tCentroid.m_fMean = fValue;
+			tCentroid.m_iCount = iWeight;
 			m_iCount = iWeight;
 			return;
 		}
 
-		auto tStart = m_dMap.lower_bound(fValue);
-		if ( tStart==m_dMap.end() )
-			tStart = m_dMap.begin();
-		else
+		const int n = m_dCentroids.GetLength();
+		int iClosest = 0;
+		double fMinDist = std::fabs ( m_dCentroids[0].m_fMean - fValue );
+		for ( int i = 1; i < n; ++i )
 		{
-			while ( tStart!=m_dMap.begin() && tStart->first==fValue )
-				tStart--;
-		}
-
-		double fMinDist = DBL_MAX;
-		auto tLastNeighbor = m_dMap.end();
-		for ( auto i=tStart; i!=m_dMap.end(); ++i )
-		{
-			double fDist = fabs ( i->first - fValue );
+			double fDist = std::fabs ( m_dCentroids[i].m_fMean - fValue );
 			if ( fDist < fMinDist )
 			{
-				tStart = i;
 				fMinDist = fDist;
-			} else if ( fDist > fMinDist )
+				iClosest = i;
+			} else if ( m_dCentroids[i].m_fMean > fValue && fDist>fMinDist )
 			{
-				// we've passed the nearest nearest neighbor
-				tLastNeighbor = i;
 				break;
 			}
 		}
 
-		auto tClosest = m_dMap.end();
-		int64_t iSum = 0;
-		for ( auto i=m_dMap.begin(); i!=tStart; ++i )
-			iSum += i->second;
+		int64_t iPrefix = 0;
+		for ( int i = 0; i < iClosest; ++i )
+			iPrefix += m_dCentroids[i].m_iCount;
 
-		int64_t iN = 0;
-		const double COMPRESSION = m_fCompression;
-		for ( auto i=tStart; i!=tLastNeighbor; ++i )
+		int iCandidate = -1;
+		int iSeen = 0;
+		const double fCompression = m_fCompression;
+		for ( int i = iClosest; i < n; ++i )
 		{
-			double fQuantile = m_iCount==1 ? 0.5 : (iSum + (i->second - 1) / 2.0) / (m_iCount - 1);
-			double fThresh = 4.0 * m_iCount * fQuantile * (1 - fQuantile) / COMPRESSION;
+			double fQuantile = ( m_iCount <= 1 )
+				? 0.5
+				: ( iPrefix + ( m_dCentroids[i].m_iCount - 1 ) / 2.0 ) / ( m_iCount - 1 );
+			double fThresh = 4.0 * (double)m_iCount * fQuantile * ( 1.0 - fQuantile ) / fCompression;
 
-			if ( i->second+iWeight<=fThresh )
+			if ( m_dCentroids[i].m_iCount + iWeight <= fThresh )
 			{
-				iN++;
-				if ( ( double ( sphRand() ) / UINT_MAX )<1.0/iN )
-					tClosest = i;
+				++iSeen;
+				if ( (double)sphRand() / UINT_MAX < 1.0 / iSeen )
+					iCandidate = i;
 			}
 
-			iSum += i->second;
+			iPrefix += m_dCentroids[i].m_iCount;
+
+			if ( std::fabs ( m_dCentroids[i].m_fMean - fValue ) > fMinDist && i>iClosest )
+				break;
 		}
 
-		if ( tClosest==m_dMap.end() )
-			m_dMap.insert ( std::pair<double, int64_t> ( fValue, iWeight ) );
+		if ( iCandidate==-1 )
+		{
+			InsertCentroid ( fValue, iWeight );
+		}
 		else
 		{
-			double fNewMean = WeightedAvg ( tClosest->first, tClosest->second, fValue, iWeight );
-			int64_t iNewCount = tClosest->second+iWeight;
-			m_dMap.erase ( tClosest );
-			m_dMap.insert ( std::pair<double, int64_t> ( fNewMean, iNewCount ) );
+			TDigestCentroid_t tCentroid = m_dCentroids[iCandidate];
+			tCentroid.m_fMean = WeightedAvg ( tCentroid.m_fMean, tCentroid.m_iCount, fValue, iWeight );
+			tCentroid.m_iCount += iWeight;
+			m_dCentroids.Remove ( iCandidate );
+			InsertCentroid ( tCentroid );
 		}
 
 		m_iCount += iWeight;
 
-		const DWORD K=20;
-		if ( m_dMap.size() > K * COMPRESSION )
+		const double K = 20.0;
+		if ( (double)m_dCentroids.GetLength() > K * fCompression )
 			Compress();
 	}
 
@@ -152,7 +127,7 @@ public:
 
 	double Quantile ( double fQuantile ) const noexcept
 	{
-		if ( m_dMap.empty() )
+		if ( m_dCentroids.IsEmpty() )
 			return 0.0;
 
 		if ( fQuantile<=0.0 )
@@ -160,8 +135,8 @@ public:
 		if ( fQuantile>=1.0 )
 			return m_fMax;
 
-		if ( m_dMap.size()==1 )
-			return m_dMap.begin()->first;
+		if ( m_dCentroids.GetLength()==1 )
+			return m_dCentroids[0].m_fMean;
 
 		const double fTotalWeight = (double)m_iCount;
 		const double fIndex = fQuantile * fTotalWeight;
@@ -169,73 +144,71 @@ public:
 		if ( fIndex < 1.0 )
 			return m_fMin;
 
-		auto itFirst = m_dMap.begin();
-		if ( itFirst->second>1 && fIndex < itFirst->second / 2.0 )
+		const TDigestCentroid_t & tFirst = m_dCentroids[0];
+		if ( tFirst.m_iCount>1 && fIndex < tFirst.m_iCount / 2.0 )
 		{
-			double fDen = itFirst->second / 2.0 - 1.0;
+			double fDen = tFirst.m_iCount / 2.0 - 1.0;
 			if ( fDen>0.0 )
-				return m_fMin + ( fIndex - 1.0 ) / fDen * ( itFirst->first - m_fMin );
-			return itFirst->first;
+				return m_fMin + ( fIndex - 1.0 ) / fDen * ( tFirst.m_fMean - m_fMin );
+			return tFirst.m_fMean;
 		}
 
 		if ( fIndex > fTotalWeight - 1.0 )
 			return m_fMax;
 
-		auto itLast = std::prev ( m_dMap.end() );
-		if ( itLast->second>1 && fTotalWeight - fIndex <= itLast->second / 2.0 )
+		const TDigestCentroid_t & tLast = m_dCentroids[m_dCentroids.GetLength()-1];
+		if ( tLast.m_iCount>1 && fTotalWeight - fIndex <= tLast.m_iCount / 2.0 )
 		{
-			double fDen = itLast->second / 2.0 - 1.0;
+			double fDen = tLast.m_iCount / 2.0 - 1.0;
 			if ( fDen>0.0 )
-				return m_fMax - ( ( fTotalWeight - fIndex - 1.0 ) / fDen ) * ( m_fMax - itLast->first );
-			return itLast->first;
+				return m_fMax - ( ( fTotalWeight - fIndex - 1.0 ) / fDen ) * ( m_fMax - tLast.m_fMean );
+			return tLast.m_fMean;
 		}
 
-		double fWeightSoFar = itFirst->second / 2.0;
-		auto it = itFirst;
-		auto itNext = std::next ( it );
-		while ( itNext!=m_dMap.end() )
+		double fWeightSoFar = tFirst.m_iCount / 2.0;
+		for ( int i = 0; i < m_dCentroids.GetLength() - 1; ++i )
 		{
-			double fDw = ( it->second + itNext->second ) / 2.0;
+			const auto & tLeft = m_dCentroids[i];
+			const auto & tRight = m_dCentroids[i+1];
+			double fDw = ( tLeft.m_iCount + tRight.m_iCount ) / 2.0;
 			if ( fWeightSoFar + fDw > fIndex )
 			{
 				double fLeftUnit = 0.0;
-				if ( it->second==1 )
+				if ( tLeft.m_iCount==1 )
 				{
 					if ( fIndex - fWeightSoFar < 0.5 )
-						return it->first;
+						return tLeft.m_fMean;
 					fLeftUnit = 0.5;
 				}
 
 				double fRightUnit = 0.0;
-				if ( itNext->second==1 )
+				if ( tRight.m_iCount==1 )
 				{
 					if ( fWeightSoFar + fDw - fIndex < 0.5 )
-						return itNext->first;
+						return tRight.m_fMean;
 					fRightUnit = 0.5;
 				}
 
 				double fZ1 = fIndex - fWeightSoFar - fLeftUnit;
 				double fZ2 = fWeightSoFar + fDw - fIndex - fRightUnit;
-				return WeightedAverage ( it->first, fZ2, itNext->first, fZ1 );
+				return WeightedAverage ( tLeft.m_fMean, fZ2, tRight.m_fMean, fZ1 );
 			}
 			fWeightSoFar += fDw;
-			++it;
-			++itNext;
 		}
 
-		double fZ1 = fIndex - fTotalWeight - itLast->second / 2.0;
-		double fZ2 = itLast->second / 2.0 - fZ1;
-		return WeightedAverage ( itLast->first, fZ1, m_fMax, fZ2 );
+		double fZ1 = fIndex - fTotalWeight - tLast.m_iCount / 2.0;
+		double fZ2 = tLast.m_iCount / 2.0 - fZ1;
+		return WeightedAverage ( tLast.m_fMean, fZ1, m_fMax, fZ2 );
 	}
 
 	double Cdf ( double fValue ) const noexcept
 	{
-		if ( m_dMap.empty() )
+		if ( m_dCentroids.IsEmpty() )
 			return 0.0;
 
 		const double fTotalWeight = (double)m_iCount;
 
-		if ( m_dMap.size()==1 )
+		if ( m_dCentroids.GetLength()==1 )
 		{
 			if ( fValue < m_fMin )
 				return 0.0;
@@ -254,63 +227,64 @@ public:
 		if ( fValue >= m_fMax )
 			return 1.0;
 
-		auto itFirst = m_dMap.begin();
-		auto itLast = std::prev ( m_dMap.end() );
+		const TDigestCentroid_t & tFirst = m_dCentroids[0];
+		const TDigestCentroid_t & tLast = m_dCentroids[m_dCentroids.GetLength()-1];
 
-		if ( fValue < itFirst->first )
+		if ( fValue < tFirst.m_fMean )
 		{
-			double fDelta = itFirst->first - m_fMin;
+			double fDelta = tFirst.m_fMean - m_fMin;
 			if ( fDelta>0.0 )
 			{
 				if ( fValue==m_fMin )
 					return 0.5 / fTotalWeight;
-				return ( 1.0 + ( fValue - m_fMin ) / fDelta * ( itFirst->second / 2.0 - 1.0 ) ) / fTotalWeight;
+				return ( 1.0 + ( fValue - m_fMin ) / fDelta * ( tFirst.m_iCount / 2.0 - 1.0 ) ) / fTotalWeight;
 			}
 			return 0.0;
 		}
 
-		if ( fValue > itLast->first )
+		if ( fValue > tLast.m_fMean )
 		{
-			double fDelta = m_fMax - itLast->first;
+			double fDelta = m_fMax - tLast.m_fMean;
 			if ( fDelta>0.0 )
 			{
-				double fDq = ( 1.0 + ( m_fMax - fValue ) / fDelta * ( itLast->second / 2.0 - 1.0 ) ) / fTotalWeight;
+				double fDq = ( 1.0 + ( m_fMax - fValue ) / fDelta * ( tLast.m_iCount / 2.0 - 1.0 ) ) / fTotalWeight;
 				return 1.0 - fDq;
 			}
 			return 1.0;
 		}
 
-		double fLeftWidth = ( std::next ( itFirst )->first - itFirst->first ) / 2.0;
+		double fLeftWidth = ( m_dCentroids[1].m_fMean - tFirst.m_fMean ) / 2.0;
 		double fWeightSoFar = 0.0;
 
-		for ( auto it = itFirst; it!=itLast; ++it )
+		for ( int i = 0; i < m_dCentroids.GetLength() - 1; ++i )
 		{
-			auto itNext = std::next ( it );
-			double fRightWidth = ( itNext->first - it->first ) / 2.0;
-			if ( fValue < it->first + fRightWidth )
+			const auto & tLeft = m_dCentroids[i];
+			const auto & tRight = m_dCentroids[i+1];
+			double fRightWidth = ( tRight.m_fMean - tLeft.m_fMean ) / 2.0;
+			if ( fValue < tLeft.m_fMean + fRightWidth )
 			{
-				double fInterp = TdInterpolate ( fValue, it->first - fLeftWidth, it->first + fRightWidth );
-				double fValueCdf = ( fWeightSoFar + it->second * fInterp ) / fTotalWeight;
+				double fInterp = TdInterpolate ( fValue, tLeft.m_fMean - fLeftWidth, tLeft.m_fMean + fRightWidth );
+				double fValueCdf = ( fWeightSoFar + tLeft.m_iCount * fInterp ) / fTotalWeight;
 				return std::max ( fValueCdf, 0.0 );
 			}
-			fWeightSoFar += it->second;
+			fWeightSoFar += tLeft.m_iCount;
 			fLeftWidth = fRightWidth;
 		}
 
-		double fRightWidth = ( itLast->first - std::prev ( itLast )->first ) / 2.0;
-		if ( fValue < itLast->first + fRightWidth )
+		double fRightWidth = ( tLast.m_fMean - m_dCentroids[m_dCentroids.GetLength()-2].m_fMean ) / 2.0;
+		if ( fValue < tLast.m_fMean + fRightWidth )
 		{
-			double fInterp = TdInterpolate ( fValue, itLast->first - fRightWidth, itLast->first + fRightWidth );
-			return ( fWeightSoFar + itLast->second * fInterp ) / fTotalWeight;
+			double fInterp = TdInterpolate ( fValue, tLast.m_fMean - fRightWidth, tLast.m_fMean + fRightWidth );
+			return ( fWeightSoFar + tLast.m_iCount * fInterp ) / fTotalWeight;
 		}
 
 		if ( fValue < m_fMax )
 		{
-			double fTailWidth = ( m_fMax - itLast->first );
+			double fTailWidth = ( m_fMax - tLast.m_fMean );
 			if ( fTailWidth>0.0 )
 			{
-				double fInterp = TdInterpolate ( fValue, itLast->first, itLast->first + fTailWidth );
-				return ( fWeightSoFar + itLast->second + ( fInterp * ( fTotalWeight - fWeightSoFar - itLast->second ) ) ) / fTotalWeight;
+				double fInterp = TdInterpolate ( fValue, tLast.m_fMean, tLast.m_fMean + fTailWidth );
+				return ( fWeightSoFar + tLast.m_iCount + ( fInterp * ( fTotalWeight - fWeightSoFar - tLast.m_iCount ) ) ) / fTotalWeight;
 			}
 		}
 
@@ -324,8 +298,8 @@ public:
 
 	void Merge ( const Impl_c & tOther )
 	{
-		for ( const auto & tEntry : tOther.m_dMap )
-			Add ( tEntry.first, tEntry.second );
+		for ( const TDigestCentroid_t & tCentroid : tOther.m_dCentroids )
+			Add ( tCentroid.m_fMean, tCentroid.m_iCount );
 
 		if ( tOther.m_iCount )
 		{
@@ -355,19 +329,18 @@ public:
 	void SetCompression ( double fCompression )
 	{
 		m_fCompression = std::max ( 1.0, fCompression );
-		if ( !m_dMap.empty() )
+		if ( !m_dCentroids.IsEmpty() )
 			Compress();
 	}
 
 	void Export ( CSphVector<TDigestCentroid_t> & dOut ) const
 	{
 		dOut.Resize ( 0 );
-		dOut.Reserve ( (int) m_dMap.size() );
-		for ( const auto & tEntry : m_dMap )
+		dOut.Reserve ( m_dCentroids.GetLength() );
+		for ( const TDigestCentroid_t & tCentroid : m_dCentroids )
 		{
-			TDigestCentroid_t & tCentroid = dOut.Add();
-			tCentroid.m_fMean = tEntry.first;
-			tCentroid.m_iCount = tEntry.second;
+			TDigestCentroid_t & tOut = dOut.Add();
+			tOut = tCentroid;
 		}
 	}
 
@@ -377,11 +350,12 @@ public:
 		if ( dCentroids.IsEmpty() )
 			return;
 
-		auto itHint = m_dMap.begin();
-		for ( const TDigestCentroid_t & tCentroid : dCentroids )
+		m_dCentroids.Resize ( dCentroids.GetLength() );
+		m_iCount = 0;
+		for ( int i = 0; i < dCentroids.GetLength(); ++i )
 		{
-			itHint = m_dMap.emplace_hint ( itHint, tCentroid.m_fMean, tCentroid.m_iCount );
-			m_iCount += tCentroid.m_iCount;
+			m_dCentroids[i] = dCentroids[i];
+			m_iCount += dCentroids[i].m_iCount;
 		}
 	}
 
@@ -410,12 +384,52 @@ public:
 	}
 
 private:
-	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator<std::pair<const double, int64_t>>>;
-	BalancedTree_c		m_dMap;
-	int64_t				m_iCount;
-	double				m_fCompression;
-	double				m_fMin;
-	double				m_fMax;
+	CSphVector<TDigestCentroid_t>	m_dCentroids;
+	int64_t							m_iCount = 0;
+	double							m_fCompression = 200.0;
+	double							m_fMin = std::numeric_limits<double>::infinity();
+	double							m_fMax = -std::numeric_limits<double>::infinity();
+
+	void UpdateExtremes ( double fValue )
+	{
+		if ( std::isinf ( m_fMin ) )
+		{
+			m_fMin = fValue;
+			m_fMax = fValue;
+		}
+		else
+		{
+			m_fMin = std::min ( m_fMin, fValue );
+			m_fMax = std::max ( m_fMax, fValue );
+		}
+	}
+
+	void InsertCentroid ( double fMean, int64_t iCount )
+	{
+		TDigestCentroid_t tCentroid { fMean, iCount };
+		InsertCentroid ( tCentroid );
+	}
+
+	void InsertCentroid ( const TDigestCentroid_t & tCentroid )
+	{
+		int iPos = LowerBoundIndex ( tCentroid.m_fMean );
+		m_dCentroids.Insert ( iPos, tCentroid );
+	}
+
+	int LowerBoundIndex ( double fMean ) const
+	{
+		int iLeft = 0;
+		int iRight = m_dCentroids.GetLength();
+		while ( iLeft < iRight )
+		{
+			int iMid = ( iLeft + iRight ) / 2;
+			if ( m_dCentroids[iMid].m_fMean < fMean )
+				iLeft = iMid + 1;
+			else
+				iRight = iMid;
+		}
+		return iLeft;
+	}
 
 	double WeightedAvg ( double fX1, int64_t iW1, double fX2, int64_t iW2 )
 	{
@@ -457,7 +471,7 @@ private:
 
 	void Reset()
 	{
-		m_dMap.clear();
+		m_dCentroids.Reset();
 		m_iCount = 0;
 		m_fMin = std::numeric_limits<double>::infinity();
 		m_fMax = -std::numeric_limits<double>::infinity();
@@ -465,20 +479,9 @@ private:
 
 	void Compress()
 	{
-		struct Centroid_t
-		{
-			double	m_fMean;
-			int64_t	m_iCount;
-		};
-
-		CSphTightVector<Centroid_t> dValues;
-		dValues.Reserve ( (int) m_dMap.size() );
-		for ( auto i : m_dMap )
-		{
-			Centroid_t & tCentroid = dValues.Add();
-			tCentroid.m_fMean = i.first;
-			tCentroid.m_iCount = i.second;
-		}
+		CSphVector<TDigestCentroid_t> dValues;
+		dValues.Reserve ( m_dCentroids.GetLength() );
+		dValues.Append ( m_dCentroids );
 
 		double fMin = m_fMin;
 		double fMax = m_fMax;
@@ -494,7 +497,7 @@ private:
 		{
 			int iValue = sphRand() % dValues.GetLength();
 			Add ( dValues[iValue].m_fMean, dValues[iValue].m_iCount );
-			dValues.RemoveFast(iValue);
+			dValues.RemoveFast ( iValue );
 		}
 	}
 };

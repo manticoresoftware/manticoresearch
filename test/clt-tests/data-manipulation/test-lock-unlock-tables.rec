@@ -81,7 +81,9 @@ mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 
 ––– comment –––
 Test WRITE lock doesn't block cross-session modifications (WRITE locks not implemented)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Not Blocked', 500);"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Not Blocked', 500);"; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ––– comment –––
 Verify INSERT succeeded (WRITE lock has no effect)

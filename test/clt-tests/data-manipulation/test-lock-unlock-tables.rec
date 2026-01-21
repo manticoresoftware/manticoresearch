@@ -65,7 +65,9 @@ ERROR 1064 (42000) at line 1: table products: table is locked
 ––– comment –––
 Test cross-session READ lock blocking DELETE (session 1 holds READ lock, session 2 tries to DELETE)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;" 2>&1; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ERROR 1064 (42000) at line 1: table products: table is locked
 ––– comment –––

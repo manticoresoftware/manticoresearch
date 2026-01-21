@@ -1081,7 +1081,7 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 			m_pStmt->m_bFormatOutWordsFile = false;
 		else
 		{
-			m_pParseError->SetSprintf ( "bad argument '%s' for option '%s', alowed: 'file', 'list'", sVal.cstr(), sOpt.cstr() );
+			m_pParseError->SetSprintf ( "bad argument '%s' for option '%s', allowed: 'file', 'list'", sVal.cstr(), sOpt.cstr() );
 			return false;
 		}
 		break;

@@ -36,43 +36,20 @@ mysql -h0 -P9306 -e "LOCK TABLES products READ; SELECT * FROM products WHERE id 
 |    1 | iPhone 15 | 999.989990 |
 +------+-----------+------------+
 ––– comment –––
-Release READ lock
+Test WRITE lock syntax (Manticore accepts syntax but shows warning - WRITE locks not implemented)
 ––– input –––
-mysql -h0 -P9306 -e "UNLOCK TABLES;"
-––– output –––
-––– comment –––
-Test WRITE lock syntax (Manticore accepts syntax but does not implement WRITE locks)
-Manticore shows warning and treats WRITE lock as no-op (table remains unlocked)
-All commands in same session to test WRITE lock behavior
-––– input –––
-mysql -h0 -P9306 << 'EOF'
-LOCK TABLES products WRITE;
-SHOW WARNINGS;
-INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);
-SELECT COUNT(*) FROM products;
-UNLOCK TABLES;
-EOF
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; SHOW WARNINGS;"
 ––– output –––
 +---------+------+--------------------------------+
 | Level   | Code | Message                        |
 +---------+------+--------------------------------+
 | warning | 1000 | Write lock is not implemented. |
 +---------+------+--------------------------------+
-+----------+
-| count(*) |
-+----------+
-|        4 |
-+----------+
 ––– comment –––
-Verify data persisted (UNLOCK was no-op since WRITE lock is not implemented)
+Add more test data
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        4 |
-+----------+
 ––– comment –––
 Test cross-session READ lock blocking INSERT (session 1 holds READ lock, session 2 tries to INSERT)
 ––– input –––

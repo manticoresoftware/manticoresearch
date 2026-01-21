@@ -18,5 +18,10 @@
         "is_code_or_comment": false,
         "model": "qwen/qwen3-14b",
         "updated_at": 1766409230
+    },
+    "__meta": {
+        "source_text": "# Deleting a replication cluster\n\n<!-- example deleting a replication cluster  1 -->\nThe `DELETE CLUSTER` statement removes the specified cluster with its  [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name). Once the cluster is deleted, it is removed from all nodes, but its tables remain intact and become active local non-replicated tables.\n\n\n\n<!-- intro -->\n##### SQL:\n\n<!-- request SQL -->\n\n```sql\nDELETE CLUSTER click_query\n```\n\n<!-- request JSON -->\n\n```json\nPOST /cli -d \"DELETE CLUSTER click_query\"\n```\n\n<!-- request PHP -->\n\n```php\n$params = [\n    'cluster' => 'click_query',\n    'body' => []\n];\n$response = $client->cluster()->delete($params);\n```\n<!-- intro -->\n##### Python:\n\n<!-- request Python -->\n\n```python\nutilsApi.sql('DELETE CLUSTER click_query')\n```\n\n<!-- response Python -->\n```python\n{u'error': u'', u'total': 0, u'warning': u''}\n```\n\n<!-- intro -->\n##### Python-asyncio:\n\n<!-- request Python-asyncio -->\n\n```python\nawait utilsApi.sql('DELETE CLUSTER click_query')\n```\n\n<!-- response Python-asyncio -->\n```python\n{u'error': u'', u'total': 0, u'warning': u''}\n```\n\n<!-- intro -->\n##### Javascript:\n\n<!-- request javascript -->\n\n```javascript\nres = await utilsApi.sql('DELETE CLUSTER click_query');\n```\n\n<!-- response javascript -->\n```javascript\n{\"total\":0,\"error\":\"\",\"warning\":\"\"}\n```\n\n<!-- intro -->\n##### java:\n\n<!-- request Java -->\n\n```java\nutilsApi.sql(\"DELETE CLUSTER click_query\");\n```\n\n<!-- intro -->\n##### C#:\n\n<!-- request C# -->\n\n```clike\nutilsApi.Sql(\"DELETE CLUSTER click_query\");\n```\n\n<!-- intro -->\n##### Rust:\n\n<!-- request Rust -->\n\n```rust\nutils_api.Sql(\"DELETE CLUSTER click_query\", Some(true)).await;\n```\n\n<!-- end -->\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "96fb0bf81a2bc05076d7e14b6aadcb68"
     }
 }

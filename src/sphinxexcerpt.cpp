@@ -1437,6 +1437,20 @@ bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnor
 	if ( m_pState->m_pExtQuery->m_dZones.GetLength () )
 		m_pState->m_eExtQuerySPZ |= SPH_SPZ_ZONE;
 
+	CSphString sWarning; // FIXME!!! report warning
+	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify(), m_pState->m_pExtQuery->m_bNeedPhraseTransform, nullptr };
+	if ( !sphTransformExtendedQuery ( &m_pState->m_pExtQuery->m_pRoot, tIndexSettings, sError, tTranformArgs, sWarning ) )
+		return false;
+
+	const auto & tMutable = m_pState->m_pIndex->GetMutableSettings();
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+	int iExpandKeywords = ExpandKeywords ( tMutable.m_iExpandKeywords, QUERY_OPT_DEFAULT, tIndexSettings, bWordDict );
+	if ( iExpandKeywords!=KWE_DISABLED )
+	{
+		sphQueryExpandKeywords ( &m_pState->m_pExtQuery->m_pRoot, tIndexSettings, iExpandKeywords, bWordDict );
+		m_pState->m_pExtQuery->m_pRoot->Check ( true );
+	}
+
 	TransformAotFilter ( m_pState->m_pExtQuery->m_pRoot, m_pDict->GetWordforms(), tIndexSettings );
 
 	bool bSetupSPZ = m_pState->m_pQuerySettings->m_ePassageSPZ!=SPH_SPZ_NONE

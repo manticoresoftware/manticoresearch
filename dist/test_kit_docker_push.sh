@@ -55,18 +55,30 @@ if [ "$current_branch" != "master" ]; then
 	images+=("$img_url_branch")
 fi
 
+img_url_hash=
+if [ "${HASH_TAG_OK}" == "true" ] && [ -n "${SOURCE_HASH}" ]; then
+	if [ -n "${BRANCH_TAG}" ]; then
+		hash_branch_tag="${BRANCH_TAG}"
+	else
+		hash_branch_tag="$(sanitize_tag "$current_branch")"
+	fi
+	img_url_hash="${hub_repo}:test-kit-${hash_branch_tag}-${SOURCE_HASH}"
+	images+=("$img_url_hash")
+fi
+
 # if we should skip pushing main branch and only commit, we reset latest tag
 if [ "$should_push_main" -eq 0 ]; then
 	img_url_latest=
 fi
 
-echo "Going to push to '$img_url' and ('$img_url_latest', '$img_url_tag', '$img_url_branch') (if not empty) if there's access to the registry"
+echo "Going to push to '$img_url' and ('$img_url_latest', '$img_url_tag', '$img_url_branch', '$img_url_hash') (if not empty) if there's access to the registry"
 
 # exporting the image, it also squashes all the layers into one
 docker import ./manticore_test_kit.img "$img_url"
 [ -n "$img_url_latest" ] && docker tag "$img_url" "$img_url_latest"
 [ -n "$img_url_tag" ] && docker tag "$img_url" "$img_url_tag"
 [ -n "$img_url_branch" ] && docker tag "$img_url" "$img_url_branch"
+[ -n "$img_url_hash" ] && docker tag "$img_url" "$img_url_hash"
 
 # pusing to ghcr.io
 [ -n "$GHCR_USER" ] && for img in "${images[@]}"; do

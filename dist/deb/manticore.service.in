@@ -20,6 +20,7 @@ LimitMEMLOCK=infinity
 Restart=on-failure
 TimeoutStartSec=infinity
 PIDFile=@CMAKE_INSTALL_FULL_RUNSTATEDIR@/manticore/searchd.pid
+WorkingDirectory=/var/lib/manticore
 
 [Install]
 WantedBy=multi-user.target

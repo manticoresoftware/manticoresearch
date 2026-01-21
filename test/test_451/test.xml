@@ -103,11 +103,61 @@ index dist5
 	type = distributed
 	agent = 127.0.0.1:<my_port />:test5
 }
+
+source test_stored1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, gid from test_table1
+    sql_attr_uint = gid
+}
+
+index test_stored1
+{
+	source			= test_stored1
+	path			= <data_path/>/test_stored1
+}
+
+source test_stored2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, gid from test_table2
+    sql_attr_uint = gid
+}
+
+index test_stored2
+{
+	source			= test_stored2
+	path			= <data_path/>/test_stored2
+}
+
+index dist_stored12
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test_stored1,test_stored2
+}
+
+index dist_stored21
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test_stored2,test_stored1
+}
+
 </config>
 
 <db_create>create table test_table ( id int not null, title varchar(255) not null, gid int not null );</db_create>
 <db_drop>drop table if exists test_table;</db_drop>
 <db_insert>insert into test_table values ( 1, 'test', 11 )</db_insert>
+
+<db_create>create table test_table1 ( id int not null, title varchar(255) not null, gid int not null );</db_create>
+<db_drop>drop table if exists test_table1;</db_drop>
+<db_insert>insert into test_table1 values ( 1, 'test 1', 11 )</db_insert>
+
+<db_create>create table test_table2 ( id int not null, title varchar(255) not null, gid int not null );</db_create>
+<db_drop>drop table if exists test_table2;</db_drop>
+<db_insert>insert into test_table2 values ( 1, 'test 2', 22 )</db_insert>
+
 
 <queries><sphinxql>
 	select * from dist1;
@@ -120,6 +170,16 @@ index dist5
 	desc test2;
 	select title as title2, title from test1;
 	select title as title2, title from test2;
-</sphinxql></queries>
+</sphinxql>
+
+<!-- fetch of the stored from the remote with duplicated id -->
+<sphinxql>
+select * from dist_stored12 where gid=11;
+select * from dist_stored21 where gid=11;
+select * from dist_stored12 where gid=22;
+select * from dist_stored21 where gid=22;
+</sphinxql>
+
+</queries>
 
 </test>

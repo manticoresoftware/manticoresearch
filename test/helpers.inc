@@ -864,6 +864,16 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
+// Check if a result set contains "knn" in the query (case insensitive)
+function HasKnnInQuery ( $result_set )
+{
+	if ( isset ( $result_set['sphinxql'] ) )
+		return stripos($result_set['sphinxql'], 'knn') !== false;
+	if ( isset ( $result_set['http_request'] ) )
+		return stripos($result_set['http_request'], 'knn') !== false;
+	return false;
+}
+
 function RandomWords ( $n, $seed )
 {
 	srand ( $seed );
@@ -882,6 +892,9 @@ function RoundFloatValues ( &$values, $roundoff )
 	{
 		if ( is_float ( $value ) )
 			$value = round ( $value, $roundoff );
+		else if ( is_string ( $value ) && is_numeric ( $value ) && strpos ( $value, '.' ) !== false )
+			// Handle numeric strings (e.g., from MySQL results)
+			$value = (string)round ( floatval ( $value ), $roundoff );
 
 		if ( is_array ( $value ) )
 			RoundFloatValues ( $value, $roundoff );
@@ -922,6 +935,8 @@ function CompareColumns ( $a, $b )
 
 function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 {
+	$has_knn = HasKnnInQuery($set);
+	
 	if ( isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
@@ -936,7 +951,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		{
 			foreach ( $rows["hits"]["hits"] as &$hit )
 			{
-				RoundFloatValues ( $hit, 6 );
+				RoundFloatValues ( $hit, $has_knn ? 5 : 6 );
 				if ( isset ( $hit["_source"] ) )
 					ksort ( $hit["_source"] );
 			}
@@ -2330,6 +2345,8 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
+        $has_knn = HasKnnInQuery($query_result);
+
         if ( $keep_json_ctrls )
         {
 			$json_handler = new SafeJsonHandler();
@@ -2351,7 +2368,7 @@ class SphinxConfig
         if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
         {
             foreach ( $decoded_rows->hits->hits as &$hit )
-                RoundFloatValues ( $hit, 6 );
+                RoundFloatValues ( $hit, $has_knn ? 5 : 6 );
         }
 
         $query_result['rows'] = $keep_json_ctrls ? $json_handler->Encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
@@ -2536,6 +2553,8 @@ class SphinxConfig
 
 	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time, $ignore_rows )
 	{
+		global $g_disable_float_tolerance;
+
 	    $raw_result["sphinxql"] = $query;
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
@@ -2562,6 +2581,11 @@ class SphinxConfig
 		{
             $raw_result["total_rows"] = mysqli_num_rows($result);
 			$query_result["total_rows"] = $raw_result["total_rows"];
+			
+			// Check if query contains "knn" (case insensitive) to determine if we should round floats
+			$has_knn = (stripos($query, 'knn') !== false);
+			$round_knn = $has_knn && !$g_disable_float_tolerance;
+			
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
                 $raw_result["rows"][] = $row;
@@ -2577,6 +2601,11 @@ class SphinxConfig
                 }
                 if ($cont)
                     continue;
+				
+				// Round float values if query contains "knn" (use 5 decimal places to handle architecture differences)
+				if ( $round_knn )
+					RoundFloatValues ( $row, 5 );
+				
 				$query_result["rows"][] = $row;
 			}
 			mysqli_free_result($result);
@@ -3338,6 +3367,8 @@ class SphinxConfig
 
 	function CompareResultSets ( $set1, $set2 )
 	{
+		global $g_disable_float_tolerance;
+
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
@@ -3345,10 +3376,24 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
+		$has_knn = HasKnnInQuery($set1) || HasKnnInQuery($set2);
+		$round_knn = $has_knn && !$g_disable_float_tolerance;
+
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		return $set1===$set2;
+		// Round float values in both sets if query contains "knn" (ensures both are rounded to same precision)
+		// Use 5 decimal places to handle architecture differences in 6th-8th decimal places
+		if ( $round_knn )
+		{
+			if ( isset ( $set1["rows"] ) )
+				RoundFloatValues ( $set1["rows"], 5 );
+			if ( isset ( $set2["rows"] ) )
+				RoundFloatValues ( $set2["rows"], 5 );
+		}
+
+		// Use strict comparison (KNN rounding handles the tolerance when enabled)
+		return $set1 === $set2;
 	}
 
 	function CompareResults ( $query1, $query2 )

@@ -46,6 +46,8 @@ bool GetBooleanSimplify ( const CSphQuery & tQuery )
 	return tQuery.m_bSimplify.value_or ( g_bBooleanSimplify );
 }
 
+bool	GetBooleanSimplify () { return g_bBooleanSimplify; }
+
 namespace {
 /// helper find-or-add (make it generic and move to sphinxstd?)
 int GetZoneIndex ( XQQuery_t * pQuery, const CSphString & sZone )

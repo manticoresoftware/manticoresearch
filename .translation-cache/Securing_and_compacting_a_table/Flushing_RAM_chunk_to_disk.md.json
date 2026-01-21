@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339769
+    },
+    "__meta": {
+        "source_text": "# Flushing RAM chunk to disk\n\n## FLUSH TABLE\n\n<!-- example flush_rtindex -->\n\n```sql\nFLUSH TABLE rt_table\n```\n\n`FLUSH TABLE` forcefully flushes RT table RAM chunk contents to disk.\n\nThe real-time table [RAM chunk](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) is automatically flushed to disk during a clean shutdown, or periodically every [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) seconds.\n\nIssuing a `FLUSH TABLE` command not only forces the RAM chunk contents to be written to disk but also triggers the cleanup of binary log files.\n\n<!-- intro -->\n##### SQL:\n\n<!-- request SQL -->\n\n```sql\nFLUSH TABLE rt;\n```\n<!-- response mysql -->\n```sql\nQuery OK, 0 rows affected (0.05 sec)\n```\n<!-- end -->\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "ed0d6e81e9a38d016d8ff06230c80fe3"
     }
 }

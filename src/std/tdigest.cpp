@@ -13,7 +13,6 @@
 #include "tdigest.h"
 
 #include "mem.h"
-#include "rand.h"
 #include "vector.h"
 
 #include <cfloat>
@@ -37,77 +36,14 @@ public:
 			return;
 
 		UpdateExtremes ( fValue );
-
-		if ( m_dCentroids.IsEmpty() )
-		{
-			auto & tCentroid = m_dCentroids.Add();
-			tCentroid.m_fMean = fValue;
-			tCentroid.m_iCount = iWeight;
-			m_iCount = iWeight;
-			return;
-		}
-
-		const int n = m_dCentroids.GetLength();
-		int iClosest = 0;
-		double fMinDist = std::fabs ( m_dCentroids[0].m_fMean - fValue );
-		for ( int i = 1; i < n; ++i )
-		{
-			double fDist = std::fabs ( m_dCentroids[i].m_fMean - fValue );
-			if ( fDist < fMinDist )
-			{
-				fMinDist = fDist;
-				iClosest = i;
-			} else if ( m_dCentroids[i].m_fMean > fValue && fDist>fMinDist )
-			{
-				break;
-			}
-		}
-
-		int64_t iPrefix = 0;
-		for ( int i = 0; i < iClosest; ++i )
-			iPrefix += m_dCentroids[i].m_iCount;
-
-		int iCandidate = -1;
-		int iSeen = 0;
-		const double fCompression = m_fCompression;
-		for ( int i = iClosest; i < n; ++i )
-		{
-			double fQuantile = ( m_iCount <= 1 )
-				? 0.5
-				: ( iPrefix + ( m_dCentroids[i].m_iCount - 1 ) / 2.0 ) / ( m_iCount - 1 );
-			double fThresh = 4.0 * (double)m_iCount * fQuantile * ( 1.0 - fQuantile ) / fCompression;
-
-			if ( m_dCentroids[i].m_iCount + iWeight <= fThresh )
-			{
-				++iSeen;
-				if ( (double)sphRand() / UINT_MAX < 1.0 / iSeen )
-					iCandidate = i;
-			}
-
-			iPrefix += m_dCentroids[i].m_iCount;
-
-			if ( std::fabs ( m_dCentroids[i].m_fMean - fValue ) > fMinDist && i>iClosest )
-				break;
-		}
-
-		if ( iCandidate==-1 )
-		{
-			InsertCentroid ( fValue, iWeight );
-		}
-		else
-		{
-			TDigestCentroid_t tCentroid = m_dCentroids[iCandidate];
-			tCentroid.m_fMean = WeightedAvg ( tCentroid.m_fMean, tCentroid.m_iCount, fValue, iWeight );
-			tCentroid.m_iCount += iWeight;
-			m_dCentroids.Remove ( iCandidate );
-			InsertCentroid ( tCentroid );
-		}
+		auto & tEntry = m_dBuffer.Add();
+		tEntry.m_fMean = fValue;
+		tEntry.m_iCount = iWeight;
 
 		m_iCount += iWeight;
 
-		const double K = 20.0;
-		if ( (double)m_dCentroids.GetLength() > K * fCompression )
-			Compress();
+		if ( m_dBuffer.GetLength() >= m_iBufferLimit )
+			FlushBuffer();
 	}
 
 	double Percentile ( int iPercent ) const noexcept
@@ -127,6 +63,8 @@ public:
 
 	double Quantile ( double fQuantile ) const noexcept
 	{
+		EnsureFlushed();
+
 		if ( m_dCentroids.IsEmpty() )
 			return 0.0;
 
@@ -203,6 +141,8 @@ public:
 
 	double Cdf ( double fValue ) const noexcept
 	{
+		EnsureFlushed();
+
 		if ( m_dCentroids.IsEmpty() )
 			return 0.0;
 
@@ -298,22 +238,25 @@ public:
 
 	void Merge ( const Impl_c & tOther )
 	{
-		for ( const TDigestCentroid_t & tCentroid : tOther.m_dCentroids )
-			Add ( tCentroid.m_fMean, tCentroid.m_iCount );
+		tOther.EnsureFlushed();
+		EnsureFlushed();
 
-		if ( tOther.m_iCount )
+		if ( !tOther.m_iCount )
+			return;
+
+		MergeExtremes ( tOther.m_fMin, tOther.m_fMax );
+		m_iCount += tOther.m_iCount;
+
+		for ( const TDigestCentroid_t & tCentroid : tOther.m_dCentroids )
 		{
-			if ( std::isinf ( m_fMin ) )
-			{
-				m_fMin = tOther.m_fMin;
-				m_fMax = tOther.m_fMax;
-			}
-			else
-			{
-				m_fMin = std::min ( m_fMin, tOther.m_fMin );
-				m_fMax = std::max ( m_fMax, tOther.m_fMax );
-			}
+			auto & tEntry = m_dBuffer.Add();
+			tEntry = tCentroid;
+
+			if ( m_dBuffer.GetLength() >= m_iBufferLimit )
+				FlushBuffer();
 		}
+
+		FlushBuffer();
 	}
 
 	int64_t GetCount () const
@@ -329,12 +272,15 @@ public:
 	void SetCompression ( double fCompression )
 	{
 		m_fCompression = std::max ( 1.0, fCompression );
+		m_iBufferLimit = BufferLimit();
 		if ( !m_dCentroids.IsEmpty() )
 			Compress();
 	}
 
 	void Export ( CSphVector<TDigestCentroid_t> & dOut ) const
 	{
+		EnsureFlushed();
+
 		dOut.Resize ( 0 );
 		dOut.Reserve ( m_dCentroids.GetLength() );
 		for ( const TDigestCentroid_t & tCentroid : m_dCentroids )
@@ -357,6 +303,9 @@ public:
 			m_dCentroids[i] = dCentroids[i];
 			m_iCount += dCentroids[i].m_iCount;
 		}
+
+		std::sort ( m_dCentroids.Begin(), m_dCentroids.End(),
+			[] ( const TDigestCentroid_t & a, const TDigestCentroid_t & b ) { return a.m_fMean < b.m_fMean; } );
 	}
 
 	double GetMin () const noexcept
@@ -385,8 +334,12 @@ public:
 
 private:
 	CSphVector<TDigestCentroid_t>	m_dCentroids;
+	CSphVector<TDigestCentroid_t>	m_dBuffer;
+	CSphVector<TDigestCentroid_t>	m_dTemp;
+	CSphVector<TDigestCentroid_t>	m_dScratch;
 	int64_t							m_iCount = 0;
 	double							m_fCompression = 200.0;
+	int								m_iBufferLimit = 0;
 	double							m_fMin = std::numeric_limits<double>::infinity();
 	double							m_fMax = -std::numeric_limits<double>::infinity();
 
@@ -404,34 +357,24 @@ private:
 		}
 	}
 
-	void InsertCentroid ( double fMean, int64_t iCount )
+	void MergeExtremes ( double fMin, double fMax )
 	{
-		TDigestCentroid_t tCentroid { fMean, iCount };
-		InsertCentroid ( tCentroid );
-	}
+		if ( std::isinf ( fMin ) )
+			return;
 
-	void InsertCentroid ( const TDigestCentroid_t & tCentroid )
-	{
-		int iPos = LowerBoundIndex ( tCentroid.m_fMean );
-		m_dCentroids.Insert ( iPos, tCentroid );
-	}
-
-	int LowerBoundIndex ( double fMean ) const
-	{
-		int iLeft = 0;
-		int iRight = m_dCentroids.GetLength();
-		while ( iLeft < iRight )
+		if ( std::isinf ( m_fMin ) )
 		{
-			int iMid = ( iLeft + iRight ) / 2;
-			if ( m_dCentroids[iMid].m_fMean < fMean )
-				iLeft = iMid + 1;
-			else
-				iRight = iMid;
+			m_fMin = fMin;
+			m_fMax = fMax;
 		}
-		return iLeft;
+		else
+		{
+			m_fMin = std::min ( m_fMin, fMin );
+			m_fMax = std::max ( m_fMax, fMax );
+		}
 	}
 
-	double WeightedAvg ( double fX1, int64_t iW1, double fX2, int64_t iW2 )
+	static double WeightedAvg ( double fX1, int64_t iW1, double fX2, int64_t iW2 )
 	{
 		return ( fX1*iW1 + fX2*iW2 ) / ( iW1 + iW2 );
 	}
@@ -472,33 +415,131 @@ private:
 	void Reset()
 	{
 		m_dCentroids.Reset();
+		m_dBuffer.Reset();
+		m_dTemp.Reset();
+		m_dScratch.Reset();
 		m_iCount = 0;
 		m_fMin = std::numeric_limits<double>::infinity();
 		m_fMax = -std::numeric_limits<double>::infinity();
+		m_iBufferLimit = BufferLimit();
 	}
 
 	void Compress()
 	{
-		CSphVector<TDigestCentroid_t> dValues;
-		dValues.Reserve ( m_dCentroids.GetLength() );
-		dValues.Append ( m_dCentroids );
+		FlushBuffer();
+		RebuildFromSorted ( m_dCentroids );
+	}
 
-		double fMin = m_fMin;
-		double fMax = m_fMax;
-		bool bHadData = ( m_iCount>0 );
-		Reset();
-		if ( bHadData )
+	void FlushBuffer()
+	{
+		if ( m_dBuffer.IsEmpty() )
+			return;
+
+		std::sort ( m_dBuffer.Begin(), m_dBuffer.End(),
+			[] ( const TDigestCentroid_t & a, const TDigestCentroid_t & b ) { return a.m_fMean < b.m_fMean; } );
+
+		m_dTemp.Resize ( 0 );
+		m_dTemp.Reserve ( m_dCentroids.GetLength() + m_dBuffer.GetLength() );
+		MergeSortedIntoTemp();
+		m_dBuffer.Resize ( 0 );
+		RebuildFromSorted ( m_dTemp );
+		m_dTemp.Resize ( 0 );
+	}
+
+	void EnsureFlushed() const
+	{
+		if ( !m_dBuffer.IsEmpty() )
+			const_cast<Impl_c*>(this)->FlushBuffer();
+	}
+
+	void MergeSortedIntoTemp()
+	{
+		int i = 0;
+		int j = 0;
+		while ( i < m_dCentroids.GetLength() && j < m_dBuffer.GetLength() )
 		{
-			m_fMin = fMin;
-			m_fMax = fMax;
+			if ( m_dCentroids[i].m_fMean <= m_dBuffer[j].m_fMean )
+				m_dTemp.Add ( m_dCentroids[i++] );
+			else
+				m_dTemp.Add ( m_dBuffer[j++] );
 		}
 
-		while ( dValues.GetLength() )
+		while ( i < m_dCentroids.GetLength() )
+			m_dTemp.Add ( m_dCentroids[i++] );
+
+		while ( j < m_dBuffer.GetLength() )
+			m_dTemp.Add ( m_dBuffer[j++] );
+	}
+
+	void RebuildFromSorted ( CSphVector<TDigestCentroid_t> & dSorted )
+	{
+		if ( dSorted.IsEmpty() )
 		{
-			int iValue = sphRand() % dValues.GetLength();
-			Add ( dValues[iValue].m_fMean, dValues[iValue].m_iCount );
-			dValues.RemoveFast ( iValue );
+			m_dCentroids.Reset();
+			return;
 		}
+
+		const double fTotal = (double)m_iCount;
+		if ( fTotal<=0.0 )
+		{
+			m_dCentroids.SwapData ( dSorted );
+			return;
+		}
+
+		m_dScratch.Resize ( 0 );
+		m_dScratch.Reserve ( dSorted.GetLength() );
+
+		double fCumulative = 0.0;
+		TDigestCentroid_t tCurrent = dSorted[0];
+
+		for ( int i = 1; i < dSorted.GetLength(); ++i )
+		{
+			const TDigestCentroid_t & tNext = dSorted[i];
+			if ( CanMerge ( tCurrent, tNext, fCumulative, fTotal ) )
+			{
+				MergeInto ( tCurrent, tNext );
+			}
+			else
+			{
+				m_dScratch.Add ( tCurrent );
+				fCumulative += tCurrent.m_iCount;
+				tCurrent = tNext;
+			}
+		}
+
+		m_dScratch.Add ( tCurrent );
+		m_dCentroids.SwapData ( m_dScratch );
+	}
+
+	bool CanMerge ( const TDigestCentroid_t & tCurrent, const TDigestCentroid_t & tNext, double fCumulative, double fTotal ) const
+	{
+		if ( fTotal<=0.0 )
+			return true;
+
+		const double fProposed = (double)tCurrent.m_iCount + (double)tNext.m_iCount;
+		const double fQ = ( fCumulative + fProposed / 2.0 ) / fTotal;
+		const double fLimit = MaxCentroidWeight ( fQ );
+		return fProposed <= fLimit;
+	}
+
+	void MergeInto ( TDigestCentroid_t & tDst, const TDigestCentroid_t & tSrc )
+	{
+		tDst.m_fMean = WeightedAvg ( tDst.m_fMean, tDst.m_iCount, tSrc.m_fMean, tSrc.m_iCount );
+		tDst.m_iCount += tSrc.m_iCount;
+	}
+
+	double MaxCentroidWeight ( double fQ ) const
+	{
+		if ( m_fCompression<=0.0 )
+			return (double)m_iCount;
+
+		double fLimit = 4.0 * (double)m_iCount * fQ * ( 1.0 - fQ ) / m_fCompression;
+		return std::max ( fLimit, 1.0 );
+	}
+
+	int BufferLimit() const
+	{
+		return std::max ( 32, (int)std::ceil ( m_fCompression * 8.0 ) );
 	}
 };
 

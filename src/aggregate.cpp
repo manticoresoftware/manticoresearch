@@ -311,6 +311,7 @@ void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
 	TDigest_c tDigest = std::move ( pRuntime->m_tDigest );
 	sphDestroyTDigestRuntimeBlob ( dBlob );
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	tMatch.SetAttr ( m_tLocator, 0 );
 	StoreTDigestBlob ( tDigest, tMatch, m_tLocator );
 }
 

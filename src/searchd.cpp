@@ -6728,7 +6728,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 			return;
 		}
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::PATH );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::FILE );
 		break;
 	}
 	case RunIdx_e::DISTR:
@@ -6837,7 +6837,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( pServed )
 	{
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ), ( tStmt.m_bFormatExtFilesPath ? ExtFilesFormat_e::PATH : ExtFilesFormat_e::VALUES ) );
+		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ), ( tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST ) );
 	} else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -10711,7 +10711,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	WIdx_T<RtIndex_i*> pRtIndex { pServed };
 
 	// get all table settings as a string
-	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema(), ExtFilesFormat_e::PATH );
+	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema(), ExtFilesFormat_e::FILE );
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )

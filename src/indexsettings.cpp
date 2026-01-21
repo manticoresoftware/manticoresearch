@@ -114,7 +114,7 @@ SettingsFormatterState_t::SettingsFormatterState_t ( StringBuilder_c & tBuf )
 class SettingsFormatter_c
 {
 public:
-				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false, bool bEscapeValues = false, ExtFilesFormat_e eExt = ExtFilesFormat_e::PATH );
+				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false, bool bEscapeValues = false, ExtFilesFormat_e eExt = ExtFilesFormat_e::FILE );
 
 	template <typename T>
 	void		Add ( const char * szKey, T tVal, bool bCond );
@@ -135,7 +135,7 @@ private:
 	bool				m_bEscapeValues = false;
 
 public:
-	const ExtFilesFormat_e m_eExt = ExtFilesFormat_e::PATH;
+	const ExtFilesFormat_e m_eExt = ExtFilesFormat_e::FILE;
 };
 
 
@@ -439,7 +439,7 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 	tOut.Add ( "blend_chars",		m_sBlendChars,	!m_sBlendChars.IsEmpty() );
 	tOut.Add ( "blend_mode",		m_sBlendMode,	!m_sBlendMode.IsEmpty() );
 
-	if ( tOut.m_eExt==ExtFilesFormat_e::PATH )
+	if ( tOut.m_eExt==ExtFilesFormat_e::FILE )
 	{
 		CSphString sSynonymsFile = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
 		tOut.Add ( "exceptions",		sSynonymsFile,	!sSynonymsFile.IsEmpty() );
@@ -613,7 +613,7 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 	tOut.Add ( "min_stemming_len",		m_iMinStemmingLen,	m_iMinStemmingLen>1 );
 	tOut.Add ( "stopwords_unstemmed",	1,					m_bStopwordsUnstemmed );
 
-	if ( tOut.m_eExt==ExtFilesFormat_e::PATH )
+	if ( tOut.m_eExt==ExtFilesFormat_e::FILE )
 	{
 		CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
 		tOut.Add ( "stopwords", sStopwordsFile, !sStopwordsFile.IsEmpty() );
@@ -1202,7 +1202,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 		tOut.Add ( "hitless_words",		"all",					true );
 	} else if ( m_eHitless==SPH_HITLESS_SOME )
 	{
-		if ( tOut.m_eExt==ExtFilesFormat_e::PATH )
+		if ( tOut.m_eExt==ExtFilesFormat_e::FILE )
 		{
 			CSphString sHitlessFiles = FormatPath ( m_sHitlessFiles, pFilenameBuilder );
 			tOut.Add ( "hitless_words", sHitlessFiles, true );

@@ -448,8 +448,8 @@ class Writer_i;
 
 enum class ExtFilesFormat_e
 {
-	PATH,
-	VALUES
+	FILE,
+	LIST
 };
 
 void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );

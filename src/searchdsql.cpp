@@ -627,7 +627,7 @@ enum class Option_e : BYTE
 	SCROLL,
 	JOIN_BATCH_SIZE,
 	FORCE,
-	FORMAT_EXT_FILES,
+	FORMAT_OUTPUT_WORDS,
 
 	INVALID_OPTION
 };
@@ -642,7 +642,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "format_ext_files" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -687,7 +687,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
 
 	static Option_e dSystemOptions[] = { Option_e::FORCE };
-	static Option_e dCreateTableOptions[] = { Option_e::FORCE, Option_e::FORMAT_EXT_FILES };
+	static Option_e dCreateTableOptions[] = { Option_e::FORCE, Option_e::FORMAT_OUTPUT_WORDS };
 
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
@@ -1074,8 +1074,16 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		m_pStmt->m_bForce = ( tValue.GetValueInt()==1 );
 		break;
 
-	case Option_e::FORMAT_EXT_FILES:
-		m_pStmt->m_bFormatExtFilesPath = ( sVal=="path" );
+	case Option_e::FORMAT_OUTPUT_WORDS:
+		if ( sVal=="file" )
+			m_pStmt->m_bFormatOutWordsFile = true;
+		else if ( sVal=="list" )
+			m_pStmt->m_bFormatOutWordsFile = false;
+		else
+		{
+			m_pParseError->SetSprintf ( "bad argument '%s' for option '%s', alowed: 'file', 'list'", sVal.cstr(), sOpt.cstr() );
+			return false;
+		}
 		break;
 
 	default: //} else

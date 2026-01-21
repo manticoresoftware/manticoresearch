@@ -408,6 +408,9 @@ public:
 		ResetAfterFlatten ();
 		m_iMaxUsed = ResetDynamic ( m_iMaxUsed );
 
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "kbuffer.flatten" );
+
 		return int ( pTo-pBegin );
 	}
 
@@ -427,6 +430,8 @@ public:
 			dRhs.m_tUniq = std::move(m_tUniq);
 
 			m_iMaxUsed = -1;
+			if constexpr ( HAS_AGGREGATES )
+				this->DumpAggregateDiagnostics ( "kbuffer.move" );
 			return;
 		}
 
@@ -466,6 +471,9 @@ public:
 
 		// once we're done copying, cleanup
 		m_iMaxUsed = ResetDynamicFreeData ( m_iMaxUsed );
+
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "kbuffer.move" );
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override
@@ -946,6 +954,9 @@ public:
 		if constexpr ( DISTINCT )
 			m_tUniq.Reset();
 
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "kbufferN.flatten" );
+
 		return int ( pTo-pBegin );
 	}
 
@@ -979,6 +990,9 @@ public:
 				m_tUniq.Compact(dStub);
 			}
 		}
+
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "kbufferN" );
 	}
 
 	// TODO! TEST!
@@ -1014,6 +1028,8 @@ public:
 			if ( !m_bFinalized && bCopyMeta )
 				dRhs.m_tUniq = std::move(m_tUniq);
 
+			if constexpr ( HAS_AGGREGATES )
+				this->DumpAggregateDiagnostics ( "kbufferN.move" );
 			return;
 		}
 
@@ -1053,6 +1069,9 @@ public:
 		dRhs.SetMerge(false);
 
 		dRhs.m_iTotal = m_iTotal+iTotal;
+
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "kbufferN.move" );
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

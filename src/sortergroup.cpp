@@ -501,6 +501,9 @@ public:
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
 
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "kbuffer" );
+
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -1784,6 +1787,8 @@ public:
 		{
 			for ( auto * pAggregate : m_dAggregates )
 				pAggregate->Finalize ( m_tData );
+
+			this->DumpAggregateDiagnostics ( "implicit" );
 		}
 
 		int iCopied = 0;

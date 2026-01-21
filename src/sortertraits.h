@@ -137,6 +137,7 @@ protected:
 
 	void	SetColumnar ( columnar::Columnar_i * pColumnar );
 	void	SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs = nullptr );
+	void	DumpAggregateDiagnostics ( const char * szContext );
 
 	// HAVING filtering
 	bool	EvalHAVING ( const CSphMatch& tMatch );

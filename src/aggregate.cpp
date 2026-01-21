@@ -161,7 +161,7 @@ protected:
 	{
 	}
 
-	~AggrTDigestBase_c () override;
+	void DumpDiagnostics ( const char * szContext ) override;
 
 	double EvalInput ( const CSphMatch & tMatch ) const
 	{
@@ -314,7 +314,7 @@ void AggrTDigestBase_c::DropRuntime ( CSphMatch & tMatch ) const
 	tMatch.SetAttr ( m_tLocator, 0 );
 }
 
-AggrTDigestBase_c::~AggrTDigestBase_c ()
+void AggrTDigestBase_c::DumpDiagnostics ( const char * szContext )
 {
 	if ( g_eLogLevel<SPH_LOG_DEBUG )
 		return;
@@ -325,11 +325,15 @@ AggrTDigestBase_c::~AggrTDigestBase_c ()
 	if ( !uAppends && !uMerges && !uFinalizes )
 		return;
 
-	sphLogDebug ( "tdigest[%s] stats: append=%llu merge=%llu finalize=%llu",
+	sphLogDebug ( "tdigest[%s%s%s] stats: append=%llu merge=%llu finalize=%llu",
 		m_sName.cstr(),
+		( szContext && *szContext ) ? " ctx=" : "",
+		( szContext && *szContext ) ? szContext : "",
 		(unsigned long long)uAppends,
 		(unsigned long long)uMerges,
 		(unsigned long long)uFinalizes );
+
+	m_tStats = {};
 }
 
 class AggrPercentiles_c final : public AggrTDigestBase_c

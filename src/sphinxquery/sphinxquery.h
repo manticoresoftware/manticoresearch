@@ -32,6 +32,7 @@ struct XQKeyword_t
 	mutable bool		m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
 	mutable void *		m_pPayload = nullptr;
 	mutable bool		m_bRegex = false;
+	mutable int			m_iBlendedGroup = -1;	///< blended token group (-1 - not blended, >0 - group number)
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )

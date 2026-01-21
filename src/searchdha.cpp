@@ -983,9 +983,6 @@ void InitSearchdStats() NO_THREAD_SAFETY_ANALYSIS
 	tStats.m_iDiskReads = 0;
 	tStats.m_iDiskReadBytes = 0;
 	tStats.m_iDiskReadTime = 0;
-
-	tStats.m_iPredictedTime = 0;
-	tStats.m_iAgentPredictedTime = 0;
 }
 
 void FormatCmdStats ( const CommandStats_t & tStats, const char * szPrefix, CommandStats_t::EDETAILS eCmd, VectorLike & dStatus )

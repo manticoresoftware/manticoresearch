@@ -1066,57 +1066,6 @@ pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 
-
-### predicted_time_costs
-
-<!-- example conf predicted_time_costs -->
-Costs for the query time prediction model, in nanoseconds. Optional, the default is `doc=64, hit=48, skip=2048, match=64`.
-
-<!-- intro -->
-##### Example:
-
-<!-- request Example -->
-
-```ini
-predicted_time_costs = doc=128, hit=96, skip=4096, match=128
-```
-<!-- end -->
-
-<!-- example conf predicted_time_costs 1 -->
-Terminating queries before completion based on their execution time (with the max query time setting) is a nice safety net, but it comes with an inherent drawback: indeterministic (unstable) results. That is, if you repeat the very same (complex) search query with a time limit several times, the time limit will be hit at different stages, and you will get *different* result sets.
-
-<!-- intro -->
-##### SQL:
-
-<!-- request SQL -->
-
-```sql
-SELECT … OPTION max_query_time
-```
-<!-- request API -->
-
-```api
-SetMaxQueryTime()
-```
-<!-- end -->
-
-There is an option, [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time), that lets you limit the query time *and* get stable, repeatable results. Instead of regularly checking the actual current time while evaluating the query, which is indeterministic, it predicts the current running time using a simple linear model instead:
-
-```ini
-predicted_time =
-    doc_cost * processed_documents +
-    hit_cost * processed_hits +
-    skip_cost * skiplist_jumps +
-    match_cost * found_matches
-```
-
-The query is then terminated early when the `predicted_time` reaches a given limit.
-
-Of course, this is not a hard limit on the actual time spent (it is, however, a hard limit on the amount of *processing* work done), and a simple linear model is in no way an ideally precise one. So the wall clock time *may* be either below or over the target limit. However, the error margins are quite acceptable: for instance, in our experiments with a 100 msec target limit, the majority of the test queries fell into a 95 to 105 msec range, and *all* the queries were in an 80 to 120 msec range. Also, as a nice side effect, using the modeled query time instead of measuring the actual run time results in somewhat fewer gettimeofday() calls, too.
-
-No two server makes and models are identical, so the `predicted_time_costs` directive lets you configure the costs for the model above. For convenience, they are integers, counted in nanoseconds. (The limit in max_predicted_time is counted in milliseconds, and having to specify cost values as 0.000128 ms instead of 128 ns is somewhat more error-prone.) It is not necessary to specify all four costs at once, as the missed ones will take the default values. However, we strongly suggest specifying all of them for readability.
-
-
 ### preopen_tables
 
 <!-- example conf preopen_tables -->

@@ -271,7 +271,6 @@ protected:
 	CSphString *		m_pWarning = nullptr;
 	bool				m_bNotWeighted = true;
 	CSphQueryStats *	m_pStats = nullptr;
-	int64_t *			m_pNanoBudget = nullptr;
 	bool				m_bCollectHits = false;
 	RowIdBoundaries_t	m_tBoundaries;
 
@@ -548,7 +547,6 @@ private:
 
 	CSphString *					m_pWarning {nullptr};
 	CSphQueryStats *				m_pStats {nullptr};
-	int64_t *						m_pNanoBudget {nullptr};
 
 	CSphFixedVector<uint64_t>		m_dWordIds;
 	CSphQueue<HitWithQpos_t, HitWithQpos_t > m_tQueue;
@@ -2073,7 +2071,6 @@ inline void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Init ( ISphQword * pQword, c
 	if constexpr(STATS)
 	{
 		m_pStats = tSetup.m_pStats;
-		m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 	}
 }
 
@@ -2090,7 +2087,6 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 	if constexpr ( STATS )
 	{
 		m_pStats = tSetup.m_pStats;
-		m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : nullptr;
 	}
 }
 
@@ -2115,17 +2111,6 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
 		return NULL;
-	}
-
-	if constexpr ( STATS )
-	{
-		// max_predicted_time
-		if ( m_pNanoBudget && *m_pNanoBudget<0 )
-		{
-			if ( m_pWarning )
-				*m_pWarning = "predicted query time exceeded max_predicted_time";
-			return nullptr;
-		}
 	}
 
 	if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
@@ -2219,8 +2204,6 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 	{
 		assert(m_pStats);
 		m_pStats->m_iFetchedDocs += iDoc;
-		if ( m_pNanoBudget )
-			*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 	}
 
 	return ReturnDocsChunk ( iDoc, "term", m_pQword->m_sDictWord.cstr() );
@@ -2273,9 +2256,6 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t * pMat
 		int nHits = m_dHits.GetLength();
 		assert(m_pStats);
 		m_pStats->m_iFetchedHits += nHits;
-
-		if ( m_pNanoBudget )
-			*m_pNanoBudget -= g_iPredictorCostHit*nHits;
 	}
 
 	// we assume that GetHits doesn't get called multiple times for the same docids in pMatched
@@ -2355,9 +2335,6 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::HintRowID ( RowID_t tRowID )
 	{
 		assert(m_pStats);
 		m_pStats->m_iSkips++;
-
-		if ( m_pNanoBudget )
-			*m_pNanoBudget -= g_iPredictorCostSkip;
 	}
 }
 
@@ -2450,9 +2427,6 @@ void ExtTermHitless_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t
 		int nHits = this->m_dHits.GetLength();
 		assert ( this->m_pStats );
 		this->m_pStats->m_iFetchedHits += nHits;
-
-		if ( this->m_pNanoBudget )
-			*(this->m_pNanoBudget) -= g_iPredictorCostHit*nHits;
 	}
 
 	// same logic as in ExtTerm_T::CollectHits
@@ -3092,7 +3066,6 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 
 	m_pWarning = tSetup.m_pWarning;
 	m_pStats = tSetup.m_pStats;
-	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 }
 
 
@@ -3214,14 +3187,6 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 		return NULL;
 	}
 
-	// max_predicted_time
-	if ( m_pNanoBudget && *m_pNanoBudget<0 )
-	{
-		if ( m_pWarning )
-			*m_pWarning = "predicted query time exceeded max_predicted_time";
-		return nullptr;
-	}
-
 	if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
 	{
 		// interrupt by sitgerm
@@ -3302,8 +3267,6 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 
 	if (m_pStats)
 		m_pStats->m_iFetchedDocs += iDoc;
-	if ( m_pNanoBudget )
-		*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 
 	return ReturnDocsChunk ( iDoc, "multiand" );
 }
@@ -3522,9 +3485,6 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 	int nHits = m_dHits.GetLength();
 	if ( m_pStats )
 		m_pStats->m_iFetchedHits += nHits;
-
-	if ( m_pNanoBudget )
-		*m_pNanoBudget -= g_iPredictorCostHit*nHits;
 
 	// look at ExtTerm_T for more info on this code
 	int nProcessed = int ( pStoredHit-m_dStoredHits.Begin() );

@@ -1825,15 +1825,8 @@ void SelectParser_t::AddOption ( YYSTYPE * pOpt, YYSTYPE * pVal )
 	{
 		if ( IsTokenEqual ( pVal, "kbuffer" ) )
 			m_pQuery->m_bSortKbuffer = true;
-	} else if ( IsTokenEqual ( pOpt, "max_predicted_time" ) )
-	{
-		char szNumber[256];
-		int iLen = pVal->m_iEnd-pVal->m_iStart;
-		assert ( iLen < (int)sizeof(szNumber) );
-		strncpy ( szNumber, m_pStart+pVal->m_iStart, iLen );
-		int64_t iMaxPredicted = strtoull ( szNumber, NULL, 10 );
-		m_pQuery->m_iMaxPredictedMsec = int(iMaxPredicted > INT_MAX ? INT_MAX : iMaxPredicted );
 	}
+	// removed predicted time parser
 }
 
 bool ParseSelectList ( CSphString & sError, CSphQuery & tQuery )
@@ -8310,10 +8303,6 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		return false;
 	}
 
-	// we count documents only (before filters)
-	if ( tQuery.m_iMaxPredictedMsec )
-		tMeta.m_bHasPrediction = true;
-
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
@@ -10810,11 +10799,6 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			if ( !iJob )
 				tThMeta.MergeWordStats ( tChunkMeta );
 
-			tThMeta.m_bHasPrediction |= tChunkMeta.m_bHasPrediction;
-
-			if ( tThMeta.m_bHasPrediction )
-				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
-
 			if ( iJob < iJobs-1 && sph::TimeExceeded ( tmMaxTimer ) )
 				Interrupt ( "query time exceeded max_query_time" );
 
@@ -11340,14 +11324,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
 	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
-	// setup prediction constrain
-	CSphQueryStats tQueryStats;
-	bool bCollectPredictionCounters = ( tQuery.m_iMaxPredictedMsec>0 );
-	int64_t iNanoBudget = (int64_t)( tQuery.m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
-	tQueryStats.m_pNanoBudget = &iNanoBudget;
-	if ( bCollectPredictionCounters )
-		tTermSetup.m_pStats = &tQueryStats;
-
 	if ( HasForceHints ( tQuery.m_dIndexHints ) )
 		tCtx.m_bSkipQCache = true;
 
@@ -11526,15 +11502,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tMeta.m_iQueryTime += (int)( tmWall/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
-	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << tQueryStats.m_iFetchedDocs << ", " << tQueryStats.m_iFetchedHits << ", " << tQueryStats.m_iSkips << ", " << dSorters[0]->GetTotalCount();
+	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << dSorters[0]->GetTotalCount();
 
 	SwitchProfile ( pProfile, eOldState );
-
-	if ( bCollectPredictionCounters )
-	{
-		tMeta.m_tStats.Add ( tQueryStats );
-		tMeta.m_bHasPrediction = true;
-	}
 
 	return true;
 }

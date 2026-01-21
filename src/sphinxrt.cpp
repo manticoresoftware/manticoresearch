@@ -7689,11 +7689,7 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 
 			// check terms inconsistency among disk chunks
 			tThMeta.MergeWordStats ( tChunkMeta );
-			tThMeta.m_bHasPrediction |= tChunkMeta.m_bHasPrediction;
 			tSSTransform.Set ( iChunk, tChunkResult );
-
-			if ( tThMeta.m_bHasPrediction )
-				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
 
 			if ( iChunk && sph::TimeExceeded ( tmMaxTimer ) )
 				Interrupt ( "query time exceeded max_query_time" );
@@ -8331,8 +8327,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// search disk chunks
 	//////////////////////
 
-	tMeta.m_bHasPrediction = tQueryToRun.m_iMaxPredictedMsec>0;
-
 	MiniTimer_c dTimerGuard;
 	int64_t tmMaxTimer = dTimerGuard.Engage ( tQueryToRun.m_uMaxQueryMsec ); // max_query_time
 
@@ -8367,13 +8361,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tTermSetup.SetSegment ( -1 );
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
-
-	// setup prediction constrain
-	CSphQueryStats tQueryStats;
-	int64_t iNanoBudget = (int64_t)(tQueryToRun.m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
-	tQueryStats.m_pNanoBudget = &iNanoBudget;
-	if ( tMeta.m_bHasPrediction )
-		tTermSetup.m_pStats = &tQueryStats;
 
 	// bind weights
 	tCtx.BindWeights ( tQueryToRun, m_tSchema, tMeta.m_sWarning );
@@ -8461,9 +8448,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// modify matches inside the sorters to work with the new schema
 	for ( auto i : dSorters )
 		tSSTransform.Transform ( i, tGuard );
-
-	if ( tMeta.m_bHasPrediction )
-		tMeta.m_tStats.Add ( tQueryStats );
 
 	tResult.m_pDocstore = m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ? this : nullptr;
 	tMeta.m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );

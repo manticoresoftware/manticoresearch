@@ -34,14 +34,6 @@ public:
 	void SetValue ( CSphMatch & tRow, T val );
 
 protected:
-	struct Stats_t
-	{
-		uint64_t	m_uAppends = 0;
-		uint64_t	m_uMerges = 0;
-		uint64_t	m_uFinalizes = 0;
-	};
-
-	mutable Stats_t	m_tStats;
 	CSphAttrLocator	m_tLocator;
 };
 
@@ -169,6 +161,8 @@ protected:
 	{
 	}
 
+	~AggrTDigestBase_c () override;
+
 	double EvalInput ( const CSphMatch & tMatch ) const
 	{
 		if ( m_pInputExpr )
@@ -256,12 +250,6 @@ public:
 		DropRuntime ( tMatch );
 	}
 
-	void AccumulateCounters ( AggrDiagnostics_t & tDiag ) const override
-	{
-		tDiag.m_uAppendCalls += m_tStats.m_uAppends;
-		tDiag.m_uMergeCalls += m_tStats.m_uMerges;
-		tDiag.m_uFinalizeCalls += m_tStats.m_uFinalizes;
-	}
 };
 
 TDigestRuntimeState_t * AggrTDigestBase_c::CreateRuntime ( CSphMatch & tMatch ) const
@@ -324,6 +312,24 @@ void AggrTDigestBase_c::DropRuntime ( CSphMatch & tMatch ) const
 	sphDestroyTDigestRuntimeBlob ( dBlob );
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, 0 );
+}
+
+AggrTDigestBase_c::~AggrTDigestBase_c ()
+{
+	if ( g_eLogLevel<SPH_LOG_DEBUG )
+		return;
+
+	const auto uAppends = m_tStats.m_uAppends;
+	const auto uMerges = m_tStats.m_uMerges;
+	const auto uFinalizes = m_tStats.m_uFinalizes;
+	if ( !uAppends && !uMerges && !uFinalizes )
+		return;
+
+	sphLogDebug ( "tdigest[%s] stats: append=%llu merge=%llu finalize=%llu",
+		m_sName.cstr(),
+		(unsigned long long)uAppends,
+		(unsigned long long)uMerges,
+		(unsigned long long)uFinalizes );
 }
 
 class AggrPercentiles_c final : public AggrTDigestBase_c

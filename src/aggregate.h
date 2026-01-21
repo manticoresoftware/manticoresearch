@@ -16,13 +16,6 @@
 #include "match.h"
 #include "columnarlib.h"
 
-struct AggrDiagnostics_t
-{
-	uint64_t	m_uAppendCalls = 0;
-	uint64_t	m_uMergeCalls = 0;
-	uint64_t	m_uFinalizeCalls = 0;
-};
-
 class AggrFunc_i
 {
 public:
@@ -34,7 +27,6 @@ public:
 	virtual void	Finalize ( CSphMatch & tDst ) {}
 	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
-	virtual void	AccumulateCounters ( struct AggrDiagnostics_t & ) const {}
 };
 
 

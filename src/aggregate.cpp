@@ -1,3 +1,9 @@
+void AggrTDigestBase_c::AccumulateCounters ( AggrDiagnostics_t & tDiag ) const
+{
+	tDiag.m_uAppendCalls += m_tStats.m_uAppends;
+	tDiag.m_uMergeCalls += m_tStats.m_uMerges;
+	tDiag.m_uFinalizeCalls += m_tStats.m_uFinalizes;
+}
 //
 // Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -34,6 +40,14 @@ public:
 	void SetValue ( CSphMatch & tRow, T val );
 
 protected:
+	struct Stats_t
+	{
+		uint64_t	m_uAppends = 0;
+		uint64_t	m_uMerges = 0;
+		uint64_t	m_uFinalizes = 0;
+	};
+
+	mutable Stats_t	m_tStats;
 	CSphAttrLocator	m_tLocator;
 };
 
@@ -215,21 +229,35 @@ public:
 		TDigest_c & tDigest = AccessDigest ( tDst );
 
 		if ( bMerge )
+		{
 			MergeFromMatch ( tDigest, tSrc );
+			++m_tStats.m_uMerges;
+		}
 		else
+		{
 			AppendValue ( tDigest, tSrc );
+			++m_tStats.m_uAppends;
+		}
 
 		tDigest.SetCompression ( m_fCompression );
 	}
 
 	void Finalize ( CSphMatch & tDst ) override
 	{
+		++m_tStats.m_uFinalizes;
 		SerializeRuntime ( tDst );
 	}
 
 	void Discard ( CSphMatch & tMatch ) override
 	{
 		DropRuntime ( tMatch );
+	}
+
+	void AccumulateCounters ( AggrDiagnostics_t & tDiag ) const override
+	{
+		tDiag.m_uAppendCalls += m_tStats.m_uAppends;
+		tDiag.m_uMergeCalls += m_tStats.m_uMerges;
+		tDiag.m_uFinalizeCalls += m_tStats.m_uFinalizes;
 	}
 };
 

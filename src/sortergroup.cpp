@@ -500,6 +500,18 @@ public:
 		// just evaluate in heap order
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
+
+		if constexpr ( HAS_AGGREGATES )
+		{
+			AggrDiagnostics_t tDiag;
+			for ( auto * pAggregate : this->m_dAggregates )
+				pAggregate->AccumulateCounters ( tDiag );
+
+			sphLogDebug ( "tdigest stats: append=%llu merge=%llu finalize=%llu",
+				(unsigned long long)tDiag.m_uAppendCalls,
+				(unsigned long long)tDiag.m_uMergeCalls,
+				(unsigned long long)tDiag.m_uFinalizeCalls );
+		}
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -1874,6 +1886,7 @@ protected:
 	bool		m_bMerge = false;
 
 	UNIQ		 m_tUniq;
+	AggrDiagnostics_t m_tDiag;
 
 private:
 	CSphVector<SphAttr_t> m_dDistinctKeys;

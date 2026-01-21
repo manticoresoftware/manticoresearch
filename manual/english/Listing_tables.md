@@ -360,15 +360,15 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name [ OPTION format_ext_files = 'values' | 'path' ]
+SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.
 
-The `format_ext_files` option allows you to control how external file settings (such as `stopwords`, `exceptions`, `wordforms`, `hitless_words`) are displayed:
+The `output_words` option allows you to control how external file settings (such as `stopwords`, `exceptions`, `wordforms`, `hitless_words`) are displayed:
 
-* `'values'` (default): Displays the content of the files as inline lists using the `*_list` options (e.g. `stopwords_list='word1; word2'`).
-* `'path'`: Displays the file paths using the original options (e.g. `stopwords='/path/to/file'`).
+* `'list'` (default): Displays the content of the files as inline lists using the `*_list` options (e.g. `stopwords_list='word1; word2'`).
+* `'file'`: Displays the file paths using the original options (e.g. `stopwords='/path/to/file'`).
 
 <!-- intro -->
 ##### SQL:

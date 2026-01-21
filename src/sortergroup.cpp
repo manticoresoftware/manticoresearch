@@ -1889,6 +1889,9 @@ public:
 		if constexpr ( DISTINCT )
 			if ( !bCopyMeta  )
 				dRhs.UpdateDistinct ( m_tData );
+
+		if constexpr ( HAS_AGGREGATES )
+			this->DumpAggregateDiagnostics ( "implicit.move" );
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

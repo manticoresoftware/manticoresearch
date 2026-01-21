@@ -53,7 +53,9 @@ mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"
 ––– comment –––
 Test cross-session READ lock blocking INSERT (session 1 holds READ lock, session 2 tries to INSERT)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Blocked Insert', 500);" 2>&1; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; 
+sleep 1; 
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Blocked Insert', 500);" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ERROR 1064 (42000) at line 1: table 'products' is locked
 ––– comment –––

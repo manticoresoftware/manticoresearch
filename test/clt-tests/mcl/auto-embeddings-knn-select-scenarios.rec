@@ -12,19 +12,17 @@ mysql -h0 -P9306 -e "CREATE TABLE test_knn_select (id BIGINT, title TEXT, conten
 ––– comment –––
 Verify table structure shows auto-embedding configuration
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_knn_select"
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_knn_select"
 ––– output –––
-+-----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table           | Create Table                                                                                                                                                                                                                                      |
-+-----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| test_knn_select | CREATE TABLE test_knn_select (
+*************************** 1. row ***************************
+       Table: test_knn_select
+Create Table: CREATE TABLE test_knn_select (
 id bigint,
 title text,
 content text,
 category string attribute,
-embedding float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
-) engine='columnar' |
-+-----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' FROM='title, content'
+) engine='columnar'
 ––– comment –––
 Insert test data with auto-generated embeddings
 ––– input –––

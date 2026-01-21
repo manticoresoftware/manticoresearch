@@ -1,9 +1,3 @@
-void AggrTDigestBase_c::AccumulateCounters ( AggrDiagnostics_t & tDiag ) const
-{
-	tDiag.m_uAppendCalls += m_tStats.m_uAppends;
-	tDiag.m_uMergeCalls += m_tStats.m_uMerges;
-	tDiag.m_uFinalizeCalls += m_tStats.m_uFinalizes;
-}
 //
 // Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -144,11 +138,20 @@ static void LoadTDigestFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double 
 class AggrTDigestBase_c : public AggrFunc_i
 {
 protected:
+	struct Stats_t
+	{
+		uint64_t	m_uAppends = 0;
+		uint64_t	m_uMerges = 0;
+		uint64_t	m_uFinalizes = 0;
+	};
+
 	CSphAttrLocator	m_tLocator;
 	ESphAttr		m_eValueType;
 	double			m_fCompression;
 	CSphString		m_sName;
 	ISphExprRefPtr_c m_pInputExpr;
+
+	mutable Stats_t	m_tStats;
 
 	TDigestRuntimeState_t * EnsureRuntime ( CSphMatch & tMatch ) const;
 	TDigestRuntimeState_t * CreateRuntime ( CSphMatch & tMatch ) const;

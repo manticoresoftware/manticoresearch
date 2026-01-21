@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339819
+    },
+    "__meta": {
+        "source_text": "# KILL\n\n<!-- example KILL -->\n```sql\nKILL <query id>\n```\n\n`KILL` terminates the execution of a query by its ID, which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\n```sql\nmysql> KILL 4;\nQuery OK, 1 row affected (0.00 sec)\n```\n\n<!-- end -->\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "c75b5ca03bad4fbb514c544271e7c144"
     }
 }

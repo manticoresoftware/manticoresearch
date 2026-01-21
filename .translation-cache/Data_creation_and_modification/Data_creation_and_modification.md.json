@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339872
+    },
+    "__meta": {
+        "source_text": "# Data creation and modification\n\nYou can add, update, replace, and delete your indexed data using different ways provided by Manticore. Manticore supports working with external storages such as databases, XML, CSV, and TSV documents. For insert and delete operations, a [transaction mechanism](../Data_creation_and_modification/Transactions.md) is supported.\n\nAlso, for insert and replace queries, Manticore supports Elasticsearch-like query format along with its own format. For details, see the corresponding examples in the [Adding documents to a real-time table](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) and [REPLACE](../Data_creation_and_modification/Updating_documents/REPLACE.md) sections.\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "569e7deca8f0485e49ead83346608f87"
     }
 }

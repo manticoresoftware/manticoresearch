@@ -541,7 +541,14 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		}
 
 		CSphString sSimilarity;
-		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError ) ) return false;
+		
+		// Fetch model_name first to check if dims should be optional
+		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
+		
+		// dims is required unless model_name is specified (model determines dimensions)
+		bool bDimsOptional = !tParsed.m_sModelName.empty();
+		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError, bDimsOptional ) ) return false;
+		
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWM, "hnsw_m", sError, true ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
@@ -565,8 +572,6 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			sError = "4-bit quantization is no longer supported";
 			return false;
 		}
-
-		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
 
 		if ( !tParsed.m_sModelName.empty() )
 		{

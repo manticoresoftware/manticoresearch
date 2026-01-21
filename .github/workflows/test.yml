@@ -46,10 +46,15 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
+      branch_name: ${{ steps.check_branch.outputs.branch_name }}
+      branch_tag: ${{ steps.sanitize_branch.outputs.branch_tag }}
+      source_hash: ${{ steps.source_hash.outputs.source_hash }}
+      image_exists: ${{ steps.image_check.outputs.image_exists }}
+      image_tag: ${{ steps.image_check.outputs.image_tag }}
     steps:
+      - uses: actions/checkout@v4
       - name: Check if branch exists in manticoresoftware/columnar
         id: check_branch
-        if: github.ref_name != 'master'
         run: |
           # Extract the actual branch name for pull requests
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -66,6 +71,51 @@ jobs:
             echo "branch_exists=false" >> $GITHUB_OUTPUT
             echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
           fi
+      - name: Sanitize branch name for tags
+        id: sanitize_branch
+        run: |
+          sanitize_tag() {
+            local name=$1
+            name=$(echo "$name" | tr '/' '_')
+            name=$(echo "$name" | sed 's/[^a-zA-Z0-9_.-]//g')
+            echo "$name"
+          }
+          branch_name="${{ steps.check_branch.outputs.branch_name }}"
+          branch_tag=$(sanitize_tag "$branch_name")
+          echo "branch_tag=$branch_tag" >> $GITHUB_OUTPUT
+      - name: Calculate source hash
+        id: source_hash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
+            git clone --depth 1 --branch "${{ steps.check_branch.outputs.branch_name }}" \
+              https://github.com/manticoresoftware/columnar.git columnar
+            rm -rf columnar/.git
+          fi
+          HASH=$(find . -type f \
+            ! -path "./test/clt-tests/*" \
+            ! -path "./columnar/test/clt-tests/*" \
+            ! -path "./.git/*" \
+            -print0 \
+            | sort -z \
+            | xargs -0 md5sum \
+            | md5sum \
+            | awk '{print $1}')
+          echo "source_hash=$HASH" >> $GITHUB_OUTPUT
+      - name: Check for existing test kit image
+        id: image_check
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          TAG="test-kit-${{ steps.sanitize_branch.outputs.branch_tag }}-${{ steps.source_hash.outputs.source_hash }}"
+          if docker manifest inspect "ghcr.io/${REPO_OWNER}/manticoresearch:${TAG}" > /dev/null 2>&1; then
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "* Reusing cached test-kit image tag: ${TAG}. Skipping builds/ubertests." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+          echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
       - name: Set Columnar Locator
         id: set_locator
         run: |
@@ -100,8 +150,8 @@ jobs:
             clt:
             - 'test/clt-tests/**'
   win_bundle:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    needs: changes
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
+    needs: [changes, check_branch]
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:
@@ -128,7 +178,7 @@ jobs:
           tar -xf boost_1_75_0.tgz
 
   build_linux_debug:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
     needs: [changes, check_branch]
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
@@ -154,7 +204,7 @@ jobs:
       timeout: 10
 
   build_linux_release:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
     needs: [changes, check_branch]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
@@ -225,8 +275,9 @@ jobs:
   pack_jammy:
     needs: [pack_jammy_cache_check, changes, check_branch]
     if: |
-      needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
-      needs.changes.outputs.source == 'true'
+      (needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
+      needs.changes.outputs.source == 'true') &&
+      needs.check_branch.outputs.image_exists != 'true'
     name: Jammy x86_64 package [build]
     uses: ./.github/workflows/build_template.yml
     with:
@@ -266,15 +317,44 @@ jobs:
 
   test_kit_docker_build:
     name: Test Kit docker image
-    needs: [pack_jammy, pack_jammy_cache_check]
+    needs:
+      - pack_jammy
+      - pack_jammy_cache_check
+      - check_branch
+      - test_linux_debug
+      - test_linux_release
+      - test_windows
+      - build_aarch64
+      - build_freebsd
     if: always() && needs.pack_jammy.result != 'failure'
     runs-on: ubuntu-22.04
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
+      deps_success: ${{ steps.prereq_status.outputs.deps_success }}
     steps:
+      - name: Evaluate prerequisite results
+        id: prereq_status
+        run: |
+          set -euo pipefail
+          results=(
+            "${{ needs.test_linux_debug.result }}"
+            "${{ needs.test_linux_release.result }}"
+            "${{ needs.test_windows.result }}"
+            "${{ needs.pack_jammy.result }}"
+            "${{ needs.build_aarch64.result }}"
+            "${{ needs.build_freebsd.result }}"
+          )
+          ok=true
+          for result in "${results[@]}"; do
+            if [[ "$result" != "success" ]]; then
+              ok=false
+            fi
+          done
+          echo "deps_success=$ok" >> $GITHUB_OUTPUT
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download built x86_64 Ubuntu Jammy packages
+        if: needs.check_branch.outputs.image_exists != 'true'
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: build_jammy_RelWithDebInfo_x86_64
@@ -286,9 +366,24 @@ jobs:
       #     tar -xvf artifact.tar
       - name: Calculate short commit hash
         id: sha
+        if: needs.check_branch.outputs.image_exists != 'true'
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Reuse cached test kit image
+        if: needs.check_branch.outputs.image_exists == 'true'
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ needs.check_branch.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPO_OWNER}/manticoresearch:${IMAGE_TAG}"
+          docker pull "$IMAGE"
+          docker tag "$IMAGE" test-kit:img
+          docker create --name manticore-test-kit-src --entrypoint /bin/sh test-kit:img -c "true"
+          docker export manticore-test-kit-src > manticore_test_kit.img
+          docker rm manticore-test-kit-src
       - name: Building docker
         id: build
+        if: needs.check_branch.outputs.image_exists != 'true'
         run: |
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
@@ -314,16 +409,21 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.changes.outputs.source == 'true'
+    if: always() && needs.changes.outputs.source == 'true' && needs.check_branch.outputs.image_exists != 'true'
     needs:
       - changes
       - clt
+      - check_branch
+      - test_kit_docker_build
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
     env:
       GHCR_USER: ${{ vars.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
       REPO_OWNER: ${{ github.repository_owner }}
+      SOURCE_HASH: ${{ needs.check_branch.outputs.source_hash }}
+      BRANCH_TAG: ${{ needs.check_branch.outputs.branch_tag }}
+      HASH_TAG_OK: ${{ needs.test_kit_docker_build.outputs.deps_success }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -341,7 +441,7 @@ jobs:
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
     needs: [changes, check_branch]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
@@ -357,7 +457,7 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
     needs: [changes, check_branch]
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
@@ -373,7 +473,7 @@ jobs:
       cache_key: build_freebsd_x86_64
 
   build_windows:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
     needs: [changes, check_branch]
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml

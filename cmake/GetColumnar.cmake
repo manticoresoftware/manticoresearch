@@ -19,7 +19,7 @@ include ( update_bundle )
 
 # Versions of API headers we are need to build with.
 set ( NEED_COLUMNAR_API 27 )
-set ( NEED_SECONDARY_API 18 )
+set ( NEED_SECONDARY_API 19 )
 set ( NEED_KNN_API 10 )
 
 # Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.

@@ -1980,8 +1980,8 @@ CSphIndex::CSphIndex ( CSphString sIndexName, CSphString sFileBase )
 
 CSphIndex::~CSphIndex ()
 {
-	QcacheDeleteIndex ( m_iIndexId );
-	SkipCache::DeleteAll ( m_iIndexId );
+	QcacheClearByIndexId ( m_iIndexId );
+	SkipCache::ClearByIndexId ( m_iIndexId );
 }
 
 
@@ -8777,8 +8777,8 @@ void CSphIndex_VLN::Dealloc ()
 	m_bPassedAlloc = false;
 	m_uAttrsStatus = 0;
 
-	QcacheDeleteIndex ( m_iIndexId );
-	SkipCache::DeleteAll ( m_iIndexId );
+	QcacheClearByIndexId ( m_iIndexId );
+	SkipCache::ClearByIndexId ( m_iIndexId );
 
 	m_iIndexId = GetIndexUid();
 }

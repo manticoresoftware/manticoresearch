@@ -3,12 +3,11 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
-  pull_request:
-    paths:
-      - 'manual/**'
-    branches:
-      - master
-      - manticore-*
+  workflow_run:
+    workflows: 
+      - 📖 Trigger doc check
+    types:
+      - completed
 
 jobs:
   translate_docs:
@@ -20,16 +19,27 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Download an artifact with PR repo name
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: pr_repo
+          path: .
       - name: Check origin repository
         id: repo-check
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            repo="${{ github.event.pull_request.head.repo.full_name }}"
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            PR_REPO=$(cat ./pr_repo.txt)
+            repo=$(head -n 1 <<< "$PR_REPO")
+            ref=$(tail -n 1 <<< "$PR_REPO")
           else
             repo="${{ github.repository }}"
+            ref="${{ github.head_ref }}"
           fi
           echo "repo=$repo" >> $GITHUB_OUTPUT
-
+          echo "ref=$ref" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v3
         with:
@@ -37,7 +47,7 @@ jobs:
           repository: ${{ steps.repo-check.outputs.repo }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
-          ref: ${{ github.head_ref }}
+          ref: ${{ steps.repo-check.outputs.ref }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2

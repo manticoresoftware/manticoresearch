@@ -18,5 +18,10 @@
         "is_code_or_comment": false,
         "model": "deepseek/deepseek-v3.2",
         "updated_at": 1766374251
+    },
+    "__meta": {
+        "source_text": "# Server logging\n\nBy default, Manticore search daemon logs all runtime events in a `searchd.log` file in the directory where searchd was started. In Linux by default, you can find the log at `/var/log/manticore/searchd.log`.\n\nThe log file path/name can be overridden by setting `log` in the `searchd` section of the configuration file.\n\n```ini\nsearchd {\n...\n    log = /custom/path/to/searchd.log\n...\n}\n```\n\n* You can also use `syslog` as the file name. In this case, events will be sent to your server's syslog daemon.\n* In some cases, you might want to use `/dev/stdout` as the file name. In this case, on Linux, Manticore will simply output the events. This can be useful in Docker/Kubernetes environments.\n\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "b47b3b53ed3af493a510afeec9288f34"
     }
 }

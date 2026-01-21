@@ -1364,6 +1364,11 @@ void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo 
 		i.m_pIndex->GetAttrInfo(dInfo);
 }
 
+void SIContainer_c::ClearCache()
+{
+	for ( auto & i : m_dIndexes )
+		i.m_pIndex->ClearCache();
+}
 
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const
 {

@@ -41,7 +41,7 @@ Done
 ––– input –––
 filebeat version | sed 's/ \[.*//'
 ––– output –––
-filebeat version #!/[0-9]{1}\.[0-9]{2}\.[0-9]{1}/!# (amd64), libbeat #!/[0-9]{1}\.[0-9]{2}\.[0-9]{1}/!#
+filebeat version #!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}/!# (amd64), libbeat #!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}/!#
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––

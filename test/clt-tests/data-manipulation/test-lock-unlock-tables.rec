@@ -59,7 +59,9 @@ ERROR 1064 (42000) at line 1: table 'products' is locked
 ––– comment –––
 Test cross-session READ lock blocking UPDATE (session 1 holds READ lock, session 2 tries to UPDATE)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "UPDATE products SET price = 1199.99 WHERE id = 1;" 2>&1; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; 
+sleep 1; 
+mysql -h0 -P9306 -e "UPDATE products SET price = 1199.99 WHERE id = 1;" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ERROR 1064 (42000) at line 1: table products: table is locked
 ––– comment –––

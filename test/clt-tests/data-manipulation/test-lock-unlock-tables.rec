@@ -53,25 +53,33 @@ mysql -h0 -P9306 -e "INSERT INTO products VALUES (4, 'OnePlus 12', 699.99);"
 ––– comment –––
 Test cross-session READ lock blocking INSERT (session 1 holds READ lock, session 2 tries to INSERT)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Blocked Insert', 500);" 2>&1; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; 
+sleep 1; 
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Blocked Insert', 500);" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ERROR 1064 (42000) at line 1: table 'products' is locked
 ––– comment –––
 Test cross-session READ lock blocking UPDATE (session 1 holds READ lock, session 2 tries to UPDATE)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "UPDATE products SET price = 1199.99 WHERE id = 1;" 2>&1; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; 
+sleep 1; 
+mysql -h0 -P9306 -e "UPDATE products SET price = 1199.99 WHERE id = 1;" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ERROR 1064 (42000) at line 1: table products: table is locked
 ––– comment –––
 Test cross-session READ lock blocking DELETE (session 1 holds READ lock, session 2 tries to DELETE)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;" 2>&1; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "DELETE FROM products WHERE id = 4;" 2>&1; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ERROR 1064 (42000) at line 1: table products: table is locked
 ––– comment –––
 Test cross-session READ lock allowing SELECT (session 1 holds READ lock, session 2 can SELECT)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products;"; wait $LOCK_PID 2>/dev/null
 ––– output –––
 +----------+
 | count(*) |
@@ -81,7 +89,9 @@ mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 
 ––– comment –––
 Test WRITE lock doesn't block cross-session modifications (WRITE locks not implemented)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products WRITE; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Not Blocked', 500);"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products WRITE; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "INSERT INTO products VALUES (5, 'Not Blocked', 500);"; wait $LOCK_PID 2>/dev/null
 ––– output –––
 ––– comment –––
 Verify INSERT succeeded (WRITE lock has no effect)
@@ -106,7 +116,10 @@ mysql -h0 -P9306 -e "INSERT INTO products2 VALUES (1, 'test1'), (2, 'test2');"
 ––– comment –––
 Test cross-session multi-table READ lock allows SELECT (session 1 locks both tables, session 2 can read)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;";
+wait $LOCK_PID 2>/dev/null
 ––– output –––
 +----------+
 | count(*) |
@@ -220,7 +233,10 @@ Test cross-session READ locks: two sessions lock same table, SHOW LOCKS displays
 Session 1: LOCK products READ + hold via debug sleep
 Session 2: LOCK products READ + SHOW LOCKS (should show Count: 2)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW LOCKS; UNLOCK TABLES;"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW LOCKS; UNLOCK TABLES;";
+wait $LOCK_PID 2>/dev/null
 ––– output –––
 +------+----------+-----------+-----------------+
 | Type | Name     | Lock Type | Additional Info |

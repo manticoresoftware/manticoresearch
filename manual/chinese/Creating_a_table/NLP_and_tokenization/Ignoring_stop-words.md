@@ -1,8 +1,8 @@
 # 忽略停用词
 
-停用词是在索引和搜索过程中被忽略的词语，通常是因为它们的频率高且对搜索结果的值较低。
+停用词是在索引和搜索过程中被忽略的词语，通常是因为它们的频率高且对搜索结果的贡献较低。
 
-Manticore Search 默认会对停用词应用 [stemming](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以使用 [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed) 关闭此功能。
+Manticore Search 默认会对停用词应用 [stemming](../../Creating_a_table/NLP_and_tokenization/Morphology.md)，这可能导致不理想的结果，但可以使用 [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed) 来关闭此功能。
 
 小型停用词文件存储在表头中，嵌入文件的大小有限制，由 [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) 选项定义。
 
@@ -19,7 +19,7 @@ stopwords 设置是可选的，默认为空。它允许您指定一个或多个�
 
 停用词文件格式是简单的纯文本，使用 UTF-8 编码。文件数据将根据 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 设置进行分词，因此您可以使用与索引数据相同的分隔符。
 
-当 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 索引处于活动状态时，由 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 中的字符组成的停用词本身会被分词为 N-gram。因此，每个单独的 N-gram 都会成为单独的停用词。例如，使用 `ngram_len=1` 和合适的 `ngram_chars`，停用词 `test` 将被解释为 `t`、`e`、`s`、`t` 四个不同的停用词。
+当 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 索引处于活动状态时，由 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) 中字符组成的停用词本身会被分词为 N-gram。因此，每个单独的 N-gram 都会成为单独的停用词。例如，使用 `ngram_len=1` 和合适的 `ngram_chars`，停用词 `test` 将被解释为 `t`、`e`、`s`、`t` 四个不同的停用词。
 
 停用词文件可以手动或半自动创建。[indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 提供了一种模式，可以创建表的频率字典，按关键词频率排序。该字典中的顶级关键词通常可以用作停用词。有关详细信息，请参阅 [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 和 [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 开关。该字典中的顶级关键词通常可以用作停用词。
 
@@ -144,7 +144,7 @@ table products {
 * hr - 克罗地亚语
 * hu - 匈牙利语
 * hy - 亚美尼亚语
-* id - 印尼语
+* id - 印度尼西亚语
 * it - 意大利语
 * ja - 日语
 * ko - 韩语
@@ -171,7 +171,7 @@ table products {
 * zu - 祖鲁语
 
 <!-- example stopwords 1 -->
-例如，要使用意大利语的停用词，只需在配置文件中添加以下行：
+例如，要在配置文件中使用意大利语的停用词，请添加以下行：
 
 
 <!-- intro -->
@@ -267,7 +267,7 @@ table products {
 <!-- end -->
 
 <!-- example stopwords 2 -->
-如果需要使用多种语言的停用词，应列出所有别名，用逗号（实时模式）或空格（普通模式）分隔：
+如果需要使用多种语言的停用词，应列出所有别名，用逗号（RT 模式）或空格（plain 模式）分隔：
 
 
 <!-- intro -->
@@ -369,9 +369,9 @@ stopwords_list = 'value1; value2; ...'
 ```
 
 <!-- example stopwords_list -->
-`stopwords_list` 设置允许您在 `CREATE TABLE` 语句中直接指定停用词。此功能仅支持 [RT 模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)。
+设置 `stopwords_list` 允许您直接在 `CREATE TABLE` 语句中指定停用词。它仅支持在 [RT 模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) 中。
 
-值必须用分号（`;`）分隔。如果需要使用分号作为字面字符，必须用反斜杠转义（`\;`）。
+值必须用分号（`;`）分隔。如果需要使用分号作为字面字符，必须用反斜杠（`\;`）转义。
 
 <!-- intro -->
 ##### SQL:
@@ -460,7 +460,7 @@ stopword_step={0|1}
 ```
 
 <!-- example stopword_step -->
-[停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) 的 position_increment 设置是可选的，允许值为 0 和 1，默认值为 1。
+在 [停用词](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) 上的 position_increment 设置是可选的，允许的值为 0 和 1，默认值为 1。
 
 
 <!-- intro -->
@@ -564,9 +564,9 @@ stopwords_unstemmed={0|1}
 ```
 
 <!-- example stopwords_unstemmed -->
-指定是在词干提取之前还是之后应用停用词。可选，默认值为 0（在词干提取之后应用停用词过滤器）。
+在词干提取之前或之后应用停用词。可选，默认值为 0（在词干提取之后应用停用词过滤器）。
 
-默认情况下，停用词本身会被词干提取，然后应用于词干提取（或任何其他形态处理）后的标记。这意味着当 stem(token) 等于 stem(stopword) 时，标记会被过滤。这种默认行为可能导致意外结果，当标记被错误地词干提取为被过滤的根词时。例如，"Andes" 可能会被词干提取为 "and"，因此当 "and" 是停用词时，"Andes" 也会被跳过。
+默认情况下，停用词本身会被词干提取，然后应用于词干提取（或任何其他形态处理）后的标记。这意味着当 stem(token) 等于 stem(stopword) 时，标记会被停止。这种默认行为可能导致意外结果，当标记被错误地词干提取为被停止的根时。例如，“Andes”可能会被词干提取为“and”，所以当“and”是停用词时，“Andes”也会被跳过。
 
 但是，您可以通过启用 `stopwords_unstemmed` 指令来更改此行为。启用后，停用词会在词干提取之前应用（因此应用于原始词形），当标记等于停用词时，标记会被跳过。
 

@@ -1524,7 +1524,7 @@ embedded_limit = size
 
 当创建表时，上述文件可以保存在表外部或直接嵌入到表中。小于`embedded_limit`的文件会被存储到表中。对于较大的文件，仅存储文件名。这也简化了将表文件移动到另一台机器的过程；您只需复制一个文件即可。
 
-With 更小的文件，这样的嵌入减少了表格依赖的外部文件数量，并有助于维护。但同时将一个 100 MB 的词形变体字典嵌入到一个微小的差分表中是没有意义的。因此需要有一个大小阈值，`embedded_limit` 就是这个阈值。
+对于较小的文件，这种嵌入方式减少了表格依赖的外部文件数量，有助于维护。但同时，将100MB的词形词典嵌入到一个微小的增量表中是没有意义的。因此需要有一个大小阈值，`embedded_limit`就是这个阈值。
 
 <!-- request CONFIG -->
 
@@ -1547,15 +1547,15 @@ global_idf = /path/to/global.idf
 ```
 
 <!-- example global_idf -->
-文件路径，包含全局（集群范围）关键词 IDF。可选，默认为空（使用本地 IDF）。
+包含全局（集群范围）关键词IDF的文件路径。可选，缺省为空（使用本地IDF）。
 
-在多表集群中，关键词频率很可能在不同的表之间有所不同。这意味着当排名函数使用基于 TF-IDF 的值时，如 BM25 家族的因素，结果可能会根据它们所在的集群节点而略有不同。
+在一个多表集群中，每个关键词的频率很可能在不同表之间存在差异。这意味着当排名函数使用基于TF-IDF的值（例如BM25系列因子）时，根据它们所在的集群节点，结果可能会被略微不同地排序。
 
-解决这个问题最简单的方法是创建并利用全局频率字典，或简称为全局 IDF 文件。此指令允许您指定该文件的位置。建议（但不是必需的）使用 .idf 扩展名。当为给定表指定了 IDF 文件，并且 [OPTION global_idf](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#global_idf) 设置为 1 时，引擎将使用全局_idf 文件中的关键词频率和集合文档计数，而不是仅使用本地表。这样，IDFs 和依赖于它们的值将在整个集群中保持一致。
+解决这个问题的最简单方法是创建并使用一个全局频率字典，或简称为全局IDF文件。此指令允许您指定该文件的位置。建议（但不强制）使用.idf扩展名。当为某个表指定了IDF文件*且* [OPTION global_idf](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#global_idf) 设置为1时，引擎将使用global_idf文件中的关键词频率和集合文档计数，而不是仅使用本地表。这样，IDF及其依赖的值将在整个集群中保持一致。
 
-IDFs 文件可以在多个表之间共享。即使许多表引用同一个文件，`searchd` 也会加载该文件的唯一副本。如果 IDF 文件的内容发生变化，可以通过发送 SIGHUP 来加载新内容。
+IDF文件可以在多个表之间共享。即使许多表引用了该文件，`searchd`也只会加载一个IDF文件的副本。如果IDF文件内容发生变化，可以通过SIGHUP信号加载新内容。
 
-您可以使用 [indextool](../../Miscellaneous_tools.md#indextool) 工具通过使用 `--dumpdict dict.txt --stats` 开关先导出字典，然后使用 `--buildidf` 转换为 .idf 格式，最后使用 `--mergeidf` 在集群中合并所有 .idf 文件。
+您可以使用 [indextool](../../Miscellaneous_tools.md#indextool) 工具构建.idf文件，首先通过 `--dumpdict dict.txt --stats` 开关转储字典，然后使用 `--buildidf` 将这些字典转换为.idf格式，最后使用 `--mergeidf` 将集群中所有.idf文件合并。
 
 <!-- request SQL -->
 
@@ -1583,7 +1583,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -1592,7 +1592,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -1601,7 +1601,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = 
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1609,7 +1609,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = 
 res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'');
 ```
 <!-- intro -->
-##### java：
+##### java:
 
 <!-- request Java -->
 
@@ -1618,7 +1618,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -1627,7 +1627,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -1656,17 +1656,17 @@ hitless_words = {all|path/to/file}
 ```
 
 <!-- example hitless_words -->
-无击点词列表。可选，允许的值为 'all' 或者一个列表文件名。
+无命中词列表。可选，允许的值为 'all' 或列表文件名。
 
-默认情况下，Manticore 全文索引不仅存储每个给定关键词匹配的文档列表，还会存储其在文档中的位置列表（称为击点列表）。击点列表使短语、接近度、严格顺序和其他高级类型的搜索以及短语接近度排名成为可能。但是，特定频繁关键词的击点列表可能会变得非常大，从而在查询时处理速度较慢。此外，在某些情况下我们可能只关心布尔关键词匹配，而不需要基于位置的操作符（如短语匹配）或短语排名。
+默认情况下，Manticore 全文索引不仅为每个关键词存储匹配文档列表，还存储其在文档中的位置列表（称为命中列表）。命中列表支持短语、邻近、严格顺序等高级搜索类型，以及短语邻近排序。然而，某些频繁关键词（由于某些原因无法被过滤，尽管它们很频繁）的命中列表可能会变得非常大，从而在查询时处理速度变慢。此外，在某些情况下，我们可能只关心布尔关键词匹配，而不需要基于位置的搜索操作符（如短语匹配）或短语排序。
 
-`hitless_words` 允许您创建不包含位置信息（击点列表）的索引，或者跳过特定关键词的位置信息。
+`hitless_words` 允许您创建不包含任何位置信息（命中列表）的索引，或为特定关键词跳过位置信息。
 
-无击点索引通常会比相应的常规全文索引占用更少的空间（大约可以预期为 1.5 倍）。索引和搜索应该更快，但会失去位置查询和排名的支持。
+无命中索引通常比相应的常规全文索引占用更少的空间（预计减少约1.5倍）。索引和搜索速度会更快，代价是缺少位置查询和排序支持。
 
-如果在位置查询（例如短语查询）中使用了无击点词，则这些词将被移除并作为操作数使用，而没有位置。例如，如果 "hello" 和 "world" 是无击点词，而 "simon" 和 "says" 不是无击点词，那么短语查询 `"simon says hello world"` 将被转换为 `("simon says" & hello & world)`，匹配文档中的任何位置的 "hello" 和 "world"，以及精确短语 "simon says"。
+如果在位置查询（例如短语查询）中使用无命中词，这些词将被移除并作为操作数使用，不带位置信息。例如，如果 "hello" 和 "world" 是无命中词，而 "simon" 和 "says" 不是，则短语查询 `"simon says hello world"` 将被转换为 `("simon says" & hello & world)`，匹配文档中任何位置的 "hello" 和 "world"，以及作为精确短语的 "simon says"。
 
-如果位置查询中只包含无击点词，则结果将为空短语节点，因此整个查询将返回空结果和警告。如果整个字典都是无击点词（使用 `all`），则只能在相应索引上使用布尔匹配。
+仅包含无命中词的位置查询将导致空的短语节点，因此整个查询将返回空结果并发出警告。如果整个词典都是无命中词（使用 `all`），则只能在相应索引上使用布尔匹配。
 
 
 
@@ -1696,7 +1696,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -1705,7 +1705,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'a
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -1714,7 +1714,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1723,7 +1723,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless
 ```
 
 <!-- intro -->
-##### Java：
+##### java:
 
 <!-- request Java -->
 
@@ -1732,7 +1732,7 @@ utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'al
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -1741,7 +1741,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'al
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -1770,12 +1770,12 @@ hitless_words_list = 'word1; word2; ...'
 ```
 
 <!-- example hitless_words_list -->
-`hitless_words_list` 设置允许您直接在 `CREATE TABLE` 语句中指定无击点词。仅在 [RT 模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) 中支持。
+`hitless_words_list` 设置允许您在 `CREATE TABLE` 语句中直接指定无命中词。此功能仅支持 [RT模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)。
 
-值必须用分号 (`;`) 分隔。
+值必须用分号（`;`）分隔。
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 
@@ -1803,7 +1803,7 @@ $index->create([
         ]);
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -1812,7 +1812,7 @@ utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list 
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -1821,7 +1821,7 @@ await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1830,21 +1830,21 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless
 ```
 
 <!-- intro -->
-##### Java：
+##### Java:
 <!-- request Java -->
 ```java
 utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", true);
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", true);
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -1868,7 +1868,7 @@ index_field_lengths = {0|1}
 * 为每个文档计算字段长度（以关键词计数），并存储到相应属性中
 * 计算每索引平均值。长度属性将具有特殊的 TOKENCOUNT 类型，但其值实际上是常规的 32 位整数，且其值通常可访问。
 
-[BM25A()](../../Functions/Searching_and_ranking_functions.md#BM25A%28%29) 和 [BM25F()](../../Functions/Searching_and_ranking_functions.md#BM25F%28%29) 表达式排序器函数基于这些长度，并需要启用 `index_field_lengths`。历史上，Manticore 使用了 BM25 的简化版，与完整函数不同，它**不**考虑文档长度。现在也支持完整的 BM25 变体及其扩展到多字段的版本，称为 BM25F。它们分别需要每文档长度和每字段长度。因此需要此附加指令。
+[BM25A()](../../Functions/Searching_and_ranking_functions.md#BM25A%28%29) 和 [BM25F()](../../Functions/Searching_and_ranking_functions.md#BM25F%28%29) 表达式排序器函数基于这些长度，需要启用 `index_field_lengths`。历史上，Manticore 使用了 BM25 的简化版，与完整函数不同，它**未**考虑文档长度。现在也支持完整的 BM25 变体及其扩展到多字段的版本，称为 BM25F。它们分别需要每文档长度和每字段长度。因此需要此附加指令。
 
 <!-- request SQL -->
 
@@ -1969,9 +1969,9 @@ index_token_filter = my_lib.so:custom_blend:chars=@#&
 ```
 
 <!-- example index_token_filter -->
-全文索引的索引时分词过滤器。可选，缺省为空。
+全文索引的索引时标记过滤器。可选，缺省为空。
 
-index_token_filter 指令指定全文索引的可选索引时分词过滤器。此指令用于创建根据自定义规则生成分词的自定义分词器。该过滤器由索引器在将源数据索引到普通表中时创建，或由 RT 表在处理 `INSERT` 或 `REPLACE` 语句时创建。插件通过 `library name:plugin name:optional string of settings` 格式定义。例如，`my_lib.so:custom_blend:chars=@#&`。
+index_token_filter 指令指定全文索引的可选索引时标记过滤器。该指令用于创建根据自定义规则生成标记的自定义分词器。该过滤器由索引器在将源数据索引到普通表中时创建，或由 RT 表在处理 `INSERT` 或 `REPLACE` 语句时创建。插件通过 `library name:plugin name:optional string of settings` 格式定义。例如，`my_lib.so:custom_blend:chars=@#&`。
 
 <!-- request SQL -->
 
@@ -2072,7 +2072,7 @@ overshort_step = {0|1}
 ```
 
 <!-- example overshort_step -->
-短于 [min_word_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len) 的关键词的词位增量。可选，允许值为 0 和 1，缺省值为 1。
+短于 [min_word_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len) 的关键词的位移增量。可选，允许值为 0 和 1，缺省值为 1。
 
 <!-- request SQL -->
 
@@ -2178,9 +2178,9 @@ phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 
 此列表控制哪些字符将被视为短语边界，以调整词位置并启用通过邻近搜索模拟短语级搜索。语法类似于 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)，但不允许映射，且边界字符不得与其他内容重叠。
 
-在短语边界处，将根据 [phrase_boundary_step](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step) 指定的额外词位置增量添加到当前词位置。这使得通过邻近查询实现短语级搜索：不同短语中的词将保证彼此之间的距离超过 phrase_boundary_step；因此，在此距离内的邻近搜索将等同于短语级搜索。
+在短语边界处，将根据 [phrase_boundary_step](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step) 指定的数值，额外增加当前词位置。这使得通过邻近查询实现短语级搜索：不同短语中的词将保证彼此之间的距离超过 phrase_boundary_step；因此，在此距离内的邻近搜索将等同于短语级搜索。
 
-只有当该字符后跟分隔符时，才会触发短语边界条件；这是为了避免像 S.T.A.L.K.E.R 或 URL 被视为多个短语。
+只有当此类字符后跟分隔符时，才会触发短语边界条件；这是为了避免像 S.T.A.L.K.E.R 或 URL 被视为多个短语。
 
 <!-- request SQL -->
 
@@ -2394,13 +2394,13 @@ regexp_filter = (blue|red) => color
 ```
 
 <!-- example regexp_filter -->
-用于过滤字段和查询的正则表达式（regexps）。该指令是可选的，多值的，默认值为空的正则表达式列表。Manticore Search 使用的正则表达式引擎是 Google 的 RE2，以其速度和安全性著称。有关 RE2 支持的语法详细信息，可以访问 [RE2 语法指南](https://github.com/google/re2/wiki/Syntax)。
+用于过滤字段和查询的正则表达式（regexps）。该指令是可选的，多值的，默认值为空的正则表达式列表。Manticore Search 使用的正则表达式引擎是 Google 的 RE2，以其速度和安全性著称。有关 RE2 支持的语法的详细信息，您可以访问 [RE2 语法指南](https://github.com/google/re2/wiki/Syntax)。
 
 在某些应用场景（如产品搜索）中，可能存在许多指代产品、型号或属性的方式。例如，`iPhone 3gs` 和 `iPhone 3 gs`（甚至 `iPhone3 gs`）很可能指代同一产品。另一个例子可能是笔记本电脑屏幕尺寸的不同表达方式，如 `13-inch`、`13 inch`、`13"` 或 `13in`。
 
 正则表达式提供了一种机制，可以指定针对此类情况的定制规则。在第一个示例中，您可以使用词形文件来处理少量 iPhone 型号，但在第二个示例中，最好指定将 "13-inch" 和 "13in" 规范化为相同内容的规则。
 
-`regexp_filter` 中列出的正则表达式将按照列出的顺序应用，在尽可能早的阶段应用，早于任何其他处理（包括 [例外](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)），甚至早于分词。也就是说，正则表达式在索引时应用于原始源字段，在搜索时应用于原始查询文本。
+`regexp_filter` 中列出的正则表达式将按照列出的顺序应用，在其他处理（包括 [例外](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)）之前尽可能早的阶段应用，甚至在分词之前。也就是说，正则表达式在索引时应用于原始源字段，在搜索时应用于原始查询文本。
 
 <!-- request SQL -->
 

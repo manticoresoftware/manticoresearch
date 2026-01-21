@@ -1,8 +1,8 @@
-# 列出表格
+# 列出表
 
-Manticore Search 的表格具有单层层次结构。
+Manticore Search 对表具有单级层次结构。
 
-与其它数据库管理系统不同，Manticore 没有将表格分组到数据库中的概念。但是，为了与 SQL 方言互操作，Manticore 接受 `SHOW DATABASES` 语句用于与 SQL 方言互操作，但该语句不会返回任何结果。
+与其它数据库管理系统不同，Manticore 没有将表分组到数据库的概念。但是，为了与 SQL 方言互操作，Manticore 接受 `SHOW DATABASES` 语句用于与 SQL 方言互操作，但该语句不会返回任何结果。
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -13,7 +13,7 @@ Manticore Search 的表格具有单层层次结构。
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` 语句列出所有当前活动的表格及其类型。现有的表格类型有 `local`、`distributed`、`rt`、`percolate` 和 `template`。
+`SHOW TABLES` 语句列出所有当前活动的表及其类型。现有的表类型有 `local`、`distributed`、`rt`、`percolate` 和 `template`。
 
 
 <!-- intro -->
@@ -158,7 +158,7 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 <!-- end -->
 
 <!-- example Example_2 -->
-支持可选的 LIKE 子句，用于按名称过滤表格。
+支持可选的 LIKE 子句，用于按名称过滤表。
 
 
 <!-- intro -->
@@ -302,7 +302,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表格的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句预期的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列将被标记为 `bigint`。示例：
+`DESCRIBE` 语句列出表的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句预期的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列将被指定为 `bigint`。示例：
 
 ```sql
 mysql> DESC rt;
@@ -318,12 +318,12 @@ mysql> DESC rt;
 ```
 
 支持可选的 LIKE 子句。有关其语法细节，请参阅
-[显示元数据](Node_info_and_management/SHOW_META.md)。
+[SHOW META](Node_info_and_management/SHOW_META.md)。
 
 ### SELECT FROM name.@table
 
 <!-- example name_table -->
-您还可以通过执行查询 `select * from <table_name>.@table` 查看表格模式。此方法的优点是您可以使用 `WHERE` 子句进行过滤：
+您还可以通过执行查询 `select * from <table_name>.@table` 查看表模式。此方法的优点是您可以使用 `WHERE` 子句进行过滤：
 
 <!-- request SQL -->
 ```sql
@@ -360,15 +360,15 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name [ OPTION format_ext_files = 'values' | 'path' ]
+SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
-打印用于创建指定表格的 `CREATE TABLE` 语句。
+打印用于创建指定表的 `CREATE TABLE` 语句。
 
-`format_ext_files` 选项允许您控制外部文件设置（如 `stopwords`、`exceptions`、`wordforms`、`hitless_words`）的显示方式：
+`output_words` 选项允许您控制外部文件设置（如 `stopwords`、`exceptions`、`wordforms`、`hitless_words`）的显示方式：
 
-* `'values'`（默认）：使用 `*_list` 选项（例如 `stopwords_list='word1; word2'`）以内联列表形式显示文件内容。
-* `'path'`：使用原始选项显示文件路径（例如 `stopwords='/path/to/file'`）。
+* `'list'`（默认）：使用 `*_list` 选项（例如 `stopwords_list='word1; word2'`）以内联列表形式显示文件内容。
+* `'file'`：使用原始选项显示文件路径（例如 `stopwords='/path/to/file'`）。
 
 <!-- intro -->
 ##### SQL:
@@ -388,9 +388,9 @@ f text indexed stored
 ```
 <!-- end -->
 
-### Percolate 表格模式
+### Percolate 表模式
 
-如果您对 percolate 表格使用 `DESC` 语句，它将显示外层表格模式，即存储查询的模式。此模式是静态的，对所有本地 percolate 表格都相同：
+如果您对 percolate 表使用 `DESC` 语句，它将显示外层表模式，即存储查询的模式。此模式是静态的，对所有本地 percolate 表都相同：
 
 ```sql
 mysql> DESC pq;

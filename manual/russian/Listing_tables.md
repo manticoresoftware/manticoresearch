@@ -158,7 +158,7 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 <!-- end -->
 
 <!-- example Example_2 -->
-Поддерживается необязательное условие LIKE для фильтрации таблиц по имени.
+Поддерживается необязательное предложение LIKE для фильтрации таблиц по имени.
 
 
 <!-- intro -->
@@ -317,13 +317,13 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-Поддерживается необязательное условие LIKE. Подробности о его синтаксисе смотрите в разделе
+Поддерживается необязательное предложение LIKE. Подробности о его синтаксисе см. в разделе
 [SHOW META](Node_info_and_management/SHOW_META.md).
 
 ### SELECT FROM name.@table
 
 <!-- example name_table -->
-Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать условие `WHERE` для фильтрации:
+Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать предложение `WHERE` для фильтрации:
 
 <!-- request SQL -->
 ```sql
@@ -344,7 +344,7 @@ select * from tbl.@table where type='text';
 
 <!-- example name_table2 -->
 
-Вы также можете выполнять множество других действий с `<your_table_name>.@table`, рассматривая её как обычную таблицу Manticore со столбцами, состоящими из целочисленных и строковых атрибутов.
+Вы также можете выполнять множество других действий с `<your_table_name>.@table`, рассматривая его как обычную таблицу Manticore со столбцами, состоящими из целочисленных и строковых атрибутов.
 
 <!-- request SQL -->
 
@@ -360,15 +360,15 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name [ OPTION format_ext_files = 'values' | 'path' ]
+SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
 Выводит оператор `CREATE TABLE`, использованный для создания указанной таблицы.
 
-Опция `format_ext_files` позволяет управлять отображением настроек внешних файлов (таких как `stopwords`, `exceptions`, `wordforms`, `hitless_words`):
+Опция `output_words` позволяет управлять отображением настроек внешних файлов (таких как `stopwords`, `exceptions`, `wordforms`, `hitless_words`):
 
-* `'values'` (по умолчанию): Отображает содержимое файлов в виде встроенных списков с использованием опций `*_list` (например, `stopwords_list='word1; word2'`).
-* `'path'`: Отображает пути к файлам с использованием исходных опций (например, `stopwords='/path/to/file'`).
+* `'list'` (по умолчанию): Отображает содержимое файлов в виде встроенных списков с использованием опций `*_list` (например, `stopwords_list='word1; word2'`).
+* `'file'`: Отображает пути к файлам с использованием исходных опций (например, `stopwords='/path/to/file'`).
 
 <!-- intro -->
 ##### SQL:
@@ -420,7 +420,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-Также поддерживается `desc pq table like ...` и работает следующим образом:
+Также поддерживается `desc pq table like ...`, и он работает следующим образом:
 
 ```sql
 mysql> desc pq table like '%title%';

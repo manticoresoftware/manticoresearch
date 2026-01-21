@@ -1,6 +1,6 @@
 # 词形转换
 
-词形转换是在通过 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 规则对传入文本进行分词处理之后应用的。它们本质上允许你将一个词替换为另一个词。通常，这用于将不同的词形转换为一个统一形式（例如，将所有变体如 "walks"、"walked"、"walking" 转换为统一形式 "walk"）。它也可以用于实现 [词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md) 的例外情况，因为词干提取不会应用于 forms 列表中找到的词。
+词形转换是在通过 [字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 规则对传入文本进行分词之后应用的。它们本质上允许你将一个词替换为另一个词。通常，这用于将不同的词形转换为一个标准形式（例如，将所有变体如 "walks"、"walked"、"walking" 转换为标准形式 "walk"）。它也可以用于实现 [词干提取](../../Creating_a_table/NLP_and_tokenization/Morphology.md) 的例外情况，因为词干提取不会应用于在 forms 列表中找到的词。
 
 ## wordforms
 
@@ -13,7 +13,7 @@ wordforms = path/to/dict*.txt
 <!-- example wordforms -->
 词形转换字典。可选，缺省为空。
 
-词形转换字典在索引和搜索期间都用于规范化传入的词。因此，当涉及到 [plain table](../../Creating_a_table/Local_tables/Plain_table.md) 时，需要旋转表以获取词形转换文件中的更改。
+词形转换字典在索引和搜索期间都用于规范化传入的词。因此，当涉及到 [普通表](../../Creating_a_table/Local_tables/Plain_table.md) 时，需要旋转表以获取词形转换文件中的更改。
 
 <!-- intro -->
 ##### SQL:
@@ -98,7 +98,7 @@ utils_api.sql("CREATE TABLE products(title text, price float) wordforms = '/var/
 ```
 
 <!-- intro -->
-##### Plain mode example:
+##### 普通模式示例:
 
 <!-- request CONFIG -->
 
@@ -116,10 +116,10 @@ table products {
 ```
 <!-- end -->
 
-Manticore 中的词形转换支持旨在良好处理大型字典。它们对索引速度有中等影响；例如，一个包含 100 万个条目的字典会使全文索引变慢约 1.5 倍。搜索速度完全不受影响。额外的 RAM 影响大致等于字典文件的大小，并且字典在表之间共享。例如，如果为 10 个不同的表指定了相同的 50 MB 词形转换文件，那么额外的 `searchd` RAM 使用量将约为 50 MB。
+Manticore 的词形转换支持旨在良好处理大型字典。它们对索引速度有中等影响；例如，一个包含 100 万个条目的字典会使全文索引变慢约 1.5 倍。搜索速度完全不受影响。额外的 RAM 影响大致等于字典文件的大小，并且字典在表之间共享。例如，如果为 10 个不同的表指定了相同的 50 MB 词形转换文件，额外的 `searchd` RAM 使用量将约为 50 MB。
 
 <!-- example wf_simple -->
-词典文件应为简单的纯文本格式。每行应包含源词和目标词形，使用 UTF-8 编码，用“大于”符号分隔。加载文件时将应用来自 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 的规则。因此，如果你不修改 `charset_table`，你的词形转换将不区分大小写，类似于你的其他全文索引数据。以下是文件内容的示例：
+字典文件应采用简单的纯文本格式。每一行应包含源词和目标词形式，使用 UTF-8 编码，并用“大于”符号分隔。加载文件时将应用来自 [字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 的规则。因此，如果你不修改 `charset_table`，你的词形转换将不区分大小写，类似于你的其他全文索引数据。以下是文件内容的示例：
 
 <!-- request Example -->
 ```ini
@@ -129,12 +129,12 @@ walking > walk
 ```
 <!-- end -->
 
-有一个名为 [Spelldump](../../Miscellaneous_tools.md#spelldump) 的捆绑工具，可以帮助你创建 Manticore 可读的字典文件。该工具可以从 `ispell` 或 `MySpell` 格式的源 `.dict` 和 `.aff` 字典文件中读取，如 OpenOffice 所附带的。
+有一个名为 [Spelldump](../../Miscellaneous_tools.md#spelldump) 的捆绑实用程序，可以帮助你创建 Manticore 可读的字典文件格式。该实用程序可以从 OpenOffice 捆绑的 `ispell` 或 `MySpell` 格式的源 `.dict` 和 `.aff` 字典文件中读取。
 
-你可以将多个源词映射到一个目标词。该过程发生在分词上，而不是源文本上，因此忽略空格和标记的差异。
+你可以将多个源词映射到一个目标词。该过程发生在标记上，而不是源文本上，因此忽略空格和标记的差异。
 
 <!-- example wf_more_complex -->
-你可以使用 `=>` 符号代替 `>`。允许使用注释（以 `#` 开头）。最后，如果一行以波浪号（`~`）开头，词形转换将在形态学之后应用，而不是之前（注意在这种情况下仅支持单个源词和目标词）。
+你可以使用 `=>` 符号代替 `>`。还允许使用注释（以 `#` 开头）。最后，如果一行以波浪号（`~`）开头，词形转换将在形态学之后应用，而不是之前（注意在这种情况下仅支持单个源词和目标词）。
 
 <!-- request Example -->
 ```ini
@@ -160,7 +160,7 @@ c\=\> => cde
 <!-- end -->
 
 <!-- example wf_multiple_tokens -->
-你可以指定多个目标词：
+你可以指定多个目标形式：
 
 <!-- request Example -->
 ```ini
@@ -192,13 +192,13 @@ wordforms=/tmp/wf_new*
 ## wordforms_list
 
 ```ini
-wordforms_list = 'map-from-token > map-to-token; ...'
+wordforms_list = 'source-form > destination-form; ...'
 ```
 
 <!-- example wordforms_list -->
-`wordforms_list` 设置允许你在 `CREATE TABLE` 语句中直接指定词形转换。它仅支持 [RT 模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)。
+`wordforms_list` 设置允许你在 `CREATE TABLE` 语句中直接指定词形转换。它仅在 [RT 模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) 中支持。
 
-值必须用分号（`;`）分隔。由于词形转换可能包含 `>` 或 `=>` 作为分隔符，以及可能的其他特殊字符，请确保如果分号是标记本身的一部分（例如 `\;`），则转义分号。
+值必须用分号（`;`）分隔。由于词形转换可能包含 `>` 或 `=>` 作为分隔符，以及可能的其他特殊字符，请确保如果分号是形式本身的一部分（例如 `\;`），则转义分号。
 
 <!-- intro -->
 ##### SQL:
@@ -279,97 +279,6 @@ utils_api.sql("CREATE TABLE products(title text, price float) wordforms_list = '
 ```
 
 <!-- end -->
-
-<!-- end -->
-
-## wordforms_list
-
-```ini
-wordforms_list = 'map-from-token > map-to-token; ...'
-```
-
-<!-- example wordforms_list -->
-`wordforms_list` 设置允许你在 `CREATE TABLE` 语句中直接指定词形转换。它仅支持 [RT 模式](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)。
-
-##### SQL:
-
-<!-- intro -->
-CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'
-
-<!-- request SQL -->
-
-```sql
-CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'
-```
-
-<!-- request JSON -->
-
-```json
-POST /cli -d "
-CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'"
-```
-
-<!-- request PHP -->
-
-```php
-##### Python:
-utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'')
-##### Python-asyncio:
-await utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'')
-##### Javascript:
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'');
-##### Java:
-utilsApi.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", true);
-```
-<!-- intro -->
-##### C#:
-
-<!-- request Python -->
-
-```python
-utilsApi.Sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", true);
-```
-
-<!-- intro -->
-##### Rust:
-
-<!-- request Python-asyncio -->
-
-```python
-utils_api.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", Some(true)).await;
-```
-
-<!-- intro -->
-utils_api.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", Some(true)).await;
-
-<!-- request javascript -->
-
-```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'');
-```
-
-<!-- intro -->
-##### Java:
-<!-- request Java -->
-```java
-utilsApi.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", true);
-```
-
-<!-- intro -->
-##### C#:
-<!-- request C# -->
-```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", true);
-```
-
-<!-- intro -->
-##### Rust:
-
-<!-- request Rust -->
-
-```rust
-utils_api.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", Some(true)).await;
-```
 
 <!-- end -->
 

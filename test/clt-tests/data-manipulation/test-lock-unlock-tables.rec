@@ -220,7 +220,10 @@ Test cross-session READ locks: two sessions lock same table, SHOW LOCKS displays
 Session 1: LOCK products READ + hold via debug sleep
 Session 2: LOCK products READ + SHOW LOCKS (should show Count: 2)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW LOCKS; UNLOCK TABLES;"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "LOCK TABLES products READ; SHOW LOCKS; UNLOCK TABLES;";
+wait $LOCK_PID 2>/dev/null
 ––– output –––
 +------+----------+-----------+-----------------+
 | Type | Name     | Lock Type | Additional Info |

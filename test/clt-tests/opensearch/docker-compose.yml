@@ -1,0 +1,47 @@
+services:
+    manticore:
+      image: ghcr.io/manticoresoftware/manticoresearch:test-kit-c7abd5d1-buddy
+      container_name: manticore
+      ports:
+        - "9306:9306"
+        - "9308:9308"
+      command: >
+        bash -c "
+          echo -e 'searchd {
+            listen = 0.0.0.0:9306:mysql
+            listen = 0.0.0.0:9312
+            listen = 0.0.0.0:9308:http
+            log = /var/log/manticore/searchd.log
+            query_log = /var/log/manticore/query.log
+            pid_file = /run/manticore/searchd.pid
+            data_dir = /var/lib/manticore
+            kibana_version_string = 2.19.0
+          }' > /etc/manticoresearch/manticore.conf &&
+          searchd --nodetach
+        "
+      healthcheck:
+        test: ["CMD", "curl", "-sf", "http://localhost:9308"]
+        interval: 5s
+        timeout: 3s
+        retries: 10
+        start_period: 10s
+      networks:
+        - manticore-net
+
+    opensearch-dashboards:
+      image: opensearchproject/opensearch-dashboards:2.19.0
+      container_name: opensearch-dashboards
+      ports:
+        - "5601:5601"
+      environment:
+        - OPENSEARCH_HOSTS=["http://manticore:9308"]
+        - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+      depends_on:
+        manticore:
+          condition: service_healthy
+      networks:
+        - manticore-net
+
+networks:
+  manticore-net:
+    driver: bridge

@@ -186,6 +186,9 @@ struct SphHitMark_t
 {
 	DWORD	m_uPosition;
 	DWORD	m_uSpan;
+	WORD	m_uQuerypos = 0;		///< starting query position (0 if not set)
+	WORD	m_uSpanlen = 0;			///< number of query positions covered (0 if not set)
+	DWORD	m_uQposMask = 0;		///< bitmask of specific query positions covered (0 if not set)
 
 	bool operator == ( const SphHitMark_t & rhs ) const
 	{

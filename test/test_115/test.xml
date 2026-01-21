@@ -74,6 +74,19 @@ index idx3
 	path			= <data_path/>/idx3
 }
 
+source src_hi1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table where id &gt;= 200
+}
+
+index hi1
+{
+	source			= src_hi1
+	path			= <data_path/>/hi1
+}
+
 </config>
 
 <queries>
@@ -139,6 +152,64 @@ index idx3
 	select id from idx3 where match (' f g k NEAR/4 l NEAR/4 m ') order by id asc OPTION ranker=expr('sum(lcs)*bm25');
 	select id from idx3 where match (' a NEAR/4 b NEAR/4 c ') order by id asc OPTION ranker=expr('sum(lcs)*bm25');
 </sphinxql>
+
+<!-- NEAR highlighting -->
+<!-- Document: s1 word11 s2 s3 s4 word10 s5 s6 s7 s8 word20 s9 -->
+<!-- Positions: word11=2, word10=6, word20=11 -->
+<!-- Distances: word11->word10=3 words, word11->word20=8 words -->
+<sphinxql>
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/4 word10 ');
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/5 word10 ');
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/9 word10 ');
+    
+	<!-- Queries that should NOT highlight word20 (distance 8 > NEAR distance) -->
+	<!-- Expected: word11 and word10 highlighted, word20 NOT highlighted -->
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/4 (word10 | word20)');
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/5 (word10 | word20)');
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/8 (word10 | word20)');
+
+	<!-- Queries that SHOULD highlight word20 (distance 9 <= NEAR distance) -->
+	<!-- Expected: word11, word10, and word20 all highlighted -->
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/9 (word10 | word20)');
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/10 (word10 | word20)');
+
+	<!-- Edge cases -->
+	<!-- NEAR/3: word10 exactly at boundary (3 words), word20 too far -->
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/3 (word10 | word20)');
+	<!-- NEAR/2: word10 too far (3 words > 2), word20 too far -->
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/2 (word10 | word20)');
+
+	<!-- Reversed order: OR first -->
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('(word10 | word20) NEAR/5 word11');
+
+	<!-- Direct NEAR without OR (should work normally) -->
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/5 word10');
+	SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0}) h FROM hi1 WHERE MATCH('word11 NEAR/9 word20');
+    
+    <!-- phrase with NEAR -->
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), '"red fox"  NEAR/50 bear') h from hi1 where id=200;
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'bear NEAR/50 "red fox" ') h from hi1 where id=200;
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), '("big red") bear NEAR/50 "red fox" ') h from hi1 where id=200;
+    
+    <!-- phrase with NEAR more cases -->
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'red NEAR/50 bear') as h1  FROM hi1 WHERE id=200;
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'bear NEAR/50 red') as h1  FROM hi1 WHERE id=200;
+
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'fox NEAR/50 bear') as h1  FROM hi1 WHERE id=200;
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'bear NEAR/50 fox') as h1  FROM hi1 WHERE id=200;
+
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), '"red fox" NEAR/50 "big fox"') as h1 FROM hi1 WHERE id=200;
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), '"big fox" NEAR/50 "red fox"') as h1 FROM hi1 WHERE id=200;
+
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'fox NEAR/2 fox') as h1  FROM hi1 WHERE id=200;
+
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), 'fox NEAR/5 fox') as h1  FROM hi1 WHERE id=200;
+
+    <!-- CRASHED!!!
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), '(bear | fox) NEAR/50 "red fox"') FROM hi1 WHERE id=200;
+    -->
+    SELECT id, HIGHLIGHT({before_match='-+', after_match='+-', limit=0},TO_STRING('red fox big fox big red bear red fox'), '"red fox" NEAR/50 (bear | fox)') as h1  FROM hi1 WHERE id=200;    
+</sphinxql>
 </queries>
 
 <db_create>
@@ -178,7 +249,10 @@ INSERT INTO `test_table` VALUES
 ( 102, 'hello test very large world' ),
 
 ( 111, 'apple' ),
-( 112, 'apples' )
+( 112, 'apples' ),
+
+( 200, 's1 word11 s2 s3 s4 word10 s5 s6 s7 s8 word20 s9' ),
+( 201, 's1 word11 s2 s3 s4 word10 s5 s6 s7 s8 word10 s9' )
 
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>

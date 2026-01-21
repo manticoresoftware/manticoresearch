@@ -30,7 +30,7 @@ source test1
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = SELECT * FROM test_table where document_id=6
+	sql_query = SELECT * FROM test_table where document_id in (6,17)
 }
 
 index test1
@@ -145,7 +145,8 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 ( 13, '', CONCAT(REPEAT('vi mi ', 530), ' vi mi hi' ) ),
 ( 14, '', 'vi mi' ),
 ( 15, '', 'lo' ),
-( 16, '', 'New York New York, New York 10451' );
+( 16, '', 'New York New York, New York 10451' ),
+( 17, '', 'h1 h2 h3 h4 h5 h1 h2 h3' );
 </db_insert>
 
 <queries>
@@ -186,6 +187,11 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 	<![CDATA[ select * from test3 where match ( '"New York, New York 10451"' ) ]]>;
 	<!-- regression ExtConditional vs tail hits from other nodes -->
 	<![CDATA[ select * from test4 where match ( ' "m1 m2 m3$"/2 ' ) ]]>;
+    
+<!-- -->
+<![CDATA[ select * from test1 where match ( ' "h1 h2" << "h1 h2" ' ) ]]>;
+<![CDATA[ select * from test1 where match ( ' ( "h1 h2" NEAR/5 ( h3 ) ) << ( "h1 h2" NEAR/5 ( h3 ) ) ' ) ]]>;
+    
 </sphinxql>
 </queries>
 

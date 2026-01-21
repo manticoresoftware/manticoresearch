@@ -3711,6 +3711,12 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	{
 		WORD uQposSpanned = pHlist->m_uQuerypos+1;
 		DWORD uQposMask = ( pHlist->m_uQposMask>>uQposSpanned );
+		sphLogDebug ( "UpdateFreq multi-term: spanlen=%u head_qpos=%u raw_mask=0x%08x start_spanned=%u mask_after_shift=0x%08x",
+			(unsigned)pHlist->m_uSpanlen,
+			(unsigned)pHlist->m_uQuerypos,
+			(unsigned)pHlist->m_uQposMask,
+			(unsigned)uQposSpanned,
+			(unsigned)uQposMask );
 		while ( uQposMask!=0 )
 		{
 			WORD uQposFixed = uQposSpanned;
@@ -3724,7 +3730,11 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 					m_dTermsHit[uQposFixed] = pHlist->m_uHitpos;
 				}
 				if ( bUniqSpanned )
+				{
+					sphLogDebug ( "UpdateFreq multi-term: hitpos=%u field=%d spanned_qpos=%u fixed_qpos=%u",
+						(unsigned)pHlist->m_uHitpos, (int)uField, (unsigned)uQposSpanned, (unsigned)uQposFixed );
 					UpdateFreq ( uQposFixed, uField );
+				}
 			}
 			uQposSpanned++;
 			uQposMask = ( uQposMask>>1 );
@@ -4695,6 +4705,9 @@ void CSphHitMarker::Mark ( CSphVector<SphHitMark_t> & dMarked )
 		SphHitMark_t tMark;
 		tMark.m_uPosition = HITMAN::GetPosWithField ( pHits->m_uHitpos );
 		tMark.m_uSpan = pHits->m_uMatchlen;
+		tMark.m_uQuerypos = pHits->m_uQuerypos;
+		tMark.m_uSpanlen = pHits->m_uSpanlen;
+		tMark.m_uQposMask = pHits->m_uQposMask;
 
 		dMarked.Add ( tMark );
 	}

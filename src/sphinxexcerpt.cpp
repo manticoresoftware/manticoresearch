@@ -424,7 +424,6 @@ private:
 
 	void							CollectHits ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetsDocIndex_c & tContainer, int iSPZ, DWORD & uFoundWords, ZoneData_t & tZodeData, SnippetResult_t & tRes ) const;
 	void							MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const;
-	void							SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked ) const;
 	void							FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) const;
 	void							FixupQueryLimits ( SnippetLimits_t & tLimit, const SnippetsDocIndex_c & tContainer, DWORD uFoundTerms, CSphString & sWarning ) const;
 	bool							CanHighlightAll ( int iDocLen, const SnippetLimits_t & tLimits ) const;
@@ -502,6 +501,7 @@ void SnippetBuilder_c::Impl_c::MarkHits ( const SnippetsDocIndex_c & tContainer,
 	tQwordSetup.SetDict ( m_pDict );
 	tQwordSetup.m_pWarning = &tRes.m_sError;
 	tQwordSetup.m_pZoneChecker = &tZoneChecker;
+	tQwordSetup.m_bSetQposMask = true;
 
 	// got a lot of stack allocated variables (up to 30K)
 	// check that query not overflow stack here
@@ -519,10 +519,30 @@ void SnippetBuilder_c::Impl_c::MarkHits ( const SnippetsDocIndex_c & tContainer,
 	});
 }
 
+static void SplitSpansNearPhrase ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked );
+static void CollectValidNearPositions ( const XQNode_t * pNode, CSphVector<int> & dValidPositions, const SnippetsDocIndex_c & tContainer );
+static void AppendMatchedAsSpans ( CSphVector<SphHitMark_t> & dMarked, const VecTraits_T<int> & dMatched, int iOriginalSpan );
 
-void SnippetBuilder_c::Impl_c::SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked ) const
+static void SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked )
 {
+	if ( tContainer.HasPhraseNear() )
+	{
+		SplitSpansNearPhrase ( tContainer, dMarked );
+		return;
+	}
+
 	const CSphVector<CSphVector<DWORD>> & dDocHits = tContainer.GetDocHits();
+
+	// Precompute valid positions for NEAR queries (if any)
+	CSphVector<int> dValidPositions;
+	bool bHasProcessableNear = false;
+	if ( tContainer.HasNear() )
+	{
+		const XQNode_t * pRoot = tContainer.GetQuery().m_pRoot;
+		CollectValidNearPositions ( pRoot, dValidPositions, tContainer );
+		dValidPositions.Uniq ( true );
+		bHasProcessableNear = ( dValidPositions.GetLength()>0 );
+	}
 
 	// we just collected matching spans into dMarked, but!
 	// certain spans might not match all words within the span
@@ -536,16 +556,30 @@ void SnippetBuilder_c::Impl_c::SplitSpans ( const SnippetsDocIndex_c & tContaine
 			continue;
 
 		CSphVector<int> dMatched;
-		for ( int j=0; j<(int)dMarked[i].m_uSpan; j++ )
+
+		if ( !bHasProcessableNear )
 		{
-			// OPTIMZE? we can premerge all dochits vectors once
-			const int iPos = dMarked[i].m_uPosition + j;
-			for ( const auto & dDocHit : dDocHits )
-				if ( dDocHit.BinarySearch(iPos) )
+			for ( int j=0; j<(int)dMarked[i].m_uSpan; j++ )
+			{
+				// OPTIMZE? we can premerge all dochits vectors once
+				const int iPos = dMarked[i].m_uPosition + j;
+				for ( const auto & dDocHit : dDocHits )
 				{
-					dMatched.Add(iPos);
-					break;
+					if ( dDocHit.BinarySearch(iPos) )
+					{
+						dMatched.Add(iPos);
+						break;
+					}
 				}
+			}
+		} else
+		{
+			for ( int j=0; j<(int)dMarked[i].m_uSpan; j++ )
+			{
+				const int iPos = dMarked[i].m_uPosition + j;
+				if ( dValidPositions.BinarySearch ( iPos ) )
+					dMatched.Add ( iPos );
+			}
 		}
 
 		// this is something that must never happen
@@ -557,22 +591,26 @@ void SnippetBuilder_c::Impl_c::SplitSpans ( const SnippetsDocIndex_c & tContaine
 			continue;
 		}
 
-		// append all matching keywords as 1-long spans
-		ARRAY_FOREACH ( j, dMatched )
-		{
-			SphHitMark_t & tMarked = dMarked.Add();
-			tMarked.m_uPosition = dMatched[j];
-			tMarked.m_uSpan = 1;
-		}
-
-		// this swaps current span with the last 1-long span we added
-		// which is by definition okay; so we need not rescan it
-		dMarked.RemoveFast ( i );
+		AppendMatchedAsSpans ( dMarked, dMatched, i );
 	}
 
 	dMarked.Uniq();
 }
 
+void AppendMatchedAsSpans ( CSphVector<SphHitMark_t> & dMarked, const VecTraits_T<int> & dMatched, int iOriginalSpan )
+{
+	// append all matching keywords as 1-long spans
+	ARRAY_FOREACH ( j, dMatched )
+	{
+		SphHitMark_t & tMarked = dMarked.Add();
+		tMarked.m_uPosition = dMatched[j];
+		tMarked.m_uSpan = 1;
+	}
+
+	// this swaps current span with the last 1-long span we added
+	// which is by definition okay; so we need not rescan it
+	dMarked.RemoveFast ( iOriginalSpan );
+}
 
 void SnippetBuilder_c::Impl_c::FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) const
 {
@@ -1620,4 +1658,731 @@ CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const Ve
 {
 	assert ( m_pImpl );
 	return m_pImpl->PackResult ( tRes, dRequestedFields );
+}
+
+static void CollectQposFromSubtree ( const XQNode_t * pNode, CSphVector<int> & dQpos, const VecTraits_T<int> & dAtomToQpos )
+{
+	if ( !pNode )
+		return;
+
+	for ( const auto & tWord : pNode->dWords() )
+	{
+		int iAtomPos = tWord.m_iAtomPos;
+		if ( iAtomPos>=0 && iAtomPos<dAtomToQpos.GetLength() )
+		{
+			int iQpos = dAtomToQpos[iAtomPos];
+			if ( iQpos>=0 )
+				dQpos.Add ( iQpos );
+		}
+	}
+
+	for ( const auto * pChild : pNode->dChildren() )
+		CollectQposFromSubtree ( pChild, dQpos, dAtomToQpos );
+}
+
+static void CollectPositionsFromQpos ( const CSphVector<int> & dQpos, CSphVector<int> & dPos, const CSphVector<CSphVector<DWORD>> & dDocHits )
+{
+	ARRAY_FOREACH ( i, dQpos )
+	{
+		int iQpos = dQpos[i];
+		if ( iQpos<0 || iQpos>=dDocHits.GetLength() )
+			continue;
+
+		const auto & dHits = dDocHits[iQpos];
+		ARRAY_FOREACH ( j, dHits )
+			dPos.Add ( (int)dHits[j] );
+	}
+	dPos.Uniq ( true );
+}
+
+// NEAR queries could emit multiple overlapping spans when multiple valid NEAR windows exist
+// highlight only positions that participate in valid NEAR pairs within each span
+// matching spans into dMarked
+// certain spans might not match all words within the span
+// (one NEAR/3 two) could return a 5-word span
+// but we do have full matching keywords list in tContainer
+// so post-process and break down such spans
+
+// collect valid positions from NEAR nodes
+void CollectValidNearPositions ( const XQNode_t * pNode, CSphVector<int> & dValidPositions, const SnippetsDocIndex_c & tContainer )
+{
+	if ( !pNode )
+		return;
+
+	const CSphVector<CSphVector<DWORD>> & dDocHits = tContainer.GetDocHits();
+	const auto & dAtomToQpos = tContainer.GetAtomToQpos();
+
+	if ( pNode->GetOp()==SPH_QUERY_NEAR && pNode->dChildren().GetLength()==2 )
+	{
+		CSphVector<int> dLeftQpos;
+		CSphVector<int> dRightQpos;
+		CollectQposFromSubtree ( pNode->dChildren()[0], dLeftQpos, dAtomToQpos );
+		CollectQposFromSubtree ( pNode->dChildren()[1], dRightQpos, dAtomToQpos );
+		
+		dLeftQpos.Uniq( true );
+		dRightQpos.Uniq ( true );
+		
+		// convert qpos to positions
+		CSphVector<int> dLeftPos;
+		CSphVector<int> dRightPos;
+		CollectPositionsFromQpos ( dLeftQpos, dLeftPos, dDocHits );
+		CollectPositionsFromQpos ( dRightQpos, dRightPos, dDocHits );
+		
+		const int iNearDist = pNode->m_iOpArg;
+		
+		// process if both left and right have positions
+		if ( dLeftPos.GetLength() && dRightPos.GetLength() )
+		{
+			// find all valid NEAR pairs and add their positions with sliding window since both arrays sorted
+			int iRightStart = 0;
+			ARRAY_FOREACH ( iLeft, dLeftPos )
+			{
+				int iLeftPos = dLeftPos[iLeft];
+				// the window of right positions within distance [iLeftPos - iNearDist, iLeftPos + iNearDist]
+				// since arrays are sorted, advance the window start to skip positions that are too far left
+				int iMinRight = iLeftPos - iNearDist;
+				while ( iRightStart < dRightPos.GetLength() && dRightPos[iRightStart] < iMinRight )
+					++iRightStart;
+				
+				// now check all right positions within the valid range
+				int iRightEnd = iRightStart;
+				while ( iRightEnd < dRightPos.GetLength() )
+				{
+					int iRightPos = dRightPos[iRightEnd];
+					int iMaxRight = iLeftPos + iNearDist;
+					if ( iRightPos > iMaxRight )
+						break; // all remaining right positions are too far right
+					
+					// both positions participate in a valid NEAR pair
+					dValidPositions.Add ( iLeftPos );
+					dValidPositions.Add ( iRightPos );
+					++iRightEnd;
+				}
+			}
+		}
+	}
+
+	// Recurse into children to find nested NEAR nodes
+	for ( const auto * pChild : pNode->dChildren() )
+		CollectValidNearPositions ( pChild, dValidPositions, tContainer );
+}
+
+// Collect all phrase runs (query structure, independent of spans)
+struct PhraseRun_t
+{
+	CSphVector<int> dQpos; // precomputed qpos values for all atoms in this phrase run
+};
+
+// Process phrase runs and add matching positions to dMatched
+// The mask represents atom positions from the matching engine (baseQpos + delta)
+// We need to map atom positions to our qpos values to determine which phrases participated
+static void ProcessPhraseRuns ( const CSphVector<PhraseRun_t> & dAllPhraseRuns, const SphHitMark_t & tSpan, const SnippetsDocIndex_c & tContainer, const CSphVector<CSphVector<DWORD>> & dDocHits, CSphVector<int> & dMatched )
+{
+	const int iSpanStart = (int)tSpan.m_uPosition;
+	const int iSpanEnd = iSpanStart + (int)tSpan.m_uSpan;
+
+	CSphVector<const PhraseRun_t *> dPhraseRuns; // phrase runs for this span
+	
+	ARRAY_FOREACH ( iRun, dAllPhraseRuns )
+	{
+		const PhraseRun_t & tRun = dAllPhraseRuns[iRun];
+		
+		// Check if any qpos in this phrase run matches the mask
+		// The mask represents atom positions (from matching engine), not our qpos values
+		// So we need to check if any atom in this phrase run participated
+		bool bPhraseInMask = false;
+		
+		const auto & dAtomToQpos = tContainer.GetAtomToQpos();
+		const WORD uBaseQpos = tSpan.m_uQuerypos;
+		
+		// Strategy: Check if any atom position in this phrase run participated
+		// 1. For each qpos in the phrase run, find which atom(s) map to it
+		// 2. Calculate atom position from mask: atom = baseQpos + delta (where delta is the mask bit index)
+		// 3. Check if that atom position maps to one of our phrase qpos values
+		
+		// First, collect all atom positions that map to qpos values in this phrase run
+		CSphVector<int> dPhraseAtoms;
+		ARRAY_FOREACH ( iQpos, tRun.dQpos )
+		{
+			int iQposVal = tRun.dQpos[iQpos];
+			if ( iQposVal<0 )
+				continue;
+			
+			// Find all atoms that map to this qpos
+			for ( int iAtom = 0; iAtom<(int)dAtomToQpos.GetLength(); ++iAtom )
+			{
+				if ( dAtomToQpos[iAtom]==iQposVal )
+					dPhraseAtoms.Add ( iAtom );
+			}
+		}
+		
+		// Now check if any of these atoms participated based on mask interpretation
+		// The mask bits represent atom positions: atom = baseQpos + delta
+		// For 2-word NEAR matches, baseQpos participates implicitly even without a mask bit
+		// Check 1: Does baseQpos participate implicitly? (for 2-word NEAR)
+		ARRAY_FOREACH ( i, dPhraseAtoms )
+		{
+			if ( dPhraseAtoms[i]==(int)uBaseQpos )
+			{
+				bPhraseInMask = true;
+				sphLogDebug ( "SplitSpansNearPhrase: phrase run has atom %d (baseQpos %d) in mask (implicit participation)", 
+					(int)uBaseQpos, (int)uBaseQpos );
+				break;
+			}
+		}
+		
+		// Check 2: Do any mask bits represent atoms in our phrase run? (explicit participation)
+		if ( !bPhraseInMask )
+		{
+			for ( int iBit = 0; iBit<32; ++iBit )
+			{
+				if ( !( tSpan.m_uQposMask & ( 1u << iBit ) ) )
+					continue;
+				
+				int iParticipatingAtom = (int)uBaseQpos + iBit;
+				
+				// Check if this participating atom is part of our phrase run
+				ARRAY_FOREACH ( i, dPhraseAtoms )
+				{
+					if ( dPhraseAtoms[i]==iParticipatingAtom )
+					{
+						bPhraseInMask = true;
+						sphLogDebug ( "SplitSpansNearPhrase: phrase run has atom %d (qpos %d) in mask (baseQpos %d + bit %d)", 
+							iParticipatingAtom, tRun.dQpos[0], (int)uBaseQpos, iBit );
+						break;
+					}
+				}
+				if ( bPhraseInMask )
+					break;
+			}
+		}
+		
+		// Fallback: Also check absolute qpos interpretation (for backward compatibility)
+		if ( !bPhraseInMask )
+		{
+			ARRAY_FOREACH ( iQpos, tRun.dQpos )
+			{
+				int iQposVal = tRun.dQpos[iQpos];
+				if ( iQposVal<0 )
+					continue;
+				
+				// Check if this qpos matches mask bit directly (absolute interpretation)
+				if ( iQposVal>=0 && iQposVal<32 && ( tSpan.m_uQposMask & ( 1u << iQposVal ) ) )
+				{
+					bPhraseInMask = true;
+					sphLogDebug ( "SplitSpansNearPhrase: phrase run has qpos %d in mask (absolute)", iQposVal );
+					break;
+				}
+			}
+		}
+		
+		// Only include phrase runs that are in the mask
+		// The mask indicates which parts of the NEAR match participated in creating this span
+		// If a phrase is not in the mask, it didn't participate and shouldn't be highlighted
+		if ( bPhraseInMask )
+			dPhraseRuns.Add ( &tRun );
+	}
+	
+	// Now add all positions for phrase runs that are in the mask/span
+	// For phrases, we need to find consecutive positions that form valid phrase occurrences
+	ARRAY_FOREACH ( iRun, dPhraseRuns )
+	{
+		const PhraseRun_t & tRun = *dPhraseRuns[iRun];
+
+		sphLogDebug ( "ProcessPhraseRuns: processing phrase run with %d qpos values: [%s]", 
+			(int)tRun.dQpos.GetLength(), Vec2Str ( tRun.dQpos ).cstr() );
+
+		if ( tRun.dQpos.GetLength()<2 )
+		{
+			// Skip invalid phrase runs (phrases must have 2+ words)
+			sphLogDebug ( "ProcessPhraseRuns: skipping invalid phrase run with %d qpos values (phrases must have 2+ words)", 
+				(int)tRun.dQpos.GetLength() );
+			continue;
+		}
+
+		// For multi-word phrases, find consecutive positions that form valid phrase matches
+		// Try each possible starting position for the first qpos
+		int iFirstQpos = tRun.dQpos[0];
+		if ( iFirstQpos<0 || iFirstQpos>=(int)dDocHits.GetLength() )
+			continue;
+
+		const auto & dFirstHits = dDocHits[iFirstQpos];
+		sphLogDebug ( "ProcessPhraseRuns: searching for phrase occurrences starting from qpos %d with %d positions", 
+			iFirstQpos, (int)dFirstHits.GetLength() );
+
+		ARRAY_FOREACH ( iFirstHit, dFirstHits )
+		{
+			int iStartPos = (int)dFirstHits[iFirstHit];
+			if ( iStartPos<iSpanStart )
+				continue;
+			if ( iStartPos>=iSpanEnd )
+				break;
+
+			// Try to build a consecutive phrase match starting from this position
+			CSphVector<int> dPhrasePositions;
+			dPhrasePositions.Add ( iStartPos );
+
+			bool bValidPhrase = true;
+			for ( int iQposIdx = 1; iQposIdx<tRun.dQpos.GetLength(); ++iQposIdx )
+			{
+				int iQposVal = tRun.dQpos[iQposIdx];
+				if ( iQposVal<0 || iQposVal>=(int)dDocHits.GetLength() )
+				{
+					bValidPhrase = false;
+					break;
+				}
+
+				const auto & dHits = dDocHits[iQposVal];
+				int iExpectedPos = iStartPos + iQposIdx; // consecutive positions
+				
+				// Check if the expected consecutive position exists
+				bool bFound = false;
+				ARRAY_FOREACH ( jHit, dHits )
+				{
+					int iPos = (int)dHits[jHit];
+					if ( iPos<iExpectedPos )
+						continue;
+					if ( iPos>iExpectedPos )
+						break; // past expected position
+
+					// Found consecutive position!
+					if ( iPos>=iSpanStart && iPos<iSpanEnd )
+					{
+						dPhrasePositions.Add ( iPos );
+						bFound = true;
+						sphLogDebug ( "ProcessPhraseRuns: found consecutive position %d for qpos %d (expected %d)", 
+							iPos, iQposVal, iExpectedPos );
+						break;
+					}
+				}
+
+				if ( !bFound )
+				{
+					bValidPhrase = false;
+					sphLogDebug ( "ProcessPhraseRuns: no consecutive position found for qpos %d (expected %d)", 
+						iQposVal, iExpectedPos );
+					break;
+				}
+			}
+
+			if ( bValidPhrase && dPhrasePositions.GetLength()==tRun.dQpos.GetLength() )
+			{
+				// Found a valid phrase occurrence - add all positions
+				sphLogDebug ( "ProcessPhraseRuns: found valid phrase occurrence at positions [%s]", 
+					Vec2Str ( dPhrasePositions ).cstr() );
+				ARRAY_FOREACH ( iPos, dPhrasePositions )
+				{
+					int iPosVal = dPhrasePositions[iPos];
+					// insert into dMatched in sorted order, avoid duplicates
+					int k = 0;
+					for ( ; k<dMatched.GetLength() && dMatched[k]<iPosVal; ++k ) {}
+					if ( k==dMatched.GetLength() || dMatched[k]!=iPosVal )
+					{
+						dMatched.Insert ( k, iPosVal );
+						sphLogDebug ( "ProcessPhraseRuns: added phrase position %d to dMatched", iPosVal );
+					}
+				}
+				// Only take the first valid phrase occurrence within this span
+				break;
+			}
+		}
+	}
+}
+
+// Process non-phrase atoms from qpos mask and add matching positions to dMatched
+// The mask bits are relative to m_uQuerypos, so we need to check (qpos - baseQpos) against the mask
+static void ProcessNonPhraseAtoms ( const SnippetsDocIndex_c & tContainer, const SphHitMark_t & tSpan, CSphVector<int> & dMatched )
+{
+	const CSphVector<CSphVector<DWORD>> & dDocHits = tContainer.GetDocHits();
+	const auto & dAtomToQpos = tContainer.GetAtomToQpos();
+	const int iSpanStart = (int)tSpan.m_uPosition;
+	const int iSpanEnd = iSpanStart + (int)tSpan.m_uSpan;
+	const int iBaseQpos = tSpan.m_uQuerypos;
+	
+	for ( int iAtom = 0; iAtom<(int)dAtomToQpos.GetLength() && iAtom<32; ++iAtom )
+	{
+		int iQpos = ( iAtom>=0 && iAtom<(int)dAtomToQpos.GetLength() ) ? dAtomToQpos[iAtom] : -1;
+		
+		// Check if this atom is in the mask
+		// The mask represents atom positions from the matching engine: atom = baseQpos + delta
+		// For mask bit i, atom position (baseQpos + i) participated
+		bool bInMask = false;
+		
+		// Strategy: Calculate which atom positions participated from mask bits
+		// For 2-word NEAR, the mask calculation is:
+		//   baseQpos = Min(qpos1, qpos2)
+		//   mask = 1 << (Max(qpos1, qpos2) - baseQpos)
+		// So only ONE bit is set (for the max qpos), but BOTH children participated
+		// We need to check: baseQpos itself (implicit) OR baseQpos + bit (explicit)
+		
+		// Check 1: Is this atom the baseQpos? (implicit participation for 2-word NEAR)
+		if ( iAtom==iBaseQpos )
+		{
+			bInMask = true;
+			sphLogDebug ( "SplitSpansNearPhrase: non-phrase atom %d -> qpos %d matches baseQpos %d (implicit participation)", 
+				iAtom, iQpos, iBaseQpos );
+		}
+		
+		// Check 2: Is this atom represented by a mask bit? (explicit participation)
+		if ( !bInMask )
+		{
+			for ( int iBit = 0; iBit<32; ++iBit )
+			{
+				if ( !( tSpan.m_uQposMask & ( 1u << iBit ) ) )
+					continue;
+				
+				int iParticipatingAtom = iBaseQpos + iBit;
+				if ( iAtom==iParticipatingAtom )
+				{
+					bInMask = true;
+					sphLogDebug ( "SplitSpansNearPhrase: non-phrase atom %d -> qpos %d matches mask (baseQpos %d + bit %d = atom %d)", 
+						iAtom, iQpos, iBaseQpos, iBit, iParticipatingAtom );
+					break;
+				}
+			}
+		}
+		
+		// Fallback: Also check absolute qpos interpretation (for backward compatibility)
+		if ( !bInMask && iQpos>=0 && iQpos<32 && ( tSpan.m_uQposMask & ( 1u << iQpos ) ) )
+		{
+			bInMask = true;
+			sphLogDebug ( "SplitSpansNearPhrase: non-phrase atom %d -> qpos %d matches mask bit %d (absolute)", iAtom, iQpos, iQpos );
+		}
+		if ( !bInMask )
+			continue;
+
+		// skip phrase atoms, they were handled above
+		int iQposForCheck = ( iAtom>=0 && iAtom<dAtomToQpos.GetLength() ) ? dAtomToQpos[iAtom] : -1;
+		if ( iQposForCheck>=0 && tContainer.IsPhrasePosition ( iQposForCheck ) )
+		{
+			sphLogDebug ( "SplitSpansNearPhrase: atom %d is a phrase position, skipping", iAtom );
+			continue;
+		}
+
+		// If qpos is invalid, this atom might be part of a phrase match
+		// From the matching engine logs, we know "red fox" has atoms [4,5] at positions [8,9]
+		// Atom 4 maps to qpos -1, but atom 5 maps to qpos 3 ("fox")
+		// If this atom participates in the mask, check if adjacent atoms form phrases
+		if ( iQpos<0 || iQpos>=(int)dDocHits.GetLength() )
+		{
+			sphLogDebug ( "SplitSpansNearPhrase: atom %d -> qpos %d is invalid, checking if part of phrase match", iAtom, iQpos );
+			
+			// Check if next atom is valid and might form a phrase with this atom
+			// This handles cases like "red fox" where "red" (atom 4) maps to qpos -1
+			// but "fox" (atom 5) maps to qpos 3
+			bool bFound = false;
+			if ( iAtom+1<(int)dAtomToQpos.GetLength() )
+			{
+				int iNextAtom = iAtom+1;
+				int iNextQpos = dAtomToQpos[iNextAtom];
+				if ( iNextQpos>=0 && iNextQpos<(int)dDocHits.GetLength() && tContainer.IsPhrasePosition ( iNextQpos ) )
+				{
+					// Next atom is a phrase position - check if we can find consecutive phrase matches
+					// This atom might be "red" in "red fox", next atom is "fox"
+					const auto & dNextHits = dDocHits[iNextQpos];
+					ARRAY_FOREACH ( jHit, dNextHits )
+					{
+						int iNextPos = (int)dNextHits[jHit];
+						if ( iNextPos<iSpanStart )
+							continue;
+						if ( iNextPos>=iSpanEnd )
+							break;
+						
+						// Check if there's a position one before this (for "red" before "fox")
+						int iExpectedPos = iNextPos - 1;
+						if ( iExpectedPos>=iSpanStart && iExpectedPos<iSpanEnd )
+						{
+							// Check all qpos slots for a position at iExpectedPos
+							// This handles cases where this atom maps to qpos -1
+							for ( int iSearchQpos = 0; iSearchQpos<(int)dDocHits.GetLength(); ++iSearchQpos )
+							{
+								const auto & dHits = dDocHits[iSearchQpos];
+								ARRAY_FOREACH ( kHit, dHits )
+								{
+									int iPos = (int)dHits[kHit];
+									if ( iPos==iExpectedPos )
+									{
+										// Found consecutive phrase match!
+										int k = 0;
+										for ( ; k<dMatched.GetLength() && dMatched[k]<iExpectedPos; ++k ) {}
+										if ( k==dMatched.GetLength() || dMatched[k]!=iExpectedPos )
+										{
+											dMatched.Insert ( k, iExpectedPos );
+											sphLogDebug ( "SplitSpansNearPhrase: atom %d -> qpos %d (invalid) found phrase position %d before next atom qpos %d at position %d", 
+												iAtom, iQpos, iExpectedPos, iNextQpos, iNextPos );
+										}
+										
+										// Also add the next position
+										k = 0;
+										for ( ; k<dMatched.GetLength() && dMatched[k]<iNextPos; ++k ) {}
+										if ( k==dMatched.GetLength() || dMatched[k]!=iNextPos )
+										{
+											dMatched.Insert ( k, iNextPos );
+											sphLogDebug ( "SplitSpansNearPhrase: atom %d -> qpos %d (invalid) added next atom phrase position %d", 
+												iAtom, iQpos, iNextPos );
+										}
+										
+										bFound = true;
+										break;
+									}
+									if ( iPos>iExpectedPos )
+										break;
+								}
+								if ( bFound )
+									break;
+							}
+						}
+						if ( bFound )
+							break;
+					}
+				}
+			}
+			
+			if ( !bFound )
+				sphLogDebug ( "SplitSpansNearPhrase: atom %d -> qpos %d (invalid) no phrase match found", iAtom, iQpos );
+			continue;
+		}
+
+		const auto & dHits = dDocHits[iQpos];
+		int iChosenPos = -1;
+		ARRAY_FOREACH ( jHit, dHits )
+		{
+			int iPos = (int)dHits[jHit];
+			if ( iPos<iSpanStart )
+				continue;
+			if ( iPos>=iSpanEnd )
+				break;
+
+			iChosenPos = iPos;
+			break;
+		}
+
+		if ( iChosenPos>=0 )
+		{
+			// insert into dMatched in sorted order, avoid duplicates
+			int k = 0;
+			for ( ; k<dMatched.GetLength() && dMatched[k]<iChosenPos; ++k ) {}
+			if ( k==dMatched.GetLength() || dMatched[k]!=iChosenPos )
+				dMatched.Insert ( k, iChosenPos );
+		}
+	}
+}
+
+static void CollectPhraseRuns ( const SnippetsDocIndex_c & tContainer, CSphVector<PhraseRun_t> & dPhraseRuns )
+{
+	const auto & dAtomToQpos = tContainer.GetAtomToQpos();
+	int iAtomMax = dAtomToQpos.GetLength();
+	
+	sphLogDebug ( "CollectPhraseRuns: atomToQpos length=%d", iAtomMax );
+	
+	for ( int iAtomHead = 0; iAtomHead<iAtomMax && iAtomHead<32; ++iAtomHead )
+	{
+		// Map atom index to qpos first, then check if qpos is a phrase position
+		int iQpos = ( iAtomHead>=0 && iAtomHead<iAtomMax ) ? dAtomToQpos[iAtomHead] : -1;
+		if ( iQpos<0 )
+		{
+			sphLogDebug ( "CollectPhraseRuns: atom %d maps to invalid qpos %d, skipping", iAtomHead, iQpos );
+			continue;
+		}
+		
+		bool bIsPhrasePos = tContainer.IsPhrasePosition ( iQpos );
+		sphLogDebug ( "CollectPhraseRuns: atom %d -> qpos %d, IsPhrasePosition=%d", iAtomHead, iQpos, (int)bIsPhrasePos );
+		
+		if ( !bIsPhrasePos )
+			continue;
+		
+		sphLogDebug ( "CollectPhraseRuns: atom %d -> qpos %d is a phrase position", iAtomHead, iQpos );
+		
+		// only start at the leftmost atom of a phrase run
+		if ( iAtomHead>0 )
+		{
+			int iPrevQpos = ( iAtomHead-1>=0 && iAtomHead-1<iAtomMax ) ? dAtomToQpos[iAtomHead-1] : -1;
+			if ( iPrevQpos>=0 )
+			{
+				bool bPrevIsPhrase = tContainer.IsPhrasePosition ( iPrevQpos );
+				sphLogDebug ( "CollectPhraseRuns: checking previous atom %d -> qpos %d, IsPhrasePosition=%d", 
+					iAtomHead-1, iPrevQpos, (int)bPrevIsPhrase );
+				if ( bPrevIsPhrase )
+				{
+					sphLogDebug ( "CollectPhraseRuns: atom %d -> qpos %d, previous atom %d -> qpos %d is also phrase, skipping start", 
+						iAtomHead, iQpos, iAtomHead-1, iPrevQpos );
+					continue;
+				}
+			}
+		}
+		
+		// Collect phrase run and precompute qpos values
+		PhraseRun_t & tRun = dPhraseRuns.Add();
+		tRun.dQpos.Add ( iQpos ); // add first atom's qpos
+		
+		int iAtomStart = iAtomHead;
+		int iAtomEnd = iAtomHead;
+		sphLogDebug ( "CollectPhraseRuns: starting phrase run from atom %d", iAtomStart );
+		while ( iAtomEnd+1<iAtomMax )
+		{
+			int iNextAtom = iAtomEnd+1;
+			int iNextQpos = ( iNextAtom>=0 && iNextAtom<iAtomMax ) ? dAtomToQpos[iNextAtom] : -1;
+			if ( iNextQpos<0 )
+			{
+				sphLogDebug ( "CollectPhraseRuns: next atom %d -> qpos %d is invalid, ending phrase run", iNextAtom, iNextQpos );
+				break;
+			}
+			bool bNextIsPhrase = tContainer.IsPhrasePosition ( iNextQpos );
+			sphLogDebug ( "CollectPhraseRuns: checking next atom %d -> qpos %d, IsPhrasePosition=%d", 
+				iNextAtom, iNextQpos, (int)bNextIsPhrase );
+			if ( !bNextIsPhrase )
+			{
+				sphLogDebug ( "CollectPhraseRuns: next atom %d -> qpos %d is not phrase, ending phrase run", iNextAtom, iNextQpos );
+				break;
+			}
+			sphLogDebug ( "CollectPhraseRuns: extending phrase run to include atom %d -> qpos %d", iNextAtom, iNextQpos );
+			tRun.dQpos.Add ( iNextQpos ); // precompute qpos for this atom
+			++iAtomEnd;
+		}
+		
+		// Only keep phrase runs with 2+ qpos values (phrases must have 2+ words)
+		if ( tRun.dQpos.GetLength()>=2 )
+		{
+			sphLogDebug ( "CollectPhraseRuns: found phrase run: atoms [%d,%d] with %d qpos values", iAtomStart, iAtomEnd, (int)tRun.dQpos.GetLength() );
+		} else
+		{
+			// Single-word phrase runs are invalid - remove them
+			dPhraseRuns.Remove ( dPhraseRuns.GetLength()-1 );
+			sphLogDebug ( "CollectPhraseRuns: skipping invalid single-word phrase run: atoms [%d,%d] with %d qpos values", 
+				iAtomStart, iAtomEnd, (int)tRun.dQpos.GetLength() );
+		}
+	}
+}
+
+void SplitSpansNearPhrase ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked )
+{
+	// Process all spans emitted by the matching engine.
+	// For NEAR queries, the matching engine may emit multiple overlapping spans when multiple valid
+	// NEAR windows exist (e.g., "red fox" NEAR/50 bear where both occurrences of "red fox" are
+	// within distance of "bear"). We highlight all positions within each emitted span, ensuring
+	// highlighting behavior matches what the matching engine found.
+	// See: manual/english/Searching/Full_text_matching/Operators.md#NEAR-operator
+	const CSphVector<CSphVector<DWORD>> & dDocHits = tContainer.GetDocHits();
+	const auto & dAtomToQpos = tContainer.GetAtomToQpos();
+
+	// Debug: Log query structure and atom-to-qpos mapping
+	sphLogDebug ( "SplitSpansNearPhrase: === QUERY STRUCTURE ANALYSIS ===" );
+	sphLogDebug ( "SplitSpansNearPhrase: atomToQpos length=%d", (int)dAtomToQpos.GetLength() );
+	for ( int iAtom = 0; iAtom<(int)dAtomToQpos.GetLength() && iAtom<32; ++iAtom )
+	{
+		int iQpos = dAtomToQpos[iAtom];
+		bool bIsPhrase = ( iQpos>=0 && tContainer.IsPhrasePosition ( iQpos ) );
+		sphLogDebug ( "SplitSpansNearPhrase: atom %d -> qpos %d (phrase=%d)", iAtom, iQpos, (int)bIsPhrase );
+	}
+	
+	// Debug: Log document positions for each qpos
+	sphLogDebug ( "SplitSpansNearPhrase: === DOCUMENT POSITIONS PER QPOS ===" );
+	for ( int iQpos = 0; iQpos<(int)dDocHits.GetLength(); ++iQpos )
+	{
+		const auto & dHits = dDocHits[iQpos];
+		if ( dHits.GetLength()>0 )
+		{
+			sphLogDebug ( "SplitSpansNearPhrase: qpos %d has %d document positions: [%s]", 
+				iQpos, (int)dHits.GetLength(), Vec2Str ( dHits ).cstr() );
+		}
+	}
+
+	// Preprocess: collect all phrase runs with precomputed qpos values (query structure, independent of spans)
+	CSphVector<PhraseRun_t> dAllPhraseRuns;
+	CollectPhraseRuns ( tContainer, dAllPhraseRuns );
+	sphLogDebug ( "SplitSpansNearPhrase: found %d phrase run(s)", (int)dAllPhraseRuns.GetLength() );
+
+	sphLogDebug ( "SplitSpansNearPhrase: === PROCESSING SPANS FROM MATCHING ENGINE ===" );
+	sphLogDebug ( "SplitSpansNearPhrase: processing %d spans", (int)dMarked.GetLength() );
+	ARRAY_FOREACH ( i, dMarked )
+	{
+		const auto & tSpan = dMarked[i];
+		int iSpanStart = (int)tSpan.m_uPosition;
+		int iSpanEnd = iSpanStart + (int)tSpan.m_uSpan;
+		const WORD uBaseQpos = tSpan.m_uQuerypos;
+		DWORD uMask = tSpan.m_uQposMask;
+		
+		// Debug: Analyze mask bits - what do they mean?
+		sphLogDebug ( "SplitSpansNearPhrase: === SPAN %d ANALYSIS ===", i );
+		sphLogDebug ( "SplitSpansNearPhrase: span %d: pos=%u spanlen=%u qposmask=0x%08x baseQpos=%u span=[%d,%d) document positions=[%d..%d)", 
+			i, (unsigned)tSpan.m_uPosition, (unsigned)tSpan.m_uSpan, (unsigned)uMask, (unsigned)uBaseQpos,
+			iSpanStart, iSpanEnd, iSpanStart, iSpanEnd-1 );
+		
+		// Debug: Interpret mask bits as child nodepos
+		sphLogDebug ( "SplitSpansNearPhrase: mask 0x%08x interpretation:", (unsigned)uMask );
+		sphLogDebug ( "SplitSpansNearPhrase:   - If mask bits represent child nodepos (0-based):" );
+		for ( int iBit = 0; iBit<32; ++iBit )
+		{
+			if ( uMask & ( 1u << iBit ) )
+				sphLogDebug ( "SplitSpansNearPhrase:     bit %d set -> child nodepos %d participated", iBit, iBit );
+		}
+		sphLogDebug ( "SplitSpansNearPhrase:   - If mask bits represent qpos deltas from baseQpos %d:", (int)uBaseQpos );
+		for ( int iBit = 0; iBit<32; ++iBit )
+		{
+			if ( uMask & ( 1u << iBit ) )
+			{
+				int iQpos = (int)uBaseQpos + iBit;
+				sphLogDebug ( "SplitSpansNearPhrase:     bit %d set -> qpos %d (baseQpos %d + delta %d) participated", 
+					iBit, iQpos, (int)uBaseQpos, iBit );
+			}
+		}
+		sphLogDebug ( "SplitSpansNearPhrase:   - If mask bits represent absolute qpos:" );
+		for ( int iBit = 0; iBit<32; ++iBit )
+		{
+			if ( uMask & ( 1u << iBit ) )
+				sphLogDebug ( "SplitSpansNearPhrase:     bit %d set -> absolute qpos %d participated", iBit, iBit );
+		}
+		
+		if ( tSpan.m_uSpan==1 )
+			continue;
+
+		// if we do not have a qpos mask, fallback to legacy behaviour for this span
+		if ( !tSpan.m_uQposMask )
+			continue;
+
+		CSphVector<int> dMatched;
+
+		// Debug: Show which document positions are within this span
+		sphLogDebug ( "SplitSpansNearPhrase: span [%d,%d) covers document positions:", iSpanStart, iSpanEnd );
+		for ( int iQpos = 0; iQpos<(int)dDocHits.GetLength(); ++iQpos )
+		{
+			const auto & dHits = dDocHits[iQpos];
+			CSphVector<int> dPositionsInSpan;
+			ARRAY_FOREACH ( jHit, dHits )
+			{
+				int iPos = (int)dHits[jHit];
+				if ( iPos>=iSpanStart && iPos<iSpanEnd )
+					dPositionsInSpan.Add ( iPos );
+			}
+			if ( dPositionsInSpan.GetLength()>0 )
+			{
+				sphLogDebug ( "SplitSpansNearPhrase:   qpos %d: positions within span [%d,%d) = [%s]", 
+					iQpos, iSpanStart, iSpanEnd, Vec2Str ( dPositionsInSpan ).cstr() );
+			}
+		}
+
+		// 1) For any phrase atoms present in the mask, reconstruct full phrase ranges
+		ProcessPhraseRuns ( dAllPhraseRuns, tSpan, tContainer, dDocHits, dMatched );
+
+		// 2) Add NEAR partner terms from qpos mask (non-phrase atoms)
+		ProcessNonPhraseAtoms ( tContainer, tSpan, dMatched );
+
+		// this is something that must never happen
+		// we got a span out of the matching engine that does not match any keywords?!
+		// However, it can happen if the qpos mask doesn't match actual positions in the span
+		// (e.g., positions are outside the span window), so we handle it gracefully
+		if ( !dMatched.GetLength() )
+		{
+			sphLogDebug ( "SplitSpansComplex: WARNING - dMatched is empty for span pos=%u spanlen=%u qposmask=0x%08x",
+				(unsigned)tSpan.m_uPosition, (unsigned)tSpan.m_uSpan, (unsigned)tSpan.m_uQposMask );
+			dMarked.RemoveFast ( i-- ); // remove, rescan
+			continue;
+		}
+
+		sphLogDebug ( "SplitSpansNearPhrase: final dMatched=[%s]", Vec2Str ( dMatched ).cstr() );
+
+		AppendMatchedAsSpans ( dMarked, dMatched, i );
+	}
+
+	dMarked.Uniq();
 }

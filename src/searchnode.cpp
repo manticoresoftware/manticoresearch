@@ -786,8 +786,12 @@ protected:
 	DWORD					m_uWordsExpected;	///< now many hits we're expect
 	DWORD					m_uWeight = 0;		///< weight accum
 	DWORD					m_uFirstHit = 0;	///< hitpos of the beginning of the match chain
+	DWORD					m_uOriginalFirstHit = 0;	///< hitpos of the original first node (for twofer mode with OR)
+	DWORD					m_uOriginalFirstML = 0;	///< match length of the original first node (for twofer mode with OR)
 	WORD					m_uFirstNpos = 0;	///< N-position of the head of the chain
+	WORD					m_uOriginalFirstNpos = 0;	///< N-position of the original first node (for twofer mode with OR)
 	WORD					m_uFirstQpos = 65535;		///< Q-position of the head of the chain (for twofers)
+	WORD					m_uOriginalFirstQpos = 65535;	///< Q-position of the original first node (for twofer mode with OR)
 	CSphVector<WORD>		m_dNpos;			///< query positions for multinear
 	CSphVector<ExtHit_t>	m_dRing;			///< ring buffer for multihit data
 	int						m_iRing = 0;		///< the head of the ring
@@ -4197,7 +4201,8 @@ const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunk()
 		while ( pHit->m_tRowID==pDoc->m_tRowID )
 		{
 			// emit document, if its new and acceptable
-			if ( FSM::HitFSM ( pHit, m_dMyHits ) && ( !iDoc || pHit->m_tRowID!=m_dDocs[iDoc-1].m_tRowID ) )
+			bool bEmitted = FSM::HitFSM ( pHit, m_dMyHits );
+			if ( bEmitted && ( !iDoc || pHit->m_tRowID!=m_dDocs[iDoc-1].m_tRowID ) )
 			{
 				m_dDocs[iDoc].m_tRowID = pHit->m_tRowID;
 				m_dDocs[iDoc].m_uDocFields = 1<< ( HITMAN::GetField ( pHit->m_uHitpos ) ); // not necessary
@@ -4311,6 +4316,14 @@ inline bool FSMphrase_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t> & 
 			tTarget.m_uMatchlen = tTarget.m_uSpanlen = (WORD)( uSpanlen + 1 );
 			tTarget.m_uWeight = m_dAtomPos.GetLength();
 			tTarget.m_uQposMask = m_uQposMask;
+			
+			// Debug: Log phrase match emission
+			sphLogDebug ( "FSMphrase::HitFSM: emitting phrase match: m_dAtomPos=[%s] qpos=%u pos=%u span=[%u,%u) weight=%u mask=0x%08x",
+				Vec2Str ( m_dAtomPos ).cstr(), (unsigned)tTarget.m_uQuerypos,
+				(unsigned)tTarget.m_uHitpos, (unsigned)tTarget.m_uHitpos,
+				(unsigned)(tTarget.m_uHitpos + tTarget.m_uMatchlen),
+				(unsigned)tTarget.m_uWeight, (unsigned)tTarget.m_uQposMask );
+			
 			ResetFSM ();
 			return true;
 		}
@@ -4472,6 +4485,12 @@ inline bool FSMmultinear_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t>
 	DWORD uHitposWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
 	WORD uNpos = pHit->m_uNodepos;
 	WORD uQpos = pHit->m_uQuerypos;
+	
+	// Debug: Log incoming hits to NEAR matching engine
+	sphLogDebug ( "FSMmultinear::HitFSM: processing hit: qpos=%u nodepos=%u pos=%u matchlen=%u spanlen=%u weight=%u, lastP=%u firstHit=%u firstQpos=%u firstNpos=%u",
+		(unsigned)uQpos, (unsigned)uNpos, (unsigned)uHitposWithField, (unsigned)pHit->m_uMatchlen,
+		(unsigned)pHit->m_uSpanlen, (unsigned)pHit->m_uWeight,
+		(unsigned)m_uLastP, (unsigned)m_uFirstHit, (unsigned)m_uFirstQpos, (unsigned)m_uFirstNpos );
 
 	// skip dupe hit (may be emitted by OR node, for example)
 	if ( m_uLastP==uHitposWithField )
@@ -4634,6 +4653,15 @@ inline bool FSMmultinear_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t>
 			tTarget.m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
 			tTarget.m_uSpanlen = 2;
 			tTarget.m_uQposMask = ( 1 << ( Max ( m_uFirstQpos, pHit->m_uQuerypos ) - tTarget.m_uQuerypos ) );
+			
+			// Debug: Log NEAR match emission
+			sphLogDebug ( "FSMmultinear::HitFSM: emitting NEAR match (twofer): first hit qpos=%u nodepos=%u pos=%u, second hit qpos=%u nodepos=%u pos=%u, baseQpos=%u mask=0x%08x delta=%u span=[%u,%u)",
+				(unsigned)m_uFirstQpos, (unsigned)m_uFirstNpos, (unsigned)m_uFirstHit,
+				(unsigned)pHit->m_uQuerypos, (unsigned)pHit->m_uNodepos, (unsigned)uHitposWithField,
+				(unsigned)tTarget.m_uQuerypos, (unsigned)tTarget.m_uQposMask,
+				(unsigned)(Max ( m_uFirstQpos, pHit->m_uQuerypos ) - tTarget.m_uQuerypos),
+				(unsigned)tTarget.m_uHitpos, (unsigned)(tTarget.m_uHitpos + tTarget.m_uMatchlen) );
+			
 			m_uFirstHit = m_uLastP = uHitposWithField;
 			m_uWeight = pHit->m_uWeight;
 			m_uFirstQpos = pHit->m_uQuerypos;

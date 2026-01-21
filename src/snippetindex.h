@@ -33,12 +33,17 @@ public:
 	void		AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition );
 	void		ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ );
 	int			GetTermWeight ( int iQueryPos ) const;
+	bool		IsPhrasePosition ( int iQueryPos ) const;
+	bool		HasPhrase () const;
+	bool		HasNear () const { return m_bNear; }
+	bool		HasPhraseNear () const { return m_bPhraseUnderNear; }
 	int			GetNumTerms () const;
 	DWORD		GetLastPos() const { return m_uLastPos; }
 	void		SetLastPos ( DWORD uLastPos ) { m_uLastPos=uLastPos; }
 
 	const XQQuery_t	& GetQuery() const { return m_tQuery; }
 	const CSphVector<CSphVector<DWORD>> & GetDocHits() const { return m_dDocHits; }
+	const VecTraits_T<int> & GetAtomToQpos() const { return m_dAtomToQpos; }
 	const CSphVector<DWORD> * GetHitlist ( const XQKeyword_t & tWord, const DictRefPtr_c & pDict ) const;
 
 private:
@@ -56,6 +61,7 @@ private:
 		SphWordID_t	m_iWordId;
 		int			m_iWeight;
 		int			m_iQueryPos;
+		int			m_iAtomPos;
 	};
 
 	DWORD							m_uLastPos;
@@ -68,12 +74,19 @@ private:
 	CSphVector<BYTE>		m_dStarBuffer;
 	CSphVector<int>			m_dQposToWeight;
 
+	CSphBitvec				m_dQposPhrase;
+	// atom pos to qpos index m_dDocHits
+	CSphFixedVector<int>	m_dAtomToQpos { 0 };
+	bool					m_bPhraseUnderNear = false;
+	bool					m_bNear = false;
+
 	mutable BYTE			m_sTmpWord [ 3*SPH_MAX_WORD_LEN + 16 ];
 
 	bool		MatchStar ( const Keyword_t & tTok, const BYTE * sWord ) const;
-	void		AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos );
+	void		AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos, int iAtomPos=-1 );
 	void		AddWordStar ( const char * sWord, int iLengthCP, int iQpos );
-	int			ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos );
+	void		ExtractWords ( XQNode_t * pNode, const DictRefPtr_c & pDict, int & iQpos, int & iMaxQpos );
+	void		CollectPhrasePositions ( const XQNode_t * pNode );
 };
 
 #endif // _snippetindex_

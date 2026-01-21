@@ -13,6 +13,7 @@
 #include "snippetindex.h"
 #include "sphinxint.h"
 #include "sphinxexcerpt.h"
+#include <algorithm>
 
 struct KeywordCmp_t
 {
@@ -185,12 +186,14 @@ void TermRemoveDup ( CSphVector<T> & dTerms, CSphVector<int> & dRemovedQPos, con
 	dTerms.Resize ( iDst );
 }
 
+static bool CheckPhraseNear ( const XQNode_t * pNode );
+static bool CheckNear ( const XQNode_t * pNode );
 
 void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ )
 {
 	int iQPos = 0;
-
-	iQPos = ExtractWords ( m_tQuery.m_pRoot, pDict, iQPos );
+	int iMaxQpos = 0;
+	ExtractWords ( m_tQuery.m_pRoot, pDict, iQPos, iMaxQpos );
 
 	if ( eExtQuerySPZ & SPH_SPZ_SENTENCE )
 	{
@@ -246,6 +249,38 @@ void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuery
 		m_dQposToWeight[m_dTerms[i].m_iQueryPos] = m_dTerms[i].m_iWeight;
 	ARRAY_FOREACH ( i, m_dStars )
 		m_dQposToWeight[m_dStars[i].m_iQueryPos] = m_dStars[i].m_iWeight;
+	
+	m_bPhraseUnderNear = CheckPhraseNear ( m_tQuery.m_pRoot );
+	m_bNear = CheckNear ( m_tQuery.m_pRoot );
+	
+	// Check if there's any NEAR query (with or without phrases)
+	// We need m_dAtomToQpos for all NEAR queries, not just those with phrases
+	if ( m_bPhraseUnderNear || m_bNear )
+	{
+		// build atom -> qpos map for NEAR handling (both with and without phrases)
+		m_dAtomToQpos.Reset ( iMaxQpos+1 );
+		m_dAtomToQpos.Fill ( -1 );
+		for ( const Term_t & tTerm : m_dTerms )
+		{
+			int iAtomPos = tTerm.m_iAtomPos;
+			if ( iAtomPos>=0 && iAtomPos<=iMaxQpos && m_dAtomToQpos[iAtomPos]==-1 )
+				m_dAtomToQpos[iAtomPos] = tTerm.m_iQueryPos;
+		}
+
+		// phrase position map (only needed for phrase/NEAR)
+		if ( m_bPhraseUnderNear )
+		{
+			// Find maximum qpos value to size m_dQposPhrase correctly
+			int iMaxQposValue = 0;
+			for ( const Term_t & tTerm : m_dTerms )
+				iMaxQposValue = Max ( iMaxQposValue, tTerm.m_iQueryPos );
+			for ( const Keyword_t & tStar : m_dStars )
+				iMaxQposValue = Max ( iMaxQposValue, tStar.m_iQueryPos );
+			
+			m_dQposPhrase.Init ( iMaxQposValue+1 );
+			CollectPhrasePositions ( m_tQuery.m_pRoot );
+		}
+	}
 
 #ifndef NDEBUG
 	bool bFilled = m_dQposToWeight.any_of ( [] ( int iWeight ) { return -1==iWeight; } );
@@ -297,19 +332,66 @@ int SnippetsDocIndex_c::GetTermWeight ( int iQueryPos ) const
 }
 
 
+bool SnippetsDocIndex_c::IsPhrasePosition ( int iQueryPos ) const
+{
+	if ( iQueryPos>=0 && iQueryPos<m_dQposPhrase.GetSize() )
+		return m_dQposPhrase.BitGet ( iQueryPos );
+	return false;
+}
+
+
+bool SnippetsDocIndex_c::HasPhrase () const
+{
+	return m_dQposPhrase.BitCount()!=0;
+}
+
+
+void SnippetsDocIndex_c::CollectPhrasePositions ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return;
+	
+	if ( pNode->GetOp()==SPH_QUERY_PHRASE )
+	{
+		assert ( pNode->dWords().GetLength() );
+
+		// might be a gap between phrase words but it should be highlighted as whole
+		// Find min/max atom positions in the phrase
+		const auto [iAtomFrom, iAtomTo] = std::minmax_element ( pNode->dWords().begin(), pNode->dWords().end(), [](const XQKeyword_t & tA, const XQKeyword_t & tB ) { return tA.m_iAtomPos < tB.m_iAtomPos; } );
+
+		// For all atom positions between min and max, map to qpos and set phrase bits
+		// Note: we use m_dAtomToQpos to map atom positions to query positions (qpos)
+		for ( int iAtomPos = iAtomFrom->m_iAtomPos; iAtomPos <= iAtomTo->m_iAtomPos; iAtomPos++ )
+		{
+			if ( iAtomPos>=0 && iAtomPos<m_dAtomToQpos.GetLength() )
+			{
+				int iQpos = m_dAtomToQpos[iAtomPos];
+				if ( iQpos>=0 && iQpos<m_dQposPhrase.GetSize() )
+				{
+					m_dQposPhrase.BitSet ( iQpos );
+				}
+			}
+		}
+	}
+
+	for ( const auto * pChild : pNode->dChildren() )
+		CollectPhrasePositions ( pChild );
+}
+
 int	SnippetsDocIndex_c::GetNumTerms () const
 {
 	return m_dQposToWeight.GetLength();
 }
 
 
-void SnippetsDocIndex_c::AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos )
+void SnippetsDocIndex_c::AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos, int iAtomPos )
 {
 	assert ( iWordID );
 	Term_t & tTerm = m_dTerms.Add();
 	tTerm.m_iWordId = iWordID;
 	tTerm.m_iWeight = iLengthCP;
 	tTerm.m_iQueryPos = iQpos;
+	tTerm.m_iAtomPos = iAtomPos;
 }
 
 
@@ -330,14 +412,15 @@ void SnippetsDocIndex_c::AddWordStar ( const char * sWord, int iLengthCP, int iQ
 }
 
 
-int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos )
+void SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c & pDict, int & iQpos, int & iMaxQpos )
 {
 	if ( !pNode )
-		return iQpos;
+		return;
 
 	ARRAY_FOREACH ( i, pNode->dWords() )
 	{
 		const XQKeyword_t & tWord = pNode->dWord(i);
+		iMaxQpos = Max ( iMaxQpos, tWord.m_iAtomPos );
 
 		int iLenCP = sphUTF8Len ( tWord.m_sWord.cstr() );
 		if ( HasWildcards ( tWord.m_sWord.cstr() ) )
@@ -351,16 +434,14 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 			SphWordID_t iWordID = pDict->GetWordID ( m_sTmpWord );
 			if ( iWordID )
 			{
-				AddWord ( iWordID, iLenCP, iQpos );
+				AddWord ( iWordID, iLenCP, iQpos, tWord.m_iAtomPos);
 				iQpos++;
 			}
 		}
 	}
 
 	ARRAY_FOREACH ( i, pNode->dChildren() )
-		iQpos = ExtractWords ( pNode->dChildren()[i], pDict, iQpos );
-
-	return iQpos;
+		ExtractWords ( pNode->dChildren()[i], pDict, iQpos, iMaxQpos );
 }
 
 
@@ -386,4 +467,41 @@ const CSphVector<DWORD> * SnippetsDocIndex_c::GetHitlist ( const XQKeyword_t & t
 	}
 
 	return nullptr;
+}
+
+
+bool CheckPhraseNear ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return false;
+
+	for ( const auto * pChild : pNode->dChildren() )
+	{
+		if ( !pChild )
+			continue;
+
+		// NEAR with phrase
+		if ( pNode->GetOp()==SPH_QUERY_NEAR && pChild->GetOp()==SPH_QUERY_PHRASE )
+			return true;
+
+		if ( CheckPhraseNear ( pChild ) )
+			return true;
+	}
+
+	return false;
+}
+
+bool CheckNear ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return false;
+
+	if ( pNode->GetOp()==SPH_QUERY_NEAR )
+		return true;
+
+	for ( const auto * pChild : pNode->dChildren() )
+		if ( CheckNear ( pChild ) )
+			return true;
+
+	return false;
 }

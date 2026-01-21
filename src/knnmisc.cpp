@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -75,6 +75,15 @@ const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
 bool IsKnnDist ( const CSphString & sExpr )
 {
 	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
+}
+
+
+void SetupKNNLimit ( CSphQuery & tQuery )
+{
+	auto & tKNN = tQuery.m_tKnnSettings;
+
+	if ( tKNN.m_iK < 0 )
+		tKNN.m_iK = tQuery.m_iLimit;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -530,7 +539,14 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		}
 
 		CSphString sSimilarity;
-		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError ) ) return false;
+		
+		// Fetch model_name first to check if dims should be optional
+		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
+		
+		// dims is required unless model_name is specified (model determines dimensions)
+		bool bDimsOptional = !tParsed.m_sModelName.empty();
+		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError, bDimsOptional ) ) return false;
+		
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWM, "hnsw_m", sError, true ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
@@ -554,8 +570,6 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			sError = "4-bit quantization is no longer supported";
 			return false;
 		}
-
-		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
 
 		if ( !tParsed.m_sModelName.empty() )
 		{
@@ -659,8 +673,7 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		NormalizeVec(dPoint);
 
 	std::string sErrorSTL;
-	int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, iRequested, tKNN.m_iEf, sErrorSTL );
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
@@ -687,7 +700,7 @@ RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQu
 	if ( !tRes.first )
 		return dIterators;
 
-	dIterators.Add ( { tRes.first, int64_t ( tQuery.m_tKnnSettings.m_iK*tQuery.m_tKnnSettings.m_fOversampling ) } );
+	dIterators.Add ( { tRes.first, tQuery.m_tKnnSettings.GetRequestedDocs() } );
 	return dIterators;
 }
 

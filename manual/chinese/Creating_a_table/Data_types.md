@@ -2483,35 +2483,57 @@ let search_res = search_api.search(search_req).await;
 
 ## Float vector
 
-<!-- example float_vector_auto -->
-
 浮点向量属性允许存储可变长度的浮点数列表，主要用于机器学习应用和相似性搜索。此类型与[多值整数（MVA）](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29)（MVAs）在几个重要方面不同：
 - 保留值的确切顺序（与MVAs不同，MVAs可能会重新排序）
 - 保留重复值（与MVAs不同，MVAs会去重）
 - 插入时无需额外处理（与MVAs不同，MVAs会排序和去重）
 
-浮点向量属性允许存储可变长度的浮点数列表，主要用于机器学习应用和相似性搜索。
+**重要：** `float_vector` 数据类型与 [自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) 机制不兼容。
 
-### 使用和限制
-- 目前仅支持实时表
-- 仅可在KNN（k-最近邻）搜索中使用
-- 不支持在普通表或其他函数/表达式中使用
-- 当与KNN设置一起使用时，不能`UPDATE` `float_vector`值。请使用`REPLACE`代替
-- 当未使用KNN设置时，可以`UPDATE` `float_vector`值
-- 浮点向量不能用于常规过滤或排序
-- 通过向量搜索操作（KNN）是过滤`float_vector`值的唯一方式
+### 一般限制
 
-### 常见用例
-- 用于语义搜索的文本嵌入
-- 推荐系统向量
-- 用于相似性搜索的图像嵌入
-- 用于机器学习的特征向量
+- 目前仅支持实时表（不支持普通表）
+- 其他函数或表达式中不支持
+- 不能在常规过滤器或排序中使用
 
-**请记住，`float_vector`数据类型与[自动模式](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)机制不兼容。**
+### 使用浮点向量与 KNN（向量搜索）
+
+当你配置 `float_vector` 属性并设置 KNN 参数时，你将启用向量相似性搜索功能。这允许你执行 k-最近邻搜索，根据向量距离查找相似文档。
+
+#### 功能
+
+**你可以做到：**
+- 执行 KNN（k-最近邻）向量搜索以查找相似文档
+- 构建语义搜索、推荐和 AI 驱动的功能
+- 使用自动嵌入从文本中自动生成向量
+
+**你不能做到：**
+- `UPDATE` `float_vector` 值（必须使用 `REPLACE` 代替）
+- 在常规过滤器或排序中使用浮点向量
+- 除了通过向量搜索操作，不能通过 `float_vector` 值进行过滤
+
+#### 参数
+
+当你创建带有 `float_vector` 属性的表以进行 KNN 搜索时，可以指定以下参数：
+
+**必填参数：**
+- `KNN_TYPE`：目前仅支持 `'hnsw'`
+- `KNN_DIMS`：向量的维度数（手动插入向量时必需，使用 `MODEL_NAME` 时可省略）
+- `HNSW_SIMILARITY`：距离函数 - `'l2'`、`'ip'`（内积）或 `'cosine'`
+
+**可选参数：**
+- `HNSW_M`：图中的最大连接数（默认：16）
+- `HNSW_EF_CONSTRUCTION`：构建时间/准确性权衡（默认：200）
+
+**自动嵌入参数**（当使用 `MODEL_NAME` 时）：
+- `MODEL_NAME`：使用的嵌入模型（例如，`'sentence-transformers/all-MiniLM-L6-v2'`、`'openai/text-embedding-ada-002'`）
+- `FROM`：用于生成嵌入的字段名列表（逗号分隔），或空字符串 `''` 表示使用所有文本/字符串字段
+- `API_KEY`：基于 API 的模型（OpenAI、Voyage、Jina）的 API 密钥
 
 有关设置浮点向量并在搜索中使用它们的详细信息，请参阅[KNN搜索](../Searching/KNN.md)。
 
-### 自动嵌入（推荐）
+<!-- example auto -->
+#### 方法 1：自动嵌入（推荐）
 
 处理浮点向量最简便的方式是使用**自动嵌入**。此功能使用机器学习模型自动从您的文本数据生成嵌入，从而消除手动计算和插入向量的需要。
 
@@ -2594,14 +2616,55 @@ INSERT INTO products (title, description) VALUES
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+<!-- end -->
 
-### 手动使用浮点向量
+<!-- example manual -->
+#### 方法 2：手动向量插入
 
-<!-- example for creating float_vector -->
-也可以使用手动计算的浮点向量。
+或者，你可以手动插入预计算的向量数据。这需要你使用外部工具或模型自行计算向量，然后将其插入到 Manticore 中。
+
+**重要提示：** 当使用 `HNSW_SIMILARITY='cosine'` 时，插入时向量会自动归一化为单位向量（数学长度/幅度为 1.0 的向量）。这种归一化保留了向量的方向，同时标准化了其长度，这是高效余弦相似性计算所必需的。这意味着存储的值将与你的原始输入值不同。
 
 <!-- intro -->
 ##### SQL：
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    image_vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2'
+);
+
+INSERT INTO products VALUES 
+(1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)),
+(2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406));
+```
+
+<!-- end -->
+
+<!-- example for creating float_vector --> 
+### 不使用 KNN 的浮点向量（仅存储）
+
+你也可以创建没有 KNN 配置的 `float_vector` 属性。在这种模式下，向量被存储但不能用于向量搜索操作。
+
+**你可以做到：**
+- 存储向量数据
+- `UPDATE` `float_vector` 值（与 KNN 不同，此时可以使用 `UPDATE`）
+
+**你不能做到：**
+- 执行 KNN 搜索或向量相似性搜索
+- 使用向量进行任何搜索操作
+- 通过 `float_vector` 值进行过滤
+
+#### 使用场景
+
+- 在配置KNN之前临时存储向量数据
+- 用于后续与KNN一起使用的暂存数据
+- 存储不需要搜索功能的向量
+
+
+<!-- intro -->
+##### SQL:
 <!-- request SQL -->
 
 ```sql

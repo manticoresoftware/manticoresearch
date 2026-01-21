@@ -499,6 +499,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [server_id](Server_settings/Searchd.md#server_id) - Server identifier used as a seed to generate a unique document ID
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` timeout
   * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 hash of the password required to invoke `shutdown` command from VIP SQL connection
+  * [skiplist_cache_size](Server_settings/Searchd.md#skiplist_cache_size) - Maximum size of the in-memory cache for decompressed skiplists
   * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Prefix to prepend to the local file names when generating snippets in `load_files` mode
   * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Path to file where the current SQL state will be serialized
   * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Maximum time to wait between requests from a MySQL client
@@ -523,6 +524,7 @@ searchd [OPTIONS]
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes the Manticore service from Microsoft Management Console and other locations where services are registered
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Prevents the server from serving incoming connections until table files are pre-read
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Displays all available parameters
+* [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - Only print errors on startup
 * [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Restricts the server to serve only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service in Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
@@ -667,4 +669,3 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Installation page](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Installation page](https://manticoresearch.com/install-15.1.0/)
 <!-- proofread -->
-

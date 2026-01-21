@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339819
+    },
+    "__meta": {
+        "source_text": "# SHOW WARNINGS\n\n`SHOW WARNINGS` statement can be used to retrieve the warning produced by the latest query. The error message will be returned along with the query itself:\n\n```sql\nmysql> SELECT * FROM test1 WHERE MATCH('@@title hello') \\G\nERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT\nnear '@title hello'\n\nmysql> SELECT * FROM test1 WHERE MATCH('@title -hello') \\G\nERROR 1064 (42000): index test1: query is non-computable (single NOT operator)\n\nmysql> SELECT * FROM test1 WHERE MATCH('\"test doc\"/3') \\G\n*************************** 1\\. row ***************************\n        id: 4\n    weight: 2500\n  group_id: 2\ndate_added: 1231721236\n1 row in set, 1 warning (0.00 sec)\n\nmysql> SHOW WARNINGS \\G\n*************************** 1\\. row ***************************\n  Level: warning\n   Code: 1000\nMessage: quorum threshold too high (words=2, thresh=3); replacing quorum operator\n         with AND operator\n1 row in set (0.00 sec)\n```\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "63581e9e32e762eaf7a7b0e8dcfbcf19"
     }
 }

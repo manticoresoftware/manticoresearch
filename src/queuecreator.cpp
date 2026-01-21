@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -2333,8 +2333,9 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 	const auto & tKNN = m_tQuery.m_tKnnSettings;
 	if ( !tKNN.m_sAttr.IsEmpty() && tKNN.m_fOversampling > 1.0f )
 	{
-		int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
-		return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
+		int64_t iRequested = tKNN.GetRequestedDocs();
+		if ( !tKNN.m_sAttr.IsEmpty() && iRequested > tKNN.m_iK )
+			return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
 	}
 
 	if ( m_tQuery.m_bExplicitMaxMatches || m_tQuery.m_bHasOuter || !m_tSettings.m_bComputeItems )
@@ -2471,10 +2472,29 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 	if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead )
 		return true;
 
+	auto & tSchema = *m_pSorterSchema;
+
+	// early-out if nothing to process
+	bool bFound = false;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bStored = false;
+		bool bColumnar = tAttr.m_pExpr && tAttr.m_pExpr->IsColumnar(&bStored);
+		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
+		{
+			bFound = true;
+			break;
+		}
+	}
+
+	if ( !bFound )
+		return true;
+
 	// check for columnar attributes that have FINAL eval stage
 	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
 	IntVec_t dStoredColumnarFinal, dStoredColumnarPostlimit;
-	auto & tSchema = *m_pSorterSchema;
+	AttrDependencyMap_c tDepMap(tSchema);
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tSchema.GetAttr(i);
@@ -2483,7 +2503,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
 		{
 			// we need docids at the final stage if we want to fetch from docstore. so they must be evaluated before that
-			if ( IsIndependentAttr ( tAttr.m_sName, tSchema ) && tAttr.m_sName!=sphGetDocidName() )
+			if ( tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
 				dStoredColumnarPostlimit.Add(i);
 			else
 				dStoredColumnarFinal.Add(i);

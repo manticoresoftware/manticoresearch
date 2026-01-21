@@ -106,7 +106,10 @@ mysql -h0 -P9306 -e "INSERT INTO products2 VALUES (1, 'test1'), (2, 'test2');"
 ––– comment –––
 Test cross-session multi-table READ lock allows SELECT (session 1 locks both tables, session 2 can read)
 ––– input –––
-mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!; sleep 1; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;"; wait $LOCK_PID 2>/dev/null
+mysql -h0 -P9306 -e "LOCK TABLES products READ, products2 READ; debug sleep 5" > /dev/null 2>&1 & LOCK_PID=$!;
+sleep 1;
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM products2;";
+wait $LOCK_PID 2>/dev/null
 ––– output –––
 +----------+
 | count(*) |

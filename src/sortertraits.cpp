@@ -321,6 +321,12 @@ void BaseGroupSorter_c::SetColumnar ( columnar::Columnar_i * pColumnar )
 		i->SetColumnar(pColumnar);
 }
 
+void BaseGroupSorter_c::DumpAggregateDiagnostics ( const char * szContext )
+{
+	for ( auto * pAggregate : m_dAggregates )
+		pAggregate->DumpDiagnostics ( szContext );
+}
+
 
 void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs )
 {

@@ -25,6 +25,7 @@
 
 #include <cstring>
 #include <cmath>
+#include <limits>
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
@@ -2429,14 +2430,48 @@ static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
 	CSphVector<TDigestCentroid_t> dCentroids;
 	tDigest.Export ( dCentroids );
 
-	TDigest_c tDeviation ( tDigest.GetCompression() );
+	if ( dCentroids.IsEmpty() )
+		return false;
+
+	int64_t iTotalWeight = 0;
 	for ( const auto & tCentroid : dCentroids )
+		iTotalWeight += tCentroid.m_iCount;
+
+	const double fTarget = 0.5 * (double)iTotalWeight;
+	double fAccumulated = 0.0;
+
+	int iRight = 0;
+	while ( iRight<dCentroids.GetLength() && dCentroids[iRight].m_fMean<fMedian )
+		++iRight;
+	int iLeft = iRight-1;
+
+	while ( iLeft>=0 || iRight<dCentroids.GetLength() )
 	{
-		double fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
-		tDeviation.Add ( fDeviation, tCentroid.m_iCount );
+		double fLeftDev = ( iLeft>=0 ) ? ( fMedian - dCentroids[iLeft].m_fMean ) : std::numeric_limits<double>::infinity();
+		double fRightDev = ( iRight<dCentroids.GetLength() ) ? ( dCentroids[iRight].m_fMean - fMedian ) : std::numeric_limits<double>::infinity();
+
+		if ( fLeftDev<=fRightDev )
+		{
+			fAccumulated += (double)dCentroids[iLeft].m_iCount;
+			if ( fAccumulated>=fTarget )
+			{
+				fMad = fLeftDev;
+				return true;
+			}
+			--iLeft;
+		} else
+		{
+			fAccumulated += (double)dCentroids[iRight].m_iCount;
+			if ( fAccumulated>=fTarget )
+			{
+				fMad = fRightDev;
+				return true;
+			}
+			++iRight;
+		}
 	}
 
-	fMad = tDeviation.Quantile ( 0.5 );
+	fMad = 0.0;
 	return true;
 }
 

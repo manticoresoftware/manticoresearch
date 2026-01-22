@@ -142,6 +142,10 @@ protected:
 	double			m_fCompression;
 	CSphString		m_sName;
 	ISphExprRefPtr_c m_pInputExpr;
+	CSphString		m_sColumnarAttr;
+	std::unique_ptr<columnar::Iterator_i> m_pColumnarIterator;
+	common::AttrType_e m_eColumnarType = common::AttrType_e::NONE;
+	bool			m_bUseColumnar = false;
 
 	mutable Stats_t	m_tStats;
 
@@ -159,12 +163,28 @@ protected:
 		, m_sName ( tAttr.m_sName )
 		, m_pInputExpr ( tAttr.m_pExpr )
 	{
+		if ( m_pInputExpr )
+		{
+			m_pInputExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &m_sColumnarAttr );
+			m_bUseColumnar = !m_sColumnarAttr.IsEmpty();
+		}
 	}
 
 	void DumpDiagnostics ( const char * szContext ) override;
 
 	double EvalInput ( const CSphMatch & tMatch ) const
 	{
+		if ( m_bUseColumnar && m_pColumnarIterator )
+		{
+			switch ( m_eColumnarType )
+			{
+			case common::AttrType_e::FLOAT:
+				return sphDW2F ( (DWORD)m_pColumnarIterator->Get ( tMatch.m_tRowID ) );
+			default:
+				return (double)m_pColumnarIterator->Get ( tMatch.m_tRowID );
+			}
+		}
+
 		if ( m_pInputExpr )
 		{
 			switch ( m_eValueType )
@@ -183,6 +203,27 @@ protected:
 		}
 
 		return FetchNumericAttr ( tMatch, m_tLocator, m_eValueType );
+	}
+
+	void SetColumnar ( columnar::Columnar_i * pColumnar ) override
+	{
+		if ( !m_bUseColumnar )
+			return;
+
+		if ( pColumnar )
+		{
+			std::string sError; // FIXME! report errors
+			m_pColumnarIterator = CreateColumnarIterator ( pColumnar, m_sColumnarAttr.cstr(), sError );
+			columnar::AttrInfo_t tAttrInfo;
+			if ( pColumnar->GetAttrInfo ( m_sColumnarAttr.cstr(), tAttrInfo ) )
+				m_eColumnarType = tAttrInfo.m_eType;
+			else
+				m_eColumnarType = common::AttrType_e::NONE;
+		} else
+		{
+			m_pColumnarIterator.reset();
+			m_eColumnarType = common::AttrType_e::NONE;
+		}
 	}
 
 	void AppendValue ( TDigest_c & tDigest, const CSphMatch & tMatch ) const

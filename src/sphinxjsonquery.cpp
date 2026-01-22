@@ -2461,7 +2461,6 @@ static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
 
 	for ( const auto & tEntry : dDeviations )
 	{
-		double fPrev = fAccumulated;
 		fAccumulated += (double)tEntry.m_iWeight;
 
 		if ( fAccumulated>=fTarget )

@@ -2479,8 +2479,6 @@ bool QueueCreator_c::ShouldEnableSlimTdigest() const
 		return false;
 	if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead )
 		return false;
-	if ( m_tQuery.m_bGroupEmulation )
-		return false;
 	return true;
 }
 

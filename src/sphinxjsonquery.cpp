@@ -2429,50 +2429,14 @@ static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
 	CSphVector<TDigestCentroid_t> dCentroids;
 	tDigest.Export ( dCentroids );
 
-	if ( dCentroids.IsEmpty() )
-		return false;
-
-	struct DeviationEntry_t
+	TDigest_c tDeviation ( tDigest.GetCompression() );
+	for ( const auto & tCentroid : dCentroids )
 	{
-		double		m_fDeviation = 0.0;
-		int64_t		m_iWeight = 0;
-	};
-
-	CSphVector<DeviationEntry_t> dDeviations;
-	dDeviations.Resize ( dCentroids.GetLength() );
-	int64_t iTotalWeight = 0;
-
-	for ( int i = 0; i < dCentroids.GetLength(); ++i )
-	{
-		const auto & tCentroid = dCentroids[i];
-		dDeviations[i].m_fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
-		dDeviations[i].m_iWeight = tCentroid.m_iCount;
-		iTotalWeight += tCentroid.m_iCount;
+		double fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
+		tDeviation.Add ( fDeviation, tCentroid.m_iCount );
 	}
 
-	std::sort ( dDeviations.Begin(), dDeviations.End(),
-		[] ( const DeviationEntry_t & a, const DeviationEntry_t & b )
-		{
-			return a.m_fDeviation < b.m_fDeviation;
-		} );
-
-	const double fTarget = 0.5 * (double)iTotalWeight;
-	double fAccumulated = 0.0;
-
-	for ( const auto & tEntry : dDeviations )
-	{
-		fAccumulated += (double)tEntry.m_iWeight;
-
-		if ( fAccumulated>=fTarget )
-		{
-			const double fExcess = fAccumulated - fTarget;
-			const double fRatio = ( tEntry.m_iWeight>0 ) ? ( 1.0 - fExcess / (double)tEntry.m_iWeight ) : 0.0;
-			fMad = tEntry.m_fDeviation * std::clamp ( fRatio, 0.0, 1.0 );
-			return true;
-		}
-	}
-
-	fMad = dDeviations.Last().m_fDeviation;
+	fMad = tDeviation.Quantile ( 0.5 );
 	return true;
 }
 

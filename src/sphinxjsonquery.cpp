@@ -2433,55 +2433,44 @@ static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
 	if ( dCentroids.IsEmpty() )
 		return false;
 
+	struct DeviationEntry_t
+	{
+		double		m_fDeviation = 0.0;
+		int64_t		m_iWeight = 0;
+	};
+
+	CSphVector<DeviationEntry_t> dDeviations;
+	dDeviations.Resize ( dCentroids.GetLength() );
+
 	int64_t iTotalWeight = 0;
-	for ( const auto & tCentroid : dCentroids )
+	for ( int i = 0; i < dCentroids.GetLength(); ++i )
+	{
+		const auto & tCentroid = dCentroids[i];
+		dDeviations[i].m_fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
+		dDeviations[i].m_iWeight = tCentroid.m_iCount;
 		iTotalWeight += tCentroid.m_iCount;
+	}
+
+	std::sort ( dDeviations.Begin(), dDeviations.End(),
+		[] ( const DeviationEntry_t & a, const DeviationEntry_t & b )
+		{
+			return a.m_fDeviation < b.m_fDeviation;
+		} );
 
 	const double fTarget = 0.5 * (double)iTotalWeight;
 	double fAccumulated = 0.0;
 
-	int iRight = 0;
-	const int iCount = dCentroids.GetLength();
-	while ( iRight<iCount && dCentroids[iRight].m_fMean<fMedian )
-		++iRight;
-	int iLeft = iRight-1;
-
-	auto NextDeviation = [&] (int index, bool left) -> double
+	for ( const auto & tEntry : dDeviations )
 	{
-		if ( left )
-			return ( index>=0 ) ? ( fMedian - dCentroids[index].m_fMean ) : std::numeric_limits<double>::infinity();
-		else
-			return ( index<iCount ) ? ( dCentroids[index].m_fMean - fMedian ) : std::numeric_limits<double>::infinity();
-	};
-
-	while ( iLeft>=0 || iRight<iCount )
-	{
-		double fLeftDev = NextDeviation ( iLeft, true );
-		double fRightDev = NextDeviation ( iRight, false );
-
-		if ( fLeftDev<=fRightDev )
+		fAccumulated += (double)tEntry.m_iWeight;
+		if ( fAccumulated>=fTarget )
 		{
-			fAccumulated += (double)dCentroids[iLeft].m_iCount;
-			if ( fAccumulated>=fTarget )
-			{
-				fMad = fLeftDev;
-				return true;
-			}
-			--iLeft;
-		}
-		else
-		{
-			fAccumulated += (double)dCentroids[iRight].m_iCount;
-			if ( fAccumulated>=fTarget )
-			{
-				fMad = fRightDev;
-				return true;
-			}
-			++iRight;
+			fMad = tEntry.m_fDeviation;
+			return true;
 		}
 	}
 
-	fMad = 0.0;
+	fMad = dDeviations.Last().m_fDeviation;
 	return true;
 }
 

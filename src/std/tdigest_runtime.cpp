@@ -10,6 +10,7 @@ TDigestRuntimeState_t::TDigestRuntimeState_t ( double fCompression )
 TDigestRuntimeState_t::TDigestRuntimeState_t ( const TDigestRuntimeState_t & rhs )
 	: m_uMagic ( RUNTIME_MAGIC )
 	, m_tDigest ( rhs.m_tDigest )
+	, m_dPending ( rhs.m_dPending )
 {}
 
 TDigestRuntimeState_t & TDigestRuntimeState_t::operator= ( const TDigestRuntimeState_t & rhs )
@@ -19,6 +20,7 @@ TDigestRuntimeState_t & TDigestRuntimeState_t::operator= ( const TDigestRuntimeS
 
 	m_uMagic = RUNTIME_MAGIC;
 	m_tDigest = rhs.m_tDigest;
+	m_dPending = rhs.m_dPending;
 	return *this;
 }
 
@@ -34,6 +36,7 @@ TDigestRuntimeAlloc_t sphTDigestRuntimeCloneState ( const TDigestRuntimeState_t 
 {
 	auto tAlloc = sphTDigestRuntimeAllocate ( tState.m_tDigest.GetCompression() );
 	tAlloc.m_pState->m_tDigest = tState.m_tDigest;
+	tAlloc.m_pState->m_dPending = tState.m_dPending;
 	return tAlloc;
 }
 

@@ -19,61 +19,26 @@
 /// mini-index for a single document
 /// keeps query words
 /// keeps hit lists for every query keyword
-class SnippetsDocIndex_c
+class SnippetsDocIndex_i
 {
-	friend struct KeywordCmp_t;
-	friend struct TermCmp_t;
-
 public:
-				SnippetsDocIndex_c ( const XQQuery_t & tQuery );
+	virtual ~SnippetsDocIndex_i() = default;
 
-	void		SetupHits();
-	int			FindWord ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen ) const;
-	int			FindStarred ( const char * sWord ) const;
-	void		AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition );
-	void		ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ );
-	int			GetTermWeight ( int iQueryPos ) const;
-	int			GetNumTerms () const;
-	DWORD		GetLastPos() const { return m_uLastPos; }
-	void		SetLastPos ( DWORD uLastPos ) { m_uLastPos=uLastPos; }
+	virtual void	SetupHits() = 0;
+	virtual int		FindWord ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen ) const = 0;
+	virtual void	AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition ) = 0;
+	virtual void	ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ ) = 0;
+	virtual int		GetTermWeight ( int iQueryPos ) const = 0;
+	virtual int		GetNumTerms () const = 0;
+	virtual DWORD	GetLastPos() const = 0;
+	virtual void	SetLastPos ( DWORD uLastPos ) = 0;
 
-	const XQQuery_t	& GetQuery() const { return m_tQuery; }
-	const CSphVector<CSphVector<DWORD>> & GetDocHits() const { return m_dDocHits; }
-	const CSphVector<DWORD> * GetHitlist ( const XQKeyword_t & tWord, const DictRefPtr_c & pDict ) const;
-
-private:
-	struct Keyword_t
-	{
-		int			m_iWord;
-		int			m_iLength;
-		bool		m_bStar;
-		int			m_iWeight;
-		int			m_iQueryPos;
-	};
-
-	struct Term_t
-	{
-		SphWordID_t	m_iWordId;
-		int			m_iWeight;
-		int			m_iQueryPos;
-	};
-
-	DWORD							m_uLastPos;
-	CSphVector<CSphVector<DWORD>>	m_dDocHits;
-	const XQQuery_t	&				m_tQuery;
-
-	CSphVector<Term_t>		m_dTerms;
-	CSphVector<SphWordID_t>	m_dStarred;
-	CSphVector<Keyword_t>	m_dStars;
-	CSphVector<BYTE>		m_dStarBuffer;
-	CSphVector<int>			m_dQposToWeight;
-
-	mutable BYTE			m_sTmpWord [ 3*SPH_MAX_WORD_LEN + 16 ];
-
-	bool		MatchStar ( const Keyword_t & tTok, const BYTE * sWord ) const;
-	void		AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos );
-	void		AddWordStar ( const char * sWord, int iLengthCP, int iQpos );
-	int			ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos );
+	virtual const XQQuery_t	& GetQuery() const = 0;
+	virtual const CSphVector<CSphVector<DWORD>> & GetDocHits() const = 0;
+	virtual const CSphVector<DWORD> * GetHitlist ( const XQKeyword_t & tWord, const DictRefPtr_c & pDict ) const = 0;
 };
+
+SnippetsDocIndex_i * CreateSnippetsDocIndex ( const XQQuery_t & tQuery );
+
 
 #endif // _snippetindex_

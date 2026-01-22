@@ -160,7 +160,7 @@ c\=\> => cde
 <!-- end -->
 
 <!-- example wf_multiple_tokens -->
-You can specify multiple destination tokens:
+You can specify multiple destination forms:
 
 <!-- request Example -->
 ```ini
@@ -189,8 +189,98 @@ wordforms=/tmp/wf2
 wordforms=/tmp/wf_new*
 ```
 
+## wordforms_list
+
+```ini
+wordforms_list = 'source-form > destination-form; ...'
+```
+
+<!-- example wordforms_list -->
+The `wordforms_list` setting allows you to specify word forms directly in the `CREATE TABLE` statement. It is supported in [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) only.
+
+The values must be separated by semicolons (`;`). Since word forms can contain `>` or `=>` as separators, and potentially other special characters, make sure to escape semicolons if they are part of the form itself (e.g. `\;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'wordforms_list' => 'walks > walk; walked > walk'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) wordforms_list = \'walks > walk; walked > walk\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) wordforms_list = 'walks > walk; walked > walk'", Some(true)).await;
+```
+
 <!-- end -->
 
+<!-- end -->
 
 <!-- proofread -->
 

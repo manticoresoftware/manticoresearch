@@ -2,7 +2,7 @@
 
 Стоп-слова — это слова, которые игнорируются при индексации и поиске, обычно из-за их высокой частоты и низкой ценности для результатов поиска.
 
-Manticore Search по умолчанию применяет [стемминг](../../Creating_a_table/NLP_and_tokenization/Morphology.md) к стоп-словам, что может привести к нежелательным результатам, но это можно отключить с помощью параметра [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
+Manticore Search по умолчанию применяет [стемминг](../../Creating_a_table/NLP_and_tokenization/Morphology.md) к стоп-словам, что может привести к нежелательным результатам, но это можно отключить с помощью опции [stopwords_unstemmed](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
 
 Небольшие файлы стоп-слов хранятся в заголовке таблицы, и существует ограничение на размер файлов, которые могут быть встроены, как определено опцией [embedded_limit](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit).
 
@@ -15,11 +15,11 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 ```
 
 <!-- example stopwords -->
-Параметр stopwords является необязательным и по умолчанию пустым. Он позволяет указать путь к одному или нескольким файлам стоп-слов, разделенным пробелами. Все файлы будут загружены. В режиме реального времени разрешены только абсолютные пути.
+Настройка stopwords является необязательной и по умолчанию пустой. Она позволяет указать путь к одному или нескольким файлам стоп-слов, разделенным пробелами. Все файлы будут загружены. В режиме реального времени разрешены только абсолютные пути.
 
-Формат файла стоп-слов — простой текстовый с кодировкой UTF-8. Данные файла будут токенизированы с учетом настроек [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), поэтому вы можете использовать те же разделители, что и в индексируемых данных.
+Формат файла стоп-слов — это простой текстовый файл в кодировке UTF-8. Данные файла будут токенизированы с учетом настроек [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), поэтому вы можете использовать те же разделители, что и в индексируемых данных.
 
-Когда активна индексация [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), стоп-слова, состоящие из символов, подпадающих под [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars), сами токенизируются на N-граммы. Таким образом, каждая отдельная N-грамма становится отдельным стоп-словом. Например, при `ngram_len=1` и подходящих `ngram_chars` стоп-слово `test` будет интерпретировано как `t`, `e`, `s`, `t` — четыре различных стоп-слова.
+Когда активна индексация [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), стоп-слова, состоящие из символов, подпадающих под [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars), сами токенизируются в N-граммы. Таким образом, каждая отдельная N-грамма становится отдельным стоп-словом. Например, при `ngram_len=1` и подходящих `ngram_chars` стоп-слово `test` будет интерпретировано как `t`, `e`, `s`, `t` — четыре различных стоп-слова.
 
 Файлы стоп-слов можно создавать вручную или полуавтоматически. [Индексатор](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) предоставляет режим, который создает частотный словарь таблицы, отсортированный по частоте ключевых слов. Верхние ключевые слова из этого словаря обычно можно использовать как стоп-слова. Подробнее см. переключатели [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) и [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments). Верхние ключевые слова из этого словаря обычно можно использовать как стоп-слова.
 
@@ -171,7 +171,7 @@ table products {
 * zu - Зулу
 
 <!-- example stopwords 1 -->
-Например, чтобы использовать стоп-слова для итальянского языка, просто добавьте следующую строку в конфигурационный файл:
+Например, чтобы использовать стоп-слова для итальянского языка, просто добавьте следующую строку в файл конфигурации:
 
 
 <!-- intro -->
@@ -362,6 +362,97 @@ table products {
 ```
 <!-- end -->
 
+## stopwords_list
+
+```ini
+stopwords_list = 'value1; value2; ...'
+```
+
+<!-- example stopwords_list -->
+Параметр `stopwords_list` позволяет указать стоп-слова непосредственно в операторе `CREATE TABLE`. Он поддерживается только в [режиме RT](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29).
+
+Значения должны быть разделены точкой с запятой (`;`). Если необходимо использовать точку с запятой как обычный символ, её нужно экранировать обратной косой чертой (`\;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) stopwords_list = 'a; the'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) stopwords_list = 'a; the'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'stopwords_list' => 'a; the'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", Some(true)).await;
+```
+
+<!-- end -->
+
 ## stopword_step
 
 ```ini
@@ -473,11 +564,11 @@ stopwords_unstemmed={0|1}
 ```
 
 <!-- example stopwords_unstemmed -->
-Определяет, применять ли стоп-слова до или после стемминга. Необязательный параметр, по умолчанию равен 0 (применять фильтр стоп-слов после стемминга).
+Определяет, применять ли стоп-слова до или после стемминга. Необязательный параметр, по умолчанию 0 (применять фильтр стоп-слов после стемминга).
 
-По умолчанию стоп-слова сами подвергаются стеммингу, а затем применяются к токенам *после* стемминга (или любой другой морфологической обработки). Это означает, что токен отбрасывается, когда stem(токен) равен stem(стоп-слово). Такое поведение по умолчанию может привести к неожиданным результатам, если токен ошибочно сводится к стоп-корню. Например, "Andes" может быть приведено к "and", поэтому, когда "and" является стоп-словом, "Andes" также пропускается.
+По умолчанию стоп-слова сами подвергаются стеммингу, а затем применяются к токенам *после* стемминга (или любой другой морфологической обработки). Это означает, что токен пропускается, когда stem(токен) равен stem(стоп-слово). Такое поведение по умолчанию может привести к неожиданным результатам, когда токен ошибочно сводится к стоп-корню. Например, "Andes" может быть приведено к "and", поэтому, когда "and" является стоп-словом, "Andes" также пропускается.
 
-Однако вы можете изменить это поведение, включив директиву `stopwords_unstemmed`. Когда она включена, стоп-слова применяются до стемминга (и, следовательно, к исходным формам слов), и токены пропускаются, когда токен равен стоп-слову.
+Однако вы можете изменить это поведение, включив директиву `stopwords_unstemmed`. При её включении стоп-слова применяются до стемминга (и, следовательно, к исходным формам слов), и токены пропускаются, когда токен равен стоп-слову.
 
 <!-- intro -->
 ##### SQL:

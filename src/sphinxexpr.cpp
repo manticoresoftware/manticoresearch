@@ -7148,18 +7148,24 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	{
 		CSphRefcountedPtr<ISphExpr> pVal;
 		VecTraits_T < CSphNamedVariant > dSrcOpt;
+		ESphAttr eArgType = SPH_ATTR_NONE;
 		GatherArgFN ( tNode.m_iLeft, [&] ( int i )
 		{
 			if ( m_dNodes[i].m_eRetType==SPH_ATTR_MAPARG )
 				dSrcOpt = m_dNodes[i].m_pMapArg->m_dPairs;
 			else
+			{
+				eArgType = m_dNodes[i].m_eRetType;
 				pVal = CreateTree ( i );
+			}
 		});
 		if ( eFunc==FUNC_HISTOGRAM )
 		{
 			AggrHistSetting_t tHist;
 			if ( !ParseAggrHistogram ( dSrcOpt, tHist, m_sCreateError ) )
 				return nullptr;
+			if ( IsFloatLike ( eArgType ) )
+				PromoteHistogramToFloat ( tHist );
 			return CreateExprHistogram ( pVal, tHist );
 		} else
 		{

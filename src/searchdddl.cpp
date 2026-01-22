@@ -531,7 +531,7 @@ bool DdlParser_c::AddItemOptionAPITimeout ( const SqlNode_t & tOption )
 	CSphString sValue = ToStringUnescape(tOption);
 	
 	int iTimeout = 0;
-	if ( !ValidateAPITimeout ( sValue, iTimeout, m_sError ) )
+	if ( !ValidateEmbeddingsAPITimeout ( sValue, iTimeout, m_sError ) )
 		return false;
 	
 	// 0 means use default timeout (10 seconds), positive value is timeout in seconds

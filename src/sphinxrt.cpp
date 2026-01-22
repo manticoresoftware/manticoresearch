@@ -11435,14 +11435,9 @@ bool RtIndex_c::AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl,
 		CSphString sRevertError;
 		LoadEmbeddingModels(sRevertError);
 
-		// If we're removing a custom URL and validation fails due to API key format,
-		// provide a clear error message explaining that a valid API key is required
-		// to use the default endpoint. This is consistent with table creation errors.
 		const char * szError = sError.cstr();
 		if ( bIsRemovingCustomUrl && szError && ( strstr ( szError, "Invalid API key" ) || strstr ( szError, "API key" ) ) )
-		{
 			sError.SetSprintf ( "cannot remove API_URL: API key validation failed for the default endpoint. The API key may be invalid, expired, or not authorized for the default provider endpoint. To remove API_URL, first update the API key to a valid key that works with the default endpoint, or keep using a custom API_URL" );
-		}
 		
 		return false;
 	}
@@ -11474,7 +11469,7 @@ bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphSt
 
 	if ( iTimeout < 0 )
 	{
-		sError = g_sAPITimeoutError;
+		sError = GetAPITimeoutErrorMsg();
 		return false;
 	}
 

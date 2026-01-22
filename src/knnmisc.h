@@ -65,7 +65,5 @@ RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQ
 
 ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings );
 
-constexpr const char * g_sAPITimeoutError = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
-
-// Validate API_TIMEOUT parameter value
-bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );
+const char *					GetAPITimeoutErrorMsg();
+bool							ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );

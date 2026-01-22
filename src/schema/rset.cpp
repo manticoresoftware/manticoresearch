@@ -214,11 +214,7 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 {
 	assert ( m_pIndexSchema );
 	assert ( iAttr >= 0 );
-
-	// Only remove static attributes (those from the index schema)
-	// Dynamic attributes (index >= ActualLen()) should not be removed via this function
-	if ( iAttr >= ActualLen() )
-		return;
+	assert ( iAttr < ActualLen() );
 
 	// map from rset indexes (adjusted for removal) to index schema indexes (the original ones)
 	ARRAY_FOREACH_COND ( i, m_dRemoved, iAttr >= m_dRemoved[i] )

@@ -50,7 +50,6 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
-#include "conversion.h"
 
 // services
 #include "taskping.h"
@@ -10480,9 +10479,8 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		case Alter_e::ApiTimeout:
 			{
 				int iTimeout = 0;
-				if ( !ValidateAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
-					break;
-				WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+				if ( ValidateEmbeddingsAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
+					WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
 			}
 			break;
 		}

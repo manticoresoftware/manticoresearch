@@ -19,6 +19,13 @@
 #include "conversion.h"
 
 
+const char * GetAPITimeoutErrorMsg()
+{
+	static const char * API_TIMEOUT_ERROR = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+	return API_TIMEOUT_ERROR;
+}
+
+
 bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
 {
 	if ( m_hModels.Exists(sAttr) )
@@ -426,15 +433,12 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 	{
 		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
 		
-		// Add 'from' field if available
 		if ( !tAttr.m_sKNNFrom.IsEmpty() )
 			sRes << " from='" << tAttr.m_sKNNFrom.cstr() << "'";
 				
-		// Add API URL if provided (custom endpoint)
 		if ( !tKNNModel.m_sAPIUrl.empty() )
 			sRes << " api_url='" << tKNNModel.m_sAPIUrl.c_str() << "'";
 		
-		// Add API timeout if provided (non-default value)
 		if ( tKNNModel.m_iAPITimeout > 0 )
 			sRes << " api_timeout='" << tKNNModel.m_iAPITimeout << "'";
 	}
@@ -489,8 +493,10 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 		tOut.NamedString ( "api_key", tMS.m_sAPIKey.c_str() );
 		if ( !tMS.m_sAPIUrl.empty() )
 			tOut.NamedString ( "api_url", tMS.m_sAPIUrl.c_str() );
+
 		if ( tMS.m_iAPITimeout > 0 )
 			tOut.NamedVal ( "api_timeout", tMS.m_iAPITimeout );
+
 		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
 	}
 }
@@ -520,8 +526,10 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 			tObj.AddStr ( "api_key", i.m_sAPIKey.c_str() );
 			if ( !i.m_sAPIUrl.empty() )
 				tObj.AddStr ( "api_url", i.m_sAPIUrl.c_str() );
+
 			if ( i.m_iAPITimeout > 0 )
 				tObj.AddInt ( "api_timeout", i.m_iAPITimeout );
+
 			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
 		}
 
@@ -853,11 +861,11 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 }
 
 
-bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError )
+bool ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError )
 {
 	if ( sValue.IsEmpty() )
 	{
-		sError = g_sAPITimeoutError;
+		sError = GetAPITimeoutErrorMsg();
 		return false;
 	}
 
@@ -869,7 +877,7 @@ bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString 
 	// If we didn't consume the entire string, it's invalid
 	if ( *p != '\0' )
 	{
-		sError = g_sAPITimeoutError;
+		sError = GetAPITimeoutErrorMsg();
 		return false;
 	}
 
@@ -878,7 +886,7 @@ bool ValidateAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString 
 	unsigned long ulTimeout = strtoul ( sValue.cstr(), &pEnd, 10 );
 	if ( ulTimeout > INT_MAX )
 	{
-		sError = g_sAPITimeoutError;
+		sError = GetAPITimeoutErrorMsg();
 		return false;
 	}
 

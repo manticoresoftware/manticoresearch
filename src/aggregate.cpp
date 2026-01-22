@@ -17,6 +17,7 @@
 #include "std/tdigest_runtime.h"
 #include "sphinxutils.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <new>
@@ -130,6 +131,8 @@ static void LoadTDigestFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double 
 class AggrTDigestBase_c : public AggrFunc_i
 {
 protected:
+	static constexpr int PENDING_FLUSH_LIMIT = 128;
+
 	struct Stats_t
 	{
 		uint64_t	m_uAppends = 0;
@@ -151,10 +154,12 @@ protected:
 
 	TDigestRuntimeState_t * EnsureRuntime ( CSphMatch & tMatch ) const;
 	TDigestRuntimeState_t * CreateRuntime ( CSphMatch & tMatch ) const;
+	TDigestRuntimeState_t & AccessState ( CSphMatch & tMatch ) const;
 	TDigest_c & AccessDigest ( CSphMatch & tMatch ) const;
 	void SerializeRuntime ( CSphMatch & tMatch ) const;
 	void DropRuntime ( CSphMatch & tMatch ) const;
 	const TDigestRuntimeState_t * TryGetRuntime ( const CSphMatch & tMatch ) const;
+	void FlushPending ( TDigestRuntimeState_t & tState ) const;
 
 	explicit AggrTDigestBase_c ( const CSphColumnInfo & tAttr )
 		: m_tLocator ( tAttr.m_tLocator )
@@ -226,13 +231,15 @@ protected:
 		}
 	}
 
-	void AppendValue ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
+	void AppendValue ( TDigestRuntimeState_t & tState, const CSphMatch & tMatch ) const
 	{
 		double fVal = EvalInput ( tMatch );
-		tDigest.Add ( fVal );
+		tState.m_dPending.Add ( fVal );
+		if ( tState.m_dPending.GetLength()>=PENDING_FLUSH_LIMIT )
+			FlushPending ( tState );
 	}
 
-	void MergeFromMatch ( TDigest_c & tDigest, const CSphMatch & tMatch ) const
+	void MergeFromMatch ( TDigestRuntimeState_t & tState, const CSphMatch & tMatch ) const
 	{
 		ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
 		if ( !dBlob.first )
@@ -240,40 +247,46 @@ protected:
 
 		if ( auto * pRuntime = sphTDigestRuntimeAccess ( dBlob ) )
 		{
-			tDigest.Merge ( pRuntime->m_tDigest );
+			FlushPending ( *pRuntime );
+			tState.m_tDigest.Merge ( pRuntime->m_tDigest );
 			return;
 		}
 
 		TDigest_c tOther ( m_fCompression );
 		LoadTDigestFromBlob ( dBlob, tOther, m_fCompression );
-		tDigest.Merge ( tOther );
+		tState.m_tDigest.Merge ( tOther );
 	}
 
 
 public:
 	void Setup ( CSphMatch & tDst, const CSphMatch &, bool bMerge ) override
 	{
-		TDigest_c & tDigest = AccessDigest ( tDst );
+		auto & tState = AccessState ( tDst );
+		TDigest_c & tDigest = tState.m_tDigest;
 		if ( bMerge )
 			return;
 
+		FlushPending ( tState );
 		tDigest.Clear();
 		tDigest.SetCompression ( m_fCompression );
-		AppendValue ( tDigest, tDst );
+		tState.m_dPending.Resize ( 0 );
+		AppendValue ( tState, tDst );
 	}
 
 	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool, bool bMerge ) override
 	{
-		TDigest_c & tDigest = AccessDigest ( tDst );
+		auto & tState = AccessState ( tDst );
+		TDigest_c & tDigest = tState.m_tDigest;
 
 		if ( bMerge )
 		{
-			MergeFromMatch ( tDigest, tSrc );
+			FlushPending ( tState );
+			MergeFromMatch ( tState, tSrc );
 			++m_tStats.m_uMerges;
 		}
 		else
 		{
-			AppendValue ( tDigest, tSrc );
+			AppendValue ( tState, tSrc );
 			++m_tStats.m_uAppends;
 		}
 
@@ -313,7 +326,7 @@ TDigestRuntimeState_t * AggrTDigestBase_c::EnsureRuntime ( CSphMatch & tMatch ) 
 	LoadTDigestFromBlob ( dBlob, tTemp, m_fCompression );
 
 	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
-	tAlloc.m_pState->m_tDigest = std::move ( tTemp );
+		tAlloc.m_pState->m_tDigest = std::move ( tTemp );
 
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, (SphAttr_t)tAlloc.m_pPacked );
@@ -322,12 +335,29 @@ TDigestRuntimeState_t * AggrTDigestBase_c::EnsureRuntime ( CSphMatch & tMatch ) 
 
 TDigest_c & AggrTDigestBase_c::AccessDigest ( CSphMatch & tMatch ) const
 {
-	return EnsureRuntime ( tMatch )->m_tDigest;
+	return AccessState ( tMatch ).m_tDigest;
+}
+
+TDigestRuntimeState_t & AggrTDigestBase_c::AccessState ( CSphMatch & tMatch ) const
+{
+	return *EnsureRuntime ( tMatch );
 }
 
 const TDigestRuntimeState_t * AggrTDigestBase_c::TryGetRuntime ( const CSphMatch & tMatch ) const
 {
 	return sphTDigestRuntimeAccess ( tMatch.FetchAttrData ( m_tLocator, nullptr ) );
+}
+
+void AggrTDigestBase_c::FlushPending ( TDigestRuntimeState_t & tState ) const
+{
+	auto & dPending = tState.m_dPending;
+	if ( !dPending.GetLength() )
+		return;
+
+	std::sort ( dPending.Begin(), dPending.End() );
+	for ( double fValue : dPending )
+		tState.m_tDigest.Add ( fValue );
+	dPending.Resize ( 0 );
 }
 
 void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
@@ -337,6 +367,7 @@ void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
 	if ( !pRuntime )
 		return;
 
+	FlushPending ( *pRuntime );
 	TDigest_c tDigest = std::move ( pRuntime->m_tDigest );
 	sphDestroyTDigestRuntimeBlob ( dBlob );
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );

@@ -2,6 +2,7 @@
 
 #include "std/blobs.h"
 #include "std/tdigest.h"
+#include "std/vector.h"
 
 struct TDigestRuntimeState_t
 {
@@ -9,6 +10,7 @@ struct TDigestRuntimeState_t
 
 	uint32_t	m_uMagic { RUNTIME_MAGIC };
 	TDigest_c	m_tDigest;
+	CSphVector<double> m_dPending;
 
 	explicit TDigestRuntimeState_t ( double fCompression );
 	TDigestRuntimeState_t ( const TDigestRuntimeState_t & rhs );

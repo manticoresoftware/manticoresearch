@@ -276,7 +276,6 @@ public:
 		if ( !m_dCentroids.IsEmpty() )
 			Compress();
 	}
-
 	void Export ( CSphVector<TDigestCentroid_t> & dOut ) const
 	{
 		EnsureFlushed();

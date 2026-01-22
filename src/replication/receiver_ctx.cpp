@@ -195,6 +195,12 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 			break;
 		}
 
+		case ReplCmd_e::AUTH_ADD:
+		case ReplCmd_e::AUTH_DELETE:
+			RPL_TNX << "auth " << ( pCmd->m_eCommand==ReplCmd_e::AUTH_DELETE ? "delete" : "replace" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
+			m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion );
+			break;
+
 		default:
 			sphWarning ( "unsupported replication command %d", (int) pCmd->m_eCommand );
 			return false;

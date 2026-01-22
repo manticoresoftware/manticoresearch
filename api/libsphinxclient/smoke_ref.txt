@@ -348,6 +348,7 @@ workers_clients_buddy: 0
 work_queue_length: 3
 ag_dist_1_1_connect_failures: 0
 ag_dist_1_1_network_errors: 0
+ag_dist_1_1_wrong_query: 0
 ag_dist_1_1_wrong_replies: 0
 ag_dist_1_1_unexpected_closings: 0
 ag_dist_1_1_warnings: 0

@@ -31,3 +31,5 @@ ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc );
 bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState );
 
 bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, bool bWithServerId );
+
+bool GetRemotesAuth ( const ClusterDesc_t & tDesc );

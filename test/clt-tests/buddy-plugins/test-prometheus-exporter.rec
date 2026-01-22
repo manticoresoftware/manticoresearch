@@ -16,7 +16,7 @@ cat /tmp/exporter_unfiltered_output.txt | grep -e "^manticore" | cut -d" " -f1 |
 searchd --iostats --cpustats --status | cut -d":" -f1 | tail -n +10 | sort > /tmp/searchd_output.txt
 ––– output –––
 ––– input –––
-ls -1 /tmp
+ls -1 /tmp | grep -E "^(exporter_|searchd_)" | sort
 ––– output –––
 exporter_output.txt
 exporter_unfiltered_output.txt

@@ -10,15 +10,93 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-// this file is should build ONLY when 'WITH_JIEBA" defined
+// This file should be built ONLY when 'WITH_JIEBA' is defined.
 
 #include "jieba.h"
 
 static_assert ( WITH_JIEBA, "should not build without WITH_JIEBA definition" );
 
+#include <mutex>
+#include <unordered_map>
+
 #include "cjkpreprocessor.h"
 
 #include "Jieba.hpp"
+
+namespace
+{
+struct JiebaCacheKey_t
+{
+	int m_iMode = 0;
+	bool m_bHMM = true;
+	CSphString m_sDictPath;
+	CSphString m_sHMMPath;
+	CSphString m_sUserDictPath;
+	CSphString m_sIdfPath;
+	CSphString m_sStopPath;
+
+	bool operator== ( const JiebaCacheKey_t & tOther ) const
+	{
+		return m_iMode==tOther.m_iMode && m_bHMM==tOther.m_bHMM
+			&& m_sDictPath==tOther.m_sDictPath && m_sHMMPath==tOther.m_sHMMPath
+			&& m_sUserDictPath==tOther.m_sUserDictPath && m_sIdfPath==tOther.m_sIdfPath
+			&& m_sStopPath==tOther.m_sStopPath;
+	}
+};
+
+struct JiebaCacheKeyHash_t
+{
+	static const size_t kHashCombine = 0x9e3779b9u; // golden ratio, improves hash mixing
+
+	size_t operator() ( const JiebaCacheKey_t & tKey ) const
+	{
+		size_t uHash = std::hash<int>{}( tKey.m_iMode );
+		uHash ^= std::hash<bool>{}( tKey.m_bHMM ) + kHashCombine + ( uHash<<6 ) + ( uHash>>2 );
+		uHash ^= std::hash<std::string>{}( tKey.m_sDictPath.scstr() ) + kHashCombine + ( uHash<<6 ) + ( uHash>>2 );
+		uHash ^= std::hash<std::string>{}( tKey.m_sHMMPath.scstr() ) + kHashCombine + ( uHash<<6 ) + ( uHash>>2 );
+		uHash ^= std::hash<std::string>{}( tKey.m_sUserDictPath.scstr() ) + kHashCombine + ( uHash<<6 ) + ( uHash>>2 );
+		uHash ^= std::hash<std::string>{}( tKey.m_sIdfPath.scstr() ) + kHashCombine + ( uHash<<6 ) + ( uHash>>2 );
+		uHash ^= std::hash<std::string>{}( tKey.m_sStopPath.scstr() ) + kHashCombine + ( uHash<<6 ) + ( uHash>>2 );
+		return uHash;
+	}
+};
+
+class JiebaCache_c
+{
+public:
+	std::shared_ptr<cppjieba::Jieba> GetOrCreate ( const JiebaCacheKey_t & tKey, const CSphString dJiebaFiles[] )
+	{
+		std::lock_guard<std::mutex> tLock ( m_tMutex );
+		auto tIt = m_hCache.find ( tKey );
+		if ( tIt!=m_hCache.end() )
+		{
+			if ( auto pExisting = tIt->second.lock() )
+				return pExisting;
+			m_hCache.erase ( tIt );
+		}
+
+		auto pJieba = std::make_shared<cppjieba::Jieba> (
+			dJiebaFiles[0].cstr(),
+			dJiebaFiles[1].cstr(),
+			dJiebaFiles[2].cstr(),
+			dJiebaFiles[3].cstr(),
+			dJiebaFiles[4].cstr()
+		);
+		m_hCache.emplace ( tKey, std::weak_ptr<cppjieba::Jieba>(pJieba) );
+		return pJieba;
+	}
+
+private:
+	std::mutex m_tMutex;
+	std::unordered_map<JiebaCacheKey_t, std::weak_ptr<cppjieba::Jieba>, JiebaCacheKeyHash_t> m_hCache;
+};
+
+JiebaCache_c & GetJiebaCache()
+{
+	static JiebaCache_c g_tCache;
+	return g_tCache;
+}
+} // namespace
 
 
 class JiebaPreprocessor_c : public CJKPreprocessor_c
@@ -102,7 +180,15 @@ bool JiebaPreprocessor_c::Init ( CSphString & sError )
 		}
 
 	// fixme! jieba responds to load errors with abort() call
-	m_pJieba = std::make_shared<cppjieba::Jieba> ( dJiebaFiles[(int)JiebaFiles_e::DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::HMM].cstr(), dJiebaFiles[(int)JiebaFiles_e::USER_DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::IDF].cstr(), dJiebaFiles[(int)JiebaFiles_e::STOP_WORD].cstr() );
+	JiebaCacheKey_t tKey;
+	tKey.m_iMode = (int)m_eMode;
+	tKey.m_bHMM = m_bHMM;
+	tKey.m_sDictPath = dJiebaFiles[(int)JiebaFiles_e::DICT];
+	tKey.m_sHMMPath = dJiebaFiles[(int)JiebaFiles_e::HMM];
+	tKey.m_sUserDictPath = dJiebaFiles[(int)JiebaFiles_e::USER_DICT];
+	tKey.m_sIdfPath = dJiebaFiles[(int)JiebaFiles_e::IDF];
+	tKey.m_sStopPath = dJiebaFiles[(int)JiebaFiles_e::STOP_WORD];
+	m_pJieba = GetJiebaCache().GetOrCreate ( tKey, dJiebaFiles );
 
 	return true;
 }
@@ -189,4 +275,3 @@ bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const C
 	pFieldFilter = std::move ( pFilterICU );
 	return true;
 }
-

@@ -2905,6 +2905,13 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 		}
 		else
 			m_pColumnar.reset();
+		
+		// If SPA file was opened but not used (because we're adding a columnar attribute),
+		// clean up the temp file, otherwise it may be left after the table is dropped and recreating it will fail.
+		if ( bHaveNonColumnar )
+		{
+			::unlink ( sSPAfile.cstr() );
+		}
 	}
 	else
 	{
@@ -2923,6 +2930,27 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	if ( bBlob )
 	{
+		// Preserve existing blob data if we're adding a columnar attribute
+		// because Alter_AddRemoveRowwiseAttr won't be called to write blob data
+		CSphTightVector<BYTE> dOldBlobData;
+		bool bNeedToPreserveBlobs = ( bColumnar && bAddAttr && m_tBlobAttrs.GetLength() > 0 );
+		if ( bNeedToPreserveBlobs )
+		{
+			// Read the blob data size from the header (first 8 bytes)
+			SphOffset_t tOldBlobDataSize = 0;
+			if ( m_tBlobAttrs.GetLength() >= 8 )
+			{
+				// Read the 8-byte offset from the header
+				const BYTE * pHeader = m_tBlobAttrs.GetReadPtr();
+				tOldBlobDataSize = sphUnalignedRead ( *(SphOffset_t*)pHeader );
+				// Header contains offset where blob data ends (includes header itself), so blob data size = header - 8
+				SphOffset_t tActualBlobDataSize = tOldBlobDataSize - 8;
+				
+				dOldBlobData.Resize ( tActualBlobDataSize );
+				memcpy ( dOldBlobData.Begin(), m_tBlobAttrs.GetReadPtr() + 8, tActualBlobDataSize );
+			}
+		}
+		
 		m_tBlobAttrs.Reset();
 
 		if ( bAddAttr || bHaveBlobs==bHadBlobs )
@@ -2936,6 +2964,14 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 			SphOffset_t tPos = tSPBWriter.GetPos();
 			// FIXME!!! made single function from this mess as order matters here
 			tSPBWriter.Flush(); // store collected data as SeekTo might got rid of buffer collected so far
+			
+			// If adding a columnar attribute, copy the preserved blob data
+			if ( bNeedToPreserveBlobs && !dOldBlobData.IsEmpty() )
+			{
+				tSPBWriter.PutBytes ( dOldBlobData.Begin(), dOldBlobData.GetLength() );
+				tPos = tSPBWriter.GetPos();
+			}
+			
 			tSPBWriter.SeekTo ( 0 );
 			tSPBWriter.PutOffset ( tPos );
 			tSPBWriter.SeekTo ( tPos + m_tSettings.m_tBlobUpdateSpace, true );

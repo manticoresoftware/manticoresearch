@@ -29,5 +29,23 @@ searchd
 		select count(*) from t3661;
 		drop table t3661;
 	</sphinxql>
+	
+	<!-- Regression: blob data corruption when adding columnar attribute to RT table with existing STRING attributes -->
+	<sphinxql>
+		drop table if exists t3661_blob;
+		create table t3661_blob (name string attribute indexed, description text) rt_mem_limit='16m';
+		insert into t3661_blob (id, name, description) values 
+			(1, 'Product Name 1', 'Description 1'),
+			(2, 'Product Name 2', 'Description 2'),
+			(3, 'Product Name 3', 'Description 3');
+		flush ramchunk t3661_blob;
+		alter table t3661_blob add column attribute_ids multi64 engine='columnar';
+		desc t3661_blob;
+		<!-- Verify blob data is preserved after ALTER -->
+		select id, name, description from t3661_blob order by id;
+		select * from t3661_blob where name='Product Name 2';
+		select count(*) from t3661_blob;
+		drop table t3661_blob;
+	</sphinxql>
 </queries>
 </test>

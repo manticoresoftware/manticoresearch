@@ -409,9 +409,6 @@ public:
 		ResetAfterFlatten ();
 		m_iMaxUsed = ResetDynamic ( m_iMaxUsed );
 
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "kbuffer.flatten" );
-
 		return int ( pTo-pBegin );
 	}
 
@@ -431,8 +428,6 @@ public:
 			dRhs.m_tUniq = std::move(m_tUniq);
 
 			m_iMaxUsed = -1;
-			if constexpr ( HAS_AGGREGATES )
-				this->DumpAggregateDiagnostics ( "kbuffer.move" );
 			return;
 		}
 
@@ -473,8 +468,6 @@ public:
 		// once we're done copying, cleanup
 		m_iMaxUsed = ResetDynamicFreeData ( m_iMaxUsed );
 
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "kbuffer.move" );
 	}
 
 	void Finalize ( MatchProcessor_i & tProcessor, bool, bool bFinalizeMatches ) override
@@ -509,9 +502,6 @@ public:
 		// just evaluate in heap order
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
-
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "kbuffer" );
 
 	}
 
@@ -955,9 +945,6 @@ public:
 		if constexpr ( DISTINCT )
 			m_tUniq.Reset();
 
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "kbufferN.flatten" );
-
 		return int ( pTo-pBegin );
 	}
 
@@ -992,8 +979,6 @@ public:
 			}
 		}
 
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "kbufferN" );
 	}
 
 	// TODO! TEST!
@@ -1029,8 +1014,6 @@ public:
 			if ( !m_bFinalized && bCopyMeta )
 				dRhs.m_tUniq = std::move(m_tUniq);
 
-			if constexpr ( HAS_AGGREGATES )
-				this->DumpAggregateDiagnostics ( "kbufferN.move" );
 			return;
 		}
 
@@ -1071,8 +1054,6 @@ public:
 
 		dRhs.m_iTotal = m_iTotal+iTotal;
 
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "kbufferN.move" );
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -1808,8 +1789,6 @@ public:
 		{
 			for ( auto * pAggregate : m_dAggregates )
 				pAggregate->Finalize ( m_tData );
-
-			this->DumpAggregateDiagnostics ( "implicit" );
 		}
 
 		int iCopied = 0;
@@ -1892,8 +1871,6 @@ public:
 			if ( !bCopyMeta  )
 				dRhs.UpdateDistinct ( m_tData );
 
-		if constexpr ( HAS_AGGREGATES )
-			this->DumpAggregateDiagnostics ( "implicit.move" );
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

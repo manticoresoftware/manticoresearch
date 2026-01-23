@@ -59,7 +59,7 @@ public:
 			return Quantile ( 1.0 );
 
 		return Quantile ( fPercent / 100.0 );
-	}
+		}
 
 	double Quantile ( double fQuantile ) const noexcept
 	{
@@ -149,7 +149,7 @@ public:
 		const double fTotalWeight = (double)m_iCount;
 
 		if ( m_dCentroids.GetLength()==1 )
-		{
+			{
 			if ( fValue < m_fMin )
 				return 0.0;
 			if ( fValue > m_fMax )
@@ -225,7 +225,7 @@ public:
 			{
 				double fInterp = TdInterpolate ( fValue, tLast.m_fMean, tLast.m_fMean + fTailWidth );
 				return ( fWeightSoFar + tLast.m_iCount + ( fInterp * ( fTotalWeight - fWeightSoFar - tLast.m_iCount ) ) ) / fTotalWeight;
-			}
+		}
 		}
 
 		return 1.0;
@@ -323,7 +323,7 @@ public:
 		{
 			m_fMin = fMin;
 			m_fMax = fMax;
-		}
+				}
 		else
 		{
 			m_fMin = std::numeric_limits<double>::infinity();
@@ -452,7 +452,7 @@ private:
 	}
 
 	void MergeSortedIntoTemp()
-	{
+		{
 		int i = 0;
 		int j = 0;
 		while ( i < m_dCentroids.GetLength() && j < m_dBuffer.GetLength() )

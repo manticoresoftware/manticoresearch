@@ -27,7 +27,6 @@ public:
 	virtual void	Finalize ( CSphMatch & tDst ) {}
 	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
-	virtual void	DumpDiagnostics ( const char * ) {}
 };
 
 

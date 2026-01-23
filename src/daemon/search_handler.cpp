@@ -2423,7 +2423,7 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		if ( tBucket.m_eAggrFunc==Aggr_e::PERCENTILES || tBucket.m_eAggrFunc==Aggr_e::PERCENTILE_RANKS || tBucket.m_eAggrFunc==Aggr_e::MAD )
 			tQuery.m_sSelect = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
 		else
-			tQuery.m_sSelect.SetSprintf ( "%s", tBucket.m_sCol.cstr() );
+		tQuery.m_sSelect.SetSprintf ( "%s", tBucket.m_sCol.cstr() );
 
 		// ref items to facet query
 		tQuery.m_dRefItems.Resize ( 0 );

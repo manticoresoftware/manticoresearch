@@ -133,13 +133,6 @@ class AggrTDigestBase_c : public AggrFunc_i
 protected:
 	static constexpr int PENDING_FLUSH_LIMIT = 128;
 
-	struct Stats_t
-	{
-		uint64_t	m_uAppends = 0;
-		uint64_t	m_uMerges = 0;
-		uint64_t	m_uFinalizes = 0;
-	};
-
 	CSphAttrLocator	m_tLocator;
 	ESphAttr		m_eValueType;
 	double			m_fCompression;
@@ -149,8 +142,6 @@ protected:
 	std::unique_ptr<columnar::Iterator_i> m_pColumnarIterator;
 	common::AttrType_e m_eColumnarType = common::AttrType_e::NONE;
 	bool			m_bUseColumnar = false;
-
-	mutable Stats_t	m_tStats;
 
 	TDigestRuntimeState_t * EnsureRuntime ( CSphMatch & tMatch ) const;
 	TDigestRuntimeState_t * CreateRuntime ( CSphMatch & tMatch ) const;
@@ -174,8 +165,6 @@ protected:
 			m_bUseColumnar = !m_sColumnarAttr.IsEmpty();
 		}
 	}
-
-	void DumpDiagnostics ( const char * szContext ) override;
 
 	double EvalInput ( const CSphMatch & tMatch ) const
 	{
@@ -282,12 +271,10 @@ public:
 		{
 			FlushPending ( tState );
 			MergeFromMatch ( tState, tSrc );
-			++m_tStats.m_uMerges;
 		}
 		else
 		{
 			AppendValue ( tState, tSrc );
-			++m_tStats.m_uAppends;
 		}
 
 		tDigest.SetCompression ( m_fCompression );
@@ -295,7 +282,6 @@ public:
 
 	void Finalize ( CSphMatch & tDst ) override
 	{
-		++m_tStats.m_uFinalizes;
 		SerializeRuntime ( tDst );
 	}
 
@@ -384,28 +370,6 @@ void AggrTDigestBase_c::DropRuntime ( CSphMatch & tMatch ) const
 	sphDestroyTDigestRuntimeBlob ( dBlob );
 	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, 0 );
-}
-
-void AggrTDigestBase_c::DumpDiagnostics ( const char * szContext )
-{
-	if ( g_eLogLevel<SPH_LOG_DEBUG )
-		return;
-
-	const auto uAppends = m_tStats.m_uAppends;
-	const auto uMerges = m_tStats.m_uMerges;
-	const auto uFinalizes = m_tStats.m_uFinalizes;
-	if ( !uAppends && !uMerges && !uFinalizes )
-		return;
-
-	sphLogDebug ( "tdigest[%s%s%s] stats: append=%llu merge=%llu finalize=%llu",
-		m_sName.cstr(),
-		( szContext && *szContext ) ? " ctx=" : "",
-		( szContext && *szContext ) ? szContext : "",
-		(unsigned long long)uAppends,
-		(unsigned long long)uMerges,
-		(unsigned long long)uFinalizes );
-
-	m_tStats = {};
 }
 
 class AggrPercentiles_c final : public AggrTDigestBase_c

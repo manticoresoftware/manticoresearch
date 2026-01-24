@@ -11930,6 +11930,16 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 				return false;
 		}
 
+		// JSON SI rebuild might not create a file for chunks that yield no schema; skip rename/load in that case.
+		const char * sJsonSIExt = sphGetExt ( SPH_EXT_SPJIDX );
+		bool bJsonSI = dCurFiles[i].Ends ( sJsonSIExt ) || dNewFiles[i].Ends ( sJsonSIExt );
+		if ( bJsonSI && !sphFileExists ( dNewFiles[i].cstr() ) )
+		{
+			if ( bCurExists )
+				::unlink ( sFileOld.cstr() );
+			continue;
+		}
+
 		dFilesFrom[0] = dNewFiles[i];
 		dFilesTo[0] = dCurFiles[i];
 

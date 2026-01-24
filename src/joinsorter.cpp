@@ -542,8 +542,27 @@ void StoredFetch_c::SetupAttrRemap()
 		sAttrName.SetSprintf ( "%s.%s", m_sRightIndexName.cstr(), tField.m_sName.cstr() );
 
 		int iDocStoreFieldId = m_tRightIndex.GetFieldId ( tField.m_sName, DOCSTORE_TEXT );
-		int iAttrId = m_tSorterSchema.GetAttrIndex ( sAttrName.cstr() );
-		assert ( iDocStoreFieldId!=-1 && iAttrId!=-1 );
+		int iAttrId = -1;
+		int iFallbackAttrId = -1;
+		for ( int iAttr = 0; iAttr < m_tSorterSchema.GetAttrsCount(); iAttr++ )
+		{
+			const CSphColumnInfo & tAttr = m_tSorterSchema.GetAttr(iAttr);
+			if ( tAttr.m_sName != sAttrName )
+				continue;
+
+			if ( tAttr.IsStoredExpr() || ( tAttr.m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) )
+			{
+				iAttrId = iAttr;
+				break;
+			}
+
+			if ( iFallbackAttrId==-1 )
+				iFallbackAttrId = iAttr;
+		}
+		if ( iAttrId==-1 )
+			iAttrId = iFallbackAttrId;
+		if ( iDocStoreFieldId==-1 || iAttrId==-1 )
+			continue;
 
 		m_dFieldToFetch.Add(iDocStoreFieldId);
 		m_dAttrRemap.Add ( m_tSorterSchema.GetAttr(iAttrId).m_tLocator );

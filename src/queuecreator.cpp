@@ -1703,6 +1703,9 @@ bool QueueCreator_c::AddJoinAttrs()
 		const CSphColumnInfo & tField = tSchema.GetField(i);
 		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
 		{
+			if ( tSchema.GetAttrIndex ( tField.m_sName.cstr() )!=-1 )
+				continue;
+
 			CSphColumnInfo tAttr;
 			tAttr.m_sName.SetSprintf ( "%s.%s", m_tSettings.m_pJoinArgs->m_sIndex2.cstr(), tField.m_sName.cstr() );
 			tAttr.m_eAttrType = SPH_ATTR_STRINGPTR;

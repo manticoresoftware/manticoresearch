@@ -29,6 +29,8 @@ concurrency:
   group: test_${{ github.ref }}
   cancel-in-progress: true
 
+# Note: Many build jobs skip execution for PRs targeting 'update-buddy-version' branch
+# as these PRs only update dependency versions and don't require full builds/tests
 jobs:
   commit_info:
     name: Commit info
@@ -150,6 +152,7 @@ jobs:
             clt:
             - 'test/clt-tests/**'
   win_bundle:
+    # Skip build jobs for PRs targeting 'update-buddy-version' branch (buddy version updates don't need full builds)
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
     needs: [changes, check_branch]
     name: Windows supplementary files preparation

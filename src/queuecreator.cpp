@@ -1041,9 +1041,10 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( IsKnnDist(sExpr) )
 	{
 		if ( m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )<0 )
-			return Err ( "KNN_DIST() is only allowed for KNN() queries" );
+			return Err ( "%s is only allowed for KNN() queries", sExpr.cstr() );
 
-		return true; // this already is an expression, no need to add it twice
+		if ( sExpr==GetKnnDistAttrName() )
+			return true; // this already is an expression, no need to add it twice
 	}
 
 	// not an attribute? must be an expression, and must be aliased by query parser

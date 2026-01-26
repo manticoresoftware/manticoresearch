@@ -6443,7 +6443,8 @@ namespace QwordIteration
 			if ( tQword.m_tDoc.m_tRowID==INVALID_ROWID )
 				return false;
 
-			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			if ( tQword.m_bHasHitlist )
+				tQword.SeekHitlist ( tQword.m_iHitlistPos );
 			return true;
 		}
 	}
@@ -6458,9 +6459,17 @@ namespace QwordIteration
 				return false;
 
 			if ( dRows[tQword.m_tDoc.m_tRowID]==INVALID_ROWID )
+			{
+				if ( tQword.m_bHasHitlist )
+				{
+					tQword.SeekHitlist ( tQword.m_iHitlistPos );
+					while ( tQword.m_bHasHitlist && tQword.GetNextHit()!=EMPTY_HIT );
+				}
 				continue;
+			}
 
-			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			if ( tQword.m_bHasHitlist )
+				tQword.SeekHitlist ( tQword.m_iHitlistPos );
 			return true;
 		}
 	}

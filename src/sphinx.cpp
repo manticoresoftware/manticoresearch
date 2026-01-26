@@ -7244,10 +7244,17 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 
 	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists (N-way)" );
 	int64_t tmWordsStart = sphMicroTimer();
-	WITH_QWORD ( pBaseIndex, false, Qword,
-		if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
-			return false;
-	);
+	const bool bWordDict = pDict->GetSettings().m_bWordDict;
+	if ( bWordDict )
+		WITH_QWORD ( pBaseIndex, false, Qword,
+			if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
+				return false;
+		);
+	else
+		WITH_QWORD ( pBaseIndex, true, Qword,
+			if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
+				return false;
+		);
 	if ( pTimings )
 		pTimings->m_tmWords = sphMicroTimer() - tmWordsStart;
 	END_CORO ( "sph" );

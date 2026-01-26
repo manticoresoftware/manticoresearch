@@ -446,6 +446,12 @@ class CSphDict;
 class CSphIndex;
 class Writer_i;
 
+enum class ExtFilesFormat_e
+{
+	FILE,
+	LIST
+};
+
 void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
@@ -455,7 +461,7 @@ void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFile
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
-CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt );
 
 // daemon-level callback
 using CreateFilenameBuilder_fn = std::unique_ptr<FilenameBuilder_i> (*) ( const char * szIndex );

@@ -95,6 +95,17 @@ select title, join2.title, uint(join2.j.sort) as table2, weight() * (j.sort + ta
 drop table join1;
 drop table join2;
 
+<!-- test error when left table is prefixed in WHERE clause filters -->
+drop table if exists a;
+create table a;
+insert into a values(1);
+drop table if exists b;
+create table b(a_id int);
+insert into b(id, a_id) values(1, 1);
+select * from a left join b on a.id = b.a_id where a.id = 1 and b.a_id = 1;
+drop table if exists b;
+drop table if exists a;
+
 </sphinxql>
 </queries>
 

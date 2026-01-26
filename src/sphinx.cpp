@@ -1983,8 +1983,8 @@ CSphIndex::CSphIndex ( CSphString sIndexName, CSphString sFileBase )
 
 CSphIndex::~CSphIndex ()
 {
-	QcacheDeleteIndex ( m_iIndexId );
-	SkipCache::DeleteAll ( m_iIndexId );
+	QcacheClearByIndexId ( m_iIndexId );
+	SkipCache::ClearByIndexId ( m_iIndexId );
 }
 
 
@@ -2801,6 +2801,14 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename(SPH_EXT_SPH), sError ) )
 		return false;
 
+	if ( !tNewSchema.GetAttrsCount() )
+	{
+		sError = "table must have at least one attribute";
+		return false;
+	}
+
+	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
+
 	// generate new .SPA, .SPB files
 	CSphWriter tSPAWriter;
 	CSphWriter tSPBWriter;
@@ -2814,9 +2822,16 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	CSphString sSPBfile = GetTmpFilename ( SPH_EXT_SPB );
 	CSphString sSPHIfile = GetTmpFilename ( SPH_EXT_SPHI );
 
+	// don't open SPA file for columnar operations
 	bool bHaveNonColumnar = tNewSchema.HasNonColumnarAttrs();
-	if ( bHaveNonColumnar && !tSPAWriter.OpenFile ( sSPAfile, sError ) )
-		return false;
+	bool bNeedToCloseSPA = false;
+	if ( !bColumnar && bHaveNonColumnar )
+	{
+		if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
+			return false;
+
+		bNeedToCloseSPA = true;
+	}
 
 	bool bHadBlobs = false;
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
@@ -2826,8 +2841,9 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		bHaveBlobs |= sphIsBlobAttr ( tNewSchema.GetAttr(i) );
 
+	// Columnar attributes don't use the blob pool, so don't open SPB file for columnar operations
 	bool bBlob = sphIsBlobAttr ( tCtx.m_eType );
-	bool bBlobsModified = bBlob && ( bAddAttr || bHaveBlobs==bHadBlobs );
+	bool bBlobsModified = bBlob && !bColumnar && ( bAddAttr || bHaveBlobs==bHadBlobs );
 	if ( bBlobsModified )
 	{
 		if ( !tSPBWriter.OpenFile ( sSPBfile, sError ) )
@@ -2836,13 +2852,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 		tSPBWriter.PutOffset(0);
 	}
 
-	if ( !tNewSchema.GetAttrsCount() )
-	{
-		sError = "table must have at least one attribute";
-		return false;
-	}
-
-	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
 	if ( bColumnar )
 		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
 	else
@@ -2877,7 +2886,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !AddRemoveFromKNN ( m_tSchema, tNewSchema, sError ) )
 		return false;
 
-	if ( bHaveNonColumnar )
+	if ( bNeedToCloseSPA )
 	{
 		if ( tSPAWriter.IsError() )
 		{
@@ -2890,7 +2899,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	bool bHadColumnar = m_tSchema.HasColumnarAttrs();
 	bool bHaveColumnar = tNewSchema.HasColumnarAttrs();
-
 	bool bHadNonColumnar = m_tSchema.HasNonColumnarAttrs();
 
 	m_tAttr.Reset();
@@ -2924,7 +2932,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( bHaveNonColumnar && !m_tAttr.Setup ( GetFilename ( SPH_EXT_SPA ), sError, true ) )
 		return false;
 
-	if ( bBlob )
+	if ( bBlob && !bColumnar )
 	{
 		m_tBlobAttrs.Reset();
 
@@ -9146,8 +9154,8 @@ void CSphIndex_VLN::Dealloc ()
 	m_bPassedAlloc = false;
 	m_uAttrsStatus = 0;
 
-	QcacheDeleteIndex ( m_iIndexId );
-	SkipCache::DeleteAll ( m_iIndexId );
+	QcacheClearByIndexId ( m_iIndexId );
+	SkipCache::ClearByIndexId ( m_iIndexId );
 
 	m_iIndexId = GetIndexUid();
 }

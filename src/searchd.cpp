@@ -12,6 +12,7 @@
 
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "docstore.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "replication/api_command_cluster.h"
@@ -6683,11 +6684,11 @@ static const CSphSchema & GetSchemaForCreateTable ( const CSphIndex * pIndex )
 }
 
 
-static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
+static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
 {
 	assert(pIndex);
 
-	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema );
+	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema, eExt );
 	return sCreateTable;
 }
 
@@ -6729,7 +6730,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 			return;
 		}
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ) );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pIdx, GetSchemaForCreateTable ( pIdx ), ExtFilesFormat_e::FILE );
 		break;
 	}
 	case RunIdx_e::DISTR:
@@ -6783,6 +6784,33 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, 
 }
 
 
+static void ClearSecondaryIndexCaches()
+{
+	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
+	for ( const auto & i : *hLocal )
+	{
+		if ( !i.second )
+			continue;
+		
+		RIdx_c pIdx { i.second };
+		const SIContainer_c * pSI = pIdx->GetSI();
+		if ( pSI && !pSI->IsEmpty() )
+			const_cast<SIContainer_c*>(pSI)->ClearCache(); // need non-const access to clear caches
+	}
+}
+
+
+static void HandleMysqlDropCache ( RowBuffer_i & tOut )
+{
+	QcacheClearAll();
+	ClearDocstoreCache();
+	SkipCache::ClearAll();
+	ClearSecondaryIndexCaches();
+	
+	tOut.Ok ( 0, 0 );
+}
+
+
 void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	auto pServed = GetServed ( tStmt.m_sIndex );
@@ -6811,7 +6839,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( pServed )
 	{
 		RIdx_c pIdx { pServed };
-		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ) );
+		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ), ( tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST ) );
 	} else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -10702,7 +10730,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	WIdx_T<RtIndex_i*> pRtIndex { pServed };
 
 	// get all table settings as a string
-	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema() );
+	CSphString sCreateTable = BuildCreateTable ( pRtIndex->GetName(), pRtIndex, pRtIndex->GetInternalSchema(), ExtFilesFormat_e::FILE );
 
 	CSphVector<SqlStmt_t> dCreateTableStmts;
 	if ( !ParseDdl ( FromStr ( sCreateTable ), dCreateTableStmts, sError ) )
@@ -11522,6 +11550,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_DROP_TABLE:
 		m_tLastMeta.m_sWarning = "";
 		HandleMysqlDropTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_DROP_CACHE:
+		m_tLastMeta = CSphQueryResultMeta();
+		HandleMysqlDropCache ( tOut );
 		return true;
 
 	case STMT_SHOW_CREATE_TABLE:

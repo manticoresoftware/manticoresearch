@@ -323,7 +323,8 @@ class BlockCache_c : public LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>
 	using BASE::BASE;
 
 public:
-	void					DeleteAll ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+	void					ClearByIndexId ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
+	void					ClearAll() { BASE::Delete ( []( const HashKey_t & ){ return true; } ); }
 
 	static void				Init ( int64_t iCacheSize );
 	static void				Done()	{ SafeDelete(m_pBlockCache); }
@@ -374,8 +375,8 @@ private:
 
 	static DocstoreReaders_c * m_pReaders;
 
-	static const int MIN_READER_CACHE_SIZE = 262144;
-	static const int MAX_READER_CACHE_SIZE = 1048576;
+	static const int MIN_READER_BUFFER_SIZE = 32768;
+	static const int MAX_READER_BUFFER_SIZE = 262144;
 	static const int MAX_TOTAL_READER_SIZE = 8388608;
 
 	void		Delete ( CSphReader * pReader, const HashKey_t tKey );
@@ -412,9 +413,9 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, int64_t iIndexId, con
 	if ( m_tHash ( { iSessionId, iIndexId } ) )
 		return;
 
-	int iBufferSize = (int)uBlockSize*8;
-	iBufferSize = Min ( iBufferSize, MAX_READER_CACHE_SIZE );
-	iBufferSize = Max ( iBufferSize, MIN_READER_CACHE_SIZE );
+	int iBufferSize = (int)uBlockSize*4;
+	iBufferSize = Min ( iBufferSize, MAX_READER_BUFFER_SIZE );
+	iBufferSize = Max ( iBufferSize, MIN_READER_BUFFER_SIZE );
 
 	if ( iBufferSize<=(int)uBlockSize )
 		return;
@@ -576,7 +577,7 @@ Docstore_c::~Docstore_c ()
 {
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 	if ( pBlockCache )
-		pBlockCache->DeleteAll(m_iIndexId);
+		pBlockCache->ClearByIndexId(m_iIndexId);
 
 	DocstoreReaders_c * pReaders = DocstoreReaders_c::Get();
 	if ( pReaders )
@@ -1951,6 +1952,14 @@ void ShutdownDocstore()
 {
 	BlockCache_c::Done();
 	DocstoreReaders_c::Done();
+}
+
+
+void ClearDocstoreCache()
+{
+	BlockCache_c * pBlockCache = BlockCache_c::Get();
+	if ( pBlockCache )
+		pBlockCache->ClearAll();
 }
 
 

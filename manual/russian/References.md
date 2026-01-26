@@ -127,68 +127,72 @@
 * [простой режим](Read_this_first.md#Real-time-mode-vs-plain-mode)
 * [режим реального времени](Read_this_first.md#Real-time-mode-vs-plain-mode)
 
-##### Общие настройки таблиц  
-* [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)  
-* [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)  
-* [access_doclists](Server_settings/Searchd.md#access_doclists)  
-* [access_hitlists](Server_settings/Searchd.md#access_hitlists)  
-* [access_dict](Server_settings/Searchd.md#access_dict)  
-* [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)  
-* [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)  
-* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)  
-* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)  
-* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)  
-* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)  
-* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)  
-* [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)  
-* [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)  
-* [expand_keywords](Searching/Options.md#expand_keywords)  
-* [global_idf](Searching/Options.md#global_idf)  
-* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)  
-* [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)  
-* [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)  
-* [html_strip](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)  
-* [ignore_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)  
-* [index_exact_words](Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)  
-* [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)  
-* [index_sp](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)  
-* [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)  
-* [index_zones](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)  
-* [infix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)  
-* [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [jieba_hmm](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)  
-* [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)  
-* [jieba_user_dict_path](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_user_dict_path)  
-* [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [max_substring_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)  
-* [min_infix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)  
-* [min_prefix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)  
-* [min_stemming_len](Creating_a_table/NLP_and_tokenization/Morphology.md#min_stemming_len)  
-* [min_word_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)  
-* [morphology](Searching/Options.md#morphology)  
-* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology_skip_fields)  
-* [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)  
-* [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)  
-* [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)  
-* [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)  
-* [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)  
-* [prefix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)  
-* [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
-* [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)  
-* [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)  
-* [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)  
-* [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)  
-* [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)  
+##### Общие настройки таблиц
+* [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
+* [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
+* [access_doclists](Server_settings/Searchd.md#access_doclists)
+* [access_hitlists](Server_settings/Searchd.md#access_hitlists)
+* [access_dict](Server_settings/Searchd.md#access_dict)
+* [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
+* [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
+* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
+* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
+* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
+* [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
+* [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
+* [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
+* [expand_keywords](Searching/Options.md#expand_keywords)
+* [global_idf](Searching/Options.md#global_idf)
+* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
+* [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
+* [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
+* [html_strip](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
+* [ignore_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
+* [index_exact_words](Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+* [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+* [index_sp](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
+* [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
+* [index_zones](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
+* [infix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
+* [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [jieba_hmm](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)
+* [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
+* [jieba_user_dict_path](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_user_dict_path)
+* [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [max_substring_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
+* [min_infix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+* [min_prefix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
+* [min_stemming_len](Creating_a_table/NLP_and_tokenization/Morphology.md#min_stemming_len)
+* [min_word_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
+* [morphology](Searching/Options.md#morphology)
+* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
+* [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+* [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
+* [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
+* [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
+* [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
+* [prefix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
+* [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+* [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
+* [stopwords_list](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_list)
+* [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
+* [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
+* [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
+* [wordforms_list](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms_list)
 
 ##### Настройки обычных таблиц
 * [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
@@ -421,94 +425,95 @@ index_converter {--config /path/to/config|--path}
 ## [Searchd](Starting_the_server/Manually.md)
 `searchd` — это сервер Manticore.
 
-##### Настройки Searchd в конфигурационном файле
-Должны быть размещены в разделе `searchd {}` конфигурационного файла:
-  * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Определяет, как осуществляется доступ к файлу blob-атрибутов таблицы
-  * [access_doclists](Server_settings/Searchd.md#access_doclists) - Определяет, как осуществляется доступ к файлу doclists таблицы
-  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Определяет, как осуществляется доступ к файлу hitlists таблицы
-  * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Определяет, как поисковый сервер получает доступ к простым атрибутам таблицы
-  * [access_dict](Server_settings/Searchd.md#access_dict) - Определяет, как осуществляется доступ к файлу словаря таблицы
-  * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Время ожидания подключения к удаленному агенту
-  * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Время ожидания запроса к удаленному агенту
-  * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Определяет количество попыток, которые Manticore совершает для подключения и запроса к удаленным агентам
+##### Настройки searchd в файле конфигурации
+Для размещения в секции `searchd {}` файла конфигурации:
+  * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Определяет способ доступа к файлу blob-атрибутов таблицы
+  * [access_doclists](Server_settings/Searchd.md#access_doclists) - Определяет способ доступа к файлу doclists таблицы
+  * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Определяет способ доступа к файлу hitlists таблицы
+  * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Определяет способ доступа поискового сервера к простым атрибутам таблицы
+  * [access_dict](Server_settings/Searchd.md#access_dict) - Определяет способ доступа к файлу словаря таблицы
+  * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Таймаут подключения к удаленному агенту
+  * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Таймаут запроса к удаленному агенту
+  * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Определяет количество попыток подключения и запроса к удаленным агентам, которые предпринимает Manticore
   * [agent_retry_delay](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Определяет задержку перед повторной попыткой запроса к удаленному агенту в случае сбоя
-  * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Устанавливает период времени между сбросами обновленных атрибутов на диск
+  * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Устанавливает период времени между сбросом обновленных атрибутов на диск
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Режим сброса/синхронизации транзакций бинарного лога
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Максимальный размер файла бинарного лога
   * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Общий файл бинарного лога для всех таблиц
   * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - Количество цифр в имени файла бинарного лога
   * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - Стратегия сброса бинарного лога
-  * [binlog_path](Server_settings/Searchd.md#binlog_path) - Путь к файлам бинарных логов
+  * [binlog_path](Server_settings/Searchd.md#binlog_path) - Путь к файлам бинарного лога
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное время ожидания между запросами при использовании постоянных соединений
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Локаль libc сервера
-  * [collation_server](Server_settings/Searchd.md#collation_server) - Колляция сервера по умолчанию
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Путь к каталогу данных, где Manticore хранит всё ([RT режим](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
-  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Тайм-аут автосброса RAM-чашки, если нет записей в нее
-  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Тайм-аут предотвращения автосброса RAM-чашки, если нет поисков в таблице
-  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, удерживаемых в памяти
-  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество расширенных ключевых слов для одного подстановочного знака
+  * [collation_server](Server_settings/Searchd.md#collation_server) - Коллация сервера по умолчанию
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Путь к каталогу данных, где Manticore хранит всё ([RT-режим](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут автоматического сброса RAM-чанка, если в него не было записей
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут предотвращения автоматического сброса RAM-чанка, если в таблице не было поисковых запросов
+  * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, хранящихся в памяти
+  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество развернутых ключевых слов для одного символа подстановки
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Включает использование часового пояса UTC для группировки временных полей
-  * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Размер окна статистики агента-мира
-  * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Интервал между пингами агента-мира
+  * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Размер окна статистики зеркал агентов
+  * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Интервал между пингами зеркал агентов
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Стратегия обновления имен хостов
-  * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Определяет максимальное количество "заданий", допустимых в очереди одновременно
-  * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для объединения таблиц для баланса между производительностью и использованием памяти
-  * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кеша для повторного использования результатов JOIN-запросов
+  * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Определяет максимальное количество "заданий", разрешенных в очереди одновременно
+  * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для объединения таблиц для баланса производительности и использования памяти
+  * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кэша для повторного использования результатов запросов JOIN
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
-  * [listen](Server_settings/Searchd.md#listen) - Указывает IP-адрес и порт или путь к Unix-сокету, на котором должен слушать searchd
-  * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Очередь прослушивания TCP
+  * [listen](Server_settings/Searchd.md#listen) - Определяет IP-адрес и порт или путь к Unix-доменному сокету для прослушивания searchd
+  * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей
   * [log](Server_settings/Searchd.md#log) - Путь к файлу журнала сервера Manticore
-  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Ограничивает количество запросов в пакете
+  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Ограничивает количество запросов на пакет
   * [max_connections](Server_settings/Searchd.md#max_connections) - Максимальное количество активных соединений
-  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - Сколько RT дисковых чанков сливается на одну задачу OPTIMIZE
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - Сколько RT-дисковых чанков объединяется за одно задание OPTIMIZE
   * [max_filters](Server_settings/Searchd.md#max_filters) - Максимально допустимое количество фильтров на запрос
-  * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Максимально допустимое количество значений в фильтре
-  * [max_open_files](Server_settings/Searchd.md#max_open_files) - Максимальное количество файлов, которые сервер может открыть
+  * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Максимально допустимое количество значений на фильтр
+  * [max_open_files](Server_settings/Searchd.md#max_open_files) - Максимальное количество файлов, разрешенных для открытия сервером
   * [max_packet_size](Server_settings/Searchd.md#max_packet_size) - Максимально допустимый размер сетевого пакета
-  * [mysql_version_string](Server_settings/Searchd.md#mysql_version_string) - Строка версии сервера, возвращаемая через протокол MySQL
-  * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - Определяет, сколько клиентов принимается за каждую итерацию сетевого цикла
-  * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - Определяет, сколько запросов обрабатывается за каждую итерацию сетевого цикла
-  * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - Контролирует интервал busy loop для сетевого потока
+  * [mysql_version_string](Server_settings/Searchd.md#mysql_version_string) - Строка версии сервера, возвращаемая по протоколу MySQL
+  * [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) - Определяет, сколько клиентов принимается на каждой итерации сетевого цикла
+  * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - Определяет, сколько запросов обрабатывается на каждой итерации сетевого цикла
+  * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - Управляет интервалом активного цикла сетевого потока
   * [net_workers](Server_settings/Searchd.md#net_workers) - Количество сетевых потоков
-  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Тайм-аут сети для клиентских запросов
-  * [node_address](Server_settings/Searchd.md#node_address) - Указывает сетевой адрес узла
+  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Сетевой таймаут для клиентских запросов
+  * [node_address](Server_settings/Searchd.md#node_address) - Определяет сетевой адрес узла
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное количество одновременных постоянных соединений с удаленными постоянными агентами
-  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - Сколько слияний RT дисковых чанков может выполняться параллельно во время OPTIMIZE
-  * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к файлу идентификатора процесса сервера Manticore
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Затраты для модели предсказания времени запроса
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - Сколько слияний RT-дисковых чанков может выполняться параллельно во время OPTIMIZE
+  * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к pid-файлу сервера Manticore
+  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Затраты для модели предсказания времени выполнения запроса
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Определяет, следует ли принудительно предварительно открывать все таблицы при запуске
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдо-шардинг для поисковых запросов к простым и RT таблицам
-  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем оперативной памяти, выделенной для кеша результатов
-  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Минимальный порог времени выполнения запроса для кеширования результата
-  * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Период истечения срока действия кешированных результатов
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардирование для поисковых запросов к обычным и реального времени таблицам
+  * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем оперативной памяти, выделенный для кэшированных наборов результатов
+  * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Минимальный порог реального времени для кэширования результата запроса
+  * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Срок действия кэшированного набора результатов
   * [query_log](Server_settings/Searchd.md#query_log) - Путь к файлу журнала запросов
   * [query_log_format](Server_settings/Searchd.md#query_log_format) - Формат журнала запросов
-  * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - Не позволяет логировать слишком быстрые запросы
-  * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - Режим прав на файл журнала запросов
+  * [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) - Предотвращает логирование слишком быстрых запросов
+  * [query_log_mode](Server_settings/Searchd.md#query_log_mode) - Режим прав доступа к файлу журнала запросов
   * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Размер буфера чтения на ключевое слово для списков документов
   * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Размер буфера чтения на ключевое слово для списков попаданий
-  * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Размер нечётного чтения
+  * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Размер чтения без подсказок
   * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Как часто Manticore сбрасывает RAM-чанки таблиц реального времени на диск
-  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Максимальное количество I/O операций (в секунду), разрешённых для потока слияния RT чанков
-  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Максимальный размер I/O операции, разрешённый для потока слияния RT чанков
-  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Предотвращает зависания searchd при ротации таблиц с огромным объемом данных для предварительного кеширования
+  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Максимальное количество операций ввода-вывода (в секунду), которое разрешено выполнять потоку слияния чанков реального времени
+  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Максимальный размер операции ввода-вывода, которую разрешено выполнять потоку слияния чанков реального времени
+  * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Предотвращает простои searchd при ротации таблиц с огромными объемами данных для предварительного кэширования
   * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - Включает использование вторичных индексов для поисковых запросов
-  * [server_id](Server_settings/Searchd.md#server_id) - Идентификатор сервера, используемый в качестве зерна для генерации уникального ID документа
-  * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Тайм-аут `--stopwait` для searchd
-  * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 хеш пароля, требуемый для вызова команды `shutdown` через VIP SQL соединение
+  * [server_id](Server_settings/Searchd.md#server_id) - Идентификатор сервера, используемый как начальное значение для генерации уникального идентификатора документа
+  * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Таймаут `--stopwait` для searchd
+  * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1-хэш пароля, необходимого для вызова команды `shutdown` из VIP SQL-соединения
+  * [skiplist_cache_size](Server_settings/Searchd.md#skiplist_cache_size) - Максимальный размер кэша в памяти для распакованных списков пропуска
   * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Префикс, добавляемый к локальным именам файлов при генерации сниппетов в режиме `load_files`
-  * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Путь к файлу, в котором будет сериализовано текущее состояние SQL
-  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Максимальное время ожидания между запросами от MySQL клиента
+  * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Путь к файлу, в который будет сериализовано текущее состояние SQL
+  * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Максимальное время ожидания между запросами от клиента MySQL
   * [ssl_ca](Server_settings/Searchd.md#ssl_ca) - Путь к файлу сертификата центра сертификации SSL
   * [ssl_cert](Server_settings/Searchd.md#ssl_cert) - Путь к SSL-сертификату сервера
   * [ssl_key](Server_settings/Searchd.md#ssl_key) - Путь к ключу SSL-сертификата сервера
-  * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Максимальный размер кеша документов общего поддерева
-  * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Максимальный размер кеша попаданий общего поддерева, на запрос
-  * [timezone](Server_settings/Searchd.md#timezone) - Часовой пояс, используемый функциями работы с датой/временем
-  * [thread_stack](Server_settings/Searchd.md#thread_stack) - Максимальный размер стека для задачи
-  * [unlink_old](Server_settings/Searchd.md#unlink_old) - Следует ли удалять копии таблиц с расширением .old после успешной ротации
-  * [watchdog](Server_settings/Searchd.md#watchdog) - Включение или отключение сторожевого таймера сервера Manticore
+  * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Максимальный размер кэша документов общего поддерева
+  * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Максимальный размер кэша попаданий общего поддерева, на запрос
+  * [timezone](Server_settings/Searchd.md#timezone) - Часовой пояс, используемый функциями, связанными с датой/временем
+  * [thread_stack](Server_settings/Searchd.md#thread_stack) - Максимальный размер стека для задания
+  * [unlink_old](Server_settings/Searchd.md#unlink_old) - Удалять ли копии таблиц .old при успешной ротации
+  * [watchdog](Server_settings/Searchd.md#watchdog) - Включить или отключить watchdog сервера Manticore
 
 ##### Параметры запуска searchd
 ```bash

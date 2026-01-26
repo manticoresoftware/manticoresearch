@@ -7148,18 +7148,24 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	{
 		CSphRefcountedPtr<ISphExpr> pVal;
 		VecTraits_T < CSphNamedVariant > dSrcOpt;
+		ESphAttr eArgType = SPH_ATTR_NONE;
 		GatherArgFN ( tNode.m_iLeft, [&] ( int i )
 		{
 			if ( m_dNodes[i].m_eRetType==SPH_ATTR_MAPARG )
 				dSrcOpt = m_dNodes[i].m_pMapArg->m_dPairs;
 			else
+			{
+				eArgType = m_dNodes[i].m_eRetType;
 				pVal = CreateTree ( i );
+			}
 		});
 		if ( eFunc==FUNC_HISTOGRAM )
 		{
 			AggrHistSetting_t tHist;
 			if ( !ParseAggrHistogram ( dSrcOpt, tHist, m_sCreateError ) )
 				return nullptr;
+			if ( IsFloatLike ( eArgType ) )
+				PromoteHistogramToFloat ( tHist );
 			return CreateExprHistogram ( pVal, tHist );
 		} else
 		{
@@ -10955,16 +10961,27 @@ ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr )
 
 void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema )
 {
-	for ( const auto & i : dAttrNames )
+	sph::StringSet hProcessed;
+	
+	ARRAY_FOREACH ( i, dAttrNames )
 	{
-		const CSphColumnInfo * pAttr = tSchema.GetAttr ( i.cstr() );
+		const CSphString & sAttr = dAttrNames[i];
+		
+		// skip if already processed to avoid redundant work and cycles
+		if ( hProcessed[sAttr] )
+			continue;
+		
+		hProcessed.Add(sAttr);
+		
+		const CSphColumnInfo * pAttr = tSchema.GetAttr ( sAttr.cstr() );
 		if ( !pAttr || !pAttr->m_pExpr )
 			continue;
 
 		int iOldLen = dAttrNames.GetLength();
 		pAttr->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dAttrNames );
+		
 		for ( int iNewAttr = iOldLen; iNewAttr < dAttrNames.GetLength(); iNewAttr++ )
-			if ( dAttrNames[iNewAttr]==i )
+			if ( dAttrNames[iNewAttr]==dAttrNames[i] )
 				dAttrNames.Remove(iNewAttr);
 	}
 
@@ -10972,21 +10989,34 @@ void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema )
 }
 
 
-bool IsIndependentAttr ( const CSphString & sAttr, const ISphSchema & tSchema )
+AttrDependencyMap_c::AttrDependencyMap_c ( const ISphSchema & tSchema )
 {
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		auto & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_sName==sAttr )
+		if ( !tAttr.m_pExpr )
 			continue;
 
 		StrVec_t dDeps;
 		dDeps.Add ( tAttr.m_sName );
 		FetchAttrDependencies ( dDeps, tSchema );
 
-		if ( dDeps.any_of ( [&sAttr]( auto & sDep ){ return sDep==sAttr; } ) )
-			return false;
-	}
+		for ( const auto & sDep : dDeps )
+		{
+			if ( sDep==tAttr.m_sName )
+				continue;
 
-	return true;
+			m_hDependents.AddUnique(sDep).Add ( tAttr.m_sName );
+		}
+	}
+}
+
+
+bool AttrDependencyMap_c::IsIndependent ( const CSphString & sAttr ) const
+{
+	auto * pDependents = m_hDependents(sAttr);
+	if ( !pDependents )
+		return true;
+
+	return pDependents->IsEmpty();
 }

@@ -56,6 +56,7 @@ public:
 	uint32_t	GetNumIterators ( const common::Filter_t & tFilter ) const;
 	bool		IsEnabled ( const CSphString & sAttr ) const;
 	void		GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo ) const;
+	void		ClearCache();
 
 	RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const;
 

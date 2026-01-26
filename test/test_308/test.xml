@@ -24,6 +24,7 @@ source test
 	<sql_settings/>
 	sql_query		= select * from test_table
 	sql_attr_uint	= gid
+	sql_attr_string	= brand_name
 }
 
 index test
@@ -39,21 +40,22 @@ CREATE TABLE test_table
 (
 	id INTEGER PRIMARY KEY NOT NULL,
 	gid INTEGER NOT NULL,
-	title VARCHAR(255) NOT NULL
+	title VARCHAR(255) NOT NULL,
+	brand_name VARCHAR(255) NOT NULL
 );
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_insert>INSERT INTO test_table VALUES
-( 1, 123, 'THE document collection. Aiming for exactly 10 docs.' ),
-( 2, 123, 'the idftest2' ),
-( 3, 123, 'the idftest2 and idftest1' ),
-( 4, 123, 'the' ),
-( 5, 123, 'the' ),
-( 6, 123, 'the' ),
-( 7, 123, 'the' ),
-( 8, 123, 'the' ),
-( 9, 123, 'the' ),
-( 10, 123, 'the' )
+( 1, 123, 'THE document collection. Aiming for exactly 10 docs.', 'A' ),
+( 2, 123, 'the idftest2', 'A' ),
+( 3, 123, 'the idftest2 and idftest1', 'B' ),
+( 4, 123, 'the', 'B' ),
+( 5, 123, 'the', 'C' ),
+( 6, 123, 'the', 'C' ),
+( 7, 123, 'the', 'D' ),
+( 8, 123, 'the', 'D' ),
+( 9, 123, 'the', 'E' ),
+( 10, 123, 'the', 'E' )
 </db_insert>
 
 <queries>
@@ -67,6 +69,20 @@ show scroll;
 select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NywidHlwZSI6ImludCJ9XX0=';
 show scroll;
 select weight(), id from test where match('the') and id>1 limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6OSwidHlwZSI6ImludCJ9XX0=';
+
+<!-- Test scroll with string sorting (DESC) -->
+select id, brand_name from test order by brand_name desc, id desc limit 2;
+show scroll;
+select id, brand_name from test order by brand_name desc, id desc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJicmFuZF9uYW1lIGRlc2MsIGlkIGRlc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6ImJyYW5kX25hbWUiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6IkUiLCJ0eXBlIjoic3RyaW5nIn0seyJhdHRyIjoiaWQiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6OSwidHlwZSI6ImludCJ9XX0=';
+show scroll;
+select id, brand_name from test order by brand_name desc, id desc limit 20 option scroll='eyJvcmRlcl9ieV9zdHIiOiJicmFuZF9uYW1lIGRlc2MsIGlkIGRlc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6ImJyYW5kX25hbWUiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6IkQiLCJ0eXBlIjoic3RyaW5nIn0seyJhdHRyIjoiaWQiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6NywidHlwZSI6ImludCJ9XX0=';
+
+<!-- Test scroll with string sorting (ASC) -->
+select id, brand_name from test order by brand_name asc, id asc limit 2;
+show scroll;
+select id, brand_name from test order by brand_name asc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJicmFuZF9uYW1lIGFzYywgaWQgYXNjIiwib3JkZXJfYnkiOlt7ImF0dHIiOiJicmFuZF9uYW1lIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjoiQSIsInR5cGUiOiJzdHJpbmcifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MiwidHlwZSI6ImludCJ9XX0=';
+show scroll;
+select id, brand_name from test order by brand_name asc, id asc limit 3 option scroll='eyJvcmRlcl9ieV9zdHIiOiJicmFuZF9uYW1lIGFzYywgaWQgYXNjIiwib3JkZXJfYnkiOlt7ImF0dHIiOiJicmFuZF9uYW1lIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjoiQiIsInR5cGUiOiJzdHJpbmcifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NCwidHlwZSI6ImludCJ9XX0=';
 </sphinxql>
 </queries>
 
@@ -136,6 +152,67 @@ select weight(), id from test where match('the') and id>1 limit 2 option scroll=
   },
   "track_scores": true,
   "limit":2
+}
+</query>
+
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": true
+  },
+  "sort":
+  [
+    { "brand_name":{ "order":"desc"} },
+	{ "id":{ "order":"desc"} }
+  ],
+  "limit":2
+}
+</query>
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJicmFuZF9uYW1lIGRlc2MsIGlkIGRlc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6ImJyYW5kX25hbWUiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6IkUiLCJ0eXBlIjoic3RyaW5nIn0seyJhdHRyIjoiaWQiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6OSwidHlwZSI6ImludCJ9XX0="
+  },
+  "sort":
+  [
+    { "brand_name":{ "order":"desc"} },
+	{ "id":{ "order":"desc"} }
+  ],
+  "limit":2
+}
+</query>
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": true
+  },
+  "sort":
+  [
+    { "brand_name":{ "order":"asc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "limit":2
+}
+</query>
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJicmFuZF9uYW1lIGFzYywgaWQgYXNjIiwib3JkZXJfYnkiOlt7ImF0dHIiOiJicmFuZF9uYW1lIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjoiQSIsInR5cGUiOiJzdHJpbmcifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MiwidHlwZSI6ImludCJ9XX0="
+  },
+  "sort":
+  [
+    { "brand_name":{ "order":"asc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "limit":3
 }
 </query>
 

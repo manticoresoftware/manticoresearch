@@ -166,7 +166,6 @@ table products_all {
 - When using `model_name`, you **must not** specify `dims` - the model automatically determines the vector dimensions. The `dims` and `model_name` parameters are mutually exclusive.
 - When **not** using `model_name` (manual vector insertion), you **must** specify `dims` to indicate the vector dimensions.
 - The `from` parameter specifies which fields to use for embedding generation (comma-separated list, or empty string for all text/string fields). This parameter is required when using `model_name`.
-- `cache_path` optionally specifies where to cache downloaded local models (e.g., Hugging Face models like sentence-transformers or Qwen). Use it if your Manticore cache directory is non-default or differs from the server's working directory.
 - For API-based models (OpenAI, Voyage, Jina), include the `api_key` parameter in the knn configuration
 
 <!-- end -->

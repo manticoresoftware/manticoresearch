@@ -18,7 +18,6 @@
 #include <cfloat>
 #include <cmath>
 #include <algorithm>
-#include <iterator>
 #include <limits>
 
 class TDigest_c::Impl_c final

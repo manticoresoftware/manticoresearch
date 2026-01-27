@@ -19,7 +19,6 @@
 #include "sphinxint.h"
 #include "sortcomp.h"
 #include "distinct.h"
-#include <cstring>
 
 /// group sorting functor
 template < typename COMPGROUP >

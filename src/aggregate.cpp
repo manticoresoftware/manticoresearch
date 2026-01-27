@@ -18,9 +18,6 @@
 #include "sphinxutils.h"
 
 #include <algorithm>
-#include <cmath>
-#include <cstring>
-#include <new>
 
 /// aggregate traits for different attribute types
 template < typename T >

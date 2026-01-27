@@ -23,9 +23,6 @@
 #include "sphinxexcerpt.h"
 #include "std/tdigest.h"
 
-#include <cstring>
-#include <cmath>
-#include <algorithm>
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";

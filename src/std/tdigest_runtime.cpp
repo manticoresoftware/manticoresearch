@@ -1,7 +1,6 @@
 #include "std/tdigest_runtime.h"
 
 #include "attribute.h"
-#include "std/zip.h"
 
 TDigestRuntimeState_t::TDigestRuntimeState_t ( double fCompression )
 	: m_tDigest ( fCompression )

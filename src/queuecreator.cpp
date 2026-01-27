@@ -1791,12 +1791,18 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 		}
 	}
 
-	if ( NeedToMoveMixedJoinFilters ( m_tQuery, *m_pSorterSchema ) )
+	if ( NeedPostJoinFilterEvaluation ( m_tQuery, *m_pSorterSchema ) )
 		for ( const auto & i : m_tQuery.m_dFilters )
 		{
 			const CSphString & sAttr = i.m_sAttrName;
 			const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
-			if ( pAttr || !sphJsonNameSplit ( sAttr.cstr(), sRightIndex.cstr() ) )
+			CSphString sSplitAttrName;
+			bool bIndexPrefix = false;
+			if ( pAttr || !sphJsonNameSplit ( sAttr.cstr(), sRightIndex.cstr(), &sSplitAttrName, &bIndexPrefix ) )
+				continue;
+
+			// check if it's a json attribute from the left table and not a joined attribute
+			if ( !bIndexPrefix )
 				continue;
 
 			CSphColumnInfo tExprCol ( sAttr.cstr(), FilterType2AttrType ( i.m_eType ) );

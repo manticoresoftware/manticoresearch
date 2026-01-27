@@ -7819,6 +7819,7 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema & tMatchSc
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
+	tFlx.m_eJoinType = tQuery.m_eJoinType;
 	tFlx.m_bAddKNNDistFilter = true;
 
 	std::unique_ptr<ISphSchema> pModifiedMatchSchema;

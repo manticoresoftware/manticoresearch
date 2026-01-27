@@ -2514,15 +2514,11 @@ static void EncodePercentilesValues ( const JsonAggr_t & tAggr, const CSphMatch 
 	if ( tAggr.m_tPercentiles.m_bKeyed )
 	{
 		tOut.StartBlock ( ",", "\"values\":{", "}" );
-		bool bFirst = true;
 		for ( float fPercent : dPercents )
 		{
-			if ( !bFirst )
-				tOut += ",";
-			bFirst = false;
-
 			CSphString sKey = FormatKey ( fPercent );
 			tOut.Sprintf ( "\"%s\":", sKey.cstr() );
+			tOut.SkipNextComma ();
 
 			if ( bHasSamples )
 			{
@@ -2562,15 +2558,11 @@ static void EncodePercentileRanksValues ( const JsonAggr_t & tAggr, const CSphMa
 	if ( tAggr.m_tPercentileRanks.m_bKeyed )
 	{
 		tOut.StartBlock ( ",", "\"values\":{", "}" );
-		bool bFirst = true;
 		for ( double fThreshold : dValues )
 		{
-			if ( !bFirst )
-				tOut += ",";
-			bFirst = false;
-
 			CSphString sKey = FormatKey ( fThreshold );
 			tOut.Sprintf ( "\"%s\":", sKey.cstr() );
+			tOut.SkipNextComma ();
 
 			if ( bHasSamples )
 			{

@@ -1,0 +1,21 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get update >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y jq >/dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS agg_td; CREATE TABLE agg_td (id INT, latency FLOAT); INSERT INTO agg_td (id, latency) VALUES (1,10),(2,20),(3,30),(4,40),(5,50);" >/dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s -H 'Content-Type: application/json' -X POST "http://localhost:9308/agg_td/_search" -d '{"size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[50,90],"keyed":true}}}}' | jq -c '.aggregations.latency_percentiles'
+––– output –––
+{"values":{"50":30,"90":50}}
+––– input –––
+curl -s -H 'Content-Type: application/json' -X POST "http://localhost:9308/agg_td/_search" -d '{"size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}' | jq -c '.aggregations.latency_mad'
+––– output –––
+{"value":10,"value_as_string":"10"}
+––– input –––
+curl -s -H 'Content-Type: application/json' -X POST "http://localhost:9308/agg_td/_search" -d '{"size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[15,45],"keyed":true}}}}' | jq -c '.aggregations.latency_ranks'
+––– output –––
+{"values":{"15":20,"45":80}}

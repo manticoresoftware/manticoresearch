@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>percentiles and MAD aggregations</name>
+
+<requires>
+	<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<Searchd_Settings/>
+	binlog_path =
+}
+
+index agg_td
+{
+	type			= rt
+	path			= <data_path/>/agg_td
+	rt_field		= data
+	rt_attr_float	= latency
+}
+</config>
+
+<queries>
+	<sphinxql>TRUNCATE RTINDEX agg_td</sphinxql>
+	<sphinxql>INSERT INTO agg_td (id,data,latency) VALUES (1,'v',10),(2,'v',20),(3,'v',30),(4,'v',40),(5,'v',50)</sphinxql>
+	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[0,100],"keyed":true}}}}</query>
+	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":true}}}}</query>
+	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}</query>
+</queries>
+</test>

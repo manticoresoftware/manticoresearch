@@ -405,7 +405,7 @@ bool	IsAllowOnlyNot();
 /// global setting for boolean simplification
 void	SetBooleanSimplify ( bool bSimplify );
 bool	GetBooleanSimplify ( const CSphQuery & tQuery );
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr, StrVec_t * pZones = nullptr );
 inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );

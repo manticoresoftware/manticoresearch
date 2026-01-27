@@ -71,6 +71,7 @@ When creating a table for auto embeddings, specify:
 
 **Supported embedding models:**
 - **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
+- **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
 - **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
 - **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
 - **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
@@ -89,6 +90,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using Qwen local embeddings (no API key needed)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -155,6 +166,7 @@ table products_all {
 - When using `model_name`, you **must not** specify `dims` - the model automatically determines the vector dimensions. The `dims` and `model_name` parameters are mutually exclusive.
 - When **not** using `model_name` (manual vector insertion), you **must** specify `dims` to indicate the vector dimensions.
 - The `from` parameter specifies which fields to use for embedding generation (comma-separated list, or empty string for all text/string fields). This parameter is required when using `model_name`.
+- `cache_path` optionally specifies where to cache downloaded local models (e.g., Hugging Face models like sentence-transformers or Qwen). Use it if your Manticore cache directory is non-default or differs from the server's working directory.
 - For API-based models (OpenAI, Voyage, Jina), include the `api_key` parameter in the knn configuration
 
 <!-- end -->
@@ -667,4 +679,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

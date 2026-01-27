@@ -135,6 +135,7 @@ public:
 
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
+	uint64_t Hash () const noexcept;
 };
 
 /// extended query node

@@ -37,6 +37,17 @@ void XQLimitSpec_t::SetFieldSpec ( const FieldMask_t & uMask, int iMaxPos )
 	m_iFieldMaxPos = iMaxPos;
 }
 
+uint64_t XQLimitSpec_t::Hash () const noexcept
+{
+	uint64_t uHash = sphFNV64 ( &m_dFieldMask, sizeof ( m_dFieldMask ) );
+	uHash = sphFNV64 ( &m_iFieldMaxPos, sizeof ( m_iFieldMaxPos ), uHash );
+	if ( m_bZoneSpan )
+		++uHash;
+	if ( !m_dZones.IsEmpty() )
+		uHash = sphFNV64 ( m_dZones.begin(), m_dZones.GetLengthBytes(), uHash );
+	return uHash;
+}
+
 XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery )
 {
 	auto * pQuery = new XQQuery_t;

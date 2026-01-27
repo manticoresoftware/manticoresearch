@@ -534,8 +534,12 @@ void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const C
 	}
 	if ( s.m_iFieldMaxPos )
 		tNode.AddInt ( SZ_MAX_FIELD_POS, s.m_iFieldMaxPos );
-	if ( pZones && !s.m_dZones.IsEmpty () )
-		tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, *pZones );
+	if ( !pZones || s.m_dZones.IsEmpty () )
+		return;
+	StrVec_t dZones;
+	for ( const auto& iZone: s.m_dZones )
+		dZones.Add ( (*pZones)[iZone] );
+	tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, dZones );
 }
 
 void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )

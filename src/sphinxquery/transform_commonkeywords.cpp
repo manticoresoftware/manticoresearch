@@ -46,16 +46,6 @@ namespace {
 
 constexpr BYTE g_sPhraseDelimiter[] = { 1 };
 
-uint64_t HashSpec ( const XQLimitSpec_t & tSpec )
-{
-	uint64_t uHash = sphFNV64 ( tSpec.m_dFieldMask.m_dMask, sizeof ( tSpec.m_dFieldMask.m_dMask ) );
-	uHash = sphFNV64 ( &tSpec.m_iFieldMaxPos, sizeof ( tSpec.m_iFieldMaxPos ), uHash );
-	uHash = sphFNV64 ( &tSpec.m_bZoneSpan, sizeof ( tSpec.m_bZoneSpan ), uHash );
-	if ( !tSpec.m_dZones.IsEmpty() )
-		uHash = sphFNV64 ( tSpec.m_dZones.Begin(), tSpec.m_dZones.GetLength() * sizeof ( tSpec.m_dZones[0] ), uHash );
-	return uHash;
-}
-
 struct CommonInfo_t
 {
 	CSphVector<XQNode_t *> *	m_pPhrases;
@@ -98,7 +88,7 @@ struct XQNodeAtomPos_fn
 uint64_t sphHashPhrase ( const XQNode_t * pNode )
 {
 	assert ( pNode );
-	uint64_t uHash = HashSpec ( pNode->m_dSpec );
+	uint64_t uHash = pNode->m_dSpec.Hash();
 
 	auto iWords = pNode->dWords().GetLength();
 	if ( !iWords )
@@ -228,7 +218,7 @@ void sphHashSubphrases ( XQNode_t * pNode,
 
 	const CSphVector<XQKeyword_t> & dWords = pNode->dWords();
 	const int iLen = dWords.GetLength();
-	const uint64_t uSpec = HashSpec ( pNode->m_dSpec );
+	const uint64_t uSpec = pNode->m_dSpec.Hash();
 	for ( int i=0; i<iLen; ++i )
 	{
 		uint64_t uSubPhrase = fnHornerHash ( dWords[i].m_sWord.cstr(), uSpec );
@@ -470,11 +460,9 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 				assert ( dWords.GetLength()>=2 );
 				dNodes[iPhrase]->m_iAtomPos = dWords.Begin()->m_iAtomPos;
 
-				const uint64_t uSpec = HashSpec ( dNodes[iPhrase]->m_dSpec );
-				uint64_t uHead = sphFNV64 ( &uSpec, sizeof(uSpec), SPH_FNV64_SEED );
-				uint64_t uTail = sphFNV64 ( &uSpec, sizeof(uSpec), SPH_FNV64_SEED );
-				uHead = sphFNV64cont ( dWords[0].m_sWord.cstr(), uHead );
-				uTail = sphFNV64cont ( dWords [ dWords.GetLength() - 1 ].m_sWord.cstr(), uTail );
+				const uint64_t uSpec = dNodes[iPhrase]->m_dSpec.Hash();
+				uint64_t uHead = sphFNV64cont ( dWords[0].m_sWord.cstr(), uSpec );
+				uint64_t uTail = sphFNV64cont ( dWords [ dWords.GetLength() - 1 ].m_sWord.cstr(), uSpec );
 				uHead = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHead );
 				uHead = sphFNV64cont ( dWords[1].m_sWord.cstr(), uHead );
 

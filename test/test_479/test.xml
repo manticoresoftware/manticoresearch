@@ -22,13 +22,35 @@ index agg_td
 	rt_field		= data
 	rt_attr_float	= latency
 }
+
+index agg_td2
+{
+	type			= rt
+	path			= <data_path/>/agg_td2
+	rt_field		= data
+	rt_attr_float	= latency
+}
+
+index dist_agg
+{
+	type			= distributed
+	local			= agg_td
+	local			= agg_td2
+}
 </config>
 
 <queries>
 	<sphinxql>truncate rtindex agg_td</sphinxql>
 	<sphinxql>insert into agg_td (id,data,latency) values (1,'v',10),(2,'v',20),(3,'v',30),(4,'v',40),(5,'v',50)</sphinxql>
+	<sphinxql>truncate rtindex agg_td2</sphinxql>
+	<sphinxql>insert into agg_td2 (id,data,latency) values (1,'v',60),(2,'v',70),(3,'v',80)</sphinxql>
+
 	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[0,100],"keyed":true}}}}</query>
 	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":true}}}}</query>
 	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}</query>
+
+	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[0,100],"keyed":true}}}}</query>
+	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":true}}}}</query>
+	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}</query>
 </queries>
 </test>

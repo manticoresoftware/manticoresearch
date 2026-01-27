@@ -13,6 +13,75 @@
 #include "snippetindex.h"
 #include "sphinxint.h"
 #include "sphinxexcerpt.h"
+#include "searchdaemon.h"
+#if WITH_RE2
+#include <re2/re2.h>
+#endif
+
+class SnippetsDocIndex_c : public SnippetsDocIndex_i
+{
+	friend struct KeywordCmp_t;
+	friend struct TermCmp_t;
+
+public:
+	explicit SnippetsDocIndex_c ( const XQQuery_t & tQuery );
+	~SnippetsDocIndex_c() override = default;
+
+	void		SetupHits() override;
+	int			FindWord ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen ) const override;
+	int			FindStarred ( const char * sWord, bool bRegex ) const;
+	void		AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition ) override;
+	void		ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuerySPZ ) override;
+	int			GetTermWeight ( int iQueryPos ) const override;
+	int			GetNumTerms () const override;
+	DWORD		GetLastPos() const override { return m_uLastPos; }
+	void		SetLastPos ( DWORD uLastPos ) override { m_uLastPos=uLastPos; }
+
+	const XQQuery_t	& GetQuery() const override { return m_tQuery; }
+	const CSphVector<CSphVector<DWORD>> & GetDocHits() const override { return m_dDocHits; }
+	const CSphVector<DWORD> * GetHitlist ( const XQKeyword_t & tWord, const DictRefPtr_c & pDict ) const override;
+
+private:
+	struct Keyword_t
+	{
+		int			m_iWord;
+		int			m_iLength;
+		bool		m_bStar;
+		int			m_iWeight;
+		int			m_iQueryPos;
+		int			m_iRe2;
+		bool		HasRegex() const { return m_iRe2!=-1; }
+	};
+
+	struct Term_t
+	{
+		SphWordID_t	m_iWordId;
+		int			m_iWeight;
+		int			m_iQueryPos;
+	};
+
+	DWORD							m_uLastPos;
+	CSphVector<CSphVector<DWORD>>	m_dDocHits;
+	const XQQuery_t	&				m_tQuery;
+
+	CSphVector<Term_t>		m_dTerms;
+	CSphVector<SphWordID_t>	m_dStarred;
+	CSphVector<Keyword_t>	m_dStars;
+	CSphVector<BYTE>		m_dStarBuffer;
+	CSphVector<int>			m_dQposToWeight;
+#if WITH_RE2
+	CSphVector<std::unique_ptr<RE2>>	m_dRegexPatterns;
+#endif
+
+	mutable BYTE			m_sTmpWord [ 3*SPH_MAX_WORD_LEN + 16 ];
+
+	bool		MatchStar ( const Keyword_t & tTok, const BYTE * sWord ) const;
+	bool		MatchRegex ( const Keyword_t & tTok, const BYTE * sWord, int iLen ) const;
+	void		AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos );
+	void		AddWordStar ( const char * sWord, int iLengthCP, int iQpos );
+	void		AddWordRegex ( const char * sWord, int iLengthCP, int iQpos );
+	int			ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDict, int iQpos );
+};
 
 struct KeywordCmp_t
 {
@@ -76,12 +145,26 @@ void SnippetsDocIndex_c::SetupHits ()
 
 bool SnippetsDocIndex_c::MatchStar ( const Keyword_t & tTok, const BYTE * sWord ) const
 {
-	assert ( tTok.m_bStar );
+	assert ( tTok.m_bStar && !tTok.HasRegex() );
 	const BYTE * sKeyword = m_dStarBuffer.Begin() + tTok.m_iWord;
 	const char * sWildcard = (const char*) sKeyword;
 	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
 	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
 	return sphWildcardMatch ( (const char*)sWord, (const char*)sKeyword, pWildcard );
+}
+
+bool SnippetsDocIndex_c::MatchRegex ( const Keyword_t & tTok, const BYTE * sWord, int iLen ) const
+{
+	assert ( tTok.m_iRe2>=0 && tTok.m_iRe2<m_dRegexPatterns.GetLength() );
+#if WITH_RE2
+	RE2 * pRe = m_dRegexPatterns[tTok.m_iRe2].get();
+	assert ( pRe );
+	
+	re2::StringPiece sToken ( (const char*)sWord, iLen );
+	return RE2::FullMatchN ( sToken, *pRe, nullptr, 0 );
+#else
+	return false;
+#endif
 }
 
 
@@ -92,14 +175,18 @@ int SnippetsDocIndex_c::FindWord ( SphWordID_t iWordID, const BYTE * sWord, int 
 		return pQueryTerm->m_iQueryPos;
 
 	if ( sWord && iWordLen )
-		ARRAY_FOREACH ( i, m_dStars )
-		if ( MatchStar ( m_dStars[i], sWord ) )
-			return m_dStars[i].m_iQueryPos;
+	{
+		for ( const auto tKw : m_dStars )
+		{
+			if ( ( !tKw.HasRegex() && MatchStar ( tKw, sWord ) ) || ( tKw.HasRegex() && MatchRegex ( tKw, sWord, iWordLen ) ) )
+				return tKw.m_iQueryPos;
+		}
+	}
 
 	return -1;
 }
 
-int SnippetsDocIndex_c::FindStarred ( const char * sWord ) const
+int SnippetsDocIndex_c::FindStarred ( const char * sWord, bool bRegex ) const
 {
 	if ( !sWord )
 		return -1;
@@ -109,7 +196,7 @@ int SnippetsDocIndex_c::FindStarred ( const char * sWord ) const
 	ARRAY_FOREACH ( i, m_dStars )
 	{
 		const Keyword_t & tTok = m_dStars[i];
-		if ( tTok.m_iLength==iLen && tTok.m_bStar && memcmp ( pBuf+tTok.m_iWord, sWord, iLen )==0 )
+		if ( tTok.m_iLength==iLen && tTok.m_bStar && ( tTok.HasRegex()==bRegex ) && memcmp ( pBuf+tTok.m_iWord, sWord, iLen )==0 )
 			return m_dStars[i].m_iQueryPos;
 	}
 
@@ -138,11 +225,22 @@ void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int 
 	{
 		ARRAY_FOREACH ( i, m_dStars )
 		{
-			if ( MatchStar ( m_dStars[i], sWord ) )
+			bool bMatched = false;
+			if ( m_dStars[i].HasRegex() )
+			{
+				bMatched = MatchRegex ( m_dStars[i], sWord, iWordLen );
+			} else
+			{
+				bMatched = MatchStar ( m_dStars[i], sWord );
+			}
+			
+			if ( bMatched )
 			{
 				int iQPos = m_dStars[i].m_iQueryPos;
 				if ( !m_dDocHits[iQPos].GetLength() || DWORD ( m_dDocHits[iQPos].Last() )!=uPosition )
+				{
 					m_dDocHits [iQPos].Add ( uPosition );
+				}
 			}
 		}
 	}
@@ -268,14 +366,14 @@ void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuery
 
 			for ( const auto& dWord : pChild->dWords() )
 			{
-				if ( HasWildcards ( dWord.m_sWord.cstr() ) )
+				if ( dWord.m_bRegex || HasWildcards ( dWord.m_sWord.cstr() ) )
 					continue;
 
 				const auto * sWord = (const BYTE *) dWord.m_sWord.cstr();
 				int iLen = Min ( 3*SPH_MAX_WORD_LEN + 16-1, dWord.m_sWord.Length() );
 				for ( const auto& dStar : m_dStars )
 				{
-					if ( MatchStar ( dStar, sWord ) )
+					if ( !dStar.HasRegex() && MatchStar ( dStar, sWord ) )
 					{
 						memcpy ( m_sTmpWord, sWord, iLen );
 						m_sTmpWord[iLen] = '\0';
@@ -327,6 +425,36 @@ void SnippetsDocIndex_c::AddWordStar ( const char * sWord, int iLengthCP, int iQ
 	tTok.m_bStar = true;
 	tTok.m_iWeight = iLengthCP;
 	tTok.m_iQueryPos = iQpos;
+	tTok.m_iRe2 = -1;
+}
+
+void SnippetsDocIndex_c::AddWordRegex ( const char * sWord, int iLengthCP, int iQpos )
+{
+	auto iLen = (int) strlen ( sWord );
+	int iOff = m_dStarBuffer.GetLength();
+
+	m_dStarBuffer.Append ( sWord, iLen+1);
+	assert (m_dStarBuffer[iOff+iLen] == 0);
+
+	int iRe2 = -1;
+#if WITH_RE2
+	RE2::Options tOptions;
+	tOptions.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
+	auto pRe = std::make_unique<RE2> ( sWord, tOptions );
+	if ( pRe && pRe->ok() )
+	{
+		iRe2 = m_dRegexPatterns.GetLength();
+		m_dRegexPatterns.Add ( std::move ( pRe ) );
+	}
+#endif
+
+	Keyword_t & tTok = m_dStars.Add();
+	tTok.m_iWord = iOff;
+	tTok.m_iLength = iLen;
+	tTok.m_bStar = true;
+	tTok.m_iWeight = iLengthCP;
+	tTok.m_iQueryPos = iQpos;
+	tTok.m_iRe2 = iRe2;
 }
 
 
@@ -340,7 +468,11 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 		const XQKeyword_t & tWord = pNode->dWord(i);
 
 		int iLenCP = sphUTF8Len ( tWord.m_sWord.cstr() );
-		if ( HasWildcards ( tWord.m_sWord.cstr() ) )
+		if ( tWord.m_bRegex )
+		{
+			AddWordRegex ( tWord.m_sWord.cstr(), iLenCP, iQpos );
+			iQpos++;
+		} else if ( HasWildcards ( tWord.m_sWord.cstr() ) )
 		{
 			AddWordStar ( tWord.m_sWord.cstr(), iLenCP, iQpos );
 			iQpos++;
@@ -367,9 +499,13 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 const CSphVector<DWORD> * SnippetsDocIndex_c::GetHitlist ( const XQKeyword_t & tWord, const DictRefPtr_c & pDict ) const
 {
 	int iWord = -1;
-	if ( HasWildcards ( tWord.m_sWord.cstr() ) )
-		iWord = FindStarred ( tWord.m_sWord.cstr() );
-	else
+	if ( tWord.m_bRegex )
+	{
+		iWord = FindStarred ( tWord.m_sWord.cstr(), true );
+	} else if ( HasWildcards ( tWord.m_sWord.cstr() ) )
+	{
+		iWord = FindStarred ( tWord.m_sWord.cstr(), false );
+	} else
 	{
 		strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord)-1 );
 		m_sTmpWord[sizeof(m_sTmpWord) - 1] = '\0';
@@ -386,4 +522,10 @@ const CSphVector<DWORD> * SnippetsDocIndex_c::GetHitlist ( const XQKeyword_t & t
 	}
 
 	return nullptr;
+}
+
+
+SnippetsDocIndex_i * CreateSnippetsDocIndex ( const XQQuery_t & tQuery )
+{
+	return new SnippetsDocIndex_c ( tQuery );
 }

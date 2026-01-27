@@ -91,7 +91,7 @@ int Passage_t::GetWeight() const
 
 //////////////////////////////////////////////////////////////////////////
 
-static CSphVector<Passage_t> SelectBestPassages ( const CSphVector<Passage_t> & dPassages, const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords )
+static CSphVector<Passage_t> SelectBestPassages ( const CSphVector<Passage_t> & dPassages, const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_i & tContainer, DWORD uFoundWords )
 {
 	CSphVector<Passage_t> dShow;
 
@@ -282,7 +282,7 @@ PassageContext_t::PassageContext_t()
 }
 
 
-CSphVector<Passage_t> PassageContext_t::SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords ) const
+CSphVector<Passage_t> PassageContext_t::SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_i & tContainer, DWORD uFoundWords ) const
 {
 	CSphVector<Passage_t> dPassagesToShow;
 	if ( !m_dPassages.GetLength() )

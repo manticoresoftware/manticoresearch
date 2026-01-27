@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339805
+    },
+    "__meta": {
+        "source_text": "# Installing Manticore Search as a Docker image\n\nDocker images of Manticore Search are publicly accessible on [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/), built from the [Manticore Search docker GitHub repository](https://github.com/manticoresoftware/docker).\n\nTo retrieve the Manticore image, run the following command:\n\n```bash\ndocker pull manticoresearch/manticore\n```\n\nFor more information about using Manticore in Docker, see the [Using Manticore in Docker](../Starting_the_server/Docker.md) section.\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "662c6fbba706dc962409b40e8a2156ad"
     }
 }

@@ -2541,7 +2541,7 @@ let search_res = search_api.search(search_req).await;
 - **简化的工作流程**：只需插入文本，嵌入会自动生成
 - **无需手动计算向量**：无需运行单独的嵌入模型
 - **一致的嵌入**：相同的模型确保一致的向量表示
-- **支持多种模型**：可以选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、OpenAI、Voyage 和 Jina 模型
+- **多模型支持**：可选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、Qwen 嵌入模型、OpenAI、Voyage 和 Jina 模型
 - **灵活的字段选择**：控制用于生成嵌入的字段
 
 #### 创建带有自动嵌入的表
@@ -2552,6 +2552,7 @@ let search_res = search_api.search(search_req).await;
 
 **支持的嵌入模型：**
 - **Sentence Transformers**：任何 [适合的 BERT 基础 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。Manticore 在创建表时下载模型。
+- **Qwen 本地嵌入**：Qwen 嵌入模型，如 `Qwen/Qwen3-Embedding-0.6B`——不需要 API 密钥。Manticore 在您创建表时下载模型。
 - **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002` - 需要 `API_KEY='<OPENAI_API_KEY>'` 参数
 - **Voyage**：Voyage AI 嵌入模型 - 需要 `API_KEY='<VOYAGE_API_KEY>'` 参数
 - **Jina**：Jina AI 嵌入模型 - 需要 `API_KEY='<JINA_API_KEY>'` 参数
@@ -2567,6 +2568,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 Qwen 本地嵌入（不需要 API 密钥）
+```sql
+CREATE TABLE products_qwen (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title'
 );
 ```
 
@@ -3624,4 +3635,3 @@ table tbl {
 ```
 
 <!-- end -->
-

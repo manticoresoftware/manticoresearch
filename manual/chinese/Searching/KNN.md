@@ -71,6 +71,7 @@ table test_vec {
 
 **支持的嵌入模型：**
 - **Sentence Transformers**：任何 [合适的 BERT 基 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——不需要 API 密钥。Manticore 在您创建表时会下载该模型。
+- **Qwen本地嵌入**: Qwen嵌入模型，如 `Qwen/Qwen3-Embedding-0.6B` ——无需API密钥。Manticore在创建表时会下载该模型。
 - **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002` - 需要 `API_KEY='<OPENAI_API_KEY>'` 参数
 - **Voyage**：Voyage AI 嵌入模型 - 需要 `API_KEY='<VOYAGE_API_KEY>'` 参数
 - **Jina**：Jina AI 嵌入模型 - 需要 `API_KEY='<JINA_API_KEY>'` 参数
@@ -89,6 +90,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 Qwen 本地嵌入（无需API密钥）
+```sql
+CREATE TABLE products_qwen (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -155,6 +166,7 @@ table products_all {
 - 使用 `model_name` 时，**不得**指定 `dims` - 模型会自动确定向量维度。`dims` 和 `model_name` 参数是互斥的。
 - **不**使用 `model_name`（手动向量插入）时，**必须**指定 `dims` 以指示向量维度。
 - `from` 参数指定用于生成嵌入的字段（逗号分隔列表，或空字符串表示所有文本/字符串字段）。当使用 `model_name` 时，此参数是必需的。
+- `cache_path` 可选地指定缓存下载的本地模型的位置（例如，Hugging Face 模型如 sentence-transformers 或 Qwen）。如果 Manticore 的缓存目录不是默认的或与服务器的工作目录不同，请使用它。
 - 对于基于 API 的模型（OpenAI、Voyage、Jina），在 knn 配置中包含 `api_key` 参数
 
 <!-- end -->
@@ -667,4 +679,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

@@ -504,7 +504,12 @@ public:
 
 	}
 
-	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
+	void SetMerge ( bool bMerge ) override
+	{
+		m_bMerge = bMerge;
+		if ( bMerge )
+			m_bDocvalueCollector = false;
+	}
 
 protected:
 	template <bool GROUPED>
@@ -1055,7 +1060,12 @@ public:
 
 	}
 
-	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
+	void SetMerge ( bool bMerge ) override
+	{
+		m_bMerge = bMerge;
+		if ( bMerge )
+			m_bDocvalueCollector = false;
+	}
 
 protected:
 	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
@@ -1726,9 +1736,10 @@ class CSphImplicitGroupSorter final : public MatchSorter_c, ISphNoncopyable, pro
 	using BaseGroupSorter_c::AggrDiscard;
 
 public:
-	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
+	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 		: BaseGroupSorter_c ( tSettings )
 		, m_bSlimTdigest ( tSettings.m_bSlimTdigest )
+		, m_pQuery ( pQuery )
 	{
 		assert ( !DISTINCT || tSettings.m_pDistinctFetcher );
 		assert ( !pComp );
@@ -1754,6 +1765,7 @@ public:
 
 		BASE::SetSchema ( pSchema, bRemapCmp );
 		SetupBaseGrouper ( pSchema, DISTINCT );
+		EvaluateDocvalueEligibility();
 	}
 
 	bool	IsGroupby () const final { return true; }
@@ -1770,6 +1782,7 @@ public:
 		BaseGroupSorter_c::SetColumnar(pColumnar);
 		if ( m_pDistinctFetcher )
 			m_pDistinctFetcher->SetColumnar(pColumnar);
+		RefreshDocvalueCollectorState();
 	}
 
 	bool	IsCutoffDisabled() const final { return true; }
@@ -1881,6 +1894,9 @@ protected:
 
 	UNIQ		 m_tUniq;
 	const bool	m_bSlimTdigest;
+	const CSphQuery * m_pQuery = nullptr;
+	bool		m_bDocvalueCollector = false;
+	bool		m_bDocvalueRequested = false;
 
 private:
 	CSphVector<SphAttr_t> m_dDistinctKeys;
@@ -1890,6 +1906,124 @@ private:
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
 	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
 	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry, m_bMerge ); }
+	void	EvaluateDocvalueEligibility ()
+	{
+		if ( m_bDocvalueRequested )
+			return;
+		if ( !CanRequestDocvalueCollector() )
+			return;
+		if ( !AggregatesSupportDocvalue() )
+			return;
+		m_bDocvalueRequested = true;
+		for ( auto * pAggregate : this->m_dAggregates )
+			pAggregate->EnableDocvalueCollector();
+	}
+	void	RefreshDocvalueCollectorState ()
+	{
+		if ( !m_bDocvalueRequested )
+		{
+			m_bDocvalueCollector = false;
+			return;
+		}
+		m_bDocvalueCollector = AggregatesDocvalueReady();
+	}
+
+	template<bool GROUPED>
+	bool	PushDocvalue ( const CSphMatch & tEntry )
+	{
+		if constexpr ( GROUPED || DISTINCT )
+			return false;
+
+		if constexpr ( NOTIFICATIONS )
+		{
+			m_tJustPushed = RowTagged_t();
+			m_dJustPopped.Resize(0);
+		}
+
+		if ( m_bDataInitialized )
+		{
+			m_tData.AddCounterScalar ( m_tLocCount, 1 );
+			if constexpr ( HAS_AGGREGATES )
+				DocvalueUpdateAggregates<GROUPED> ( tEntry );
+			return false;
+		}
+
+		InitSlimData ( tEntry );
+		if constexpr ( HAS_AGGREGATES )
+		{
+			DocvalueSetupAggregates();
+			DocvalueUpdateAggregates<GROUPED> ( tEntry );
+		}
+
+		m_tData.SetAttr ( m_tLocGroupby, 1 );
+		m_tData.SetAttr ( m_tLocCount, 1 );
+		if constexpr ( DISTINCT )
+			m_tData.SetAttr ( m_tLocDistinct, 0 );
+
+		if constexpr ( NOTIFICATIONS )
+			m_tJustPushed = RowTagged_t ( m_tData );
+
+		m_bDataInitialized = true;
+		++m_iTotal;
+		return true;
+	}
+
+	void	DocvalueSetupAggregates ()
+	{
+		if constexpr ( HAS_AGGREGATES )
+			for ( auto * pAggregate : this->m_dAggregates )
+				pAggregate->DocvalueSetup ( m_tData );
+	}
+
+	template<bool GROUPED>
+	void	DocvalueUpdateAggregates ( const CSphMatch & tEntry )
+	{
+		if constexpr ( HAS_AGGREGATES )
+			for ( auto * pAggregate : this->m_dAggregates )
+				pAggregate->DocvalueAppend ( m_tData, tEntry, GROUPED );
+	}
+
+	bool	CanRequestDocvalueCollector () const
+	{
+		if constexpr ( !HAS_AGGREGATES || DISTINCT )
+			return false;
+
+		if ( !m_bSlimTdigest )
+			return false;
+
+		if ( !this->m_bImplicit )
+			return false;
+
+		if ( this->m_bGrouped )
+			return false;
+
+		if ( !m_pQuery || m_pQuery->m_iLimit!=0 )
+			return false;
+
+		return true;
+	}
+
+	bool	AggregatesSupportDocvalue () const
+	{
+		if constexpr ( !HAS_AGGREGATES )
+			return false;
+
+		for ( auto * pAggregate : this->m_dAggregates )
+			if ( !pAggregate->SupportsDocvalueCollector() )
+				return false;
+		return true;
+	}
+
+	bool	AggregatesDocvalueReady () const
+	{
+		if constexpr ( !HAS_AGGREGATES )
+			return false;
+
+		for ( auto * pAggregate : this->m_dAggregates )
+			if ( !pAggregate->DocvalueReady() )
+				return false;
+		return true;
+	}
 	void	InitSlimData ( const CSphMatch & tEntry )
 	{
 		if ( !m_pSchema )
@@ -1927,6 +2061,12 @@ private:
 	template <bool GROUPED>
 	FORCE_INLINE bool PushEx ( const CSphMatch & tEntry )
 	{
+		if ( m_bDocvalueCollector )
+		{
+			if constexpr ( !GROUPED )
+				return PushDocvalue<GROUPED> ( tEntry );
+		}
+
 		if constexpr ( NOTIFICATIONS )
 		{
 			m_tJustPushed = RowTagged_t();
@@ -1965,7 +2105,7 @@ private:
 		if ( m_bSlimTdigest )
 			InitSlimData ( tEntry );
 		else
-			m_pSchema->CloneMatch ( m_tData, tEntry );
+		m_pSchema->CloneMatch ( m_tData, tEntry );
 
 		// first-time aggregate setup
 		if constexpr ( HAS_AGGREGATES )

@@ -139,6 +139,7 @@ protected:
 	std::unique_ptr<columnar::Iterator_i> m_pColumnarIterator;
 	common::AttrType_e m_eColumnarType = common::AttrType_e::NONE;
 	bool			m_bUseColumnar = false;
+	bool			m_bDocvalueCollector = false;
 
 	TDigestRuntimeState_t * EnsureRuntime ( CSphMatch & tMatch ) const;
 	TDigestRuntimeState_t * CreateRuntime ( CSphMatch & tMatch ) const;
@@ -166,15 +167,7 @@ protected:
 	double EvalInput ( const CSphMatch & tMatch ) const
 	{
 		if ( m_bUseColumnar && m_pColumnarIterator )
-		{
-			switch ( m_eColumnarType )
-			{
-			case common::AttrType_e::FLOAT:
-				return sphDW2F ( (DWORD)m_pColumnarIterator->Get ( tMatch.m_tRowID ) );
-			default:
-				return (double)m_pColumnarIterator->Get ( tMatch.m_tRowID );
-			}
-		}
+			return EvalColumnarValue ( tMatch.m_tRowID );
 
 		if ( m_pInputExpr )
 		{
@@ -219,10 +212,12 @@ protected:
 
 	void AppendValue ( TDigestRuntimeState_t & tState, const CSphMatch & tMatch ) const
 	{
-		double fVal = EvalInput ( tMatch );
-		tState.m_dPending.Add ( fVal );
-		if ( tState.m_dPending.GetLength()>=PENDING_FLUSH_LIMIT )
-			FlushPending ( tState );
+		AppendValue ( tState, EvalInput ( tMatch ) );
+	}
+
+	void AppendValue ( TDigestRuntimeState_t & tState, double fValue ) const
+	{
+		AppendPendingValue ( tState, fValue );
 	}
 
 	void MergeFromMatch ( TDigestRuntimeState_t & tState, const CSphMatch & tMatch ) const
@@ -256,7 +251,8 @@ public:
 		tDigest.Clear();
 		tDigest.SetCompression ( m_fCompression );
 		tState.m_dPending.Resize ( 0 );
-		AppendValue ( tState, tDst );
+		if ( !m_bDocvalueCollector )
+			AppendValue ( tState, tDst );
 	}
 
 	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool, bool bMerge ) override
@@ -285,6 +281,67 @@ public:
 	void Discard ( CSphMatch & tMatch ) override
 	{
 		DropRuntime ( tMatch );
+	}
+
+	bool SupportsDocvalueCollector () const override
+	{
+		return m_bUseColumnar;
+	}
+
+	void EnableDocvalueCollector () override
+	{
+		if ( m_bUseColumnar )
+			m_bDocvalueCollector = true;
+	}
+
+	void DocvalueSetup ( CSphMatch & tDst ) override
+	{
+		if ( !m_bDocvalueCollector )
+			return;
+
+		auto & tState = AccessState ( tDst );
+		TDigest_c & tDigest = tState.m_tDigest;
+		FlushPending ( tState );
+		tDigest.Clear();
+		tDigest.SetCompression ( m_fCompression );
+		tState.m_dPending.Resize ( 0 );
+	}
+
+	bool DocvalueAppend ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) override
+	{
+		if ( !m_bDocvalueCollector || bGrouped || !m_pColumnarIterator )
+			return false;
+
+		auto & tState = AccessState ( tDst );
+		AppendPendingValue ( tState, EvalColumnarValue ( tSrc.m_tRowID ) );
+		return true;
+	}
+
+	bool DocvalueReady () const override
+	{
+		return m_bDocvalueCollector && m_pColumnarIterator!=nullptr;
+	}
+
+private:
+	double EvalColumnarValue ( RowID_t tRowID ) const
+	{
+		if ( !m_pColumnarIterator )
+			return 0.0;
+
+		switch ( m_eColumnarType )
+		{
+		case common::AttrType_e::FLOAT:
+			return sphDW2F ( (DWORD)m_pColumnarIterator->Get ( tRowID ) );
+		default:
+			return (double)m_pColumnarIterator->Get ( tRowID );
+		}
+	}
+
+	void AppendPendingValue ( TDigestRuntimeState_t & tState, double fValue ) const
+	{
+		tState.m_dPending.Add ( fValue );
+		if ( tState.m_dPending.GetLength()>=PENDING_FLUSH_LIMIT )
+			FlushPending ( tState );
 	}
 
 };

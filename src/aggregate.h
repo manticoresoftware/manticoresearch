@@ -27,6 +27,11 @@ public:
 	virtual void	Finalize ( CSphMatch & tDst ) {}
 	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
+	virtual bool	SupportsDocvalueCollector () const { return false; }
+	virtual void	EnableDocvalueCollector () {}
+	virtual void	DocvalueSetup ( CSphMatch & ) {}
+	virtual bool	DocvalueAppend ( CSphMatch &, const CSphMatch &, bool ) { return false; }
+	virtual bool	DocvalueReady () const { return false; }
 };
 
 

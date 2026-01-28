@@ -15,6 +15,7 @@
 #include "columnarmisc.h"
 #include "indexsettings.h"
 #include "secondaryindex.h"
+#include <functional>
 
 class TableEmbeddings_c
 {
@@ -60,7 +61,11 @@ bool							Str2Quantization ( const CSphString & sQuantization, knn::Quantizatio
 std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, const CSphString & sTmpFilename, CSphString & sError );
 void							BuildTrainKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );
 bool							BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );
-std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphString & sError );
-RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, bool & bError, CSphString & sError );
+// Function type for getting docinfo by rowid (needed for setting m_pStatic in matches)
+// Using std::function to allow lambdas that capture 'this'
+using GetDocinfoByRowID_fn = std::function<const CSphRowitem * ( RowID_t tRowID )>;
+
+std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphQueryContext * pCtx, const columnar::Columnar_i * pColumnar, const BYTE * pBlobPool, GetDocinfoByRowID_fn fnGetDocinfo, CSphString & sError );
+RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphQueryContext * pCtx, const columnar::Columnar_i * pColumnar, const BYTE * pBlobPool, GetDocinfoByRowID_fn fnGetDocinfo, bool & bError, CSphString & sError );
 
 ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings );

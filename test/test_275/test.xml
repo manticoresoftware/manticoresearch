@@ -126,6 +126,315 @@ searchd
 	insert into test values ( 1, 'yellow bag', 'person',1 ,(0.653448,0.192478,0.017971,0.339821) ), ( 2, 'white bag', 'or',10, (-0.148894,0.748278,0.091892,-0.095406) );
 	select id, knn_dist() from test where type  =  'or' AND pr > 0 AND (type = 'person' AND pr > 1 OR type != 'person') AND  knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), {ef=2000} );
 	drop table test;
+
+	<!-- On-the-fly filtering tests -->
+	<!-- Test Case 1: Basic on-the-fly filtering with category filter -->
+	create table t_filter (title text, category int, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t_filter values 
+		(1, 'doc1', 1, (0.1, 0.2, 0.3, 0.4)),
+		(2, 'doc2', 2, (0.2, 0.3, 0.4, 0.5)),
+		(3, 'doc3', 3, (0.3, 0.4, 0.5, 0.6)),
+		(4, 'doc4', 1, (0.4, 0.5, 0.6, 0.7)),
+		(5, 'doc5', 2, (0.5, 0.6, 0.7, 0.8)),
+		(6, 'doc6', 3, (0.6, 0.7, 0.8, 0.9)),
+		(7, 'doc7', 1, (0.7, 0.8, 0.9, 1.0)),
+		(8, 'doc8', 2, (0.8, 0.9, 1.0, 1.1)),
+		(9, 'doc9', 3, (0.9, 1.0, 1.1, 1.2)),
+		(10, 'doc10', 1, (1.0, 1.1, 1.2, 1.3));
+	flush ramchunk t_filter;
+
+	<!-- WITHOUT filter=1 (post-filtering): Query point (0.3, 0.4, 0.5, 0.6) is close to category=3 docs, returns 1 result (id=4) -->
+	select id, category, knn_dist() dist from t_filter 
+	where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0}) and category=1;
+
+	<!-- WITH filter=1 (on-the-fly): Returns 2 category=1 docs (id=4, 1) - continues searching until k filtered results found -->
+	select id, category, knn_dist() dist from t_filter 
+	where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0, filter=1}) and category=1;
+
+	<!-- Test Case 2: Range filter (price < 50) - filter=1 finds more results than filter=0 -->
+	create table t_price (title text, price float, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t_price values 
+		(1, 'cheap1', 10.0, (0.1, 0.2, 0.3, 0.4)),
+		(2, 'cheap2', 20.0, (0.2, 0.3, 0.4, 0.5)),
+		(3, 'expensive1', 80.0, (0.8, 0.9, 1.0, 1.1)),
+		(4, 'expensive2', 90.0, (0.9, 1.0, 1.1, 1.2)),
+		(5, 'cheap3', 30.0, (0.3, 0.4, 0.5, 0.6)),
+		(6, 'expensive3', 100.0, (1.0, 1.1, 1.2, 1.3));
+	flush ramchunk t_price;
+
+	<!-- WITHOUT filter=1: Query point (0.2, 0.3, 0.4, 0.5) matches cheap doc id=2, returns 2 results after filtering (id=2, 1) -->
+	select id, price, knn_dist() dist from t_price 
+	where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0}) and price&lt;50;
+
+	<!-- WITH filter=1: Returns 2 cheap docs (id=2, 1) - continues searching until k filtered results found -->
+	select id, price, knn_dist() dist from t_price 
+	where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, filter=1}) and price&lt;50;
+
+	<!-- Test Case 3: Restrictive filter (fewer matches than k) - filter=1 finds all matching docs -->
+	<!-- WITHOUT filter=1: Query point (0.48, 0.58, 0.68, 0.78) is close to price=100 doc, but no results (query point is far from id=6) -->
+	select id, price, knn_dist() dist from t_price 
+	where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0}) and price=100;
+
+	<!-- WITH filter=1: Returns 1 price=100 doc (id=6) - continues searching until k filtered results found (only 1 exists) -->
+	select id, price, knn_dist() dist from t_price 
+	where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, filter=1}) and price=100;
+
+	<!-- Test Case 4: Category=2 filter with k=3 -->
+	<!-- WITHOUT filter=1: Query point (0.3, 0.4, 0.5, 0.6) is close to category=3, returns 1 result (id=2) -->
+	select id, category, knn_dist() dist from t_filter 
+	where knn(vec, 3, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0}) and category=2;
+
+	<!-- WITH filter=1: Returns 3 category=2 docs (id=2, 5, 8) - continues searching until k filtered results found -->
+	select id, category, knn_dist() dist from t_filter 
+	where knn(vec, 3, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0, filter=1}) and category=2;
+
+	<!-- Test Case 5: Price>=50 range filter - filter=1 finds more results than filter=0 -->
+	<!-- WITHOUT filter=1: Query point (0.75, 0.85, 0.95, 1.05) is close to expensive docs, returns 2 results (id=3, 4) -->
+	select id, price, knn_dist() dist from t_price 
+	where knn(vec, 2, (0.75, 0.85, 0.95, 1.05), {oversampling=1.0}) and price&gt;=50;
+
+	<!-- WITH filter=1: Returns 2 expensive docs (id=3, 4) - continues searching until k filtered results found -->
+	select id, price, knn_dist() dist from t_price 
+	where knn(vec, 2, (0.75, 0.85, 0.95, 1.05), {oversampling=1.0, filter=1}) and price&gt;=50;
+
+	<!-- Test Case 6: Integration with filter tree (extend existing pattern) -->
+	create table test_filter_tree ( title text, type string, pr int, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );
+	insert into test_filter_tree values 
+		( 1, 'yellow bag', 'person', 1, (0.653448,0.192478,0.017971,0.339821) ), 
+		( 2, 'white bag', 'or', 10, (-0.148894,0.748278,0.091892,-0.095406) ),
+		( 3, 'red bag', 'person', 5, (0.5, 0.6, 0.7, 0.8) );
+	flush ramchunk test_filter_tree;
+
+	<!-- Original query without filter=1 -->
+	select id, knn_dist() from test_filter_tree 
+	where type = 'or' AND pr > 0 AND (type = 'person' AND pr > 1 OR type != 'person') AND knn(image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), {ef=2000});
+
+	<!-- Same query with filter=1 (on-the-fly filtering) -->
+	select id, knn_dist() from test_filter_tree 
+	where type = 'or' AND pr > 0 AND (type = 'person' AND pr > 1 OR type != 'person') AND knn(image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), {ef=2000, filter=1});
+
+	drop table test_filter_tree;
+	drop table t_price;
+	drop table t_filter;
+
+	<!-- Test Case 7: On-the-fly filtering with default oversampling (more documents needed) -->
+	create table t_large (title text, category int, price float, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t_large values 
+		(1, 'doc1', 1, 10.0, (0.05, 0.15, 0.25, 0.35)),
+		(2, 'doc2', 2, 20.0, (0.10, 0.20, 0.30, 0.40)),
+		(3, 'doc3', 3, 30.0, (0.15, 0.25, 0.35, 0.45)),
+		(4, 'doc4', 1, 40.0, (0.20, 0.30, 0.40, 0.50)),
+		(5, 'doc5', 2, 50.0, (0.25, 0.35, 0.45, 0.55)),
+		(6, 'doc6', 3, 60.0, (0.30, 0.40, 0.50, 0.60)),
+		(7, 'doc7', 1, 70.0, (0.35, 0.45, 0.55, 0.65)),
+		(8, 'doc8', 2, 80.0, (0.40, 0.50, 0.60, 0.70)),
+		(9, 'doc9', 3, 90.0, (0.45, 0.55, 0.65, 0.75)),
+		(10, 'doc10', 1, 100.0, (0.50, 0.60, 0.70, 0.80)),
+		(11, 'doc11', 2, 15.0, (0.55, 0.65, 0.75, 0.85)),
+		(12, 'doc12', 3, 25.0, (0.60, 0.70, 0.80, 0.90)),
+		(13, 'doc13', 1, 35.0, (0.65, 0.75, 0.85, 0.95)),
+		(14, 'doc14', 2, 45.0, (0.70, 0.80, 0.90, 1.00)),
+		(15, 'doc15', 3, 55.0, (0.75, 0.85, 0.95, 1.05)),
+		(16, 'doc16', 1, 65.0, (0.80, 0.90, 1.00, 1.10)),
+		(17, 'doc17', 2, 75.0, (0.85, 0.95, 1.05, 1.15)),
+		(18, 'doc18', 3, 85.0, (0.90, 1.00, 1.10, 1.20)),
+		(19, 'doc19', 1, 95.0, (0.95, 1.05, 1.15, 1.25)),
+		(20, 'doc20', 2, 5.0, (1.00, 1.10, 1.20, 1.30)),
+		(21, 'doc21', 3, 12.0, (0.12, 0.22, 0.32, 0.42)),
+		(22, 'doc22', 1, 22.0, (0.22, 0.32, 0.42, 0.52)),
+		(23, 'doc23', 2, 32.0, (0.32, 0.42, 0.52, 0.62)),
+		(24, 'doc24', 3, 42.0, (0.42, 0.52, 0.62, 0.72)),
+		(25, 'doc25', 1, 52.0, (0.52, 0.62, 0.72, 0.82));
+	flush ramchunk t_large;
+
+	<!-- WITHOUT filter=1 (post-filtering): Query point (0.15, 0.25, 0.35, 0.45) is close to category=3 docs, returns 3 results (id=4, 22, 1) -->
+	<!-- Note: Using default oversampling (not explicitly set) -->
+	select id, category, knn_dist() dist from t_large 
+	where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and category=1;
+
+	<!-- WITH filter=1 (on-the-fly): Returns 9 category=1 docs (all that exist) - demonstrates benefit of on-the-fly filtering -->
+	<!-- Note: Using default oversampling (not explicitly set) -->
+	select id, category, knn_dist() dist from t_large 
+	where knn(vec, 3, (0.15, 0.25, 0.35, 0.45), {filter=1}) and category=1;
+
+	<!-- Test Case 8: Default oversampling with range filter - filter=1 finds more results than filter=0 -->
+	<!-- WITHOUT filter=1: Query point (0.25, 0.35, 0.45, 0.55) is between price ranges, returns 1 result (id=22) -->
+	select id, price, knn_dist() dist from t_large 
+	where knn(vec, 2, (0.25, 0.35, 0.45, 0.55)) and price&lt;30;
+
+	<!-- WITH filter=1: Returns 6 cheap docs (id=22, 21, 2, 1, 11, 12) - continues searching until k filtered results found -->
+	select id, price, knn_dist() dist from t_large 
+	where knn(vec, 2, (0.25, 0.35, 0.45, 0.55), {filter=1}) and price&lt;30;
+
+	<!-- Test Case 9: Default oversampling with higher k -->
+	<!-- WITHOUT filter=1: Query point (0.5, 0.6, 0.7, 0.8) is close to category=1 docs, returns 5 results (id=9, 24, 12, 6, 15) -->
+	select id, category, knn_dist() dist from t_large 
+	where knn(vec, 5, (0.5, 0.6, 0.7, 0.8)) and category=3;
+
+	<!-- WITH filter=1: Returns 8 category=3 docs (more than k=5) - demonstrates benefit of on-the-fly filtering -->
+	select id, category, knn_dist() dist from t_large 
+	where knn(vec, 5, (0.5, 0.6, 0.7, 0.8), {filter=1}) and category=3;
+
+	drop table t_large;
+
+	<!-- Test Case 10: On-the-fly filtering with k=auto (no k specified, uses LIMIT) -->
+	<!-- When k is not specified in knn(), it defaults to LIMIT value -->
+	<!-- Need more documents to clearly show the difference -->
+	create table t_auto (title text, category int, price float, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into t_auto values 
+		(1, 'doc1', 1, 10.0, (0.05, 0.15, 0.25, 0.35)),
+		(2, 'doc2', 2, 20.0, (0.10, 0.20, 0.30, 0.40)),
+		(3, 'doc3', 3, 30.0, (0.15, 0.25, 0.35, 0.45)),
+		(4, 'doc4', 1, 40.0, (0.20, 0.30, 0.40, 0.50)),
+		(5, 'doc5', 2, 50.0, (0.25, 0.35, 0.45, 0.55)),
+		(6, 'doc6', 3, 60.0, (0.30, 0.40, 0.50, 0.60)),
+		(7, 'doc7', 1, 70.0, (0.35, 0.45, 0.55, 0.65)),
+		(8, 'doc8', 2, 80.0, (0.40, 0.50, 0.60, 0.70)),
+		(9, 'doc9', 3, 90.0, (0.45, 0.55, 0.65, 0.75)),
+		(10, 'doc10', 1, 100.0, (0.50, 0.60, 0.70, 0.80)),
+		(11, 'doc11', 2, 15.0, (0.55, 0.65, 0.75, 0.85)),
+		(12, 'doc12', 3, 25.0, (0.60, 0.70, 0.80, 0.90)),
+		(13, 'doc13', 1, 35.0, (0.65, 0.75, 0.85, 0.95)),
+		(14, 'doc14', 2, 45.0, (0.70, 0.80, 0.90, 1.00)),
+		(15, 'doc15', 3, 55.0, (0.75, 0.85, 0.95, 1.05)),
+		(16, 'doc16', 1, 65.0, (0.80, 0.90, 1.00, 1.10)),
+		(17, 'doc17', 2, 75.0, (0.85, 0.95, 1.05, 1.15)),
+		(18, 'doc18', 3, 85.0, (0.90, 1.00, 1.10, 1.20)),
+		(19, 'doc19', 1, 95.0, (0.95, 1.05, 1.15, 1.25)),
+		(20, 'doc20', 2, 5.0, (1.00, 1.10, 1.20, 1.30)),
+		(21, 'doc21', 3, 12.0, (0.12, 0.22, 0.32, 0.42)),
+		(22, 'doc22', 1, 22.0, (0.22, 0.32, 0.42, 0.52)),
+		(23, 'doc23', 2, 32.0, (0.32, 0.42, 0.52, 0.62)),
+		(24, 'doc24', 3, 42.0, (0.42, 0.52, 0.62, 0.72)),
+		(25, 'doc25', 1, 52.0, (0.52, 0.62, 0.72, 0.82)),
+		(26, 'doc26', 2, 62.0, (0.62, 0.72, 0.82, 0.92)),
+		(27, 'doc27', 3, 72.0, (0.72, 0.82, 0.92, 1.02)),
+		(28, 'doc28', 1, 82.0, (0.82, 0.92, 1.02, 1.12)),
+		(29, 'doc29', 2, 92.0, (0.92, 1.02, 1.12, 1.22)),
+		(30, 'doc30', 3, 102.0, (1.02, 1.12, 1.22, 1.32)),
+		(31, 'doc31', 1, 8.0, (0.08, 0.18, 0.28, 0.38)),
+		(32, 'doc32', 2, 18.0, (0.18, 0.28, 0.38, 0.48)),
+		(33, 'doc33', 3, 28.0, (0.28, 0.38, 0.48, 0.58)),
+		(34, 'doc34', 1, 38.0, (0.38, 0.48, 0.58, 0.68)),
+		(35, 'doc35', 2, 48.0, (0.48, 0.58, 0.68, 0.78)),
+		(36, 'doc36', 3, 58.0, (0.58, 0.68, 0.78, 0.88)),
+		(37, 'doc37', 1, 68.0, (0.68, 0.78, 0.88, 0.98)),
+		(38, 'doc38', 2, 78.0, (0.78, 0.88, 0.98, 1.08)),
+		(39, 'doc39', 3, 88.0, (0.88, 0.98, 1.08, 1.18)),
+		(40, 'doc40', 1, 98.0, (0.98, 1.08, 1.18, 1.28));
+	flush ramchunk t_auto;
+
+	<!-- Test Case 10a: k=auto (no k), LIMIT=2, category=2 filter -->
+	<!-- WITHOUT filter=1: Query point (0.15, 0.25, 0.35, 0.45) is close to category=3, returns 2 results (id=32, 2) -->
+	select id, category, knn_dist() dist from t_auto 
+	where knn(vec, (0.15, 0.25, 0.35, 0.45)) and category=2 limit 2;
+
+	<!-- WITH filter=1: Returns 2 category=2 docs (id=32, 2) - same as filter=0 in this case -->
+	select id, category, knn_dist() dist from t_auto 
+	where knn(vec, (0.15, 0.25, 0.35, 0.45), {filter=1}) and category=2 limit 2;
+
+	<!-- Test Case 10b: k=auto (no k), LIMIT=3, price&lt;30 filter -->
+	<!-- WITHOUT filter=1: Query point (0.25, 0.35, 0.45, 0.55) is between price ranges, returns 3 results (id=33, 22, 32) -->
+	select id, price, knn_dist() dist from t_auto 
+	where knn(vec, (0.25, 0.35, 0.45, 0.55)) and price&lt;30 limit 3;
+
+	<!-- WITH filter=1: May return 0 results - demonstrates limitation when query point is far from filtered documents in embedding space -->
+	<!-- Note: This is expected behavior of approximate nearest neighbor search -->
+	select id, price, knn_dist() dist from t_auto 
+	where knn(vec, (0.25, 0.35, 0.45, 0.55), {filter=1}) and price&lt;30 limit 3;
+
+	<!-- Test Case 10c: k=auto (no k), LIMIT=3, price&gt;=80 filter -->
+	<!-- WITHOUT filter=1: Query point (0.75, 0.85, 0.95, 1.05) is close to expensive docs, returns 1 result (id=28) -->
+	select id, price, knn_dist() dist from t_auto 
+	where knn(vec, (0.75, 0.85, 0.95, 1.05)) and price&gt;=80 limit 3;
+
+	<!-- WITH filter=1: Returns 3 expensive docs (id=28, 39, 18) - finds more than filter=0 (which only found 1) -->
+	select id, price, knn_dist() dist from t_auto 
+	where knn(vec, (0.75, 0.85, 0.95, 1.05), {filter=1}) and price&gt;=80 limit 3;
+
+	<!-- Test Case 10d: k=auto (no k), LIMIT=3, price&lt;25 filter -->
+	<!-- WITHOUT filter=1: Query point (0.2, 0.3, 0.4, 0.5) is close to cheap docs, returns 3 results (id=22, 32, 21) -->
+	select id, price, knn_dist() dist from t_auto 
+	where knn(vec, (0.2, 0.3, 0.4, 0.5)) and price&lt;25 limit 3;
+
+	<!-- WITH filter=1: Returns 3 cheap docs (id=22, 32, 21) - same as filter=0 in this case -->
+	select id, price, knn_dist() dist from t_auto 
+	where knn(vec, (0.2, 0.3, 0.4, 0.5), {filter=1}) and price&lt;25 limit 3;
+
+	drop table t_auto;
+
+	<!-- Columnar engine tests - verify on-the-fly filtering works identically with columnar storage -->
+	<!-- Test Case 1: Basic on-the-fly filtering with category filter (columnar) -->
+	create table t_filter_col (title text, category int, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') engine='columnar';
+	insert into t_filter_col values 
+		(1, 'doc1', 1, (0.1, 0.2, 0.3, 0.4)),
+		(2, 'doc2', 2, (0.2, 0.3, 0.4, 0.5)),
+		(3, 'doc3', 3, (0.3, 0.4, 0.5, 0.6)),
+		(4, 'doc4', 1, (0.4, 0.5, 0.6, 0.7)),
+		(5, 'doc5', 2, (0.5, 0.6, 0.7, 0.8)),
+		(6, 'doc6', 3, (0.6, 0.7, 0.8, 0.9)),
+		(7, 'doc7', 1, (0.7, 0.8, 0.9, 1.0)),
+		(8, 'doc8', 2, (0.8, 0.9, 1.0, 1.1)),
+		(9, 'doc9', 3, (0.9, 1.0, 1.1, 1.2)),
+		(10, 'doc10', 1, (1.0, 1.1, 1.2, 1.3));
+	flush ramchunk t_filter_col;
+
+	<!-- WITHOUT filter=1 (post-filtering): Returns 1 result (id=4) -->
+	select id, category, knn_dist() dist from t_filter_col 
+	where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0}) and category=1;
+
+	<!-- WITH filter=1 (on-the-fly): Returns 2 category=1 docs (id=4, 1) -->
+	select id, category, knn_dist() dist from t_filter_col 
+	where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0, filter=1}) and category=1;
+
+	<!-- Test Case 2: Range filter with columnar engine -->
+	create table t_price_col (title text, price float, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') engine='columnar';
+	insert into t_price_col values 
+		(1, 'cheap1', 10.0, (0.1, 0.2, 0.3, 0.4)),
+		(2, 'cheap2', 20.0, (0.2, 0.3, 0.4, 0.5)),
+		(3, 'expensive1', 80.0, (0.8, 0.9, 1.0, 1.1)),
+		(4, 'expensive2', 90.0, (0.9, 1.0, 1.1, 1.2)),
+		(5, 'cheap3', 30.0, (0.3, 0.4, 0.5, 0.6)),
+		(6, 'expensive3', 100.0, (1.0, 1.1, 1.2, 1.3));
+	flush ramchunk t_price_col;
+
+	<!-- WITHOUT filter=1: Returns 2 results (id=2, 1) -->
+	select id, price, knn_dist() dist from t_price_col 
+	where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0}) and price&lt;50;
+
+	<!-- WITH filter=1: Returns 2 cheap docs (id=2, 1) -->
+	select id, price, knn_dist() dist from t_price_col 
+	where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, filter=1}) and price&lt;50;
+
+	<!-- Test Case 3: Restrictive filter with columnar engine -->
+	<!-- WITHOUT filter=1: Returns empty (query point is far from id=6) -->
+	select id, price, knn_dist() dist from t_price_col 
+	where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0}) and price=100;
+
+	<!-- WITH filter=1: Returns 1 price=100 doc (id=6) -->
+	select id, price, knn_dist() dist from t_price_col 
+	where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, filter=1}) and price=100;
+
+	<!-- Test Case 4: Category=2 filter with k=3 (columnar) -->
+	<!-- WITHOUT filter=1: Returns 1 result (id=2) -->
+	select id, category, knn_dist() dist from t_filter_col 
+	where knn(vec, 3, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0}) and category=2;
+
+	<!-- WITH filter=1: Returns 3 category=2 docs (id=2, 5, 8) -->
+	select id, category, knn_dist() dist from t_filter_col 
+	where knn(vec, 3, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0, filter=1}) and category=2;
+
+	<!-- Test Case 5: Price>=50 range filter (columnar) -->
+	<!-- WITHOUT filter=1: Returns 2 results (id=3, 4) -->
+	select id, price, knn_dist() dist from t_price_col 
+	where knn(vec, 2, (0.75, 0.85, 0.95, 1.05), {oversampling=1.0}) and price&gt;=50;
+
+	<!-- WITH filter=1: Returns 2 expensive docs (id=3, 4) -->
+	select id, price, knn_dist() dist from t_price_col 
+	where knn(vec, 2, (0.75, 0.85, 0.95, 1.05), {oversampling=1.0, filter=1}) and price&gt;=50;
+
+	drop table t_price_col;
+	drop table t_filter_col;
 </sphinxql>
 </queries>
 

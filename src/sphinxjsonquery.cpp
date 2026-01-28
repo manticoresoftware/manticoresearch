@@ -1273,6 +1273,18 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		sError = "oversampling parameter must be >= 1.0";
 		return false;
 	}
+	// Check if "filter" is a boolean (option) or object (criteria)
+	// If it's an object, it's filter criteria - automatically enable on-the-fly filtering
+	// If it's a boolean, it's the on-the-fly filtering option
+	JsonObj_c tFilterOpt = tJson.GetItem ( "filter" );
+	if ( tFilterOpt )
+	{
+		if ( tFilterOpt.IsBool() )
+			tKNN.m_bOnTheFlyFiltering = tFilterOpt.BoolVal();
+		else if ( tFilterOpt.IsObj() )
+			// Filter criteria object present - automatically enable on-the-fly filtering
+			tKNN.m_bOnTheFlyFiltering = true;
+	}
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError, true );
 	if ( tQueryVec )

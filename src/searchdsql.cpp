@@ -1470,6 +1470,14 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		tKNN.m_iK = tOpt.m_iValue;
 		return true;
 	}
+	else if ( sName=="filter" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bOnTheFlyFiltering = !!tOpt.m_iValue;
+		return true;
+	}
 
 	return false;
 }

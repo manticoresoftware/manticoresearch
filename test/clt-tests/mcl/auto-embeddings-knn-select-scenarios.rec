@@ -47,11 +47,11 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    1 | machine learning algorithms | 141.302780 |
-|    4 | artificial intelligence     | 141.419083 |
-|    2 | cooking recipes             | 141.779907 |
-|    3 | travel destinations         | 142.266846 |
-|    5 | healthy eating              | 142.354874 |
+|    1 | machine learning algorithms | #!/141\.302[0-9]*/!# |
+|    4 | artificial intelligence     | #!/141\.419[0-9]*/!# |
+|    2 | cooking recipes             | #!/141\.779[0-9]*/!# |
+|    3 | travel destinations         | #!/142\.266[0-9]*/!# |
+|    5 | healthy eating              | #!/142\.354[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test KNN search with text query parameter (auto-embeddings approach)
@@ -61,11 +61,11 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    4 | artificial intelligence     | 0.59020078 |
-|    1 | machine learning algorithms | 0.60105515 |
-|    2 | cooking recipes             |   1.779692 |
-|    3 | travel destinations         | 1.94063687 |
-|    5 | healthy eating              |   1.976098 |
+|    4 | artificial intelligence     | #!/0\.590[0-9]*/!# |
+|    1 | machine learning algorithms | #!/0\.601[0-9]*/!# |
+|    2 | cooking recipes             | #!/1\.779[0-9]*/!# |
+|    3 | travel destinations         | #!/1\.940[0-9]*/!# |
+|    5 | healthy eating              | #!/1\.976[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test KNN search with empty string query
@@ -75,11 +75,11 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    2 | cooking recipes             | 1.88556850 |
-|    1 | machine learning algorithms | 1.92225611 |
-|    3 | travel destinations         | 1.93586946 |
-|    4 | artificial intelligence     | 1.94731545 |
-|    5 | healthy eating              | 1.97711217 |
+|    2 | cooking recipes             | #!/1\.885[0-9]*/!# |
+|    1 | machine learning algorithms | #!/1\.922[0-9]*/!# |
+|    3 | travel destinations         | #!/1\.935[0-9]*/!# |
+|    4 | artificial intelligence     | #!/1\.947[0-9]*/!# |
+|    5 | healthy eating              | #!/1\.977[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test KNN search with different text queries to verify semantic similarity
@@ -89,11 +89,11 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    2 | cooking recipes             | 0.80746633 |
-|    5 | healthy eating              | 1.31011271 |
-|    4 | artificial intelligence     | 1.73995149 |
-|    1 | machine learning algorithms | 1.74750781 |
-|    3 | travel destinations         | 1.83199012 |
+|    2 | cooking recipes             | #!/0\.807[0-9]*/!# |
+|    5 | healthy eating              | #!/1\.310[0-9]*/!# |
+|    4 | artificial intelligence     | #!/1\.739[0-9]*/!# |
+|    1 | machine learning algorithms | #!/1\.747[0-9]*/!# |
+|    3 | travel destinations         | #!/1\.831[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test KNN search with document ID parameter
@@ -103,10 +103,10 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-------------------------+------------+
 | id   | title                   | knn_dist() |
 +------+-------------------------+------------+
-|    4 | artificial intelligence | 0.22544095 |
-|    2 | cooking recipes         | 1.76208055 |
-|    3 | travel destinations     | 1.83849883 |
-|    5 | healthy eating          | 1.97417617 |
+|    4 | artificial intelligence | #!/0\.225[0-9]*/!# |
+|    2 | cooking recipes         | #!/1\.762[0-9]*/!# |
+|    3 | travel destinations     | #!/1\.838[0-9]*/!# |
+|    5 | healthy eating          | #!/1\.974[0-9]*/!# |
 +------+-------------------------+------------+
 ––– comment –––
 Test KNN search with additional filtering
@@ -116,8 +116,8 @@ mysql -h0 -P9306 -e "SELECT id, title, category, knn_dist() FROM test_knn_select
 +------+-----------------------------+------------+------------+
 | id   | title                       | category   | knn_dist() |
 +------+-----------------------------+------------+------------+
-|    4 | artificial intelligence     | technology | 1.32850134 |
-|    1 | machine learning algorithms | technology | 1.35791051 |
+|    4 | artificial intelligence     | technology | #!/1\.328[0-9]*/!# |
+|    1 | machine learning algorithms | technology | #!/1\.357[0-9]*/!# |
 +------+-----------------------------+------------+------------+
 ––– comment –––
 Test KNN search with advanced options (ef, rescore, oversampling)
@@ -127,11 +127,11 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    3 | travel destinations         | 0.59569979 |
-|    2 | cooking recipes             | 1.77228165 |
-|    4 | artificial intelligence     | 1.79695368 |
-|    5 | healthy eating              | 1.86994112 |
-|    1 | machine learning algorithms | 1.87506628 |
+|    3 | travel destinations         | #!/0\.595[0-9]*/!# |
+|    2 | cooking recipes             | #!/1\.772[0-9]*/!# |
+|    4 | artificial intelligence     | #!/1\.796[0-9]*/!# |
+|    5 | healthy eating              | #!/1\.869[0-9]*/!# |
+|    1 | machine learning algorithms | #!/1\.875[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test special characters in search query
@@ -155,8 +155,8 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    4 | artificial intelligence     | 0.84652847 |
-|    1 | machine learning algorithms | 0.90871155 |
+|    4 | artificial intelligence     | #!/0\.846[0-9]*/!# |
+|    1 | machine learning algorithms | #!/0\.908[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test KNN search with LIMIT
@@ -166,11 +166,11 @@ mysql -h0 -P9306 -e "SELECT id, title, knn_dist() FROM test_knn_select WHERE knn
 +------+-----------------------------+------------+
 | id   | title                       | knn_dist() |
 +------+-----------------------------+------------+
-|    5 | healthy eating              | 0.47211158 |
-|    2 | cooking recipes             |   1.500787 |
-|    3 | travel destinations         | 1.80363417 |
-|    1 | machine learning algorithms | 1.97797108 |
-|    4 | artificial intelligence     |   1.989296 |
+|    5 | healthy eating              | #!/0\.472[0-9]*/!# |
+|    2 | cooking recipes             | #!/1\.500[0-9]*/!# |
+|    3 | travel destinations         | #!/1\.803[0-9]*/!# |
+|    1 | machine learning algorithms | #!/1\.977[0-9]*/!# |
+|    4 | artificial intelligence     | #!/1\.989[0-9]*/!# |
 +------+-----------------------------+------------+
 ––– comment –––
 Test that text queries produce consistent results

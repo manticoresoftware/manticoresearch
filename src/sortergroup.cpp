@@ -504,7 +504,12 @@ public:
 
 	}
 
-	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
+	void SetMerge ( bool bMerge ) override
+	{
+		m_bMerge = bMerge;
+		if ( bMerge )
+			m_bDocvalueCollector = false;
+	}
 
 protected:
 	template <bool GROUPED>
@@ -1055,7 +1060,12 @@ public:
 
 	}
 
-	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
+	void SetMerge ( bool bMerge ) override
+	{
+		m_bMerge = bMerge;
+		if ( bMerge )
+			m_bDocvalueCollector = false;
+	}
 
 protected:
 	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist

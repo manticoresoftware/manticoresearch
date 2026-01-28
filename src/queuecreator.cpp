@@ -915,13 +915,6 @@ bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 
 			return true;
 		}
-
-		if ( tColumnarAttr.IsColumnar() )
-		{
-			CSphString sColumnarCol = tColumnarAttr.m_sName;
-			tExprCol.m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR_COL, &sColumnarCol );
-			return true;
-		}
 	}
 
 	return false;

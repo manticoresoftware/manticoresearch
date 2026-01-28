@@ -2541,7 +2541,7 @@ let search_res = search_api.search(search_req).await;
 - **Упрощенный рабочий процесс**: Просто вставляйте текст, эмбеддинги генерируются автоматически
 - **Без ручного вычисления векторов**: Не нужно запускать отдельные модели эмбеддингов
 - **Согласованные эмбеддинги**: Одна и та же модель обеспечивает согласованные векторные представления
-- **Поддержка нескольких моделей**: Выбирайте из моделей [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage и Jina
+- **Поддержка множества моделей**: Выбирайте из моделей эмбеддингов [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models), OpenAI, Voyage и Jina
 - **Гибкий выбор полей**: Контролируйте, какие поля используются для генерации эмбеддингов
 
 #### Создание таблиц с автоматическими эмбеддингами
@@ -2552,6 +2552,7 @@ let search_res = search_api.search(search_req).await;
 
 **Поддерживаемые модели эмбеддингов:**
 - **Sentence Transformers**: Любая [подходящая модель Hugging Face на основе BERT](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
+- **Локальные эмбеддинги Qwen**: Модели эмбеддингов Qwen, такие как `Qwen/Qwen3-Embedding-0.6B` — API-ключ не требуется. Manticore загружает модель при создании таблицы.
 - **OpenAI**: Модели эмбеддингов OpenAI, такие как `openai/text-embedding-ada-002` - требует параметр `API_KEY='<OPENAI_API_KEY>'`
 - **Voyage**: Модели эмбеддингов Voyage AI - требует параметр `API_KEY='<VOYAGE_API_KEY>'`
 - **Jina**: Модели эмбеддингов Jina AI - требует параметр `API_KEY='<JINA_API_KEY>'`
@@ -2567,6 +2568,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование локальных эмбеддингов Qwen (API-ключ не требуется)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title'
 );
 ```
 
@@ -3624,4 +3635,3 @@ table tbl {
 ```
 
 <!-- end -->
-

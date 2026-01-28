@@ -71,6 +71,7 @@ table test_vec {
 
 **Поддерживаемые модели эмбеддингов:**
 - **Sentence Transformers**: Любая [подходящая модель на основе BERT из Hugging Face](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
+- **Qwen локальные эмбеддинги**: Модели эмбеддингов Qwen, такие как `Qwen/Qwen3-Embedding-0.6B` — ключ API не требуется. Manticore загружает модель при создании таблицы.
 - **OpenAI**: Модели эмбеддингов OpenAI, такие как `openai/text-embedding-ada-002` - требует параметр `API_KEY='<OPENAI_API_KEY>'`
 - **Voyage**: Модели эмбеддингов Voyage AI - требует параметр `API_KEY='<VOYAGE_API_KEY>'`
 - **Jina**: Модели эмбеддингов Jina AI - требует параметр `API_KEY='<JINA_API_KEY>'`
@@ -89,6 +90,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование локальных эмбеддингов Qwen (ключ API не требуется)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -667,4 +678,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

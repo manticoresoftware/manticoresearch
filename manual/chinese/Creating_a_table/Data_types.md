@@ -2541,7 +2541,7 @@ let search_res = search_api.search(search_req).await;
 - **简化的工作流程**：只需插入文本，嵌入会自动生成
 - **无需手动计算向量**：无需运行单独的嵌入模型
 - **一致的嵌入**：相同的模型确保一致的向量表示
-- **多模型支持**：可选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、Qwen 嵌入模型、OpenAI、Voyage 和 Jina 模型
+- **多模型支持**：可选择 [sentence-transformers](https://huggingface.co/sentence-transformers/models)、[Qwen](https://huggingface.co/Qwen/models) 嵌入模型、OpenAI、Voyage 和 Jina 模型
 - **灵活的字段选择**：控制用于生成嵌入的字段
 
 #### 创建带有自动嵌入的表

@@ -76,7 +76,9 @@ mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (3, 'c'); FLUSH RAMCHUNK rt
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B
 ––– output –––
-disk_chunks	3
++-------------+------+
+| disk_chunks |    3 |
++-------------+------+
 
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_multi (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_multi;"
@@ -84,7 +86,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_dst_multi (id BIGINT, title TEXT); ATTACH T
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE rt_dst_multi STATUS LIKE 'disk_chunks';" -N -B
 ––– output –––
-disk_chunks	3
++-------------+------+
+| disk_chunks |    3 |
++-------------+------+
 ––– input –––
 if grep -q "swauniq" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
 grep -q "swauniqb" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
@@ -143,7 +147,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_dst_attach (id BIGINT, title TEXT); ATTACH 
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE rt_dst_attach STATUS LIKE 'disk_chunks';" -N -B
 ––– output –––
-disk_chunks	4
++-------------+------+
+| disk_chunks |    4 |
++-------------+------+
 ––– input –––
 if grep -q "swduniq" /var/lib/manticore/rt_dst_attach/stopwords_chunk*.txt && \
 grep -q "d1 => d1r" /var/lib/manticore/rt_dst_attach/wordforms_chunk*.txt && \
@@ -166,7 +172,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_dst_nonempty (id BIGINT, title TEXT) stopwo
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLE rt_dst_nonempty STATUS LIKE 'disk_chunks';" -N -B
 ––– output –––
-disk_chunks	2
++-------------+------+
+| disk_chunks |    2 |
++-------------+------+
 ––– input –––
 if grep -q "swdstuniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt && \
 grep -q "swduniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt; then echo OK_NONEMPTY_CONTENT; else echo FAIL_NONEMPTY_CONTENT; fi

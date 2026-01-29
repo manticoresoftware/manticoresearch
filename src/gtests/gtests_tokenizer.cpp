@@ -1454,6 +1454,16 @@ TEST_F ( QueryParser, transform_common_and_not_factor_with_mixed_phrases_1 )
 	);
 }
 
+// use-after-free error
+TEST_F ( QueryParser, transform_common_subphrases_fail_asan )
+{
+	Transform (
+		"\"00-00\"|\"00@00-00\"|\"00@00-00\"~5",
+		"( \"00 00\" | \"00 00 00\" | \"00 00 00\"~5 )",
+		"( \"00 00 00\"~5 | ( \"00 \"00 00\"\" ) )"
+	);
+}
+
 // COMMON | NOT
 TEST_F ( QueryParser, transform_common_or_not )
 {

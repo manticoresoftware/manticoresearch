@@ -589,7 +589,7 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 
 void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *> & dCommonNodes, int iCommonLen, bool bHeadIsCommon )
 {
-	const XQLimitSpec_t & tSpec = dCommonNodes[0]->m_dSpec;
+	const XQLimitSpec_t tSpec = dCommonNodes[0]->m_dSpec;
 	auto * pCommonPhrase = new XQNode_t ( tSpec );
 	pCommonPhrase->SetOp ( SPH_QUERY_PHRASE );
 

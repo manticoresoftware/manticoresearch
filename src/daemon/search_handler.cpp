@@ -2284,6 +2284,9 @@ static ESphAggrFunc GetAggr ( Aggr_e eAggrFunc )
 	case Aggr_e::MAX: return SPH_AGGR_MAX;
 	case Aggr_e::SUM: return SPH_AGGR_SUM;
 	case Aggr_e::AVG: return SPH_AGGR_AVG;
+	case Aggr_e::PERCENTILES: return SPH_AGGR_PERCENTILES;
+	case Aggr_e::PERCENTILE_RANKS: return SPH_AGGR_PERCENTILE_RANKS;
+	case Aggr_e::MAD: return SPH_AGGR_MAD;
 	default: return SPH_AGGR_NONE;
 	}
 }
@@ -2361,8 +2364,11 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	{
 		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
 
-		// add only new items
-		if ( hAttrs[tBucket.m_sCol] )
+		const bool bHasAggrFunc = ( tBucket.m_eAggrFunc!=Aggr_e::NONE );
+		CSphString sAlias = bHasAggrFunc ? GetAggrName ( i, tBucket.m_sCol ) : tBucket.m_sCol;
+
+		// add only new items (by alias)
+		if ( hAttrs[sAlias] )
 			continue;
 
 		if ( tBucket.m_eAggrFunc==Aggr_e::COUNT )
@@ -2378,14 +2384,22 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
 		{
 			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
-			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			tItem.m_sAlias = sAlias;
 			tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+			switch ( tBucket.m_eAggrFunc )
+			{
+			case Aggr_e::PERCENTILES: tItem.m_fTdigestCompression = tBucket.m_tPercentiles.m_fCompression; break;
+			case Aggr_e::PERCENTILE_RANKS: tItem.m_fTdigestCompression = tBucket.m_tPercentileRanks.m_fCompression; break;
+			case Aggr_e::MAD: tItem.m_fTdigestCompression = tBucket.m_tMad.m_fCompression; break;
+			default: break;
+			}
 		} else
 		{
 			tItem.m_sExpr = tBucket.m_sCol;
-			tItem.m_sAlias = tBucket.m_sCol;
-			hAttrs.Add ( tBucket.m_sCol );
+			tItem.m_sAlias = sAlias;
 		}
+
+		hAttrs.Add ( tItem.m_sAlias );
 	}
 
 	tQuery.m_bFacetHead = true;
@@ -2406,6 +2420,9 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		tQuery.m_bFacet = true;
 
 		// select list to facet query
+		if ( tBucket.m_eAggrFunc==Aggr_e::PERCENTILES || tBucket.m_eAggrFunc==Aggr_e::PERCENTILE_RANKS || tBucket.m_eAggrFunc==Aggr_e::MAD )
+			tQuery.m_sSelect = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+		else
 		tQuery.m_sSelect.SetSprintf ( "%s", tBucket.m_sCol.cstr() );
 
 		// ref items to facet query
@@ -2435,11 +2452,21 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			case Aggr_e::MAX:
 			case Aggr_e::SUM:
 			case Aggr_e::AVG:
+			case Aggr_e::PERCENTILES:
+			case Aggr_e::PERCENTILE_RANKS:
+			case Aggr_e::MAD:
 			{
 				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
 				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
 				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
 				tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+				switch ( tBucket.m_eAggrFunc )
+				{
+				case Aggr_e::PERCENTILES: tItem.m_fTdigestCompression = tBucket.m_tPercentiles.m_fCompression; break;
+				case Aggr_e::PERCENTILE_RANKS: tItem.m_fTdigestCompression = tBucket.m_tPercentileRanks.m_fCompression; break;
+				case Aggr_e::MAD: tItem.m_fTdigestCompression = tBucket.m_tMad.m_fCompression; break;
+				default: break;
+				}
 			}
 			break;
 
@@ -2473,6 +2500,9 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			case Aggr_e::MAX:
 			case Aggr_e::SUM:
 			case Aggr_e::AVG:
+			case Aggr_e::PERCENTILES:
+			case Aggr_e::PERCENTILE_RANKS:
+			case Aggr_e::MAD:
 				break;
 
 			case Aggr_e::COMPOSITE:

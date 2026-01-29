@@ -27,6 +27,7 @@ struct CSphGroupSorterSettings
 	CSphRefcountedPtr<CSphGrouper>		m_pGrouper;///< group key calculator
 	CSphRefcountedPtr<DistinctFetcher_i> m_pDistinctFetcher;
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
+	bool				m_bSlimTdigest = false; ///< implicit TDigest-only query, allow slim match buffer
 	SharedPtr_t<ISphFilter>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
 	int					m_iMaxMatches = 0;

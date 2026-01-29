@@ -79,6 +79,9 @@ protected:
 	void		ResetAfterFlatten()		{ m_dIData.Resize(0); }
 	int			ResetDynamic ( int iMaxUsed );
 	int			ResetDynamicFreeData ( int iMaxUsed );
+
+protected:
+	virtual void	OnMatchFree ( CSphMatch & tMatch );
 };
 
 
@@ -140,6 +143,7 @@ protected:
 	void	AggrUpdate ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge = false );
 	void	AggrSetup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge = false );
 	void	AggrUngroup ( CSphMatch & tMatch );
+	void	AggrDiscard ( CSphMatch & tMatch );
 
 private:
 	void	ResetAggregates();

@@ -938,7 +938,8 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		break;
 
 	case Option_e::EXPAND_BLENDED:
-		tQuery.m_sExpandBlended = sVal;
+		if ( sVal!="0" )
+			tQuery.m_sExpandBlended = sVal;
 		break;
 
 	case Option_e::STORE: //} else if ( sOpt=="store" )

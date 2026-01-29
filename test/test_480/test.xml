@@ -177,6 +177,9 @@ show plan;
 
 <!-- expand to distirbuted agent -->
 SELECT * FROM dist1 WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none';
+
+SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='0';
+show plan;
 </sphinxql>
 
 </queries>

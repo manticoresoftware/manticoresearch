@@ -142,7 +142,11 @@ CSphMatchQueueTraits::CSphMatchQueueTraits ( int iSize )
 CSphMatchQueueTraits::~CSphMatchQueueTraits ()
 {
 	if ( m_pSchema )
-		m_dData.Apply ( [this] ( CSphMatch& tMatch ) { m_pSchema->FreeDataPtrs ( tMatch ); } );
+		m_dData.Apply ( [this] ( CSphMatch& tMatch )
+		{
+			OnMatchFree ( tMatch );
+			m_pSchema->FreeDataPtrs ( tMatch );
+		} );
 }
 
 
@@ -183,11 +187,17 @@ int CSphMatchQueueTraits::ResetDynamicFreeData ( int iMaxUsed )
 {
 	for ( int i=0; i<iMaxUsed; i++ )
 	{
+		OnMatchFree ( m_dData[i] );
 		m_pSchema->FreeDataPtrs ( m_dData[i] );
 		m_dData[i].ResetDynamic();
 	}
 
 	return -1;
+}
+
+
+void CSphMatchQueueTraits::OnMatchFree ( CSphMatch & tMatch )
+{
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -311,7 +321,6 @@ void BaseGroupSorter_c::SetColumnar ( columnar::Columnar_i * pColumnar )
 		i->SetColumnar(pColumnar);
 }
 
-
 void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs )
 {
 	m_tPregroup.ResetAttrs();
@@ -350,6 +359,18 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 			m_dAggregates.Add ( CreateAggrConcat(tAttr) );
 			m_tPregroup.AddPtr ( tAttr.m_tLocator );
 			break;
+		case SPH_AGGR_PERCENTILES:
+			m_dAggregates.Add ( CreateAggrPercentiles ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_PERCENTILE_RANKS:
+			m_dAggregates.Add ( CreateAggrPercentileRanks ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_MAD:
+			m_dAggregates.Add ( CreateAggrMad ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
 
 		default: assert ( 0 && "internal error: unhandled aggregate function" );
 			break;
@@ -386,6 +407,13 @@ void BaseGroupSorter_c::AggrUngroup ( CSphMatch & tMatch )
 {
 	for ( auto * pAggregate : this->m_dAggregates )
 		pAggregate->Ungroup ( tMatch );
+}
+
+
+void BaseGroupSorter_c::AggrDiscard ( CSphMatch & tMatch )
+{
+	for ( auto * pAggregate : this->m_dAggregates )
+		pAggregate->Discard ( tMatch );
 }
 
 

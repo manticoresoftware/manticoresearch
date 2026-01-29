@@ -13,19 +13,384 @@
 #include "aggregate.h"
 
 #include "schema/columninfo.h"
+#include "std/tdigest.h"
+#include "std/tdigest_runtime.h"
+#include "sphinxutils.h"
+
+#include <algorithm>
 
 /// aggregate traits for different attribute types
 template < typename T >
 class AggrFunc_Traits_T : public AggrFunc_i
 {
 public:
-	explicit		AggrFunc_Traits_T ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
+	explicit AggrFunc_Traits_T ( const CSphAttrLocator & tLocator )
+		: m_tLocator ( tLocator )
+	{}
 
-	T				GetValue ( const CSphMatch & tRow );
-	void			SetValue ( CSphMatch & tRow, T val );
+	T GetValue ( const CSphMatch & tRow );
+	void SetValue ( CSphMatch & tRow, T val );
 
 protected:
 	CSphAttrLocator	m_tLocator;
+};
+
+namespace
+{
+using BStream_c = TightPackedVec_T<BYTE>;
+
+static double FetchNumericAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, ESphAttr eType )
+{
+	switch ( eType )
+	{
+	case SPH_ATTR_BOOL:
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_TIMESTAMP:
+		return (double)tMatch.GetAttr ( tLoc );
+
+	case SPH_ATTR_FLOAT:
+		return (double)tMatch.GetAttrFloat ( tLoc );
+
+	case SPH_ATTR_DOUBLE:
+		return tMatch.GetAttrDouble ( tLoc );
+
+	default:
+		return 0.0;
+	}
+}
+
+static void StoreTDigestBlob ( const TDigest_c & tDigest, const CSphMatch & tDst, const CSphAttrLocator & tLoc )
+{
+	ByteBlob_t dPrev = tDst.FetchAttrData ( tLoc, nullptr );
+	if ( dPrev.first )
+		sphDeallocatePacked ( sphPackedBlob ( dPrev ) );
+
+	CSphVector<TDigestCentroid_t> dCentroids;
+	tDigest.Export ( dCentroids );
+
+	BStream_c dOut;
+	int iCount = dCentroids.GetLength();
+	BYTE * pCount = dOut.AddN ( sizeof ( int ) );
+	sphUnalignedWrite ( pCount, iCount );
+
+	double fMin = tDigest.GetMin();
+	double fMax = tDigest.GetMax();
+	BYTE * pBounds = dOut.AddN ( sizeof ( double ) * 2 );
+	memcpy ( pBounds, &fMin, sizeof ( double ) );
+	memcpy ( pBounds + sizeof ( double ), &fMax, sizeof ( double ) );
+
+	if ( iCount>0 )
+	{
+		size_t uSize = sizeof(TDigestCentroid_t) * (size_t)iCount;
+		BYTE * pData = dOut.AddN ( (int)uSize );
+		memcpy ( pData, dCentroids.Begin(), uSize );
+	}
+
+	sphPackPtrAttrInPlace ( dOut );
+	const_cast<CSphMatch&>(tDst).SetAttr ( tLoc, (SphAttr_t)dOut.LeakData() );
+}
+
+static void LoadTDigestFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double fCompression )
+{
+	if ( !dBlob.first )
+	{
+		tDigest.Clear();
+		tDigest.SetCompression ( fCompression );
+		return;
+	}
+
+	const BYTE * pData = dBlob.first;
+	int iCount = 0;
+	memcpy ( &iCount, pData, sizeof(int) );
+	pData += sizeof(int);
+
+	double fMin = 0.0;
+	double fMax = 0.0;
+	memcpy ( &fMin, pData, sizeof(double) );
+	pData += sizeof(double);
+	memcpy ( &fMax, pData, sizeof(double) );
+	pData += sizeof(double);
+
+	CSphVector<TDigestCentroid_t> dCentroids;
+	if ( iCount>0 )
+	{
+		dCentroids.Resize ( iCount );
+		memcpy ( dCentroids.Begin(), pData, sizeof(TDigestCentroid_t)*(size_t)iCount );
+	}
+	tDigest.SetCompression ( fCompression );
+	tDigest.Import ( dCentroids );
+	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
+}
+
+}
+
+class AggrTDigestBase_c : public AggrFunc_i
+{
+protected:
+	static constexpr int PENDING_FLUSH_LIMIT = 128;
+
+	CSphAttrLocator	m_tLocator;
+	ESphAttr		m_eValueType;
+	double			m_fCompression;
+	CSphString		m_sName;
+	ISphExprRefPtr_c m_pInputExpr;
+	CSphString		m_sColumnarAttr;
+	std::unique_ptr<columnar::Iterator_i> m_pColumnarIterator;
+	common::AttrType_e m_eColumnarType = common::AttrType_e::NONE;
+	bool			m_bUseColumnar = false;
+
+	TDigestRuntimeState_t * EnsureRuntime ( CSphMatch & tMatch ) const;
+	TDigestRuntimeState_t * CreateRuntime ( CSphMatch & tMatch ) const;
+	TDigestRuntimeState_t & AccessState ( CSphMatch & tMatch ) const;
+	TDigest_c & AccessDigest ( CSphMatch & tMatch ) const;
+	void SerializeRuntime ( CSphMatch & tMatch ) const;
+	void DropRuntime ( CSphMatch & tMatch ) const;
+	const TDigestRuntimeState_t * TryGetRuntime ( const CSphMatch & tMatch ) const;
+	void FlushPending ( TDigestRuntimeState_t & tState ) const;
+
+	explicit AggrTDigestBase_c ( const CSphColumnInfo & tAttr )
+		: m_tLocator ( tAttr.m_tLocator )
+		, m_eValueType ( tAttr.m_eAggrInputType!=SPH_ATTR_NONE ? tAttr.m_eAggrInputType : tAttr.m_eAttrType )
+		, m_fCompression ( tAttr.m_fTdigestCompression ? tAttr.m_fTdigestCompression : 200.0 )
+		, m_sName ( tAttr.m_sName )
+		, m_pInputExpr ( tAttr.m_pExpr )
+	{
+		if ( m_pInputExpr )
+		{
+			m_pInputExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &m_sColumnarAttr );
+			m_bUseColumnar = !m_sColumnarAttr.IsEmpty();
+		}
+	}
+
+	double EvalInput ( const CSphMatch & tMatch ) const
+	{
+		if ( m_bUseColumnar && m_pColumnarIterator )
+		{
+			switch ( m_eColumnarType )
+			{
+			case common::AttrType_e::FLOAT:
+				return sphDW2F ( (DWORD)m_pColumnarIterator->Get ( tMatch.m_tRowID ) );
+			default:
+				return (double)m_pColumnarIterator->Get ( tMatch.m_tRowID );
+			}
+		}
+
+		if ( m_pInputExpr )
+		{
+			switch ( m_eValueType )
+			{
+			case SPH_ATTR_BOOL:
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_BIGINT:
+			case SPH_ATTR_TIMESTAMP:
+				return (double)m_pInputExpr->Int64Eval ( tMatch );
+			case SPH_ATTR_FLOAT:
+			case SPH_ATTR_DOUBLE:
+				return (double)m_pInputExpr->Eval ( tMatch );
+			default:
+				return (double)m_pInputExpr->Eval ( tMatch );
+			}
+		}
+
+		return FetchNumericAttr ( tMatch, m_tLocator, m_eValueType );
+	}
+
+	void SetColumnar ( columnar::Columnar_i * pColumnar ) override
+	{
+		if ( !m_bUseColumnar )
+			return;
+
+		if ( pColumnar )
+		{
+			std::string sError; // FIXME! report errors
+			m_pColumnarIterator = CreateColumnarIterator ( pColumnar, m_sColumnarAttr.cstr(), sError );
+			columnar::AttrInfo_t tAttrInfo;
+			if ( pColumnar->GetAttrInfo ( m_sColumnarAttr.cstr(), tAttrInfo ) )
+				m_eColumnarType = tAttrInfo.m_eType;
+			else
+				m_eColumnarType = common::AttrType_e::NONE;
+		} else
+		{
+			m_pColumnarIterator.reset();
+			m_eColumnarType = common::AttrType_e::NONE;
+		}
+	}
+
+	void AppendValue ( TDigestRuntimeState_t & tState, const CSphMatch & tMatch ) const
+	{
+		double fVal = EvalInput ( tMatch );
+		tState.m_dPending.Add ( fVal );
+		if ( tState.m_dPending.GetLength()>=PENDING_FLUSH_LIMIT )
+			FlushPending ( tState );
+	}
+
+	void MergeFromMatch ( TDigestRuntimeState_t & tState, const CSphMatch & tMatch ) const
+	{
+		ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
+		if ( !dBlob.first )
+			return;
+
+		if ( auto * pRuntime = sphTDigestRuntimeAccess ( dBlob ) )
+		{
+			FlushPending ( *pRuntime );
+			tState.m_tDigest.Merge ( pRuntime->m_tDigest );
+			return;
+		}
+
+		TDigest_c tOther ( m_fCompression );
+		LoadTDigestFromBlob ( dBlob, tOther, m_fCompression );
+		tState.m_tDigest.Merge ( tOther );
+	}
+
+
+public:
+	void Setup ( CSphMatch & tDst, const CSphMatch &, bool bMerge ) override
+	{
+		auto & tState = AccessState ( tDst );
+		TDigest_c & tDigest = tState.m_tDigest;
+		if ( bMerge )
+			return;
+
+		FlushPending ( tState );
+		tDigest.Clear();
+		tDigest.SetCompression ( m_fCompression );
+		tState.m_dPending.Resize ( 0 );
+		AppendValue ( tState, tDst );
+	}
+
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool, bool bMerge ) override
+	{
+		auto & tState = AccessState ( tDst );
+		TDigest_c & tDigest = tState.m_tDigest;
+
+		if ( bMerge )
+		{
+			FlushPending ( tState );
+			MergeFromMatch ( tState, tSrc );
+		}
+		else
+		{
+			AppendValue ( tState, tSrc );
+		}
+
+		tDigest.SetCompression ( m_fCompression );
+	}
+
+	void Finalize ( CSphMatch & tDst ) override
+	{
+		SerializeRuntime ( tDst );
+	}
+
+	void Discard ( CSphMatch & tMatch ) override
+	{
+		DropRuntime ( tMatch );
+	}
+
+};
+
+TDigestRuntimeState_t * AggrTDigestBase_c::CreateRuntime ( CSphMatch & tMatch ) const
+{
+	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
+	tMatch.SetAttr ( m_tLocator, (SphAttr_t)tAlloc.m_pPacked );
+	return tAlloc.m_pState;
+}
+
+TDigestRuntimeState_t * AggrTDigestBase_c::EnsureRuntime ( CSphMatch & tMatch ) const
+{
+	ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
+	if ( !dBlob.first )
+		return CreateRuntime ( tMatch );
+
+	if ( auto * pRuntime = sphTDigestRuntimeAccess ( dBlob ) )
+		return pRuntime;
+
+	TDigest_c tTemp ( m_fCompression );
+	LoadTDigestFromBlob ( dBlob, tTemp, m_fCompression );
+
+	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
+		tAlloc.m_pState->m_tDigest = std::move ( tTemp );
+
+	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	tMatch.SetAttr ( m_tLocator, (SphAttr_t)tAlloc.m_pPacked );
+	return tAlloc.m_pState;
+}
+
+TDigest_c & AggrTDigestBase_c::AccessDigest ( CSphMatch & tMatch ) const
+{
+	return AccessState ( tMatch ).m_tDigest;
+}
+
+TDigestRuntimeState_t & AggrTDigestBase_c::AccessState ( CSphMatch & tMatch ) const
+{
+	return *EnsureRuntime ( tMatch );
+}
+
+const TDigestRuntimeState_t * AggrTDigestBase_c::TryGetRuntime ( const CSphMatch & tMatch ) const
+{
+	return sphTDigestRuntimeAccess ( tMatch.FetchAttrData ( m_tLocator, nullptr ) );
+}
+
+void AggrTDigestBase_c::FlushPending ( TDigestRuntimeState_t & tState ) const
+{
+	auto & dPending = tState.m_dPending;
+	if ( !dPending.GetLength() )
+		return;
+
+	std::sort ( dPending.Begin(), dPending.End() );
+	for ( double fValue : dPending )
+		tState.m_tDigest.Add ( fValue );
+	dPending.Resize ( 0 );
+}
+
+void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
+{
+	ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
+	auto * pRuntime = sphTDigestRuntimeAccess ( dBlob );
+	if ( !pRuntime )
+		return;
+
+	FlushPending ( *pRuntime );
+	TDigest_c tDigest = std::move ( pRuntime->m_tDigest );
+	sphDestroyTDigestRuntimeBlob ( dBlob );
+	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	tMatch.SetAttr ( m_tLocator, 0 );
+	StoreTDigestBlob ( tDigest, tMatch, m_tLocator );
+}
+
+void AggrTDigestBase_c::DropRuntime ( CSphMatch & tMatch ) const
+{
+	ByteBlob_t dBlob = tMatch.FetchAttrData ( m_tLocator, nullptr );
+	if ( !sphIsTDigestRuntimeBlob ( dBlob ) )
+		return;
+
+	sphDestroyTDigestRuntimeBlob ( dBlob );
+	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	tMatch.SetAttr ( m_tLocator, 0 );
+}
+
+class AggrPercentiles_c final : public AggrTDigestBase_c
+{
+public:
+	explicit AggrPercentiles_c ( const CSphColumnInfo & tAttr )
+		: AggrTDigestBase_c ( tAttr )
+	{}
+};
+
+class AggrPercentileRanks_c final : public AggrTDigestBase_c
+{
+public:
+	explicit AggrPercentileRanks_c ( const CSphColumnInfo & tAttr )
+		: AggrTDigestBase_c ( tAttr )
+	{}
+};
+
+class AggrMad_c final : public AggrTDigestBase_c
+{
+public:
+	explicit AggrMad_c ( const CSphColumnInfo & tAttr )
+		: AggrTDigestBase_c ( tAttr )
+	{}
 };
 
 template<>
@@ -816,4 +1181,19 @@ AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr )
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr )
 {
 	return new AggrConcat_c(tAttr);
+}
+
+AggrFunc_i * CreateAggrPercentiles ( const CSphColumnInfo & tAttr )
+{
+	return new AggrPercentiles_c ( tAttr );
+}
+
+AggrFunc_i * CreateAggrPercentileRanks ( const CSphColumnInfo & tAttr )
+{
+	return new AggrPercentileRanks_c ( tAttr );
+}
+
+AggrFunc_i * CreateAggrMad ( const CSphColumnInfo & tAttr )
+{
+	return new AggrMad_c ( tAttr );
 }

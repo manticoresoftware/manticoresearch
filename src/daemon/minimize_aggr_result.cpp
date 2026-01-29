@@ -479,6 +479,7 @@ static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResu
 			{
 				assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
 				tCol.m_eAggrFunc = tItem.m_eAggrFunc;
+				tCol.m_fTdigestCompression = tItem.m_fTdigestCompression;
 			}
 		}
 	}

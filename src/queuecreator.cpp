@@ -277,6 +277,8 @@ private:
 	bool						m_bHeadWOGroup;
 	bool						m_bGotDistinct;
 	bool						m_bExprsNeedDocids = false;
+	bool						m_bSlimTdigestCandidate = true;
+	bool						m_bHasTdigestAgg = false;
 
 	// for sorter to create pooled attributes
 	bool						m_bHaveStar = false;
@@ -352,6 +354,7 @@ private:
 	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
 	void				SetupCollation();
 	bool				Err ( const char * sFmt, ... ) const;
+	bool				ShouldEnableSlimTdigest() const;
 };
 
 
@@ -613,6 +616,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	if ( bHasImplicitGrouping )
 	{
 		m_tGroupSorterSettings.m_bImplicit = true;
+		m_tGroupSorterSettings.m_bSlimTdigest = ShouldEnableSlimTdigest();
 		return true;
 	}
 
@@ -809,6 +813,18 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 
 bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags )
 {
+	const bool bIsSlimTdigest = ( tExprCol.m_eAggrFunc==SPH_AGGR_PERCENTILES
+		|| tExprCol.m_eAggrFunc==SPH_AGGR_PERCENTILE_RANKS
+		|| tExprCol.m_eAggrFunc==SPH_AGGR_MAD );
+
+	if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE )
+	{
+		if ( bIsSlimTdigest )
+			m_bHasTdigestAgg = true;
+		else
+			m_bSlimTdigestCandidate = false;
+	}
+
 	// validate that MAX/MIN/SUM/AVG cannot be used on string/text columns
 	// This check must happen BEFORE the switch statement that may modify tExprCol.m_eAttrType
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX || tExprCol.m_eAggrFunc==SPH_AGGR_MIN 
@@ -829,6 +845,13 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 		// force AVG() to be computed in doubles
 		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
 		tExprCol.m_tLocator.m_iBitCount = 64;
+		break;
+	case SPH_AGGR_PERCENTILES:
+	case SPH_AGGR_PERCENTILE_RANKS:
+	case SPH_AGGR_MAD:
+		tExprCol.m_eAggrInputType = tExprCol.m_eAttrType;
+		tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+		tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
 		break;
 
 	case SPH_AGGR_CAT:
@@ -993,6 +1016,8 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	const CSphString & sExpr = tItem.m_sExpr;
 	bool bIsCount = IsCount(sExpr);
 	m_bHasCount |= bIsCount;
+	if ( tItem.m_eAggrFunc==SPH_AGGR_NONE && !bIsCount && !IsGroupbyMagic ( sExpr ) )
+		m_bSlimTdigestCandidate = false;
 
 	if ( sExpr=="*" )
 	{
@@ -1098,6 +1123,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	m_bZonespanlist |= bHasZonespanlist;
 	m_bExprsNeedDocids |= bExprsNeedDocids;
 	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
+	tExprCol.m_fTdigestCompression = tItem.m_fTdigestCompression;
 	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
@@ -2451,6 +2477,17 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	return CreateColumnarProxySorter ( pSorter, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
 }
 
+
+bool QueueCreator_c::ShouldEnableSlimTdigest() const
+{
+	if ( !m_bSlimTdigestCandidate || !m_bHasTdigestAgg )
+		return false;
+	if ( m_tQuery.m_iLimit!=0 )
+		return false;
+	if ( m_tQuery.m_bFacet || m_tQuery.m_bFacetHead )
+		return false;
+	return true;
+}
 
 bool QueueCreator_c::SetupComputeQueue ()
 {

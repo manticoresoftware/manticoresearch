@@ -23,6 +23,7 @@
 #include "joinsorter.h"
 #include "columnarexpr.h"
 #include "sphinxfilter.h"
+#include "attribute.h"
 #include "queryprofile.h"
 #include "knnmisc.h"
 #include "sorterscroll.h"
@@ -534,6 +535,25 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		} );
 		dGroupBy.Uniq();
 
+		auto fnIsMvaGroupBy = [&] ( const CSphColumnInfo & tAttr, const CSphString & sGroupBy )
+		{
+			if ( IsMvaAttr ( tAttr.m_eAttrType ) )
+				return true;
+
+			int iOrigAttr = tSchema.GetAttrIndexOriginal ( sGroupBy.cstr() );
+			if ( iOrigAttr>=0 && IsMvaAttr ( tSchema.GetAttr(iOrigAttr).m_eAttrType ) )
+				return true;
+
+			if ( tAttr.IsColumnarExpr() )
+			{
+				CSphString sCol = GetAliasedColumnarAttrName ( tAttr );
+				int iCol = tSchema.GetAttrIndex ( sCol.cstr() );
+				return iCol>=0 && IsMvaAttr ( tSchema.GetAttr(iCol).m_eAttrType );
+			}
+
+			return false;
+		};
+
 		for ( auto & sGroupBy : dGroupBy )
 		{
 			int iAttr = GetAliasedAttrIndex ( sGroupBy, m_tQuery, tSchema );
@@ -552,7 +572,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 			auto tAttr = tSchema.GetAttr ( iAttr );
 			ESphAttr eType = tAttr.m_eAttrType;
-			if ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET )
+			if ( fnIsMvaGroupBy ( tAttr, sGroupBy ) )
 				return Err ( "MVA values can't be used in multiple group-by" );
 
 			if ( eType==SPH_ATTR_JSON && sJsonExpr.IsEmpty() )

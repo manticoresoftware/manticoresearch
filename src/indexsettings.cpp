@@ -258,7 +258,7 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
-static CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
+CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
 	if ( !pFilenameBuilder || sFile.IsEmpty() || IsPathAbsolute ( sFile ) )
 		return sFile;
@@ -1297,6 +1297,7 @@ public:
 	bool			Add ( const char * szName, const CSphString & sValue ) override;
 	bool			Add ( const CSphString & sName, const CSphString & sValue ) override;
 	CSphString		Get ( const CSphString & sName ) const override;
+	CSphString		GetList ( const CSphString & sName ) const override;
 	bool			Contains ( const char * szName ) const override;
 	void			RemoveKeys ( const CSphString & sName ) override;
 	bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) override;
@@ -1684,6 +1685,22 @@ CSphString IndexSettingsContainer_c::Get ( const CSphString & sName ) const
 		return "";
 
 	return m_hCfg[sName].strval();
+}
+
+CSphString IndexSettingsContainer_c::GetList ( const CSphString & sName ) const
+{
+	if ( !Contains ( sName.cstr() ) )
+		return "";
+
+	CSphVariant * pVal = m_hCfg ( sName.cstr() );
+	if ( !pVal || !pVal->m_pNext )
+		return m_hCfg[sName].strval();
+
+	StringBuilder_c sList ( " " );
+	for ( ; pVal; pVal = pVal->m_pNext )
+		sList << pVal->cstr();
+
+	return (CSphString)sList;
 }
 
 

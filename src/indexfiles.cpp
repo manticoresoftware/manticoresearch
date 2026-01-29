@@ -317,3 +317,19 @@ bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 
 	return true;
 }
+
+// remove all old files these are not in the list of current index files
+void RemoveOutdatedFiles ( const StrVec_t & dNewFiles, StrVec_t & dOldFiles )
+{
+	dOldFiles.Uniq();
+	sph::StringSet hNewFiles ( dNewFiles );
+
+	for ( const CSphString & tOldName : dOldFiles )
+	{
+		if ( hNewFiles[tOldName] )
+			continue;
+
+		if ( sphIsReadable ( tOldName ) )
+			::unlink ( tOldName.cstr() );
+	}
+}

@@ -105,3 +105,6 @@ public:
 	// if prev op fails with fatal error - log the message and terminate
 	CSphString FatalMsg(const char * szMsg=nullptr);
 };
+
+// remove all old files these are not in the list of current index files
+void		RemoveOutdatedFiles ( const StrVec_t & dNewFiles, StrVec_t & dOldFiles );

@@ -1,0 +1,200 @@
+––– comment –––
+RT mode ATTACH externals: prepare unique external files
+––– block: ../base/start-searchd –––
+––– input –––
+mkdir -p /var/lib/manticore/ext_rt && \
+echo "sweuniq" > /var/lib/manticore/ext_rt/sw_e.txt && \
+echo "e1 => e1r" > /var/lib/manticore/ext_rt/wf_e1.txt && \
+echo "e2 => e2r" > /var/lib/manticore/ext_rt/wf_e2.txt && \
+echo "exce => excex" > /var/lib/manticore/ext_rt/exc_e.txt && \
+echo "swauniq" > /var/lib/manticore/ext_rt/sw_a1.txt && \
+echo "swauniqb" > /var/lib/manticore/ext_rt/sw_a2.txt && \
+echo "a1 => a1r" > /var/lib/manticore/ext_rt/wf_a1.txt && \
+echo "exca => excar" > /var/lib/manticore/ext_rt/exc_a.txt && \
+echo "swbuniq" > /var/lib/manticore/ext_rt/sw_b1.txt && \
+echo "b1 => b1r" > /var/lib/manticore/ext_rt/wf_b1.txt && \
+echo "b2 => b2r" > /var/lib/manticore/ext_rt/wf_b2.txt && \
+echo "excb => excbr" > /var/lib/manticore/ext_rt/exc_b.txt && \
+echo "swcuniq" > /var/lib/manticore/ext_rt/sw_c1.txt && \
+echo "swcuniqb" > /var/lib/manticore/ext_rt/sw_c2.txt && \
+echo "c1 => c1r" > /var/lib/manticore/ext_rt/wf_c1.txt && \
+echo "excc => exccr" > /var/lib/manticore/ext_rt/exc_c.txt && \
+echo "swduniq" > /var/lib/manticore/ext_rt/sw_d1.txt && \
+echo "d1 => d1r" > /var/lib/manticore/ext_rt/wf_d1.txt && \
+echo "d2 => d2r" > /var/lib/manticore/ext_rt/wf_d2.txt && \
+echo "excd => excdr" > /var/lib/manticore/ext_rt/exc_d.txt && \
+echo "swdstuniq" > /var/lib/manticore/ext_rt/sw_dst.txt && \
+echo "dst => dstr" > /var/lib/manticore/ext_rt/wf_dst.txt && \
+echo "excdst => excdstr" > /var/lib/manticore/ext_rt/exc_dst.txt && \
+echo "swshareduniq" > /var/lib/manticore/ext_rt/sw_shared.txt && \
+echo "shared => sharedr" > /var/lib/manticore/ext_rt/wf_shared.txt && \
+echo "excshared => excsharedr" > /var/lib/manticore/ext_rt/exc_shared.txt
+––– output –––
+
+––– comment –––
+Case A: source RT with no disk chunks; attach to empty dst; verify RT-level externals copied + meta updated
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_dst_empty (id BIGINT, title TEXT); CREATE TABLE rt_src_empty (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_e.txt' wordforms='/var/lib/manticore/ext_rt/wf_e1.txt, /var/lib/manticore/ext_rt/wf_e2.txt' exceptions='/var/lib/manticore/ext_rt/exc_e.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ATTACH TABLE rt_src_empty TO TABLE rt_dst_empty;"
+––– output –––
+––– input –––
+if grep -q "sweuniq" /var/lib/manticore/rt_dst_empty/stopwords_chunk*.txt && \
+grep -q "e1 => e1r" /var/lib/manticore/rt_dst_empty/wordforms_chunk*.txt && \
+grep -q "e2 => e2r" /var/lib/manticore/rt_dst_empty/wordforms_chunk*.txt && \
+grep -q "exce => excex" /var/lib/manticore/rt_dst_empty/exceptions_chunk*.txt; then echo OK_EMPTY_CONTENT; else echo FAIL_EMPTY_CONTENT; fi
+––– output –––
+OK_EMPTY_CONTENT
+––– input –––
+if grep -q "stopwords_chunk" /var/lib/manticore/rt_dst_empty/rt_dst_empty.meta && \
+grep -q "wordforms_chunk" /var/lib/manticore/rt_dst_empty/rt_dst_empty.meta && \
+grep -q "exceptions_chunk" /var/lib/manticore/rt_dst_empty/rt_dst_empty.meta; then echo OK_EMPTY_META; else echo FAIL_EMPTY_META; fi
+––– output –––
+OK_EMPTY_META
+
+––– comment –––
+Case B: source RT with 3 disk chunks; each chunk has unique externals; attach to empty dst; verify per-chunk copies + meta + headers
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_multi (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_a1.txt, /var/lib/manticore/ext_rt/sw_a2.txt' wordforms='/var/lib/manticore/ext_rt/wf_a1.txt' exceptions='/var/lib/manticore/ext_rt/exc_a.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (1, 'a'); FLUSH RAMCHUNK rt_src_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE rt_src_multi STOPWORDS='/var/lib/manticore/ext_rt/sw_b1.txt'; ALTER TABLE rt_src_multi WORDFORMS='/var/lib/manticore/ext_rt/wf_b1.txt, /var/lib/manticore/ext_rt/wf_b2.txt'; ALTER TABLE rt_src_multi EXCEPTIONS='/var/lib/manticore/ext_rt/exc_b.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (2, 'b'); FLUSH RAMCHUNK rt_src_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE rt_src_multi STOPWORDS='/var/lib/manticore/ext_rt/sw_c1.txt, /var/lib/manticore/ext_rt/sw_c2.txt'; ALTER TABLE rt_src_multi WORDFORMS='/var/lib/manticore/ext_rt/wf_c1.txt'; ALTER TABLE rt_src_multi EXCEPTIONS='/var/lib/manticore/ext_rt/exc_c.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (3, 'c'); FLUSH RAMCHUNK rt_src_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B
+––– output –––
+disk_chunks	3
+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_dst_multi (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_multi STATUS LIKE 'disk_chunks';" -N -B
+––– output –––
+disk_chunks	3
+––– input –––
+if grep -q "swauniq" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
+grep -q "swauniqb" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
+grep -q "swbuniq" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
+grep -q "swcuniq" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
+grep -q "swcuniqb" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
+grep -q "a1 => a1r" /var/lib/manticore/rt_dst_multi/wordforms_chunk*.txt && \
+grep -q "b1 => b1r" /var/lib/manticore/rt_dst_multi/wordforms_chunk*.txt && \
+grep -q "b2 => b2r" /var/lib/manticore/rt_dst_multi/wordforms_chunk*.txt && \
+grep -q "c1 => c1r" /var/lib/manticore/rt_dst_multi/wordforms_chunk*.txt && \
+grep -q "exca => excar" /var/lib/manticore/rt_dst_multi/exceptions_chunk*.txt && \
+grep -q "excb => excbr" /var/lib/manticore/rt_dst_multi/exceptions_chunk*.txt && \
+grep -q "excc => exccr" /var/lib/manticore/rt_dst_multi/exceptions_chunk*.txt; then echo OK_MULTI_CONTENT; else echo FAIL_MULTI_CONTENT; fi
+––– output –––
+OK_MULTI_CONTENT
+––– input –––
+if grep -q "stopwords_chunk" /var/lib/manticore/rt_dst_multi/rt_dst_multi.meta && \
+grep -q "wordforms_chunk" /var/lib/manticore/rt_dst_multi/rt_dst_multi.meta && \
+grep -q "exceptions_chunk" /var/lib/manticore/rt_dst_multi/rt_dst_multi.meta; then echo OK_MULTI_META; else echo FAIL_MULTI_META; fi
+––– output –––
+OK_MULTI_META
+––– input –––
+if for f in /var/lib/manticore/rt_dst_multi/*.sph; do grep -a -q "stopwords_chunk" "$f" || exit 1; done; then echo OK_MULTI_SPH; else echo FAIL_MULTI_SPH; fi
+––– output –––
+OK_MULTI_SPH
+
+––– comment –––
+Case C: multiple attaches into same dst; verify latest attach externals present
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS rt_src_multi; DROP TABLE IF EXISTS rt_src_second; DROP TABLE IF EXISTS rt_dst_attach;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_multi (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_a1.txt, /var/lib/manticore/ext_rt/sw_a2.txt' wordforms='/var/lib/manticore/ext_rt/wf_a1.txt' exceptions='/var/lib/manticore/ext_rt/exc_a.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (1, 'a'); FLUSH RAMCHUNK rt_src_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE rt_src_multi STOPWORDS='/var/lib/manticore/ext_rt/sw_b1.txt'; ALTER TABLE rt_src_multi WORDFORMS='/var/lib/manticore/ext_rt/wf_b1.txt, /var/lib/manticore/ext_rt/wf_b2.txt'; ALTER TABLE rt_src_multi EXCEPTIONS='/var/lib/manticore/ext_rt/exc_b.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (2, 'b'); FLUSH RAMCHUNK rt_src_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE rt_src_multi STOPWORDS='/var/lib/manticore/ext_rt/sw_c1.txt, /var/lib/manticore/ext_rt/sw_c2.txt'; ALTER TABLE rt_src_multi WORDFORMS='/var/lib/manticore/ext_rt/wf_c1.txt'; ALTER TABLE rt_src_multi EXCEPTIONS='/var/lib/manticore/ext_rt/exc_c.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (3, 'c'); FLUSH RAMCHUNK rt_src_multi;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_second (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_d1.txt' wordforms='/var/lib/manticore/ext_rt/wf_d1.txt, /var/lib/manticore/ext_rt/wf_d2.txt' exceptions='/var/lib/manticore/ext_rt/exc_d.txt'; INSERT INTO rt_src_second VALUES (4, 'd'); FLUSH RAMCHUNK rt_src_second;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_dst_attach (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_attach; ATTACH TABLE rt_src_second TO TABLE rt_dst_attach;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_attach STATUS LIKE 'disk_chunks';" -N -B
+––– output –––
+disk_chunks	4
+––– input –––
+if grep -q "swduniq" /var/lib/manticore/rt_dst_attach/stopwords_chunk*.txt && \
+grep -q "d1 => d1r" /var/lib/manticore/rt_dst_attach/wordforms_chunk*.txt && \
+grep -q "d2 => d2r" /var/lib/manticore/rt_dst_attach/wordforms_chunk*.txt && \
+grep -q "excd => excdr" /var/lib/manticore/rt_dst_attach/exceptions_chunk*.txt; then echo OK_ATTACH_CONTENT; else echo FAIL_ATTACH_CONTENT; fi
+––– output –––
+OK_ATTACH_CONTENT
+
+––– comment –––
+Case D: attach into non-empty dst; verify old dst externals still present and new ones copied
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS rt_src_second; DROP TABLE IF EXISTS rt_dst_nonempty;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_second (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_d1.txt' wordforms='/var/lib/manticore/ext_rt/wf_d1.txt, /var/lib/manticore/ext_rt/wf_d2.txt' exceptions='/var/lib/manticore/ext_rt/exc_d.txt'; INSERT INTO rt_src_second VALUES (4, 'd'); FLUSH RAMCHUNK rt_src_second;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_dst_nonempty (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_dst.txt' wordforms='/var/lib/manticore/ext_rt/wf_dst.txt' exceptions='/var/lib/manticore/ext_rt/exc_dst.txt'; INSERT INTO rt_dst_nonempty VALUES (10,'dst'); FLUSH RAMCHUNK rt_dst_nonempty; ATTACH TABLE rt_src_second TO TABLE rt_dst_nonempty;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_nonempty STATUS LIKE 'disk_chunks';" -N -B
+––– output –––
+disk_chunks	2
+––– input –––
+if grep -q "swdstuniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt && \
+grep -q "swduniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt; then echo OK_NONEMPTY_CONTENT; else echo FAIL_NONEMPTY_CONTENT; fi
+––– output –––
+OK_NONEMPTY_CONTENT
+
+––– comment –––
+Case E: shared externals across chunks; verify dedup reuse (single copy per bundle)
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_shared (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_shared.txt' wordforms='/var/lib/manticore/ext_rt/wf_shared.txt' exceptions='/var/lib/manticore/ext_rt/exc_shared.txt'; INSERT INTO rt_src_shared VALUES (1,'s1'); FLUSH RAMCHUNK rt_src_shared; INSERT INTO rt_src_shared VALUES (2,'s2'); FLUSH RAMCHUNK rt_src_shared; CREATE TABLE rt_dst_shared (id BIGINT, title TEXT); ATTACH TABLE rt_src_shared TO TABLE rt_dst_shared;"
+––– output –––
+––– input –––
+if [ "$(grep -l 'swshareduniq' /var/lib/manticore/rt_dst_shared/stopwords_chunk*.txt | wc -l)" -eq 1 ]; then echo OK_SHARED_DEDUP; else echo FAIL_SHARED_DEDUP; fi
+––– output –––
+OK_SHARED_DEDUP
+
+––– comment –––
+Case F: shared externals across different sources; verify dedup reuse on second attach
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS rt_src_shared; DROP TABLE IF EXISTS rt_src_shared2; DROP TABLE IF EXISTS rt_dst_shared;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_shared (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_shared.txt' wordforms='/var/lib/manticore/ext_rt/wf_shared.txt' exceptions='/var/lib/manticore/ext_rt/exc_shared.txt'; INSERT INTO rt_src_shared VALUES (1,'s1'); FLUSH RAMCHUNK rt_src_shared; CREATE TABLE rt_dst_shared (id BIGINT, title TEXT); ATTACH TABLE rt_src_shared TO TABLE rt_dst_shared;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_src_shared2 (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_shared.txt' wordforms='/var/lib/manticore/ext_rt/wf_shared.txt' exceptions='/var/lib/manticore/ext_rt/exc_shared.txt'; INSERT INTO rt_src_shared2 VALUES (2,'s2'); FLUSH RAMCHUNK rt_src_shared2; ATTACH TABLE rt_src_shared2 TO TABLE rt_dst_shared;"
+––– output –––
+––– input –––
+if [ "$(grep -l 'swshareduniq' /var/lib/manticore/rt_dst_shared/stopwords_chunk*.txt | wc -l)" -eq 1 ]; then echo OK_SHARED_DEDUP_MULTI_SRC; else echo FAIL_SHARED_DEDUP_MULTI_SRC; fi
+––– output –––
+OK_SHARED_DEDUP_MULTI_SRC

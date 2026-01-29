@@ -2483,35 +2483,57 @@ let search_res = search_api.search(search_req).await;
 
 ## Float vector
 
-<!-- example float_vector_auto -->
-
 Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from [multi-valued attributes](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) (MVAs) in several important ways:
 - Preserves the exact order of values (unlike MVAs which may reorder)
 - Retains duplicate values (unlike MVAs which deduplicate)
 - No additional processing during insertion (unlike MVAs which sort and deduplicate)
 
-Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. 
+**Important:** The `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism.
 
-### Usage and Limitations
-- Currently only supported in real-time tables
-- Can only be utilized in KNN (k-nearest neighbor) searches
-- Not supported in plain tables or other functions/expressions
-- When used with KNN settings, you cannot `UPDATE` `float_vector` values. Use `REPLACE` instead
-- When used without KNN settings, you can `UPDATE` `float_vector` values
-- Float vectors cannot be used in regular filters or sorting
-- The only way to filter by `float_vector` values is through vector search operations (KNN)
+### General Limitations
 
-### Common Use Cases
-- Text embeddings for semantic search
-- Recommendation system vectors
-- Image embeddings for similarity search
-- Feature vectors for machine learning
+- Currently only supported in real-time tables (not in plain tables)
+- Not supported in other functions or expressions
+- Cannot be used in regular filters or sorting
 
-** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
+### Using Float Vectors with KNN (Vector Search)
+
+When you configure a `float_vector` attribute with KNN settings, you enable vector similarity search capabilities. This allows you to perform k-nearest neighbor searches to find similar documents based on vector distance.
+
+#### Capabilities
+
+**What you can do:**
+- Perform KNN (k-nearest neighbor) vector searches to find similar documents
+- Build semantic search, recommendations, and AI-powered features
+- Use auto embeddings to automatically generate vectors from text
+
+**What you cannot do:**
+- `UPDATE` `float_vector` values (you must use `REPLACE` instead)
+- Use float vectors in regular filters or sorting
+- Filter by `float_vector` values except through vector search operations
+
+#### Parameters
+
+When creating a table with `float_vector` attributes for KNN search, you can specify the following parameters:
+
+**Required parameters:**
+- `KNN_TYPE`: Currently only `'hnsw'` is supported
+- `KNN_DIMS`: Number of dimensions in the vectors (required for manual vector insertion, omitted when using `MODEL_NAME`)
+- `HNSW_SIMILARITY`: Distance function - `'l2'`, `'ip'` (inner product), or `'cosine'`
+
+**Optional parameters:**
+- `HNSW_M`: Maximum connections in the graph (default: 16)
+- `HNSW_EF_CONSTRUCTION`: Construction time/accuracy trade-off (default: 200)
+
+**Auto-embeddings parameters** (when using `MODEL_NAME`):
+- `MODEL_NAME`: The embedding model to use (e.g., `'sentence-transformers/all-MiniLM-L6-v2'`, `'openai/text-embedding-ada-002'`)
+- `FROM`: Comma-separated list of field names to use for embedding generation, or empty string `''` to use all text/string fields
+- `API_KEY`: API key for API-based models (OpenAI, Voyage, Jina)
 
 For more details on setting up float vectors and using them in searches, see [KNN search](../Searching/KNN.md).
 
-### Auto Embeddings (Recommended)
+<!-- example auto -->
+#### Method 1: Auto Embeddings (Recommended)
 
 The most convenient way to work with float vectors is using **auto embeddings**. This feature automatically generates embeddings from your text data using machine learning models, eliminating the need to manually compute and insert vectors.
 
@@ -2519,7 +2541,7 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 - **Simplified workflow**: Just insert text, embeddings are generated automatically
 - **No manual vector computation**: No need to run separate embedding models
 - **Consistent embeddings**: Same model ensures consistent vector representations
-- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), OpenAI, Voyage, and Jina models
+- **Multiple model support**: Choose from [sentence-transformers](https://huggingface.co/sentence-transformers/models), [Qwen](https://huggingface.co/Qwen/models) embedding models, OpenAI, Voyage, and Jina models
 - **Flexible field selection**: Control which fields are used for embedding generation
 
 #### Creating tables with auto embeddings
@@ -2530,6 +2552,7 @@ When creating a table with auto embeddings, specify these additional parameters:
 
 **Supported embedding models:**
 - **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
+- **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
 - **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
 - **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
 - **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
@@ -2545,6 +2568,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using Qwen local embeddings (no API key needed)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title'
 );
 ```
 
@@ -2594,11 +2627,52 @@ INSERT INTO products (title, description) VALUES
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+<!-- end -->
 
-### Manual Float Vector Usage
+<!-- example manual -->
+#### Method 2: Manual Vector Insertion
 
-<!-- example for creating float_vector -->
-Alternatively, you can work with manually computed float vectors. 
+Alternatively, you can manually insert pre-computed vector data. This requires you to compute the vectors yourself using external tools or models, then insert them into Manticore.
+
+**Important:** When using `HNSW_SIMILARITY='cosine'`, vectors are automatically normalized upon insertion to unit vectors (vectors with a mathematical length/magnitude of 1.0). This normalization preserves the direction of the vector while standardizing its length, which is required for efficient cosine similarity calculations. This means the stored values will differ from your original input values.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    image_vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2'
+);
+
+INSERT INTO products VALUES 
+(1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)),
+(2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406));
+```
+
+<!-- end -->
+
+<!-- example for creating float_vector --> 
+### Using Float Vectors without KNN (Storage Only)
+
+You can also create `float_vector` attributes without KNN configuration. In this mode, the vectors are stored but cannot be used for vector search operations.
+
+**What you can do:**
+- Store vector data
+- `UPDATE` `float_vector` values (unlike with KNN where you must use `REPLACE`)
+
+**What you cannot do:**
+- Perform KNN searches or vector similarity searches
+- Use vectors for any search operations
+- Filter by `float_vector` values
+
+#### Use Cases
+
+- Temporary storage of vector data before configuring KNN
+- Staging data that will later be used with KNN
+- Storing vectors that don't need search capabilities
+
 
 <!-- intro -->
 ##### SQL:
@@ -3561,4 +3635,3 @@ table tbl {
 ```
 
 <!-- end -->
-

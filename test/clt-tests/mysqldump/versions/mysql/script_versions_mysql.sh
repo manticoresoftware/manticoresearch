@@ -4,7 +4,7 @@ set -e
 # Check for new major.minor versions
 echo "🔍 Checking for new MySQL major.minor versions..."
 
-LATEST_MYSQL="9.5"
+LATEST_MYSQL="9.6"
 
 if command -v curl >/dev/null 2>&1; then
     found_new=false
@@ -43,7 +43,7 @@ fi
 echo ""
 
 # MySQL versions
-versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:latest")
+versions=("mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.2" "mysql:8.3" "mysql:8.4" "mysql:9.0" "mysql:9.1" "mysql:9.2" "mysql:9.3" "mysql:9.4" "mysql:9.5" "mysql:9.6" "mysql:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do

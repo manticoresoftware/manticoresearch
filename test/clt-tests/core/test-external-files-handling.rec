@@ -15,7 +15,7 @@ mysql -h0 -P9306 -e "INSERT INTO t_disk (id, title, tag) VALUES (2, 'srthh', 88)
 mysql -h0 -P9306 -e "INSERT INTO t_disk (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t_disk; OPTIMIZE TABLE t_disk OPTION cutoff=1, sync=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_disk; SHOW CREATE TABLE t_disk;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_disk; SHOW CREATE TABLE t_disk OPTION output_words = 'file';"
 ––– output –––
 +--------+------+
 | Table  | Type |

@@ -22,11 +22,11 @@ mysql -h0 -P9306 -e "CREATE TABLE test_json_columnar (
 ––– output –––
 0
 ––– comment –––
-Verify table structure shows auto-detected dimensions
+Verify table structure shows model_name and FROM (not knn_dims when model_name is present)
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json_columnar" | grep -o "knn_dims='384'"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json_columnar" | grep -o "model_name='sentence-transformers/all-MiniLM-L6-v2'"
 ––– output –––
-knn_dims='384'
+model_name='sentence-transformers/all-MiniLM-L6-v2'
 ––– comment –––
 Insert document via JSON API (embeddings generated automatically from FROM fields)
 ––– input –––
@@ -149,11 +149,11 @@ mysql -h0 -P9306 -e "CREATE TABLE test_json_rowwise (
 ––– output –––
 0
 ––– comment –––
-Verify table structure shows auto-detected dimensions
+Verify table structure shows model_name and FROM (not knn_dims when model_name is present)
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json_rowwise" | grep -o "knn_dims='384'"
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_json_rowwise" | grep -o "model_name='sentence-transformers/all-MiniLM-L6-v2'"
 ––– output –––
-knn_dims='384'
+model_name='sentence-transformers/all-MiniLM-L6-v2'
 ––– comment –––
 Insert document via JSON API (embeddings generated automatically from FROM fields)
 ––– input –––

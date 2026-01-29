@@ -1,8 +1,8 @@
-# 列表表格
+# 列出表
 
-Manticore Search 具有单一层次结构的表格。
+Manticore Search 对表具有单级层次结构。
 
-与其他DBMS不同，在Manticore中没有将表格分组到数据库中的概念。然而，为了与SQL方言的互操作性，Manticore接受`SHOW DATABASES`语句，但该语句不会返回任何结果。
+与其它数据库管理系统不同，Manticore 没有将表分组到数据库的概念。但是，为了与 SQL 方言互操作，Manticore 接受 `SHOW DATABASES` 语句用于与 SQL 方言互操作，但该语句不会返回任何结果。
 
 <!-- example listing -->
 ## SHOW TABLES
@@ -13,11 +13,11 @@ Manticore Search 具有单一层次结构的表格。
 SHOW TABLES [ LIKE pattern ]
 ```
 
-`SHOW TABLES` 语句列出所有当前活动的表格及其类型。现有的表格类型包括 `local`，`distributed`，`rt`，`percolate` 和 `template`。
+`SHOW TABLES` 语句列出所有当前活动的表及其类型。现有的表类型有 `local`、`distributed`、`rt`、`percolate` 和 `template`。
 
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 
@@ -58,7 +58,7 @@ Array
 
 ```
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -79,7 +79,7 @@ utilsApi.sql('SHOW TABLES')
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -100,7 +100,7 @@ await utilsApi.sql('SHOW TABLES')
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -114,7 +114,7 @@ res = await utilsApi.sql('SHOW TABLES');
 ```
 
 <!-- intro -->
-##### java：
+##### java:
 
 <!-- request Java -->
 
@@ -128,7 +128,7 @@ utilsApi.sql("SHOW TABLES", true)
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -142,7 +142,7 @@ utilsApi.Sql("SHOW TABLES", true)
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -158,11 +158,11 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 <!-- end -->
 
 <!-- example Example_2 -->
-支持使用 LIKE 子句按名称过滤表格。
+支持可选的 LIKE 子句，用于按名称过滤表。
 
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 
@@ -199,7 +199,7 @@ Array
 
 
 <!-- intro -->
-##### Python：
+##### Python:
 
 <!-- request Python -->
 
@@ -218,7 +218,7 @@ utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- intro -->
-##### Python-asyncio：
+##### Python-asyncio:
 
 <!-- request Python-asyncio -->
 
@@ -237,7 +237,7 @@ await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- intro -->
-##### Javascript：
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -252,7 +252,7 @@ utilsApi.sql('SHOW TABLES LIKE \'pro%\'')
 
 
 <!-- intro -->
-##### java：
+##### java:
 
 <!-- request Java -->
 
@@ -266,7 +266,7 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- intro -->
-##### C#：
+##### C#:
 
 <!-- request C# -->
 
@@ -280,7 +280,7 @@ utilsApi.Sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- intro -->
-##### Rust：
+##### Rust:
 
 <!-- request Rust -->
 
@@ -302,7 +302,7 @@ utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
 {DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
-`DESCRIBE` 语句列出表格的列及其关联的类型。列包括文档ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句中预期的字段和属性顺序相同。列类型包括 `field`，`integer`，`timestamp`，`ordinal`，`bool`，`float`，`bigint`，`string` 和 `mva`。ID 列将被类型化为 `bigint`。示例：
+`DESCRIBE` 语句列出表的列及其相关类型。列包括文档 ID、全文字段和属性。顺序与 `INSERT` 和 `REPLACE` 语句预期的字段和属性顺序一致。列类型包括 `field`、`integer`、`timestamp`、`ordinal`、`bool`、`float`、`bigint`、`string` 和 `mva`。ID 列将被指定为 `bigint`。示例：
 
 ```sql
 mysql> DESC rt;
@@ -317,13 +317,13 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-支持使用 LIKE 子句。参见
-[SHOW META](Node_info_and_management/SHOW_META.md) 以获取其语法细节。
+支持可选的 LIKE 子句。有关其语法细节，请参阅
+[SHOW META](Node_info_and_management/SHOW_META.md)。
 
 ### SELECT FROM name.@table
 
 <!-- example name_table -->
-您还可以通过执行查询 `select * from <table_name>.@table` 查看表格的模式。此方法的好处是您可以使用 `WHERE` 子句进行过滤：
+您还可以通过执行查询 `select * from <table_name>.@table` 查看表模式。此方法的优点是您可以使用 `WHERE` 子句进行过滤：
 
 <!-- request SQL -->
 ```sql
@@ -344,7 +344,7 @@ select * from tbl.@table where type='text';
 
 <!-- example name_table2 -->
 
-您还可以将 `<your_table_name>.@table` 作为常规 Manticore 表进行许多其他操作，其列由整数和字符串属性组成。
+您还可以将 `<your_table_name>.@table` 视为具有整数和字符串属性列的常规 Manticore 表，执行许多其他操作。
 
 <!-- request SQL -->
 
@@ -360,13 +360,18 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name
+SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
-打印用于创建指定表格的 `CREATE TABLE` 语句。
+打印用于创建指定表的 `CREATE TABLE` 语句。
+
+`output_words` 选项允许您控制外部文件设置（如 `stopwords`、`exceptions`、`wordforms`、`hitless_words`）的显示方式：
+
+* `'list'`（默认）：使用 `*_list` 选项（例如 `stopwords_list='word1; word2'`）以内联列表形式显示文件内容。
+* `'file'`：使用原始选项显示文件路径（例如 `stopwords='/path/to/file'`）。
 
 <!-- intro -->
-##### SQL：
+##### SQL:
 
 <!-- request SQL -->
 ```sql
@@ -385,7 +390,7 @@ f text indexed stored
 
 ### Percolate 表模式
 
-如果您在 percolate 表上使用 `DESC` 语句，它将显示外部表格模式，即存储查询的模式。此模式是静态的，并且所有本地 percolate 表相同：
+如果您对 percolate 表使用 `DESC` 语句，它将显示外层表模式，即存储查询的模式。此模式是静态的，对所有本地 percolate 表都相同：
 
 ```sql
 mysql> DESC pq;
@@ -401,7 +406,7 @@ mysql> DESC pq;
 ```
 
 如果您想查看预期的文档模式，请使用以下命令：
-`DESC <pq table name> table`：
+`DESC <pq table name> table`:
 
 ```sql
 mysql> DESC pq TABLE;
@@ -415,7 +420,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-`desc pq table like ...` 也支持并按如下方式工作：
+此外，`desc pq table like ...` 也受支持，其工作方式如下：
 
 ```sql
 mysql> desc pq table like '%title%';

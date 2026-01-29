@@ -30,7 +30,6 @@ echo "swshareduniq" > /var/lib/manticore/ext_rt/sw_shared.txt && \
 echo "shared => sharedr" > /var/lib/manticore/ext_rt/wf_shared.txt && \
 echo "excshared => excsharedr" > /var/lib/manticore/ext_rt/exc_shared.txt
 ––– output –––
-
 ––– comment –––
 Case A: source RT with no disk chunks; attach to empty dst; verify RT-level externals copied + meta updated
 ––– input –––
@@ -52,7 +51,6 @@ grep -q "wordforms_chunk" /var/lib/manticore/rt_dst_empty/rt_dst_empty.meta && \
 grep -q "exceptions_chunk" /var/lib/manticore/rt_dst_empty/rt_dst_empty.meta; then echo OK_EMPTY_META; else echo FAIL_EMPTY_META; fi
 ––– output –––
 OK_EMPTY_META
-
 ––– comment –––
 Case B: source RT with 3 disk chunks; each chunk has unique externals; attach to empty dst; verify per-chunk copies + meta + headers
 ––– input –––
@@ -79,7 +77,6 @@ mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B
 +-------------+------+
 | disk_chunks |    3 |
 +-------------+------+
-
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_multi (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_multi;"
 ––– output –––
@@ -114,7 +111,6 @@ OK_MULTI_META
 if for f in /var/lib/manticore/rt_dst_multi/*.sph; do grep -a -q "stopwords_chunk" "$f" || exit 1; done; then echo OK_MULTI_SPH; else echo FAIL_MULTI_SPH; fi
 ––– output –––
 OK_MULTI_SPH
-
 ––– comment –––
 Case C: multiple attaches into same dst; verify latest attach externals present
 ––– input –––
@@ -157,7 +153,6 @@ grep -q "d2 => d2r" /var/lib/manticore/rt_dst_attach/wordforms_chunk*.txt && \
 grep -q "excd => excdr" /var/lib/manticore/rt_dst_attach/exceptions_chunk*.txt; then echo OK_ATTACH_CONTENT; else echo FAIL_ATTACH_CONTENT; fi
 ––– output –––
 OK_ATTACH_CONTENT
-
 ––– comment –––
 Case D: attach into non-empty dst; verify old dst externals still present and new ones copied
 ––– input –––
@@ -180,7 +175,6 @@ if grep -q "swdstuniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt &
 grep -q "swduniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt; then echo OK_NONEMPTY_CONTENT; else echo FAIL_NONEMPTY_CONTENT; fi
 ––– output –––
 OK_NONEMPTY_CONTENT
-
 ––– comment –––
 Case E: shared externals across chunks; verify dedup reuse (single copy per bundle)
 ––– input –––
@@ -190,7 +184,6 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_shared (id BIGINT, title TEXT) stopword
 if [ "$(grep -l 'swshareduniq' /var/lib/manticore/rt_dst_shared/stopwords_chunk*.txt | wc -l)" -eq 1 ]; then echo OK_SHARED_DEDUP; else echo FAIL_SHARED_DEDUP; fi
 ––– output –––
 OK_SHARED_DEDUP
-
 ––– comment –––
 Case F: shared externals across different sources; verify dedup reuse on second attach
 ––– input –––

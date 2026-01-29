@@ -136,6 +136,7 @@ public:
 
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
+	uint64_t Hash () const noexcept;
 };
 
 /// extended query node
@@ -407,7 +408,7 @@ bool	IsAllowOnlyNot();
 void	SetBooleanSimplify ( bool bSimplify );
 bool	GetBooleanSimplify ( const CSphQuery & tQuery );
 bool	GetBooleanSimplify ();
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr, StrVec_t * pZones = nullptr );
 inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );

@@ -64,6 +64,7 @@
 /test/clt-tests/**/*.rep
 /test/clt-tests/**/*.deb
 /clt
+/agents.md
 /test/clt-tests/*repo.noarch.deb.*
 /test/clt-tests/**/*.cmp
 /test/.cache/

@@ -713,7 +713,7 @@ void QueryParser::TestMany (const char* szQuery, const char* szReconst)
 {
 	XQQuery_t tQuery;
 	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
-	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema, &tQuery.m_dZones );
 	ASSERT_STREQ ( sReconst.cstr(), szReconst );
 }
 
@@ -849,7 +849,7 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 	if (!sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ))
 		return;
 
-	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema, &tQuery.m_dZones );
 
 	CSphDummyIndex tIndex;
 	if ( pKeywordHits )
@@ -861,7 +861,7 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
 	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs, tQuery.m_sParseWarning ) );
 
-	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema, &tQuery.m_dZones );
 	EXPECT_STREQ ( sReconst.cstr(), szReconst );
 	ASSERT_STREQ ( sReconstTransformed.cstr(), szReconstTransformed );
 }
@@ -1141,8 +1141,8 @@ TEST_F ( QueryParser, different_zones )
 {
 	Transform (
 		"(( ZONE:(h1) ACCEL !aaa)|( ACCEL !bbb))",
-		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
-		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+		"( ( ZONE:(h1) accel AND NOT ZONE:(h1) aaa ) | ( accel AND NOT bbb ) )",
+		"( ( ZONE:(h1) accel AND NOT ZONE:(h1) aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
 	);
 }
 
@@ -1150,8 +1150,8 @@ TEST_F ( QueryParser, different_zonespan )
 {
 	Transform (
 		"(( ZONESPAN:(h1) ACCEL !aaa)|( ACCEL !bbb))",
-		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
-		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+		"( ( ZONESPAN:(h1) accel AND NOT ZONESPAN:(h1) aaa ) | ( accel AND NOT bbb ) )",
+		"( ( ZONESPAN:(h1) accel AND NOT ZONESPAN:(h1) aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
 	);
 }
 
@@ -1361,6 +1361,70 @@ TEST_F ( QueryParser, transform_common_and_not_factor_1 )
 	);
 }
 
+// common subphrases spec
+TEST_F ( QueryParser, transform_naked_common_subphrases )
+{
+	Transform (
+		"(@title \"aaa bbb\") | (@title \"aaa bbb\")",
+		"( ( @title: \"aaa bbb\" ) | ( @title: \"aaa bbb\" ) )",
+		"( @title: \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_different_fields )
+{
+	Transform (
+		"(@title \"aaa bbb\") | (@body \"aaa bbb\")",
+		"( ( @title: \"aaa bbb\" ) | ( @body: \"aaa bbb\" ) )",
+		"( ( @title: \"aaa bbb\" ) | ( @body: \"aaa bbb\" ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_same_field_limits )
+{
+	Transform (
+		"(@title[10] \"aaa bbb\") | (@title[10] \"aaa bbb\")",
+		"( ( @title[10]: \"aaa bbb\" ) | ( @title[10]: \"aaa bbb\" ) )",
+		"( @title[10]: \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_different_field_limits )
+{
+	Transform (
+		"(@title \"aaa bbb\") | (@title[10] \"aaa bbb\")",
+		"( ( @title: \"aaa bbb\" ) | ( @title[10]: \"aaa bbb\" ) )",
+		"( ( @title: \"aaa bbb\" ) | ( @title[10]: \"aaa bbb\" ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_same_zones )
+{
+	Transform (
+		"(ZONE:h1 \"aaa bbb\") | (ZONE:h1 \"aaa bbb\")",
+		"( ZONE:(h1) \"aaa bbb\" | ZONE:(h1) \"aaa bbb\" )",
+		"ZONE:(h1) \"aaa bbb\""
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_different_zones )
+{
+	Transform (
+		"(ZONE:h1 \"aaa bbb\") | (\"aaa bbb\")",
+		"( ZONE:(h1) \"aaa bbb\" | \"aaa bbb\" )",
+		"( ZONE:(h1) \"aaa bbb\" | \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_different_zones_and_zonespans )
+{
+	Transform (
+		"(ZONE:h1 \"aaa bbb\") | (ZONESPAN:h1 \"aaa bbb\")",
+		"( ZONE:(h1) \"aaa bbb\" | ZONESPAN:(h1) \"aaa bbb\" )",
+		"( ZONE:(h1) \"aaa bbb\" | ZONESPAN:(h1) \"aaa bbb\" )"
+	);
+}
+
 // different fields
 TEST_F ( QueryParser, transform_different_fields )
 {
@@ -1387,6 +1451,16 @@ TEST_F ( QueryParser, transform_common_and_not_factor_with_mixed_phrases_1 )
 		"( \"aaa bbb\"~10 !xxx ) | ( \"aaa bbb\"~20 !yyy ) | ( \"aaa bbb\" !zzz )",
 		"( ( \"aaa bbb\"~10 AND NOT xxx ) | ( \"aaa bbb\"~20 AND NOT yyy ) | ( \"aaa bbb\" AND NOT zzz ) )",
 		"( \"aaa bbb\"~20 AND NOT ( yyy   xxx   zzz ) )"
+	);
+}
+
+// use-after-free error
+TEST_F ( QueryParser, transform_common_subphrases_fail_asan )
+{
+	Transform (
+		"\"00-00\"|\"00@00-00\"|\"00@00-00\"~5",
+		"( \"00 00\" | \"00 00 00\" | \"00 00 00\"~5 )",
+		"( \"00 00 00\"~5 | ( \"00 \"00 00\"\" ) )"
 	);
 }
 
@@ -1466,8 +1540,8 @@ TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_1 )
 {
 	Transform (
 		"@@relaxed ZONESPAN:aaa bbb | @missed ddd | fff eee",
-		"bbb",
-		"bbb"
+		"ZONESPAN:(aaa) bbb",
+		"ZONESPAN:(aaa) bbb"
 	);
 }
 

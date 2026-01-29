@@ -71,6 +71,7 @@ When creating a table for auto embeddings, specify:
 
 **Supported embedding models:**
 - **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
+- **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
 - **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
 - **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
 - **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
@@ -89,6 +90,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Using Qwen local embeddings (no API key needed)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -667,4 +678,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

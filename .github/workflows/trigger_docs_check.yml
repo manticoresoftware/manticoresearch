@@ -18,6 +18,18 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Save PR repo
+        env:
+          PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo $PR_REPO > pr_repo.txt
+          echo $PR_REF >> pr_repo.txt
+      - name: Upload PR repo name
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr_repo
+          path: ./pr_repo.txt
       - name: Trigger doc check
         run: |
           echo "Doc check triggered"

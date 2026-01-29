@@ -1763,6 +1763,97 @@ table products {
 ```
 <!-- end -->
 
+### hitless_words_list
+
+```ini
+hitless_words_list = 'word1; word2; ...'
+```
+
+<!-- example hitless_words_list -->
+The `hitless_words_list` setting allows you to specify hitless words directly in the `CREATE TABLE` statement. It is supported in [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) only.
+
+The values must be separated by semicolons (`;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'hitless_words_list' => 'hello; world'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list = \'hello; world\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list = \'hello; world\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words_list = \'hello; world\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) hitless_words_list = 'hello; world'", Some(true)).await;
+```
+
+<!-- end -->
+
 ### index_field_lengths
 
 ```ini

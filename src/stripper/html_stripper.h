@@ -24,6 +24,7 @@ public:
 	bool SetRemovedElements ( const char* sConfig, CSphString& sError );
 	bool SetZones ( const char* sZones, CSphString& sError );
 	void EnableParagraphs();
+	void SetDecodeEntities ( bool bDecode );
 	void Strip ( BYTE* sData ) const;
 
 public:
@@ -36,6 +37,7 @@ private:
 	static const int MAX_CHAR_INDEX = 28; ///< max valid char index (a-z, underscore, colon)
 
 	CSphVector<html_stripper::StripperTag_t> m_dTags; ///< known tags to index attrs and/or to remove contents
+	bool m_bDecodeEntities = true;
 	int m_dStart[MAX_CHAR_INDEX];	   ///< maps index of the first tag name char to start offset in m_dTags
 	int m_dEnd[MAX_CHAR_INDEX];		   ///< maps index of the first tag name char to end offset in m_dTags
 

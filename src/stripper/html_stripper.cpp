@@ -46,6 +46,8 @@ static inline int sphIsTagStart ( int c )
 
 CSphHTMLStripper::CSphHTMLStripper ( bool bDefaultTags )
 {
+	m_bDecodeEntities = true;
+
 	if ( bDefaultTags )
 	{
 		// known inline tags
@@ -271,6 +273,12 @@ void CSphHTMLStripper::EnableParagraphs ()
 	}
 
 	UpdateTags ();
+}
+
+
+void CSphHTMLStripper::SetDecodeEntities ( bool bDecode )
+{
+	m_bDecodeEntities = bDecode;
 }
 
 
@@ -851,6 +859,12 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 
 		if ( *s=='&' )
 		{
+			if ( !m_bDecodeEntities )
+			{
+				*d++ = *s++;
+				continue;
+			}
+
 			if ( s[1]=='#' )
 			{
 				// handle "&#number;" and "&#xnumber;" forms

@@ -1181,6 +1181,7 @@ public:
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	bool				RewriteHeader ( CSphString & sError ) const final;
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
 	void				Dealloc () final;
@@ -1250,7 +1251,7 @@ public:
 	bool				LoadSecondaryIndex ( const CSphString & sFile );
 	bool				PreallocSecondaryIndex();
 
-	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true );
+	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true ) const;
 	bool				SaveHeader ( CSphString & sError );
 
 	CSphVector<SphAttr_t> 	BuildDocList () const final;
@@ -2971,7 +2972,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 }
 
 
-void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader )
+void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader ) const
 {
 	tBuildHeader.m_iTotalDocuments = m_tStats.m_iTotalDocuments;
 	tBuildHeader.m_iTotalBytes = m_tStats.m_iTotalBytes;
@@ -13214,4 +13215,36 @@ volatile bool& sphGetbCpuStat () noexcept
 {
 	static bool bCpuStat = false;
 	return bCpuStat;
+}
+
+
+bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
+{
+	CSphString sHeader = GetFilename ( SPH_EXT_SPH );
+	if ( !sphIsReadable ( sHeader.cstr(), &sError ) )
+		return false;
+
+	CSphString sHeaderNew;
+	sHeaderNew.SetSprintf ( "%s.new", sHeader.cstr() );
+	CSphString sHeaderOld;
+	sHeaderOld.SetSprintf ( "%s.old", sHeader.cstr() );
+
+	BuildHeader_t tBuildHeader;
+	WriteHeader_t tWriteHeader;
+	PrepareHeaders ( tBuildHeader, tWriteHeader );
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderNew, sError ) )
+		return false;
+
+	StrVec_t dSrc;
+	StrVec_t dDst;
+	dSrc.Add ( sHeader );
+	dDst.Add ( sHeaderOld );
+	dSrc.Add ( sHeaderNew );
+	dDst.Add ( sHeader );
+
+	if ( !RenameWithRollback ( dSrc, dDst, sError ) )
+		return false;
+
+	::unlink ( sHeaderOld.cstr() );
+	return true;
 }

@@ -1314,6 +1314,9 @@ public:
 	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
+	/// rewrite index header on disk using current in-memory settings
+	virtual bool				RewriteHeader ( CSphString & sError ) const { return false; }
+
 	/// getter for name. Notice, const char* returned as it is mostly used for printing name
 	const char *				GetName () const { return m_sIndexName.cstr(); }
 

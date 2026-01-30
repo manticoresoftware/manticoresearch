@@ -11910,6 +11910,8 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	if ( !SiRecreate ( tMonitor, *this, m_iDocinfo, dCurFiles, dNewFiles, sError ) )
 		return false;
 
+	const char * sJsonSIExt = sphGetExt ( SPH_EXT_SPJIDX );
+
 	ARRAY_FOREACH ( i, dCurFiles )
 	{
 		StrVec_t dFilesFrom(1);
@@ -11931,7 +11933,6 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 		}
 
 		// JSON SI rebuild might not create a file for chunks that yield no schema; skip rename/load in that case.
-		const char * sJsonSIExt = sphGetExt ( SPH_EXT_SPJIDX );
 		bool bJsonSI = dCurFiles[i].Ends ( sJsonSIExt ) || dNewFiles[i].Ends ( sJsonSIExt );
 		if ( bJsonSI && !sphFileExists ( dNewFiles[i].cstr() ) )
 		{

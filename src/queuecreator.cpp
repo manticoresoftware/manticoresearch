@@ -334,7 +334,6 @@ private:
 	int		ReduceOrIncreaseMaxMatches() const;
 	int		AdjustMaxMatches ( int iMaxMatches ) const;
 	bool	ConvertColumnarToDocstore();
-	CSphString GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr ) const;
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 	bool	IsJoinAttr ( const CSphString & sAttr ) const;
@@ -373,7 +372,7 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 }
 
 
-CSphString QueueCreator_c::GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr ) const
+static CSphString GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr )
 {
 	if ( !tAttr.IsColumnarExpr() )
 		return tAttr.m_sName;
@@ -502,6 +501,25 @@ bool QueueCreator_c::SetupDistinctAttr()
 	return true;
 }
 
+static bool IsMvaGroupBy ( const ISphSchema & tSchema, const CSphColumnInfo & tAttr, const CSphString & sGroupBy )
+{
+	if ( IsMvaAttr ( tAttr.m_eAttrType ) )
+		return true;
+
+	int iOrigAttr = tSchema.GetAttrIndexOriginal ( sGroupBy.cstr() );
+	if ( iOrigAttr>=0 && IsMvaAttr ( tSchema.GetAttr(iOrigAttr).m_eAttrType ) )
+		return true;
+
+	if ( tAttr.IsColumnarExpr() )
+	{
+		CSphString sCol = GetAliasedColumnarAttrName ( tAttr );
+		int iCol = tSchema.GetAttrIndex ( sCol.cstr() );
+		return iCol>=0 && IsMvaAttr ( tSchema.GetAttr(iCol).m_eAttrType );
+	}
+
+	return false;
+};
+
 
 bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 {
@@ -552,7 +570,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 			auto tAttr = tSchema.GetAttr ( iAttr );
 			ESphAttr eType = tAttr.m_eAttrType;
-			if ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET )
+			if ( IsMvaGroupBy ( tSchema, tAttr, sGroupBy ) )
 				return Err ( "MVA values can't be used in multiple group-by" );
 
 			if ( eType==SPH_ATTR_JSON && sJsonExpr.IsEmpty() )

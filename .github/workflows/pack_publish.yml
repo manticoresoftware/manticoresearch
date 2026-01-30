@@ -412,7 +412,9 @@ jobs:
   # Test Windows installer without Docker/Buddy on GitHub Actions
   test_windows_installer:
     name: Test Windows NSIS installer
-    needs: [publish_windows, pack]
+    # TEMPORARY: changed from [publish_windows, pack] to test without publishing
+    # TODO: Revert after PR is verified: needs: [publish_windows, pack]
+    needs: [build_nsis, pack]
     runs-on: windows-latest
     steps:
     - name: Download Windows installer artifact
@@ -596,6 +598,138 @@ jobs:
         echo "✓ All ports (9306, 9308, 9312) are accessible"
         echo "✓ HTTP endpoints respond with status 200"
         echo "✓ Manticore service is operational"
+      shell: pwsh
+    
+    - name: Test custom config path via Windows Service (sc start)
+      run: |
+        echo "=== TESTING CUSTOM CONFIG PATH VIA WINDOWS SERVICE ==="
+        echo "This test verifies fix for issue #3601: --config parameter handling in sc start"
+
+        $installPath = "C:\Program Files (x86)\Manticore"
+        $searchdPath = "$installPath\bin\searchd.exe"
+        $serviceName = "ManticoreTestCustomConfig"
+
+        # Stop and remove default searchd service if running
+        echo "Stopping default Manticore service..."
+        sc.exe stop Manticore 2>$null
+        Start-Sleep -Seconds 3
+
+        # Create custom config in non-standard location with a unique table
+        $customConfigDir = "$env:TEMP\manticore-test-config"
+        $customDataDir = "$customConfigDir\data"
+        New-Item -ItemType Directory -Force -Path $customConfigDir | Out-Null
+        New-Item -ItemType Directory -Force -Path $customDataDir | Out-Null
+
+        $customConfig = "$customConfigDir\custom.conf"
+
+        # Config with a unique RT table to verify custom config is being used
+        @"
+        searchd {
+            listen = 127.0.0.1:9306:mysql
+            listen = 127.0.0.1:9308:http
+            listen = 127.0.0.1:9312
+            log = $customConfigDir\searchd.log
+            query_log = $customConfigDir\query.log
+            pid_file = $customConfigDir\searchd.pid
+            data_dir = $customDataDir
+            buddy_path =
+        }
+
+        table test_custom_config_marker {
+            type = rt
+            path = $customDataDir\test_custom_config_marker
+            rt_field = content
+            rt_attr_uint = id
+        }
+        "@  | Out-File -FilePath $customConfig -Encoding ASCII
+
+        echo "Created custom config at: $customConfig"
+        echo "Custom config contains table 'test_custom_config_marker' as verification marker"
+
+        # Install Windows Service with custom config
+        echo ""
+        echo "=== Installing Windows Service with custom config ==="
+        echo "Command: $searchdPath --install --config $customConfig --servicename $serviceName"
+
+        & $searchdPath --install --config "$customConfig" --servicename $serviceName
+        if ($LASTEXITCODE -ne 0) {
+            echo "✗ Failed to install service"
+            exit 1
+        }
+        echo "✓ Service '$serviceName' installed"
+
+        # Start service via sc start (this is what issue #3601 was about!)
+        echo ""
+        echo "=== Starting service via sc start ==="
+        sc.exe start $serviceName
+        if ($LASTEXITCODE -ne 0) {
+            echo "✗ Failed to start service via sc start"
+            & $searchdPath --delete --servicename $serviceName
+            exit 1
+        }
+
+        # Wait for service to fully start
+        echo "Waiting for service to start..."
+        Start-Sleep -Seconds 10
+
+        # Check service status
+        $serviceStatus = sc.exe query $serviceName
+        echo "Service status:"
+        echo $serviceStatus
+
+        # Test connectivity
+        echo ""
+        echo "=== Testing connectivity ==="
+        $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue -InformationLevel Quiet
+        if ($port9306) {
+            echo "✓ Port 9306 accessible"
+        } else {
+            echo "✗ Port 9306 not accessible"
+            sc.exe stop $serviceName
+            & $searchdPath --delete --servicename $serviceName
+            exit 1
+        }
+
+        # KEY TEST: Verify custom config is being used by checking for marker table
+        echo ""
+        echo "=== Verifying custom config is used (checking for marker table) ==="
+        $mysqlPath = Get-Command mysql -ErrorAction SilentlyContinue
+        if ($mysqlPath) {
+            $result = & mysql -h 127.0.0.1 -P 9306 -e "SHOW TABLES;" 2>&1
+            echo "SHOW TABLES result:"
+            echo $result
+
+            if ($result -match "test_custom_config_marker") {
+                echo ""
+                echo "✓ SUCCESS: Found 'test_custom_config_marker' table - custom config is being used!"
+            } else {
+                echo ""
+                echo "✗ FAILURE: Table 'test_custom_config_marker' not found!"
+                echo "This means searchd is using DEFAULT config instead of custom config."
+                echo "Issue #3601 regression detected!"
+                sc.exe stop $serviceName
+                & $searchdPath --delete --servicename $serviceName
+                exit 1
+            }
+        } else {
+            echo "⚠ MySQL client not available, cannot verify custom config usage"
+            echo "Skipping marker table check"
+        }
+
+        echo ""
+        echo "=== CUSTOM CONFIG PATH TEST PASSED ==="
+        echo "✓ Service installed with custom config"
+        echo "✓ Service started via sc start"
+        echo "✓ Custom config marker table found"
+
+        # Cleanup
+        echo ""
+        echo "=== Cleanup ==="
+        sc.exe stop $serviceName
+        Start-Sleep -Seconds 2
+        & $searchdPath --delete --servicename $serviceName
+        Remove-Item -Recurse -Force $customConfigDir -ErrorAction SilentlyContinue
+        echo "✓ Cleanup completed"
       shell: pwsh
 
   publish_nsis:

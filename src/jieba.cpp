@@ -19,7 +19,53 @@ static_assert ( WITH_JIEBA, "should not build without WITH_JIEBA definition" );
 #include "cjkpreprocessor.h"
 
 #include "Jieba.hpp"
+#include "std/mutex.h"
+#include "std/stringbuilder.h"
+#include "std/stringhash.h"
 
+
+class JiebaCache_c
+{
+public:
+	std::shared_ptr<cppjieba::Jieba> Get ( const VecTraits_T<CSphString> & dJiebaFiles );
+	void		Store ( const VecTraits_T<CSphString> & dJiebaFiles, const std::shared_ptr<cppjieba::Jieba> & pJieba );
+
+private:
+	CSphMutex m_tLock;
+	CSphOrderedHash<std::weak_ptr<cppjieba::Jieba>, CSphString, CSphStrHashFunc, 256> m_hCache;
+
+	CSphString	BuildKey ( const VecTraits_T<CSphString> & dJiebaFiles ) const { return Vec2Str(dJiebaFiles); }
+};
+
+
+std::shared_ptr<cppjieba::Jieba> JiebaCache_c::Get ( const VecTraits_T<CSphString> & dJiebaFiles )
+{
+	const CSphString sKey = BuildKey(dJiebaFiles);
+	ScopedMutex_t tGuard(m_tLock);
+	auto pWeak = m_hCache(sKey);
+	if ( !pWeak )
+		return nullptr;
+
+	auto pShared = pWeak->lock();
+	if ( !pShared )
+		m_hCache.Delete(sKey);		// entry expired, clean it up
+
+	return pShared;
+}
+
+
+void JiebaCache_c::Store ( const VecTraits_T<CSphString> & dJiebaFiles, const std::shared_ptr<cppjieba::Jieba> & pJieba )
+{
+	assert(pJieba);
+	const CSphString sKey = BuildKey(dJiebaFiles);
+	ScopedMutex_t tGuard(m_tLock);
+	auto & tEntry = m_hCache.AddUnique(sKey);
+	tEntry = pJieba;
+}
+
+static JiebaCache_c g_tJiebaCache;
+
+////////////////////////////////////////////////////////////////////////////////
 
 class JiebaPreprocessor_c : public CJKPreprocessor_c
 {
@@ -101,8 +147,13 @@ bool JiebaPreprocessor_c::Init ( CSphString & sError )
 			return false;
 		}
 
+	m_pJieba = g_tJiebaCache.Get ( { dJiebaFiles, (size_t)JiebaFiles_e::TOTAL } );
+	if ( m_pJieba )
+		return true;
+
 	// fixme! jieba responds to load errors with abort() call
 	m_pJieba = std::make_shared<cppjieba::Jieba> ( dJiebaFiles[(int)JiebaFiles_e::DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::HMM].cstr(), dJiebaFiles[(int)JiebaFiles_e::USER_DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::IDF].cstr(), dJiebaFiles[(int)JiebaFiles_e::STOP_WORD].cstr() );
+	g_tJiebaCache.Store ( { dJiebaFiles, (size_t)JiebaFiles_e::TOTAL }, m_pJieba );
 
 	return true;
 }

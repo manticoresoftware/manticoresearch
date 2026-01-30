@@ -118,7 +118,8 @@ insert into test_table values
 <db_insert>
 <![CDATA[
 insert into test_table2 values
-( 1, '<p>The ideas of syntax highlighting overlap significantly with those of <a href="/wiki/Structure_editor" title="Structure editor">syntax-directed editors</a>. One of the first such editors for code was Wilfred Hansens 1969 code editor, Emily.<sup id="cite_ref-hansen_3-0" class="reference"><a href="#cite_note-hansen-3">[3]</a></sup><sup id="cite_ref-4" class="reference"><a href="#cite_note-4">[4]</a></sup> It provided advanced language-independent <a href="/wiki/Autocomplete" title="Autocomplete">code completion</a> facilities, and unlike modern editors with syntax highlighting, actually made it impossible to create syntactically incorrect programs.</p>' )
+( 1, '<p>The ideas of syntax highlighting overlap significantly with those of <a href="/wiki/Structure_editor" title="Structure editor">syntax-directed editors</a>. One of the first such editors for code was Wilfred Hansens 1969 code editor, Emily.<sup id="cite_ref-hansen_3-0" class="reference"><a href="#cite_note-hansen-3">[3]</a></sup><sup id="cite_ref-4" class="reference"><a href="#cite_note-4">[4]</a></sup> It provided advanced language-independent <a href="/wiki/Autocomplete" title="Autocomplete">code completion</a> facilities, and unlike modern editors with syntax highlighting, actually made it impossible to create syntactically incorrect programs.</p>' ),
+( 2, '<code>&lt;?php echo "hello world"</code>' )
 ]]>
 </db_insert>
 
@@ -178,6 +179,7 @@ call snippets (('door opened last time', 'this is door closed'), 'test1', ' "doo
 <!-- expand keywords -->
 select id, highlight({limit=40},body) FROM test_kw1 WHERE MATCH('com');
 call snippets (('command mode activated', 'test.com looks like'), 'test_kw1', ' com ', 1 as query_mode);
+select highlight({html_strip_mode=strip}) from test2 where match('hello');
 
 
 </sphinxql></queries>

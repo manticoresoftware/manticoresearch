@@ -46,8 +46,6 @@ static inline int sphIsTagStart ( int c )
 
 CSphHTMLStripper::CSphHTMLStripper ( bool bDefaultTags )
 {
-	m_bDecodeEntities = true;
-
 	if ( bDefaultTags )
 	{
 		// known inline tags
@@ -274,13 +272,6 @@ void CSphHTMLStripper::EnableParagraphs ()
 
 	UpdateTags ();
 }
-
-
-void CSphHTMLStripper::SetDecodeEntities ( bool bDecode )
-{
-	m_bDecodeEntities = bDecode;
-}
-
 
 bool CSphHTMLStripper::SetZones ( const char * sZones, CSphString & sError )
 {
@@ -859,76 +850,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 
 		if ( *s=='&' )
 		{
-			if ( !m_bDecodeEntities )
-			{
-				*d++ = *s++;
-				continue;
-			}
-
-			if ( s[1]=='#' )
-			{
-				// handle "&#number;" and "&#xnumber;" forms
-				DWORD uCode = 0;
-				s += 2;
-
-				bool bHex = ( *s && ( *s=='x' || *s=='X') );
-				if ( !bHex )
-				{
-					while ( isdigit(*s) )
-						uCode = uCode*10 + (*s++) - '0';
-				} else
-				{
-					s++;
-					while ( *s )
-					{
-						if ( isdigit(*s) )
-							uCode = uCode*16 + (*s++) - '0';
-						else if ( *s>=0x41 && *s<=0x46 )
-							uCode = uCode*16 + (*s++) - 'A' + 0xA;
-						else if ( *s>=0x61 && *s<=0x66 )
-							uCode = uCode*16 + (*s++) - 'a' + 0xA;
-						else
-							break;
-					}
-				}
-
-				uCode = uCode % 0x110000; // there is no unicode code-points bigger than this value
-
-				if ( uCode<=0x1f || *s!=';' ) // 0-31 are reserved codes
-					continue;
-
-				d += sphUTF8Encode ( d, (int)uCode );
-				s++;
-
-			} else
-			{
-				// skip until ';' or max length
-				if ( ( s[1]>='a' && s[1]<='z' ) || ( s[1]>='A' && s[1]<='Z' ) )
-				{
-					const int MAX_ENTITY_LEN = 8;
-					const BYTE * sStart = s+1;
-					while ( *s && *s!=';' && s-sStart<=MAX_ENTITY_LEN )
-						s++;
-
-					if ( *s==';' )
-					{
-						int iCode = HtmlEntityLookup ( sStart, (int)(s-sStart) );
-						if ( iCode>0 )
-						{
-							// this is a known entity; encode it
-							d += sphUTF8Encode ( d, iCode );
-							s++;
-							continue;
-						}
-					}
-
-					// rollback
-					s = sStart-1;
-				}
-
-				// if we're here, it's not an entity; pass the leading ampersand and rescan
-				*d++ = *s++;
-			}
+			*d++ = *s++;
 			continue;
 		}
 

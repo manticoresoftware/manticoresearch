@@ -1338,8 +1338,6 @@ bool SnippetBuilder_c::Impl_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & s
 	{
 		// don't strip HTML markup in 'retain' mode - proceed zones only
 		m_pState->m_pStripper = std::make_unique<CSphHTMLStripper> ( q.m_sStripMode!="retain" );
-		if ( q.m_sStripMode=="strip" )
-			m_pState->m_pStripper->SetDecodeEntities ( false );
 
 		if ( q.m_sStripMode=="index" )
 		{

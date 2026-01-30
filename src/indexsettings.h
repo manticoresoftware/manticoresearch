@@ -428,6 +428,7 @@ public:
 	virtual bool			Add ( const char * szName, const CSphString & sValue ) = 0;
 	virtual bool			Add ( const CSphString & sName, const CSphString & sValue ) = 0;
 	virtual CSphString		Get ( const CSphString & sName ) const =0 ;
+	virtual CSphString		GetList ( const CSphString & sName ) const = 0;
 	virtual bool			Contains ( const char * szName ) const = 0;
 	virtual void			RemoveKeys ( const CSphString & sName ) = 0;
 	virtual bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) = 0;
@@ -494,5 +495,7 @@ void		LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings 
 void		operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSettings );
 void		LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void		SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
+
+CSphString		FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder );
 
 #endif // _indexsettings_

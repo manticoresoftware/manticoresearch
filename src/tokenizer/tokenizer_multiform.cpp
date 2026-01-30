@@ -32,6 +32,7 @@ struct StoredToken_t
 	bool m_bSpecial;
 	bool m_bBlended;
 	bool m_bBlendedPart;
+	bool m_bBlendedHead;
 };
 
 void FillStoredTokenInfo ( StoredToken_t& tToken, const BYTE* sToken, const TokenizerRefPtr_c& pTokenizer )
@@ -48,6 +49,7 @@ void FillStoredTokenInfo ( StoredToken_t& tToken, const BYTE* sToken, const Toke
 	tToken.m_bSpecial = pTokenizer->WasTokenSpecial();
 	tToken.m_bBlended = pTokenizer->TokenIsBlended();
 	tToken.m_bBlendedPart = pTokenizer->TokenIsBlendedPart();
+	tToken.m_bBlendedHead = pTokenizer->TokenIsBlendedHead();
 }
 
 /// token filter for multiforms support
@@ -93,6 +95,10 @@ public:
 	bool TokenIsBlendedPart() const noexcept final
 	{
 		return m_iStart < m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlendedPart : Base::TokenIsBlendedPart();
+	}
+	bool TokenIsBlendedHead() const noexcept final
+	{
+		return m_iStart < m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlendedHead : Base::TokenIsBlendedHead();
 	}
 	int SkipBlended() final;
 
@@ -156,6 +162,7 @@ BYTE* MultiformTokenizer::GetToken()
 			tStart.m_bSpecial = false;
 			tStart.m_bBlended = false;
 			tStart.m_bBlendedPart = false;
+			tStart.m_bBlendedHead = false;
 			return tStart.m_sToken;
 		}
 	}
@@ -301,6 +308,7 @@ BYTE* MultiformTokenizer::GetToken()
 			tEnd.m_bSpecial = false;
 			tEnd.m_bBlended = false;
 			tEnd.m_bBlendedPart = false;
+			tEnd.m_bBlendedHead = false;
 
 			if ( pCurForm->m_dNormalForm.GetLength() > 1 )
 			{

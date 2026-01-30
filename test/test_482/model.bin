@@ -1,0 +1,65 @@
+a:1:{i:0;a:30:{i:0;a:2:{s:8:"sphinxql";s:83:"INSERT INTO t (id, f) VALUES (1, 'well being'), (2, 'well-being'), (3, 'wellbeing')";s:14:"total_affected";i:3;}i:1;a:3:{s:8:"sphinxql";s:57:"SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}}}i:2;a:3:{s:8:"sphinxql";s:83:"SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:2:{s:2:"id";s:1:"1";s:1:"f";s:10:"well being";}i:1;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}i:2;a:2:{s:2:"id";s:1:"3";s:1:"f";s:9:"wellbeing";}}}i:3;a:2:{s:8:"sphinxql";s:257:"INSERT INTO t1 (id, f) VALUES
+	(4, 'well-being test-case'),
+	(5, 'well-being test'),
+	(6, 'well-being case'),
+	(7, 'well test-case'),
+	(8, 'being test-case'),
+	(9, 'wellbeing testcase'),
+	(10, 'well-being'),
+	(11, 'test-case'),
+	(12, 'well being test case')";s:14:"total_affected";i:9;}i:4;a:3:{s:8:"sphinxql";s:94:"SELECT * FROM t1 WHERE MATCH('well-being test-case') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:7;s:4:"rows";a:7:{i:0;a:2:{s:2:"id";s:1:"4";s:1:"f";s:20:"well-being test-case";}i:1;a:2:{s:2:"id";s:1:"5";s:1:"f";s:15:"well-being test";}i:2;a:2:{s:2:"id";s:1:"6";s:1:"f";s:15:"well-being case";}i:3;a:2:{s:2:"id";s:1:"7";s:1:"f";s:14:"well test-case";}i:4;a:2:{s:2:"id";s:1:"8";s:1:"f";s:15:"being test-case";}i:5;a:2:{s:2:"id";s:1:"9";s:1:"f";s:18:"wellbeing testcase";}i:6;a:2:{s:2:"id";s:2:"12";s:1:"f";s:20:"well being test case";}}}i:5;a:2:{s:8:"sphinxql";s:226:"INSERT INTO t2 (id, f) VALUES
+	(1, 'well test'),
+	(2, 'well- test-'),
+	(3, 'well-test'),
+	(4, 'well'),
+	(5, 'test'),
+	(6, 'well-'),
+	(7, 'test-'),
+	(8, 'well being'),
+	(9, 'test case'),
+	(10, 'well- case'),
+	(11, 'well test-')";s:14:"total_affected";i:11;}i:6;a:3:{s:8:"sphinxql";s:85:"SELECT * FROM t2 WHERE MATCH('well- test-') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:2:{s:2:"id";s:1:"1";s:1:"f";s:9:"well test";}i:1;a:2:{s:2:"id";s:1:"2";s:1:"f";s:11:"well- test-";}i:2;a:2:{s:2:"id";s:1:"3";s:1:"f";s:9:"well-test";}i:3;a:2:{s:2:"id";s:2:"11";s:1:"f";s:10:"well test-";}}}i:7;a:2:{s:8:"sphinxql";s:170:"INSERT INTO t1 (id, f) VALUES
+	(20, 'well-being test-case'),
+	(21, 'well being test case'),
+	(22, 'wellbeing testcase'),
+	(23, 'well-being test'),
+	(24, 'well test-case')";s:14:"total_affected";i:5;}i:8;a:3:{s:8:"sphinxql";s:96:"SELECT * FROM t1 WHERE MATCH('"well-being test-case"') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:2:"id";s:1:"4";s:1:"f";s:20:"well-being test-case";}i:1;a:2:{s:2:"id";s:2:"20";s:1:"f";s:20:"well-being test-case";}}}i:9;a:2:{s:8:"sphinxql";s:202:"INSERT INTO t1 (id, f) VALUES
+	(30, 'hello well-being world'),
+	(31, 'hello well being world'),
+	(32, 'hello wellbeing world'),
+	(33, 'hello well-being'),
+	(34, 'hello world'),
+	(35, 'well-being world')";s:14:"total_affected";i:6;}i:10;a:3:{s:8:"sphinxql";s:96:"SELECT * FROM t1 WHERE MATCH('hello well-being world') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:2:{s:2:"id";s:2:"30";s:1:"f";s:22:"hello well-being world";}i:1;a:2:{s:2:"id";s:2:"31";s:1:"f";s:22:"hello well being world";}i:2;a:2:{s:2:"id";s:2:"32";s:1:"f";s:21:"hello wellbeing world";}}}i:11;a:2:{s:8:"sphinxql";s:141:"INSERT INTO t (id, f) VALUES
+	(10, 'well-being'),
+	(11, 'well-being test'),
+	(12, 'test well-being'),
+	(13, 'wellbeing'),
+	(14, 'well being')";s:14:"total_affected";i:5;}i:12;a:3:{s:8:"sphinxql";s:85:"SELECT * FROM t WHERE MATCH('^well-being$') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:8;s:4:"rows";a:8:{i:0;a:2:{s:2:"id";s:1:"1";s:1:"f";s:10:"well being";}i:1;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}i:2;a:2:{s:2:"id";s:1:"3";s:1:"f";s:9:"wellbeing";}i:3;a:2:{s:2:"id";s:2:"10";s:1:"f";s:10:"well-being";}i:4;a:2:{s:2:"id";s:2:"11";s:1:"f";s:15:"well-being test";}i:5;a:2:{s:2:"id";s:2:"12";s:1:"f";s:15:"test well-being";}i:6;a:2:{s:2:"id";s:2:"13";s:1:"f";s:9:"wellbeing";}i:7;a:2:{s:2:"id";s:2:"14";s:1:"f";s:10:"well being";}}}i:13;a:2:{s:8:"sphinxql";s:235:"INSERT INTO t1 (id, f) VALUES
+	(40, 'well-being test-case multi-part'),
+	(41, 'well being test case multi part'),
+	(42, 'wellbeing testcase multipart'),
+	(43, 'well-being test-case'),
+	(44, 'multi-part'),
+	(45, 'well-being multi-part')";s:14:"total_affected";i:6;}i:14;a:3:{s:8:"sphinxql";s:105:"SELECT * FROM t1 WHERE MATCH('well-being test-case multi-part') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:2:{s:2:"id";s:2:"40";s:1:"f";s:31:"well-being test-case multi-part";}i:1;a:2:{s:2:"id";s:2:"41";s:1:"f";s:31:"well being test case multi part";}i:2;a:2:{s:2:"id";s:2:"42";s:1:"f";s:28:"wellbeing testcase multipart";}}}i:15;a:2:{s:8:"sphinxql";s:138:"INSERT INTO t1 (id, f) VALUES
+	(70, 'a well-being b'),
+	(71, 'a well being b'),
+	(72, 'a well-being'),
+	(73, 'well-being b'),
+	(74, 'a b')";s:14:"total_affected";i:5;}i:16;a:3:{s:8:"sphinxql";s:62:"SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:2:"id";s:2:"70";s:1:"f";s:14:"a well-being b";}}}i:17;a:3:{s:8:"sphinxql";s:88:"SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:2:"id";s:2:"70";s:1:"f";s:14:"a well-being b";}i:1;a:2:{s:2:"id";s:2:"71";s:1:"f";s:14:"a well being b";}}}i:18;a:2:{s:8:"sphinxql";s:15:"set profiling=1";s:14:"total_affected";i:0;}i:19;a:3:{s:8:"sphinxql";s:62:"SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:2:"id";s:2:"70";s:1:"f";s:14:"a well-being b";}}}i:20;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:108:"AND(
+  AND(KEYWORD(a, querypos=1)), 
+  AND(KEYWORD(well-being, querypos=2)), 
+  AND(KEYWORD(b, querypos=4)))";}}}i:21;a:3:{s:8:"sphinxql";s:88:"SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:2:"id";s:2:"70";s:1:"f";s:14:"a well-being b";}i:1;a:2:{s:2:"id";s:2:"71";s:1:"f";s:14:"a well being b";}}}i:22;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:234:"AND(
+  AND(KEYWORD(a, querypos=1)), 
+  OR(
+    AND(KEYWORD(well-being, querypos=2)), 
+    AND(KEYWORD(wellbeing, querypos=2)), 
+    AND(KEYWORD(well, querypos=2)), 
+    AND(KEYWORD(being, querypos=3))), 
+  AND(KEYWORD(b, querypos=4)))";}}}i:23;a:3:{s:8:"sphinxql";s:83:"SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='1'";s:10:"total_rows";i:8;s:4:"rows";a:8:{i:0;a:2:{s:2:"id";s:1:"1";s:1:"f";s:10:"well being";}i:1;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}i:2;a:2:{s:2:"id";s:1:"3";s:1:"f";s:9:"wellbeing";}i:3;a:2:{s:2:"id";s:2:"10";s:1:"f";s:10:"well-being";}i:4;a:2:{s:2:"id";s:2:"11";s:1:"f";s:15:"well-being test";}i:5;a:2:{s:2:"id";s:2:"12";s:1:"f";s:15:"test well-being";}i:6;a:2:{s:2:"id";s:2:"13";s:1:"f";s:9:"wellbeing";}i:7;a:2:{s:2:"id";s:2:"14";s:1:"f";s:10:"well being";}}}i:24;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:154:"OR(
+  AND(KEYWORD(well-being, querypos=1)), 
+  AND(KEYWORD(wellbeing, querypos=1)), 
+  AND(KEYWORD(well, querypos=1)), 
+  AND(KEYWORD(being, querypos=2)))";}}}i:25;a:3:{s:8:"sphinxql";s:91:"SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none'";s:10:"total_rows";i:6;s:4:"rows";a:6:{i:0;a:2:{s:2:"id";s:1:"1";s:1:"f";s:10:"well being";}i:1;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}i:2;a:2:{s:2:"id";s:2:"10";s:1:"f";s:10:"well-being";}i:3;a:2:{s:2:"id";s:2:"11";s:1:"f";s:15:"well-being test";}i:4;a:2:{s:2:"id";s:2:"12";s:1:"f";s:15:"test well-being";}i:5;a:2:{s:2:"id";s:2:"14";s:1:"f";s:10:"well being";}}}i:26;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:114:"OR(
+  AND(KEYWORD(well-being, querypos=1)), 
+  AND(KEYWORD(well, querypos=1)), 
+  AND(KEYWORD(being, querypos=2)))";}}}i:27;a:3:{s:8:"sphinxql";s:95:"SELECT * FROM dist1 WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none'";s:10:"total_rows";i:6;s:4:"rows";a:6:{i:0;a:2:{s:2:"id";s:1:"1";s:1:"f";s:10:"well being";}i:1;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}i:2;a:2:{s:2:"id";s:2:"10";s:1:"f";s:10:"well-being";}i:3;a:2:{s:2:"id";s:2:"11";s:1:"f";s:15:"well-being test";}i:4;a:2:{s:2:"id";s:2:"12";s:1:"f";s:15:"test well-being";}i:5;a:2:{s:2:"id";s:2:"14";s:1:"f";s:10:"well being";}}}i:28;a:3:{s:8:"sphinxql";s:83:"SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='0'";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:2:{s:2:"id";s:1:"2";s:1:"f";s:10:"well-being";}i:1;a:2:{s:2:"id";s:2:"10";s:1:"f";s:10:"well-being";}i:2;a:2:{s:2:"id";s:2:"11";s:1:"f";s:15:"well-being test";}i:3;a:2:{s:2:"id";s:2:"12";s:1:"f";s:15:"test well-being";}}}i:29;a:3:{s:8:"sphinxql";s:9:"show plan";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:36:"AND(KEYWORD(well-being, querypos=1))";}}}}}

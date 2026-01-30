@@ -190,17 +190,15 @@ mysql -h0 -P9306 -e "CREATE TABLE test_auto_dims (
 ––– comment –––
 Verify dimensions are auto-detected as 384 for all-MiniLM-L6-v2 model
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE test_auto_dims"
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_auto_dims"
 ––– output –––
-+----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Table          | Create Table                                                                                                                                                                                             |
-+----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| test_auto_dims | CREATE TABLE test_auto_dims (
+*************************** 1. row ***************************
+       Table: test_auto_dims
+Create Table: CREATE TABLE test_auto_dims (
 id bigint,
 content_text text,
-vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2'
-) engine='columnar' |
-+----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' FROM='content_text'
+) engine='columnar'
 ––– comment –––
 Create table for REPLACE operations testing
 ––– input –––

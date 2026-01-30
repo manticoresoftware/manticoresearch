@@ -1181,6 +1181,7 @@ public:
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	bool				RewriteHeader ( CSphString & sError ) const final;
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
 	void				Dealloc () final;
@@ -1250,7 +1251,7 @@ public:
 	bool				LoadSecondaryIndex ( const CSphString & sFile );
 	bool				PreallocSecondaryIndex();
 
-	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true );
+	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true ) const;
 	bool				SaveHeader ( CSphString & sError );
 
 	CSphVector<SphAttr_t> 	BuildDocList () const final;
@@ -2798,6 +2799,14 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename(SPH_EXT_SPH), sError ) )
 		return false;
 
+	if ( !tNewSchema.GetAttrsCount() )
+	{
+		sError = "table must have at least one attribute";
+		return false;
+	}
+
+	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
+
 	// generate new .SPA, .SPB files
 	CSphWriter tSPAWriter;
 	CSphWriter tSPBWriter;
@@ -2811,9 +2820,16 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	CSphString sSPBfile = GetTmpFilename ( SPH_EXT_SPB );
 	CSphString sSPHIfile = GetTmpFilename ( SPH_EXT_SPHI );
 
+	// don't open SPA file for columnar operations
 	bool bHaveNonColumnar = tNewSchema.HasNonColumnarAttrs();
-	if ( bHaveNonColumnar && !tSPAWriter.OpenFile ( sSPAfile, sError ) )
-		return false;
+	bool bNeedToCloseSPA = false;
+	if ( !bColumnar && bHaveNonColumnar )
+	{
+		if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
+			return false;
+
+		bNeedToCloseSPA = true;
+	}
 
 	bool bHadBlobs = false;
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
@@ -2823,8 +2839,9 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		bHaveBlobs |= sphIsBlobAttr ( tNewSchema.GetAttr(i) );
 
+	// Columnar attributes don't use the blob pool, so don't open SPB file for columnar operations
 	bool bBlob = sphIsBlobAttr ( tCtx.m_eType );
-	bool bBlobsModified = bBlob && ( bAddAttr || bHaveBlobs==bHadBlobs );
+	bool bBlobsModified = bBlob && !bColumnar && ( bAddAttr || bHaveBlobs==bHadBlobs );
 	if ( bBlobsModified )
 	{
 		if ( !tSPBWriter.OpenFile ( sSPBfile, sError ) )
@@ -2833,13 +2850,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 		tSPBWriter.PutOffset(0);
 	}
 
-	if ( !tNewSchema.GetAttrsCount() )
-	{
-		sError = "table must have at least one attribute";
-		return false;
-	}
-
-	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
 	if ( bColumnar )
 		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
 	else
@@ -2874,7 +2884,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !AddRemoveFromKNN ( m_tSchema, tNewSchema, sError ) )
 		return false;
 
-	if ( bHaveNonColumnar )
+	if ( bNeedToCloseSPA )
 	{
 		if ( tSPAWriter.IsError() )
 		{
@@ -2887,7 +2897,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	bool bHadColumnar = m_tSchema.HasColumnarAttrs();
 	bool bHaveColumnar = tNewSchema.HasColumnarAttrs();
-
 	bool bHadNonColumnar = m_tSchema.HasNonColumnarAttrs();
 
 	m_tAttr.Reset();
@@ -2921,7 +2930,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( bHaveNonColumnar && !m_tAttr.Setup ( GetFilename ( SPH_EXT_SPA ), sError, true ) )
 		return false;
 
-	if ( bBlob )
+	if ( bBlob && !bColumnar )
 	{
 		m_tBlobAttrs.Reset();
 
@@ -2963,7 +2972,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 }
 
 
-void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader )
+void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader ) const
 {
 	tBuildHeader.m_iTotalDocuments = m_tStats.m_iTotalDocuments;
 	tBuildHeader.m_iTotalBytes = m_tStats.m_iTotalBytes;
@@ -8264,6 +8273,7 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_pSI			= &m_tSI;
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
+	tFlx.m_eJoinType	= tQuery.m_eJoinType;
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
@@ -13216,4 +13226,36 @@ volatile bool& sphGetbCpuStat () noexcept
 {
 	static bool bCpuStat = false;
 	return bCpuStat;
+}
+
+
+bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
+{
+	CSphString sHeader = GetFilename ( SPH_EXT_SPH );
+	if ( !sphIsReadable ( sHeader.cstr(), &sError ) )
+		return false;
+
+	CSphString sHeaderNew;
+	sHeaderNew.SetSprintf ( "%s.new", sHeader.cstr() );
+	CSphString sHeaderOld;
+	sHeaderOld.SetSprintf ( "%s.old", sHeader.cstr() );
+
+	BuildHeader_t tBuildHeader;
+	WriteHeader_t tWriteHeader;
+	PrepareHeaders ( tBuildHeader, tWriteHeader );
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderNew, sError ) )
+		return false;
+
+	StrVec_t dSrc;
+	StrVec_t dDst;
+	dSrc.Add ( sHeader );
+	dDst.Add ( sHeaderOld );
+	dSrc.Add ( sHeaderNew );
+	dDst.Add ( sHeader );
+
+	if ( !RenameWithRollback ( dSrc, dDst, sError ) )
+		return false;
+
+	::unlink ( sHeaderOld.cstr() );
+	return true;
 }

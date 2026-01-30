@@ -71,6 +71,7 @@ table test_vec {
 
 **支持的嵌入模型：**
 - **Sentence Transformers**：任何 [合适的 BERT 基 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——不需要 API 密钥。Manticore 在您创建表时会下载该模型。
+- **Qwen本地嵌入**: Qwen嵌入模型，如 `Qwen/Qwen3-Embedding-0.6B` ——无需API密钥。Manticore在创建表时会下载该模型。
 - **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002` - 需要 `API_KEY='<OPENAI_API_KEY>'` 参数
 - **Voyage**：Voyage AI 嵌入模型 - 需要 `API_KEY='<VOYAGE_API_KEY>'` 参数
 - **Jina**：Jina AI 嵌入模型 - 需要 `API_KEY='<JINA_API_KEY>'` 参数
@@ -89,6 +90,16 @@ CREATE TABLE products (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 Qwen 本地嵌入（无需API密钥）
+```sql
+CREATE TABLE products_qwen (
+    title TEXT, 
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -667,4 +678,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

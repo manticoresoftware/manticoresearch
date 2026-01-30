@@ -628,6 +628,7 @@ enum class Option_e : BYTE
 	JOIN_BATCH_SIZE,
 	FORCE,
 	FORMAT_OUTPUT_WORDS,
+	EXPAND_BLENDED,
 
 	INVALID_OPTION
 };
@@ -642,7 +643,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -676,7 +677,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
-			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE };
+			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -827,6 +828,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::STRICT_:						tQuery.m_bStrict = iValue!=0; break;
 	case Option_e::SYNC: 						tQuery.m_bSync = iValue!=0; break;
 	case Option_e::EXPAND_KEYWORDS:				tQuery.m_eExpandKeywords = ( iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED ); break;
+	case Option_e::EXPAND_BLENDED:				tQuery.m_sExpandBlended = ( sValue ); break;
 	case Option_e::THREADS:						tQuery.m_iConcurrency = (int)iValue; break;
 	case Option_e::NOT_ONLY_ALLOWED:			tQuery.m_bNotOnlyAllowed = iValue!=0; break;
 	case Option_e::RAND_SEED:					tQuery.m_iRandSeed = int64_t(DWORD(iValue)); break;
@@ -937,6 +939,11 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			tQuery.m_eExpandKeywords = QUERY_OPT_MORPH_NONE;
 		else
 			return FAILED ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
+		break;
+
+	case Option_e::EXPAND_BLENDED:
+		if ( sVal!="0" )
+			tQuery.m_sExpandBlended = sVal;
 		break;
 
 	case Option_e::STORE: //} else if ( sOpt=="store" )

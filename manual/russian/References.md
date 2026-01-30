@@ -425,7 +425,7 @@ index_converter {--config /path/to/config|--path}
 ## [Searchd](Starting_the_server/Manually.md)
 `searchd` — это сервер Manticore.
 
-##### Настройки Searchd в файле конфигурации
+##### Настройки searchd в файле конфигурации
 Для размещения в секции `searchd {}` файла конфигурации:
   * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) - Определяет способ доступа к файлу blob-атрибутов таблицы
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - Определяет способ доступа к файлу doclists таблицы
@@ -446,16 +446,16 @@ index_converter {--config /path/to/config|--path}
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное время ожидания между запросами при использовании постоянных соединений
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Локаль libc сервера
   * [collation_server](Server_settings/Searchd.md#collation_server) - Коллация сервера по умолчанию
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Путь к каталогу данных, где Manticore хранит все данные ([RT-режим](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Путь к каталогу данных, где Manticore хранит всё ([RT-режим](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
   * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Таймаут автоматического сброса RAM-чанка, если в него не было записей
   * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Таймаут предотвращения автоматического сброса RAM-чанка, если в таблице не было поисковых запросов
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Максимальный размер блоков документов из хранилища документов, хранящихся в памяти
-  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество расширенных ключевых слов для одного символа подстановки
+  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Максимальное количество развернутых ключевых слов для одного символа подстановки
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Включает использование часового пояса UTC для группировки временных полей
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Размер окна статистики зеркал агентов
   * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Интервал между пингами зеркал агентов
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Стратегия обновления имен хостов
-  * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Определяет максимальное количество "задач", разрешенных в очереди одновременно
+  * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Определяет максимальное количество "заданий", разрешенных в очереди одновременно
   * [join_batch_size](Searching/Joining.md#Join-batching) - Определяет размер пакета для объединения таблиц для баланса производительности и использования памяти
   * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кэша для повторного использования результатов запросов JOIN
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
@@ -463,8 +463,9 @@ index_converter {--config /path/to/config|--path}
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей
   * [log](Server_settings/Searchd.md#log) - Путь к файлу журнала сервера Manticore
-  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Ограничивает количество запросов в пакете
+  * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Ограничивает количество запросов на пакет
   * [max_connections](Server_settings/Searchd.md#max_connections) - Максимальное количество активных соединений
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - Сколько RT-дисковых чанков объединяется за одно задание OPTIMIZE
   * [max_filters](Server_settings/Searchd.md#max_filters) - Максимально допустимое количество фильтров на запрос
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Максимально допустимое количество значений на фильтр
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Максимальное количество файлов, разрешенных для открытия сервером
@@ -474,13 +475,14 @@ index_converter {--config /path/to/config|--path}
   * [net_throttle_action](Server_settings/Searchd.md#net_throttle_action)  - Определяет, сколько запросов обрабатывается на каждой итерации сетевого цикла
   * [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) - Управляет интервалом активного цикла сетевого потока
   * [net_workers](Server_settings/Searchd.md#net_workers) - Количество сетевых потоков
-  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Сетевой таймаут для запросов клиентов
+  * [network_timeout](Server_settings/Searchd.md#network_timeout) - Сетевой таймаут для клиентских запросов
   * [node_address](Server_settings/Searchd.md#node_address) - Определяет сетевой адрес узла
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное количество одновременных постоянных соединений с удаленными постоянными агентами
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - Сколько слияний RT-дисковых чанков может выполняться параллельно во время OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к pid-файлу сервера Manticore
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Затраты для модели прогнозирования времени выполнения запроса
+  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Затраты для модели предсказания времени выполнения запроса
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Определяет, следует ли принудительно предварительно открывать все таблицы при запуске
-  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардинг для поисковых запросов к обычным и реального времени таблицам
+  * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардирование для поисковых запросов к обычным и реального времени таблицам
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем оперативной памяти, выделенный для кэшированных наборов результатов
   * [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec) - Минимальный порог реального времени для кэширования результата запроса
   * [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec) - Срок действия кэшированного набора результатов
@@ -492,8 +494,8 @@ index_converter {--config /path/to/config|--path}
   * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#read_buffer_docs) - Размер буфера чтения на ключевое слово для списков попаданий
   * [read_unhinted](Server_settings/Searchd.md#read_unhinted) - Размер чтения без подсказок
   * [rt_flush_period](Server_settings/Searchd.md#rt_flush_period) - Как часто Manticore сбрасывает RAM-чанки таблиц реального времени на диск
-  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Максимальное количество операций ввода-вывода (в секунду), разрешенное для потока слияния чанков реального времени
-  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Максимальный размер операции ввода-вывода, разрешенный для потока слияния чанков реального времени
+  * [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) - Максимальное количество операций ввода-вывода (в секунду), которое разрешено выполнять потоку слияния чанков реального времени
+  * [rt_merge_maxiosize](Server_settings/Searchd.md#rt_merge_maxiosize) - Максимальный размер операции ввода-вывода, которую разрешено выполнять потоку слияния чанков реального времени
   * [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) - Предотвращает простои searchd при ротации таблиц с огромными объемами данных для предварительного кэширования
   * [secondary_indexes](Server_settings/Searchd.md#secondary_indexes) - Включает использование вторичных индексов для поисковых запросов
   * [server_id](Server_settings/Searchd.md#server_id) - Идентификатор сервера, используемый как начальное значение для генерации уникального идентификатора документа
@@ -509,9 +511,9 @@ index_converter {--config /path/to/config|--path}
   * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Максимальный размер кэша документов общего поддерева
   * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Максимальный размер кэша попаданий общего поддерева, на запрос
   * [timezone](Server_settings/Searchd.md#timezone) - Часовой пояс, используемый функциями, связанными с датой/временем
-  * [thread_stack](Server_settings/Searchd.md#thread_stack) - Максимальный размер стека для задачи
+  * [thread_stack](Server_settings/Searchd.md#thread_stack) - Максимальный размер стека для задания
   * [unlink_old](Server_settings/Searchd.md#unlink_old) - Удалять ли копии таблиц .old при успешной ротации
-  * [watchdog](Server_settings/Searchd.md#watchdog) - Включить или отключить сторожевой таймер сервера Manticore
+  * [watchdog](Server_settings/Searchd.md#watchdog) - Включить или отключить watchdog сервера Manticore
 
 ##### Параметры запуска searchd
 ```bash

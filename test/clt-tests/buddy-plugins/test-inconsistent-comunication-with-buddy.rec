@@ -57,6 +57,8 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -90,6 +92,8 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -123,6 +127,8 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -156,6 +162,8 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},

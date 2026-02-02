@@ -31,7 +31,7 @@ find Testing/Temporary/MemoryChecker.*.log -size 0 -delete
 # Analysis of memory leak reports
 echo "Analyzing memory leak reports..."
 LEAK_FOUND=0
-LEAK_PATTERNS=(definitely invalid uninitialized)
+LEAK_PATTERNS=("definitely " "invalid " "uninitialised ")
 
 # Function to check for memory leaks in a file
 check_leaks() {

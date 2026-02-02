@@ -1,0 +1,163 @@
+––– comment –––
+This test verifies intent classification and conversation flow in the ConversationalRag plugin.
+Tests various user intents: NEW_SEARCH, TOPIC_CHANGE, INTEREST, REJECTION, QUESTION, ALTERNATIVES.
+Based on issue #3978 - conversational RAG with intent classification.
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Setup: Create test table with documents about AI, programming, and entertainment
+––– input –––
+mysql -h0 -P9306 << EOF
+CREATE TABLE docs (
+    id BIGINT,
+    content TEXT,
+    title TEXT,
+    category TEXT,
+    embedding_vector FLOAT_VECTOR
+    knn_type='hnsw'
+    hnsw_similarity='cosine'
+    model_name='sentence-transformers/all-MiniLM-L6-v2'
+    from='content'
+    api_key='\${OPENAI_API_KEY}'
+) TYPE='rt';
+EOF
+––– output –––
+––– comment –––
+Insert test documents
+––– input –––
+mysql -h0 -P9306 << EOF
+INSERT INTO docs (id, content, title, category) VALUES
+(1, 'Retrieval-Augmented Generation combines search with LLM for intelligent responses', 'RAG Introduction', 'AI'),
+(2, 'Vector search uses embeddings to find semantically similar documents', 'Vector Search', 'AI'),
+(3, 'Breaking Bad is a crime drama about a chemistry teacher who becomes a drug dealer', 'Breaking Bad', 'Entertainment'),
+(4, 'The Sopranos is a critically acclaimed crime drama series', 'The Sopranos', 'Entertainment'),
+(5, 'Python is a high-level programming language known for simplicity', 'Python Programming', 'Programming'),
+(6, 'JavaScript is widely used for web development', 'JavaScript Basics', 'Programming');
+EOF
+––– output –––
+––– comment –––
+Wait for auto-embeddings generation (async via Buddy)
+––– input –––
+mysql -h0 -P9306 -e "debug sleep 20;" > /dev/null 2>&1
+––– output –––
+––– comment –––
+Create RAG model
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (llm_provider='openai', llm_model='gpt-4o-mini');"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– comment –––
+Test 1: Initial question about RAG (NEW_SEARCH intent)
+Expected: Search for RAG-related documents, response contains RAG keywords
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration|[Aa]ugmented).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify sources contain AI category documents
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -c '"category":"AI"'
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test 2: User expresses rejection (REJECTION intent - "Its boring")
+Expected: Topic change, should not return AI category documents
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify sources do not contain AI category after rejection
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -c '"category":"AI"'
+––– output –––
+0
+––– comment –––
+Test 3: Topic change to movies (TOPIC_CHANGE intent)
+Expected: Search for Entertainment category
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify sources contain Entertainment category (not AI)
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -c '"category":"Entertainment"'
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test 4: User shows interest in specific show (INTEREST intent)
+Expected: Should find Breaking Bad in sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I like Breaking Bad', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.+/!#
+          sources: #!/.*Breaking Bad.*/!#
+––– comment –––
+Test 5: Follow-up question (QUESTION intent)
+Expected: Response about cast, reuses previous context
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is the cast?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test 6: Emotional response (conversational - "omg")
+Expected: Responds without new search, uses previous context
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('omg thats amazing', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test 7: Request for more content (ALTERNATIVES intent)
+Expected: Returns more results
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('show me more entertainment', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test 8: New independent conversation - Programming topic
+Expected: Fresh context, should find Python
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'content', 'test-conv-intent-002')\G;"
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-002
+         response: #!/.*[Pp]ython.*/!#
+          sources: #!/.*Python.*/!#
+––– comment –––
+Verify sources contain Programming category (new conversation context)
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'content', 'test-conv-intent-002')\G;" | grep -c '"category":"Programming"'
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Cleanup
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL test_assistant;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
+––– output –––

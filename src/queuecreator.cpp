@@ -506,10 +506,6 @@ static bool IsMvaGroupBy ( const ISphSchema & tSchema, const CSphColumnInfo & tA
 	if ( IsMvaAttr ( tAttr.m_eAttrType ) )
 		return true;
 
-	int iOrigAttr = tSchema.GetAttrIndexOriginal ( sGroupBy.cstr() );
-	if ( iOrigAttr>=0 && IsMvaAttr ( tSchema.GetAttr(iOrigAttr).m_eAttrType ) )
-		return true;
-
 	if ( tAttr.IsColumnarExpr() )
 	{
 		CSphString sCol = GetAliasedColumnarAttrName ( tAttr );

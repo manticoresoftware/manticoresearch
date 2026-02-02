@@ -40,7 +40,7 @@ check_leaks() {
     
     for pattern in "${LEAK_PATTERNS[@]}"; do
         if grep -i "$pattern" "$file" > /dev/null; then
-            echo "$pattern DETECTED in test_$test_num"
+            echo "ERROR: $pattern DETECTED in test_$test_num"
             cat "$file"
             LEAK_FOUND=1
         fi

@@ -10362,9 +10362,11 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		const auto & tStatsB = pB->Cidx().GetStats();
 		int64_t iAliveA = tStatsA.m_iTotalDocuments - tStatusA.m_iDead;
 		int64_t iAliveB = tStatsB.m_iTotalDocuments - tStatusB.m_iDead;
-		sphInfo ( "rt merge: table %s: pre-merge chunk %d total=%d dead=%d alive=%d; chunk %d total=%d dead=%d alive=%d",
+		int iDupA = pA->Cidx().CountDocidDuplicates();
+		int iDupB = pB->Cidx().CountDocidDuplicates();
+		sphInfo ( "rt merge: table %s: pre-merge chunk %d total=%d dead=%d alive=%d dupes=%d; chunk %d total=%d dead=%d alive=%d dupes=%d",
 			GetName(), iAID, (int)tStatsA.m_iTotalDocuments, (int)tStatusA.m_iDead, (int)iAliveA,
-			iBID, (int)tStatsB.m_iTotalDocuments, (int)tStatusB.m_iDead, (int)iAliveB );
+			iDupA, iBID, (int)tStatsB.m_iTotalDocuments, (int)tStatusB.m_iDead, (int)iAliveB, iDupB );
 	}
 
 	// merge data to disk ( data is constant during that phase )
@@ -10392,8 +10394,9 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		tMerged.GetStatus ( &tStatusM );
 		const auto & tStatsM = tMerged.GetStats();
 		int64_t iAliveM = tStatsM.m_iTotalDocuments - tStatusM.m_iDead;
-		sphInfo ( "rt merge: table %s: merged chunk pre-kill total=%d dead=%d alive=%d",
-			GetName(), (int)tStatsM.m_iTotalDocuments, (int)tStatusM.m_iDead, (int)iAliveM );
+		int iDupM = tMerged.CountDocidDuplicates();
+		sphInfo ( "rt merge: table %s: merged chunk pre-kill total=%d dead=%d alive=%d dupes=%d",
+			GetName(), (int)tStatsM.m_iTotalDocuments, (int)tStatusM.m_iDead, (int)iAliveM, iDupM );
 	}
 
 	// going to modify list of chunks; so fall into serial fiber
@@ -10420,8 +10423,9 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		tMerged.GetStatus ( &tStatusM );
 		const auto & tStatsM = tMerged.GetStats();
 		int64_t iAliveM = tStatsM.m_iTotalDocuments - tStatusM.m_iDead;
-		sphInfo ( "rt merge: table %s: merged chunk post-kill total=%d dead=%d alive=%d killed=%d",
-			GetName(), (int)tStatsM.m_iTotalDocuments, (int)tStatusM.m_iDead, (int)iAliveM, iKilled );
+		int iDupM = tMerged.CountDocidDuplicates();
+		sphInfo ( "rt merge: table %s: merged chunk post-kill total=%d dead=%d alive=%d killed=%d dupes=%d",
+			GetName(), (int)tStatsM.m_iTotalDocuments, (int)tStatusM.m_iDead, (int)iAliveM, iKilled, iDupM );
 	}
 
 	// and also apply collected updates

@@ -5,7 +5,7 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
 
@@ -20,7 +20,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `bool` - булев атрибут
 * `multi` - многозначный целочисленный атрибут
 * `multi64` - многозначный атрибут bigint
-* `json` - атрибут json
+* `json` - атрибут json; используйте `secondary_index='1'` для создания вторичного индекса по JSON
 * `string` / `text attribute` / `string attribute` - строковый атрибут
 * `text` / `text indexed stored` / `string indexed stored` - полнотекстовое индексируемое поле с исходным значением, хранящимся в docstore
 * `text indexed` / `string indexed` - полнотекстовое индексируемое поле, только индексируемое (исходное значение не хранится в docstore)

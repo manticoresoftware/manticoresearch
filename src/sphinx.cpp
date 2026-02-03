@@ -3136,6 +3136,9 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	if ( !HasKillHook() )
 		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
 	else
+	{
+		sphInfo ( "rt kills: index %s chunk %d: killmulti with hook, killlist=%d",
+			GetName(), m_iChunk, dKlist.GetLength() );
 		iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this] ( RowID_t tRow, DocID_t tDoc )
 		{
 			if ( !m_tDeadRowMap.Set ( tRow ) )
@@ -3143,6 +3146,9 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 			KillHook ( tDoc );
 			return true;
 		} );
+		sphInfo ( "rt kills: index %s chunk %d: killmulti with hook done, killed=%d",
+			GetName(), m_iChunk, iTotalKilled );
+	}
 
 	if ( iTotalKilled )
 		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
@@ -6734,6 +6740,37 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::CreateRowMapsAndCountTotalDocs" );
+	auto fnCountDocidDupes = [] ( const CSphIndex_VLN* pIndex ) -> int
+	{
+		if ( !pIndex || !pIndex->m_iDocinfo )
+			return 0;
+
+		CSphVector<DocID_t> dDocids;
+		dDocids.Resize ( pIndex->m_iDocinfo );
+		const DWORD * pRow = pIndex->m_tAttr.GetReadPtr();
+		const int iStride = pIndex->m_tSchema.GetRowSize();
+		for ( int i = 0; i < (int)pIndex->m_iDocinfo; ++i, pRow += iStride )
+			dDocids[i] = sphGetDocID ( pRow );
+
+		dDocids.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) );
+		int iDupes = 0;
+		for ( int i = 1; i < dDocids.GetLength(); ++i )
+			if ( dDocids[i] == dDocids[i-1] )
+				++iDupes;
+		return iDupes;
+	};
+	{
+		int iDupDst = fnCountDocidDupes ( pDstIndex );
+		sphInfo ( "rt merge: index %s chunk %d pre-merge duplicates=%d (docs=%d)",
+			pDstIndex->GetName(), pDstIndex->m_iChunk, iDupDst, (int)pDstIndex->m_iDocinfo );
+		if ( pSrcIndex && pSrcIndex!=pDstIndex )
+		{
+			int iDupSrc = fnCountDocidDupes ( pSrcIndex );
+			sphInfo ( "rt merge: index %s chunk %d pre-merge duplicates=%d (docs=%d)",
+				pSrcIndex->GetName(), pSrcIndex->m_iChunk, iDupSrc, (int)pSrcIndex->m_iDocinfo );
+		}
+	}
+
 	if ( pSrcIndex!=pDstIndex )
 		dSrcRowMap.Reset ( pSrcIndex->m_iDocinfo );
 	dDstRowMap.Reset ( pDstIndex->m_iDocinfo );
@@ -6935,6 +6972,32 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
 
 	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
+
+	{
+		// post-merge duplicate check
+		auto fnCountDocidDupes = [] ( const CSphIndex_VLN* pIndex ) -> int
+		{
+			if ( !pIndex || !pIndex->m_iDocinfo )
+				return 0;
+
+			CSphVector<DocID_t> dDocids;
+			dDocids.Resize ( pIndex->m_iDocinfo );
+			const DWORD * pRow = pIndex->m_tAttr.GetReadPtr();
+			const int iStride = pIndex->m_tSchema.GetRowSize();
+			for ( int i = 0; i < (int)pIndex->m_iDocinfo; ++i, pRow += iStride )
+				dDocids[i] = sphGetDocID ( pRow );
+
+			dDocids.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) );
+			int iDupes = 0;
+			for ( int i = 1; i < dDocids.GetLength(); ++i )
+				if ( dDocids[i] == dDocids[i-1] )
+					++iDupes;
+			return iDupes;
+		};
+		int iDupMerged = fnCountDocidDupes ( pDstIndex );
+		sphInfo ( "rt merge: index %s chunk %d post-merge duplicates=%d (docs=%d)",
+			pDstIndex->GetName(), pDstIndex->m_iChunk, iDupMerged, (int)pDstIndex->m_iDocinfo );
+	}
 
 	// we're done; clean all deferred deletes
 	tDict.SetPersistent();

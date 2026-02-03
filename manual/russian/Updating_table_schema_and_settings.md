@@ -20,7 +20,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `bool` - булев атрибут
 * `multi` - многозначный целочисленный атрибут
 * `multi64` - многозначный атрибут bigint
-* `json` - атрибут json; используйте `secondary_index='1'` для создания вторичного индекса по JSON (см. примечание ниже)
+* `json` - атрибут json; используйте `secondary_index='1'` для создания вторичного индекса по JSON
 * `string` / `text attribute` / `string attribute` - строковый атрибут
 * `text` / `text indexed stored` / `string indexed stored` - полнотекстовое индексируемое поле с исходным значением, хранящимся в docstore
 * `text indexed` / `string indexed` - полнотекстовое индексируемое поле, только индексируемое (исходное значение не хранится в docstore)

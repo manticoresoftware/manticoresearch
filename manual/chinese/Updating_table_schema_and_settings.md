@@ -20,7 +20,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `bool` - 布尔属性
 * `multi` - 多值整数属性
 * `multi64` - 多值bigint属性
-* `json` - JSON 属性；使用 `secondary_index='1'` 在 JSON 上创建二级索引（见下文说明）
+* `json` - JSON 属性；使用 `secondary_index='1'` 为 JSON 创建二级索引
 * `string` / `text attribute` / `string attribute` - 字符串属性
 * `text` / `text indexed stored` / `string indexed stored` - 全文索引字段，原始值存储在docstore中
 * `text indexed` / `string indexed` - 全文索引字段，仅索引（原始值不存储在docstore中）

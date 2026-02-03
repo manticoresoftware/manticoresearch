@@ -406,6 +406,8 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	if constexpr ( bDump ) Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
 	if constexpr ( bDump ) Dump ( pRoot, "FixupDestForms" );
+	FixupBlend ( pRoot );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupBlend" );
 	DeleteNodesWOFields ( pRoot );
 	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
@@ -775,4 +777,180 @@ void XQParseHelper_c::DeleteSpawned ( XQNode_t * pNode ) noexcept
 	});
 	pNode->ResetChildren();
 	SafeDelete ( pNode );
+}
+
+struct BlendedKw_t
+{
+	XQKeyword_t m_tWord;
+	XQNode_t * m_pParent = nullptr;
+	int m_iOrder = 0;
+	uint64_t m_uName = 0; // name hash or duplicate flag if 0
+
+	BlendedKw_t() = default;
+
+	BlendedKw_t ( XQKeyword_t && tWord, XQNode_t * pParent, int iOrder )
+		: m_tWord ( std::move ( tWord ) )
+		, m_pParent ( pParent )
+		, m_iOrder ( iOrder )
+	{
+		m_uName = sphFNV64 ( m_tWord.m_sWord.cstr() );
+	}
+};
+
+using BlendedVec_t = CSphVector<BlendedKw_t>;
+using FieldStartEnd_t = std::pair<bool, bool>;
+
+static void FlushOrGroup ( XQNode_t * pOr, XQNode_t * pParent, CSphVector<XQNode_t *> & dKeywordNodes, const FieldStartEnd_t & tFieldStartEnd )
+{
+	if ( !pOr || dKeywordNodes.IsEmpty() )
+		return;
+
+	assert ( pParent );
+	
+	// field modifiers to first keyword nodes
+	dKeywordNodes[0]->dWord(0).m_bFieldStart = tFieldStartEnd.first;
+	dKeywordNodes[0]->dWord(0).m_bFieldEnd = tFieldStartEnd.second;
+	
+	// OR node children and add to parent
+	pOr->SetOp ( SPH_QUERY_OR, dKeywordNodes );
+	pParent->AddNewChild ( pOr );
+	dKeywordNodes.Resize ( 0 );
+}
+
+static void CollectBlended ( XQNode_t * pNode, BlendedVec_t & dBlended )
+{
+	if ( !pNode )
+		return;
+
+	pNode->WithChildren ( [&dBlended] ( auto & dChildren )
+	{
+		for ( auto & pChild : dChildren )
+			CollectBlended ( pChild, dBlended );
+	});
+
+	if ( !pNode->dWords().IsEmpty() )
+	{
+		pNode->WithWords ( [&dBlended, pNode] ( auto & dWords )
+		{
+			if ( !dWords.any_of ( []( const auto & tWord ){ return tWord.m_iBlendedGroup>=0; } ) )
+				return;
+
+			int iOut = 0;
+			ARRAY_FOREACH ( i, dWords )
+			{
+				auto & tWord = dWords[i];
+				if ( tWord.m_iBlendedGroup>=0 )
+				{
+					dBlended.Add ( BlendedKw_t ( std::move ( tWord ), pNode, dBlended.GetLength() ) );
+				} else
+				{
+					if ( iOut!=i )
+						dWords[iOut] = std::move ( dWords[i] );
+					iOut++;
+				}
+			}
+			dWords.Resize ( iOut );
+		});
+	}
+}
+
+void XQParseHelper_c::FixupBlend ( XQNode_t * pNode )
+{
+	if ( !m_bExpandBlended )
+		return;
+
+	if ( !pNode )
+		return;
+
+	CSphVector<BlendedKw_t> dBlended;
+	CollectBlended ( pNode, dBlended );
+	
+	if ( dBlended.IsEmpty() )
+		return;
+
+	// sort by gen asc then name dups then order asc
+	dBlended.Sort ( Lesser ( [] ( const BlendedKw_t & tA, const BlendedKw_t & tB )
+	{
+		int iGenA = tA.m_tWord.m_iBlendedGroup;
+		int iGenB = tB.m_tWord.m_iBlendedGroup;
+		if ( iGenA!=iGenB )
+			return ( iGenA<iGenB );
+		if ( tA.m_uName!=tB.m_uName )
+			return ( tA.m_uName<tB.m_uName );
+
+		return ( tA.m_iOrder<tB.m_iOrder );
+	}));
+
+	// mark duplicates
+	for ( int i=1; i<dBlended.GetLength(); i++ )
+	{
+		const auto & tPrev = dBlended[i-1];
+		auto & tCur = dBlended[i];
+		if ( tPrev.m_tWord.m_iBlendedGroup==tCur.m_tWord.m_iBlendedGroup && tPrev.m_uName==tCur.m_uName )
+			tCur.m_uName = 0;
+	}
+
+	// sort by gen asc then order asc
+	dBlended.Sort ( Lesser ( [] ( const BlendedKw_t & tA, const BlendedKw_t & tB )
+	{
+		int iGenA = tA.m_tWord.m_iBlendedGroup;
+		int iGenB = tB.m_tWord.m_iBlendedGroup;
+		if ( iGenA!=iGenB )
+			return ( iGenA<iGenB );
+
+		return ( tA.m_iOrder<tB.m_iOrder );
+	}));
+
+	// OR nodes for each gen group
+	XQNode_t * pOr = nullptr;
+	XQNode_t * pParent = nullptr;
+	CSphVector<XQNode_t *> dKeywordNodes; // keyword nodes for current OR group
+	FieldStartEnd_t tFieldStartEnd { false, false }; // track field modifiers: first = field start, second = field end
+	int iCurrentGen = -1;
+	
+	for ( const auto & tBlended : dBlended )
+	{
+		// skip duplicates with 0 in name hash
+		if ( !tBlended.m_uName )
+			continue;
+
+		// new group
+		if ( iCurrentGen!=tBlended.m_tWord.m_iBlendedGroup )
+		{
+			// flush previous group
+			FlushOrGroup ( pOr, pParent, dKeywordNodes, tFieldStartEnd );
+			pOr = nullptr;
+			pParent = nullptr;
+			tFieldStartEnd = { false, false };
+
+			// atart new group
+			pParent = tBlended.m_pParent;
+			const XQLimitSpec_t & tSpec = pParent->m_dSpec;
+			iCurrentGen = tBlended.m_tWord.m_iBlendedGroup;
+
+			// OR node for this blended group
+			pOr = SpawnNode ( tSpec );
+			pOr->SetOp ( SPH_QUERY_OR );
+			
+			// field start from first word in new group
+			tFieldStartEnd.first = tBlended.m_tWord.m_bFieldStart;
+		}
+
+		// create KEYWORD node for this word
+		assert ( pOr && pParent );
+		const XQLimitSpec_t & tSpec = pParent->m_dSpec;
+		
+		// update field end from current word
+		tFieldStartEnd.second = tBlended.m_tWord.m_bFieldEnd;
+		
+		// keyword node with the word (field modifiers will be applied later)
+		XQKeyword_t tWordCopy = tBlended.m_tWord;
+		
+		XQNode_t * pKeywordNode = SpawnNode ( tSpec );
+		pKeywordNode->AddDirtyWord ( std::move ( tWordCopy ) );
+		dKeywordNodes.Add ( pKeywordNode );
+	}
+
+	// flush last group
+	FlushOrGroup ( pOr, pParent, dKeywordNodes, tFieldStartEnd );
 }

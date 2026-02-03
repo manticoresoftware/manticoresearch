@@ -198,12 +198,19 @@ void CSphTokenizerBase::SetBufferPtr ( const char* sNewPtr )
 	m_pAccum = m_sAccum;
 	m_pTokenStart = m_pTokenEnd = nullptr;
 	m_pBlendStart = m_pBlendEnd = nullptr;
+	m_bBlended = false;
+	m_bBlendedPart = false;
+	m_bBlendAdd = false;
+	m_uBlendVariantsPending = 0;
+	m_bBlendedHead = false;
 }
 
 /// adjusts blending magic when we're about to return a token (any token)
 /// returns false if current token should be skipped, true otherwise
 bool CSphTokenizerBase::BlendAdjust ( const BYTE* pCur )
 {
+	m_bBlendedHead = false;
+
 	// check if all we got is a bunch of blended characters (pure-blended case)
 	if ( m_bBlended && !m_bNonBlended )
 	{
@@ -230,6 +237,7 @@ bool CSphTokenizerBase::BlendAdjust ( const BYTE* pCur )
 		m_pBlendEnd = pCur;
 		m_pBlendStart = nullptr;
 		m_bBlendedPart = true;
+		m_bBlendedHead = true;
 	} else if ( pCur >= m_pBlendEnd )
 	{
 		// tricky bit, as at this point, token we're about to return

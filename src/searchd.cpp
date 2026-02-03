@@ -9095,13 +9095,13 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 		return;
 	}
 
-	bool bFatal = false;
 	bool bAttached = false;
 	CSphString sError;
 	WIdx_T<RtIndex_i *> pTo { pServedTo };
 
 	if ( pServedFrom->m_eType==IndexType_e::PLAIN )
 	{
+		bool bFatal = false;
 		WIdx_c pPlainFrom { pServedFrom };
 		bAttached = pTo->AttachDiskIndex ( pPlainFrom, bTruncate, bFatal, sError );
 
@@ -9114,9 +9114,13 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 	} else
 	{
 		WIdx_T<RtIndex_i*> pFrom { pServedFrom };
-		bAttached = pTo->AttachRtIndex ( pFrom, bTruncate, bFatal, sError );
+		AttachArgs_t tArgs { pFrom };
+		tArgs.m_bTruncate = bTruncate;
+		tArgs.m_bConfigless = IsConfigless();
 
-		if ( bFatal )
+		bAttached = pTo->AttachRtIndex ( tArgs, sError );
+
+		if ( tArgs.m_bFatal )
 			g_pLocalIndexes->Delete ( sFrom );
 	}
 
@@ -10658,25 +10662,6 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 		tOut.Error ( sError.cstr() );
 }
 
-// remove all old files these are not in the list of current index files
-static void RemoveOutdatedFiles ( RtIndex_i * pRtIndex, StrVec_t & dOldFiles )
-{
-	StrVec_t dNewFiles;
-	pRtIndex->GetIndexFiles ( dNewFiles, dNewFiles );
-
-	dOldFiles.Uniq();
-	sph::StringSet hNewFiles ( dNewFiles );
-
-	for ( const CSphString & tOldName : dOldFiles )
-	{
-		if ( hNewFiles[tOldName] )
-			continue;
-
-		if ( sphIsReadable ( tOldName ) )
-			::unlink ( tOldName.cstr() );
-	}
-}
-
 // STMT_ALTER_INDEX_SETTINGS: ALTER TABLE index [ident = 'string']*
 static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
@@ -10799,8 +10784,11 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 
 	if ( sError.IsEmpty() )
 	{
+		StrVec_t dNewFiles;
+		pRtIndex->GetIndexFiles ( dNewFiles, dNewFiles );
+
 		// all ok, delete old files
-		RemoveOutdatedFiles ( pRtIndex, dOldFiles );
+		RemoveOutdatedFiles ( dNewFiles, dOldFiles );
 		pContainer->ResetCleanup();
 
 		tOut.Ok ( 0, dWarnings.GetLength() );

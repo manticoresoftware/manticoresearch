@@ -11,6 +11,7 @@
 /*.sdf
 /*.opensdf
 /.hg
+**/*.bak
 
 # cmake local presets
 /CMakeUserPresets.json

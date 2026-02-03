@@ -98,7 +98,10 @@ protected:
 		{
 			BYTE* pVar = GetBlendedVariant();
 			if ( pVar )
+			{
+				m_bBlendedHead = false;
 				return pVar;
+			}
 			m_bBlendedPart = ( m_pBlendEnd != nullptr );
 		}
 

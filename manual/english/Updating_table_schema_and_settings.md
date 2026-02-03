@@ -20,7 +20,7 @@ This feature only supports adding one field at a time for RT tables or the expan
 * `bool` - boolean attribute
 * `multi` - multi-valued integer attribute
 * `multi64` - multi-valued bigint attribute
-* `json` - json attribute; use `secondary_index='1'` to create a secondary index on the JSON (see note below)
+* `json` - json attribute; use `secondary_index='1'` to create a secondary index on the JSON
 * `string` / `text attribute` / `string attribute` - string attribute
 * `text` / `text indexed stored` / `string indexed stored` - full-text indexed field with original value stored in docstore
 * `text indexed` / `string indexed` - full-text indexed field, indexed only (the original value is not stored in docstore)

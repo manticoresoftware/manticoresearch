@@ -3173,18 +3173,30 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
+	sphInfo ( "rt kills: table %s: apply killlist size=%d to %d disk chunks and %d ram segments",
+		GetName(), dAccKlist.GetLength(), pChunks ? pChunks->GetLength() : 0, m_tRtChunks.GetRamSegmentsCount() );
 
 	if ( !Threads::IsInsideCoroutine() || m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
+	{
+		int iChunkIdx = 0;
 		for ( auto& pChunk : *pChunks )
-			iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
+		{
+			int iChunkKilled = pChunk->CastIdx().KillMulti ( dAccKlist );
+			iKilled += iChunkKilled;
+			sphInfo ( "rt kills: table %s: chunk %d (id=%d) killed=%d",
+				GetName(), iChunkIdx++, pChunk->Cidx().m_iChunk, iChunkKilled );
+		}
+	}
 	else
 	{
 		// if saving is disabled, and we NEED to actually mark a doc in disk chunk as deleted,
 		// we'll pause that action, waiting until index is unlocked.
 		bool bNeedWait = true;
 		bool bEnabled = false;
+		int iChunkIdx = 0;
 		for ( auto& pChunk : *pChunks )
-			iKilled += pChunk->CastIdx().CheckThenKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
+		{
+			int iChunkKilled = pChunk->CastIdx().CheckThenKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
 			{
 				if ( bNeedWait )
 				{
@@ -3193,12 +3205,22 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 				}
 				return bEnabled;
 			});
+			iKilled += iChunkKilled;
+			sphInfo ( "rt kills: table %s: chunk %d (id=%d) killed=%d (save-disabled path)",
+				GetName(), iChunkIdx++, pChunk->Cidx().m_iChunk, iChunkKilled );
+		}
 	}
 
 	auto pSegs = m_tRtChunks.RamSegs();
+	int iSegIdx = 0;
 	for ( auto& pSeg : *pSegs )
-		iKilled += const_cast<RtSegment_t*> ( pSeg.Ptr() )->KillMulti ( dAccKlist );
+	{
+		int iSegKilled = const_cast<RtSegment_t*> ( pSeg.Ptr() )->KillMulti ( dAccKlist );
+		iKilled += iSegKilled;
+		sphInfo ( "rt kills: table %s: ram segment %d killed=%d", GetName(), iSegIdx++, iSegKilled );
+	}
 
+	sphInfo ( "rt kills: table %s: apply killlist done, total killed=%d", GetName(), iKilled );
 	return iKilled;
 }
 
@@ -9495,6 +9517,7 @@ public:
 		case E_COLLECT_START:
 			m_dTrackedChunks.Add ( (int)iPayload );
 			m_pOwner->SetKillHookFor ( &m_tKilledWhileMerge, (int)iPayload );
+			sphInfo ( "rt merge: table %s: collect start for chunk %d (killhook set)", m_pOwner->GetName(), (int)iPayload );
 			break;
 		case E_MERGEATTRS_START: // enter serial state/rlock
 			m_iLastPayload = iPayload;
@@ -9522,6 +9545,9 @@ public:
 			m_pChunk->m_tLock.Unlock ();
 			m_iLastPayload = -1;
 			m_pChunk = nullptr;
+			break;
+		case E_COLLECT_FINISHED:
+			sphInfo ( "rt merge: table %s: collect finished for chunk %d (kills tracked so far=%d)", m_pOwner->GetName(), (int)iPayload, m_tKilledWhileMerge.m_dDocids.GetLength() );
 			break;
 		default:
 			break;
@@ -10360,7 +10386,11 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 	// as we are in serial worker, that is safe here; no new kills may arrive.
 	int iKilled = 0;
 	if ( tMonitor.HasKilled() )
-		iKilled = tMerged.KillMulti ( tMonitor.GetKilled() );
+	{
+		auto dKilled = tMonitor.GetKilled();
+		sphInfo ( "rt merge: table %s: applying %d collected kills to merged chunk (from %d,%d)", GetName(), dKilled.GetLength(), iAID, iBID );
+		iKilled = tMerged.KillMulti ( dKilled );
+	}
 
 	// and also apply collected updates
 	CSphVector<ConstDiskChunkRefPtr_t> tUpdated;

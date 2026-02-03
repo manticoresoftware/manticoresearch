@@ -37,6 +37,14 @@ index dist_agg
 	local			= agg_td
 	local			= agg_td2
 }
+
+index agg_mad
+{
+	type			= rt
+	path			= <data_path/>/agg_mad
+	rt_field		= data
+	rt_attr_float	= latency
+}
 </config>
 
 <queries>
@@ -50,5 +58,15 @@ index dist_agg
 	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[0,100],"keyed":true}}}}</query>
 	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":true}}}}</query>
 	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}</query>
+
+	<sphinxql>truncate rtindex agg_mad</sphinxql>
+	<sphinxql>insert into agg_mad (id,data,latency) values (1,'v',0),(2,'v',1),(3,'v',2),(4,'v',3),(5,'v',4),(6,'v',5),(7,'v',6),(8,'v',7),(9,'v',8),(10,'v',9),(11,'v',10),(12,'v',11),(13,'v',12),(14,'v',13),(15,'v',14),(16,'v',15),(17,'v',16),(18,'v',17),(19,'v',18),(20,'v',19),(21,'v',20),(22,'v',21),(23,'v',22),(24,'v',23),(25,'v',24),(26,'v',25),(27,'v',26),(28,'v',27),(29,'v',28),(30,'v',29),(31,'v',30),(32,'v',31),(33,'v',32),(34,'v',33),(35,'v',34),(36,'v',35),(37,'v',36),(38,'v',37),(39,'v',38),(40,'v',39),(41,'v',40),(42,'v',41),(43,'v',42),(44,'v',43),(45,'v',44),(46,'v',45),(47,'v',46),(48,'v',47),(49,'v',48),(50,'v',49),(51,'v',50)</sphinxql>
+	<sphinxql>insert into agg_mad (id,data,latency) values (52,'v',51),(53,'v',52),(54,'v',53),(55,'v',54),(56,'v',55),(57,'v',56),(58,'v',57),(59,'v',58),(60,'v',59),(61,'v',60),(62,'v',61),(63,'v',62),(64,'v',63),(65,'v',64),(66,'v',65),(67,'v',66),(68,'v',67),(69,'v',68),(70,'v',69),(71,'v',70),(72,'v',71),(73,'v',72),(74,'v',73),(75,'v',74),(76,'v',75),(77,'v',76),(78,'v',77),(79,'v',78),(80,'v',79),(81,'v',80),(82,'v',81),(83,'v',82),(84,'v',83),(85,'v',84),(86,'v',85),(87,'v',86),(88,'v',87),(89,'v',88),(90,'v',89),(91,'v',90),(92,'v',91),(93,'v',92),(94,'v',93),(95,'v',94),(96,'v',95),(97,'v',96),(98,'v',97),(99,'v',98),(100,'v',99),(101,'v',100)</sphinxql>
+	<!-- expected output with current digest MAD logic and tdigest.compression=1: {"value":0,"value_as_string":"0"} -->
+	<!-- exact MAD for 0..100 (python/sql exact) is 25; shows centroid-mean MAD can deviate under low compression -->
+	<query endpoint="json/search">{"table":"agg_mad","size":0,"aggs":{"latency_mad_lowc":{"median_absolute_deviation":{"field":"latency","tdigest":{"compression":1}}}}}</query>
+	<!-- expected output with current digest MAD logic and tdigest.compression=2: {"value":25.5,"value_as_string":"25.5"} -->
+	<!-- exact MAD for 0..100 (python/sql exact) is 25; shows approximation drift even when non-zero -->
+	<query endpoint="json/search">{"table":"agg_mad","size":0,"aggs":{"latency_mad_c2":{"median_absolute_deviation":{"field":"latency","tdigest":{"compression":2}}}}}</query>
 </queries>
 </test>

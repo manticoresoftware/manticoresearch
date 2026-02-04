@@ -1181,7 +1181,7 @@ public:
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	int					CountDocidDuplicates() const final;
-	int					CountCrossChunkDupes ( const CSphIndex & tOther, int iSampleLimit, CSphString& sSample ) const override;
+	int					CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit, CSphString& sSample, CSphVector<DocID_t>& dSamples ) const override;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 	bool				RewriteHeader ( CSphString & sError ) const final;
 
@@ -7421,7 +7421,7 @@ int CSphIndex_VLN::CountDocidDuplicates() const
 	return iDupes;
 }
 
-int CSphIndex_VLN::CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit, CSphString& sSample ) const
+int CSphIndex_VLN::CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit, CSphString& sSample, CSphVector<DocID_t>& dSamples ) const
 {
 	const CSphIndex_VLN & tOther = (const CSphIndex_VLN &)tB;
 	LookupReaderIterator_c tReaderA ( m_tDocidLookup.GetReadPtr() );
@@ -7452,6 +7452,7 @@ int CSphIndex_VLN::CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit
 				if ( iDupes > 1 )
 					tOut << ",";
 				tOut << tDocA;
+				dSamples.Add ( tDocA );
 			}
 			bHaveA = tReaderA.Read ( tDocA, tRowA );
 			bHaveB = tReaderB.Read ( tDocB, tRowB );

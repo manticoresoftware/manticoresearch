@@ -1510,6 +1510,8 @@ private:
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 	CSphVector<int>				m_dSavingTickets GUARDED_BY ( m_tWorkers.SerialChunkAccess() );			// segments which are currently in saving to disk chunk(s)
 	mutable MiniTimer_c			m_dSavingTimer;
+	std::atomic<int>			m_iDupWatchCount { 0 };
+	std::array<DocID_t, 5>		m_dDupWatchSamples {};
 
 	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
 
@@ -3175,6 +3177,29 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 	auto pChunks = m_tRtChunks.DiskChunks();
 	sphInfo ( "rt kills: table %s: apply killlist size=%d to %d disk chunks and %d ram segments",
 		GetName(), dAccKlist.GetLength(), pChunks ? pChunks->GetLength() : 0, m_tRtChunks.GetRamSegmentsCount() );
+	int iWatchCount = m_iDupWatchCount.load ( std::memory_order_acquire );
+	if ( iWatchCount > 0 )
+	{
+		int iFound = 0;
+		for ( int i = 0; i < iWatchCount; ++i )
+		{
+			DocID_t tDocID = m_dDupWatchSamples[i];
+			bool bFound = false;
+			for ( const auto & tK : dAccKlist )
+				if ( tK == tDocID )
+				{
+					bFound = true;
+					break;
+				}
+
+			if ( bFound )
+			{
+				++iFound;
+				sphInfo ( "rt kills: table %s: watch docid " INT64_FMT " present in killlist", GetName(), (int64_t)tDocID );
+			}
+		}
+		sphInfo ( "rt kills: table %s: watchlist size=%d found-in-killlist=%d", GetName(), iWatchCount, iFound );
+	}
 
 	if ( !Threads::IsInsideCoroutine() || m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
 	{
@@ -10365,12 +10390,25 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		int iDupA = pA->Cidx().CountDocidDuplicates();
 		int iDupB = pB->Cidx().CountDocidDuplicates();
 		CSphString sCrossSample;
-		int iCrossDupes = pA->Cidx().CountCrossChunkDupes ( pB->Cidx(), 5, sCrossSample );
+		CSphVector<DocID_t> dCrossSamples;
+		int iCrossDupes = pA->Cidx().CountCrossChunkDupes ( pB->Cidx(), 5, sCrossSample, dCrossSamples );
 		sphInfo ( "rt merge: table %s: pre-merge chunk %d total=%d dead=%d alive=%d dupes=%d; chunk %d total=%d dead=%d alive=%d dupes=%d",
 			GetName(), iAID, (int)tStatsA.m_iTotalDocuments, (int)tStatusA.m_iDead, (int)iAliveA,
 			iDupA, iBID, (int)tStatsB.m_iTotalDocuments, (int)tStatusB.m_iDead, (int)iAliveB, iDupB );
 		sphInfo ( "rt merge: table %s: cross-chunk dupes=%d sample=%s",
 			GetName(), iCrossDupes, sCrossSample.cstr() );
+		for ( const auto & tDocID : dCrossSamples )
+		{
+			int iAliveA = pA->Cidx().IsAlive ( tDocID ) ? 1 : 0;
+			int iAliveB = pB->Cidx().IsAlive ( tDocID ) ? 1 : 0;
+			sphInfo ( "rt merge: table %s: cross-dupe docid " INT64_FMT " aliveA=%d aliveB=%d", GetName(), (int64_t)tDocID, iAliveA, iAliveB );
+		}
+		{
+			int iCount = Min ( dCrossSamples.GetLength(), (int)m_dDupWatchSamples.size() );
+			for ( int i = 0; i < iCount; ++i )
+				m_dDupWatchSamples[i] = dCrossSamples[i];
+			m_iDupWatchCount.store ( iCount, std::memory_order_release );
+		}
 	}
 
 	// merge data to disk ( data is constant during that phase )

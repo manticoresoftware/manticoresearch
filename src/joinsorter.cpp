@@ -2162,7 +2162,10 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 		CSphString sJoinAlias;
 		sJoinAlias.SetSprintf ( "%s%s", GetBatchedItemPrefix(), sJoinExpr.cstr() );
 		if ( sphJsonNameSplit ( sJoinExpr.cstr() ) )
-			sJoinExpr = AddJsonTypeConversion ( sJoinExpr, i.m_eType==SPH_FILTER_STRING ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );
+		{
+			ESphAttr eAttr = ( i.m_eType==SPH_FILTER_STRING || i.m_eType==SPH_FILTER_STRING_LIST ) ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT;
+			sJoinExpr = AddJsonTypeConversion ( sJoinExpr, eAttr );
+		}
 
 		AddToJoinSelectListForced ( sJoinExpr, sJoinAlias );
 	}

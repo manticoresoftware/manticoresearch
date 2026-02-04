@@ -942,6 +942,45 @@ select * from join1 left join join2 on join1.string_id=join2.id and join2.id in 
 drop table join1;
 drop table join2;
 
+<!-- join on json string with explicit cast -->
+create table join_json_l ( id bigint, j json );
+create table join_json_r ( id bigint, j json );
+insert into join_json_l values ( 1, '{"s":"string", "i": 1}' );
+insert into join_json_r values ( 1, '{"s":"string", "i": 1}' );
+select * from join_json_l inner join join_json_r on string(join_json_l.j.s)=join_json_r.j.s;
+</sphinxql>
+
+<query endpoint="json/search">
+{
+  "table": "join_json_l",
+  "join": [
+    {
+      "type": "inner",
+      "table": "join_json_r",
+      "on": [
+        {
+          "left": {
+            "table": "join_json_l",
+            "field": "j.s",
+            "type": "string"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "join_json_r",
+            "field": "j.s"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+
+<sphinxql>
+drop table join_json_r;
+drop table join_json_l;
+
 </sphinxql>
 </queries>
 

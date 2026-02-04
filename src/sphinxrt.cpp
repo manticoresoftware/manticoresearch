@@ -442,7 +442,7 @@ int RtSegment_t::KillOnSaveHook_t::Kill ( DocID_t tDocID )
 
 int RtSegment_t::AddKillOnSave ( DocID_t tDocID ) const
 {
-	ScopedMutex_t tLock ( m_tKillOnSaveLock );
+	Threads::Coro::ScopedMutex_t tLock ( m_tKillOnSaveLock );
 	if ( !m_bKillOnSaveActive )
 		return 0;
 	m_dKillOnSave.Add ( tDocID );
@@ -451,13 +451,13 @@ int RtSegment_t::AddKillOnSave ( DocID_t tDocID ) const
 
 void RtSegment_t::SetKillOnSaveActive ( bool bActive ) const
 {
-	ScopedMutex_t tLock ( m_tKillOnSaveLock );
+	Threads::Coro::ScopedMutex_t tLock ( m_tKillOnSaveLock );
 	m_bKillOnSaveActive = bActive;
 }
 
 void RtSegment_t::DrainKillOnSave ( CSphVector<DocID_t> & dOut ) const
 {
-	ScopedMutex_t tLock ( m_tKillOnSaveLock );
+	Threads::Coro::ScopedMutex_t tLock ( m_tKillOnSaveLock );
 	dOut.SwapData ( m_dKillOnSave );
 	m_dKillOnSave.Reset();
 }

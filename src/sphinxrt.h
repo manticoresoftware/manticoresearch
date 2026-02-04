@@ -18,6 +18,7 @@
 #include "sphinxint.h"
 #include "killlist.h"
 #include "attribute.h"
+#include "coroutine.h"
 #include "docstore.h"
 #include "columnarrt.h"
 #include "coroutine.h"
@@ -334,7 +335,7 @@ public:
 
 private:
 	mutable int64_t			m_iUsedRam = 0;			///< ram usage counter
-	mutable CSphMutex		m_tKillOnSaveLock;
+	mutable Threads::Coro::Mutex_c	m_tKillOnSaveLock;
 	mutable CSphVector<DocID_t>	m_dKillOnSave;
 	mutable bool			m_bKillOnSaveActive = false;
 

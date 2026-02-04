@@ -415,7 +415,6 @@ jobs:
     if: always() && needs.changes.outputs.source == 'true' && needs.check_branch.outputs.image_exists != 'true'
     needs:
       - changes
-      - clt
       - check_branch
       - test_kit_docker_build
     name: Push Test Kit docker image to repo

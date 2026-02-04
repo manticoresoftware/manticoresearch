@@ -1180,6 +1180,8 @@ public:
 	void				DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
+	int					CountDocidDuplicates() const final;
+	int					CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit, CSphString& sSample, CSphVector<DocID_t>& dSamples ) const override;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 	bool				RewriteHeader ( CSphString & sError ) const final;
 
@@ -3136,6 +3138,9 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	if ( !HasKillHook() )
 		iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
 	else
+	{
+		sphInfo ( "rt kills: index %s chunk %d: killmulti with hook, killlist=%d",
+			GetName(), m_iChunk, dKlist.GetLength() );
 		iTotalKilled = ProcessIntersected ( tTargetReader, tKillerReader, [this] ( RowID_t tRow, DocID_t tDoc )
 		{
 			if ( !m_tDeadRowMap.Set ( tRow ) )
@@ -3143,6 +3148,9 @@ int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 			KillHook ( tDoc );
 			return true;
 		} );
+		sphInfo ( "rt kills: index %s chunk %d: killmulti with hook done, killed=%d",
+			GetName(), m_iChunk, iTotalKilled );
+	}
 
 	if ( iTotalKilled )
 		m_uAttrsStatus |= IndexSegment_c::ATTRS_ROWMAP_UPDATED;
@@ -7386,6 +7394,73 @@ int	CSphIndex_VLN::Kill ( DocID_t tDocID )
 	}
 
 	return 0;
+}
+
+int CSphIndex_VLN::CountDocidDuplicates() const
+{
+	if ( !m_iDocinfo )
+		return 0;
+
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetReadPtr() );
+	DocID_t tDocID = 0;
+	RowID_t tRowID = INVALID_ROWID;
+	DocID_t tPrevDocID = 0;
+	bool bHavePrev = false;
+	int iDupes = 0;
+
+	while ( tLookup.Read ( tDocID, tRowID ) )
+	{
+		if ( bHavePrev && tDocID == tPrevDocID )
+			++iDupes;
+		else
+			tPrevDocID = tDocID;
+
+		bHavePrev = true;
+	}
+
+	return iDupes;
+}
+
+int CSphIndex_VLN::CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit, CSphString& sSample, CSphVector<DocID_t>& dSamples ) const
+{
+	const CSphIndex_VLN & tOther = (const CSphIndex_VLN &)tB;
+	LookupReaderIterator_c tReaderA ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tReaderB ( tOther.m_tDocidLookup.GetReadPtr() );
+
+	DocID_t tDocA = 0, tDocB = 0;
+	RowID_t tRowA = INVALID_ROWID, tRowB = INVALID_ROWID;
+	bool bHaveA = tReaderA.Read ( tDocA, tRowA );
+	bool bHaveB = tReaderB.Read ( tDocB, tRowB );
+	int iDupes = 0;
+
+	StringBuilder_c tOut;
+	while ( bHaveA && bHaveB )
+	{
+		if ( (uint64_t)tDocA < (uint64_t)tDocB )
+		{
+			tReaderA.HintDocID ( tDocB );
+			bHaveA = tReaderA.Read ( tDocA, tRowA );
+		} else if ( (uint64_t)tDocA > (uint64_t)tDocB )
+		{
+			tReaderB.HintDocID ( tDocA );
+			bHaveB = tReaderB.Read ( tDocB, tRowB );
+		} else
+		{
+			++iDupes;
+			if ( iDupes <= iSampleLimit )
+			{
+				if ( iDupes > 1 )
+					tOut << ",";
+				tOut << tDocA;
+				dSamples.Add ( tDocA );
+			}
+			bHaveA = tReaderA.Read ( tDocA, tRowA );
+			bHaveB = tReaderB.Read ( tDocB, tRowB );
+		}
+	}
+
+	sSample = tOut.cstr();
+	return iDupes;
 }
 
 bool CSphIndex_VLN::IsAlive ( DocID_t tDocID ) const

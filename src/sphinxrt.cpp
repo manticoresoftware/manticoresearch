@@ -1510,6 +1510,8 @@ private:
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 	CSphVector<int>				m_dSavingTickets GUARDED_BY ( m_tWorkers.SerialChunkAccess() );			// segments which are currently in saving to disk chunk(s)
 	mutable MiniTimer_c			m_dSavingTimer;
+	std::atomic<int>			m_iDupWatchCount { 0 };
+	std::array<DocID_t, 5>		m_dDupWatchSamples {};
 
 	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
 
@@ -3173,18 +3175,53 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 
 	int iKilled = 0;
 	auto pChunks = m_tRtChunks.DiskChunks();
+	sphInfo ( "rt kills: table %s: apply killlist size=%d to %d disk chunks and %d ram segments",
+		GetName(), dAccKlist.GetLength(), pChunks ? pChunks->GetLength() : 0, m_tRtChunks.GetRamSegmentsCount() );
+	int iWatchCount = m_iDupWatchCount.load ( std::memory_order_acquire );
+	if ( iWatchCount > 0 )
+	{
+		int iFound = 0;
+		for ( int i = 0; i < iWatchCount; ++i )
+		{
+			DocID_t tDocID = m_dDupWatchSamples[i];
+			bool bFound = false;
+			for ( const auto & tK : dAccKlist )
+				if ( tK == tDocID )
+				{
+					bFound = true;
+					break;
+				}
+
+			if ( bFound )
+			{
+				++iFound;
+				sphInfo ( "rt kills: table %s: watch docid " INT64_FMT " present in killlist", GetName(), (int64_t)tDocID );
+			}
+		}
+		sphInfo ( "rt kills: table %s: watchlist size=%d found-in-killlist=%d", GetName(), iWatchCount, iFound );
+	}
 
 	if ( !Threads::IsInsideCoroutine() || m_tSaving.ActiveStateIs ( SaveState_c::ENABLED ) )
+	{
+		int iChunkIdx = 0;
 		for ( auto& pChunk : *pChunks )
-			iKilled += pChunk->CastIdx().KillMulti ( dAccKlist );
+		{
+			int iChunkKilled = pChunk->CastIdx().KillMulti ( dAccKlist );
+			iKilled += iChunkKilled;
+			sphInfo ( "rt kills: table %s: chunk %d (id=%d) killed=%d",
+				GetName(), iChunkIdx++, pChunk->Cidx().m_iChunk, iChunkKilled );
+		}
+	}
 	else
 	{
 		// if saving is disabled, and we NEED to actually mark a doc in disk chunk as deleted,
 		// we'll pause that action, waiting until index is unlocked.
 		bool bNeedWait = true;
 		bool bEnabled = false;
+		int iChunkIdx = 0;
 		for ( auto& pChunk : *pChunks )
-			iKilled += pChunk->CastIdx().CheckThenKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
+		{
+			int iChunkKilled = pChunk->CastIdx().CheckThenKillMulti ( dAccKlist, [this,&bNeedWait, &bEnabled]()
 			{
 				if ( bNeedWait )
 				{
@@ -3193,12 +3230,22 @@ int RtIndex_c::ApplyKillList ( const VecTraits_T<DocID_t> & dAccKlist )
 				}
 				return bEnabled;
 			});
+			iKilled += iChunkKilled;
+			sphInfo ( "rt kills: table %s: chunk %d (id=%d) killed=%d (save-disabled path)",
+				GetName(), iChunkIdx++, pChunk->Cidx().m_iChunk, iChunkKilled );
+		}
 	}
 
 	auto pSegs = m_tRtChunks.RamSegs();
+	int iSegIdx = 0;
 	for ( auto& pSeg : *pSegs )
-		iKilled += const_cast<RtSegment_t*> ( pSeg.Ptr() )->KillMulti ( dAccKlist );
+	{
+		int iSegKilled = const_cast<RtSegment_t*> ( pSeg.Ptr() )->KillMulti ( dAccKlist );
+		iKilled += iSegKilled;
+		sphInfo ( "rt kills: table %s: ram segment %d killed=%d", GetName(), iSegIdx++, iSegKilled );
+	}
 
+	sphInfo ( "rt kills: table %s: apply killlist done, total killed=%d", GetName(), iKilled );
 	return iKilled;
 }
 
@@ -9459,6 +9506,8 @@ void RtIndex_c::SetKillHookFor ( IndexSegment_c* pAccum, int iDiskChunkID ) cons
 {
 	// that ensures no concurrency
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	sphInfo ( "rt merge: table %s: killhook %s for chunk %d",
+		GetName(), pAccum ? "set" : "unset", iDiskChunkID );
 	ProcessDiskChunkByID ( iDiskChunkID, [pAccum] ( const DiskChunk_c* p ) { p->Cidx().SetKillHook ( pAccum ); } );
 }
 
@@ -9466,6 +9515,8 @@ void RtIndex_c::SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskC
 {
 	// that ensures no concurrency
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	sphInfo ( "rt merge: table %s: killhook %s for %d chunks",
+		GetName(), pAccum ? "set" : "unset", dDiskChunkIDs.GetLength() );
 	ProcessDiskChunkByID ( dDiskChunkIDs, [pAccum] ( const DiskChunk_c* p ) { p->Cidx().SetKillHook ( pAccum ); } );
 }
 
@@ -9495,6 +9546,7 @@ public:
 		case E_COLLECT_START:
 			m_dTrackedChunks.Add ( (int)iPayload );
 			m_pOwner->SetKillHookFor ( &m_tKilledWhileMerge, (int)iPayload );
+			sphInfo ( "rt merge: table %s: collect start for chunk %d (killhook set)", m_pOwner->GetName(), (int)iPayload );
 			break;
 		case E_MERGEATTRS_START: // enter serial state/rlock
 			m_iLastPayload = iPayload;
@@ -9522,6 +9574,9 @@ public:
 			m_pChunk->m_tLock.Unlock ();
 			m_iLastPayload = -1;
 			m_pChunk = nullptr;
+			break;
+		case E_COLLECT_FINISHED:
+			sphInfo ( "rt merge: table %s: collect finished for chunk %d (kills tracked so far=%d)", m_pOwner->GetName(), (int)iPayload, m_tKilledWhileMerge.m_dDocids.GetLength() );
 			break;
 		default:
 			break;
@@ -10324,6 +10379,37 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 			(int)( GetChunkSize ( pA->Cidx() ) / 1024 ),
 			iBID,
 			(int)( GetChunkSize ( pB->Cidx() ) / 1024 ) );
+	{
+		CSphIndexStatus tStatusA, tStatusB;
+		pA->Cidx().GetStatus ( &tStatusA );
+		pB->Cidx().GetStatus ( &tStatusB );
+		const auto & tStatsA = pA->Cidx().GetStats();
+		const auto & tStatsB = pB->Cidx().GetStats();
+		int64_t iAliveA = tStatsA.m_iTotalDocuments - tStatusA.m_iDead;
+		int64_t iAliveB = tStatsB.m_iTotalDocuments - tStatusB.m_iDead;
+		int iDupA = pA->Cidx().CountDocidDuplicates();
+		int iDupB = pB->Cidx().CountDocidDuplicates();
+		CSphString sCrossSample;
+		CSphVector<DocID_t> dCrossSamples;
+		int iCrossDupes = pA->Cidx().CountCrossChunkDupes ( pB->Cidx(), 5, sCrossSample, dCrossSamples );
+		sphInfo ( "rt merge: table %s: pre-merge chunk %d total=%d dead=%d alive=%d dupes=%d; chunk %d total=%d dead=%d alive=%d dupes=%d",
+			GetName(), iAID, (int)tStatsA.m_iTotalDocuments, (int)tStatusA.m_iDead, (int)iAliveA,
+			iDupA, iBID, (int)tStatsB.m_iTotalDocuments, (int)tStatusB.m_iDead, (int)iAliveB, iDupB );
+		sphInfo ( "rt merge: table %s: cross-chunk dupes=%d sample=%s",
+			GetName(), iCrossDupes, sCrossSample.cstr() );
+		for ( const auto & tDocID : dCrossSamples )
+		{
+			int iAliveA = pA->Cidx().IsAlive ( tDocID ) ? 1 : 0;
+			int iAliveB = pB->Cidx().IsAlive ( tDocID ) ? 1 : 0;
+			sphInfo ( "rt merge: table %s: cross-dupe docid " INT64_FMT " aliveA=%d aliveB=%d", GetName(), (int64_t)tDocID, iAliveA, iAliveB );
+		}
+		{
+			int iCount = Min ( dCrossSamples.GetLength(), (int)m_dDupWatchSamples.size() );
+			for ( int i = 0; i < iCount; ++i )
+				m_dDupWatchSamples[i] = dCrossSamples[i];
+			m_iDupWatchCount.store ( iCount, std::memory_order_release );
+		}
+	}
 
 	// merge data to disk ( data is constant during that phase )
 	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
@@ -10345,6 +10431,15 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		return false;
 
 	CSphIndex& tMerged = pMerged->CastIdx(); // const breakage is ok since we don't yet published the index
+	{
+		CSphIndexStatus tStatusM;
+		tMerged.GetStatus ( &tStatusM );
+		const auto & tStatsM = tMerged.GetStats();
+		int64_t iAliveM = tStatsM.m_iTotalDocuments - tStatusM.m_iDead;
+		int iDupM = tMerged.CountDocidDuplicates();
+		sphInfo ( "rt merge: table %s: merged chunk pre-kill total=%d dead=%d alive=%d dupes=%d",
+			GetName(), (int)tStatsM.m_iTotalDocuments, (int)tStatusM.m_iDead, (int)iAliveM, iDupM );
+	}
 
 	// going to modify list of chunks; so fall into serial fiber
 	TRACE_CORO ( "rt", "RtIndex_c::MergeTwoChunks_workserial" );
@@ -10360,7 +10455,20 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 	// as we are in serial worker, that is safe here; no new kills may arrive.
 	int iKilled = 0;
 	if ( tMonitor.HasKilled() )
-		iKilled = tMerged.KillMulti ( tMonitor.GetKilled() );
+	{
+		auto dKilled = tMonitor.GetKilled();
+		sphInfo ( "rt merge: table %s: applying %d collected kills to merged chunk (from %d,%d)", GetName(), dKilled.GetLength(), iAID, iBID );
+		iKilled = tMerged.KillMulti ( dKilled );
+	}
+	{
+		CSphIndexStatus tStatusM;
+		tMerged.GetStatus ( &tStatusM );
+		const auto & tStatsM = tMerged.GetStats();
+		int64_t iAliveM = tStatsM.m_iTotalDocuments - tStatusM.m_iDead;
+		int iDupM = tMerged.CountDocidDuplicates();
+		sphInfo ( "rt merge: table %s: merged chunk post-kill total=%d dead=%d alive=%d killed=%d dupes=%d",
+			GetName(), (int)tStatsM.m_iTotalDocuments, (int)tStatusM.m_iDead, (int)iAliveM, iKilled, iDupM );
+	}
 
 	// and also apply collected updates
 	CSphVector<ConstDiskChunkRefPtr_t> tUpdated;

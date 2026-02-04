@@ -320,8 +320,23 @@ public:
 	void					MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const UpdateContext_t& tCtx );
 	void					UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t>& dPostUpdates ) final;
 
+	struct KillOnSaveHook_t final : IndexSegment_c
+	{
+		RtSegment_t * m_pOwner = nullptr;
+		int Kill ( DocID_t tDocID ) final;
+	};
+
+	int						AddKillOnSave ( DocID_t tDocID ) const;
+	void					SetKillOnSaveActive ( bool bActive ) const;
+	void					DrainKillOnSave ( CSphVector<DocID_t> & dOut ) const;
+
+	mutable KillOnSaveHook_t	m_tKillOnSaveHook;
+
 private:
 	mutable int64_t			m_iUsedRam = 0;			///< ram usage counter
+	mutable CSphMutex		m_tKillOnSaveLock;
+	mutable CSphVector<DocID_t>	m_dKillOnSave;
+	mutable bool			m_bKillOnSaveActive = false;
 
 							~RtSegment_t () final;
 

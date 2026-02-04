@@ -322,6 +322,7 @@ RtSegment_t::RtSegment_t ( DWORD uDocs, const ISphSchema& tSchema )
 	, m_tDeadRowMap ( uDocs )
 	, m_tSchema { tSchema }
 {
+	m_tKillOnSaveHook.m_pOwner = this;
 }
 
 RtSegment_t::~RtSegment_t ()
@@ -432,6 +433,33 @@ int	RtSegment_t::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 		iTotalKilled += Kill ( iDocID );
 
 	return iTotalKilled;
+}
+
+int RtSegment_t::KillOnSaveHook_t::Kill ( DocID_t tDocID )
+{
+	return m_pOwner ? m_pOwner->AddKillOnSave ( tDocID ) : 0;
+}
+
+int RtSegment_t::AddKillOnSave ( DocID_t tDocID ) const
+{
+	ScopedMutex_t tLock ( m_tKillOnSaveLock );
+	if ( !m_bKillOnSaveActive )
+		return 0;
+	m_dKillOnSave.Add ( tDocID );
+	return 1;
+}
+
+void RtSegment_t::SetKillOnSaveActive ( bool bActive ) const
+{
+	ScopedMutex_t tLock ( m_tKillOnSaveLock );
+	m_bKillOnSaveActive = bActive;
+}
+
+void RtSegment_t::DrainKillOnSave ( CSphVector<DocID_t> & dOut ) const
+{
+	ScopedMutex_t tLock ( m_tKillOnSaveLock );
+	dOut.SwapData ( m_dKillOnSave );
+	m_dKillOnSave.Reset();
 }
 
 
@@ -4545,8 +4573,9 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	// collect all non-occupied non-empty segments and lock them
 	int64_t iNotMyOpRAM {0};
 	int64_t iMyOpRAM {0};
-	KillAccum_t dKillOnSave;
+	CSphVector<DocID_t> dKillOnSaveDocs;
 	LazyVector_T<ConstRtSegmentRefPtf_t> dSegments;
+	bool bHooksCleared = false;
 	for ( const auto & pSeg : *m_tRtChunks.RamSegs () )
 	{
 		if ( !pSeg->m_iLocked )
@@ -4554,14 +4583,20 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 			pSeg->m_iLocked = iSaveOp;
 			if ( pSeg->m_tAliveRows.load ( std::memory_order_relaxed )!=0 )
 			{
-				pSeg->SetKillHook ( &dKillOnSave );
+				pSeg->SetKillOnSaveActive ( true );
+				pSeg->SetKillHook ( &pSeg->m_tKillOnSaveHook );
 				dSegments.Add ( pSeg );
 				iMyOpRAM += pSeg->GetUsedRam();
 			}
 		} else
 			iNotMyOpRAM += pSeg->GetUsedRam();
 	}
-	AT_SCOPE_EXIT ( [&dSegments] { dSegments.for_each ( [] ( const auto& dSeg ) { dSeg->SetKillHook ( nullptr ); } ); } );
+	AT_SCOPE_EXIT ( [&dSegments, &bHooksCleared]
+	{
+		if ( bHooksCleared )
+			return;
+		dSegments.for_each ( [] ( const auto& dSeg ) { dSeg->SetKillHook ( nullptr ); dSeg->SetKillOnSaveActive ( false ); } );
+	} );
 	if ( !dSegments.IsEmpty() )
 		m_dSavingTickets.Add ( iSaveOp );
 	UpdateUnlockedCount();
@@ -4633,13 +4668,22 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	}
 
 	// applying postponed kills is ok now, since no other kills would happen as we're in serial fiber.
-	if ( !dKillOnSave.m_dDocids.IsEmpty() )
+	dKillOnSaveDocs.Reset();
+	for ( const auto & pSegRef : dSegments )
+	{
+		CSphVector<DocID_t> dTmp;
+		pSegRef->DrainKillOnSave ( dTmp );
+		if ( !dTmp.IsEmpty() )
+			dKillOnSaveDocs.Append ( dTmp );
+	}
+
+	if ( !dKillOnSaveDocs.IsEmpty() )
 	{
 		RTLOGV << "SaveDiskChunk: apply postponed kills";
 		tmSave -= sphMicroTimer ();
-		dKillOnSave.m_dDocids.Uniq ();
-		pNewChunk->KillMulti ( dKillOnSave.m_dDocids );
-		dKillOnSave.m_dDocids.Reset();
+		dKillOnSaveDocs.Uniq ();
+		pNewChunk->KillMulti ( dKillOnSaveDocs );
+		dKillOnSaveDocs.Reset();
 		tmSave += sphMicroTimer ();
 	}
 
@@ -4652,7 +4696,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	}
 
 	int iSegments = dSegments.GetLength ();
-	dSegments.Reset (); // we don't need them anymore
 
 	// update field lengths (offline, will swap under lock)
 	CSphFixedVector<int64_t> dNewFieldLensRam { 0 };
@@ -4703,6 +4746,28 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	m_dSavingTickets.RemoveValue ( iSaveOp );
 	Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
+	// final drain after publish to catch kills that happened while segments stayed locked
+	dKillOnSaveDocs.Reset();
+	for ( const auto & pSegRef : dSegments )
+	{
+		CSphVector<DocID_t> dTmp;
+		pSegRef->DrainKillOnSave ( dTmp );
+		if ( !dTmp.IsEmpty() )
+			dKillOnSaveDocs.Append ( dTmp );
+	}
+
+	dSegments.for_each ( [] ( const auto& dSeg ) { dSeg->SetKillHook ( nullptr ); dSeg->SetKillOnSaveActive ( false ); } );
+	bHooksCleared = true;
+
+	if ( !dKillOnSaveDocs.IsEmpty() )
+	{
+		dKillOnSaveDocs.Uniq ();
+		auto tGuard = RtGuard();
+		for ( const auto & pChunk : tGuard.m_dDiskChunks )
+			pChunk->CastIdx().KillMulti ( dKillOnSaveDocs );
+		dKillOnSaveDocs.Reset();
+	}
+
 	// abandon .ram file
 	UnlinkRAMChunk ( "SaveDiskChunk" );
 
@@ -4738,6 +4803,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	Preread();
 	CheckStartAutoOptimize();
+	dSegments.Reset();
 	return true;
 }
 

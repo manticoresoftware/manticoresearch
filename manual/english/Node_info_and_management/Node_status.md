@@ -1925,48 +1925,5 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 
 <!-- end -->
 
-## Prometheus Exporter
-
-<!-- example prometheus exporter -->
-
-Manticore Search has a built-in Prometheus exporter.
-To request metrics, make sure the HTTP port is exposed and simply call the /metrics endpoint.
-
-**Note:** The exporter requires **Buddy** to be enabled.
-
-<!-- intro -->
-##### HTTP:
-
-<!-- request http -->
-
-```go
-curl -s 0:9308/metrics
-```
-<!-- response http -->
-
-```http
-# HELP manticore_uptime_seconds Time in seconds since start
-# TYPE manticore_uptime_seconds counter
-manticore_uptime_seconds 25
-# HELP manticore_connections_count Connections count since start
-# TYPE manticore_connections_count gauge
-manticore_connections_count 55
-# HELP manticore_maxed_out_error_count Count of maxed_out errors since start
-# TYPE manticore_maxed_out_error_count counter
-manticore_maxed_out_error_count 0
-# HELP manticore_version Manticore Search version
-# TYPE manticore_version gauge
-manticore_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0) (buddy v3.28.6-7-g14ee10)"} 1
-# HELP manticore_mysql_version Manticore Search version
-# TYPE manticore_mysql_version gauge
-manticore_mysql_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0)"} 1
-# HELP manticore_command_search_count Count of search queries since start
-# TYPE manticore_command_search_count counter
-manticore_command_search_count 1
-......
-```
-
-<!-- end -->
-
 <!-- proofread -->
 

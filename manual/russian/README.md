@@ -161,6 +161,7 @@
     * [• KILL](Node_info_and_management/KILL.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
     * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
+    * [• Мониторинг](Node_info_and_management/Monitoring.md)
     * [≫ Профилирование]
         * [• Профилирование запросов](Node_info_and_management/Profiling/Query_profile.md)
         * [• План запроса](Node_info_and_management/Profiling/Query_plan.md)

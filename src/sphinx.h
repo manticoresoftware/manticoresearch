@@ -1387,6 +1387,8 @@ public:
 	float						GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bool bPlainIDF ) const;
 	bool						HasGlobalIDF () const;
 
+	virtual int					CountCrossChunkDupes ( const CSphIndex & tOther, int iSampleLimit, CSphString& sSample ) const { return 0; }
+
 protected:
 	CSphString					m_sGlobalIDFPath;
 };

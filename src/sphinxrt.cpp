@@ -10364,9 +10364,13 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		int64_t iAliveB = tStatsB.m_iTotalDocuments - tStatusB.m_iDead;
 		int iDupA = pA->Cidx().CountDocidDuplicates();
 		int iDupB = pB->Cidx().CountDocidDuplicates();
+		CSphString sCrossSample;
+		int iCrossDupes = pA->Cidx().CountCrossChunkDupes ( pB->Cidx(), 5, sCrossSample );
 		sphInfo ( "rt merge: table %s: pre-merge chunk %d total=%d dead=%d alive=%d dupes=%d; chunk %d total=%d dead=%d alive=%d dupes=%d",
 			GetName(), iAID, (int)tStatsA.m_iTotalDocuments, (int)tStatusA.m_iDead, (int)iAliveA,
 			iDupA, iBID, (int)tStatsB.m_iTotalDocuments, (int)tStatusB.m_iDead, (int)iAliveB, iDupB );
+		sphInfo ( "rt merge: table %s: cross-chunk dupes=%d sample=%s",
+			GetName(), iCrossDupes, sCrossSample.cstr() );
 	}
 
 	// merge data to disk ( data is constant during that phase )

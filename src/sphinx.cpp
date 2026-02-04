@@ -1181,6 +1181,7 @@ public:
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	int					CountDocidDuplicates() const final;
+	int					CountCrossChunkDupes ( const CSphIndex & tOther, int iSampleLimit, CSphString& sSample ) const override;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 	bool				RewriteHeader ( CSphString & sError ) const final;
 
@@ -7417,6 +7418,47 @@ int CSphIndex_VLN::CountDocidDuplicates() const
 		bHavePrev = true;
 	}
 
+	return iDupes;
+}
+
+int CSphIndex_VLN::CountCrossChunkDupes ( const CSphIndex & tB, int iSampleLimit, CSphString& sSample ) const
+{
+	const CSphIndex_VLN & tOther = (const CSphIndex_VLN &)tB;
+	LookupReaderIterator_c tReaderA ( m_tDocidLookup.GetReadPtr() );
+	LookupReaderIterator_c tReaderB ( tOther.m_tDocidLookup.GetReadPtr() );
+
+	DocID_t tDocA = 0, tDocB = 0;
+	RowID_t tRowA = INVALID_ROWID, tRowB = INVALID_ROWID;
+	bool bHaveA = tReaderA.Read ( tDocA, tRowA );
+	bool bHaveB = tReaderB.Read ( tDocB, tRowB );
+	int iDupes = 0;
+
+	StringBuilder_c tOut;
+	while ( bHaveA && bHaveB )
+	{
+		if ( (uint64_t)tDocA < (uint64_t)tDocB )
+		{
+			tReaderA.HintDocID ( tDocB );
+			bHaveA = tReaderA.Read ( tDocA, tRowA );
+		} else if ( (uint64_t)tDocA > (uint64_t)tDocB )
+		{
+			tReaderB.HintDocID ( tDocA );
+			bHaveB = tReaderB.Read ( tDocB, tRowB );
+		} else
+		{
+			++iDupes;
+			if ( iDupes <= iSampleLimit )
+			{
+				if ( iDupes > 1 )
+					tOut << ",";
+				tOut << tDocA;
+			}
+			bHaveA = tReaderA.Read ( tDocA, tRowA );
+			bHaveB = tReaderB.Read ( tDocB, tRowB );
+		}
+	}
+
+	sSample = tOut.cstr();
 	return iDupes;
 }
 

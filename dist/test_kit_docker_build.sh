@@ -1,7 +1,21 @@
 #!/bin/bash
 set -e
 
-git clone https://github.com/manticoresoftware/docker.git docker
+# Ensure a clean clone directory so reruns don't fail.
+rm -rf docker
+# Shallow clone with retries to avoid transient network errors.
+for i in 1 2 3; do
+	if git clone --depth 1 https://github.com/manticoresoftware/docker.git docker; then
+		break
+	fi
+	echo "git clone failed (attempt $i), retrying..."
+	rm -rf docker
+	sleep 2
+done
+if [ ! -d docker ]; then
+	echo "ERROR: failed to clone docker repo after retries" >&2
+	exit 1
+fi
 cd docker
 
 # We set it later when parse deps.txt
@@ -167,17 +181,19 @@ done < ../deps.txt
 deb_dir=$(realpath ../build/)
 
 # Use official docker image to create and tune our test kit
-docker pull manticoresearch/manticore:dev
+docker pull --platform linux/amd64 manticoresearch/manticore:dev
+docker rm -f manticore-test-kit >/dev/null 2>&1 || true
 docker create \
 	-v "$deb_dir:/build" --name manticore-test-kit \
 	--entrypoint tail \
+	--platform linux/amd64 \
 	manticoresearch/manticore:dev \
 	-f /dev/null
 	docker start manticore-test-kit
 
 	# Copy current repo into /manticore, excluding heavy/unused dirs to save space.
 	docker exec manticore-test-kit mkdir -p /manticore
-	tar -C .. --exclude=.git --exclude=manual --exclude=src -cf - . | \
+	tar -C .. --exclude=.git --exclude=manual --exclude=src --exclude=build* --exclude=artifact.tar --exclude=build --exclude=docker -cf - . | \
 		docker exec -i manticore-test-kit tar -C /manticore -xf -
 
 	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
@@ -189,7 +205,7 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash mysql-server && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
@@ -213,6 +229,22 @@ docker exec manticore-test-kit bash -c "grep -q 'query_log = /var/log/manticore/
 docker exec manticore-test-kit bash -c "grep -q 'log = /var/log/manticore/searchd.log' /etc/manticoresearch/manticore.conf || sed -i '/listen = 127.0.0.1:9308:http/a\    log = /var/log/manticore/searchd.log' /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
+
+docker exec manticore-test-kit bash -c \
+	'# Prepare MySQL server for ubertests (db/user "test", empty password, federated enabled).
+	set -e
+	mkdir -p /var/run/mysqld
+	chown -R mysql:mysql /var/run/mysqld
+	if [ -f /etc/mysql/mysql.conf.d/mysqld.cnf ] && ! grep -q "^federated=ON" /etc/mysql/mysql.conf.d/mysqld.cnf; then
+		echo "federated=ON" >> /etc/mysql/mysql.conf.d/mysqld.cnf
+	fi
+	service mysql start >/dev/null 2>&1 || mysqld_safe --datadir=/var/lib/mysql &
+	for i in $(seq 1 30); do
+		if mysqladmin ping -h localhost --silent; then break; fi
+		sleep 2
+	done
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test;"
+	mysql -uroot test -e "CREATE USER IF NOT EXISTS '\''test'\''@'\''%'\'' IDENTIFIED BY '\'''\''; GRANT ALL PRIVILEGES ON test.* TO '\''test'\''@'\''%'\''; GRANT ALL PRIVILEGES ON *.* TO '\''test'\''@'\''%'\'' WITH GRANT OPTION; FLUSH PRIVILEGES;"'
 
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"

@@ -207,7 +207,7 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && \
 	printf "#!/bin/sh\nexit 101\n" > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d && \
-	DEBIAN_FRONTEND=noninteractive apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash mysql-server && \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash mariadb-server && \
 	rm -f /usr/sbin/policy-rc.d && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
@@ -234,14 +234,19 @@ docker exec manticore-test-kit bash -c "grep -q 'log = /var/log/manticore/search
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \
-	'# Prepare MySQL server for ubertests (db/user "test", empty password, federated enabled).
+	'# Prepare MariaDB server for ubertests (db/user "test", empty password, federated enabled).
 	set -e
 	mkdir -p /var/run/mysqld
 	chown -R mysql:mysql /var/run/mysqld
-	if [ -f /etc/mysql/mysql.conf.d/mysqld.cnf ] && ! grep -q "^federated=ON" /etc/mysql/mysql.conf.d/mysqld.cnf; then
-		echo "federated=ON" >> /etc/mysql/mysql.conf.d/mysqld.cnf
+	if [ -f /etc/mysql/mariadb.conf.d/50-server.cnf ]; then
+		if ! grep -q "^[[]mariadb[]]" /etc/mysql/mariadb.conf.d/50-server.cnf; then
+			echo "[mariadb]" >> /etc/mysql/mariadb.conf.d/50-server.cnf
+		fi
+		if ! grep -q "^plugin_load_add[[:space:]]*=[[:space:]]*ha_federatedx" /etc/mysql/mariadb.conf.d/50-server.cnf; then
+			echo "plugin_load_add = ha_federatedx" >> /etc/mysql/mariadb.conf.d/50-server.cnf
+		fi
 	fi
-	service mysql start >/dev/null 2>&1 || mysqld_safe --datadir=/var/lib/mysql &
+	service mariadb start >/dev/null 2>&1 || mysqld_safe --datadir=/var/lib/mysql &
 	for i in $(seq 1 30); do
 		if mysqladmin ping -h localhost --silent; then break; fi
 		sleep 2

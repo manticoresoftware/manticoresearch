@@ -175,6 +175,11 @@ docker create \
 	-f /dev/null
 	docker start manticore-test-kit
 
+	# Copy current repo into /manticore, excluding heavy/unused dirs to save space.
+	docker exec manticore-test-kit mkdir -p /manticore
+	tar -C .. --exclude=.git --exclude=manual --exclude=src -cf - . | \
+		docker exec -i manticore-test-kit tar -C /manticore -xf -
+
 	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
 	docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
 

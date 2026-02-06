@@ -19,7 +19,7 @@ To run KNN searches, you must first configure your table. Float vectors and KNN 
   - `L2` - Squared L2
   - `IP` - Inner product
   - `COSINE` - Cosine similarity
-  
+
   **Note:** When using `COSINE` similarity, vectors are automatically normalized upon insertion. This means the stored vector values may differ from the original input values, as they will be converted to unit vectors (vectors with a mathematical length/magnitude of 1.0) to enable efficient cosine similarity calculations. This normalization preserves the direction of the vector while standardizing its length.
 * `hnsw_m`: An optional setting that defines the maximum number of outgoing connections in the graph. The default is 16.
 * `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off. The default is 200.
@@ -70,11 +70,23 @@ When creating a table for auto embeddings, specify:
 - `FROM`: Which fields to use for embedding generation (empty means all text/string fields)
 
 **Supported embedding models:**
-- **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
-- **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
-- **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
-- **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+
+| Model Type | Example | API Key Required | Notes |
+|------------|---------|-----------------|-------|
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |
+| **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | No | Local Qwen family models |
+| **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
+| **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
+| **Gemma** | `h2oai/embeddinggemma-300m` | No | Local Gemma family models |
+| **OpenAI** | `openai/text-embedding-ada-002` | Yes | `API_KEY='<OPENAI_API_KEY>'` |
+| **Voyage** | Voyage AI models | Yes | `API_KEY='<VOYAGE_API_KEY>'` |
+| **Jina** | Jina AI models | Yes | `API_KEY='<JINA_API_KEY>'` |
+
+**Local model format requirements:**
+- Must be saved in `safetensors` format (single-file only)
+- Supported families: Qwen, Llama, Mistral, Gemma
+- Tested models: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
+- Other `safetensors` models may also work, but are not guaranteed
 
 More information about setting up a `float_vector` attribute can be found [here](../Creating_a_table/Data_types.md#Float-vector).
 
@@ -86,9 +98,9 @@ More information about setting up a `float_vector` attribute can be found [here]
 Using sentence-transformers (no API key needed)
 ```sql
 CREATE TABLE products (
-    title TEXT, 
+    title TEXT,
     description TEXT,
-    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
 );
 ```
@@ -96,7 +108,7 @@ CREATE TABLE products (
 Using Qwen local embeddings (no API key needed)
 ```sql
 CREATE TABLE products_qwen (
-    title TEXT, 
+    title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
@@ -107,7 +119,7 @@ Using OpenAI (requires API_KEY parameter)
 ```sql
 CREATE TABLE products_openai (
     title TEXT,
-    description TEXT, 
+    description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
@@ -183,12 +195,12 @@ When using auto embeddings, **do not specify the vector field** in your INSERT s
 
 Insert text data only - embeddings generated automatically
 ```sql
-INSERT INTO products (title) VALUES 
+INSERT INTO products (title) VALUES
 ('machine learning artificial intelligence'),
 ('banana fruit sweet yellow');
 ```
 
-Insert multiple fields - both used for embedding if FROM='title,description'  
+Insert multiple fields - both used for embedding if FROM='title,description'
 ```sql
 INSERT INTO products_openai (title, description) VALUES
 ('smartphone', 'latest mobile device with advanced features'),
@@ -197,7 +209,7 @@ INSERT INTO products_openai (title, description) VALUES
 
 Insert empty vector (document excluded from vector search)
 ```sql
-INSERT INTO products (title, embedding_vector) VALUES 
+INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());
 ```
 
@@ -427,7 +439,7 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"ef": 2000, 
+		"ef": 2000,
 		"rescore": true,
 		"oversampling": 3.0
 	}

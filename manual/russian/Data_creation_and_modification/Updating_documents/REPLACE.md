@@ -4,7 +4,7 @@
 
 `REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но предварительно помечает предыдущий документ с таким же ID как удалённый перед вставкой нового.
 
-Как и с INSERT, если таблица, в которую вы пытаетесь заменить документы, ещё не существует, Manticore попытается создать её автоматически. Подробнее см. [Автосхема](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+Если таблица, в которую вы пытаетесь заменить документы, не существует, Manticore попытается создать её автоматически. Подробности см. в разделе [Автосхема](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 Если вам нужны обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 

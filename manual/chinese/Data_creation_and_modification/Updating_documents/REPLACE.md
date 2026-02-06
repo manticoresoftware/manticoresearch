@@ -4,7 +4,7 @@
 
 `REPLACE` 的工作方式类似于 [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)，但它会在插入新文档之前，将具有相同 ID 的前一个文档标记为已删除。
 
-与 INSERT 一样，如果您尝试替换的表尚不存在，Manticore 将尝试自动创建它。有关详细信息，请参阅 [Auto schema](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
+如果尝试替换文档的表不存在，Manticore 会尝试自动创建它。有关详细信息，请参阅 [自动模式](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
 
 如果您想进行原地更新，请参阅 [本节](../../Data_creation_and_modification/Updating_documents/UPDATE.md)。
 

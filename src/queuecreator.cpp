@@ -816,6 +816,8 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 	for ( const auto & sAttr : dDependentCols )
 	{
 		auto pDep = const_cast<CSphColumnInfo *> ( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		if ( pDep->IsJoined() )
+			continue;
 		if ( pDep->m_eStage > tExprCol.m_eStage )
 			pDep->m_eStage = tExprCol.m_eStage;
 	}

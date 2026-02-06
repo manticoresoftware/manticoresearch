@@ -980,8 +980,34 @@ select * from join_json_l inner join join_json_r on string(join_json_l.j.s)=join
 <sphinxql>
 drop table join_json_r;
 drop table join_json_l;
-
 </sphinxql>
+
+<sphinxql>
+create table t1;
+create table t2(i int);
+insert into t1 (id) values(1);
+insert into t2 values(1, 1);
+
+<!-- alias from joined attr -->
+select *, i al, (i * 0.01) pct from t2 where pct > 0.0;
+select t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+select t2.i * 0.1 pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+
+select *, t2.i * 0.1 pct from t1 join t2 on t1.id = t2.id where pct>0.0;
+select t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+select *, t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+
+<!-- chained aliases from joined attr -->
+select t2.i al, al+1 b, b*2 c from t1 join t2 on t1.id = t2.id where c > 0;
+
+<!-- multiple aliases from joined attr in one expression -->
+select t2.i al, (al + al) doubled from t1 join t2 on t1.id = t2.id where doubled > 0;
+
+drop table if exists t1;
+drop table if exists t2;
+</sphinxql>
+
+
 </queries>
 
 </test>

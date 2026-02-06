@@ -161,7 +161,6 @@
     * [• KILL](Node_info_and_management/KILL.md)
     * [• SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md)
     * [• SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md)
-    * [• 监控](Node_info_and_management/Monitoring.md)
     * [≫ 分析]
         * [• 查询分析](Node_info_and_management/Profiling/Query_profile.md)
         * [• 查询计划](Node_info_and_management/Profiling/Query_plan.md)

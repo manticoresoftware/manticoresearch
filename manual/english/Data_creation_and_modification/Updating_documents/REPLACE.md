@@ -4,6 +4,8 @@
 
 `REPLACE` works similarly to [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), but it marks the previous document with the same ID as deleted before inserting a new one.
 
+As witn INSERT, if the table you’re trying to replace documents in doesn’t exist yet, Manticore will attempt to create it automatically. For more details, see [Auto schema](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
+
 If you are looking for in-place updates, please see [this section](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE

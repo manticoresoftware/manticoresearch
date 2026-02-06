@@ -63,10 +63,28 @@ endif()
 # since cmake 3.18 names need fixup
 include(fixup_test_name)
 
+set (UBERTEST_BIN_DIR "" CACHE STRING "Use prebuilt binaries for UberTests (path to dir with searchd/indexer)")
+set (UBERTEST_SEARCHD "" CACHE FILEPATH "Use a specific searchd binary for UberTests")
+set (UBERTEST_INDEXER "" CACHE FILEPATH "Use a specific indexer binary for UberTests")
+
+set (_ubertest_env "INDEXER=$<TARGET_FILE:indexer>;SEARCHD=$<TARGET_FILE:searchd>")
+if (UBERTEST_BIN_DIR)
+	set (_ubertest_env "INDEXER=${UBERTEST_BIN_DIR}/indexer;SEARCHD=${UBERTEST_BIN_DIR}/searchd")
+endif ()
+if (UBERTEST_SEARCHD)
+	set (_ubertest_env "INDEXER=$<TARGET_FILE:indexer>;SEARCHD=${UBERTEST_SEARCHD}")
+endif ()
+if (UBERTEST_INDEXER)
+	set (_ubertest_env "INDEXER=${UBERTEST_INDEXER};SEARCHD=$<TARGET_FILE:searchd>")
+endif ()
+if (UBERTEST_SEARCHD AND UBERTEST_INDEXER)
+	set (_ubertest_env "INDEXER=${UBERTEST_INDEXER};SEARCHD=${UBERTEST_SEARCHD}")
+endif ()
+
 function (_test_prop test)
 	SET_TESTS_PROPERTIES ("${test}" PROPERTIES SKIP_RETURN_CODE 42 FIXTURES_REQUIRED UBER )
 
-	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT "INDEXER=$<TARGET_FILE:indexer>;SEARCHD=$<TARGET_FILE:searchd>")
+	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT "${_ubertest_env}")
 	# m.b. append extra properties
 	if (COMMAND special_ubertest_properties) #cb from outside
 		special_ubertest_properties ("${test}")
@@ -245,5 +263,4 @@ foreach ( test ${tests} )
 endforeach ()
 
 add_subdirectory(indextool)
-
 

@@ -411,6 +411,33 @@ jobs:
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}
 
+  ubertests_test_kit_parallel:
+    if: always() && needs.test_kit_docker_build.result != 'failure'
+    name: UberTests (test-kit, parallel)
+    needs: test_kit_docker_build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Download test kit image
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: manticore_test_kit.img
+          path: .
+      - name: Load test kit image
+        run: |
+          docker import ./manticore_test_kit.img test-kit:img
+      - name: Run UberTests via CTest in parallel
+        run: |
+          docker run --rm \
+            -e CTEST_RESOURCE=/manticore/misc/ctest/ubertests/ubertests_docker_image/resource.json \
+            -e NO_BUILD=1 \
+            -e BUILD_DIR=/manticore/build_ubertests \
+            -e UBERTEST_BIN_DIR=/usr/bin \
+            -v "$(pwd)":/manticore \
+            test-kit:img \
+            bash -lc "cd /manticore && ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600"
+
   test_kit_docker_push:
     if: always() && needs.changes.outputs.source == 'true' && needs.check_branch.outputs.image_exists != 'true'
     needs:

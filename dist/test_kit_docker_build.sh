@@ -193,7 +193,7 @@ docker create \
 
 	# Copy current repo into /manticore, excluding heavy/unused dirs to save space.
 	docker exec manticore-test-kit mkdir -p /manticore
-	tar -C .. --exclude=.git --exclude=manual --exclude=src --exclude=build* --exclude=artifact.tar --exclude=build --exclude=docker -cf - . | \
+	tar -C .. --exclude=.git --exclude=manual --exclude=build* --exclude=artifact.tar --exclude=build --exclude=docker --exclude=cache -cf - . | \
 		docker exec -i manticore-test-kit tar -C /manticore -xf -
 
 	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
@@ -207,7 +207,7 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && \
 	printf "#!/bin/sh\nexit 101\n" > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d && \
-	DEBIAN_FRONTEND=noninteractive apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash mariadb-server && \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash mariadb-server cmake ninja-build build-essential xsltproc && \
 	rm -f /usr/sbin/policy-rc.d && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
@@ -252,6 +252,15 @@ docker exec manticore-test-kit bash -c \
 		sleep 2
 	done
 	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test1;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test2;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test3;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test4;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test5;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test6;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test7;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test8;"
+	mysql -uroot -e "CREATE DATABASE IF NOT EXISTS test9;"
 	mysql -uroot test -e "CREATE USER IF NOT EXISTS '\''test'\''@'\''%'\'' IDENTIFIED BY '\'''\''; GRANT ALL PRIVILEGES ON test.* TO '\''test'\''@'\''%'\''; GRANT ALL PRIVILEGES ON *.* TO '\''test'\''@'\''%'\'' WITH GRANT OPTION; FLUSH PRIVILEGES;"'
 
 docker exec manticore-test-kit bash -c \

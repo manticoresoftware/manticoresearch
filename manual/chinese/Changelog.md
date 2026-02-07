@@ -4,10 +4,12 @@
 **发布日期**：2026 年 2 月 7 日
 
 ### 推荐库
-- 推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：10.20.0
+- 推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：10.2.0
 - 推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.41.0
 
 如果你遵循 [官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
+
+❤️ 我们想感谢 [@pakud](https://github.com/pakud) 在 [PR #4075](https://github.com/manticoresoftware/manticoresearch/pull/4075) 上的工作。
 
 ## 突破性变更
 * ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ 问题 #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) MCL 10.0.0：增加了对 `DROP CACHE` 的支持。这更新了守护进程与 MCL 之间的接口。旧版 Manticore Search 不支持较新的 MCL。

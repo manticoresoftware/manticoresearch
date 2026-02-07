@@ -4,10 +4,12 @@
 **Выпущена**: 7 февраля 2026 г.
 
 ### Рекомендуемые библиотеки
-- Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 10.20.0
+- Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 10.2.0
 - Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.41.0
 
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не нужно об этом беспокоиться.
+
+❤️ Мы хотели бы поблагодарить [@pakud](https://github.com/pakud) за их работу над [PR #4075](https://github.com/manticoresoftware/manticoresearch/pull/4075).
 
 ## Критические изменения
 * ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ Issue #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) MCL 10.0.0: Добавлена поддержка `DROP CACHE`. Это обновляет интерфейс между демоном и MCL. Более старые версии Manticore Search не поддерживают новую MCL.

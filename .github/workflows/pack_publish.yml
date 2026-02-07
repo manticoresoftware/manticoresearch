@@ -219,7 +219,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        DISTR: [rhel7, rhel8, rhel9, rhel10]
+        DISTR: [rhel8, rhel9, rhel10]
         arch: [x86_64, aarch64]
     with:
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}

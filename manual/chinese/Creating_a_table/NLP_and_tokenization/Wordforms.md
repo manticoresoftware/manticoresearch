@@ -189,6 +189,8 @@ wordforms=/tmp/wf2
 wordforms=/tmp/wf_new*
 ```
 
+<!-- end -->
+
 ## wordforms_list
 
 ```ini

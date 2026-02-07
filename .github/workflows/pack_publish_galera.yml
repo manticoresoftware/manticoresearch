@@ -162,7 +162,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [7, 8, 9, 10]
+        DISTR: [8, 9, 10]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing

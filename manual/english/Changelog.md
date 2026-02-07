@@ -4,10 +4,12 @@
 **Released**: February 7th 2026
 
 ### Recommended Libraries
-- Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 10.20.0
+- Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 10.2.0
 - Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.41.0
 
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don't need to worry about this.
+
+❤️ We’d like to thank [@pakud](https://github.com/pakud) for their work on [PR #4075](https://github.com/manticoresoftware/manticoresearch/pull/4075).
 
 ## Breaking Changes
 * ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ Issue #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) MCL 10.0.0: Added support for `DROP CACHE`. This updates the interface between the daemon and MCL. Older Manticore Search versions don't suport the newer MCL.

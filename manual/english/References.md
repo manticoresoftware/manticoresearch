@@ -668,4 +668,5 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [13.13.0](https://manual.manticoresearch.com/manticore-13-13-0/). [Installation page](https://manticoresearch.com/install-13.13.0/)
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Installation page](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Installation page](https://manticoresearch.com/install-15.1.0/)
+* [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [Installation page](https://manticoresearch.com/install-17.5.1/)
 <!-- proofread -->

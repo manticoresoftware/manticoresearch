@@ -448,6 +448,7 @@ static void ResetTailHit ( CSphWordHit * pHit )
 
 static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc, const ISphSchema & tSchema )
 {
+	const char ** ppStr = tDoc.m_dStrings.Begin();
 	int iStrAttr = 0;
 
 	for ( int i=0; i < tSchema.GetAttrsCount(); ++i )
@@ -458,7 +459,7 @@ static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc
 			continue;
 
 		if ( iAttr==i )
-			return tDoc.m_dStrings[iStrAttr];
+			return ppStr[iStrAttr];
 
 		iStrAttr++;
 	}
@@ -620,6 +621,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
+	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 	{
@@ -630,12 +632,12 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_JSON:
 			{
-				const char * pStr = tDoc.m_dStrings[iStrAttr++];
+				const BYTE* pStr = ppStr ? (const BYTE*)ppStr[iStrAttr++] : nullptr;
 				ByteBlob_t dStr;
 				if ( tColumn.m_eAttrType == SPH_ATTR_STRING )
-					dStr = { (const BYTE *)pStr, ( pStr ? (int)strlen ( (const char*)pStr ) : 0 ) };
+					dStr = { pStr, pStr ? (int)strlen ( (const char*)pStr ) : 0 };
 				else // SPH_ATTR_JSON - packed len + data
-					dStr = sphUnpackPtrAttr ( (const BYTE *)pStr );
+					dStr = sphUnpackPtrAttr ( pStr );
 
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, dStr.first, dStr.second );

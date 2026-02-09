@@ -336,12 +336,11 @@ const TDigestRuntimeState_t * AggrTDigestBase_c::TryGetRuntime ( const CSphMatch
 void AggrTDigestBase_c::FlushPending ( TDigestRuntimeState_t & tState ) const
 {
 	auto & dPending = tState.m_dPending;
-	if ( !dPending.GetLength() )
+	int iCount = dPending.GetLength();
+	if ( !iCount )
 		return;
 
-	std::sort ( dPending.Begin(), dPending.End() );
-	for ( double fValue : dPending )
-		tState.m_tDigest.Add ( fValue );
+	tState.m_tDigest.AddBulk ( dPending.Begin(), iCount );
 	dPending.Resize ( 0 );
 }
 

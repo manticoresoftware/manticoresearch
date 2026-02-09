@@ -45,6 +45,56 @@ public:
 			FlushBuffer();
 	}
 
+	void AddBulk ( const double * pValues, int iCount )
+	{
+		if ( !pValues || iCount<=0 )
+			return;
+
+		double fBatchMin = std::numeric_limits<double>::infinity();
+		double fBatchMax = -std::numeric_limits<double>::infinity();
+
+		for ( int i = 0; i < iCount; ++i )
+		{
+			double fValue = pValues[i];
+			fBatchMin = std::min ( fBatchMin, fValue );
+			fBatchMax = std::max ( fBatchMax, fValue );
+		}
+
+		if ( std::isinf ( m_fMin ) )
+		{
+			m_fMin = fBatchMin;
+			m_fMax = fBatchMax;
+		}
+		else
+		{
+			m_fMin = std::min ( m_fMin, fBatchMin );
+			m_fMax = std::max ( m_fMax, fBatchMax );
+		}
+
+		m_iCount += (int64_t)iCount;
+
+		int iPos = 0;
+		while ( iPos < iCount )
+		{
+			int iSpace = m_iBufferLimit - m_dBuffer.GetLength();
+			if ( iSpace<=0 )
+			{
+				FlushBuffer();
+				continue;
+			}
+
+			int iChunk = std::min ( iSpace, iCount - iPos );
+			TDigestCentroid_t * pDest = m_dBuffer.AddN ( iChunk );
+			for ( int j = 0; j < iChunk; ++j )
+			{
+				double fValue = pValues[iPos + j];
+				pDest[j].m_fMean = fValue;
+				pDest[j].m_iCount = 1;
+			}
+			iPos += iChunk;
+		}
+	}
+
 	double Percentile ( int iPercent ) const noexcept
 	{
 		return Percentile ( double ( iPercent ) );
@@ -577,6 +627,11 @@ TDigest_c & TDigest_c::operator= ( const TDigest_c & rhs )
 void TDigest_c::Add ( double fValue, int64_t iWeight )
 {
 	m_pImpl->Add ( fValue, iWeight );
+}
+
+void TDigest_c::AddBulk ( const double * pValues, int iCount )
+{
+	m_pImpl->AddBulk ( pValues, iCount );
 }
 
 

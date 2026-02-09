@@ -41,6 +41,7 @@ public:
 	TDigest_c & operator= ( const TDigest_c & );
 
 	void Add ( double fValue, int64_t iWeight = 1 );
+	void AddBulk ( const double * pValues, int iCount );
 	double Percentile ( int iPercent ) const noexcept;
 	double Percentile ( double fPercent ) const noexcept;
 	double Quantile ( double fQuantile ) const noexcept;

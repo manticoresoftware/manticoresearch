@@ -2411,39 +2411,34 @@ static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInf
 	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 
-static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad )
+static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad,
+	CSphVector<TDigestCentroid_t> & dCentroids,
+	CSphVector<JsonAggr_t::MadDeviationEntry_t> & dDeviations )
 {
 	if ( tDigest.GetCount()==0 )
 		return false;
 
 	double fMedian = tDigest.Quantile ( 0.5 );
 
-	CSphVector<TDigestCentroid_t> dCentroids;
 	tDigest.Export ( dCentroids );
 
 	if ( dCentroids.IsEmpty() )
 		return false;
 
-	struct DeviationEntry_t
-	{
-		double		m_fDeviation = 0.0;
-		int64_t		m_iWeight = 0;
-	};
-
-	CSphVector<DeviationEntry_t> dDeviations;
 	dDeviations.Resize ( dCentroids.GetLength() );
 
 	int64_t iTotalWeight = 0;
 	for ( int i = 0; i < dCentroids.GetLength(); ++i )
 	{
 		const auto & tCentroid = dCentroids[i];
-		dDeviations[i].m_fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
-		dDeviations[i].m_iWeight = tCentroid.m_iCount;
+		auto & tDeviation = dDeviations[i];
+		tDeviation.m_fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
+		tDeviation.m_iWeight = tCentroid.m_iCount;
 		iTotalWeight += tCentroid.m_iCount;
 	}
 
 	std::sort ( dDeviations.Begin(), dDeviations.End(),
-		[] ( const DeviationEntry_t & a, const DeviationEntry_t & b )
+		[] ( const JsonAggr_t::MadDeviationEntry_t & a, const JsonAggr_t::MadDeviationEntry_t & b )
 		{
 			return a.m_fDeviation < b.m_fDeviation;
 		} );
@@ -2687,7 +2682,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				LoadTdigestFromMatch ( tMatch, *tKey.m_pKey, tDigest );
 
 				double fMad = 0.0;
-				if ( CalcMadFromDigest ( tDigest, fMad ) )
+				if ( CalcMadFromDigest ( tDigest, fMad, tAggr.m_dMadCentroidScratch, tAggr.m_dMadDeviationScratch ) )
 				{
 					CSphString sValue = FormatNumeric ( fMad );
 					AppendValueStringFields ( tOut, sValue );

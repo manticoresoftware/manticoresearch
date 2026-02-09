@@ -254,7 +254,8 @@ public:
 
 		FlushPending ( tState );
 		tDigest.Clear();
-		tDigest.SetCompression ( m_fCompression );
+		if ( tDigest.GetCompression()!=m_fCompression )
+			tDigest.SetCompression ( m_fCompression );
 		tState.m_dPending.Resize ( 0 );
 		AppendValue ( tState, tDst );
 	}
@@ -274,7 +275,8 @@ public:
 			AppendValue ( tState, tSrc );
 		}
 
-		tDigest.SetCompression ( m_fCompression );
+		if ( tDigest.GetCompression()!=m_fCompression )
+			tDigest.SetCompression ( m_fCompression );
 	}
 
 	void Finalize ( CSphMatch & tDst ) override

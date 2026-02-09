@@ -1956,7 +1956,6 @@ static void ProcessStoredAttrs ( DocstoreBuilder_i::Doc_t & tStoredDoc, const In
 
 	VecTraits_T<BYTE> * pAddedAttrs = tStoredDoc.m_dFields.AddN ( iNumStoredAttrs );
 
-	const char ** ppStr = tDoc.m_dStrings.Begin();
 	int iStrAttr = 0;
 	int iMva = 0;
 	int iStoredAttr = 0;
@@ -1973,7 +1972,7 @@ static void ProcessStoredAttrs ( DocstoreBuilder_i::Doc_t & tStoredDoc, const In
 			{
 				if ( bStored )
 				{
-					BYTE * pStr = ppStr ? (BYTE *) ppStr[iStrAttr] : nullptr;
+					BYTE * pStr = (BYTE *)tDoc.m_dStrings[iStrAttr];
 					pAddedAttrs[iStoredAttr] = { pStr, pStr ? (int) strlen ((const char *) pStr ) : 0 };
 				}
 

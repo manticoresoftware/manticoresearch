@@ -57,6 +57,7 @@ public:
 
 	void Export ( CSphVector<TDigestCentroid_t> & dOut ) const;
 	void Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids );
+	void ImportRaw ( const void * pData, int iCount );
 
 	void SetCompression ( double fCompression );
 	double GetCompression () const noexcept;

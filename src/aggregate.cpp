@@ -112,14 +112,9 @@ static void LoadTDigestFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double 
 	memcpy ( &fMax, pData, sizeof(double) );
 	pData += sizeof(double);
 
-	CSphVector<TDigestCentroid_t> dCentroids;
-	if ( iCount>0 )
-	{
-		dCentroids.Resize ( iCount );
-		memcpy ( dCentroids.Begin(), pData, sizeof(TDigestCentroid_t)*(size_t)iCount );
-	}
+	const BYTE * pCentroids = pData;
 	tDigest.SetCompression ( fCompression );
-	tDigest.Import ( dCentroids );
+	tDigest.ImportRaw ( pCentroids, iCount );
 	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 

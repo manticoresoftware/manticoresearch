@@ -340,17 +340,21 @@ public:
 
 	void Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids )
 	{
+		ImportRaw ( dCentroids.Begin(), dCentroids.GetLength() );
+	}
+
+	void ImportRaw ( const void * pData, int iCount )
+	{
 		Reset();
-		if ( dCentroids.IsEmpty() )
+		if ( !pData || iCount<=0 )
 			return;
 
-		m_dCentroids.Resize ( dCentroids.GetLength() );
+		m_dCentroids.Resize ( iCount );
+		memcpy ( m_dCentroids.Begin(), pData, sizeof(TDigestCentroid_t)*(size_t)iCount );
+
 		m_iCount = 0;
-		for ( int i = 0; i < dCentroids.GetLength(); ++i )
-		{
-			m_dCentroids[i] = dCentroids[i];
-			m_iCount += dCentroids[i].m_iCount;
-		}
+		for ( int i = 0; i < iCount; ++i )
+			m_iCount += m_dCentroids[i].m_iCount;
 
 		std::sort ( m_dCentroids.Begin(), m_dCentroids.End(),
 			[] ( const TDigestCentroid_t & a, const TDigestCentroid_t & b ) { return a.m_fMean < b.m_fMean; } );
@@ -693,6 +697,11 @@ void TDigest_c::Export ( CSphVector<TDigestCentroid_t> & dOut ) const
 void TDigest_c::Import ( const VecTraits_T<TDigestCentroid_t> & dCentroids )
 {
 	m_pImpl->Import ( dCentroids );
+}
+
+void TDigest_c::ImportRaw ( const void * pData, int iCount )
+{
+	m_pImpl->ImportRaw ( pData, iCount );
 }
 
 void TDigest_c::SetCompression ( double fCompression )

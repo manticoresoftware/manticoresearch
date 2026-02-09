@@ -2406,14 +2406,8 @@ static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInf
 	memcpy ( &fMax, pData, sizeof(double) );
 	pData += sizeof(double);
 
-	CSphVector<TDigestCentroid_t> dCentroids;
-	if ( iCount>0 )
-	{
-		dCentroids.Resize ( iCount );
-		memcpy ( dCentroids.Begin(), pData, sizeof(TDigestCentroid_t)*(size_t)iCount );
-	}
-
-	tDigest.Import ( dCentroids );
+	const BYTE * pCentroids = pData;
+	tDigest.ImportRaw ( pCentroids, iCount );
 	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 

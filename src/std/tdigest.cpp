@@ -126,66 +126,42 @@ public:
 			return m_dCentroids[0].m_fMean;
 
 		const double fTotalWeight = (double)m_iCount;
-		const double fIndex = fQuantile * fTotalWeight;
+		if ( fTotalWeight<=1.0 )
+			return m_dCentroids[0].m_fMean;
 
-		if ( fIndex < 1.0 )
-			return m_fMin;
+		const double fTarget = fQuantile * ( fTotalWeight - 1.0 ) + 0.5;
 
-		const TDigestCentroid_t & tFirst = m_dCentroids[0];
-		if ( tFirst.m_iCount>1 && fIndex < tFirst.m_iCount / 2.0 )
+		double fCumulative = 0.0;
+		for ( int i = 0; i < m_dCentroids.GetLength(); ++i )
 		{
-			double fDen = tFirst.m_iCount / 2.0 - 1.0;
-			if ( fDen>0.0 )
-				return m_fMin + ( fIndex - 1.0 ) / fDen * ( tFirst.m_fMean - m_fMin );
-			return tFirst.m_fMean;
-		}
+			const auto & tCurrent = m_dCentroids[i];
+			const double fNext = fCumulative + tCurrent.m_iCount;
 
-		if ( fIndex > fTotalWeight - 1.0 )
-			return m_fMax;
-
-		const TDigestCentroid_t & tLast = m_dCentroids[m_dCentroids.GetLength()-1];
-		if ( tLast.m_iCount>1 && fTotalWeight - fIndex <= tLast.m_iCount / 2.0 )
-		{
-			double fDen = tLast.m_iCount / 2.0 - 1.0;
-			if ( fDen>0.0 )
-				return m_fMax - ( ( fTotalWeight - fIndex - 1.0 ) / fDen ) * ( m_fMax - tLast.m_fMean );
-			return tLast.m_fMean;
-		}
-
-		double fWeightSoFar = tFirst.m_iCount / 2.0;
-		for ( int i = 0; i < m_dCentroids.GetLength() - 1; ++i )
-		{
-			const auto & tLeft = m_dCentroids[i];
-			const auto & tRight = m_dCentroids[i+1];
-			double fDw = ( tLeft.m_iCount + tRight.m_iCount ) / 2.0;
-			if ( fWeightSoFar + fDw > fIndex )
+			if ( fTarget <= fNext )
 			{
-				double fLeftUnit = 0.0;
-				if ( tLeft.m_iCount==1 )
-				{
-					if ( fIndex - fWeightSoFar < 0.5 )
-						return tLeft.m_fMean;
-					fLeftUnit = 0.5;
-				}
+				double fLeftBound = ( i==0 )
+					? m_fMin
+					: ( m_dCentroids[i-1].m_fMean + tCurrent.m_fMean ) * 0.5;
 
-				double fRightUnit = 0.0;
-				if ( tRight.m_iCount==1 )
-				{
-					if ( fWeightSoFar + fDw - fIndex < 0.5 )
-						return tRight.m_fMean;
-					fRightUnit = 0.5;
-				}
+				double fRightBound = ( i==m_dCentroids.GetLength()-1 )
+					? m_fMax
+					: ( tCurrent.m_fMean + m_dCentroids[i+1].m_fMean ) * 0.5;
 
-				double fZ1 = fIndex - fWeightSoFar - fLeftUnit;
-				double fZ2 = fWeightSoFar + fDw - fIndex - fRightUnit;
-				return WeightedAverage ( tLeft.m_fMean, fZ2, tRight.m_fMean, fZ1 );
+				if ( fRightBound < fLeftBound )
+					std::swap ( fLeftBound, fRightBound );
+
+				double fSpan = fNext - fCumulative;
+				if ( fSpan<=0.0 )
+					return tCurrent.m_fMean;
+
+				double fRatio = ( fTarget - fCumulative ) / fSpan;
+				return fLeftBound + ( fRightBound - fLeftBound ) * fRatio;
 			}
-			fWeightSoFar += fDw;
+
+			fCumulative = fNext;
 		}
 
-		double fZ1 = fIndex - fTotalWeight - tLast.m_iCount / 2.0;
-		double fZ2 = tLast.m_iCount / 2.0 - fZ1;
-		return WeightedAverage ( tLast.m_fMean, fZ1, m_fMax, fZ2 );
+		return m_fMax;
 	}
 
 	double Cdf ( double fValue ) const noexcept

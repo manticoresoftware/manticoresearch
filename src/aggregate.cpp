@@ -289,6 +289,11 @@ public:
 		DropRuntime ( tMatch );
 	}
 
+	bool NeedsDiscard () const override
+	{
+		return true;
+	}
+
 };
 
 TDigestRuntimeState_t * AggrTDigestBase_c::CreateRuntime ( CSphMatch & tMatch ) const

@@ -27,6 +27,7 @@ public:
 	virtual void	Finalize ( CSphMatch & tDst ) {}
 	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
+	virtual bool	NeedsDiscard () const { return false; }
 };
 
 

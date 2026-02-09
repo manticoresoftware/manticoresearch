@@ -61,6 +61,8 @@ The features of the Manticore SQL log format compared to the [plain format](../L
 ```
 <!-- end -->
 
+In each entry, **real** is the elapsed time from start to finish of the query (wall-clock). **wall** is the accumulated query time: for a single local table it equals real; for [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) queries it is the sum of local search time plus each agent's reported query time. Because agents run in parallel, wall can exceed real (e.g. real 10s, wall 50s with 5 agents each taking ~10s). Use real for "how long the user waited"; use wall to see total work done across agents.
+
 ### Plain log format
 
 <!-- example plain_log -->
@@ -82,8 +84,8 @@ The log format is as follows:
 ```
 
 where:
-* `real-time` is the time from the start to the finish of the query.
-* `wall-time` is similar to real-time, but excludes time spent waiting for agents and merging result sets from them.
+* `real-time` is the elapsed time from the start to the finish of the query (wall-clock).
+* `wall-time` is the accumulated query time: for a single local table it matches real-time; for [distributed](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) queries it is the sum of local search time plus each agent's query time, so it can exceed real-time when agents run in parallel.
 * `perf-stats` includes CPU/IO stats when Manticore is started with `--cpustats` (or it was enabled via `SET GLOBAL cpustats=1`) and/or `--iostats` (or it was enabled via `SET GLOBAL iostats=1`):
   - `ios` is the number of file I/O operations carried out;
   - `kb` is the amount of data in kilobytes read from the table files;

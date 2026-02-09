@@ -703,8 +703,8 @@ struct ExpansionStats_t
 class CSphQueryResultMeta
 {
 public:
-	int						m_iQueryTime = 0;		///< query time, milliseconds
-	int						m_iRealQueryTime = 0;	///< query time, measured just from start to finish of the query. In milliseconds
+	int						m_iQueryTime = 0;		///< query time, ms. For distributed: sum of local + all agents' query times (can exceed m_iRealQueryTime when agents run in parallel)
+	int						m_iRealQueryTime = 0;	///< elapsed wall-clock time from start to finish of the query, milliseconds
 	int64_t					m_iCpuTime = 0;			///< user time, microseconds
 	int						m_iMultiplier = 1;		///< multi-query multiplier, -1 to indicate error
 

@@ -22,6 +22,7 @@
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
 #include "std/tdigest.h"
+#include "std/tdigest_runtime.h"
 
 
 static const char * g_szAll = "_all";
@@ -2385,30 +2386,8 @@ static double GetTdigestCompression ( const CSphColumnInfo & tCol )
 static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, TDigest_c & tDigest )
 {
 	double fCompression = GetTdigestCompression ( tCol );
-	tDigest.SetCompression ( fCompression );
-
 	ByteBlob_t dBlob = tMatch.FetchAttrData ( tCol.m_tLocator, nullptr );
-	if ( !dBlob.first )
-	{
-		tDigest.Clear();
-		return;
-	}
-
-	const BYTE * pData = dBlob.first;
-	int iCount = 0;
-	memcpy ( &iCount, pData, sizeof(int) );
-	pData += sizeof(int);
-
-	double fMin = 0.0;
-	double fMax = 0.0;
-	memcpy ( &fMin, pData, sizeof(double) );
-	pData += sizeof(double);
-	memcpy ( &fMax, pData, sizeof(double) );
-	pData += sizeof(double);
-
-	const BYTE * pCentroids = pData;
-	tDigest.ImportRaw ( pCentroids, iCount );
-	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
+	sphTDigestLoadFromBlob ( dBlob, tDigest, fCompression );
 }
 
 static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad,

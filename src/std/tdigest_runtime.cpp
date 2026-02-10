@@ -2,6 +2,8 @@
 
 #include "attribute.h"
 
+#include <cstring>
+
 TDigestRuntimeState_t::TDigestRuntimeState_t ( double fCompression )
 	: m_tDigest ( fCompression )
 {}
@@ -71,5 +73,35 @@ BYTE * sphCloneTDigestRuntimeBlob ( ByteBlob_t dBlob )
 
 	auto tAlloc = sphTDigestRuntimeCloneState ( *pState );
 	return tAlloc.m_pPacked;
+}
+
+
+void sphTDigestLoadFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double fCompression )
+{
+	if ( tDigest.GetCompression()!=fCompression )
+		tDigest.SetCompression ( fCompression );
+
+	if ( !dBlob.first )
+	{
+		tDigest.Clear();
+		tDigest.SetCompression ( fCompression );
+		return;
+	}
+
+	const BYTE * pData = dBlob.first;
+	int iCount = 0;
+	memcpy ( &iCount, pData, sizeof(int) );
+	pData += sizeof(int);
+
+	double fMin = 0.0;
+	double fMax = 0.0;
+	memcpy ( &fMin, pData, sizeof(double) );
+	pData += sizeof(double);
+	memcpy ( &fMax, pData, sizeof(double) );
+	pData += sizeof(double);
+
+	const BYTE * pCentroids = pData;
+	tDigest.ImportRaw ( pCentroids, iCount );
+	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
 }
 

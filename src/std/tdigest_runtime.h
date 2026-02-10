@@ -30,3 +30,6 @@ TDigestRuntimeState_t *	sphTDigestRuntimeAccess ( ByteBlob_t dBlob );
 bool					sphIsTDigestRuntimeBlob ( ByteBlob_t dBlob );
 void					sphDestroyTDigestRuntimeBlob ( ByteBlob_t dBlob );
 BYTE *					sphCloneTDigestRuntimeBlob ( ByteBlob_t dBlob );
+
+/// Utility helpers shared between TDigest aggregation paths
+void sphTDigestLoadFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double fCompression );

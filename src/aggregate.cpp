@@ -91,33 +91,6 @@ static void StoreTDigestBlob ( const TDigest_c & tDigest, const CSphMatch & tDst
 	const_cast<CSphMatch&>(tDst).SetAttr ( tLoc, (SphAttr_t)dOut.LeakData() );
 }
 
-static void LoadTDigestFromBlob ( ByteBlob_t dBlob, TDigest_c & tDigest, double fCompression )
-{
-	if ( !dBlob.first )
-	{
-		tDigest.Clear();
-		tDigest.SetCompression ( fCompression );
-		return;
-	}
-
-	const BYTE * pData = dBlob.first;
-	int iCount = 0;
-	memcpy ( &iCount, pData, sizeof(int) );
-	pData += sizeof(int);
-
-	double fMin = 0.0;
-	double fMax = 0.0;
-	memcpy ( &fMin, pData, sizeof(double) );
-	pData += sizeof(double);
-	memcpy ( &fMax, pData, sizeof(double) );
-	pData += sizeof(double);
-
-	const BYTE * pCentroids = pData;
-	tDigest.SetCompression ( fCompression );
-	tDigest.ImportRaw ( pCentroids, iCount );
-	tDigest.SetExtremes ( fMin, fMax, iCount>0 );
-}
-
 }
 
 class AggrTDigestBase_c : public AggrFunc_i
@@ -234,7 +207,7 @@ protected:
 		}
 
 		TDigest_c tOther ( m_fCompression );
-		LoadTDigestFromBlob ( dBlob, tOther, m_fCompression );
+		sphTDigestLoadFromBlob ( dBlob, tOther, m_fCompression );
 		tState.m_tDigest.Merge ( tOther );
 	}
 
@@ -308,7 +281,7 @@ TDigestRuntimeState_t * AggrTDigestBase_c::EnsureRuntime ( CSphMatch & tMatch ) 
 		return pRuntime;
 
 	TDigest_c tTemp ( m_fCompression );
-	LoadTDigestFromBlob ( dBlob, tTemp, m_fCompression );
+	sphTDigestLoadFromBlob ( dBlob, tTemp, m_fCompression );
 
 	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
 		tAlloc.m_pState->m_tDigest = std::move ( tTemp );

@@ -115,6 +115,7 @@ TDigestRuntimeAlloc_t sphTDigestRuntimeAllocate ( double fCompression )
 
 	bool bAligned = std::align ( RUNTIME_ALIGN, sizeof ( TDigestRuntimeState_t ), pAligned, uSpace );
 	assert ( bAligned && "Failed to align TDigest runtime state" );
+	(void)bAligned;
 
 	size_t uPad = reinterpret_cast<BYTE*>( pAligned ) - pStateArena;
 	assert ( uPad <= std::numeric_limits<uint8_t>::max() );

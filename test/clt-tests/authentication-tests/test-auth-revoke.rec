@@ -1,0 +1,72 @@
+––– comment –––
+Test REVOKE command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: REVOKE action ON target FROM 'username'
+Actions: read, write, schema, admin, replication (lowercase!)
+Target: '*' (all) or 'tablename'
+
+IMPORTANT: Actions must be lowercase (same bug as GRANT)
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create user and grant permissions –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'revokeuser' IDENTIFIED BY 'revokepass1';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: revokeuser
+generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'revokeuser';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON 'testtable' TO 'revokeuser';"
+––– output –––
+––– comment –––
+––– 2.6.1 Successful REVOKE of existing permission –––
+EXPECTED per spec: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'revokeuser';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='revokeuser' AND action='read';"
+––– output –––
+*************************** 1. row ***************************
+cnt: 0
+––– comment –––
+––– 2.6.2 Error on non-existent permission –––
+EXPECTED per spec: Error — does not have permission
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE schema ON * FROM 'revokeuser';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: User 'revokeuser' does not have 'schema' permission on '*'.
+––– comment –––
+––– 2.6.3 Error for non-existent user –––
+EXPECTED per spec: Error — user does not exist
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'nonexistent';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: User 'nonexistent' does not exist.
+––– comment –––
+––– 2.6.4 Error without ADMIN permission –––
+EXPECTED per spec: Permission denied
+ACTUAL: BUG CRITICAL — nonadmin successfully revokes permission! No ADMIN check!
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'nonadmin' IDENTIFIED BY 'nonadmin1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: nonadmin
+generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+––– input –––
+MYSQL_PWD=nonadmin1234 mysql -unonadmin -h0 -P9306 -e "REVOKE write ON 'testtable' FROM 'revokeuser';"
+––– output –––

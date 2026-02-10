@@ -1,0 +1,39 @@
+––– comment –––
+Test SHOW USERS command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: SHOW USERS — lists all users (requires ADMIN permission)
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– 2.7.1 Admin sees all users –––
+EXPECTED per spec: List of all users
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep "Username:" | sort
+––– output –––
+Username: admin
+Username: system.buddy
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'testuser' IDENTIFIED BY 'testpass1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: testuser
+generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep "Username:" | sort
+––– output –––
+Username: admin
+Username: system.buddy
+Username: testuser
+––– comment –––
+––– 2.7.2 Error without ADMIN permission –––
+EXPECTED per spec: Permission denied
+––– comment –––
+––– input –––
+MYSQL_PWD=testpass1234 mysql -utestuser -h0 -P9306 -e "SHOW USERS;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'testuser'

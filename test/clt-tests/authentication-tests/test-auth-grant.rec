@@ -1,0 +1,122 @@
+––– comment –––
+Test GRANT command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: GRANT action ON target TO 'username' [WITH BUDGET 'json']
+Actions: read, write, schema, admin, replication
+Target: '*' (all) or 'tablename'
+
+IMPORTANT: Actions must be lowercase (read, write, schema, admin, replication)
+BUG: UPPERCASE actions like READ, WRITE return (null) — should be case-insensitive
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create test user –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'grantuser' IDENTIFIED BY 'grantpass123';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: grantuser
+generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+––– comment –––
+––– 2.5.1 GRANT read ON * –––
+EXPECTED per spec: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser';"
+––– output –––
+––– comment –––
+––– 2.5.2 GRANT write ON 'table' –––
+EXPECTED per spec: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON 'testtable' TO 'grantuser';"
+––– output –––
+––– comment –––
+––– 2.5.3 GRANT schema ON * –––
+EXPECTED per spec: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT schema ON * TO 'grantuser';"
+––– output –––
+––– comment –––
+––– 2.5.4 GRANT admin ON * –––
+EXPECTED per spec: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT admin ON * TO 'grantuser';"
+––– output –––
+––– comment –––
+––– 2.5.5 GRANT replication ON * –––
+EXPECTED per spec: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT replication ON * TO 'grantuser';"
+––– output –––
+––– comment –––
+––– 2.5.6 GRANT WITH BUDGET –––
+EXPECTED per spec: Success with budget saved
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'budgetuser' IDENTIFIED BY 'budgetpass1';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: budgetuser
+generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'reports' TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":100}';"
+––– output –––
+––– comment –––
+––– 2.5.7 Error on duplicate permission –––
+EXPECTED per spec: Error — already has permission
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: User 'grantuser' already has 'read' permission on '*'.
+––– comment –––
+––– 2.5.8 Error for non-existent user –––
+EXPECTED per spec: Error — user does not exist
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'nonexistent';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: User 'nonexistent' does not exist.
+––– comment –––
+––– 2.5.9 Error on invalid action –––
+EXPECTED per spec: Error — invalid action
+ACTUAL: BUG — syntax error instead of validation error
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT invalid ON * TO 'grantuser';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'GRANT invalid ON * TO 'grantuser''
+––– comment –––
+––– 2.5.10 Error without ADMIN permission –––
+EXPECTED per spec: Permission denied
+ACTUAL: BUG CRITICAL — nonadmin bypasses ADMIN check, gets duplicate error instead of Permission denied!
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'nonadmin' IDENTIFIED BY 'nonadmin1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: nonadmin
+generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+––– input –––
+MYSQL_PWD=nonadmin1234 mysql -unonadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: User 'grantuser' already has 'read' permission on '*'.
+––– comment –––
+––– Verify permissions were granted –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='grantuser';"
+––– output –––
+*************************** 1. row ***************************
+cnt: 5

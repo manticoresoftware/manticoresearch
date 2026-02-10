@@ -1,0 +1,49 @@
+––– comment –––
+Test Bootstrap Mode (searchd --auth).
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+
+Per spec:
+- searchd --auth initializes admin user interactively
+- Prompts for login and password
+- Creates auth.json with hashes
+- Fails if auth.json already has data
+BUG CRITICAL: searchd --auth NOT IMPLEMENTED
+- Flag not in --help output
+- Does not create auth.json
+- No interactive prompts
+––– comment –––
+––– input –––
+sed -i '/^searchd/a\    auth = 1' /etc/manticoresearch/manticore.conf && echo "Auth enabled"
+––– output –––
+Auth enabled
+––– comment –––
+––– 8.1.1 Bootstrap: searchd --auth should prompt for credentials –––
+EXPECTED per spec: Interactive prompt for login/password
+BUG CRITICAL: --auth flag not implemented, shows normal startup error
+––– comment –––
+––– input –––
+rm -f /var/lib/manticore/auth.json; searchd --auth 2>&1 | head -5
+––– output –––
+#!/.*using config file.*/!#
+#!/.*FATAL.*pid file.*/!#
+#!/Manticore.*/!#
+#!/Copyright.*/!#
+#!/Copyright.*/!#
+––– comment –––
+––– 8.1.2 Bootstrap: auth.json not created –––
+BUG: --auth should create auth.json but doesn't
+––– comment –––
+––– input –––
+test -f /var/lib/manticore/auth.json && echo "file exists" || echo "file not found"
+––– output –––
+file not found
+––– comment –––
+––– 8.1.3 Bootstrap: --auth flag missing from help –––
+EXPECTED per spec: --auth documented in help
+BUG CRITICAL: --auth not shown in searchd --help
+––– comment –––
+––– input –––
+searchd --help 2>&1 | grep "\-\-auth" || echo "flag not found"
+––– output –––
+flag not found

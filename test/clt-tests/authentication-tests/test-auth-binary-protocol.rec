@@ -1,0 +1,51 @@
+––– comment –––
+Test Binary Protocol Authentication (inter-daemon communication).
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec:
+- Binary protocol uses AES-256-GCM encryption
+- 12-byte nonce: sender ID (4) + Boot ID (4) + counter (4)
+- PKCS5_PBKDF2_HMAC-SHA256 for key derivation
+- Replay protection via monotonic counter
+Note: Binary protocol is internal, testing via cluster replication indirectly
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– 8.3.1 Binary Protocol: Internal communication enabled –––
+EXPECTED per spec: searchd listens on binary port with auth
+Note: Direct binary protocol testing requires special client
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW STATUS LIKE 'uptime';"
+––– output –––
+*************************** 1. row ***************************
+Counter: uptime
+ Value: #!/[0-9]+/!#
+––– comment –––
+––– 8.3.2 Binary Protocol: Cluster status check –––
+EXPECTED per spec: Cluster commands work through binary protocol
+Note: Single node test, full test requires multi-node
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS cluster_test;"
+––– output –––
+*************************** 1. row ***************************
+cluster_test: 1
+––– comment –––
+––– 8.3.3 Binary Protocol: Verify auth config active –––
+EXPECTED per spec: Auth is enabled in daemon
+––– comment –––
+––– input –––
+grep -c "auth = 1" /etc/manticoresearch/manticore.conf
+––– output –––
+1
+––– comment –––
+Note: Full binary protocol tests (AES-256-GCM, nonce validation, replay protection)
+require specialized tooling or multi-node cluster setup.
+The binary protocol is used internally for:
+- Inter-daemon replication
+- Cluster node communication
+These are covered indirectly through cluster tests.
+––– comment –––

@@ -92,12 +92,13 @@ jobs:
             test_prefix: test/clt-tests/vector-knn/
           - name: Authentication
             test_prefix: test/clt-tests/authentication-tests/
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-72fe6c0e-buddy
               
     steps:
       - uses: manticoresoftware/clt@0.7.8
         with:
           artifact: ${{ inputs.artifact_name }}
-          image: ${{ inputs.docker_image }}
+          image: ${{ matrix.test-suite.image || inputs.docker_image }}
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}

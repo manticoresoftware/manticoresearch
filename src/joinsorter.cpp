@@ -203,6 +203,33 @@ CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CS
 }
 
 
+// check if any filter depends on an expression over joined attrs
+// e.g. SELECT t2.i al, (al * 0.1) pct ... WHERE pct > 0
+// pct itself is not ATTR_JOINED, but its expression depends on joined al
+static bool HasFiltersDependingOnJoinedAttrs ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema )
+{
+	for ( const auto & tFilter : dFilters )
+	{
+		const CSphColumnInfo * pFilterAttr = tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+		if ( !pFilterAttr || !pFilterAttr->m_pExpr || pFilterAttr->IsJoined() )
+			continue;
+
+		StrVec_t dDeps;
+		dDeps.Add ( pFilterAttr->m_sName );
+		FetchAttrDependencies ( dDeps, tSchema );
+
+		for ( const auto & sDep : dDeps )
+		{
+			const CSphColumnInfo * pDep = tSchema.GetAttr ( sDep.cstr() );
+			if ( pDep && pDep->IsJoined() )
+				return true;
+		}
+	}
+
+	return false;
+}
+
+
 bool NeedPostJoinFilterEvaluation ( const CSphQuery & tQuery, const ISphSchema & tSchema )
 {
 	return NeedPostJoinFilterEvaluation ( tQuery.m_dFilters, tQuery.m_sJoinIdx, tQuery.m_dFilterTree.GetLength()>0, tQuery.m_eJoinType, tSchema );
@@ -211,6 +238,9 @@ bool NeedPostJoinFilterEvaluation ( const CSphQuery & tQuery, const ISphSchema &
 
 bool NeedPostJoinFilterEvaluation ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sJoinIdx, bool bFilterTree, JoinType_e eJoinType, const ISphSchema & tSchema )
 {
+	if ( HasFiltersDependingOnJoinedAttrs ( dFilters, tSchema ) )
+		return true;
+
 	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dFilters, tSchema, sJoinIdx.cstr() );
 	if ( !dRightFilters.GetLength() )
 		return false;
@@ -2162,7 +2192,10 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 		CSphString sJoinAlias;
 		sJoinAlias.SetSprintf ( "%s%s", GetBatchedItemPrefix(), sJoinExpr.cstr() );
 		if ( sphJsonNameSplit ( sJoinExpr.cstr() ) )
-			sJoinExpr = AddJsonTypeConversion ( sJoinExpr, i.m_eType==SPH_FILTER_STRING ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );
+		{
+			ESphAttr eAttr = ( i.m_eType==SPH_FILTER_STRING || i.m_eType==SPH_FILTER_STRING_LIST ) ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT;
+			sJoinExpr = AddJsonTypeConversion ( sJoinExpr, eAttr );
+		}
 
 		AddToJoinSelectListForced ( sJoinExpr, sJoinAlias );
 	}

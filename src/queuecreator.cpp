@@ -26,6 +26,7 @@
 #include "queryprofile.h"
 #include "knnmisc.h"
 #include "sorterscroll.h"
+#include "sphinxquery/sphinxquery.h"
 
 static const char g_sIntAttrPrefix[] = "@int_attr_";
 static const char g_sIntJsonPrefix[] = "@groupbystr_";
@@ -815,6 +816,8 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 	for ( const auto & sAttr : dDependentCols )
 	{
 		auto pDep = const_cast<CSphColumnInfo *> ( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		if ( pDep->IsJoined() )
+			continue;
 		if ( pDep->m_eStage > tExprCol.m_eStage )
 			pDep->m_eStage = tExprCol.m_eStage;
 	}
@@ -1717,6 +1720,9 @@ bool QueueCreator_c::AddJoinAttrs()
 		const CSphColumnInfo & tField = tSchema.GetField(i);
 		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
 		{
+			if ( tSchema.GetAttrIndex ( tField.m_sName.cstr() )!=-1 )
+				continue;
+
 			CSphColumnInfo tAttr;
 			tAttr.m_sName.SetSprintf ( "%s.%s", m_tSettings.m_pJoinArgs->m_sIndex2.cstr(), tField.m_sName.cstr() );
 			tAttr.m_eAttrType = SPH_ATTR_STRINGPTR;
@@ -2511,6 +2517,10 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 	if ( !bFound )
 		return true;
 
+	// try to guess the implicit cutoff (no sorters yet)
+	int iCutoff = ApplyImplicitCutoff ( m_tQuery, {}, !m_tQuery.m_pQueryParser->IsFullscan(m_tQuery) );
+	bool bEvalAllInFinal = iCutoff>=0 && iCutoff<=m_tQuery.m_iLimit;
+
 	// check for columnar attributes that have FINAL eval stage
 	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
 	IntVec_t dStoredColumnarFinal, dStoredColumnarPostlimit;
@@ -2523,7 +2533,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
 		{
 			// we need docids at the final stage if we want to fetch from docstore. so they must be evaluated before that
-			if ( tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
+			if ( !bEvalAllInFinal && tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
 				dStoredColumnarPostlimit.Add(i);
 			else
 				dStoredColumnarFinal.Add(i);

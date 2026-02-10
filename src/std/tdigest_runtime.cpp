@@ -38,7 +38,7 @@ TDigestRuntimeState_t * AccessLegacyRuntime ( ByteBlob_t dBlob )
 	return ( pState && pState->m_uMagic==TDigestRuntimeState_t::RUNTIME_MAGIC ) ? pState : nullptr;
 }
 
-TDigestRuntimeState_t * AccessHeaderRuntime ( ByteBlob_t dBlob )
+const TDigestRuntimeBlobHeader_t * GetRuntimeHeader ( ByteBlob_t dBlob )
 {
 	if ( dBlob.second < (int)sizeof ( TDigestRuntimeBlobHeader_t ) )
 		return nullptr;
@@ -47,12 +47,27 @@ TDigestRuntimeState_t * AccessHeaderRuntime ( ByteBlob_t dBlob )
 	if ( pHeader->m_uVersion!=TDIGEST_RUNTIME_BLOB_VERSION )
 		return nullptr;
 
+	if ( pHeader->m_uPad > ( RUNTIME_ALIGN - 1 ) )
+		return nullptr;
+
+	const size_t uRequired = sizeof ( TDigestRuntimeBlobHeader_t )
+		+ pHeader->m_uPad
+		+ sizeof ( TDigestRuntimeState_t );
+
+	if ( dBlob.second < (int)uRequired )
+		return nullptr;
+
+	return pHeader;
+}
+
+TDigestRuntimeState_t * AccessHeaderRuntime ( ByteBlob_t dBlob )
+{
+	const auto * pHeader = GetRuntimeHeader ( dBlob );
+	if ( !pHeader )
+		return nullptr;
+
 	const BYTE * pStateStart = reinterpret_cast<const BYTE*>( pHeader + 1 );
 	const BYTE * pStateBytes = pStateStart + pHeader->m_uPad;
-	const BYTE * pBlobEnd = dBlob.first + dBlob.second;
-
-	if ( pStateBytes + sizeof ( TDigestRuntimeState_t ) > pBlobEnd )
-		return nullptr;
 
 	return const_cast<TDigestRuntimeState_t*>( reinterpret_cast<const TDigestRuntimeState_t*>( pStateBytes ) );
 }
@@ -127,7 +142,18 @@ TDigestRuntimeState_t * sphTDigestRuntimeAccess ( ByteBlob_t dBlob )
 
 bool sphIsTDigestRuntimeBlob ( ByteBlob_t dBlob )
 {
-	return sphTDigestRuntimeAccess ( dBlob )!=nullptr;
+	if ( !dBlob.first )
+		return false;
+
+	if ( GetRuntimeHeader ( dBlob ) )
+		return true;
+
+	if ( dBlob.second < (int)sizeof ( TDigestRuntimeState_t ) )
+		return false;
+
+	uint32_t uMagic = 0;
+	memcpy ( &uMagic, dBlob.first, sizeof ( uMagic ) );
+	return uMagic==TDigestRuntimeState_t::RUNTIME_MAGIC;
 }
 
 void sphDestroyTDigestRuntimeBlob ( ByteBlob_t dBlob )

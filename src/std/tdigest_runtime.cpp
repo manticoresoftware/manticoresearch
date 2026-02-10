@@ -2,7 +2,69 @@
 
 #include "attribute.h"
 
+#include <cassert>
 #include <cstring>
+#include <limits>
+#include <memory>
+
+namespace
+{
+
+constexpr uint8_t TDIGEST_RUNTIME_BLOB_VERSION = 1;
+
+struct TDigestRuntimeBlobHeader_t
+{
+	uint8_t m_uVersion = TDIGEST_RUNTIME_BLOB_VERSION;
+	uint8_t m_uPad = 0;
+	uint8_t m_uReserved[2] = { 0, 0 };
+};
+
+constexpr size_t RUNTIME_ALIGN = alignof ( TDigestRuntimeState_t );
+static_assert ( RUNTIME_ALIGN <= std::numeric_limits<uint8_t>::max(), "runtime alignment must fit into pad byte" );
+
+constexpr size_t RuntimePayloadReservation ()
+{
+	return sizeof ( TDigestRuntimeBlobHeader_t )
+		+ sizeof ( TDigestRuntimeState_t )
+		+ ( RUNTIME_ALIGN - 1 );
+}
+
+TDigestRuntimeState_t * AccessLegacyRuntime ( ByteBlob_t dBlob )
+{
+	if ( dBlob.second < (int)sizeof ( TDigestRuntimeState_t ) )
+		return nullptr;
+
+	auto * pState = reinterpret_cast<TDigestRuntimeState_t*>( const_cast<BYTE*>( dBlob.first ) );
+	return ( pState && pState->m_uMagic==TDigestRuntimeState_t::RUNTIME_MAGIC ) ? pState : nullptr;
+}
+
+TDigestRuntimeState_t * AccessHeaderRuntime ( ByteBlob_t dBlob )
+{
+	if ( dBlob.second < (int)sizeof ( TDigestRuntimeBlobHeader_t ) )
+		return nullptr;
+
+	const auto * pHeader = reinterpret_cast<const TDigestRuntimeBlobHeader_t*>( dBlob.first );
+	if ( pHeader->m_uVersion!=TDIGEST_RUNTIME_BLOB_VERSION )
+		return nullptr;
+
+	const BYTE * pStateStart = reinterpret_cast<const BYTE*>( pHeader + 1 );
+	const BYTE * pStateBytes = pStateStart + pHeader->m_uPad;
+	const BYTE * pBlobEnd = dBlob.first + dBlob.second;
+
+	if ( pStateBytes + sizeof ( TDigestRuntimeState_t ) > pBlobEnd )
+		return nullptr;
+
+	return const_cast<TDigestRuntimeState_t*>( reinterpret_cast<const TDigestRuntimeState_t*>( pStateBytes ) );
+}
+
+TDigestRuntimeState_t * AccessRuntimeState ( ByteBlob_t dBlob )
+{
+	if ( auto * pLegacy = AccessLegacyRuntime ( dBlob ) )
+		return pLegacy;
+	return AccessHeaderRuntime ( dBlob );
+}
+
+}
 
 TDigestRuntimeState_t::TDigestRuntimeState_t ( double fCompression )
 	: m_tDigest ( fCompression )
@@ -28,8 +90,22 @@ TDigestRuntimeState_t & TDigestRuntimeState_t::operator= ( const TDigestRuntimeS
 TDigestRuntimeAlloc_t sphTDigestRuntimeAllocate ( double fCompression )
 {
 	BYTE * pPayload = nullptr;
-	BYTE * pPacked = sphPackPtrAttr ( (int)sizeof ( TDigestRuntimeState_t ), &pPayload );
-	auto * pState = new ( pPayload ) TDigestRuntimeState_t ( fCompression );
+	constexpr size_t uReservation = RuntimePayloadReservation ();
+	BYTE * pPacked = sphPackPtrAttr ( (int)uReservation, &pPayload );
+
+	auto * pHeader = new ( pPayload ) TDigestRuntimeBlobHeader_t();
+	BYTE * pStateArena = reinterpret_cast<BYTE*>( pHeader + 1 );
+	size_t uSpace = uReservation - sizeof ( TDigestRuntimeBlobHeader_t );
+	void * pAligned = pStateArena;
+
+	bool bAligned = std::align ( RUNTIME_ALIGN, sizeof ( TDigestRuntimeState_t ), pAligned, uSpace );
+	assert ( bAligned && "Failed to align TDigest runtime state" );
+
+	size_t uPad = reinterpret_cast<BYTE*>( pAligned ) - pStateArena;
+	assert ( uPad <= std::numeric_limits<uint8_t>::max() );
+	pHeader->m_uPad = (uint8_t)uPad;
+
+	auto * pState = new ( pAligned ) TDigestRuntimeState_t ( fCompression );
 	return { pState, pPacked };
 }
 
@@ -43,11 +119,10 @@ TDigestRuntimeAlloc_t sphTDigestRuntimeCloneState ( const TDigestRuntimeState_t 
 
 TDigestRuntimeState_t * sphTDigestRuntimeAccess ( ByteBlob_t dBlob )
 {
-	if ( !dBlob.first || dBlob.second < (int)sizeof ( TDigestRuntimeState_t ) )
+	if ( !dBlob.first )
 		return nullptr;
 
-	auto * pState = reinterpret_cast<TDigestRuntimeState_t*>( const_cast<BYTE*>( dBlob.first ) );
-	return ( pState->m_uMagic==TDigestRuntimeState_t::RUNTIME_MAGIC ) ? pState : nullptr;
+	return AccessRuntimeState ( dBlob );
 }
 
 bool sphIsTDigestRuntimeBlob ( ByteBlob_t dBlob )

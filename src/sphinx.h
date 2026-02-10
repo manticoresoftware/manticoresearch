@@ -419,7 +419,7 @@ struct CSphQueryItem
 	CSphString		m_sExpr;		///< expression to compute
 	CSphString		m_sAlias;		///< alias to return
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };
-	double			m_fTdigestCompression = 200.0; ///< optional tdigest compression for extended aggs
+	float			m_fTdigestCompression = 200.0f; ///< optional tdigest compression for extended aggs
 };
 
 /// search query complex filter tree

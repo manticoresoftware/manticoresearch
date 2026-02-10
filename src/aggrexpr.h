@@ -92,19 +92,19 @@ struct AggrPercentilesSetting_t
 {
 	CSphVector<float> m_dPercents;
 	bool m_bKeyed = false;
-	double m_fCompression = 200.0;
+	float m_fCompression = 200.0f;
 };
 
 struct AggrPercentileRanksSetting_t
 {
 	CSphVector<double> m_dValues;
 	bool m_bKeyed = false;
-	double m_fCompression = 200.0;
+	float m_fCompression = 200.0f;
 };
 
 struct AggrMadSetting_t
 {
-	double m_fCompression = 1000.0;
+	float m_fCompression = 1000.0f;
 };
 
 struct AggrSettings_t

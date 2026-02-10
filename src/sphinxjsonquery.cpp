@@ -2378,14 +2378,14 @@ static bool IsSingleValue ( Aggr_e eAggr )
 		|| eAggr==Aggr_e::PERCENTILES || eAggr==Aggr_e::PERCENTILE_RANKS );
 }
 
-static double GetTdigestCompression ( const CSphColumnInfo & tCol )
+static float GetTdigestCompression ( const CSphColumnInfo & tCol )
 {
-	return tCol.m_fTdigestCompression ? tCol.m_fTdigestCompression : 200.0;
+	return tCol.m_fTdigestCompression ? tCol.m_fTdigestCompression : 200.0f;
 }
 
 static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, TDigest_c & tDigest )
 {
-	double fCompression = GetTdigestCompression ( tCol );
+	float fCompression = GetTdigestCompression ( tCol );
 	ByteBlob_t dBlob = tMatch.FetchAttrData ( tCol.m_tLocator, nullptr );
 	sphTDigestLoadFromBlob ( dBlob, tDigest, fCompression );
 }
@@ -4329,7 +4329,7 @@ static bool ParseAggrComposite ( const JsonObj_c & tBucket, JsonAggr_t & tAggr, 
 	return true;
 }
 
-static bool ParseTdigestCompression ( const JsonObj_c & tBucket, double & fCompression, CSphString & sError )
+static bool ParseTdigestCompression ( const JsonObj_c & tBucket, float & fCompression, CSphString & sError )
 {
 	JsonObj_c tTdigest = tBucket.GetItem ( "tdigest" );
 	if ( !tTdigest )
@@ -4358,7 +4358,7 @@ static bool ParseTdigestCompression ( const JsonObj_c & tBucket, double & fCompr
 		return false;
 	}
 
-	fCompression = fValue;
+	fCompression = (float)fValue;
 	return true;
 }
 
@@ -4411,7 +4411,7 @@ static bool ParseAggrPercentiles ( const JsonObj_c & tBucket, JsonAggr_t & tItem
 		return false;
 	tItem.m_tPercentiles.m_bKeyed = bKeyed;
 
-	double fCompression = tItem.m_tPercentiles.m_fCompression;
+	float fCompression = tItem.m_tPercentiles.m_fCompression;
 	if ( !ParseTdigestCompression ( tBucket, fCompression, sError ) )
 		return false;
 	tItem.m_tPercentiles.m_fCompression = fCompression;
@@ -4456,7 +4456,7 @@ static bool ParseAggrPercentileRanks ( const JsonObj_c & tBucket, JsonAggr_t & t
 		return false;
 	tItem.m_tPercentileRanks.m_bKeyed = bKeyed;
 
-	double fCompression = tItem.m_tPercentileRanks.m_fCompression;
+	float fCompression = tItem.m_tPercentileRanks.m_fCompression;
 	if ( !ParseTdigestCompression ( tBucket, fCompression, sError ) )
 		return false;
 	tItem.m_tPercentileRanks.m_fCompression = fCompression;
@@ -4473,7 +4473,7 @@ static bool ParseAggrMad ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphSt
 		return false;
 	}
 
-	double fCompression = tItem.m_tMad.m_fCompression;
+	float fCompression = tItem.m_tMad.m_fCompression;
 	if ( !ParseTdigestCompression ( tBucket, fCompression, sError ) )
 		return false;
 	tItem.m_tMad.m_fCompression = fCompression;

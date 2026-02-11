@@ -129,7 +129,7 @@ public:
 		if ( fTotalWeight<=1.0 )
 			return m_dCentroids[0].m_fMean;
 
-		const double fTarget = fQuantile * ( fTotalWeight - 1.0 ) + 0.5;
+		const double fTarget = fQuantile * fTotalWeight;
 
 		double fCumulative = 0.0;
 		for ( int i = 0; i < m_dCentroids.GetLength(); ++i )

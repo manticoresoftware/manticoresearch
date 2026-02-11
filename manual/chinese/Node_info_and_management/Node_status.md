@@ -216,6 +216,12 @@ SHOW STATUS LIKE '%stats_ms%';
 
 这些指标有助于跟踪特定时间段内的性能，使发现查询响应时间的趋势和可能瓶颈变得更加容易。
 
+对于搜索时间：
+- `search_stats_ms_*` 在 `SHOW STATUS` 中基于与查询日志中显示为 `wall` 的相同查询墙时间家族。
+- `query_wall` / `avg_query_wall` 是执行查询的累积/平均节点计数器。
+- `dist_wall`、`dist_local` 和 `dist_wait` 是仅限分布式维度，应一起解释，而不是作为 `search_stats_ms_*` 的直接替代。
+- 每个表的计时器（`SHOW TABLE ... STATUS`）可能与节点级计数器不同，尤其是对于分布式表。
+
 以下是`SHOW STATUS`输出的一部分指标：
 - `*_avg`：每种查询类型的平均查询时间，分别在过去1分钟、5分钟和15分钟内。
 - `*_min`：每种查询类型记录的最短查询时间。

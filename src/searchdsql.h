@@ -342,6 +342,7 @@ public:
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	bool					m_bForce = false;
+	bool					m_bFormatOutWordsFile = false;
 
 	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;
 

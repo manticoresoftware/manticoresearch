@@ -19,7 +19,7 @@ Manticore Search 使用 HNSW 库启用 k-最近邻（KNN）向量搜索。此功
   - `L2` - 平方 L2
   - `IP` - 点积
   - `COSINE` - 余弦相似度
-  
+
   **注意：** 使用 `COSINE` 相似度时，插入时向量会自动归一化。这意味着存储的向量值可能与原始输入值不同，因为它们将被转换为单位向量（数学长度/幅度为 1.0 的向量），以实现高效的余弦相似度计算。这种归一化保留了向量的方向，同时标准化了其长度。
 * `hnsw_m`：可选设置，定义图中出边的最大数量。默认值为 16。
 * `hnsw_ef_construction`：可选设置，定义构建时间/准确性权衡。默认值为 200。
@@ -70,10 +70,23 @@ table test_vec {
 - `FROM`：用于生成嵌入的字段（留空表示所有文本/字符串字段）
 
 **支持的嵌入模型：**
-- **Sentence Transformers**：任何 [合适的 BERT 基 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——不需要 API 密钥。Manticore 在您创建表时会下载该模型。
-- **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002` - 需要 `API_KEY='<OPENAI_API_KEY>'` 参数
-- **Voyage**：Voyage AI 嵌入模型 - 需要 `API_KEY='<VOYAGE_API_KEY>'` 参数
-- **Jina**：Jina AI 嵌入模型 - 需要 `API_KEY='<JINA_API_KEY>'` 参数
+
+| 模型类型 | 示例 | 需要 API 密钥 | 说明 |
+|------------|---------|-----------------|-------|
+| **句子转换器** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 模型，自动下载 |
+| **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | 否 | 本地 Qwen 家族模型 |
+| **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 家族模型 |
+| **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 家族模型 |
+| **Gemma** | `h2oai/embeddinggemma-300m` | 否 | 本地 Gemma 家族模型 |
+| **OpenAI** | `openai/text-embedding-ada-002` | 是 | `API_KEY='<OPENAI_API_KEY>'` |
+| **Voyage** | Voyage AI 模型 | 是 | `API_KEY='<VOYAGE_API_KEY>'` |
+| **Jina** | Jina AI 模型 | 是 | `API_KEY='<JINA_API_KEY>'` |
+
+**本地模型格式要求：**
+- 必须以 `safetensors` 格式保存（仅单文件）
+- 支持的家族：Qwen、Llama、Mistral、Gemma
+- 测试模型：`TinyLlama/TinyLlama-1.1B-Chat-v1.0`、`Locutusque/TinyMistral-248M-v2`、`Qwen/Qwen3-Embedding-0.6B`、`h2oai/embeddinggemma-300m`
+- 其他 `safetensors` 模型可能也有效，但不保证
 
 有关设置 `float_vector` 属性的更多信息，请参见 [此处](../Creating_a_table/Data_types.md#Float-vector)。
 
@@ -85,10 +98,20 @@ table test_vec {
 使用 sentence-transformers（不需要 API 密钥）
 ```sql
 CREATE TABLE products (
-    title TEXT, 
+    title TEXT,
     description TEXT,
-    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+使用 Qwen 本地嵌入（无需API密钥）
+```sql
+CREATE TABLE products_qwen (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -96,7 +119,7 @@ CREATE TABLE products (
 ```sql
 CREATE TABLE products_openai (
     title TEXT,
-    description TEXT, 
+    description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
@@ -172,12 +195,12 @@ table products_all {
 
 仅插入文本数据 - 嵌入自动生成
 ```sql
-INSERT INTO products (title) VALUES 
+INSERT INTO products (title) VALUES
 ('machine learning artificial intelligence'),
 ('banana fruit sweet yellow');
 ```
 
-插入多个字段 - 如果 FROM='title,description'，两者都用于嵌入  
+插入多个字段 - 如果FROM='title,description'，则两者都用于嵌入
 ```sql
 INSERT INTO products_openai (title, description) VALUES
 ('smartphone', 'latest mobile device with advanced features'),
@@ -186,7 +209,7 @@ INSERT INTO products_openai (title, description) VALUES
 
 插入空向量（文档从向量搜索中排除）
 ```sql
-INSERT INTO products (title, embedding_vector) VALUES 
+INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());
 ```
 
@@ -416,7 +439,7 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"ef": 2000, 
+		"ef": 2000,
 		"rescore": true,
 		"oversampling": 3.0
 	}
@@ -667,4 +690,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

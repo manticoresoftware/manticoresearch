@@ -65,6 +65,7 @@ protected:
 	int						m_iAtomPos {0};
 	bool					m_bEmptyStopword {false};
 	bool					m_bWasBlended {false};
+	bool					m_bExpandBlended { false };
 
 	CSphVector<XQNode_t*>		m_dSpawned;
 	StrVec_t					m_dDestForms;
@@ -82,4 +83,5 @@ private:
 	void			FixupDestForms();
 	bool			CheckQuorumProximity ( const XQNode_t * pNode );
 	bool			CheckNear ( const XQNode_t * pNode );
+	void			FixupBlend ( XQNode_t * pNode );
 };

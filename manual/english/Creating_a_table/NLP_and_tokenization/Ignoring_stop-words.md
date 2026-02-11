@@ -362,6 +362,97 @@ table products {
 ```
 <!-- end -->
 
+## stopwords_list
+
+```ini
+stopwords_list = 'value1; value2; ...'
+```
+
+<!-- example stopwords_list -->
+The `stopwords_list` setting allows you to specify stop words directly in the `CREATE TABLE` statement. It is supported in [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) only.
+
+The values must be separated by semicolons (`;`). If you need to use a semicolon as a literal character, it must be escaped with a backslash (`\;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) stopwords_list = 'a; the'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) stopwords_list = 'a; the'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'stopwords_list' => 'a; the'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", Some(true)).await;
+```
+
+<!-- end -->
+
 ## stopword_step
 
 ```ini

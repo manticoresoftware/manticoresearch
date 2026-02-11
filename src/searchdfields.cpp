@@ -138,6 +138,8 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 	StrVec_t dNames;
 	ParseIndexList ( sIndexes, dNames );
 
+	sph::StringSet hDups;
+
 	for ( const CSphString & sIndex : dNames )
 	{
 		auto pLocal = GetServed ( sIndex );
@@ -151,7 +153,9 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 
 		if ( pLocal )
 		{
-			dLocal.Add ( sIndex );
+			if ( hDups.Add ( sIndex ) )
+				dLocal.Add ( sIndex );
+
 		} else
 		{
 			for ( const auto& pAgent : pDist->m_dAgents )
@@ -163,11 +167,14 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 				pConn->m_pResult = std::make_unique<RemoteFieldsAnswer_t>();
 				dRemotes.Add ( pConn );
 			}
-			dLocal.Append ( pDist->m_dLocal );
+			for ( const auto & sDistLocal : pDist->m_dLocal )
+			{
+				if ( hDups.Add ( sDistLocal ) )
+					dLocal.Add ( sDistLocal );
+			}
 		}
 	}
 
-	dLocal.Uniq();
 	return true;
 }
 

@@ -26,6 +26,7 @@
 #include "queryprofile.h"
 #include "knnmisc.h"
 #include "sorterscroll.h"
+#include "sphinxquery/sphinxquery.h"
 
 static const char g_sIntAttrPrefix[] = "@int_attr_";
 static const char g_sIntJsonPrefix[] = "@groupbystr_";
@@ -334,7 +335,6 @@ private:
 	int		ReduceOrIncreaseMaxMatches() const;
 	int		AdjustMaxMatches ( int iMaxMatches ) const;
 	bool	ConvertColumnarToDocstore();
-	CSphString GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr ) const;
 	bool	SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags );
 	bool	SetupColumnarAggregates ( CSphColumnInfo & tExprCol );
 	bool	IsJoinAttr ( const CSphString & sAttr ) const;
@@ -373,7 +373,7 @@ QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSp
 }
 
 
-CSphString QueueCreator_c::GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr ) const
+static CSphString GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr )
 {
 	if ( !tAttr.IsColumnarExpr() )
 		return tAttr.m_sName;
@@ -502,6 +502,21 @@ bool QueueCreator_c::SetupDistinctAttr()
 	return true;
 }
 
+static bool IsMvaGroupBy ( const ISphSchema & tSchema, const CSphColumnInfo & tAttr, const CSphString & sGroupBy )
+{
+	if ( IsMvaAttr ( tAttr.m_eAttrType ) )
+		return true;
+
+	if ( tAttr.IsColumnarExpr() )
+	{
+		CSphString sCol = GetAliasedColumnarAttrName ( tAttr );
+		int iCol = tSchema.GetAttrIndex ( sCol.cstr() );
+		return iCol>=0 && IsMvaAttr ( tSchema.GetAttr(iCol).m_eAttrType );
+	}
+
+	return false;
+};
+
 
 bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 {
@@ -552,7 +567,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 			auto tAttr = tSchema.GetAttr ( iAttr );
 			ESphAttr eType = tAttr.m_eAttrType;
-			if ( eType==SPH_ATTR_UINT32SET || eType==SPH_ATTR_INT64SET )
+			if ( IsMvaGroupBy ( tSchema, tAttr, sGroupBy ) )
 				return Err ( "MVA values can't be used in multiple group-by" );
 
 			if ( eType==SPH_ATTR_JSON && sJsonExpr.IsEmpty() )
@@ -801,6 +816,8 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 	for ( const auto & sAttr : dDependentCols )
 	{
 		auto pDep = const_cast<CSphColumnInfo *> ( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		if ( pDep->IsJoined() )
+			continue;
 		if ( pDep->m_eStage > tExprCol.m_eStage )
 			pDep->m_eStage = tExprCol.m_eStage;
 	}
@@ -1703,6 +1720,9 @@ bool QueueCreator_c::AddJoinAttrs()
 		const CSphColumnInfo & tField = tSchema.GetField(i);
 		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
 		{
+			if ( tSchema.GetAttrIndex ( tField.m_sName.cstr() )!=-1 )
+				continue;
+
 			CSphColumnInfo tAttr;
 			tAttr.m_sName.SetSprintf ( "%s.%s", m_tSettings.m_pJoinArgs->m_sIndex2.cstr(), tField.m_sName.cstr() );
 			tAttr.m_eAttrType = SPH_ATTR_STRINGPTR;
@@ -1791,12 +1811,18 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 		}
 	}
 
-	if ( NeedToMoveMixedJoinFilters ( m_tQuery, *m_pSorterSchema ) )
+	if ( NeedPostJoinFilterEvaluation ( m_tQuery, *m_pSorterSchema ) )
 		for ( const auto & i : m_tQuery.m_dFilters )
 		{
 			const CSphString & sAttr = i.m_sAttrName;
 			const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
-			if ( pAttr || !sphJsonNameSplit ( sAttr.cstr(), sRightIndex.cstr() ) )
+			CSphString sSplitAttrName;
+			bool bIndexPrefix = false;
+			if ( pAttr || !sphJsonNameSplit ( sAttr.cstr(), sRightIndex.cstr(), &sSplitAttrName, &bIndexPrefix ) )
+				continue;
+
+			// check if it's a json attribute from the left table and not a joined attribute
+			if ( !bIndexPrefix )
 				continue;
 
 			CSphColumnInfo tExprCol ( sAttr.cstr(), FilterType2AttrType ( i.m_eType ) );
@@ -2491,6 +2517,10 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 	if ( !bFound )
 		return true;
 
+	// try to guess the implicit cutoff (no sorters yet)
+	int iCutoff = ApplyImplicitCutoff ( m_tQuery, {}, !m_tQuery.m_pQueryParser->IsFullscan(m_tQuery) );
+	bool bEvalAllInFinal = iCutoff>=0 && iCutoff<=m_tQuery.m_iLimit;
+
 	// check for columnar attributes that have FINAL eval stage
 	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
 	IntVec_t dStoredColumnarFinal, dStoredColumnarPostlimit;
@@ -2503,7 +2533,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		if ( bColumnar && bStored && tAttr.m_eStage==SPH_EVAL_FINAL )
 		{
 			// we need docids at the final stage if we want to fetch from docstore. so they must be evaluated before that
-			if ( tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
+			if ( !bEvalAllInFinal && tDepMap.IsIndependent ( tAttr.m_sName ) && tAttr.m_sName!=sphGetDocidName() )
 				dStoredColumnarPostlimit.Add(i);
 			else
 				dStoredColumnarFinal.Add(i);

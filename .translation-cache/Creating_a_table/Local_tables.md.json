@@ -18,5 +18,10 @@
         "is_code_or_comment": false,
         "model": "deepseek/deepseek-v3.2",
         "updated_at": 1766374258
+    },
+    "__meta": {
+        "source_text": "# Creating a local table\n\nIn Manticore Search, there are two ways to manage tables:\n## Online schema management (RT mode)\nReal-time mode requires no table definition in the configuration file. However, the [data_dir](../Server_settings/Searchd.md#data_dir) directive in the `searchd` section is mandatory. Table files are stored inside the `data_dir`.\n\nReplication is only available in this mode.\n\nYou can use SQL commands such as `CREATE TABLE`, `ALTER TABLE` and `DROP TABLE` to create and modify table schema, and to drop it. This mode is particularly useful for **real-time** and **percolate tables**.\n\nTable names are converted to lowercase when created.\n\n## Defining table schema in config (Plain mode)\nIn this mode, you can specify the table schema in the configuration file. Manticore reads this schema on startup and creates the table if it doesn't exist yet. This mode is particularly useful for **plain tables** that use data from an external storage.\n\nTo drop a table, remove it from the configuration file or remove the path setting and send a HUP signal to the server or restart it.\n\nTable names are case-sensitive in this mode.\n\nAll table types are supported in this mode.\n\n\n## Table types and modes\n\n\n| Table type  | RT mode        | Plain mode  |\n|-------------|----------------|-------------|\n| Real-time   | supported      | supported   |\n| Plain       | not supported  | supported   |\n| Percolate   | supported      | supported   |\n| Distributed | supported      | supported   |\n| Template    | not supported  | supported   |\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "7c65d8247f433033217581533a103558"
     }
 }

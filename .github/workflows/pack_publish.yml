@@ -219,7 +219,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        DISTR: [rhel7, rhel8, rhel9, rhel10]
+        DISTR: [rhel8, rhel9, rhel10]
         arch: [x86_64, aarch64]
     with:
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
@@ -360,7 +360,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [7, 8, 9, 10]
+        DISTR: [8, 9, 10]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
@@ -647,7 +647,7 @@ jobs:
         image: [ "almalinux:8", "almalinux:9", "almalinux:10", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -662,7 +662,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

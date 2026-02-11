@@ -221,15 +221,16 @@ protected:
 	int							m_iDocLen = 0;
 	int							m_iSeparatorLen;
 	int							m_iField = 0;
+	const VecTraits_T<int>		m_dExtraSpaces;
 
-			TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes );
+			TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes, const VecTraits_T<int> dExtraSpaces );
 
 	void	ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=nullptr, int iPostLen=0 ) const;
 	void	EmitPassageSeparator ( CSphVector<BYTE> & dBuf );
 };
 
 
-TokenFunctorTraits_c::TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes )
+TokenFunctorTraits_c::TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes, const VecTraits_T<int> dExtraSpaces )
 	: m_tResult ( tRes )
 	, m_tQuery ( tQuery )
 	, m_tIndexSettings ( tIndexSettings )
@@ -238,6 +239,7 @@ TokenFunctorTraits_c::TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const
 	, m_szDocBuffer ( szDoc )
 	, m_iDocLen ( iDocLen )
 	, m_iField ( iField )
+	, m_dExtraSpaces ( dExtraSpaces )
 
 {
 	assert(m_pTokenizer);
@@ -248,10 +250,11 @@ TokenFunctorTraits_c::TokenFunctorTraits_c ( TokenizerRefPtr_c pTokenizer, const
 	m_iSeparatorLen = m_tQuery.m_sChunkSeparator.Length();
 }
 
+static void ResultEmitSpaces ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, const VecTraits_T<int> & dExtraSpaces, const char * pDoc, int iDocLen );
 
 void TokenFunctorTraits_c::ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro, int iPassageId, const char * pPost, int iPostLen ) const
 {
-	dBuf.Append ( pSrc, iLen );
+	ResultEmitSpaces ( dBuf, pSrc, iLen, m_dExtraSpaces, m_pDoc, m_iDocLen );
 
 	if ( !bHasPassageMacro )
 		return;
@@ -300,8 +303,7 @@ void HitTraits_c::RewindHits ( DWORD uTokPos, int iField )
 class DocStartHighlighter_c : public TokenFunctorTraits_c
 {
 public:
-			DocStartHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
-				int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes );
+			DocStartHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes, const VecTraits_T<int> & dSpaces );
 
 	bool	OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * ) final;
 	bool	OnOverlap ( int iStart, int iLen, int ) final;
@@ -321,9 +323,8 @@ private:
 };
 
 
-DocStartHighlighter_c::DocStartHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
-	int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+DocStartHighlighter_c::DocStartHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes, const VecTraits_T<int> & dSpaces )
+	: TokenFunctorTraits_c ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes, dSpaces )
 	, m_tLimits ( tLimits )
 	, m_iResultLenCP ( iResultCP )
 {
@@ -409,7 +410,7 @@ void DocStartHighlighter_c::CollectStartSpaces()
 class PassageExtractor_c : public TokenFunctorTraits_c, public HitTraits_c
 {
 public:
-				PassageExtractor_c ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tPassageContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+				PassageExtractor_c ( const SnippetsDocIndex_i & tContainer, PassageContext_t & tPassageContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
 					const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
 protected:
@@ -431,7 +432,7 @@ private:
 	bool					m_bQwordsChanged = true;
 	bool					m_bAppendSentenceEnd = false;
 
-	const SnippetsDocIndex_c & m_tContainer;
+	const SnippetsDocIndex_i & m_tContainer;
 	SnippetLimits_t			m_tLimits;
 
 	TokenSpan_c				m_tSpan;
@@ -455,9 +456,8 @@ private:
 };
 
 
-PassageExtractor_c::PassageExtractor_c ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tPassageContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
-	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+PassageExtractor_c::PassageExtractor_c ( const SnippetsDocIndex_i & tContainer, PassageContext_t & tPassageContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes, VecTraits_T<int> {} )
 	, HitTraits_c ( dHits )
 	, m_tContainer ( tContainer )
 	, m_tLimits ( tLimits )
@@ -1028,8 +1028,7 @@ protected:
 class PassageHighlighter_c : public TokenFunctorTraits_c, public BeforeAfterTraits_c, public HitTraits_c
 {
 public:
-			PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
-				const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes );
+			PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes, const VecTraits_T<int> & dSpaces );
 
 protected:
 	bool	OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * ) final;
@@ -1059,9 +1058,8 @@ private:
 };
 
 
-PassageHighlighter_c::PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
-	const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+PassageHighlighter_c::PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes, const VecTraits_T<int> & dSpaces )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes, dSpaces )
 	, BeforeAfterTraits_c(tQuery)
 	, HitTraits_c(dHits)
 	, m_dPassages ( dPassages )
@@ -1242,8 +1240,7 @@ void PassageHighlighter_c::CheckClose ( int iPos )
 class QueryHighlighter_c : public TokenFunctorTraits_c, public BeforeAfterTraits_c, public HitTraits_c
 {
 public:
-	QueryHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
-		const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
+	QueryHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes, const VecTraits_T<int> dExtraSpaces );
 
 protected:
 	bool	OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * ) final;
@@ -1262,9 +1259,8 @@ private:
 };
 
 
-QueryHighlighter_c::QueryHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
-	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+QueryHighlighter_c::QueryHighlighter_c ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes, const VecTraits_T<int> dExtraSpaces )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes, dExtraSpaces )
 	, BeforeAfterTraits_c(tQuery)
 	, HitTraits_c(dHits)
 {
@@ -1354,7 +1350,7 @@ void QueryHighlighter_c::CheckClose ( int iPos )
 class HitCollector_c : public TokenFunctorTraits_c, public virtual HitCollector_i
 {
 public:
-	HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+	HitCollector_c ( SnippetsDocIndex_i & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 		const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes );
 
 protected:
@@ -1375,7 +1371,7 @@ protected:
 	DWORD						GetFoundWords() const final	{ return m_uFoundWords; }
 
 private:
-	SnippetsDocIndex_c &		m_tContainer;
+	SnippetsDocIndex_i &		m_tContainer;
 	CacheStreamer_i &			m_tTokenContainer;
 
 	CSphVector<ZonePacked_t> &	m_dZones;
@@ -1390,9 +1386,8 @@ private:
 };
 
 
-HitCollector_c::HitCollector_c ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
-	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
+HitCollector_c::HitCollector_c ( SnippetsDocIndex_i & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
+	: TokenFunctorTraits_c ( std::move (pTokenizer), tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes, VecTraits_T<int> {} )
 	, m_tContainer ( tContainer )
 	, m_tTokenContainer ( tTokenContainer )
 	, m_dZones ( dZones )
@@ -1514,36 +1509,90 @@ void HitCollector_c::OnTail ( int iStart, int iLen, int iBoundary )
 
 //////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<TokenFunctor_i> CreateDocStartHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc,
-	int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes )
+std::unique_ptr<TokenFunctor_i> CreateDocStartHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes, const VecTraits_T<int> & dSpaces )
 {
-	return std::make_unique<DocStartHighlighter_c> ( std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, iField, iResultCP, tRes );
+	return std::make_unique<DocStartHighlighter_c> ( std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, iField, iResultCP, tRes, dSpaces );
 }
 
 
-std::unique_ptr<TokenFunctor_i> CreateQueryHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
-	const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
+std::unique_ptr<TokenFunctor_i> CreateQueryHighlighter ( TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes, const VecTraits_T<int> & dExtraSpaces )
 {
-	return std::make_unique<QueryHighlighter_c> ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
+	return std::make_unique<QueryHighlighter_c> ( std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes, dExtraSpaces );
 }
 
 
-std::unique_ptr<TokenFunctor_i> CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
-	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
+std::unique_ptr<TokenFunctor_i> CreatePassageExtractor ( const SnippetsDocIndex_i & tContainer, PassageContext_t & tContext, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes )
 {
 	return std::make_unique<PassageExtractor_c> ( tContainer, tContext, std::move ( pTokenizer ), tQuery, tLimits, tIndexSettings, szDoc, iDocLen, dHits, iField, tRes );
 }
 
 
-std::unique_ptr<TokenFunctor_i> CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
-	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes )
+std::unique_ptr<TokenFunctor_i> CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, TokenizerRefPtr_c pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes, const VecTraits_T<int> & dExtraSpaces )
 {
-	return std::make_unique<PassageHighlighter_c> ( dPassages, std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, tZoneInfo, iField, tRes );
+	return std::make_unique<PassageHighlighter_c> ( dPassages, std::move ( pTokenizer ), tQuery, tIndexSettings, szDoc, iDocLen, dHits, tZoneInfo, iField, tRes, dExtraSpaces );
 }
 
 
-std::unique_ptr<HitCollector_i> CreateHitCollector ( SnippetsDocIndex_c & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
-	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
+std::unique_ptr<HitCollector_i> CreateHitCollector ( SnippetsDocIndex_i & tContainer, TokenizerRefPtr_c pTokenizer, DictRefPtr_c pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes )
 {
 	return std::make_unique<HitCollector_c> ( tContainer, std::move ( pTokenizer ), std::move (pDict), tQuery, tIndexSettings, szDoc, iDocLen, iField, tTokenContainer, dZones, tZoneInfo, tRes );
+}
+
+static bool ResolveDocSlice ( const char * pSrc, int iLen, const char * pDoc, int iDocLen, int & iStart, int & iEnd )
+{
+	const char * pDocBegin = pDoc;
+	const char * pDocEnd = pDoc + iDocLen;
+	if ( pSrc<pDocBegin || pSrc+iLen>pDocEnd )
+		return false;
+
+	iStart = int ( pSrc - pDocBegin );
+	iEnd = iStart + iLen;
+	return true;
+}
+
+static void EmitDocSliceWoSpaces ( CSphVector<BYTE> & dBuf, const char * pDoc, int iStart, int iEnd, const VecTraits_T<int> & dExtraSpaces )
+{
+	const int * pSpaces = dExtraSpaces.Begin();
+	const int * pSpacesEnd = pSpaces + dExtraSpaces.GetLength();
+	const int * pCurSpace = std::lower_bound ( pSpaces, pSpacesEnd, iStart );
+
+	if ( pCurSpace==pSpacesEnd || *pCurSpace>=iEnd )
+	{
+		dBuf.Append ( pDoc + iStart, iEnd - iStart );
+		return;
+	}
+
+	int iCur = iStart;
+	while ( pCurSpace!=pSpacesEnd && *pCurSpace<iEnd )
+	{
+		if ( *pCurSpace>iCur )
+			dBuf.Append ( pDoc + iCur, *pCurSpace - iCur );
+		iCur = *pCurSpace + 1;
+		pCurSpace++;
+	}
+
+	if ( iCur<iEnd )
+		dBuf.Append ( pDoc + iCur, iEnd - iCur );
+}
+
+static void ResultEmitSpaces ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, const VecTraits_T<int> & dExtraSpaces, const char * pDoc, int iDocLen )
+{
+	if ( !iLen )
+		return;
+
+	if ( !dExtraSpaces.GetLength() )
+	{
+		dBuf.Append ( pSrc, iLen );
+		return;
+	}
+
+	int iStart = 0;
+	int iEnd = 0;
+	if ( !ResolveDocSlice ( pSrc, iLen, pDoc, iDocLen, iStart, iEnd ) )
+	{
+		dBuf.Append ( pSrc, iLen );
+		return;
+	}
+
+	EmitDocSliceWoSpaces ( dBuf, pDoc, iStart, iEnd, dExtraSpaces );
 }

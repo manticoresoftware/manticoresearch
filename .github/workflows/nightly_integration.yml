@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-check-filebeat-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -49,7 +49,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-check-logstash-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -64,7 +64,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/grafana/test-integrations-check-grafana-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -82,7 +82,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/dbeaver/test-integrations-dbeaver
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -97,7 +97,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-filebeat
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -112,7 +112,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/fluentbit/test-integrations-fluentbit
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -126,7 +126,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/grafana/test-integrations-grafana
           image: manticoresearch/dind:v1
@@ -141,7 +141,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/kafka/test-integration-
           image: manticoresearch/dind:v1
@@ -156,7 +156,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-logstash
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -171,7 +171,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/vector/test-integrations-vector
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -189,7 +189,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-support-filebeat-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -204,7 +204,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-test-logstash-versions
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
@@ -219,7 +219,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.7.7
+      - uses: manticoresoftware/clt@0.7.8
         with:
           test_prefix: test/clt-tests/integrations/grafana/test-integrations-test-grafana-versions
           image: manticoresearch/dind:v1

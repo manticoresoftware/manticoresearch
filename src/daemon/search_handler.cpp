@@ -1182,10 +1182,8 @@ void SearchHandler_c::RunLocalSearches()
 
 	tGlobalSorters.MergeResults(m_dNAggrResults);
 
-	// update our wall time for every result set
+	// m_iQueryTime is already accumulated from query metadata; adding tmLocal again causes double accounting
 	tmLocal = sphMicroTimer ()-tmLocal;
-	for ( int iQuery = 0; iQuery<iQueries; ++iQuery )
-		m_dNAggrResults[iQuery].m_iQueryTime += (int) ( tmLocal / 1000 );
 
 	auto iTotalSuccessesInt = iTotalSuccesses.load ( std::memory_order_relaxed );
 

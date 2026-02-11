@@ -303,6 +303,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendFloat ( i.m_fValue );
 		tOut.SendString ( i.m_sValue.cstr() );
 	}
+
+	tOut.SendString ( q.m_sExpandBlended.cstr() );
 }
 
 
@@ -1099,6 +1101,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			i.m_sValue = tReq.GetString();
 		}
 	}
+
+	if ( uMasterVer>=27 )
+		tQuery.m_sExpandBlended = tReq.GetString();
 
 	/////////////////////
 	// additional checks

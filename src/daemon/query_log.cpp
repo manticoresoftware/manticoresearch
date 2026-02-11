@@ -667,7 +667,8 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 	QuotationEscapedBuilder tBuf;
 	int iCompactIN = (g_bLogCompactIn ? LOG_COMPACT_IN : 0);
 
-	// real = elapsed wall-clock; wall = accumulated (for distributed: sum of local + agents, so wall can exceed real)
+	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
+	// In distributed/multi-source queries, wall and real may differ.
 	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
 	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
 
@@ -796,7 +797,8 @@ void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType )
 
 	QuotationEscapedBuilder tBuf;
 
-	// real = elapsed wall-clock; wall = accumulated (for distributed: sum of local + agents, so wall can exceed real)
+	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
+	// In distributed/multi-source queries, wall and real may differ.
 	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
 	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
 

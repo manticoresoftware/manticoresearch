@@ -8383,8 +8383,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
-	auto tmStart = sphMicroTimer();
-
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
 	QueryProfile_c tProfile;
@@ -8472,7 +8470,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 				bMoreResultsFollow = false;
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
-			gStats().AddDetailed ( SearchdStats_t::eSearch, uMatches, tmStart );
+			gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tRes.m_iQueryTime * 1000 );
 			break;
 		}
 		case STMT_SHOW_WARNINGS:
@@ -11381,7 +11379,6 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			}
 
 			StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-			auto tmStart = sphMicroTimer();
 			SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
 			// no log for search queries from the buddy in the info verbosity
 			if ( session::IsQueryLogDisabled() )
@@ -11402,7 +11399,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
 				auto uMatches = SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
-				gStats().AddDetailed ( SearchdStats_t::eSearch, uMatches, tmStart );
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tLast.m_iQueryTime * 1000 );
 			}
 
 			// save meta for SHOW META (profile is saved elsewhere)

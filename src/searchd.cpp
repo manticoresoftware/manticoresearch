@@ -8474,7 +8474,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 				bMoreResultsFollow = false;
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
-			gStats().AddDetailed ( SearchdStats_t::eSearch, uMatches, tmStart );
+			gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tRes.m_iQueryTime * 1000 );
 			break;
 		}
 		case STMT_SHOW_WARNINGS:
@@ -11407,7 +11407,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
 				auto uMatches = SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
-				gStats().AddDetailed ( SearchdStats_t::eSearch, uMatches, tmStart );
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tLast.m_iQueryTime * 1000 );
 			}
 
 			// save meta for SHOW META (profile is saved elsewhere)

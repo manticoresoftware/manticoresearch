@@ -82,8 +82,8 @@ query_log_format = plain
 ```
 
 其中：
-* `real-time`是从查询开始到结束的时间。
-* `wall-time`类似于`real-time`，但排除了等待代理和合并结果集的时间。
+* `real-time` 是从查询开始到结束的端到端时间。在 SphinxQL 日志中，它对应 `real` 字段。
+* `wall-time` 是 Manticore 的内部查询墙时间指标。在 SphinxQL 日志中，它对应 `wall` 字段，且此值也用于 `query_log_min_msec`。对于分布式和多源查询，`wall-time` 可能与 `real-time` 不同。
 * `perf-stats`包括当Manticore以`--cpustats`（或通过`SET GLOBAL cpustats=1`启用）和/或`--iostats`（或通过`SET GLOBAL iostats=1`启用）启动时的CPU/IO统计信息：
   - `ios`是执行的文件I/O操作数；
   - `kb`是从表文件读取的数据量（以千字节为单位）；
@@ -105,6 +105,8 @@ query_log_format = plain
   - "ext"对应`SPH_SORT_EXTENDED`模式。
 
 注意：`SPH*`模式是`sphinx`遗留接口特有的。SQL和JSON接口通常会记录`ext2`作为`match-mode`，`ext`和`rel`作为`sort-mode`。
+
+对于分布式查询，请使用 `SHOW STATUS` 计数器 `dist_wall`、`dist_local` 和 `dist_wait` 来分析时间消耗。这些计数器是互补的，不能直接替代查询日志中的 `real`/`wall`。
 
 <!-- intro -->
 查询日志示例：

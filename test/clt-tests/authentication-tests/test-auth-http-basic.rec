@@ -1,0 +1,46 @@
+––– comment –––
+Test HTTP Basic Auth authentication.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: Base64 encoded credentials, validation via sha256(salt + password)
+
+BUG CRITICAL: HTTP Basic Auth NOT WORKING — admin with correct password gets Access denied
+BUG: Invalid Base64 causes empty response with ~3sec timeout
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– 1.2.1 Successful request with correct Basic Auth –––
+EXPECTED per spec: 200 OK with JSON result
+ACTUAL: Access denied — HTTP Basic Auth broken
+––– comment –––
+––– input –––
+curl -s -u admin:adminpass http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+––– output –––
+{"error":"Access denied for user 'admin' (using password: YES)"}
+––– comment –––
+––– 1.2.2 Reject with wrong password –––
+EXPECTED per spec: Access denied error
+––– comment –––
+––– input –––
+curl -s -u admin:wrongpassword http://127.0.0.1:9308/sql -d "query=SELECT 1"
+––– output –––
+{"error":"Access denied for user 'admin' (using password: YES)"}
+––– comment –––
+––– 1.2.3 Reject without Authorization header –––
+EXPECTED per spec: 401 Unauthorized or Access denied
+ACTUAL: Different error message but acceptable
+––– comment –––
+––– input –––
+curl -s http://127.0.0.1:9308/sql -d "query=SELECT 1"
+––– output –––
+{"error":"Authorization header field missed"}
+––– comment –––
+––– 1.2.4 Reject with invalid Base64 –––
+EXPECTED per spec: Error response
+ACTUAL: Empty response (timeout?) — possible BUG
+––– comment –––
+––– input –––
+curl -s -H "Authorization: Basic not-valid-base64!!!" http://127.0.0.1:9308/sql -d "query=SELECT 1"
+––– output –––

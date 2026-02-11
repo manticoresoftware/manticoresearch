@@ -1,0 +1,17 @@
+––– comment –––
+Test DUMP AUTH command: exports auth data as JSON compatible with plain mode.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+BUG: DUMP AUTH not implemented — returns syntax error
+     Command not added to searchd parser (no STMT_DUMP_AUTH in SqlStmt_e)
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+Test: DUMP AUTH should return JSON with users and permissions
+Currently fails with syntax error — NOT IMPLEMENTED
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DUMP AUTH;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'DUMP AUTH'

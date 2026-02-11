@@ -1,0 +1,48 @@
+––– comment –––
+Test HTTP Bearer Token authentication.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: Token via POST /token endpoint, then use Authorization: Bearer <token>
+
+BUG CRITICAL: POST /token returns Access denied — cannot get token via HTTP API
+     (depends on HTTP Basic Auth which is broken)
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– 1.3.1 Get token via POST /token –––
+EXPECTED per spec: {"token": "<new_token>"}
+ACTUAL: Access denied — HTTP Basic Auth broken, cannot authenticate to get token
+––– comment –––
+––– input –––
+curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+{"error":"Access denied for user 'admin' (using password: YES)"}
+––– comment –––
+––– 1.3.2 Successful request with Bearer token –––
+EXPECTED per spec: 200 OK with JSON result
+Note: Cannot test properly — no way to get valid token (POST /token broken)
+Token must be 64 hex characters (32 bytes)
+––– comment –––
+––– input –––
+curl -s -H "Authorization: Bearer test_token_placeholder" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+––– output –––
+{"error":"Access denied for token 'test_token_placeholder', error: argument 'token' has wrong hash size 11, expected 32"}
+––– comment –––
+––– 1.3.3 Reject with invalid token –––
+EXPECTED per spec: Access denied error
+ACTUAL: Rejects with hash size error — acceptable
+––– comment –––
+––– input –––
+curl -s -H "Authorization: Bearer invalid_token_12345" http://127.0.0.1:9308/sql -d "query=SELECT 1"
+––– output –––
+{"error":"Access denied for token 'invalid_token_12345', error: argument 'token' has wrong hash size 9, expected 32"}
+––– comment –––
+––– 1.3.4 Reject with regenerated token (old token invalid) –––
+SKIPPED: Cannot test — POST /token broken
+––– comment –––
+––– input –––
+echo "SKIPPED: Cannot test token regeneration — POST /token broken"
+––– output –––
+SKIPPED: Cannot test token regeneration — POST /token broken

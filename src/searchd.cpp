@@ -8385,8 +8385,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
-	auto tmStart = sphMicroTimer();
-
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
 	QueryProfile_c tProfile;
@@ -11386,7 +11384,6 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			}
 
 			StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-			auto tmStart = sphMicroTimer();
 			SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
 			// no log for search queries from the buddy in the info verbosity
 			if ( session::IsQueryLogDisabled() )

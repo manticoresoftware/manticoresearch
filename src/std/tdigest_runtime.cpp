@@ -69,7 +69,10 @@ TDigestRuntimeState_t * AccessHeaderRuntime ( ByteBlob_t dBlob )
 	const BYTE * pStateStart = reinterpret_cast<const BYTE*>( pHeader + 1 );
 	const BYTE * pStateBytes = pStateStart + pHeader->m_uPad;
 
-	return const_cast<TDigestRuntimeState_t*>( reinterpret_cast<const TDigestRuntimeState_t*>( pStateBytes ) );
+	const auto * pState = reinterpret_cast<const TDigestRuntimeState_t*>( pStateBytes );
+	return ( pState->m_uMagic==TDigestRuntimeState_t::RUNTIME_MAGIC )
+		? const_cast<TDigestRuntimeState_t*>( pState )
+		: nullptr;
 }
 
 TDigestRuntimeState_t * AccessRuntimeState ( ByteBlob_t dBlob )

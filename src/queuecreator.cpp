@@ -2519,7 +2519,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 
 	// try to guess the implicit cutoff (no sorters yet)
 	int iCutoff = ApplyImplicitCutoff ( m_tQuery, {}, !m_tQuery.m_pQueryParser->IsFullscan(m_tQuery) );
-	bool bEvalAllInFinal = iCutoff>=0 && iCutoff<=m_tQuery.m_iLimit;
+	bool bEvalAllInFinal = ( iCutoff>=0 && iCutoff<=m_tQuery.m_iLimit ) || ( m_tQuery.m_iLimit==m_tQuery.m_iMaxMatches );
 
 	// check for columnar attributes that have FINAL eval stage
 	// if we have more than 1 of such attributes (and they are also stored), we replace columnar expressions with columnar expressions
@@ -2540,7 +2540,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 		}
 	}
 
-	const int MIN_FINAL_THRESH = 2;
+	const int MIN_FINAL_THRESH = 10;
 	if ( dStoredColumnarFinal.GetLength()>MIN_FINAL_THRESH )
 		for ( auto i : dStoredColumnarFinal )
 		{

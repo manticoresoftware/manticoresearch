@@ -11721,7 +11721,7 @@ static bool AttachRtChunkExtCopy ( const CSphIndex & tSrcIndex, CSphIndex & tDst
 	return true;
 }
 
-bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError )
+bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	// prevent optimize to start during the disk chunks stealing
 	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
@@ -11768,7 +11768,7 @@ bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, 
 	return true;
 }
 
-bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError )
+bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	// prevent optimize to start during the disk chunks stealing
 	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );

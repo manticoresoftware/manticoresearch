@@ -303,19 +303,19 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sErro
 	// send sqlstate (1 byte marker, 5 byte state)
 	switch ( eErr )
 	{
-		case EMYSQL_ERR::SERVER_SHUTDOWN:
-		case EMYSQL_ERR::UNKNOWN_COM_ERROR:
-			tOut.SendBytes ( FROMS ( "#08S01" ) );
-			break;
-		case EMYSQL_ERR::NO_SUCH_TABLE:
-			tOut.SendBytes ( FROMS ( "#42S02" ) );
-			break;
-		case EMYSQL_ERR::NO_SUCH_THREAD:
-			tOut.SendBytes ( FROMS ( "#HY000" ) );
-			break;
-		default:
-			tOut.SendBytes ( FROMS ( "#42000" ) );
-			break;
+	case EMYSQL_ERR::SERVER_SHUTDOWN:
+	case EMYSQL_ERR::UNKNOWN_COM_ERROR:
+		tOut.SendBytes ( FROMS ( "#08S01" ) );
+		break;
+	case EMYSQL_ERR::NO_SUCH_TABLE:
+		tOut.SendBytes ( FROMS ( "#42S02" ) );
+		break;
+	case EMYSQL_ERR::NO_SUCH_THREAD:
+		tOut.SendBytes ( FROMS ( "#HY000" ) );
+		break;
+	default:
+		tOut.SendBytes ( FROMS ( "#42000" ) );
+		break;
 	}
 
 	// send error message
@@ -326,11 +326,11 @@ WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
 	WORD uStatus = 0;
 	if ( bMoreResults )
-			uStatus |= MYSQL_FLAG::MORE_RESULTS;
+		uStatus |= MYSQL_FLAG::MORE_RESULTS;
 	if ( bAutoCommit )
-			uStatus |= MYSQL_FLAG::STATUS_AUTOCOMMIT;
+		uStatus |= MYSQL_FLAG::STATUS_AUTOCOMMIT;
 	if ( bIsInTrans )
-			uStatus |= MYSQL_FLAG::STATUS_IN_TRANS;
+		uStatus |= MYSQL_FLAG::STATUS_IN_TRANS;
 	return uStatus;
 }
 
@@ -345,7 +345,7 @@ void SendMysqlOkPacketBody ( ISphOutputBuffer& tOut, int iAffectedRows, int iWar
 	tOut.SendLSBWord ( iWarns < 0 ? 0 : ( iWarns > 65536 ? 65535 : iWarns ) );
 
 	if ( !szMessage )
-			return;
+		return;
 
 	auto iLen = (int)strlen ( szMessage );
 	MysqlSendInt ( tOut, iLen );

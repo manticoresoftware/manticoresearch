@@ -1371,12 +1371,48 @@ TEST_F ( QueryParser, transform_naked_common_subphrases )
 	);
 }
 
+TEST_F ( QueryParser, transform_naked_common_subphrases_without_fields )
+{
+	Transform (
+		"( \"aaa bbb\") | ( \"aaa bbb\")",
+		"( \"aaa bbb\" | \"aaa bbb\" )",
+		"\"aaa bbb\""
+	);
+}
+
 TEST_F ( QueryParser, transform_common_subphrases_with_different_fields )
 {
 	Transform (
 		"(@title \"aaa bbb\") | (@body \"aaa bbb\")",
 		"( ( @title: \"aaa bbb\" ) | ( @body: \"aaa bbb\" ) )",
 		"( ( @title: \"aaa bbb\" ) | ( @body: \"aaa bbb\" ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_two_shallowing_fields )
+{
+	Transform (
+		"(@(title,body) \"aaa bbb\") | (@(body,title) \"aaa bbb\")",
+		"( ( @title,body: \"aaa bbb\" ) | ( @title,body: \"aaa bbb\" ) )",
+		"( @title,body: \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_different_shallowing_fields )
+{
+	Transform (
+		"(@(title,body) \"aaa bbb\") | (@body \"aaa bbb\")",
+		"( ( @title,body: \"aaa bbb\" ) | ( @body: \"aaa bbb\" ) )",
+		"( ( @title,body: \"aaa bbb\" ) | ( @body: \"aaa bbb\" ) )" // wrong. Expected: "( @title,body: \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_all_shallowing_fields )
+{
+	Transform (
+		"\"aaa bbb\" | (@body \"aaa bbb\")",
+		"( \"aaa bbb\" | ( @body: \"aaa bbb\" ) )",
+		"( \"aaa bbb\" | ( @body: \"aaa bbb\" ) )" // wrong. Expected "\"aaa bbb\""
 	);
 }
 
@@ -1394,7 +1430,16 @@ TEST_F ( QueryParser, transform_common_subphrases_with_different_field_limits )
 	Transform (
 		"(@title \"aaa bbb\") | (@title[10] \"aaa bbb\")",
 		"( ( @title: \"aaa bbb\" ) | ( @title[10]: \"aaa bbb\" ) )",
-		"( ( @title: \"aaa bbb\" ) | ( @title[10]: \"aaa bbb\" ) )"
+		"( ( @title: \"aaa bbb\" ) | ( @title[10]: \"aaa bbb\" ) )" // wrong. Expected "( @title: \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_same_field_limits_2 )
+{
+	Transform (
+		"(@title[10] \"aaa bbb\") | (@title[20] \"aaa bbb\")",
+		"( ( @title[10]: \"aaa bbb\" ) | ( @title[20]: \"aaa bbb\" ) )",
+		"( ( @title[10]: \"aaa bbb\" ) | ( @title[20]: \"aaa bbb\" ) )" // wrong. Expected "( @title[20]: \"aaa bbb\" )"
 	);
 }
 
@@ -1407,12 +1452,30 @@ TEST_F ( QueryParser, transform_common_subphrases_with_same_zones )
 	);
 }
 
+TEST_F ( QueryParser, transform_common_subphrases_with_same_zones_2 )
+{
+	Transform (
+		"(ZONE:(h1,h2) \"aaa bbb\") | (ZONE:(h1,h2) \"aaa bbb\")",
+		"( ZONE:(h1,h2) \"aaa bbb\" | ZONE:(h1,h2) \"aaa bbb\" )",
+		"ZONE:(h1,h2) \"aaa bbb\""
+	);
+}
+
 TEST_F ( QueryParser, transform_common_subphrases_with_different_zones )
 {
 	Transform (
 		"(ZONE:h1 \"aaa bbb\") | (\"aaa bbb\")",
 		"( ZONE:(h1) \"aaa bbb\" | \"aaa bbb\" )",
-		"( ZONE:(h1) \"aaa bbb\" | \"aaa bbb\" )"
+		"( ZONE:(h1) \"aaa bbb\" | \"aaa bbb\" )"  // wrong. Expected "\"aaa bbb\""
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subphrases_with_different_zones_2 )
+{
+	Transform (
+		"(ZONE:h1 \"aaa bbb\") | (ZONE:(h1,h2) \"aaa bbb\")",
+		"( ZONE:(h1) \"aaa bbb\" | ZONE:(h1,h2) \"aaa bbb\" )",
+		"( ZONE:(h1) \"aaa bbb\" | ZONE:(h1,h2) \"aaa bbb\" )" // wrong. Expected "ZONE:(h1,h2) \"aaa bbb\""
 	);
 }
 

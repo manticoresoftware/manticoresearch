@@ -149,7 +149,7 @@ INSERT INTO tbl (id, str, floatvec) VALUES (0, 'I\'m a string', (0.1,0.2,0.3))
 
 ## 向量参数（MVA/float_vector）
 
-在标准 Manticore SQL 语法中，[MVA](../Data_types.md#Multi-value-integer-%28MVA%29) 或 [float vectors](Creating_a_table/Data_types.md#Float-vector) 以括号内的一组值的形式书写，例如 `(1, 2, 3)`。 
+在标准 Manticore SQL 语法中，[MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) 或 [float vectors](../Creating_a_table/Data_types.md#Float-vector) 作为括号内的一组值写入，例如 `(1, 2, 3)`。 
 
 使用预处理语句时，请直接在查询中包含括号，并仅使用 `?VEC?` 占位符表示括号内的值。例如：
 

@@ -292,7 +292,7 @@ Manticore config
 
 ## Резервное копирование и восстановление с помощью mysqldump
 
-Manticore поддерживает утилиту `mysqldump` из MySQL до версии 9.6 и утилиту `mariadb-dump` из MariaDB до версии 12.1.
+Manticore поддерживает утилиту `mysqldump` из MySQL до версии 9.6 и утилиту `mariadb-dump` из MariaDB до версии 12.2.
 
 <!-- example mysqldump_backup -->
 

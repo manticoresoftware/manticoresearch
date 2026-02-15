@@ -149,7 +149,7 @@ INSERT INTO tbl (id, str, floatvec) VALUES (0, 'I\'m a string', (0.1,0.2,0.3))
 
 ## Векторные параметры (MVA/float_vector)
 
-В стандартном SQL-синтаксисе Manticore [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) или [векторы с плавающей запятой](../Creating_a_table/Data_types.md#Float-vector) записываются как список значений в круглых скобках, например `(1, 2, 3)`.
+В стандартном SQL-синтаксисе Manticore [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) или [векторы с плавающей точкой](../Creating_a_table/Data_types.md#Float-vector) записываются как список значений в круглых скобках, например `(1, 2, 3)`.
 
 При использовании подготовленных запросов включайте круглые скобки непосредственно в запрос и используйте плейсхолдер `?VEC?` только для значений внутри них. Например:
 

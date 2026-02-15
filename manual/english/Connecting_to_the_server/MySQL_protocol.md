@@ -149,7 +149,7 @@ INSERT INTO tbl (id, str, floatvec) VALUES (0, 'I\'m a string', (0.1,0.2,0.3))
 
 ## Vector Parameters (MVA/float_vector)
 
-In the standard Manticore SQL syntax [MVA](../Data_types.md#Multi-value-integer-%28MVA%29) or [float vectors](../Creating_a_table/Data_types.md#Float-vector) are written as a list of values enclosed in parentheses, for example `(1, 2, 3)`. 
+In the standard Manticore SQL syntax [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) or [float vectors](../Creating_a_table/Data_types.md#Float-vector) are written as a list of values enclosed in parentheses, for example `(1, 2, 3)`. 
 
 When using prepared statements, include the parentheses directly in the query, and use the `?VEC?` placeholder only for the values inside them. For example:
 

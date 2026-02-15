@@ -19,7 +19,7 @@ Manticore Search позволяет выполнять поиск по вект�
   - `L2` - Квадрат L2
   - `IP` - Скалярное произведение
   - `COSINE` - Косинусное сходство
-  
+
   **Примечание:** При использовании сходства `COSINE` векторы автоматически нормализуются при вставке. Это означает, что сохраненные значения векторов могут отличаться от исходных входных значений, так как они будут преобразованы в единичные векторы (векторы с математической длиной/величиной 1.0) для обеспечения эффективных вычислений косинусного сходства. Эта нормализация сохраняет направление вектора, стандартизируя его длину.
 * `hnsw_m`: Необязательная настройка, определяющая максимальное количество исходящих соединений в графе. По умолчанию 16.
 * `hnsw_ef_construction`: Необязательная настройка, определяющая компромисс между временем построения и точностью. По умолчанию 200.
@@ -70,10 +70,23 @@ table test_vec {
 - `FROM`: Какие поля использовать для генерации эмбеддингов (пустое значение означает все текстовые/строковые поля)
 
 **Поддерживаемые модели эмбеддингов:**
-- **Sentence Transformers**: Любая [подходящая модель на основе BERT из Hugging Face](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI**: Модели эмбеддингов OpenAI, такие как `openai/text-embedding-ada-002` - требует параметр `API_KEY='<OPENAI_API_KEY>'`
-- **Voyage**: Модели эмбеддингов Voyage AI - требует параметр `API_KEY='<VOYAGE_API_KEY>'`
-- **Jina**: Модели эмбеддингов Jina AI - требует параметр `API_KEY='<JINA_API_KEY>'`
+
+| Тип модели | Пример | Требуется API ключ | Примечания |
+|------------|---------|-----------------|-------|
+| **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные BERT-модели, автоматически загружаются |
+| **Qwen** | `Qwen/Qwen3-Embedding-0.6B` | Нет | Локальные модели семейства Qwen |
+| **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Нет | Локальные модели семейства Llama |
+| **Mistral** | `Locutusque/TinyMistral-248M-v2` | Нет | Локальные модели семейства Mistral |
+| **Gemma** | `h2oai/embeddinggemma-300m` | Нет | Локальные модели семейства Gemma |
+| **OpenAI** | `openai/text-embedding-ada-002` | Да | `API_KEY='<OPENAI_API_KEY>'` |
+| **Voyage** | Модели Voyage AI | Да | `API_KEY='<VOYAGE_API_KEY>'` |
+| **Jina** | Модели Jina AI | Да | `API_KEY='<JINA_API_KEY>'` |
+
+**Требования к формату локальной модели:**
+- Должны быть сохранены в формате `safetensors` (только однофайловый)
+- Поддерживаемые семейства: Qwen, Llama, Mistral, Gemma
+- Протестированные модели: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`, `Locutusque/TinyMistral-248M-v2`, `Qwen/Qwen3-Embedding-0.6B`, `h2oai/embeddinggemma-300m`
+- Другие модели в формате `safetensors` также могут работать, но не гарантируется
 
 Более подробную информацию о настройке атрибута `float_vector` можно найти [здесь](../Creating_a_table/Data_types.md#Float-vector).
 
@@ -85,10 +98,20 @@ table test_vec {
 Использование sentence-transformers (ключ API не требуется)
 ```sql
 CREATE TABLE products (
-    title TEXT, 
+    title TEXT,
     description TEXT,
-    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' 
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title'
+);
+```
+
+Использование локальных эмбеддингов Qwen (ключ API не требуется)
+```sql
+CREATE TABLE products_qwen (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title' CACHE_PATH='/opt/homebrew/var/manticore/.cache/manticore'
 );
 ```
 
@@ -96,7 +119,7 @@ CREATE TABLE products (
 ```sql
 CREATE TABLE products_openai (
     title TEXT,
-    description TEXT, 
+    description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
@@ -172,12 +195,12 @@ table products_all {
 
 Вставка только текстовых данных - эмбеддинги генерируются автоматически
 ```sql
-INSERT INTO products (title) VALUES 
+INSERT INTO products (title) VALUES
 ('machine learning artificial intelligence'),
 ('banana fruit sweet yellow');
 ```
 
-Вставка нескольких полей - оба используются для эмбеддинга, если FROM='title,description'  
+Вставка нескольких полей - оба используются для эмбеддинга, если FROM='title,description'
 ```sql
 INSERT INTO products_openai (title, description) VALUES
 ('smartphone', 'latest mobile device with advanced features'),
@@ -186,7 +209,7 @@ INSERT INTO products_openai (title, description) VALUES
 
 Вставка пустого вектора (документ исключен из векторного поиска)
 ```sql
-INSERT INTO products (title, embedding_vector) VALUES 
+INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());
 ```
 
@@ -416,7 +439,7 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"ef": 2000, 
+		"ef": 2000,
 		"rescore": true,
 		"oversampling": 3.0
 	}
@@ -667,4 +690,3 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
-

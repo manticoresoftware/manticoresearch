@@ -5,7 +5,7 @@
 ## 使用 CI Docker 构建
 为了准备[官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。该镜像包含必要的工具，并设计为与外部系统根目录（sysroots）一起使用，因此一个容器可以为所有操作系统构建软件包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) 来构建该镜像，或者使用 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 上的镜像。这是为任何支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
 
-* `DISTR`：目标平台：`bionic`、`focal`、`jammy`、`buster`、`bullseye`、`bookworm`、`rhel7`、`rhel8`、`rhel9`、`rhel10`、`macos`、`windows`、`freebsd13`
+* `DISTR`：目标平台：`bionic`，`focal`，`jammy`，`buster`，`bullseye`，`bookworm`，`rhel8`，`rhel9`，`rhel10`，`macos`，`windows`，`freebsd13`
 * `arch`：架构：`x86_64`、`x64`（适用于 Windows）、`aarch64`、`arm64`（适用于 Macos）
 * `SYSROOT_URL`：系统根目录归档文件的 URL。除非您自己构建系统根目录（说明可以在[这里](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)找到），否则可以使用 https://repo.manticoresearch.com/repository/sysroots。
 * 参考 CI 工作流文件以查找您可能需要使用的其他环境变量：

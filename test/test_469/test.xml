@@ -183,6 +183,15 @@ FLUSH RAMCHUNK t;
 show table t indexes;
 drop table t;
 
+CREATE TABLE t(j json secondary_index='1');
+INSERT INTO t VALUES (1,'[null, 0, 1.55, "1232a"]');
+FLUSH RAMCHUNK t;
+INSERT INTO t VALUES (2,'{"a":1, "b": null, "c":{}, "d": []}');
+FLUSH RAMCHUNK t;
+ALTER TABLE t REBUILD SECONDARY;
+SHOW TABLE t INDEXES;
+DROP TABLE t;
+
 </sphinxql></queries>
 
 </test>

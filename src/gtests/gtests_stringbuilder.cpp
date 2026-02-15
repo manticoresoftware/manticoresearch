@@ -477,6 +477,16 @@ TEST ( functions, EscapedStringBuilder )
 	ASSERT_STREQ ( tBuilder.cstr(), "'space'" );
 
 	delete[] buf;
+
+	auto sTest = FROMS("spa'ce");
+
+	tBuilder.Clear();
+	tBuilder.AppendEscaped ( sTest.first, EscBld::eEscape | EscBld::eSkipComma, sTest.second );
+	ASSERT_STREQ ( tBuilder.cstr(), "'spa\\'ce'" );
+
+	tBuilder.Clear();
+	tBuilder.AppendEscaped ( sTest.first, EscBld::eEscape | EscBld::eSkipComma | EscBld::eSkipQuotes, sTest.second );
+	ASSERT_STREQ ( tBuilder.cstr(), "spa\\'ce" );
 }
 
 TEST ( functions, EscapedStringBuilderbounds )

@@ -1337,6 +1337,18 @@ enum class MergeSeg_e : BYTE
 
 using AlterOp_fn = std::function < bool( CSphIndex & , CSphString & ) >;
 
+struct ExternalFilesCacheEntry_t
+{
+	uint64_t	m_uHash = 0;
+	CSphString	m_sStopwords;
+	CSphString	m_sWordforms;
+	CSphString	m_sExceptions;
+	CSphString	m_sHitless;
+	CSphString	m_sJieba;
+};
+
+using ExtFiles_h = OpenHashTable_T<uint64_t, ExternalFilesCacheEntry_t, IdentityHash_fn>;
+
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
 {
 public:
@@ -1353,7 +1365,7 @@ public:
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
-	bool				AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
+	bool				AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
@@ -1648,7 +1660,7 @@ private:
 	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
-	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
+	bool						CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const;
 	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						AttachSetSettings ( CSphIndex * pIndex );
 	bool						AttachSaveDiskChunk ();
@@ -1656,6 +1668,9 @@ private:
 	int							GetChunkId () const override { return m_tChunkID.GetChunkId ( m_tRtChunks ); }
 	void						SetGlobalIDFPath ( const CSphString & sPath ) override;
 	void						DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
+	bool						AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError );
+	bool						AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError );
+	bool						InitExtCache ( const FilenameBuilder_i * pDstFilenameBuilder, ExtFiles_h & hExtCache, CSphString & sError ) const;
 };
 
 
@@ -4608,6 +4623,13 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		break;
 	}
 
+	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
+	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
+	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
+	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
+	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
+	END_SCHED( "rt" );
+
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
@@ -4652,13 +4674,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 			dNewFieldLensDisk[i] = m_dFieldLensDisk[i] + tStats.m_dFieldLens[i];
 		}
 	}
-
-	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
-	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
-	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
-	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
-	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
-	END_SCHED( "rt" );
 
 	IntVec_t dChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
@@ -7819,6 +7834,7 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema & tMatchSc
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
+	tFlx.m_eJoinType = tQuery.m_eJoinType;
 	tFlx.m_bAddKNNDistFilter = true;
 
 	std::unique_ptr<ISphSchema> pModifiedMatchSchema;
@@ -9168,7 +9184,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 	// safeguards
 	// we do not support some disk index features in RT just yet
-	if ( !CanAttach ( pIndex, sError ) )
+	if ( !CanAttach ( pIndex, true, sError ) )
 		return false;
 
 	// note: that is important. Active readers prohibited by topmost w-lock, but internal processes not!
@@ -9206,18 +9222,18 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	return true;
 }
 
-bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const
+bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const
 {
 	// ATTACH to exist index require these checks
 	if ( !m_tRtChunks.IsEmpty() )
 	{
-		if ( m_pTokenizer->GetSettingsFNV()!=pIndex->GetTokenizer()->GetSettingsFNV() )
+		if ( bCheckFT && m_pTokenizer->GetSettingsFNV()!=pIndex->GetTokenizer()->GetSettingsFNV() )
 		{
 			sError = "ATTACH currently requires same tokenizer settings (RT-side support not implemented yet)";
 			return false;
 		}
 
-		if ( m_pDict->GetSettingsFNV()!=pIndex->GetDictionary()->GetSettingsFNV() )
+		if ( bCheckFT && m_pDict->GetSettingsFNV()!=pIndex->GetDictionary()->GetSettingsFNV() )
 		{
 			sError = "ATTACH currently requires same dictionary settings (RT-side support not implemented yet)";
 			return false;
@@ -9287,22 +9303,28 @@ void RtIndex_c::AttachSetSettings ( CSphIndex * pIndex )
 	m_pDict = pIndex->GetDictionary()->Clone ();
 }
 
-bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bFatal, CSphString & sError )
+static bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFiles_h & hExtCache, CSphString & sError );
+
+bool RtIndex_c::AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError )
 {
 	// from the next line we work in index simple scheduler. That made everything much simpler
 	// (no need to care about locks and order of access to ram segments and disk chunks)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", "AttachDiskIndex" );
 
+	RtIndex_i * pSrcIndex = tArgs.m_pSrcIndex;
+	bool bTruncate = tArgs.m_bTruncate;
+	bool bConfigless = tArgs.m_bConfigless;
+
 	assert ( pSrcIndex );
-	bFatal = false;
+	tArgs.m_bFatal = false;
 
 	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
 		return false;
 
 	// safeguards
 	// we do not support some disk index features in RT just yet
-	if ( !CanAttach ( pSrcIndex, sError ) )
+	if ( !CanAttach ( pSrcIndex, !bConfigless, sError ) )
 		return false;
 
 	// note: that is important. Active readers prohibited by topmost w-lock, but internal processes not!
@@ -9318,35 +9340,34 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 	if ( !pSrcRtIndex->AttachSaveDiskChunk() )
 		return false;
 
+	StrVec_t dOldSrcFiles, dNewSrcFiles, dOldDstFiles, dNewDstFiles;
+	ExtFiles_h hExtCache { 32 };
+
+	if ( bConfigless )
 	{
-		// prevent optimize to start during the disk chunks stealing
-		OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
-		OptimizeGuard_c tDstStopOptimize ( *this );
-		LazyVector_T<ConstDiskChunkRefPtr_t> dOthers;
+		pSrcIndex->GetIndexFiles ( dOldSrcFiles, dOldSrcFiles );
+		GetIndexFiles ( dOldDstFiles, dOldDstFiles );
 
-		for ( ;; )
-		{
-			ConstDiskChunkRefPtr_t tChunk = pSrcRtIndex->PopDiskChunk();
-			if ( !tChunk )
-				break;
-
-			tChunk->m_bFinallyUnlink = true; // destroy the disk chunks on failure
-			if ( !AttachDiskChunkMove ( static_cast<CSphIndex *>( *tChunk ), bFatal, sError ) )
-			{
-				bFatal = true; // need to destroy source index in case of failure as it does not have right amount of disk chunks anymore
-				return false;
-			}
-		
-			dOthers.Add ( tChunk );
-		}
-
-		// update disk chunk list
-		auto tNewSet = RtWriter();
-		CopyChunksTo ( tNewSet );
-		dOthers.for_each ( [&tNewSet] (auto& tChunk) { tChunk->m_bFinallyUnlink = false; tNewSet.m_pNewDiskChunks->Add ( tChunk ); } );
+		if ( !AttachRtChunksExtCopy ( pSrcRtIndex, tArgs.m_bFatal, hExtCache, sError ) )
+			return false;
+	} else
+	{
+		if ( !AttachRtChunksNoExtCopy ( pSrcRtIndex, tArgs.m_bFatal, sError ) )
+			return false;
 	}
 
 	AttachSetSettings ( pSrcIndex );
+	if ( bConfigless )
+	{
+		if ( !AttachCopyExt ( *pSrcIndex, *this, hExtCache, sError ) )
+			return false;
+
+		pSrcIndex->GetIndexFiles ( dNewSrcFiles, dNewSrcFiles );
+		GetIndexFiles ( dNewDstFiles, dNewDstFiles );
+		RemoveOutdatedFiles ( dNewSrcFiles, dOldSrcFiles );
+		RemoveOutdatedFiles ( dNewDstFiles, dOldDstFiles );
+	}
+
 	PostSetup();
 
 	// FIXME? what about copying m_TID etc?
@@ -11428,4 +11449,383 @@ void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 
 	for ( auto & tDiskChunk : tGuard.m_dDiskChunks )
 		tDiskChunk->CastIdx().DebugDumpDict ( fp, true );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+static bool SettingsAddExt ( IndexSettingsContainer_i & tContainer, const char * szName, const CSphString & sValue, const FilenameBuilder_i * pFileBuilder, CSphString & sError )
+{
+	if ( sValue.IsEmpty() )
+		return true;
+
+	StringBuilder_c sPaths ( " " );
+	sphSplitApply ( sValue.cstr(), sValue.Length(), " \t,", [&sPaths, pFileBuilder] ( const char * sToken, int iLen )
+	{
+		if ( !iLen )
+			return;
+
+		CSphString sFile;
+		sFile.SetBinary ( sToken, iLen );
+		CSphString sPath = FormatPath ( sFile, pFileBuilder );
+		if ( !sPath.IsEmpty() )
+			sPaths << sPath;
+	} );
+
+	if ( sPaths.IsEmpty() )
+		return true;
+
+	CSphString sPath = (CSphString)sPaths;
+	if ( !tContainer.AddOption ( szName, sPath, true ) )
+	{
+		sError = tContainer.GetError();
+		return false;
+	}
+
+	return true;
+}
+
+static bool CollectExtSettings ( IndexSettingsContainer_i & tContainer, const CSphIndex & tSrcIndex, const FilenameBuilder_i * pSrcFileBuilder, CSphString & sError )
+{
+	const CSphIndexSettings & tSettings = tSrcIndex.GetSettings();
+	const CSphTokenizerSettings & tTokSettings = tSrcIndex.GetTokenizer()->GetSettings();
+	const CSphDictSettings & tDictSettings = tSrcIndex.GetDictionary()->GetSettings();
+
+	if ( !SettingsAddExt ( tContainer, "stopwords", tDictSettings.m_sStopwords, pSrcFileBuilder, sError ) )
+		return false;
+
+	if ( !SettingsAddExt ( tContainer, "wordforms", Vec2Str ( tDictSettings.m_dWordforms, " " ), pSrcFileBuilder, sError ) )
+		return false;
+
+	if ( !SettingsAddExt ( tContainer, "exceptions", tTokSettings.m_sSynonymsFile, pSrcFileBuilder, sError ) )
+		return false;
+
+	if ( !SettingsAddExt ( tContainer, "hitless_words", tSettings.m_sHitlessFiles, pSrcFileBuilder, sError ) )
+		return false;
+
+	if ( !SettingsAddExt ( tContainer, "jieba_user_dict_path", tSettings.m_sJiebaUserDictPath, pSrcFileBuilder, sError ) )
+		return false;
+
+	return true;
+}
+
+static uint64_t HashFileInfo ( const CSphSavedFile & tInfo )
+{
+	uint64_t uHash = SPH_FNV64_SEED;
+	uHash = sphFNV64 ( &tInfo.m_uSize, sizeof ( tInfo.m_uSize ), uHash );
+	uHash = sphFNV64 ( &tInfo.m_uCRC32, sizeof ( tInfo.m_uCRC32 ), uHash );
+	return uHash;
+}
+
+static bool HashExtFile ( const CSphString & sFile, const FilenameBuilder_i * pFileBuilder, uint64_t & uHash, CSphString & sError )
+{
+	uHash = 0;
+
+	if ( sFile.IsEmpty() )
+		return true;
+
+	CSphString sPath = FormatPath ( sFile, pFileBuilder );
+	CSphSavedFile tInfo;
+	if ( !tInfo.Collect ( sPath.cstr(), &sError ) )
+		return false;
+
+	uHash = HashFileInfo ( tInfo );
+	return true;
+}
+
+static bool HashExtFileList ( const StrVec_t & dFiles, const FilenameBuilder_i * pFileBuilder, uint64_t & uHash, CSphString & sError )
+{
+	uHash = 0;
+
+	if ( dFiles.IsEmpty() )
+		return true;
+
+	CSphVector<uint64_t> dHashes;
+	dHashes.Reserve ( dFiles.GetLength() );
+	for ( const auto & sFile : dFiles )
+	{
+		uint64_t uVal = 0;
+		if ( !HashExtFile ( sFile, pFileBuilder, uVal, sError ) )
+			return false;
+		if ( uVal )
+			dHashes.Add ( uVal );
+	}
+
+	// need order‑independent file name list
+	dHashes.Sort();
+	uHash = SPH_FNV64_SEED;
+	for ( auto uVal : dHashes )
+		uHash = sphFNV64 ( &uVal, sizeof ( uVal ), uHash );
+
+	return true;
+}
+
+static bool BuildExtCacheEntry ( const CSphIndex & tIndex, const FilenameBuilder_i * pFileBuilder, ExternalFilesCacheEntry_t & tEntry, CSphString & sError )
+{
+	const CSphIndexSettings & tSettings = tIndex.GetSettings();
+	const CSphTokenizerSettings & tTokSettings = tIndex.GetTokenizer()->GetSettings();
+	const CSphDictSettings & tDictSettings = tIndex.GetDictionary()->GetSettings();
+
+	StrVec_t dStopwords = sphSplit ( tDictSettings.m_sStopwords.cstr(), " \t," );
+	StrVec_t dHitless = sphSplit ( tSettings.m_sHitlessFiles.cstr(), " \t,"  );
+
+	uint64_t uStopwords = 0;
+	uint64_t uWordforms = 0;
+	uint64_t uExceptions = 0;
+	uint64_t uHitless = 0;
+	uint64_t uJieba = 0;
+
+	if ( !HashExtFileList ( dStopwords, pFileBuilder, uStopwords, sError ) )
+		return false;
+	if ( !HashExtFileList ( tDictSettings.m_dWordforms, pFileBuilder, uWordforms, sError ) )
+		return false;
+	if ( !HashExtFile ( tTokSettings.m_sSynonymsFile, pFileBuilder, uExceptions, sError ) )
+		return false;
+	if ( !HashExtFileList ( dHitless, pFileBuilder, uHitless, sError ) )
+		return false;
+	if ( !HashExtFile ( tSettings.m_sJiebaUserDictPath, pFileBuilder, uJieba, sError ) )
+		return false;
+
+	uint64_t uHash = SPH_FNV64_SEED;
+	uHash = sphFNV64 ( "stopwords", 9, uHash );
+	uHash = sphFNV64 ( &uStopwords, sizeof ( uStopwords ), uHash );
+	uHash = sphFNV64 ( "wordforms", 9, uHash );
+	uHash = sphFNV64 ( &uWordforms, sizeof ( uWordforms ), uHash );
+	uHash = sphFNV64 ( "exceptions", 10, uHash );
+	uHash = sphFNV64 ( &uExceptions, sizeof ( uExceptions ), uHash );
+	uHash = sphFNV64 ( "hitless", 7, uHash );
+	uHash = sphFNV64 ( &uHitless, sizeof ( uHitless ), uHash );
+	uHash = sphFNV64 ( "jieba", 5, uHash );
+	uHash = sphFNV64 ( &uJieba, sizeof ( uJieba ), uHash );
+
+	tEntry.m_uHash = uHash;
+	tEntry.m_sStopwords = tDictSettings.m_sStopwords;
+	tEntry.m_sWordforms = Vec2Str ( tDictSettings.m_dWordforms, " " );
+	tEntry.m_sExceptions = tTokSettings.m_sSynonymsFile;
+	tEntry.m_sHitless = tSettings.m_sHitlessFiles;
+	tEntry.m_sJieba = tSettings.m_sJiebaUserDictPath;
+
+	return true;
+}
+
+static bool StoreExtCacheEntry ( const CSphIndex & tIndex, const FilenameBuilder_i * pDstFileBuilder, ExtFiles_h & hExtCache, CSphString & sError )
+{
+	ExternalFilesCacheEntry_t tEntry;
+	if ( !BuildExtCacheEntry ( tIndex, pDstFileBuilder, tEntry, sError ) )
+		return false;
+
+	hExtCache.Add ( tEntry.m_uHash, tEntry );
+	return true;
+}
+
+static bool ApplyExtSettings ( FilenameBuilder_i * pDstFileBuilder, CSphIndex & tDstIndex, IndexSettingsContainer_i & tContainer, CSphString sError )
+{
+	const bool bHasAny = ( tContainer.Contains ( "hitless_words" ) || tContainer.Contains ( "jieba_user_dict_path" ) || tContainer.Contains ( "exceptions" ) || tContainer.Contains ( "stopwords" ) || tContainer.Contains ( "wordforms" ) );
+	if ( !bHasAny )
+		return true;
+
+	CSphIndexSettings tSettings = tDstIndex.GetSettings();
+	CSphTokenizerSettings tTokSettings = tDstIndex.GetTokenizer()->GetSettings();
+	CSphDictSettings tDictSettings = tDstIndex.GetDictionary()->GetSettings();
+
+	if ( tContainer.Contains ( "hitless_words" ) )
+		tSettings.m_sHitlessFiles = tContainer.GetList ( "hitless_words" );
+
+	if ( tContainer.Contains ( "jieba_user_dict_path" ) )
+		tSettings.m_sJiebaUserDictPath = tContainer.Get ( "jieba_user_dict_path" );
+
+	if ( tContainer.Contains ( "exceptions" ) )
+		tTokSettings.m_sSynonymsFile = tContainer.Get ( "exceptions" );
+
+	if ( tContainer.Contains ( "stopwords" ) )
+		tDictSettings.m_sStopwords = tContainer.GetList ( "stopwords" );
+
+	if ( tContainer.Contains ( "wordforms" ) )
+	{
+		CSphString sWordforms = tContainer.GetList ( "wordforms" );
+		StrVec_t dWordforms = sphSplit ( sWordforms.cstr(), " \t," );
+		tDictSettings.m_dWordforms = std::move ( dWordforms );
+	}
+
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tTokSettings, nullptr, pDstFileBuilder, dWarnings, sError );
+	if ( !pTokenizer )
+		return false;
+
+	DictRefPtr_c pDict { tDictSettings.m_bWordDict
+		? sphCreateDictionaryKeywords ( tDictSettings, nullptr, pTokenizer, tDstIndex.GetName(), false, tSettings.m_iSkiplistBlockSize, pDstFileBuilder, sError )
+		: sphCreateDictionaryCRC ( tDictSettings, nullptr, pTokenizer, tDstIndex.GetName(), false, tSettings.m_iSkiplistBlockSize, pDstFileBuilder, sError )};
+	if ( !pDict )
+		return false;
+
+	tDstIndex.SetDictionary ( pDict );
+
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms() );
+	tDstIndex.SetTokenizer ( pTokenizer );
+
+	tDstIndex.Setup ( tSettings );
+	tDstIndex.PostSetup();
+	return true;
+}
+
+static bool ApplyCachedExtSettings ( FilenameBuilder_i * pDstFileBuilder, CSphIndex & tDstIndex, const ExternalFilesCacheEntry_t & tEntry, CSphString sError )
+{
+	std::unique_ptr<IndexSettingsContainer_i> pContainer { CreateIndexSettingsContainer() };
+	if ( !tEntry.m_sStopwords.IsEmpty() )
+		pContainer->Add ( "stopwords", tEntry.m_sStopwords );
+	if ( !tEntry.m_sWordforms.IsEmpty() )
+		pContainer->Add ( "wordforms", tEntry.m_sWordforms );
+	if ( !tEntry.m_sExceptions.IsEmpty() )
+		pContainer->Add ( "exceptions", tEntry.m_sExceptions );
+	if ( !tEntry.m_sHitless.IsEmpty() )
+		pContainer->Add ( "hitless_words", tEntry.m_sHitless );
+	if ( !tEntry.m_sJieba.IsEmpty() )
+		pContainer->Add ( "jieba_user_dict_path", tEntry.m_sJieba );
+
+	return ApplyExtSettings ( pDstFileBuilder, tDstIndex, *pContainer, sError );
+}
+
+static bool AttachRtChunkExtCopy ( const CSphIndex & tSrcIndex, CSphIndex & tDstIndex, int iChunk, const FilenameBuilder_i * pSrcFileBuilder, FilenameBuilder_i * pDstFileBuilder,
+	ExtFiles_h & hExtCache, const CSphString & sDstPath, CSphString & sError )
+{
+	ExternalFilesCacheEntry_t tSrcEntry;
+	if ( !BuildExtCacheEntry ( tSrcIndex, pSrcFileBuilder, tSrcEntry, sError ) )
+		return false;
+
+	auto * pCached = hExtCache.Find ( tSrcEntry.m_uHash );
+	if ( pCached )
+	{
+		if ( !ApplyCachedExtSettings ( pDstFileBuilder, tDstIndex, *pCached, sError ) )
+			return false;
+
+	} else
+	{
+		auto pChunkContainer = std::unique_ptr<IndexSettingsContainer_i> { CreateIndexSettingsContainer() };
+		if ( !CollectExtSettings ( *pChunkContainer, tSrcIndex, pSrcFileBuilder, sError ) )
+			return false;
+
+		if ( !pChunkContainer->CopyExternalFiles ( sDstPath, iChunk ) )
+		{
+			sError = pChunkContainer->GetError();
+			return false;
+		}
+
+		if ( !ApplyExtSettings ( pDstFileBuilder, tDstIndex, *pChunkContainer, sError ) )
+			return false;
+
+		pChunkContainer->ResetCleanup();
+
+		if ( !StoreExtCacheEntry ( tDstIndex, pDstFileBuilder, hExtCache, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+{
+	// prevent optimize to start during the disk chunks stealing
+	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
+	OptimizeGuard_c tDstStopOptimize ( *this );
+
+	std::unique_ptr<FilenameBuilder_i> pSrcFileBuilder { GetIndexFilenameBuilder() ( pSrcRtIndex->GetName() ) };
+	std::unique_ptr<FilenameBuilder_i> pDstFileBuilder { GetIndexFilenameBuilder() ( GetName() ) };
+
+	if ( !InitExtCache ( pDstFileBuilder.get(), hExtCache, sError ) )
+		return false;
+
+	CSphString sDstPath = GetPathOnly ( GetFilebase() );
+	LazyVector_T<ConstDiskChunkRefPtr_t> dOthers;
+
+	for ( ;; )
+	{
+		ConstDiskChunkRefPtr_t tChunk = pSrcRtIndex->PopDiskChunk();
+		if ( !tChunk )
+			break;
+
+		auto * pChunkIndex = static_cast<CSphIndex *>( *tChunk );
+		tChunk->m_bFinallyUnlink = true; // destroy the disk chunks on failure
+		if ( !AttachDiskChunkMove ( pChunkIndex, bFatal, sError ) )
+		{
+			bFatal = true; // need to destroy source index in case of failure as it does not have right amount of disk chunks anymore
+			return false;
+		}
+
+		int iChunk = pChunkIndex->m_iChunk;
+		if ( !AttachRtChunkExtCopy ( *pChunkIndex, *pChunkIndex, iChunk, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
+			return false;
+
+		if ( !tChunk->Cidx().RewriteHeader ( sError ) )
+			return false;
+
+		dOthers.Add ( tChunk );
+	}
+
+	// update disk chunk list
+	auto tNewSet = RtWriter();
+	CopyChunksTo ( tNewSet );
+	dOthers.for_each ( [&tNewSet] (auto& tChunk) { tChunk->m_bFinallyUnlink = false; tNewSet.m_pNewDiskChunks->Add ( tChunk ); } );
+
+	return true;
+}
+
+bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+{
+	// prevent optimize to start during the disk chunks stealing
+	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
+	OptimizeGuard_c tDstStopOptimize ( *this );
+	LazyVector_T<ConstDiskChunkRefPtr_t> dOthers;
+
+	for ( ;; )
+	{
+		ConstDiskChunkRefPtr_t tChunk = pSrcRtIndex->PopDiskChunk();
+		if ( !tChunk )
+			break;
+
+		auto * pChunkIndex = static_cast<CSphIndex *>( *tChunk );
+		tChunk->m_bFinallyUnlink = true; // destroy the disk chunks on failure
+		if ( !AttachDiskChunkMove ( pChunkIndex, bFatal, sError ) )
+		{
+			bFatal = true; // need to destroy source index in case of failure as it does not have right amount of disk chunks anymore
+			return false;
+		}
+
+		dOthers.Add ( tChunk );
+	}
+
+	// update disk chunk list
+	auto tNewSet = RtWriter();
+	CopyChunksTo ( tNewSet );
+	dOthers.for_each ( [&tNewSet] (auto& tChunk) { tChunk->m_bFinallyUnlink = false; tNewSet.m_pNewDiskChunks->Add ( tChunk ); } );
+
+	return true;
+}
+
+bool RtIndex_c::InitExtCache ( const FilenameBuilder_i * pDstFileBuilder, ExtFiles_h & hExtCache, CSphString & sError ) const
+{
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( const auto & tChunk : *pChunks )
+	{
+		if ( !StoreExtCacheEntry ( tChunk->Cidx(), pDstFileBuilder, hExtCache, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFiles_h & hExtCache, CSphString & sError )
+{
+	std::unique_ptr<FilenameBuilder_i> pSrcFileBuilder { GetIndexFilenameBuilder() ( tSrcIndex.GetName() ) };
+	std::unique_ptr<FilenameBuilder_i> pDstFileBuilder { GetIndexFilenameBuilder() ( tDstIndex.GetName() ) };
+
+	const CSphString sDstPath = GetPathOnly ( tDstIndex.GetFilebase() );
+	const int iSuffix = tDstIndex.GetChunkId();
+	if ( !AttachRtChunkExtCopy ( tSrcIndex, tDstIndex, iSuffix, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
+		return false;
+	{
+		auto pDict = tDstIndex.GetDictionary();
+		assert ( pDict );
+		const auto & tDictSettings = pDict->GetSettings();
+		assert ( tDictSettings.m_dWordforms.GetLength()==pDict->GetWordformsFileInfos().GetLength() );
+	}
+	return true;
 }

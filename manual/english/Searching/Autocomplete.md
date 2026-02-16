@@ -5,7 +5,7 @@ Autocomplete, or word completion, predicts and suggests the end of a word or phr
 - Suggestions in search engines
 - Text fields in apps
 
-Manticore offers an advanced autocomplete feature that gives suggestions while you type, similar to those in well-known search engines. This helps speed up searches and lets users find what they need faster.
+Manticore offers an advanced autocomplete feature that gives suggestions while you type, similar to those in well-known search engines. This helps speed up searches and lets users find what they need faster...
 
 In addition to basic autocomplete functionality, Manticore includes advanced features to enhance the user experience:
 

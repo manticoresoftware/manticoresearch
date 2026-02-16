@@ -4,7 +4,7 @@ Manticore Search 通过使用 MySQL 协议实现了 SQL 接口，允许使用任
 
 然而，SQL 方言有所不同，仅实现了 MySQL 中可用的 SQL 命令或函数的一个子集。此外，还存在 Manticore Search 特有的子句和函数，例如用于全文搜索的 `MATCH()` 子句。
 
-Manticore Search 支持通过 MySQL 协议的服务器端 [预处理语句](#prepared-statements)。也可以使用客户端预处理语句。需要注意的是，Manticore 实现了多值 (MVA) 和 `float_vector` 数据类型，这些在 MySQL 或实现预处理语句的库中没有等价物。在这些情况下，值必须在原始查询中以逗号分隔的数字列表形式构造。
+Manticore Search 支持通过 MySQL 协议的 [预处理语句](../Connecting_to_the_server/MySQL_protocol.md#prepared-statements)。也可以使用客户端预处理语句。需要注意的是，Manticore 实现了多值 (MVA) 和 `float_vector` 数据类型，这些在 MySQL 或实现预处理语句的库中没有等价物。在这些情况下，值必须在原始查询中以逗号分隔的数字列表形式构建。
 
 一些 MySQL 客户端/连接器需要用户/密码和/或数据库名称的值。由于 Manticore Search 没有数据库的概念，也没有实现用户访问控制，这些值可以任意设置，因为 Manticore 会简单地忽略它们。
 

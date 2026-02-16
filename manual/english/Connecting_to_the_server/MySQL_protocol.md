@@ -4,7 +4,7 @@ Manticore Search implements an SQL interface using the MySQL protocol, allowing 
 
 However, the SQL dialect is different and implements only a subset of the SQL commands or functions available in MySQL. Additionally, there are clauses and functions that are specific to Manticore Search, such as the `MATCH()` clause for full-text search.
 
-Manticore Search supports server-side [prepared statements](#prepared-statements) over the MySQL protocol. Client-side prepared statements can also be used. It is important to note that Manticore implements the multi-value (MVA) and `float_vector` data types, which have no equivalents in MySQL or libraries implementing prepared statements. In these cases, values must be crafted in the raw query as comma-separated list of numbers.
+Manticore Search supports server-side [prepared statements](../Connecting_to_the_server/MySQL_protocol.md#prepared-statements) over the MySQL protocol. Client-side prepared statements can also be used. It is important to note that Manticore implements the multi-value (MVA) and `float_vector` data types, which have no equivalents in MySQL or libraries implementing prepared statements. In these cases, values must be crafted in the raw query as comma-separated list of numbers.
 
 Some MySQL clients/connectors require values for user/password and/or database name. Since Manticore Search does not have the concept of databases and there is no user access control implemented, these values can be set arbitrarily as Manticore will simply ignore them.
 

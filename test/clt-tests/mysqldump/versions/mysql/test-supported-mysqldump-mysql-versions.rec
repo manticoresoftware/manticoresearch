@@ -67,6 +67,11 @@ Testing version: mysql:5.6
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:5.6 completed successfully
+Testing cluster:table with mysql:5.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:5.7
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -95,6 +100,11 @@ Testing version: mysql:5.7
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:5.7 completed successfully
+Testing cluster:table with mysql:5.7...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -123,6 +133,11 @@ Testing version: mysql:8.0
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:8.0 completed successfully
+Testing cluster:table with mysql:8.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -151,6 +166,11 @@ Testing version: mysql:8.2
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:8.2 completed successfully
+Testing cluster:table with mysql:8.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.3
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -179,6 +199,11 @@ Testing version: mysql:8.3
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:8.3 completed successfully
+Testing cluster:table with mysql:8.3...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:8.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -207,6 +232,11 @@ Testing version: mysql:8.4
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:8.4 completed successfully
+Testing cluster:table with mysql:8.4...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -235,6 +265,11 @@ Testing version: mysql:9.0
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.0 completed successfully
+Testing cluster:table with mysql:9.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.1
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -263,6 +298,11 @@ Testing version: mysql:9.1
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.1 completed successfully
+Testing cluster:table with mysql:9.1...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -291,6 +331,11 @@ Testing version: mysql:9.2
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.2 completed successfully
+Testing cluster:table with mysql:9.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.3
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -319,6 +364,11 @@ Testing version: mysql:9.3
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.3 completed successfully
+Testing cluster:table with mysql:9.3...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -347,6 +397,11 @@ Testing version: mysql:9.4
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.4 completed successfully
+Testing cluster:table with mysql:9.4...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.5
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -375,6 +430,11 @@ Testing version: mysql:9.5
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.5 completed successfully
+Testing cluster:table with mysql:9.5...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:9.6
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -403,6 +463,11 @@ Testing version: mysql:9.6
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:9.6 completed successfully
+Testing cluster:table with mysql:9.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mysql:latest
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -431,6 +496,11 @@ Testing version: mysql:latest
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mysql:latest completed successfully
+Testing cluster:table with mysql:latest...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mysqldump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 All MySQL versions tested successfully!
 Checking documentation versions...
 Checking documentation file...

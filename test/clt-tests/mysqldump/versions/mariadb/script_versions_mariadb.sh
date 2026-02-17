@@ -100,7 +100,7 @@ for version in "${versions[@]}"; do
     
     # Test 1: mariadb-dump WITHOUT --skip-lock-tables should fail
     echo "  Testing WITHOUT --skip-lock-tables (should fail)..."
-    if docker exec db-test $dump_command -hmanticore -P9306 -ucluster -t manticore test_c:test_repl > cluster_dump_fail.sql 2>&1; then
+    if docker exec db-test $dump_command --skip-ssl-verify-server-cert -hmanticore -P9306 -ucluster -t manticore test_c:test_repl > cluster_dump_fail.sql 2>&1; then
         echo "  ⚠️  WARNING: mariadb-dump succeeded without --skip-lock-tables (bug may be fixed)"
     else
         echo "  ✅ Expected: mariadb-dump failed without --skip-lock-tables"
@@ -108,7 +108,7 @@ for version in "${versions[@]}"; do
     
     # Test 2: mariadb-dump WITH --skip-lock-tables should succeed
     echo "  Testing WITH --skip-lock-tables (should succeed)..."
-    if docker exec db-test $dump_command -hmanticore -P9306 -ucluster -t --skip-lock-tables --compact manticore test_c:test_repl > cluster_dump_ok.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect|Couldn't read status information" >&2); then
+    if docker exec db-test $dump_command --skip-ssl-verify-server-cert -hmanticore -P9306 -ucluster -t --skip-lock-tables --compact manticore test_c:test_repl > cluster_dump_ok.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect|Couldn't read status information" >&2); then
         if grep -q "cluster_data" cluster_dump_ok.sql; then
             echo "  ✅ Workaround successful: dump contains data with --skip-lock-tables"
         else

@@ -28,7 +28,7 @@ CREATE TABLE knowledge_base (
     knn_type='hnsw'
     hnsw_similarity='cosine'
     model_name='sentence-transformers/all-MiniLM-L6-v2'
-    from='title,content'
+    from='content'
     api_key='\${OPENAI_API_KEY}'
 ) TYPE='rt';
 EOF
@@ -83,11 +83,17 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (llm_provider='openai',
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– comment –––
-Verify all models are created (check count, order may vary)
+Verify all models are created
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;" | grep -c "openai"
+mysql -h0 -P9306 -e "SHOW RAG MODELS;"
 ––– output –––
-3
++--------------------------------------+--------------------+--------------+---------------+------------+
+| uuid                                 | name               | llm_provider | llm_model     | created_at |
++--------------------------------------+--------------------+--------------+---------------+------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | detailed_assistant | openai       | gpt-4o        | %{NUMBER} |
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | creative_assistant | openai       | gpt-4o-mini   | %{NUMBER} |
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | fast_assistant     | openai       | gpt-3.5-turbo | %{NUMBER} |
++--------------------------------------+--------------------+--------------+---------------+------------+
 ––– comment –––
 Test with single content field
 ––– input –––

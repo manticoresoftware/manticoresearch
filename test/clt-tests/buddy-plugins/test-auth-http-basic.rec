@@ -44,3 +44,4 @@ ACTUAL: Empty response (timeout?) — possible BUG
 ––– input –––
 curl -s -H "Authorization: Basic not-valid-base64!!!" http://127.0.0.1:9308/sql -d "query=SELECT 1"
 ––– output –––
+{"error":"Failed to decode base64 user:password"}

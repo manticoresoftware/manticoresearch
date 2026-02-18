@@ -4,7 +4,7 @@ Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/aut
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
-Per spec: GRANT action ON target TO 'username' [WITH BUDGET 'json']
+Per spec: GRANT action ON target TO 'username' [WITH ALLOW 0|1 [BUDGET 'json'] | WITH BUDGET 'json']
 Actions: read, write, schema, admin, replication
 Target: '*' (all) or 'tablename'
 
@@ -21,7 +21,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'grantuser' IDEN
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: grantuser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– comment –––
 ––– 2.5.1 GRANT read ON * –––
 EXPECTED per spec: Success (empty output)
@@ -67,9 +67,31 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'budgetuser' IDE
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: budgetuser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'reports' TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":100}';"
+––– output –––
+––– comment –––
+––– 2.5.6.1 GRANT WITH ALLOW 0 and BUDGET –––
+EXPECTED per spec: Success with explicit deny rule and budget saved
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'denied_tbl' TO 'budgetuser' WITH ALLOW 0 BUDGET '{\"queries_per_minute\":7}';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT action, target, allow, budget FROM system.auth_permissions WHERE username='budgetuser' AND target='denied_tbl';"
+––– output –––
+*************************** 1. row ***************************
+action: read
+target: denied_tbl
+ allow: 0
+budget: {"queries_per_minute":7}
+––– comment –––
+––– 2.5.6.2 GRANT WITH ALLOW 1 –––
+EXPECTED per spec: Success with explicit allow rule
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'allowed_tbl' TO 'budgetuser' WITH ALLOW 1;"
 ––– output –––
 ––– comment –––
 ––– 2.5.7 Error on duplicate permission –––
@@ -107,11 +129,43 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'nonadmin' IDENT
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: nonadmin
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=nonadmin1234 mysql -unonadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: Permission denied for user 'nonadmin'
+ERROR 1045 (42000) at line 1: Permission denied for user 'nonadmin'
+––– comment –––
+––– 2.5.11 Error on invalid ALLOW value –––
+EXPECTED per spec: Validation error for ALLOW not in 0|1
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH ALLOW 2;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: wrong allowed '2'
+––– comment –––
+––– 2.5.12 Error on ALLOW true –––
+EXPECTED per spec: Parser error (only integer 0|1 allowed)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH ALLOW true;" 2>&1
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: P01: syntax error, .*!#
+––– comment –––
+––– 2.5.13 Error on unsupported order WITH BUDGET ... ALLOW –––
+EXPECTED per spec: Parser error (fixed order only)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH BUDGET '{\"queries_per_minute\":11}' ALLOW 0;" 2>&1
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: P01: syntax error, .*!#
+––– comment –––
+––– 2.5.14 Error on unsupported ALLOW=1 form –––
+EXPECTED per spec: Parser error (ALLOW=1 is not supported)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH ALLOW=1;" 2>&1
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: P01: syntax error, .*!#
 ––– comment –––
 ––– Verify permissions were granted –––
 ––– comment –––

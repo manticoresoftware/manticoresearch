@@ -20,7 +20,7 @@ cnt: 1
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='admin';"
 ––– output –––
 *************************** 1. row ***************************
-cnt: 6
+cnt: 4
 ––– comment –––
 ––– 6.3.2 JSON format matches specification –––
 EXPECTED per spec: auth.json has users array and permissions array

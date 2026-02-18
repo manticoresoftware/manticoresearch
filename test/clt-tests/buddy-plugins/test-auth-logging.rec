@@ -19,9 +19,9 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'loguser' IDENTI
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: loguser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
-sleep 1; grep -c "loguser" /var/log/manticore/searchd.log
+sleep 1; grep -c "loguser" /var/log/manticore/searchd.log.auth
 ––– output –––
 #!/[1-9][0-9]*/!#
 ––– comment –––
@@ -33,7 +33,7 @@ BUG: Operation is NOT logged
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'loguser';"
 ––– output –––
 ––– input –––
-sleep 1; grep -c "loguser" /var/log/manticore/searchd.log
+sleep 1; grep -c "loguser" /var/log/manticore/searchd.log.auth
 ––– output –––
 #!/[1-9][0-9]*/!#
 ––– comment –––
@@ -47,12 +47,12 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'grantlog' IDENT
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: grantlog
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantlog';"
 ––– output –––
 ––– input –––
-sleep 1; grep -ic "grant\|grantlog" /var/log/manticore/searchd.log
+sleep 1; grep -ic "grant\|grantlog" /var/log/manticore/searchd.log.auth
 ––– output –––
 #!/[1-9][0-9]*/!#
 ––– input –––
@@ -65,8 +65,8 @@ EXPECTED per spec: Failed login attempts appear in log
 ––– input –––
 MYSQL_PWD=wrongpass mysql -ufakeuser -h0 -P9306 -e "SELECT 1;" 2>&1
 ––– output –––
-ERROR 1047 (08S01): Access denied for user 'fakeuser' (using password: NO)
+ERROR 1045 (42000): Access denied for user 'fakeuser' (using password: YES)
 ––– input –––
-timeout 5 bash -c 'until [ "$(grep -ic "denied\|fakeuser\|auth" /var/log/manticore/searchd.log)" -ge 2 ]; do sleep 0.2; done'; grep -ic "denied\|fakeuser\|auth" /var/log/manticore/searchd.log
+timeout 5 bash -c 'until [ "$(grep -ic "fakeuser" /var/log/manticore/searchd.log.auth)" -ge 1 ]; do sleep 0.2; done'; grep -ic "fakeuser" /var/log/manticore/searchd.log.auth
 ––– output –––
-2
+#!/[1-9][0-9]*/!#

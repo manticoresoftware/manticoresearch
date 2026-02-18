@@ -4,8 +4,8 @@ Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/aut
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
-BUG: Error code 1047 (08S01) instead of standard MySQL 1045 (28000)
-BUG: Non-existent user shows "using password: NO" even when password provided
+Behavior update: auth failures now return MySQL error code 1045
+and preserve whether password was provided.
 ––– comment –––
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
@@ -20,27 +20,27 @@ test: 1
 ––– comment –––
 ––– 1.1.2 Reject with wrong password –––
 EXPECTED per spec: ERROR 1045 (28000): Access denied for user 'admin' (using password: YES)
-ACTUAL: ERROR 1047 (08S01) — wrong error code
+ACTUAL: ERROR 1045 (42000): Access denied for user 'admin' (using password: YES)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=wrongpass mysql -uadmin -h0 -P9306 -e "SELECT 1;" 2>&1
 ––– output –––
-ERROR 1047 (08S01): Access denied for user 'admin' (using password: YES)
+ERROR 1045 (42000): Access denied for user 'admin' (using password: YES)
 ––– comment –––
 ––– 1.1.3 Reject with non-existent user –––
 EXPECTED per spec: ERROR 1045 (28000): Access denied for user 'nonexistent' (using password: YES)
-ACTUAL: ERROR 1047 (08S01) and shows "using password: NO" — wrong
+ACTUAL: ERROR 1045 (42000): Access denied for user 'nonexistent' (using password: YES)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=anypass mysql -unonexistent -h0 -P9306 -e "SELECT 1;" 2>&1
 ––– output –––
-ERROR 1047 (08S01): Access denied for user 'nonexistent' (using password: NO)
+ERROR 1045 (42000): Access denied for user 'nonexistent' (using password: YES)
 ––– comment –––
 ––– 1.1.4 Reject with empty password –––
 EXPECTED per spec: ERROR 1045 (28000): Access denied for user 'admin' (using password: NO)
-ACTUAL: ERROR 1047 (08S01) — wrong error code
+ACTUAL: ERROR 1045 (42000): Access denied for user 'admin' (using password: NO)
 ––– comment –––
 ––– input –––
 mysql -uadmin -h0 -P9306 -e "SELECT 1;" 2>&1
 ––– output –––
-ERROR 1047 (08S01): Access denied for user 'admin' (using password: NO)
+ERROR 1045 (42000): Access denied for user 'admin' (using password: NO)

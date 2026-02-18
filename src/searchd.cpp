@@ -11940,8 +11940,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 
 		tOut.HeadBegin ();
-		tOut.HeadColumn ( "Username" );
-		tOut.HeadColumn ( "Token" );
+		tOut.HeadColumn ( "username" );
+		tOut.HeadColumn ( "token" );
 		if ( !tOut.HeadEnd () )
 			return true;
 

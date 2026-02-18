@@ -27,8 +27,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO denied_tbl(id, cont
 ––– output –––
 ––– comment –––
 ––– 5.1.1 Deny overrides allow –––
-EXPECTED per spec: Explicit deny takes precedence over wildcard allow
-Note: Need to insert deny rule directly into system.auth_permissions
+EXPECTED per spec: explicit deny overrides wildcard allow
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'denyuser' IDENTIFIED BY 'denyuserpass';"
@@ -36,12 +35,12 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'denyuser' IDENT
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: denyuser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'denyuser';"
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO system.auth_permissions(username, action, target, allow, budget) VALUES('denyuser', 'read', 'denied_tbl', 0, '');"
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'denied_tbl' TO 'denyuser' WITH ALLOW 0;"
 ––– output –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
@@ -66,7 +65,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'specificuser' I
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: specificuser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'allowed_tbl' TO 'specificuser';"
 ––– output –––
@@ -93,7 +92,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'norules' IDENTI
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: norules
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=norulespass1 mysql -unorules -h0 -P9306 -e "SELECT * FROM allowed_tbl;" 2>&1
 ––– output –––

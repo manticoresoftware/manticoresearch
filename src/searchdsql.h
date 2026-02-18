@@ -293,6 +293,7 @@ struct SqlStmt_t
 	CSphString				m_sAuthUser;
 	CSphString				m_sAuthPassword;
 	CSphString				m_sAuthBudget;
+	int						m_iAuthAllow = 1;
 
 	// CALL specific
 	CSphString				m_sCallProc;

@@ -1507,7 +1507,7 @@ static SqlStmt_t BuildGrantInsert ( const SqlStmt_t & tGrant )
 	tInsert.m_dInsertValues.Add ( MakeAuthInsertStringVal ( tGrant.m_sAuthUser ) );
 	tInsert.m_dInsertValues.Add ( MakeAuthInsertStringVal ( tGrant.m_sAuthAction ) );
 	tInsert.m_dInsertValues.Add ( MakeAuthInsertStringVal ( tGrant.m_sAuthTarget ) );
-	tInsert.m_dInsertValues.Add ( MakeAuthInsertIntVal ( 1 ) );
+	tInsert.m_dInsertValues.Add ( MakeAuthInsertIntVal ( tGrant.m_iAuthAllow ) );
 	tInsert.m_dInsertValues.Add ( MakeAuthInsertStringVal ( tGrant.m_sAuthBudget ) );
 	return tInsert;
 }

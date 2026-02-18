@@ -402,10 +402,6 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - ALTER TABLE
     - DROP TABLE
     - IMPORT TABLE
-    - JOIN CLUSTER
-    - ALTER CLUSTER
-    - SET CLUSTER
-    - DELETE CLUSTER
     - CREATE FUNCTION
     - DROP FUNCTION
     - CREATE PLUGIN
@@ -435,6 +431,11 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
 
 - **replication**:
   - all replication-related internal commands that replication nodes use to communicate with each other
+  - SQL cluster-management commands:
+    - CREATE CLUSTER
+    - JOIN CLUSTER
+    - DELETE CLUSTER
+    - ALTER CLUSTER (ADD, DROP, UPDATE)
 
 - **admin**:
   - SQL commands that manage users and permissions:
@@ -648,18 +649,22 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    - Requires `admin` permission.
    - SQL Command:
      ```sql
-     GRANT <action> ON <target> TO '<username>' [WITH BUDGET '<json_budget>'];
+     GRANT <action> ON <target> TO '<username>' [WITH ALLOW <0|1> [BUDGET '<json_budget>'] | WITH BUDGET '<json_budget>'];
      ```
-   - `<action>`: `READ`, `WRITE`, `SCHEMA`, or `ADMIN`. Users with the `ADMIN` action can manage users and permissions but require explicit grants for other actions.
+   - `<action>`: `READ`, `WRITE`, `SCHEMA`, `REPLICATION`, or `ADMIN`. Users with the `ADMIN` action can manage users and permissions but require explicit grants for other actions.
    - `<target>`: The object to which the permission applies. Use either `*` or `'*'` for all targets, or specify a table name preceded by the `table/` prefix.
    - **Constraint:** If `<action>` is `ADMIN`, `<target>` must be `*` (or `'*'`).
    - If `<username>` does not exist, the command fails with `user '<username>' not found`.
    - If `<action>` is unknown, the command fails with `unknown action '<action>'`.
    - If user already has permission for the same `<action>` and `<target>`, the command fails (budgets do not create a distinct permission key).
+   - `ALLOW` is optional and accepts only `0` or `1`:
+     - Omitted means `allow=1`.
+     - `WITH ALLOW 0` creates an explicit deny rule.
    - `<json_budget>`: Optional JSON specifying resource limits.
    - Example:
      ```sql
      GRANT READ ON * TO 'readonly' WITH BUDGET '{"queries_per_day": 10000}';
+     GRANT READ ON 'restricted_tbl' TO 'readonly' WITH ALLOW 0 BUDGET '{"queries_per_minute": 10}';
      GRANT WRITE ON 'mytable' TO 'custom_user';
      GRANT ADMIN ON * TO 'security_admin';
      ```
@@ -675,6 +680,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    - If `<username>` does not exist, the command fails with `user '<username>' not found`.
    - If `<action>` is unknown, the command fails with `unknown action '<action>'`.
    - If user does not have the specified permission, the command fails with `user '<username>' does not have '<action>' permission on '<target>'`.
+   - `REVOKE` removes the rule; it does not create a deny rule (`allow=0`).
    - Example:
      ```sql
      REVOKE READ ON '*' FROM 'readonly';
@@ -873,7 +879,7 @@ If the `system.auth_users` and `system.auth_permissions` tables (RT Mode) or the
 - Joining a cluster overrides local `system.auth_users` and `system.auth_permissions` with the cluster’s version.
 - Dumps the original local data to `searchd` log as a backup.
 - Ensures all nodes share consistent authentication and authorization data.
-- Replication involves several internal commands, which, while not directly accessible to users, must still be protected by authentication and authorization. To address this, the `CREATE CLUSTER`, `JOIN CLUSTER`, and `ALTER CLUSTER` commands have been updated. These commands now leverage a special permission action called **replication**, which allows a user to perform all internal replication-related operations.
+- Replication involves several internal commands, which, while not directly accessible to users, must still be protected by authentication and authorization. To address this, cluster-management SQL commands (`CREATE CLUSTER`, `JOIN CLUSTER`, `DELETE CLUSTER`, and `ALTER CLUSTER`) leverage a special permission action called **replication**, which allows a user to perform replication-related operations.
 
 If a cluster is associated with a specific user, that user's credentials will be used for all internal replication commands executed on behalf of the cluster.
 

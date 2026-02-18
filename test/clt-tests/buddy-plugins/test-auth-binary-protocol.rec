@@ -22,7 +22,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW STATUS LIKE 'uptime';"
 ––– output –––
 *************************** 1. row ***************************
 Counter: uptime
- Value: #!/[0-9]+/!#
+#!/\s*Value:\s*[0-9]+/!#
 ––– comment –––
 ––– 8.3.2 Binary Protocol: Cluster status check –––
 EXPECTED per spec: Cluster commands work through binary protocol

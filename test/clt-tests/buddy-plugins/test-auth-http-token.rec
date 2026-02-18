@@ -5,18 +5,16 @@ Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
 Per spec: POST /token with Basic Auth returns new token
-Note: HTTP Basic Auth is broken (known bug from test-auth-http-basic.rec)
 ––– comment –––
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
 ––– 3.1.1 POST /token with Basic Auth — success –––
 EXPECTED per spec: {"token": "<new_token>"}
-ACTUAL: BUG CRITICAL — HTTP Basic Auth is broken, Access denied even with correct password
 ––– comment –––
 ––– input –––
 curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
-{"error":"Access denied for user 'admin' (using password: YES)"}
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 3.1.2 POST /token without authorization — error –––
 EXPECTED per spec: Access denied
@@ -27,9 +25,8 @@ curl -s -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
 {"error":"Authorization header field missed"}
 ––– comment –––
-––– 3.1.3 POST /token without ADMIN permission — error –––
-EXPECTED per spec: Permission denied
-ACTUAL: BLOCKED — cannot test, HTTP Basic Auth is broken
+––– 3.1.3 POST /token for non-admin user — success –––
+EXPECTED per spec: Any authenticated user can rotate own token
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'httpuser' IDENTIFIED BY 'httpuser1234';"
@@ -37,11 +34,11 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'httpuser' IDENT
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: httpuser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 curl -s -u httpuser:httpuser1234 -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
-{"error":"Access denied for user 'httpuser' (using password: YES)"}
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– Daemon-first additional coverage –––
 Per spec update:
@@ -50,7 +47,7 @@ Per spec update:
 ––– comment –––
 ––– 3.1.4 POST /token with Bearer token — success (implemented path) –––
 ––– input –––
-USR_TOKEN=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | awk '{print $2}')
+USR_TOKEN=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | tail -n1)
 curl -s -H "Authorization: Bearer $USR_TOKEN" -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
 {"token":"#!/[0-9a-f]{64}/!#"}

@@ -88,6 +88,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 
 "AGENT"				{ YYSTOREBOUNDS; return TOK_AGENT; }
 "ALL"				{ YYSTOREBOUNDS; return TOK_ALL; }
+"ALLOW"				{ YYSTOREBOUNDS; return TOK_ALLOW; }
 "AND"				{ YYSTOREBOUNDS; return TOK_AND; }
 "ANY"				{ YYSTOREBOUNDS; return TOK_ANY; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }

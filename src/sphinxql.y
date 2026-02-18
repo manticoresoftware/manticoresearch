@@ -36,6 +36,7 @@
 
 %token	TOK_AGENT
 %token	TOK_ALL
+%token	TOK_ALLOW
 %token	TOK_ANY
 %token	TOK_AS
 %token	TOK_ASC
@@ -276,7 +277,8 @@ multi_stmt:
 
 reserved_tokens_without_option:
 	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC
-	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
+		| TOK_ALLOW
+		| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE | TOK_DROP
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
@@ -1742,7 +1744,7 @@ drop_user_stmt:
 	;
 
 grant_stmt:
-	TOK_GRANT ident TOK_ON grant_target TOK_TO TOK_QUOTED_STRING opt_grant_budget
+	TOK_GRANT ident TOK_ON grant_target TOK_TO TOK_QUOTED_STRING opt_grant_options
 		{
 			pParser->m_pStmt->m_eStmt = STMT_GRANT;
 			pParser->ToString ( pParser->m_pStmt->m_sAuthAction, $2 );
@@ -1776,14 +1778,20 @@ grant_target:
 		}
 	;
 
-opt_grant_budget:
+opt_grant_options:
 	// empty
-		{
-			pParser->m_pStmt->m_sAuthBudget = "";
-		}
 	| TOK_WITH TOK_BUDGET TOK_QUOTED_STRING
 		{
 			pParser->m_pStmt->m_sAuthBudget = pParser->ToStringUnescape ( $3 );
+		}
+	| TOK_WITH TOK_ALLOW const_int
+		{
+			pParser->m_pStmt->m_iAuthAllow = (int)$3.GetValueInt();
+		}
+	| TOK_WITH TOK_ALLOW const_int TOK_BUDGET TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_iAuthAllow = (int)$3.GetValueInt();
+			pParser->m_pStmt->m_sAuthBudget = pParser->ToStringUnescape ( $5 );
 		}
 	;
 

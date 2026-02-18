@@ -18,7 +18,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'regular' IDENTI
 *************************** 1. row ***************************
        token: #!/[0-9a-f]{64}/!#
     username: regular
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON * TO 'regular';"
 ––– output –––

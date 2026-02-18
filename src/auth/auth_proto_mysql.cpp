@@ -211,7 +211,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 	case STMT_CLUSTER_ALTER_UPDATE:
-		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sCluster, false, sError );
+		return CheckPerms ( sUser, AuthAction_e::REPLICATION, tStmt.m_sCluster, false, sError );
 
 
 	case STMT_SHOW_STATUS:
@@ -321,7 +321,7 @@ static bool DumpUserPerms ( const CSphString & sUser, const UserPerms_t & dPerms
 		tOut.PutString ( sUser );
 		tOut.PutString ( GetActionName ( tPerm.m_eAction ) );
 		tOut.PutString ( tPerm.m_sTarget );
-		tOut.PutString ( tPerm.m_bAllow ? "true" : "false" );
+		tOut.PutString ( tPerm.m_bAllow ? "1" : "0" );
 		tOut.PutString ( tPerm.m_sBudget );
 		if ( !tOut.Commit () )
 			return false;
@@ -333,11 +333,11 @@ static bool DumpUserPerms ( const CSphString & sUser, const UserPerms_t & dPerms
 void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Username" );
+	tOut.HeadColumn ( "username" );
 	tOut.HeadColumn ( "action" );
-	tOut.HeadColumn ( "Target" );
-	tOut.HeadColumn ( "Allow" );
-	tOut.HeadColumn ( "Budget" );
+	tOut.HeadColumn ( "target" );
+	tOut.HeadColumn ( "allow" );
+	tOut.HeadColumn ( "budget" );
 	if ( !tOut.HeadEnd () )
 		return;
 
@@ -375,7 +375,7 @@ void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser )
 void HandleMysqlShowUsers ( RowBuffer_i & tOut )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Username" );
+	tOut.HeadColumn ( "username" );
 	if ( !tOut.HeadEnd () )
 		return;
 
@@ -396,8 +396,8 @@ void HandleMysqlShowUsers ( RowBuffer_i & tOut )
 void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Username" );
-	tOut.HeadColumn ( "Token" );
+	tOut.HeadColumn ( "username" );
+	tOut.HeadColumn ( "token" );
 	if ( !tOut.HeadEnd () )
 		return;
 

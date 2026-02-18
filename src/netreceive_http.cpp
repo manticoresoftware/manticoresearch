@@ -219,6 +219,11 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( !iChunk || tIn.GetError() )
 			{
+				// We already served at least one request on this keep-alive connection.
+				// If the client closes (or any read error happens) while waiting for the next header, just stop quietly.
+				if ( tSess.GetPersistent() )
+					return;
+
 				sError.SetSprintf ( "failed to receive HTTP request, %s", ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
 				HttpReply ( EHTTP_STATUS::_400, FromStr ( sError ) );
 			}

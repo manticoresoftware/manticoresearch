@@ -164,6 +164,7 @@ static CSphString GetCommandPipeName ( int iPid, ReloadAuthCmd_e eCmd )
 	return sRes;
 }
 
+#if _WIN32
 static CSphString GetCommandPipeNameWin ( int iPid, ReloadAuthCmd_e eCmd )
 {
 	CSphString sRes;
@@ -173,6 +174,7 @@ static CSphString GetCommandPipeNameWin ( int iPid, ReloadAuthCmd_e eCmd )
 		sRes.SetSprintf ( "\\\\.\\pipe\\searchd_cmd_reply_%d", iPid );
 	return sRes;
 }
+#endif
 
 static ReloadAuthResult_e WaitSimpleReply ( const PipeTrait_t & tPipe, int iWaitTimeout, CSphString & sError )
 {

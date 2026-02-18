@@ -1411,6 +1411,7 @@ bool BuildCreateUserInsert ( const SqlStmt_t & tCreate, SqlStmt_t & tInsert, CSp
 	AuthUserCred_t tUser;
 	tUser.m_sUser = tCreate.m_sAuthUser;
 
+	tUser.m_dSalt.Reset ( HASH20_SIZE );
 	if ( !MakeRandBuf ( tUser.m_dSalt, sError ) )
 		return false;
 

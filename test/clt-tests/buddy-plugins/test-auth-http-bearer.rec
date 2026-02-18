@@ -47,7 +47,9 @@ TOK1=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | 
 TOK2=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 [ "$TOK1" != "$TOK2" ] && echo "tokens differ"
 curl -s -H "Authorization: Bearer $TOK1" -X POST http://127.0.0.1:9308/token -d "{}"
+echo
 curl -s -H "Authorization: Bearer $TOK2" -X POST http://127.0.0.1:9308/token -d "{}"
+echo
 ––– output –––
 tokens differ
 #!/\{"error":"Access denied for token '.*'"\}/!#

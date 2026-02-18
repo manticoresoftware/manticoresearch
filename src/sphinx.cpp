@@ -6339,6 +6339,9 @@ public:
 				iDelta = uPack & 127;
 				iMatch = m_pReader->GetByte();
 			}
+			int iWordLen = (int)strlen ( m_sWord );
+			if ( iMatch+iDelta>=(int)sizeof(m_sWord)-1 || iMatch>iWordLen )
+				return false;
 			assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
 			assert ( iMatch<=(int)strlen(m_sWord) );
 

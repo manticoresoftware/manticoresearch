@@ -1212,6 +1212,7 @@ public:
 	virtual int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const { return -1; }	// returns values if index has some meta on its attributes
 	virtual int64_t				GetCount() const { return -1; }
+	virtual int					CountDocidDuplicates() const { return -1; }
 
 public:
 	/// build index by indexing given sources
@@ -1385,6 +1386,8 @@ public:
 	virtual void				SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
 	float						GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bool bPlainIDF ) const;
 	bool						HasGlobalIDF () const;
+
+	virtual int					CountCrossChunkDupes ( const CSphIndex & tOther, int iSampleLimit, CSphString& sSample, CSphVector<DocID_t>& dSamples ) const { return 0; }
 
 protected:
 	CSphString					m_sGlobalIDFPath;

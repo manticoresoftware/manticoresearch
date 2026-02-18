@@ -221,9 +221,32 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 
 void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 {
+	auto IsCreateDropTableRoutedToUserGrammar = [this, szMessage]()
+	{
+		if ( !m_pLastTokenStart )
+			return false;
+
+		// auth grammar adds CREATE/DROP USER to the main parser.
+		// CREATE/DROP TABLE then fails at TABLE with "expecting USER"
+		// (or "expecting TOK_USER"), and should be routed to DDL parser
+		// for canonical P03 diagnostics.
+		const bool bExpectsUser = strstr ( szMessage, "expecting USER" ) || strstr ( szMessage, "expecting TOK_USER" );
+		if ( !bExpectsUser )
+			return false;
+
+		const char szTable[] = "table";
+		constexpr int iTableLen = sizeof(szTable)-1;
+		if ( strncasecmp ( m_pLastTokenStart, szTable, iTableLen )!=0 )
+			return false;
+
+		const char cNext = m_pLastTokenStart[iTableLen];
+		return cNext==0 || sphIsSpace(cNext) || cNext=='`' || cNext==';';
+	};
+
 	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
 	// notice: szMessage here is NOT prefixed with "PXX:"
-	if ( ( m_pBuf == m_pLastTokenStart ) && ( strncmp ( szMessage, "syntax error", 12 ) == 0 ) )
+	if ( ( strncmp ( szMessage, "syntax error", 12 ) == 0 )
+		&& ( m_pBuf == m_pLastTokenStart || IsCreateDropTableRoutedToUserGrammar() ) )
 		m_bWrongParserSyntaxError = true;
 
 	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );

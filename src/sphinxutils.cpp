@@ -2943,7 +2943,9 @@ void sphBacktrace ( int iFD, bool bSafe )
 #endif // !HAVE_BACKTRACE
 
 	sphSafeInfo ( iFD, "Trying boost backtrace:" );
-	sphSafeInfo ( iFD, to_string ( boost::stacktrace::stacktrace() ).c_str() );
+	auto sBoostBacktrace = to_string ( boost::stacktrace::stacktrace() );
+	sphSafeInfoWrite ( iFD, sBoostBacktrace.c_str(), (int)sBoostBacktrace.size() );
+	sphSafeInfoWrite ( iFD, "\n", 1 );
 
 	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 

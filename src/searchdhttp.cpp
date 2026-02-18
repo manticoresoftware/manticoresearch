@@ -113,23 +113,24 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 
 void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData )
 {
-	assert ( tReply.m_sBody.first && tReply.m_sBody.second );
+	const bool bHaveBody = tReply.m_sBody.first && tReply.m_sBody.second>0;
+	const int iBodyLen = bHaveBody ? tReply.m_sBody.second : 0;
 
 	const char * sContentType = tReply.m_sContentType;
 	if ( !sContentType )
 		sContentType = ( tReply.m_bHtml ? "text/html" : "application/json" );
 
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName ( tReply.m_eCode ), g_sStatusVersion.cstr(), sContentType, tReply.m_sBody.second );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName ( tReply.m_eCode ), g_sStatusVersion.cstr(), sContentType, iBodyLen );
 
 	int iHeaderLen = sHttp.Length();
 	int iBufLen = iHeaderLen;
-	if ( !tReply.m_bHeadReply )
-		iBufLen += tReply.m_sBody.second;
+	if ( !tReply.m_bHeadReply && bHaveBody )
+		iBufLen += iBodyLen;
 	dData.Resize ( iBufLen );
 	memcpy ( dData.Begin(), sHttp.cstr(), iHeaderLen );
-	if ( !tReply.m_bHeadReply )
-		memcpy ( dData.Begin() + iHeaderLen, tReply.m_sBody.first, tReply.m_sBody.second );
+	if ( !tReply.m_bHeadReply && bHaveBody )
+		memcpy ( dData.Begin() + iHeaderLen, tReply.m_sBody.first, iBodyLen );
 }
 
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply )

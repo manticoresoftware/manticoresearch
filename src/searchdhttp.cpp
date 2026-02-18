@@ -1444,6 +1444,37 @@ public:
 		m_dBuf << uVal;
 	}
 
+	void PutFloat ( float fVal ) final
+	{
+		PutFloatAsString ( fVal, nullptr );
+	}
+
+	void PutDouble ( double fVal ) final
+	{
+		PutDoubleAsString ( fVal, nullptr );
+	}
+
+	void PutInt ( int iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutInt64 ( int64_t iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutDWORD ( DWORD uVal ) override
+	{
+		PutNumAsString ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
+
 	void PutArray ( const ByteBlob_t& dBlob, bool ) override
 	{
 		AddDataColumn();

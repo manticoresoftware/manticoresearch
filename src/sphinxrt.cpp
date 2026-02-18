@@ -4623,6 +4623,13 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		break;
 	}
 
+	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
+	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
+	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
+	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
+	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
+	END_SCHED( "rt" );
+
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
@@ -4667,13 +4674,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 			dNewFieldLensDisk[i] = m_dFieldLensDisk[i] + tStats.m_dFieldLens[i];
 		}
 	}
-
-	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
-	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
-	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
-	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
-	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
-	END_SCHED( "rt" );
 
 	IntVec_t dChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
@@ -11721,7 +11721,7 @@ static bool AttachRtChunkExtCopy ( const CSphIndex & tSrcIndex, CSphIndex & tDst
 	return true;
 }
 
-bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError )
+bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	// prevent optimize to start during the disk chunks stealing
 	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
@@ -11768,7 +11768,7 @@ bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, 
 	return true;
 }
 
-bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError )
+bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	// prevent optimize to start during the disk chunks stealing
 	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );

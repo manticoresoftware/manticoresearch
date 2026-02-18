@@ -31,6 +31,10 @@ INSERT INTO orders (id, user_id, name, description, price, order_date, attr, reg
 
 SELECT id, name FROM users INNER JOIN orders ON users.id=orders.user_id ORDER BY orders.id ASC;
 
+flush ramchunk users;
+flush ramchunk orders;
+SELECT * FROM users LEFT JOIN orders ON users.id=orders.user_id ORDER BY orders.id ASC;
+
 DROP TABLE users;
 DROP TABLE orders;
 

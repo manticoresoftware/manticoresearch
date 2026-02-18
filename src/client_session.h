@@ -21,6 +21,21 @@
 
 constexpr const char* szManticore = "Manticore";
 
+struct BinaryPreparedStmt_t;
+class PreparedStatements
+{
+	class Impl_c;
+	std::unique_ptr<Impl_c> m_pImpl;
+
+public:
+	PreparedStatements();
+	~PreparedStatements();
+	DWORD GetNextStmtID();
+	void AddPreparedStatement (DWORD uStmtID, BinaryPreparedStmt_t&& tStmt);
+	BinaryPreparedStmt_t* GetStmt(DWORD uStmtID);
+	void RemoveStatement (DWORD uStmtID);
+};
+
 class ClientSession_c final
 {
 public:
@@ -43,6 +58,7 @@ public:
 	bool m_bOptimizeById = true;
 	bool m_bDeprecatedEOF = false;
 	StrVec_t m_dLockedTables;
+	PreparedStatements m_dPreparedStatements;
 
 public:
 	NONCOPYMOVABLE ( ClientSession_c );

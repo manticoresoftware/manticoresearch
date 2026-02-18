@@ -12,6 +12,9 @@ on:
 jobs:
   translate_docs:
     runs-on: ubuntu-24.04
+    outputs:
+      repo: ${{ steps.repo-check.outputs.repo }}
+      ref: ${{ steps.repo-check.outputs.ref }}
     permissions:
       contents: write
       pull-requests: read
@@ -107,12 +110,18 @@ jobs:
       - name: Check origin repository
         id: repo-check
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            repo="${{ needs.translate_docs.outputs.repo }}"
+            ref="${{ needs.translate_docs.outputs.ref }}"
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
             repo="${{ github.event.pull_request.head.repo.full_name }}"
+            ref="${{ github.head_ref }}"
           else
             repo="${{ github.repository }}"
+            ref="${{ github.head_ref || github.ref_name }}"
           fi
           echo "repo=$repo" >> $GITHUB_OUTPUT
+          echo "ref=$ref" >> $GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v3
@@ -121,7 +130,7 @@ jobs:
           repository: ${{ steps.repo-check.outputs.repo }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
-          ref: ${{ github.head_ref }}
+          ref: ${{ steps.repo-check.outputs.ref }}
 
       - name: Fetch master and get changed files
         id: changed-files

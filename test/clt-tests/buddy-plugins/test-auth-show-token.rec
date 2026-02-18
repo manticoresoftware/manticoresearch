@@ -34,6 +34,7 @@ MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN;" 2>&1
 ––– output –––
 #!/\+[-+]+\+/!#
 #!/\s*\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
 #!/\s*\| tokenuser +\| [0-9a-f]{64} \|/!#
 #!/\+[-+]+\+/!#
 ––– comment –––
@@ -45,6 +46,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';" 2>
 ––– output –––
 #!/\+[-+]+\+/!#
 #!/\s*\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
 #!/\s*\| tokenuser +\| [0-9a-f]{64} \|/!#
 #!/\+[-+]+\+/!#
 ––– comment –––
@@ -67,7 +69,7 @@ MYSQL_PWD=tokenuser123 mysql -E -utokenuser -h0 -P9306 -e "SHOW TOKEN;"
 ––– output –––
 *************************** 1. row ***************************
 username: tokenuser
-token: #!/[0-9a-f]{64}/!#
+#!/\s*token:\s*[0-9a-f]{64}/!#
 ––– comment –––
 ––– 2.11.5 SHOW TOKEN FOR: Admin sees other user's token (implemented path) –––
 ––– input –––
@@ -75,7 +77,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';"
 ––– output –––
 *************************** 1. row ***************************
 username: tokenuser
-token: #!/[0-9a-f]{64}/!#
+#!/\s*token:\s*[0-9a-f]{64}/!#
 ––– comment –––
 ––– 2.11.6 SHOW TOKEN legacy quoted syntax (implemented path) –––
 ––– input –––
@@ -83,7 +85,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TOKEN 'tokenuser';"
 ––– output –––
 *************************** 1. row ***************************
 username: tokenuser
-token: #!/[0-9a-f]{64}/!#
+#!/\s*token:\s*[0-9a-f]{64}/!#
 ––– comment –––
 ––– 2.11.7 SHOW TOKEN FOR: Non-admin denied (implemented path) –––
 ––– input –––

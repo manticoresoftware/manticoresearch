@@ -10,6 +10,7 @@ Per spec: POST /token with Basic Auth returns new token
 ––– comment –––
 ––– 3.1.1 POST /token with Basic Auth — success –––
 EXPECTED per spec: {"token": "<new_token>"}
+ACTUAL: Implemented — returns token for authenticated user
 ––– comment –––
 ––– input –––
 curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
@@ -47,7 +48,7 @@ Per spec update:
 ––– comment –––
 ––– 3.1.4 POST /token with Bearer token — success (implemented path) –––
 ––– input –––
-USR_TOKEN=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | tail -n1)
+USR_TOKEN=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | awk '{print $2}')
 curl -s -H "Authorization: Bearer $USR_TOKEN" -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
 {"token":"#!/[0-9a-f]{64}/!#"}

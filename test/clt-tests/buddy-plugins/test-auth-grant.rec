@@ -149,7 +149,7 @@ EXPECTED per spec: Parser error (only integer 0|1 allowed)
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH ALLOW true;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P01: syntax error, .*!#
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected TRUE, expecting integer or '-' near 'true'
 ––– comment –––
 ––– 2.5.13 Error on unsupported order WITH BUDGET ... ALLOW –––
 EXPECTED per spec: Parser error (fixed order only)
@@ -157,7 +157,7 @@ EXPECTED per spec: Parser error (fixed order only)
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH BUDGET '{\"queries_per_minute\":11}' ALLOW 0;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P01: syntax error, .*!#
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected ALLOW, expecting $end near 'ALLOW 0'
 ––– comment –––
 ––– 2.5.14 Error on unsupported ALLOW=1 form –––
 EXPECTED per spec: Parser error (ALLOW=1 is not supported)
@@ -165,7 +165,7 @@ EXPECTED per spec: Parser error (ALLOW=1 is not supported)
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'grantuser' WITH ALLOW=1;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P01: syntax error, .*!#
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '=', expecting integer or '-' near '=1'
 ––– comment –––
 ––– Verify permissions were granted –––
 ––– comment –––

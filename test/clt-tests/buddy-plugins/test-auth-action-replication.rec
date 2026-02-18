@@ -59,8 +59,8 @@ EXPECTED per spec mapping: Success after explicit schema grant
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT schema ON * TO 'repluser';"
 ––– output –––
 ––– input –––
-MYSQL_PWD=repluserpass mysql -E -urepluser -h0 -P9306 -e "SHOW STATUS LIKE 'cluster%';"
+MYSQL_PWD=repluserpass mysql -E -urepluser -h0 -P9306 -e "SHOW STATUS LIKE 'cluster_name';"
 ––– output –––
 *************************** 1. row ***************************
-Counter: #!/cluster_.+/!#
- Value: #!/.*/!#
+Counter: cluster_name
+ Value: testcluster

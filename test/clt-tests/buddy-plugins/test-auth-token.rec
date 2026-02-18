@@ -31,7 +31,8 @@ ACTUAL: Implemented — returns token table
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN;" 2>&1
 ––– output –––
 #!/\+[-+]+\+/!#
-#!/\| Username +\| Token +\|/!#
+#!/\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
 #!/\| admin +\| [0-9a-f]{64} +\|/!#
 #!/\+[-+]+\+/!#
 ––– comment –––
@@ -43,18 +44,25 @@ ACTUAL: Implemented — returns token table
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';" 2>&1
 ––– output –––
 #!/\+[-+]+\+/!#
-#!/\| Username +\| Token +\|/!#
+#!/\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
 #!/\| tokenuser +\| [0-9a-f]{64} +\|/!#
 #!/\+[-+]+\+/!#
 ––– comment –––
 ––– 2.4.3 Repeated TOKEN returns different token –––
 EXPECTED per spec: New token each time, old token invalidated
-ACTUAL: SKIPPED — TOKEN not implemented
+ACTUAL: Implemented — old token denied, new token accepted
 ––– comment –––
 ––– input –––
-echo "SKIPPED: TOKEN command not implemented"
+TOK1=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
+TOK2=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
+[ "$TOK1" != "$TOK2" ] && echo "tokens differ"
+curl -s -H "Authorization: Bearer $TOK1" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+curl -s -H "Authorization: Bearer $TOK2" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
 ––– output –––
-OK
+tokens differ
+#!/\{"error":"Access denied for token '.*'"\}/!#
+#!/.*\"test\":1.*/!#
 ––– comment –––
 ––– 2.4.4 Error for non-existent user –––
 EXPECTED per spec: Error — user does not exist
@@ -88,16 +96,16 @@ ERROR 1045 (42000) at line 1: Permission denied for user 'tokenuser'
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "TOKEN;"
 ––– output –––
 *************************** 1. row ***************************
-Username: admin
-   Token: #!/[0-9a-f]{64}/!#
+username: admin
+   token: #!/[0-9a-f]{64}/!#
 ––– comment –––
 ––– 2.4.7 Admin generates token for another user (implemented path) –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';"
 ––– output –––
 *************************** 1. row ***************************
-Username: tokenuser
-   Token: #!/[0-9a-f]{64}/!#
+username: tokenuser
+   token: #!/[0-9a-f]{64}/!#
 ––– comment –––
 ––– 2.4.8 Repeated TOKEN returns different token (implemented path) –––
 ––– input –––
@@ -110,6 +118,7 @@ TOK2=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'nonexistent';" 2>&1
 ––– output –––
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
 ––– 2.4.10 Error without ADMIN when generating other's token (implemented path) –––
 ––– input –––

@@ -42,6 +42,23 @@ static const Str_t g_sDataDisabled = FROMS("-");
 Str_t Data2Log ( Str_t tMsg ) { return ( g_iLogHttpData ? Str_t ( tMsg.first, Min ( tMsg.second, g_iLogHttpData ) ) : g_sDataDisabled ); }
 Str_t Data2Log ( ByteBlob_t tMsg ) { return ( g_iLogHttpData ? Str_t ( (const char *)tMsg.first, Min ( tMsg.second, g_iLogHttpData ) ) : g_sDataDisabled ); }
 
+static void SetCrashHttpQuerySnapshot ( Str_t sData )
+{
+	auto & tCrashQuery = GlobalCrashQueryGetRef();
+	if ( !sData.first || sData.second<=0 )
+	{
+		tCrashQuery.m_dQuery = { nullptr, 0 };
+		return;
+	}
+
+	constexpr int iMaxCrashHttpQuery = 64 * 1024;
+	static thread_local BYTE dCrashHttpQuery[iMaxCrashHttpQuery];
+
+	int iCopyLen = Min ( sData.second, iMaxCrashHttpQuery );
+	memcpy ( dCrashHttpQuery, sData.first, iCopyLen );
+	tCrashQuery.m_dQuery = { dCrashHttpQuery, iCopyLen };
+}
+
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept
 {
 	switch ( eStatus )
@@ -2165,8 +2182,7 @@ public:
 			}
 
 			bResult = false;
-			auto& tCrashQuery = GlobalCrashQueryGetRef();
-			tCrashQuery.m_dQuery = { (const BYTE*) tQuery.first, tQuery.second };
+			SetCrashHttpQuerySnapshot ( tQuery );
 			const char* szStmt = tQuery.first;
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
@@ -2330,8 +2346,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 	sQuery = dEmptyStr;
 
 	auto SetQuery = [&sQuery] ( Str_t&& sData ) {
-		auto& tCrashQuery = GlobalCrashQueryGetRef();
-		tCrashQuery.m_dQuery = { (const BYTE*)sData.first, sData.second };
+		SetCrashHttpQuerySnapshot ( sData );
 		sQuery = sData;
 	};
 
@@ -3222,8 +3237,7 @@ bool HttpHandlerEsBulk_c::Process()
 	if ( !Validate() )
 		return false;
 
-	auto & tCrashQuery = GlobalCrashQueryGetRef();
-	tCrashQuery.m_dQuery = S2B ( GetBody() );
+	SetCrashHttpQuerySnapshot ( GetBody() );
 
 	CSphVector<Str_t> dLines;
 	SplitNdJson ( GetBody(), [&] ( const char * sLine, int iLen ) { dLines.Add ( Str_t ( sLine, iLen ) ); } );

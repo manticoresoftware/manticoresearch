@@ -31,9 +31,9 @@ void AuthLogInit ( const CSphConfigSection & hSearchd );
 
 ServedIndexRefPtr_c MakeDynamicAuthIndex ( const CSphString & sName, StringBuilder_c & sError );
 
-int DeleteAuthDocuments ( const CSphString & sName, const SqlStmt_t & tStmt, CSphString & sError );
 bool DeleteAuthDocuments ( const RtAccum_t & tAccum, int * pDeletedCount, CSphString & sError );
-bool InsertAuthDocuments ( const SqlStmt_t & tStmt, CSphString & sError );
 bool InsertAuthDocuments ( const RtAccum_t & tAccum, CSphString & sError );
+bool UserSetPassword ( const CSphString & sTargetUser, const CSphString & sPassword,CSphString & sError );
+bool UserCreateToken ( const CSphString & sTargetUser, CSphString & sToken, CSphString & sError );
 
 int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath );

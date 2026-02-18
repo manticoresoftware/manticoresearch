@@ -93,7 +93,7 @@ static CSphString ReadPassword()
 	return CSphString { dBuf };
 }
 
-static std::tuple<CSphString, CSphString> ReadUserCred()
+static std::tuple<CSphString, CSphString> ReadUserCred ( PasswordPolicy_e ePolicy, int iMinLen )
 {
 	CSphString sLogin;
 	while ( true )
@@ -113,9 +113,10 @@ static std::tuple<CSphString, CSphString> ReadUserCred()
 		fprintf ( stdout, "Enter password:\n" );
 		CSphString sPwd = ReadPassword();
 		sPwd.Trim();
-		if ( sPwd.IsEmpty() )
+		CSphString sValidationError;
+		if ( !ValidatePassword ( sPwd, ePolicy, iMinLen, sValidationError ) )
 		{
-			fprintf ( stdout, "error: password is empty, please try again\n" );
+			fprintf ( stdout, "error: %s, please try again\n", sValidationError.cstr() );
 			continue;
 		}
 
@@ -201,6 +202,9 @@ static bool CheckAuthFile ( const CSphString & sFile, CSphString & sError )
 
 int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath )
 {
+	PasswordPolicy_e ePolicy = ParsePasswordPolicy ( hSearchd );
+	int iMinLen = GetPasswordMinLength ( hSearchd );
+
 	CSphString sPidFile = hSearchd.GetStr ( "pid_file" );
 	if ( sPidFile.IsEmpty() )
 		sphFatal ( "could not read 'pid_file' option from the '%s' section 'searchd'", sConfigFilePath.cstr () );
@@ -227,7 +231,7 @@ int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConf
 	if ( !CheckAuthFile ( sAuthFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
-	auto [ sLogin, sPwd ] = ReadUserCred();
+	auto [ sLogin, sPwd ] = ReadUserCred ( ePolicy, iMinLen );
 
 	AuthUserCred_t tEntry;
 	// username

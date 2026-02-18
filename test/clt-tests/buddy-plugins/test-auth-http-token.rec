@@ -42,3 +42,15 @@ generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
 curl -s -u httpuser:httpuser1234 -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
 {"error":"Access denied for user 'httpuser' (using password: YES)"}
+––– comment –––
+––– Daemon-first additional coverage –––
+Per spec update:
+- POST /token rotates token for authenticated user
+- No ADMIN permission required
+––– comment –––
+––– 3.1.4 POST /token with Bearer token — success (implemented path) –––
+––– input –––
+USR_TOKEN=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | awk '{print $2}')
+curl -s -H "Authorization: Bearer $USR_TOKEN" -X POST http://127.0.0.1:9308/token -d "{}"
+––– output –––
+{"token":"#!/[0-9a-f]{64}/!#"}

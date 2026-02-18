@@ -54,3 +54,38 @@ BUG: syntax error instead of permission check
 MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN FOR 'admin';" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: P01: syntax error, unexpected FOR, expecting $end near 'FOR 'admin''
+––– comment –––
+––– Daemon-first additional coverage –––
+Per spec update:
+- SHOW TOKEN FOR 'user' is implemented
+- SHOW TOKEN 'user' is accepted as legacy syntax
+––– comment –––
+––– 2.11.4 SHOW TOKEN: User sees own token hash (implemented path) –––
+––– input –––
+MYSQL_PWD=tokenuser123 mysql -E -utokenuser -h0 -P9306 -e "SHOW TOKEN;"
+––– output –––
+*************************** 1. row ***************************
+Username: tokenuser
+Token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.11.5 SHOW TOKEN FOR: Admin sees other user's token (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';"
+––– output –––
+*************************** 1. row ***************************
+Username: tokenuser
+Token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.11.6 SHOW TOKEN legacy quoted syntax (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TOKEN 'tokenuser';"
+––– output –––
+*************************** 1. row ***************************
+Username: tokenuser
+Token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.11.7 SHOW TOKEN FOR: Non-admin denied (implemented path) –––
+––– input –––
+MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN FOR 'admin';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'tokenuser'

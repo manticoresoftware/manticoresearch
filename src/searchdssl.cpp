@@ -939,6 +939,14 @@ bool MakeRandBuf ( VecTraits_T<BYTE> & dRes, CSphString & sError )
 		return SslError ( sError );
 }
 
+bool MakeRandBuf ( Str_t & sRes, CSphString & sError )
+{
+	if ( RAND_bytes ( (BYTE *)sRes.first, sRes.second )==1 )
+		return true;
+	else
+		return SslError ( sError );
+}
+
 #else
 
 static bool NoSslSupport ( CSphString & sError )
@@ -963,6 +971,11 @@ bool MakeApiKdf ( const ByteBlob_t & , const ByteBlob_t & , CSphFixedVector<BYTE
 }
 
 bool MakeRandBuf ( VecTraits_T<BYTE> & , CSphString & sError )
+{
+	return NoSslSupport ( sError );
+}
+
+bool MakeRandBuf ( Str_t & sRes, CSphString & sError )
 {
 	return NoSslSupport ( sError );
 }

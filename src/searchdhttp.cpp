@@ -1349,7 +1349,7 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long long" )
 		return MYSQL_COL_LONGLONG;
 
-	if ( sType == "string" )
+	if ( sType == "string" || sType=="json" )
 		return MYSQL_COL_STRING;
 
 	assert (false && "Unknown column");
@@ -3596,11 +3596,8 @@ bool HttpTokenHandler_c::Process ()
 {
 	TRACE_CONN ( "conn", "HttpTokenHandler_c::Process" );
 
-	if( !HttpCheckPerms ( session::GetUser(), AuthAction_e::ADMIN, CSphString(), m_eHttpCode, m_sError, m_dData ) )
-		return false;
-
-	CSphString sToken = CreateSessionToken ( m_sError );
-	if ( !m_sError.IsEmpty() )
+	CSphString sToken;
+	if ( !CreateSessionToken ( sToken, m_sError ) )
 	{
 		m_eHttpCode = EHTTP_STATUS::_403;
 		sphHttpErrorReply ( m_dData, m_eHttpCode, m_sError.cstr() );

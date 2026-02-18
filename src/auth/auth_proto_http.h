@@ -19,7 +19,7 @@
 struct HttpProcessResult_t;
 
 bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser );
-CSphString CreateBuddyToken ( CSphString & sError );
-CSphString CreateSessionToken ( CSphString & sError );
+bool CreateBuddyToken ( CSphString & sToken, CSphString & sError );
+bool CreateSessionToken ( CSphString & sToken, CSphString & sError );
 
 bool HttpCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, EHTTP_STATUS & eReplyHttpCode, CSphString & sError, CSphVector<BYTE> & dReply );

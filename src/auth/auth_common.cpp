@@ -12,6 +12,7 @@
 
 #include "searchdssl.h"
 #include <filesystem>
+#include <cstring>
 
 #ifdef _WIN32
 #include <aclapi.h>
@@ -23,6 +24,7 @@ static const CSphString g_sBuddyName ( "system.buddy" );
 static CSphString g_sPrefixAuth ( "system.auth_" );
 static CSphString g_sIndexNameAuthUsers ( "system.auth_users" );
 static CSphString g_sIndexNameAuthPerms ( "system.auth_permissions" );
+constexpr int g_iDefaultAuthPasswordMinLength = 8;
 
 const CSphString & GetPrefixAuth()
 {
@@ -260,15 +262,15 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 
 AuthAction_e ReadAction ( Str_t sAction )
 {
-	if ( StrEq ( sAction, "read" ) )
+	if ( StrEqN ( sAction, "read" ) )
 		return AuthAction_e::READ;
-	else if ( StrEq ( sAction, "write" ) )
+	else if ( StrEqN ( sAction, "write" ) )
 		return AuthAction_e::WRITE;
-	else if ( StrEq ( sAction, "schema" ) )
+	else if ( StrEqN ( sAction, "schema" ) )
 		return AuthAction_e::SCHEMA;
-	else if ( StrEq ( sAction, "replication" ) )
+	else if ( StrEqN ( sAction, "replication" ) )
 		return AuthAction_e::REPLICATION;
-	else if ( StrEq ( sAction, "admin" ) )
+	else if ( StrEqN ( sAction, "admin" ) )
 		return AuthAction_e::ADMIN;
 	else
 		return AuthAction_e::UNKNOWN;
@@ -872,4 +874,78 @@ CSphString AuthGetPath ( const CSphConfigSection & hSearchd )
 	}
 
 	return RealPath ( sFile );
+}
+
+PasswordPolicy_e ParsePasswordPolicy ( const CSphConfigSection & hSearchd )
+{
+	CSphString sPolicyRaw = hSearchd.GetStr ( "auth_password_policy", "LOW" );
+	CSphString sPolicy = sPolicyRaw;
+	sPolicy.ToLower();
+	if ( sPolicy=="low" )
+		return PasswordPolicy_e::LOW;
+
+	if ( sPolicy=="medium" )
+		return PasswordPolicy_e::MEDIUM;
+
+	sphFatal ( "unknown auth_password_policy '%s' (must be LOW or MEDIUM)", sPolicyRaw.cstr() );
+	return PasswordPolicy_e::LOW;
+}
+
+int GetPasswordMinLength ( const CSphConfigSection & hSearchd )
+{
+	return hSearchd.GetInt ( "auth_password_min_length", g_iDefaultAuthPasswordMinLength );
+}
+
+bool ValidatePassword ( const CSphString & sPwd, PasswordPolicy_e ePolicy, int iMinLen, CSphString & sError )
+{
+	if ( sPwd.IsEmpty() )
+	{
+		sError = "password is empty";
+		return false;
+	}
+
+	if ( sPwd.Length()<iMinLen )
+	{
+		sError.SetSprintf ( "password must be at least %d characters", iMinLen );
+		return false;
+	}
+
+	if ( ePolicy==PasswordPolicy_e::MEDIUM )
+	{
+		bool bHasLower = false;
+		bool bHasUpper = false;
+		bool bHasDigit = false;
+		bool bHasSpecial = false;
+
+		for ( int i = 0; i < sPwd.Length(); ++i )
+		{
+			BYTE uCh = (BYTE)sPwd.cstr()[i];
+			if ( uCh>='a' && uCh<='z' )
+				bHasLower = true;
+			else if ( uCh>='A' && uCh<='Z' )
+				bHasUpper = true;
+			else if ( uCh>='0' && uCh<='9' )
+				bHasDigit = true;
+			else
+				bHasSpecial = true;
+		}
+
+		if ( !bHasLower || !bHasUpper || !bHasDigit || !bHasSpecial )
+		{
+			sError = "password must contain lowercase, uppercase, digit, and non-alphanumeric character";
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void ScrubSensitive ( Str_t & sValue )
+{
+	if ( !sValue.first || sValue.second<=0 )
+		return;
+
+	CSphString sError;
+	if ( !MakeRandBuf ( sValue, sError ) )
+		memset ( (void *)sValue.first, 0xff, sValue.second );
 }

@@ -28,6 +28,13 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 struct SqlStmt_t;
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
 
-void HandleMysqlShowPerms ( RowBuffer_i & tOut );
+bool SqlSkipBuddy();
+
+void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser );
 void HandleMysqlShowUsers ( RowBuffer_i & tOut );
 void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut );
+
+void HandleMysqlCreateUser ( RowBuffer_i & tOut, SqlStmt_t & tCreate, CSphString & sError );
+void HandleMysqlDropUser ( RowBuffer_i & tOut, const SqlStmt_t & tDrop );
+void HandleMysqlGrant ( RowBuffer_i & tOut, const SqlStmt_t & tGrantStmt, CSphString & sError );
+void HandleMysqlRevoke ( RowBuffer_i & tOut, const SqlStmt_t & tRevokeStmt );

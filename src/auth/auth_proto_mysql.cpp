@@ -13,6 +13,7 @@
 #include "sphinxutils.h"
 
 #include "searchdsql.h"
+#include "client_session.h"
 #include "auth_common.h"
 #include "auth_proto_mysql.h"
 #include "auth_log.h"
@@ -90,7 +91,7 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
 	if ( !pUser || dClientHash.IsEmpty() )
 	{
-		sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		sError.SetSprintf ( "Access denied for user '%s' (using password: %s)", sUser.cstr(), ( dClientHash.IsEmpty() ? "NO" : "YES" ) );
 		if ( !pUser )
 			AuthLog().AuthFailure ( sUser, AccessMethod_e::SQL, session::szClientName(), "user does not exist" );
 		else
@@ -167,6 +168,11 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_ALTER_KLIST_TARGET:
 	case STMT_FREEZE:
 	case STMT_UNFREEZE:
+		if ( tStmt.m_sIndex.Begins ( GetPrefixAuth().cstr() ) )
+		{
+			sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
+			return false;
+		}
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
 	// special write actions without index
@@ -222,9 +228,43 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_RELOAD_AUTH:
 	case STMT_DEBUG:
 	case STMT_SHOW_USERS:
-	case STMT_SHOW_PERMISSIONS:
-	case STMT_SHOW_TOKEN:
 		 return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError );
+
+	case STMT_SHOW_PERMISSIONS:
+	{
+		if ( !tStmt.m_dCallStrings.GetLength() )
+			return true;
+
+		// SHOW PERMISSIONS FOR '<user>' is an admin-only path.
+		if ( !CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError ) )
+			return false;
+
+		const CSphString & sTargetUser = tStmt.m_dCallStrings[0];
+		AuthUsersPtr_t pUsers = GetAuth();
+		if ( !pUsers->m_hUserToken ( sTargetUser ) )
+		{
+			sError.SetSprintf ( "user '%s' not found", sTargetUser.cstr() );
+			return false;
+		}
+
+		return true;
+	}
+
+	case STMT_SHOW_TOKEN:
+	case STMT_SET_PASSWORD:
+	case STMT_TOKEN:
+	{
+		const CSphString sTargetUser = ( tStmt.m_dCallStrings.GetLength() ? tStmt.m_dCallStrings[0] : sUser );
+		if ( sTargetUser==sUser )
+			return true;
+		return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError );
+	}
+
+	case STMT_GRANT:
+	case STMT_REVOKE:
+	case STMT_CREATE_USER:
+	case STMT_DROP_USER:
+		return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError );
 
 	default:
 		break;
@@ -235,7 +275,62 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	return false;
 }
 
-void HandleMysqlShowPerms ( RowBuffer_i & tOut )
+bool SqlSkipBuddy()
+{
+	auto pSession = session::Info().GetClientSession();
+	if ( !pSession )
+		return false;
+
+	switch ( pSession->m_eLastStmt )
+	{
+	case STMT_SHOW_USERS:
+	case STMT_SHOW_PERMISSIONS:
+	case STMT_SHOW_TOKEN:
+	case STMT_SET_PASSWORD:
+	case STMT_TOKEN:
+	case STMT_CREATE_USER:
+	case STMT_DROP_USER:
+	case STMT_GRANT:
+	case STMT_REVOKE:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool HasAdminPerm ( const CSphString & sUser )
+{
+	AuthUsersPtr_t pUsers = GetAuth();
+	const UserPerms_t * pPerms = pUsers->m_hUserPerms ( sUser );
+	if ( !pPerms || !pPerms->GetLength() )
+		return false;
+
+	for ( const auto & tPerm : *pPerms )
+	{
+		if ( tPerm.m_eAction==AuthAction_e::ADMIN )
+			return tPerm.m_bAllow;
+	}
+
+	return false;
+}
+
+static bool DumpUserPerms ( const CSphString & sUser, const UserPerms_t & dPerms, RowBuffer_i & tOut )
+{
+	for ( const auto & tPerm : dPerms )
+	{
+		tOut.PutString ( sUser );
+		tOut.PutString ( GetActionName ( tPerm.m_eAction ) );
+		tOut.PutString ( tPerm.m_sTarget );
+		tOut.PutString ( tPerm.m_bAllow ? "true" : "false" );
+		tOut.PutString ( tPerm.m_sBudget );
+		if ( !tOut.Commit () )
+			return false;
+	}
+
+	return true;
+}
+
+void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser )
 {
 	tOut.HeadBegin ();
 	tOut.HeadColumn ( "Username" );
@@ -248,17 +343,27 @@ void HandleMysqlShowPerms ( RowBuffer_i & tOut )
 
 	if ( IsAuthEnabled() )
 	{
+		const CSphString & sSessionUser = session::GetUser();
 		AuthUsersPtr_t pUsers = GetAuth();
-		for ( const auto & tUser : pUsers->m_hUserPerms )
+
+		if ( pTargetUser )
 		{
-			for ( const auto & tPerm : tUser.second )
+			assert ( HasAdminPerm ( sSessionUser ) );
+			const UserPerms_t * pPerms = pUsers->m_hUserPerms ( *pTargetUser );
+			if ( pPerms && !DumpUserPerms ( *pTargetUser, *pPerms, tOut ) )
+				return;
+
+		} else if ( !HasAdminPerm ( sSessionUser ) )
+		{
+			const UserPerms_t * pPerms = pUsers->m_hUserPerms ( sSessionUser );
+			if ( pPerms && !DumpUserPerms ( sSessionUser, *pPerms, tOut ) )
+				return;
+
+		} else
+		{
+			for ( const auto & tUser : pUsers->m_hUserPerms )
 			{
-				tOut.PutString ( tUser.first );
-				tOut.PutString ( GetActionName ( tPerm.m_eAction ) );
-				tOut.PutString ( tPerm.m_sTarget );
-				tOut.PutString ( tPerm.m_bAllow ? "true" : "false" );
-				tOut.PutString ( tPerm.m_sBudget );
-				if ( !tOut.Commit () )
+				if ( !DumpUserPerms ( tUser.first, tUser.second, tOut ) )
 					return;
 			}
 		}

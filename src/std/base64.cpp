@@ -46,18 +46,27 @@ CSphString EncodeBase64 ( const CSphString & sValue )
 	return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
 }
 
-void DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst )
+bool DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst )
 {
 	std::string_view sVal = sSrc.cstr();
     dDst.Reserve ( dDst.GetLength() + ( ( sVal.size() + 2 ) / 3 ) * 4 );
 
     using namespace boost::archive::iterators;
-    using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
-    for ( It tIt ( std::begin(sVal) ); tIt!=It( std::end(sVal) ); tIt++ )
-        dDst.Add ( *tIt );
+	try
+	{
+		using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+		for ( It tIt ( std::begin(sVal) ); tIt!=It( std::end(sVal) ); tIt++ )
+			dDst.Add ( *tIt );
+	}
+	catch (...)
+	{
+		return false;
+	}
 
     while ( dDst.GetLength() && dDst.Last()=='\0' )
         dDst.Pop();
+
+	return true;
 }
 
 

@@ -34,14 +34,15 @@ BUG: User gets validation error instead of Permission denied
 ––– input –––
 MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "INSERT INTO system.auth_users(username, salt, hashes) VALUES('hacker', 'aabb', '{\"password_sha1_no_salt\":\"aabb\"}');" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: user 'hacker' error: argument 'salt' has wrong hash size 2, expected 20
+ERROR 1064 (42000) at line 1: Permission denied for user 'regular'
 ––– comment –––
 ––– 6.1.2 User cannot DELETE from system.auth_permissions –––
 EXPECTED per spec: Permission denied for user 'regular'
 ––– comment –––
 ––– input –––
-MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "DELETE FROM system.auth_permissions WHERE username='admin';"
+MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "DELETE FROM system.auth_permissions WHERE username='admin';" 2>&1
 ––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'regular'
 ––– comment –––
 ––– 6.1.3 Admin also cannot directly modify system.auth_users –––
 EXPECTED per spec: Permission denied - only Buddy can modify via internal secure_hash

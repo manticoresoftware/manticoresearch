@@ -1095,6 +1095,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "attr_autoconv_strict",	0, NULL },
 	{ "auth",					0, NULL },
 	{ "auth_log_level",			0, NULL },
+	{ "auth_password_policy",	0, NULL },
+	{ "auth_password_min_length",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

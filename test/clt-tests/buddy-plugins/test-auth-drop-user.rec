@@ -24,7 +24,6 @@ generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT READ ON * TO 'droptest';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: (null)
 ––– comment –––
 ––– 2.2.1 Successful user deletion –––
 EXPECTED per spec: Success, user removed
@@ -53,11 +52,9 @@ generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT READ ON * TO 'cascade';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: (null)
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT WRITE ON * TO 'cascade';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: (null)
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'cascade';"
 ––– output –––
@@ -74,7 +71,7 @@ ACTUAL: OK
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'nonexistent';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: User 'nonexistent' does not exist.
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
 ––– 2.2.4 Error without ADMIN permission –––
 EXPECTED per spec: Permission denied
@@ -97,17 +94,16 @@ generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT READ ON * TO 'attacker';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: (null)
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
 ––– output –––
 ––– input –––
-MYSQL_PWD=attacker123 mysql -uattacker -h0 -P9306 -e "DROP USER 'victim';"
+MYSQL_PWD=attacker123 mysql -uattacker -h0 -P9306 -e "DROP USER 'victim';" 2>&1
 ––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'attacker'
 ––– comment –––
 Verify victim was deleted by attacker (should not happen!)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'victim';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: User 'victim' does not exist.

@@ -15,5 +15,5 @@
 CSphString EncodeBase64 ( const CSphString & sValue );
 bool DecodeBase64 ( const CSphString & sValue, CSphString & sResult );
 
-void DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst );
+bool DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst );
 CSphString EncodeBinBase64 ( const VecTraits_T<BYTE> & dSrc );

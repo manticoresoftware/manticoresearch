@@ -385,9 +385,10 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	boost::process::environment tEnv = boost::this_process::environment();
 	if ( IsAuthEnabled() )
 	{
-		CSphString sTokenError;
-		tEnv[g_sBuddyTokenName.cstr()] = CreateBuddyToken ( sTokenError ).scstr();
-		if ( !sTokenError.IsEmpty() )
+		CSphString sToken, sTokenError;
+		if ( CreateBuddyToken ( sToken, sTokenError ) )
+			tEnv[g_sBuddyTokenName.cstr()] = sToken.scstr();
+		else
 			sphLogDebug ( "[BUDDY] token error: %s", sTokenError.cstr() );
 	}
 	if ( CheckWeCanUseSSL() )
@@ -626,8 +627,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 				tBuddyQuery.NamedValNE ( "body", "null" );
 		}
 		tBuddyQuery.NamedVal ( "version", g_iBuddyVersion );
-		if ( !bHttp )
-			tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
+		tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
 
 		{
 			tBuddyQuery.Named ( "message" );
@@ -636,10 +636,6 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 			tBuddyQuery.NamedString ( "body", sQuery );
 			tBuddyQuery.NamedString ( "http_method", ( bHttp ? http_method_str ( eRequestType ) : "" ) );
 		}
-
-		// set user bearer that buddy should send back as request for that user
-		CSphString sBearer = GetBearer ( session::GetUser() );
-		tBuddyQuery.NamedString ( "Bearer", sBearer );
 	}
 
 	StrVec_t dHeaders;

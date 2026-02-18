@@ -36,6 +36,7 @@ public:
 bool DecryptGCM ( const VecTraits_T<BYTE> & dEncryptedData, CSphVector<BYTE> & dDstData, CSphString & sUser, GcmUserKey_i & tKey, CSphString & sError );
 bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVector<BYTE> & dRes, CSphString & sError );
 bool MakeRandBuf ( VecTraits_T<BYTE> & dRes, CSphString & sError );
+bool MakeRandBuf ( Str_t & sRes, CSphString & sError );
 
 #if WITH_SSL
 	// set SSL key, certificate and ca-certificate to be used in SSL, if required.

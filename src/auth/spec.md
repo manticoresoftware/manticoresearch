@@ -1,4 +1,4 @@
-# Spec v1.5.0
+# Spec v1.7.0
 
 ## Table of Contents
 
@@ -20,6 +20,7 @@
    - Rule Evaluation Algorithm
 8. Initial Administrator Setup (`--auth` mode)
 9. Configuration
+   - Password Policy Model
 10. SQL Commands for Authentication and Authorization (RT Mode)
 11. DUMP AUTH SQL Command
 12. Authentication and Authorization in Replication Clusters
@@ -356,7 +357,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - CALL SNIPPETS
     - CALL PQ
     - CALL KEYWORDS
-    - SHOW MY PERMISSIONS
+    - SHOW PERMISSIONS
     - SHOW MY USAGE
 
   - HTTP endpoints that retrieve data without modification:
@@ -437,23 +438,24 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
 
 - **admin**:
   - SQL commands that manage users and permissions:
-    - CREATE USER - will be implemented in Buddy
-    - DROP USER - will be implemented in Buddy
-    - GRANT - will be implemented in Buddy
-    - REVOKE - will be implemented in Buddy
-    - SHOW USERS - will be implemented in Buddy
-    - SHOW PERMISSIONS - will be implemented in Buddy
-    - SET PASSWORD - will be implemented in Buddy
-    - TOKEN - will be implemented in Buddy
+    - CREATE USER - implemented in daemon
+    - DROP USER - implemented in daemon
+    - GRANT - implemented in daemon
+    - REVOKE - implemented in daemon
+    - SHOW USERS - implemented in daemon
+    - SHOW PERMISSIONS - implemented in daemon
+    - SHOW TOKEN - implemented in daemon
+    - SET PASSWORD - implemented in daemon
+    - TOKEN - implemented in daemon
     - SHOW USAGE
     - RELOAD AUTH
 
   - HTTP endpoints that manage authentication and authorization:
-    - None explicitly defined at this time; all admin-related SQL commands must be executed through the `/sql`, `/cli`, or `/cli_json` endpoints.
+    - SQL admin commands are executed through the `/sql`, `/cli`, or `/cli_json` endpoints.
     - **`POST /token`**
         - **Purpose:** Generates or updates a bearer token for the currently authenticated user.
         - **Authentication:** The request must include a valid `Authorization` header (e.g., Basic Auth).
-        - **Authorization:** The authenticated user must have the `admin` permission.
+        - **Authorization:** Any authenticated user can rotate their own token.
         - **Request Body:** An empty JSON object (e.g., `{}`).
         - **Response:** A JSON object containing the new, unhashed token: `{"token": "<new_token>"}`.
 
@@ -462,7 +464,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
 - Commands not explicitly listed under any permission are denied by default.
 - Users with the `admin` action are restricted to managing users and permissions. For other actions, such as `read`, `write`, or `schema`, explicit grants are required.
 - This list should be reviewed and updated regularly to ensure all possible SQL commands and endpoints are included.
-- Write access to the `system.auth*` tables is restricted in the daemon to Manticore Buddy only. Even users with the `admin` privilege should not be able to modify these tables to prevent corruption.
+- Direct writes to `system.auth_users` and `system.auth_permissions` are restricted to daemon-internal auth handlers. Even users with the `admin` privilege should not be able to modify these tables directly to prevent corruption.
 
 #### Rule Resolution Strategy
 
@@ -554,6 +556,7 @@ sequenceDiagram
 1.  **Start the Daemon:** Start the `searchd` process normally. If authentication is enabled, it will run but will not have any users defined.
 2.  **Run Bootstrap Mode:** In a separate terminal, run the same `searchd` binary with the `--auth` flag (e.g., `sudo -u manticore searchd -c /etc/manticoresearch/manticore.conf --auth`).
 3.  **Provide Credentials:** The tool will interactively prompt for a new administrator login and a password (which must be entered twice for confirmation).
+    The provided password must satisfy the password policy rules defined in the **Configuration / Password Policy Model** section.
 4.  **File Creation:** The tool securely generates the necessary password hashes and creates the `auth.json` file (or populates it if it was empty). This process will fail if the file already contains user or permission data, preventing accidental overwrites.
 5.  **Daemon Notification:** Using a secure, cross-platform Inter-Process Communication (IPC) mechanism (named pipes), the bootstrap process signals the running daemon to execute a `RELOAD AUTH` command.
 6.  **Confirmation:** The bootstrap process waits for a confirmation reply from the daemon and informs the user whether the new authentication settings were successfully loaded.
@@ -562,7 +565,7 @@ This one-time procedure is the only supported method for creating the first user
 
 ### Ongoing User and Permission Management
 
-Once the initial administrator is created, all subsequent user and permission management is performed via **SQL commands**. These commands are processed by **Manticore Buddy** and operate on the `system.auth_users` and `system.auth_permissions` tables (in RT mode) or by modifying the `auth.json` file (in plain mode, via Buddy's file-watching mechanism).
+Once the initial administrator is created, all subsequent user and permission management is performed via **SQL commands**. `CREATE USER`, `DROP USER`, `GRANT`, `REVOKE`, `SHOW USERS`, `SHOW PERMISSIONS`, `SHOW TOKEN`, `SET PASSWORD`, and `TOKEN` are processed natively by the daemon.
 
 This SQL-based approach provides a standardized and powerful interface for all day-to-day administrative tasks, including:
 
@@ -580,11 +583,15 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
 1. **Create a User**
    Adds a new user with a password.
    - **Note**: The initial administrator user must be created using the `searchd --auth` bootstrap process. This `CREATE USER` command is intended for creating subsequent, non-admin users.
+   - Requires `admin` permission.
    - SQL Command:
      ```sql
      CREATE USER '<username>' IDENTIFIED BY '<password>';
      ```
    - The password is securely hashed and stored by the system.
+   - The provided password must satisfy the password policy rules defined in the **Configuration / Password Policy Model** section.
+   - Returns one row with columns: `token`, `username`, `generated_at`.
+   - If user already exists, command fails with `user '<username>' already exists`.
    - Example:
      ```sql
      CREATE USER 'readonly' IDENTIFIED BY 'readonlypassword';
@@ -594,10 +601,12 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    Creates a new token for an existing user or updates the current token. The result is the new token.
    - **SQL Command:**
      ```sql
-     TOKEN[ '<username>'];
+     TOKEN ['<username>'];
      ```
    - The token is securely hashed and stored by the system.
    - If the username is not specified, the current user's token will be updated.
+   - Any authenticated user can update their own token.
+   - Updating another user's token requires `admin` permission.
    - **Examples:**
      ```sql
      TOKEN 'readonly';
@@ -608,10 +617,13 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    Updates the password for an existing user or the current user.
    - **SQL Command:**
      ```sql
-     SET PASSWORD '<password>'[ FOR '<username>'];
+     SET PASSWORD '<password>' [FOR '<username>'];
      ```
    - The password is securely hashed and stored by the system.
    - If the username is not specified, the current user's password will be updated.
+   - Any authenticated user can update their own password.
+   - Updating another user's password requires `admin` permission.
+   - The provided password must satisfy the password policy rules defined in the **Configuration / Password Policy Model** section.
    - **Examples:**
      ```sql
      SET PASSWORD 'abcdef' FOR 'justin';
@@ -620,10 +632,12 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
 
 4. **Delete a User**
    Deletes a user and their associated permissions.
+   - Requires `admin` permission.
    - SQL Command:
      ```sql
      DROP USER '<username>';
      ```
+   - If `<username>` does not exist, command fails with `user '<username>' not found`.
    - Example:
      ```sql
      DROP USER 'readonly';
@@ -631,28 +645,40 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
 
 5. **Grant a Permission**
    Adds a permission for a specific user.
+   - Requires `admin` permission.
    - SQL Command:
      ```sql
-     GRANT <action> ON <target> TO '<username>' [WITH BUDGET <json_budget>];
+     GRANT <action> ON <target> TO '<username>' [WITH BUDGET '<json_budget>'];
      ```
-   - `<action>`: `READ`, `WRITE`, or `SCHEMA`. Users with the `ADMIN` action can manage users and permissions but require explicit grants for other actions.
+   - `<action>`: `READ`, `WRITE`, `SCHEMA`, or `ADMIN`. Users with the `ADMIN` action can manage users and permissions but require explicit grants for other actions.
    - `<target>`: The object to which the permission applies. Use either `*` or `'*'` for all targets, or specify a table name preceded by the `table/` prefix.
+   - **Constraint:** If `<action>` is `ADMIN`, `<target>` must be `*` (or `'*'`).
+   - If `<username>` does not exist, the command fails with `user '<username>' not found`.
+   - If `<action>` is unknown, the command fails with `unknown action '<action>'`.
+   - If user already has permission for the same `<action>` and `<target>`, the command fails (budgets do not create a distinct permission key).
    - `<json_budget>`: Optional JSON specifying resource limits.
    - Example:
      ```sql
      GRANT READ ON * TO 'readonly' WITH BUDGET '{"queries_per_day": 10000}';
      GRANT WRITE ON 'mytable' TO 'custom_user';
+     GRANT ADMIN ON * TO 'security_admin';
      ```
 
 6. **Revoke a Permission**
    Removes a specific permission for a user.
+   - Requires `admin` permission.
    - SQL Command:
      ```sql
      REVOKE <action> ON <target> FROM '<username>';
      ```
+   - **Constraint:** If `<action>` is `ADMIN`, `<target>` must be `*` (or `'*'`).
+   - If `<username>` does not exist, the command fails with `user '<username>' not found`.
+   - If `<action>` is unknown, the command fails with `unknown action '<action>'`.
+   - If user does not have the specified permission, the command fails with `user '<username>' does not have '<action>' permission on '<target>'`.
    - Example:
      ```sql
      REVOKE READ ON '*' FROM 'readonly';
+     REVOKE ADMIN ON * FROM 'security_admin';
      ```
 
 7. **List All Users**
@@ -672,31 +698,15 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      +-------------+
      ```
 
-8. **Show Permissions for Current User**
-   Lists permissions granted to the current user.
-   - SQL Command:
-     ```sql
-     SHOW MY PERMISSIONS;
-     ```
-   - Example Output for `custom_user`:
-     ```
-     +-------------+--------+---------------+-------+--------------------------+
-     | username    | action | target        | allow | budget                   |
-     +-------------+--------+---------------+-------+--------------------------+
-     | custom_user | read   | table/mytable | true  | {"queries_per_day": 500} |
-     | custom_user | write  | table/mytable | true  | null                     |
-     +-------------+--------+---------------+-------+--------------------------+
-     ```
-
-9. **Show All Permissions**
-   Lists all permissions.
-   - **Behavior**:
-     - **Admin**: Lists permissions for all users.
-     - **Non-admin**: Behaves like `SHOW MY PERMISSIONS`.
+8. **Show Permissions**
+   Lists permissions.
    - SQL Command:
      ```sql
      SHOW PERMISSIONS;
      ```
+   - **Behavior**:
+     - **Admin**: Lists permissions for all users.
+     - **Non-admin**: Lists only current user's permissions.
    - Example Output for Admin:
      ```
      +-------------+--------+---------------+-------+----------------------------+
@@ -716,6 +726,22 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      | custom_user | write  | table/mytable | true  | null                     |
      +-------------+--------+---------------+-------+--------------------------+
      ```
+
+9. **Show Permissions for a Specific User**
+   Lists permissions for the specified user.
+   - SQL Command:
+     ```sql
+     SHOW PERMISSIONS FOR '<username>';
+     ```
+   - **Behavior**:
+     - **Admin**: Lists only the target user's permissions.
+     - **Non-admin**: Returns `Permission denied`.
+     - **Unknown target user**: Returns `user '<username>' not found`.
+   - Example:
+     ```sql
+     SHOW PERMISSIONS FOR 'custom_user';
+     ```
+   - `SHOW MY PERMISSIONS` is not supported.
 
 10. **Show Usage Information**
    - **Admin**: Displays usage statistics for all users.
@@ -772,7 +798,7 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
 Displays the securely hashed bearer token (`bearer_sha256`) for a specified user or the current user. This is useful for administrative verification.
    - **SQL Command:**
      ```sql
-     SHOW TOKEN [FOR '<username>'];
+     SHOW TOKEN [FOR '<username>' | '<username>'];
      ```
    - **Behavior:**
      - `SHOW TOKEN`: Shows the token hash for the current user.
@@ -791,6 +817,8 @@ Displays the securely hashed bearer token (`bearer_sha256`) for a specified user
 **Notes on `ADMIN` Action**
 
 - Users with the `ADMIN` action can only manage users and permissions.
+- `ADMIN` permissions are global-only and must target `*`.
+- `GRANT ADMIN` and `REVOKE ADMIN` with non-`*` targets are rejected.
 - To perform other actions (`READ`, `WRITE`, `SCHEMA`), explicit grants are required.
 - Both `*` and `'*'` are valid in commands for targets, ensuring flexibility.
 - The `ADMIN` action provides unrestricted access to the `SHOW USERS`, `SHOW PERMISSIONS`, and `SHOW USAGE` commands.
@@ -813,7 +841,30 @@ Displays the securely hashed bearer token (`bearer_sha256`) for a specified user
   auth = /path/to/file
   ```
 
-If the `system.auth*` tables (RT Mode) or the authentication file (Plain Mode) do not exist, Manticore should create them. If they already exist, Manticore should validate them during startup. If validation fails, Manticore should not start.
+#### Password Policy Model
+
+Password quality requirements are controlled by the following configuration options:
+
+- `auth_password_policy`
+  - Defines which password checks are enforced.
+  - Allowed values:
+    - `LOW`: applies minimum length and non-empty checks.
+    - `MEDIUM`: applies `LOW` plus complexity checks (at least one lowercase, one uppercase, one digit, and one non-alphanumeric character).
+  - Default: `LOW`.
+
+- `auth_password_min_length`
+  - Defines the minimum allowed password length.
+  - Default: `8`.
+
+The same password policy must be applied consistently by all password-setting entry points:
+
+- `searchd --auth` bootstrap flow (initial admin password)
+- `CREATE USER ... IDENTIFIED BY ...`
+- `SET PASSWORD ...`
+
+If validation fails, the command must return a validation error that explains which policy rule failed.
+
+If the `system.auth_users` and `system.auth_permissions` tables (RT Mode) or the authentication file (Plain Mode) do not exist, Manticore should create them. If they already exist, Manticore should validate them during startup. If validation fails, Manticore should not start.
 
 ---
 
@@ -903,25 +954,14 @@ sequenceDiagram
     Note over ManticoreSearch: On start, generates and holds BUDDY_TOKEN.
     ManticoreSearch->>Buddy: Starts Buddy, passing BUDDY_TOKEN via env var.
 
-    alt Administrative Path (e.g., CREATE USER)
-        SQLClient->>ManticoreSearch: Send `CREATE USER 'new_user' ...`
-        Note over ManticoreSearch: Recognizes command is for Buddy.
-        ManticoreSearch->>Buddy: Delegate command (e.g., via internal API with BUDDY_TOKEN)
-        Buddy->>Buddy: Prepares SQL to modify system.auth_users
-        Buddy->>ManticoreSearch: Execute `INSERT` on system.auth_users (with BUDDY_TOKEN)
-        ManticoreSearch->>ManticoreSearch: Authenticates Buddy and executes INSERT
-        ManticoreSearch-->>Buddy: Return success
-        Buddy-->>ManticoreSearch: Return success
-        ManticoreSearch-->>SQLClient: Return "OK"
-    end
-
-    alt User Request Path (e.g., /search)
+    alt Delegated Command Path
         EndUserClient->>ManticoreSearch: Send request with `Authorization: Bearer <user_token>`
-        Note over ManticoreSearch: Forwards request to a Buddy plugin (if any)
-        ManticoreSearch->>Buddy: Send request with original `Authorization: Bearer <user_token>`
-        Note over Buddy: Buddy processes the request...
-        Buddy->>ManticoreSearch: Forwards request back with original `Authorization: Bearer <user_token>`
-        ManticoreSearch->>ManticoreSearch: Authenticate <user_token> and check permissions
+        Note over ManticoreSearch: Authenticates user and resolves delegated identity (`user`)
+        ManticoreSearch->>Buddy: Delegate command with `user`
+        Buddy->>Buddy: Rewrites/prepares command for daemon
+        Buddy->>ManticoreSearch: Execute rewritten command with `Authorization: Bearer <BUDDY_TOKEN>` and optional `X-Manticore-User`
+        ManticoreSearch->>ManticoreSearch: Authenticates Buddy token, authorizes as delegated `user`, executes command
+        ManticoreSearch-->>Buddy: Return success/error
         ManticoreSearch->>EndUserClient: Return final result
     end
 ```
@@ -941,13 +981,19 @@ sequenceDiagram
       ```
     - The daemon authenticates this token against the `system.auth_users` table. The `manticore_buddy` user must have the required permissions for the operation to succeed.
 
-3. **User Request**:
-    - The daemon forwards the user request to Buddy, preserving the user's original `Authorization` header (e.g., `Authorization: Bearer <user_token>`).
-    - After Buddy processes the data, it forwards the request back to the daemon with the user's original `Authorization` header. Buddy does not need to interpret or validate the user's token.
+3. **Delegated Command Identity**:
+    - For commands delegated to Buddy, the daemon must first authenticate the client request and resolve the authenticated user identity.
+    - The daemon forwards this identity to Buddy in the request payload as `user`.
+    - Buddy sends rewritten/internal commands to daemon using:
+      - `Authorization: Bearer <BUDDY_TOKEN>` (always)
+      - `X-Manticore-User: <username>` only when incoming payload `user` is non-empty
+    - If incoming payload `user` is empty, Buddy must omit `X-Manticore-User`.
 
 4. **Authorization**:
-    - The daemon uses a single, unified authentication process for all requests received from Buddy. It extracts the bearer token from the `Authorization` header, hashes it, and looks for a matching user in the `system.auth_users` table.
-    - Whether the token identifies the Buddy system user or a regular end-user, the daemon proceeds to the authorization step, where it verifies that the identified user has the required permissions for the requested action.
+    - The daemon must authenticate Buddy-originated requests using the Buddy bearer token.
+    - If `X-Manticore-User` is present, daemon must authorize the command against that delegated user identity.
+    - If `X-Manticore-User` is absent, daemon must treat the request as a non-delegated Buddy request.
+    - The daemon must accept delegated user identity only for Buddy-authenticated requests from the internal daemon-Buddy channel.
 
 5. **Security**:
     - The security of this model relies on protecting the plaintext token of the highly privileged Buddy user, which is guarded by the integrity of the HTTPS channel.

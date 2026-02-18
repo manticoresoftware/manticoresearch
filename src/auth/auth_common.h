@@ -94,3 +94,14 @@ public:
 };
 
 BearerCache_i & GetBearerCache();
+
+enum class PasswordPolicy_e
+{
+	LOW,
+	MEDIUM
+};
+
+PasswordPolicy_e ParsePasswordPolicy ( const CSphConfigSection & hSearchd );
+int GetPasswordMinLength ( const CSphConfigSection & hSearchd );
+bool ValidatePassword ( const CSphString & sPwd, PasswordPolicy_e ePolicy, int iMinLen, CSphString & sError );
+void ScrubSensitive ( Str_t & sValue );

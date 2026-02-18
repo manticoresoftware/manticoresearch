@@ -172,6 +172,12 @@ enum SqlStmt_e : BYTE
 	STMT_SHOW_PERMISSIONS,
 	STMT_SHOW_USERS,
 	STMT_SHOW_TOKEN,
+	STMT_SET_PASSWORD,
+	STMT_TOKEN,
+	STMT_CREATE_USER,
+	STMT_DROP_USER,
+	STMT_GRANT,
+	STMT_REVOKE,
 
 	STMT_TOTAL
 };
@@ -189,11 +195,11 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"alter_index_settings", "alter_embeddings_api_key", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
-	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn",
-	"reload_auth", "show_permissions", "show_users", "show_token"
-	};
+		"alter_index_settings", "alter_embeddings_api_key", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
+		"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
+		"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn",
+		"reload_auth", "show_permissions", "show_users", "show_token", "set_password", "token", "create_user", "drop_user", "grant", "revoke"
+		};
 	return dNames[eStmt];
 }
 
@@ -280,6 +286,13 @@ struct SqlStmt_t
 	int64_t					m_iSetValue = 0;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
+
+	// GRANT/REVOKE specific
+	CSphString				m_sAuthAction;
+	CSphString				m_sAuthTarget;
+	CSphString				m_sAuthUser;
+	CSphString				m_sAuthPassword;
+	CSphString				m_sAuthBudget;
 
 	// CALL specific
 	CSphString				m_sCallProc;

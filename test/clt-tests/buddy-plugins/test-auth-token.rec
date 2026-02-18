@@ -74,3 +74,41 @@ generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
 MYSQL_PWD=tokenpass123 mysql -utokenuser -h0 -P9306 -e "TOKEN 'other';" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'TOKEN 'other''
+––– comment –––
+––– Daemon-first additional coverage –––
+––– comment –––
+––– 2.4.6 Generate own token (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "TOKEN;"
+––– output –––
+*************************** 1. row ***************************
+Username: admin
+Token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.4.7 Admin generates token for another user (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';"
+––– output –––
+*************************** 1. row ***************************
+Username: tokenuser
+Token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.4.8 Repeated TOKEN returns different token (implemented path) –––
+––– input –––
+TOK1=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
+TOK2=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
+[ "$TOK1" != "$TOK2" ] && echo "tokens differ"
+––– output –––
+tokens differ
+––– comment –––
+––– 2.4.9 Error for non-existent user (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'nonexistent';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found
+––– comment –––
+––– 2.4.10 Error without ADMIN when generating other's token (implemented path) –––
+––– input –––
+MYSQL_PWD=tokenpass123 mysql -utokenuser -h0 -P9306 -e "TOKEN 'other';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'tokenuser'

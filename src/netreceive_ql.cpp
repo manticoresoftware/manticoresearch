@@ -1064,7 +1064,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
 			if ( tRows.IsError() )
 			{
-				if ( !HasBuddy() || tRows.WasFlushed() )
+				if ( !HasBuddy() || tRows.WasFlushed() || SqlSkipBuddy() )
 				{
 					LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( tRows.GetError() ) );
 					if ( tRows.WasFlushed() )
@@ -1318,7 +1318,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( !CheckAuth ( tAuth, tResponse.GetUsername(), tResponse.GetAuthResponce(), sError ) )
 			{
 				LogNetError ( sError.cstr() );
-				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::ACCESS_DENIED_ERROR );
 				pOut->Flush ();
 				return;
 			}

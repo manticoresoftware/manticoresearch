@@ -12,6 +12,7 @@
 
 #include "std/base64.h"
 #include "searchdhttp.h"
+#include "searchdbuddy.h"
 
 #include "auth_common.h"
 #include "auth_log.h"
@@ -58,7 +59,12 @@ static Str_t GetTokenFromAuth ( const CSphString & sSrcAuth, int iPrefixLen )
 static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
 {
 	CSphVector<BYTE> dSrcUserPwd;
-	DecodeBinBase64 ( sSrcUserPwd, dSrcUserPwd );
+	if ( !DecodeBinBase64 ( sSrcUserPwd, dSrcUserPwd ) )
+	{
+		tRes.m_sError = "Failed to decode base64 user:password";
+		AuthLog().AuthFailure ( sUser, AccessMethod_e::HTTP_BASIC, session::szClientName(), "malformed authentication string" );
+		return FailAuth ( tRes, dReply );
+	}
 
 	int iDel = dSrcUserPwd.GetFirst ( []( BYTE c ) { return c==':'; } );
 	if ( iDel==-1 )
@@ -198,10 +204,26 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 	}
 
 	Str_t sAuthTail = GetTokenFromAuth ( *pSrcAuth, ( bBasicToken ? sizeof( sAuthPrefixBasic )-1 : sizeof( sAuthPrefixBearer )-1 ) );
+
+	bool bOk = false;
 	if ( bBasicToken )
-		return CheckAuthBasic ( sAuthTail, tRes, dReply, sUser );
+		bOk = CheckAuthBasic ( sAuthTail, tRes, dReply, sUser );
 	else
-		return CheckAuthBearer ( sAuthTail, tRes, dReply, sUser );
+		bOk = CheckAuthBearer ( sAuthTail, tRes, dReply, sUser );
+
+	if ( !bOk )
+		return false;
+
+	
+	// user from Buddy - only accept acting user override when request is authenticated as Buddy and marked as Buddy-originated
+	if ( IsBuddyQuery ( hOptions ) && sUser==GetAuthBuddyName() )
+	{
+		const CSphString * pBuddySubstUser = hOptions ( "x-manticore-user" );
+		if ( pBuddySubstUser && !pBuddySubstUser->IsEmpty() )
+			sUser = *pBuddySubstUser;
+	}
+
+	return true;
 }
 
 bool HttpCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, EHTTP_STATUS & eReplyHttpCode, CSphString & sError, CSphVector<BYTE> & dReply )

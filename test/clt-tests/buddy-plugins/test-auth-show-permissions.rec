@@ -1,24 +1,16 @@
 ––– comment –––
 Test SHOW PERMISSIONS command.
 Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
-Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
 Per spec:
 - SHOW PERMISSIONS — admin sees all, user sees only own
-- SHOW MY PERMISSIONS — always shows only own permissions
+- SHOW PERMISSIONS FOR 'user' — admin-only targeted lookup
 ––– comment –––
 ––– block: ../base/start-searchd-with-auth –––
-––– comment –––
-––– Setup: create user with permissions –––
-––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'permuser' IDENTIFIED BY 'permpass1234';"
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'permuser' IDENTIFIED BY 'permpass1234';"
 ––– output –––
-*************************** 1. row ***************************
-       token: #!/[0-9a-f]{64}/!#
-    username: permuser
-generated_at: #!/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'permuser';"
 ––– output –––
@@ -26,51 +18,39 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'permuser';"
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON 'mytable' TO 'permuser';"
 ––– output –––
 ––– comment –––
-––– 2.8.1 Admin sees all permissions –––
-EXPECTED per spec: Admin sees permissions for all users
-––– comment –––
+––– 2.8.1 Admin SHOW PERMISSIONS returns multiple users –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS total FROM system.auth_permissions;"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS;" | grep "Username:" | sort | uniq
 ––– output –––
-*************************** 1. row ***************************
-total: #!/[0-9]+/!#
-––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT username, action FROM system.auth_permissions WHERE username='admin';" | grep "action:" | sort
-––– output –––
-  action: admin
-  action: read
-  action: schema
-  action: write
-––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT username, action FROM system.auth_permissions WHERE username='permuser';" | grep "action:" | sort
-––– output –––
-  action: read
-  action: write
+Username: admin
+Username: permuser
+Username: system.buddy
 ––– comment –––
-––– 2.8.2 User sees only own permissions –––
-EXPECTED per spec: User sees only their own permissions
-ACTUAL: BUG — Permission denied instead of showing own permissions
-––– comment –––
+––– 2.8.2 Non-admin SHOW PERMISSIONS returns only own user –––
 ––– input –––
-MYSQL_PWD=permpass1234 mysql -upermuser -h0 -P9306 -e "SHOW PERMISSIONS;" 2>&1
+MYSQL_PWD=permpass1234 mysql -E -upermuser -h0 -P9306 -e "SHOW PERMISSIONS;" | grep "Username:" | sort | uniq
+––– output –––
+Username: permuser
+––– comment –––
+––– 2.8.3 Admin SHOW PERMISSIONS FOR returns only target user –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'permuser';" | grep "Username:" | sort | uniq
+––– output –––
+Username: permuser
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'permuser';" | grep "action:" | sort
+––– output –––
+action: read
+action: write
+––– comment –––
+––– 2.8.4 Non-admin SHOW PERMISSIONS FOR denied –––
+––– input –––
+MYSQL_PWD=permpass1234 mysql -upermuser -h0 -P9306 -e "SHOW PERMISSIONS FOR 'admin';" 2>&1
 ––– output –––
 ERROR 1064 (42000) at line 1: Permission denied for user 'permuser'
 ––– comment –––
-––– 2.8.3 SHOW MY PERMISSIONS — only own permissions –––
-EXPECTED per spec: Shows only current user's permissions
-––– comment –––
+––– 2.8.5 Admin SHOW PERMISSIONS FOR missing user returns not found –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW MY PERMISSIONS;" | grep -i "action:" | sort
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'nonexistent';" 2>&1
 ––– output –––
-  action: admin
-  action: read
-  action: schema
-  action: write
-––– comment –––
-Verify permuser is NOT shown in admin's MY PERMISSIONS
-––– comment –––
-––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_permissions WHERE username='admin';"
-––– output –––
-*************************** 1. row ***************************
-cnt: #!/[4-9]/!#
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found

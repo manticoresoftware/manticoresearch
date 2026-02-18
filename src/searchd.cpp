@@ -4896,23 +4896,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		if ( tStmt.m_sIndex.Begins ( GetPrefixAuth().cstr() ) )
-		{
-			bool bCommit = ( pSession->m_bAutoCommit && !pSession->m_bInTransaction );
-			if ( !bCommit )
-			{
-				tOut.Error ( "table '%s': %s is not supported on system auth tables when autocommit=0", ( bReplace ? "REPLACE" : "INSERT" ), tStmt.m_sIndex.cstr() );
-				return;
-			}
-
-			CSphString sError;
-			if ( !InsertAuthDocuments ( tStmt, sError ) )
-				tOut.Error ( "%s", sError.cstr () );
-			else
-				tOut.Ok ( tStmt.m_iRowsAffected, CSphString(), 0 ); // FIXME!!!
-			return;
-		}
-
 		bool bDistTable = false;
 		if ( !pServed )
 		{
@@ -8326,23 +8309,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	if ( dNames.IsEmpty() )
 	{
 		tOut.Error ( "no such table '%s'", tStmt.m_sIndex.cstr () );
-		return;
-	}
-
-	if ( dNames[0].Begins ( GetPrefixAuth().cstr() ) )
-	{
-		if ( !bCommit )
-		{
-			tOut.Error ( "table '%s': DELETE is not supported on system auth tables when autocommit=0", tStmt.m_sIndex.cstr() );
-			return;
-		}
-
-		CSphString sError;
-		int iAffected = DeleteAuthDocuments ( dNames[0], tStmt, sError );
-		if ( !sError.IsEmpty() )
-			tOut.Error ( "%s", sError.cstr () );
-		else
-			tOut.Ok ( iAffected );
 		return;
 	}
 
@@ -11920,7 +11886,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_SHOW_PERMISSIONS:
-		HandleMysqlShowPerms ( tOut );
+	{
+		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
+		HandleMysqlShowPerms ( tOut, pTargetUser );
+	}
 		return true;
 
 	case STMT_SHOW_USERS:
@@ -11933,6 +11902,57 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowToken ( sUser, tOut );
 	}
 	return true;
+
+	case STMT_SET_PASSWORD:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		if ( UserSetPassword ( sUser, pStmt->m_sSetValue, m_sError ) )
+			tOut.Ok();
+		else
+			tOut.Error ( m_sError.cstr() );
+	}
+	return true;
+
+	case STMT_TOKEN:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		CSphString sToken;
+		if ( !UserCreateToken ( sUser, sToken, m_sError ) )
+		{
+			tOut.Error ( m_sError.cstr() );
+			return true;
+		}
+
+		tOut.HeadBegin ();
+		tOut.HeadColumn ( "Username" );
+		tOut.HeadColumn ( "Token" );
+		if ( !tOut.HeadEnd () )
+			return true;
+
+		tOut.PutString ( sUser );
+		tOut.PutString ( sToken );
+		if ( !tOut.Commit () )
+			return true;
+
+		tOut.Eof ( false );
+	}
+	return true;
+
+	case STMT_CREATE_USER:
+		HandleMysqlCreateUser ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_DROP_USER:
+		HandleMysqlDropUser ( tOut, *pStmt );
+		return true;
+
+	case STMT_GRANT:
+		HandleMysqlGrant ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_REVOKE:
+		HandleMysqlRevoke ( tOut, *pStmt );
+		return true;
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
@@ -14977,11 +14997,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !WinService() )
 		g_bOptNoDetach = true;
 
-#ifndef NDEBUG
-	// i also want my windows debug builds to skip locking by default
-	// NOTE, this also skips log files!
-	g_bOptNoLock = true;
-#endif
+//#ifndef NDEBUG
+//	// i also want my windows debug builds to skip locking by default
+//	// NOTE, this also skips log files!
+//	g_bOptNoLock = true;
+//#endif
 #endif
 
 	if ( !bOptPIDFile )

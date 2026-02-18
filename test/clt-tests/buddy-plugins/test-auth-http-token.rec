@@ -52,6 +52,10 @@ MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN 'httpuser';"
 ––– output –––
 {"token":}
 ––– input –––
+MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | awk '{print $2}' | tr -d '\r\n'
+––– output –––
+{"token":}
+––– input –––
 USR_TOKEN=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN 'httpuser';" | awk '{print $2}' | tr -d '\r\n')
 curl -s -H "Authorization: Bearer $USR_TOKEN" -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––

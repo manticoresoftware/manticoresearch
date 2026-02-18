@@ -57,12 +57,14 @@ ACTUAL: Implemented — old token denied, new token accepted
 TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
 TOK2=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
 [ "$TOK1" != "$TOK2" ] && echo "tokens differ"
-curl -s -H "Authorization: Bearer $TOK1" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
-curl -s -H "Authorization: Bearer $TOK2" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+curl -s -H "Authorization: Bearer $TOK1" -X POST http://127.0.0.1:9308/token -d "{}"
+echo
+curl -s -H "Authorization: Bearer $TOK2" -X POST http://127.0.0.1:9308/token -d "{}"
+echo
 ––– output –––
 tokens differ
 #!/\{"error":"Access denied for token '.*'"\}/!#
-#!/.*\"test\":1.*/!#
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 2.4.4 Error for non-existent user –––
 EXPECTED per spec: Error — user does not exist
@@ -113,6 +115,7 @@ TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo
 TOK2=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
 [ "$TOK1" != "$TOK2" ] && echo "tokens differ"
 ––– output –––
+tokens differ
 ––– comment –––
 ––– 2.4.9 Error for non-existent user (implemented path) –––
 ––– input –––

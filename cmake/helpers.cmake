@@ -302,8 +302,50 @@ endfunction ()
 
 function ( configure_config data )
 	# generate config files
+	# Handle FreeBSD directory layout (check DISTR variable)
+	if (DISTR AND DISTR MATCHES "^freebsd")
+		# FreeBSD uses /var/run instead of /usr/local/var/run
+		# Set default if not already set by user via -D flag
+		# If user passes -DCMAKE_INSTALL_FULL_RUNSTATEDIR=..., it will be in cache
+		if (NOT DEFINED CMAKE_INSTALL_FULL_RUNSTATEDIR OR CMAKE_INSTALL_FULL_RUNSTATEDIR STREQUAL "")
+			set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "/var/run" CACHE PATH "Full path to runstate directory" )
+		endif ()
+		# FreeBSD uses /var instead of /usr/local/var
+		# Set default if not already set by user via -D flag
+		if (NOT DEFINED CMAKE_INSTALL_FULL_LOCALSTATEDIR OR CMAKE_INSTALL_FULL_LOCALSTATEDIR STREQUAL "")
+			set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR "/var" CACHE PATH "Full path to localstate directory" )
+		endif ()
+	endif ()
+	
+	# Ensure variables are set (fallback to defaults if not set)
+	# Check if CMAKE_INSTALL_FULL_RUNSTATEDIR is set (either by user or by GNUInstallDirs)
+	if (NOT DEFINED CMAKE_INSTALL_FULL_RUNSTATEDIR OR CMAKE_INSTALL_FULL_RUNSTATEDIR STREQUAL "")
+		# Try to get it from GNUInstallDirs if available
+		if (DEFINED CMAKE_INSTALL_RUNSTATEDIR)
+			GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_RUNSTATEDIR CMAKE_INSTALL_RUNSTATEDIR RUNSTATEDIR )
+		else ()
+			# Default fallback
+			set ( CMAKE_INSTALL_FULL_RUNSTATEDIR "${CMAKE_INSTALL_PREFIX}/var/run" )
+		endif ()
+	endif ()
+	
+	# Check if CMAKE_INSTALL_FULL_LOCALSTATEDIR is set (either by user or by GNUInstallDirs)
+	if (NOT DEFINED CMAKE_INSTALL_FULL_LOCALSTATEDIR OR CMAKE_INSTALL_FULL_LOCALSTATEDIR STREQUAL "")
+		# Try to get it from GNUInstallDirs if available
+		if (DEFINED CMAKE_INSTALL_LOCALSTATEDIR)
+			GNUInstallDirs_get_absolute_install_dir ( CMAKE_INSTALL_FULL_LOCALSTATEDIR CMAKE_INSTALL_LOCALSTATEDIR LOCALSTATEDIR )
+		else ()
+			# Default fallback
+			set ( CMAKE_INSTALL_FULL_LOCALSTATEDIR "${CMAKE_INSTALL_PREFIX}/var" )
+		endif ()
+	endif ()
+	
 	set ( RUNDIR "${CMAKE_INSTALL_FULL_RUNSTATEDIR}/manticore" )
 	set ( LOGDIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/log/manticore" )
+	# FreeBSD uses /var/db instead of /var/lib for data directories
+	if (DISTR AND DISTR MATCHES "^freebsd" AND data MATCHES "^lib/")
+		string ( REPLACE "lib/" "db/" data "${data}" )
+	endif ()
 	set ( CONFDIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/${data}" )
 	configure_file ( "${MANTICORE_SOURCE_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 endfunction ()

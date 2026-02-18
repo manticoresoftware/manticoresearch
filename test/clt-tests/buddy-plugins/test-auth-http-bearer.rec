@@ -26,9 +26,9 @@ ACTUAL: Implemented — valid bearer token works
 ––– comment –––
 ––– input –––
 TOK=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-curl -s -H "Authorization: Bearer $TOK" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+curl -s -H "Authorization: Bearer $TOK" -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
-#!/.*\"test\":1.*/!#
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 1.3.3 Reject with invalid token –––
 EXPECTED per spec: Access denied error
@@ -46,9 +46,9 @@ EXPECTED per spec: New token works, previous token is invalidated
 TOK1=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 TOK2=$(curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 [ "$TOK1" != "$TOK2" ] && echo "tokens differ"
-curl -s -H "Authorization: Bearer $TOK1" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
-curl -s -H "Authorization: Bearer $TOK2" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+curl -s -H "Authorization: Bearer $TOK1" -X POST http://127.0.0.1:9308/token -d "{}"
+curl -s -H "Authorization: Bearer $TOK2" -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
 tokens differ
 #!/\{"error":"Access denied for token '.*'"\}/!#
-#!/.*\"test\":1.*/!#
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#

@@ -63,4 +63,4 @@ MYSQL_PWD=repluserpass mysql -E -urepluser -h0 -P9306 -e "SHOW STATUS LIKE 'clus
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_name
- Value: testcluster
+#!/\s*Value: testcluster/!#

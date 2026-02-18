@@ -16,9 +16,9 @@ EXPECTED per spec: 200 OK with JSON result
 ACTUAL: Implemented — request succeeds
 ––– comment –––
 ––– input –––
-curl -s -u admin:adminpass http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
+curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
 ––– output –––
-#!/.*\"test\":1.*/!#
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 1.2.2 Reject with wrong password –––
 EXPECTED per spec: Access denied error

@@ -54,8 +54,8 @@ EXPECTED per spec: New token each time, old token invalidated
 ACTUAL: Implemented — old token denied, new token accepted
 ––– comment –––
 ––– input –––
-TOK1=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
-TOK2=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
+TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}' | tr -d '\r\n')
+TOK2=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}' | tr -d '\r\n')
 [ "$TOK1" != "$TOK2" ] && echo "tokens differ"
 curl -s -H "Authorization: Bearer $TOK1" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
 curl -s -H "Authorization: Bearer $TOK2" http://127.0.0.1:9308/sql -d "query=SELECT 1 AS test"
@@ -109,8 +109,8 @@ username: tokenuser
 ––– comment –––
 ––– 2.4.8 Repeated TOKEN returns different token (implemented path) –––
 ––– input –––
-TOK1=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
-TOK2=$(MYSQL_PWD=adminpass mysql -N -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}')
+TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}' | tr -d '\r\n')
+TOK2=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | awk '{print $2}' | tr -d '\r\n')
 [ "$TOK1" != "$TOK2" ] && echo "tokens differ"
 ––– output –––
 ––– comment –––

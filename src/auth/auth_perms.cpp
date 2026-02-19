@@ -57,7 +57,6 @@ bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphStri
 	if ( pPerms && pPerms->GetLength() && ProcessPerms ( pPerms, eAction, sTarget, bAllowEmpty ) )
 		return true;
 
-	sphLogDebug ( "Permission denied for user '%s', action(%s) to '%s'", sUser.cstr(), GetActionName ( eAction ), sTarget.scstr() ); // !COMMIT
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
 	AuthLog().AuthDenied ( sUser, session::szClientName(), eAction, sTarget );
 

@@ -69,10 +69,7 @@ void SetSessionAuth ( CSphVector<AgentConn_t *> & dRemotes )
 bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, ISphOutputBuffer & tOut )
 {
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, permission granted" );
 		return true;
-	}
 
 	CSphString sError;
 	if ( CheckPerms ( sUser, eAction, sTarget, false, sError ) )
@@ -85,10 +82,7 @@ bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphS
 bool ApiCheckClusterPerms ( const CSphString & sUser, ISphOutputBuffer & tOut )
 {
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, permission granted" );
 		return true;
-	}
 
 	CSphString sError;
 	if ( CheckPerms ( sUser, AuthAction_e::REPLICATION, CSphString(), true, sError ) )
@@ -199,10 +193,7 @@ bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn
 		return true;
 
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, access granted" );
 		return true;
-	}
 
 	const BYTE * pEncrypted = nullptr;
 	if ( !tIn.GetBytesZerocopy ( &pEncrypted, iReplySize ) )

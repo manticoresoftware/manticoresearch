@@ -176,10 +176,7 @@ static bool CheckAuthBearer ( const Str_t & sToken, HttpProcessResult_t & tRes, 
 bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
 {
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, access granted" );
 		return true;
-	}
 
 	const CSphString * pSrcAuth = hOptions ( "authorization" );
 	if ( !pSrcAuth )
@@ -229,10 +226,7 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 bool HttpCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, EHTTP_STATUS & eReplyHttpCode, CSphString & sError, CSphVector<BYTE> & dReply )
 {
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, permission granted" );
 		return true;
-	}
 
 	if ( CheckPerms ( sUser, eAction, sTarget, ( eAction==AuthAction_e::ADMIN ), sError ) )
 		return true;

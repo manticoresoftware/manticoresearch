@@ -54,10 +54,7 @@ MySQLAuth_t GetMySQLAuth()
 static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry, const VecTraits_T<BYTE> & dClientHash )
 {
 	const HASH20_t & tSha1 = tEntry.m_tPwdSha1;
-	sphLogDebug ( "sha1:(%d)0x%s", (int)tSha1.size(), BinToHex ( tSha1 ).cstr() );
-
 	HASH20_t tSha2 = CalcBinarySHA1 ( tSha1.data(), tSha1.size() );
-	sphLogDebug ( "sha2:(%d)0x%s", (int)tSha2.size(), BinToHex ( tSha2 ).cstr() );
 
 	SHA1_c tSaltSha2Calc;
 	tSaltSha2Calc.Init();
@@ -65,27 +62,17 @@ static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry,
 	tSaltSha2Calc.Update ( tSha2.data(), tSha2.size() );
 	HASH20_t tSha3 = tSaltSha2Calc.FinalHash();
 
-	sphLogDebug ( "sha3:(%d)0x%s", (int)tSha3.size(), BinToHex ( tSha3 ).cstr() );
-
 	CSphFixedVector<BYTE> dRes ( tSha1.size() );
 	Crypt ( dRes.Begin(), tSha3.data(), tSha1.data(), dRes.GetLength() );
 
-	sphLogDebug ( "buf:(%d)0x%s", (int)dRes.GetLength(), BinToHex ( dRes.Begin(), dRes.GetLength() ).cstr() );
-
 	int iCmp = memcmp ( dRes.Begin(), dClientHash.Begin(), Min ( dClientHash.GetLength(), dRes.GetLength() ) );
-	sphLogDebug ( "pwd:(%d) matched(%d):0x%s", dClientHash.GetLength(), iCmp, BinToHex ( dClientHash.Begin(), dClientHash.GetLength() ).cstr() );
 	return ( iCmp==0 );
 }
 
 bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecTraits_T<BYTE> & dClientHash, CSphString & sError )
 {
-	sphLogDebug ( "auth raw:(%d)0x%s", dClientHash.GetLength(), BinToHex ( dClientHash.Begin(), dClientHash.GetLength() ).cstr() );
-
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, user '%s' access granted", sUser.cstr() );
 		return true;
-	}
 
 	AuthUsersPtr_t pUsers = GetAuth();
 	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
@@ -114,16 +101,10 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	if ( !IsAuthEnabled() )
-	{
-		sphLogDebug ( "no users found in config, permission granted" );
 		return true;
-	}
 
 	if ( !dStmt.GetLength() )
-	{
-		sphLogDebug ( "empty statements, permission granted" );
 		return true;
-	}
 
 	const SqlStmt_t & tStmt = dStmt[0];
 

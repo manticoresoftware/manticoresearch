@@ -16,6 +16,7 @@ enum class EPARAM_TYPE : BYTE
 {
 	SINGLE,
 	VECTOR,
+	FVECTOR
 };
 
 struct tScanParam

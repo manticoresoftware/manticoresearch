@@ -1372,6 +1372,19 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 						dEscaped.AppendRawChunk ( dValue.m_dBytesVec );
 					}
 					break;
+				case EPARAM_TYPE::FVECTOR: // ?FVEC? placeholder. Consider real blob of floats (each float = 4 bytes of IEEE 754 float)
+					{
+						if ( dValue.m_dBytesVec.GetLength()%4 )
+						{
+							sError.SetSprintf ("blob, containing float vector should has size x4. Got %d", dValue.m_dBytesVec.GetLength() );
+							return false;
+						}
+						const int64_t iSize = dValue.m_dBytesVec.GetLength() / sizeof (float);
+						const VecTraits_T<const float> dfValues { reinterpret_cast<const float *> (dValue.m_dBytesVec.begin()), iSize };
+						dEscaped.StartBlock ();
+						dfValues.for_each ([&dEscaped] (const auto &fValue) {dEscaped << fValue;});
+						dEscaped.FinishBlock ();
+					}
 				}
 				dEscaped.MoveTo ( dValue.m_sValue );
 //				sphWarning ("param %d, eLONG_BLOB %s", i, dValue.m_sValue.cstr() );

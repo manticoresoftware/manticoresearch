@@ -84,6 +84,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 
 "?"                 { STORE_BOUNDS; lvalp->m_eType = EPARAM_TYPE::SINGLE; pParser->AddParam(*lvalp); }
 "?VEC?"             { STORE_BOUNDS; lvalp->m_eType = EPARAM_TYPE::VECTOR; pParser->AddParam(*lvalp); }
+"?FVEC?"             { STORE_BOUNDS; lvalp->m_eType = EPARAM_TYPE::FVECTOR; pParser->AddParam(*lvalp); }
 
 {SPACE}+
 .					{  return yytext[0]; }

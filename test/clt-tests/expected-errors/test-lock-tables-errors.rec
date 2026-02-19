@@ -1,0 +1,219 @@
+# Negative tests for LOCK TABLES and UNLOCK TABLES
+# Validates error handling for incorrect usage and lock violations
+# Issue: https://github.com/manticoresoftware/manticoresearch/issues/3047
+
+––– block: ../base/start-searchd –––
+––– comment –––
+Create test table for error validation
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_locks; CREATE TABLE test_locks (id BIGINT, title TEXT);"
+––– output –––
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (1, 'test');"
+––– output –––
+––– comment –––
+Error: Lock non-existent table
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES nonexistent_table READ;"
+––– output –––
+ERROR 1064 (42000) at line 1: Table nonexistent_table absent, or not suitable for lock
+––– comment –––
+Error: Invalid lock mode
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks INVALID_MODE;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks INVALID_MODE'
+––– comment –––
+Error: LOCK TABLES without table name
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES'
+––– comment –––
+Error: UNLOCK TABLES with table name (incorrect syntax)
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES test_locks;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'UNLOCK TABLES test_locks'
+––– comment –––
+Error: Wrong command (LOCK TABLE instead of LOCK TABLES)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLE test_locks READ;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLE test_locks READ'
+––– comment –––
+Error: Cannot specify both READ and WRITE
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ WRITE;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks READ WRITE'
+––– comment –––
+Error: LOCK TABLES without READ or WRITE mode
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks;"
+––– output –––
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'LOCK TABLES test_locks'
+––– comment –––
+DROP TABLE with READ lock is allowed (intentional, differs from MySQL)
+READ lock only blocks data modifications (INSERT/UPDATE/DELETE), not DDL operations
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; DROP TABLE test_locks;"
+––– output –––
+––– comment –––
+Recreate table after DROP
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_locks (id BIGINT, title TEXT); INSERT INTO test_locks VALUES (1, 'test');"
+––– output –––
+––– comment –––
+Error: Try to INSERT into READ-locked table
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; INSERT INTO test_locks VALUES (2, 'forbidden');"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'test_locks' is locked
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Cross-session INSERT: Session 1 locks, Session 2 tries INSERT (blocked)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'from_another_session');" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table 'test_locks' is locked
+––– comment –––
+Wait for background session to complete and verify table state unchanged
+––– input –––
+sleep 5; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– comment –––
+After session 1 closed, lock is released - modifications from session 2 should succeed
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_locks VALUES (2, 'session_2_after_lock_released');"
+––– output –––
+––– comment –––
+Verify the insert succeeded
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_locks;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+––– comment –––
+Cleanup - delete the inserted row for next tests
+––– input –––
+mysql -h0 -P9306 -e "DELETE FROM test_locks WHERE id = 2;"
+––– output –––
+––– comment –––
+Cross-session UPDATE: Session 1 locks, Session 2 tries UPDATE (blocked)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "UPDATE test_locks SET title = 'blocked' WHERE id = 1;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_locks: table is locked
+––– comment –––
+Wait for background session to complete
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Cross-session DELETE: Session 1 locks, Session 2 tries DELETE (blocked)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "DELETE FROM test_locks WHERE id = 1;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table test_locks: table is locked
+––– comment –––
+Wait for background session to complete
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Error: Try to UPDATE READ-locked table (same session test)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; UPDATE test_locks SET title = 'new' WHERE id = 1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table test_locks: table is locked
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Error: Try to DELETE from READ-locked table (same session test)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; DELETE FROM test_locks WHERE id = 1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table test_locks: table is locked
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Cross-session DROP TABLE: Session 1 locks, Session 2 drops (allowed - DDL not blocked)
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; debug sleep 5" > /dev/null 2>&1 & sleep 1; mysql -h0 -P9306 -e "DROP TABLE test_locks;" 2>&1 && echo "DROP succeeded from another session"
+––– output –––
+DROP succeeded from another session
+––– comment –––
+Wait for background session to complete
+––– input –––
+sleep 4
+––– output –––
+––– comment –––
+Recreate table for remaining tests
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_locks (id BIGINT, title TEXT); INSERT INTO test_locks VALUES (1, 'test');"
+––– output –––
+––– comment –––
+Create second table for lock scope testing
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS other_table; CREATE TABLE other_table (id BIGINT);"
+––– output –––
+––– comment –––
+Manticore allows accessing unlocked tables even when other tables are locked
+This differs from MySQL behavior
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks READ; SELECT * FROM other_table;"
+––– output –––
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Manticore allows accessing unlocked tables even with WRITE lock on another table
+––– input –––
+mysql -h0 -P9306 -e "LOCK TABLES test_locks WRITE; SELECT * FROM other_table;"
+––– output –––
+––– comment –––
+Release lock
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Manticore allows CREATE TABLE even while locks are active
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+LOCK TABLES test_locks READ;
+CREATE TABLE new_table (id BIGINT);
+EOF
+––– output –––
+––– comment –––
+Release any remaining locks
+––– input –––
+mysql -h0 -P9306 -e "UNLOCK TABLES;"
+––– output –––
+––– comment –––
+Cleanup test tables
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_locks; DROP TABLE IF EXISTS other_table; DROP TABLE IF EXISTS new_table;"
+––– output –––

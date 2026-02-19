@@ -1348,25 +1348,31 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 
 		case MYSQL_TYPE::eLONG_BLOB:
 			{
-				if ( tStmt.dParamsPositions[i].eType != EPARAM_TYPE::SINGLE )
+				switch (tStmt.dParamsPositions[i].eType)
 				{
-					// we need extra 2 bytes after the end - for flex work
-					const auto uSize = dValue.m_dBytesVec.GetLength();
-					if ( dValue.m_dBytesVec.GetLimit() < uSize+2)
-					{
-						dValue.m_dBytesVec.AddN(2);
-						dValue.m_dBytesVec.Resize(uSize);
-					}
-
-					if (!ValidateVector ( dValue.m_dBytesVec, sError ))
-					{
-//						sphWarning ("%s in param %s", sError.cstr(), dValue.m_dBytesVec.begin());
-						return false;
-					}
-					// validated content - only numbers, comma, spaces. Nothing to escape, no need to enclose in quotes
-					dEscaped.AppendRawChunk ( dValue.m_dBytesVec );
-				} else
+				case EPARAM_TYPE::SINGLE: // ? placeholder. Consider string
 					dEscaped.AppendEscapedSkippingComma ( (const char*)dValue.m_dBytesVec.begin(), dValue.m_dBytesVec.GetLength());
+					break;
+				case EPARAM_TYPE::VECTOR: // ?VEC? placeholder. Consider string, containing list of numbers (integers, or floats. Need to validate!)
+					{
+						// we need extra 2 bytes after the end - for flex work
+						const auto uSize = dValue.m_dBytesVec.GetLength();
+						if ( dValue.m_dBytesVec.GetLimit() < uSize+2)
+						{
+							dValue.m_dBytesVec.AddN(2);
+							dValue.m_dBytesVec.Resize(uSize);
+						}
+
+						if (!ValidateVector ( dValue.m_dBytesVec, sError ))
+						{
+//						sphWarning ("%s in param %s", sError.cstr(), dValue.m_dBytesVec.begin());
+							return false;
+						}
+						// validated content - only numbers, comma, spaces. Nothing to escape, no need to enclose in quotes
+						dEscaped.AppendRawChunk ( dValue.m_dBytesVec );
+					}
+					break;
+				}
 				dEscaped.MoveTo ( dValue.m_sValue );
 //				sphWarning ("param %d, eLONG_BLOB %s", i, dValue.m_sValue.cstr() );
 				break;

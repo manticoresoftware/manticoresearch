@@ -9,7 +9,7 @@ printf 'user\npassword\npassword\n' | searchd --auth >/dev/null 2>&1
 ––– input –––
 mysql -h0 -P9306 -e "select 1"
 ––– output –––
-ERROR 1045 (08S01): Access denied for user 'root' (using password: NO)
+ERROR 1045 (42000): Access denied for user 'root' (using password: NO)
 ––– input –––
 mysql -h0 -P9306 -N -e "select 1" -uuser -ppassword
 ––– output –––

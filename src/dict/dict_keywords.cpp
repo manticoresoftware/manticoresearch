@@ -454,7 +454,7 @@ void CSphDictKeywords::DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntr
 	tEntry.m_iDocs = dBin.UnzipInt();
 	tEntry.m_iHits = dBin.UnzipInt();
 	tEntry.m_uHint = (BYTE)dBin.ReadByte();
-	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
+	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		tEntry.m_iSkiplistPos = dBin.UnzipOffset();
 	else
 		tEntry.m_iSkiplistPos = 0;
@@ -608,7 +608,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 		m_wrDict.ZipInt ( tWord.m_iHits );
 		if ( tWord.m_uHint )
 			m_wrDict.PutByte ( tWord.m_uHint );
-		if ( tWord.m_iDocs > m_iSkiplistBlockSize )
+		if ( ( tWord.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 			m_wrDict.ZipOffset ( tWord.m_iSkiplistPos );
 
 		// build infixes
@@ -736,8 +736,8 @@ void CSphDictKeywords::DictFlush()
 		m_wrTmpDict.ZipInt ( pWord->m_iDocs );
 		m_wrTmpDict.ZipInt ( pWord->m_iHits );
 		m_wrTmpDict.PutByte ( pWord->m_uHint );
-		assert ( ( pWord->m_iDocs > m_iSkiplistBlockSize ) == ( pWord->m_iSkiplistPos != 0 ) );
-		if ( pWord->m_iDocs > m_iSkiplistBlockSize )
+		assert ( ( ( pWord->m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize ) == ( pWord->m_iSkiplistPos != 0 ) );
+		if ( ( pWord->m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 			m_wrTmpDict.ZipOffset ( pWord->m_iSkiplistPos );
 	}
 
@@ -798,10 +798,10 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 	m_wrDict.ZipOffset ( tEntry.m_iDoclistOffset );
 	m_wrDict.ZipInt ( tEntry.m_iDocs );
 	m_wrDict.ZipInt ( tEntry.m_iHits );
-	auto uHint = sphDoclistHintPack ( tEntry.m_iDocs, tEntry.m_iDoclistLength );
+	auto uHint = sphDoclistHintPack ( tEntry.m_iDocs & HITLESS_DOC_MASK, tEntry.m_iDoclistLength );
 	if ( uHint )
 		m_wrDict.PutByte ( uHint );
-	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
+	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
 
 	// build infixes
@@ -860,9 +860,9 @@ void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )
 	pWord->m_uOff = tEntry.m_iDoclistOffset;
 	pWord->m_iDocs = tEntry.m_iDocs;
 	pWord->m_iHits = tEntry.m_iHits;
-	pWord->m_uHint = sphDoclistHintPack ( tEntry.m_iDocs, tEntry.m_iDoclistLength );
+	pWord->m_uHint = sphDoclistHintPack ( tEntry.m_iDocs & HITLESS_DOC_MASK, tEntry.m_iDoclistLength );
 	pWord->m_iSkiplistPos = 0;
-	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
+	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		pWord->m_iSkiplistPos = tEntry.m_iSkiplistOffset;
 }
 

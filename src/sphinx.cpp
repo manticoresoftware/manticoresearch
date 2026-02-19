@@ -3675,7 +3675,7 @@ void CSphHitBuilder::DoclistEndList ()
 	// emit skiplist
 	// OPTIMIZE? placing it after doclist means an extra seek on searching
 	// however placing it before means some (longer) doclist data moves while indexing
-	if ( m_tWord.m_iDocs>m_iSkiplistBlockSize )
+	if ( ( m_tWord.m_iDocs & HITLESS_DOC_MASK )>m_iSkiplistBlockSize )
 	{
 		assert ( m_dSkiplist.GetLength() );
 		assert ( m_dSkiplist[0].m_iOffset==m_tWord.m_iDoclistOffset );
@@ -6260,6 +6260,7 @@ public:
 
 private:
 	ESphHitless		m_eHitless { SPH_HITLESS_NONE };
+	bool			m_bLegacyHitlessSkipPointers = false;
 	CSphAutoreader	m_tMyReader;
 	CSphReader *	m_pReader = nullptr;
 	SphOffset_t		m_iMaxPos = 0;
@@ -6274,22 +6275,23 @@ public:
 		m_sWord[0] = '\0';
 	}
 
-	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless, CSphString & sError )
+	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless, bool bLegacyHitlessSkipPointers, CSphString & sError )
 	{
 		if ( !m_tMyReader.Open ( sFilename, sError ) )
 			return false;
 
-		Setup ( &m_tMyReader, iMaxPos, eHitless );
+		Setup ( &m_tMyReader, iMaxPos, eHitless, bLegacyHitlessSkipPointers );
 		return true;
 	}
 
-	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless )
+	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless, bool bLegacyHitlessSkipPointers )
 	{
 		m_pReader = pReader;
 		m_pReader->SeekTo ( 1, READ_NO_SIZE_HINT );
 
 		m_iMaxPos = iMaxPos;
 		m_eHitless = eHitless;
+		m_bLegacyHitlessSkipPointers = bLegacyHitlessSkipPointers;
 		m_sWord[0] = '\0';
 		m_iCheckpoint = 1;
 	}
@@ -6349,10 +6351,11 @@ public:
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
 			m_iHint = 0;
-			if ( m_iDocs>=DOCLIST_HINT_THRESH )
-				m_iHint = m_pReader->GetByte();
-			if ( m_iDocs > m_iSkiplistBlockSize )
-				m_pReader->UnzipInt();
+				int iLayoutDocs = m_bLegacyHitlessSkipPointers ? m_iDocs : ( m_iDocs & HITLESS_DOC_MASK );
+				if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
+					m_iHint = m_pReader->GetByte();
+				if ( iLayoutDocs>m_iSkiplistBlockSize )
+					m_pReader->UnzipInt();
 
 			m_uWordID = (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
 
@@ -6362,8 +6365,9 @@ public:
 			m_iDoclistOffset += m_pReader->UnzipOffset();
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
-			if ( m_iDocs > m_iSkiplistBlockSize )
-				m_pReader->UnzipOffset();
+				const int iLayoutDocs = m_bLegacyHitlessSkipPointers ? m_iDocs : ( m_iDocs & HITLESS_DOC_MASK );
+				if ( iLayoutDocs>m_iSkiplistBlockSize )
+					m_pReader->UnzipOffset();
 		}
 
 		m_bHasHitlist =
@@ -6540,9 +6544,9 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	/// compress means: I don't want true merge, I just want to apply deadrows and filter
 	bool bCompress = pDstIndex==pSrcIndex;
 
-	if ( !tDstReader.Setup ( pDstIndex->GetFilename ( SPH_EXT_SPI ), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, sError ) )
+	if ( !tDstReader.Setup ( pDstIndex->GetFilename ( SPH_EXT_SPI ), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, pDstIndex->m_uVersion<68, sError ) )
 		return false;
-	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetFilename ( SPH_EXT_SPI ), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError ) )
+	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetFilename ( SPH_EXT_SPI ), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, pSrcIndex->m_uVersion<68, sError ) )
 		return false;
 
 	/// prepare for indexing
@@ -6963,7 +6967,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	pHitBuilder->CreateIndexFiles ( pIndex->GetTmpFilename ( SPH_EXT_SPD ), pIndex->GetTmpFilename ( SPH_EXT_SPP ), pIndex->GetTmpFilename ( SPH_EXT_SPE ), false, 0, tDummy );
 
 	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize );
-	if ( !tWordsReader.Setup ( pIndex->GetFilename ( SPH_EXT_SPI ), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
+	if ( !tWordsReader.Setup ( pIndex->GetFilename ( SPH_EXT_SPI ), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, pIndex->m_uVersion<68, sError ) )
 		return false;
 
 	/// prepare for indexing
@@ -8562,7 +8566,7 @@ bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, 
 	assert ( pBuf );
 	assert ( m_iSkiplistBlockSize>0 );
 
-	KeywordsBlockReader_c tCtx ( pBuf, m_iSkiplistBlockSize );
+	KeywordsBlockReader_c tCtx ( pBuf, m_iSkiplistBlockSize, pIndex->m_tWordlist.HasLegacyHitlessSkiplistLayout() );
 	while ( tCtx.UnpackWord() )
 	{
 		// block is sorted
@@ -8639,9 +8643,9 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 		// read in skiplist
 		// OPTIMIZE? maybe add an option to decompress on preload instead?
-		if ( m_pSkips && tRes.m_iDocs>m_iSkiplistBlockSize )
+		if ( m_pSkips && ( tRes.m_iDocs & HITLESS_DOC_MASK )>m_iSkiplistBlockSize )
 		{
-			int iSkips = tRes.m_iDocs/m_iSkiplistBlockSize;
+			int iSkips = ( tRes.m_iDocs & HITLESS_DOC_MASK )/m_iSkiplistBlockSize;
 			const int SMALL_SKIP_THRESH = 256;
 			bool bNeedCache = iSkips > SMALL_SKIP_THRESH;
 
@@ -9308,7 +9312,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 	m_tWordlist.DebugPopulateCheckpoints();
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{
-		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ), m_tSettings.m_iSkiplistBlockSize );
+		KeywordsBlockReader_c tCtx ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ), m_tSettings.m_iSkiplistBlockSize, m_tWordlist.HasLegacyHitlessSkiplistLayout() );
 		while ( tCtx.UnpackWord() )
 			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", tCtx.GetWord(), tCtx.m_iDocs, tCtx.m_iHits, int64_t(tCtx.m_iDoclistOffset) );
 	}
@@ -9350,7 +9354,7 @@ bool CSphIndex_VLN::PreallocWordlist()
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
+	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_uVersion, bWordDict, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
 		return false;
 
 	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=18 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
@@ -9727,7 +9731,7 @@ void CSphIndex_VLN::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & 
 		return;
 
 	assert ( !tRes.m_pWordReader );
-	tRes.m_pWordReader = new KeywordsBlockReader_c ( m_tWordlist.m_tBuf.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize );
+	tRes.m_pWordReader = new KeywordsBlockReader_c ( m_tWordlist.m_tBuf.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize, m_tWordlist.HasLegacyHitlessSkiplistLayout() );
 	tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 
 	sphGetSuggest ( &m_tWordlist, m_tWordlist.m_iInfixCodepointBytes, tArgs, tRes );

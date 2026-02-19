@@ -109,7 +109,7 @@ public:
 										~CWordlist () override;
 
 	void								Reset();
-	bool								Preread ( const CSphString & sName, bool bWordDict, int iSkiplistBlockSize, CSphString & sError );
+	bool								Preread ( const CSphString & sName, DWORD uVersion, bool bWordDict, int iSkiplistBlockSize, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpointCrc ( SphWordID_t iWordID ) const;
 	const CSphWordlistCheckpoint *		FindCheckpointWrd ( const char * sWord, int iWordLen, bool bStarMode ) const;
@@ -124,6 +124,7 @@ public:
 	void								SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const override;
 	bool								ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const override;
 	SphOffset_t							GetWordsEnd() const { return m_iWordsEnd; }
+	bool								HasLegacyHitlessSkiplistLayout() const { return m_bLegacyHitlessSkiplistLayout; }
 
 	void								DebugPopulateCheckpoints();
 
@@ -133,9 +134,11 @@ private:
 	CSphFixedVector<BYTE>				m_pWords {0};			///< arena for checkpoint's words
 	BYTE *								m_pInfixBlocksWords = nullptr;	///< arena for infix checkpoint's words
 	int									m_iSkiplistBlockSize {0};
+	bool								m_bLegacyHitlessSkiplistLayout {false};
 
 	SphOffset_t							m_iWordsEnd = 0;		///< end of wordlist
 	CheckpointReader_c *				m_pCpReader = nullptr;
+
 };
 
 
@@ -143,7 +146,7 @@ private:
 class KeywordsBlockReader_c : public DictEntry_t
 {
 public:
-					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize );
+					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bLegacyHitlessSkipPointers = false );
 
 	void			Reset ( const BYTE * pBuf );
 	bool			UnpackWord();
@@ -157,6 +160,7 @@ private:
 	int				m_iLen;
 	BYTE			m_uHint = 0;
 	int				m_iSkiplistBlockSize = 0;
+	bool			m_bLegacyHitlessSkipPointers = false;
 };
 
 // header of a disk index or chunk

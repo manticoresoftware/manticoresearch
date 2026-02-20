@@ -562,6 +562,7 @@ sequenceDiagram
 6.  **Confirmation:** The bootstrap process waits for a confirmation reply from the daemon and informs the user whether the new authentication settings were successfully loaded.
 
 This one-time procedure is the only supported method for creating the first user, ensuring the system is immediately secured.
+For SQL-level semantics of `RELOAD AUTH`, see **SQL Commands for Authentication and Authorization**, command **Reload Authentication Data**.
 
 #### Non-Interactive Bootstrap (`--auth-non-interactive`)
 
@@ -861,6 +862,23 @@ Displays the securely hashed bearer token (`bearer_sha256`) for a specified user
      +----------+------------------------------------------------------------------+
      | admin    | 27f955c72fa08387001c6cb5f83985d7baf002e632e60cdbd0b1985136a366c1 |
      +----------+------------------------------------------------------------------+
+
+13. **Reload Authentication Data**
+Reloads authentication users and permissions from the configured authentication storage.
+   - **SQL Command:**
+     ```sql
+     RELOAD AUTH;
+     ```
+   - **Permissions:**
+     - Requires `admin` permission.
+   - **Behavior:**
+     - Reloads auth data from configured storage (`auth.json` or configured auth file path).
+     - Returns success when data is valid and reload is applied.
+     - Returns an error when auth storage cannot be parsed or validated.
+   - **Mode Notes:**
+     - Supported in both **plain mode** and **RT mode**.
+     - Primary practical use-case is **plain mode**, where auth storage may be updated out-of-band and must be reloaded into daemon memory.
+     - In **RT mode**, SQL auth commands usually apply changes immediately; `RELOAD AUTH` is mostly an operational/maintenance command.
 
 **Notes on `ADMIN` Action**
 

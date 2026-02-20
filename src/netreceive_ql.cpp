@@ -1461,6 +1461,8 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 	if ( uCopied < uQLen )
 		tBuilder.Append ( pQuery, uQLen-uCopied );
 	tBuilder.Add('\0');
+	tBuilder.Add('\0'); // two zero bytes, because bison parser needs it.
+	tBuilder.Resize(tBuilder.GetLength()-2);
 
 	// Execute the query using the same mechanism as COM_QUERY
 	SqlBinaryRowBuffer_c tRows ( &uPacketID, &tOut ); // stub! Should be binary!

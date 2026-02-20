@@ -24,10 +24,15 @@
 
 constexpr int g_iSignalTimeoutUs = 3000000; // default timeout on daemon auth rotation is 3 seconds
 
-static CSphString ReadLine()
+static bool IsConsoleInput()
+{
+	return isatty ( STDIN_FILENO ) && isatty ( STDOUT_FILENO );
+}
+
+static bool ReadLine ( CSphString & sOut )
 {
 	CSphVector<char> dBuf;
-	char iCh;
+	char iCh = 0;
 
 	auto fnReadChar = [&iCh]() {
 #ifdef _WIN32
@@ -37,23 +42,54 @@ static CSphString ReadLine()
 #endif
 	};
 
-	while ( fnReadChar()>0 && iCh != '\n' && iCh != '\r' )
-		dBuf.Add ( iCh );
+	while ( true )
+	{
+		int iRead = fnReadChar();
+		if ( iRead<=0 )
+		{
+			sOut = CSphString { dBuf };
+			return !dBuf.IsEmpty();
+		}
 
-	return CSphString { dBuf };
+		if ( iCh == '\n' || iCh == '\r' )
+			break;
+
+		dBuf.Add ( iCh );
+	}
+
+	sOut = CSphString { dBuf };
+	return true;
 }
 
-static CSphString ReadPassword()
+static bool ReadPassword ( bool bInteractive, CSphString & sOut, CSphString & sError )
 {
+	if ( !bInteractive )
+	{
+		if ( !ReadLine ( sOut ) )
+		{
+			sError = "unexpected end of input while reading password";
+			return false;
+		}
+		return true;
+	}
+
 	CSphVector<char> dBuf;
 
 #ifndef _WIN32
 	// set up the terminal to disable character echoing.
 	termios tOldT;
-	tcgetattr ( STDIN_FILENO, &tOldT );
+	if ( tcgetattr ( STDIN_FILENO, &tOldT )!=0 )
+	{
+		sError.SetSprintf ( "failed to read terminal settings: %s", strerror(errno) );
+		return false;
+	}
 	termios tNewT = tOldT;
 	tNewT.c_lflag &= ~ECHO; // disable echoing
-	tcsetattr ( STDIN_FILENO, TCSANOW, &tNewT );
+	if ( tcsetattr ( STDIN_FILENO, TCSANOW, &tNewT )!=0 )
+	{
+		sError.SetSprintf ( "failed to update terminal settings: %s", strerror(errno) );
+		return false;
+	}
 #endif
 
 	auto fnReadChar = []() {
@@ -61,14 +97,27 @@ static CSphString ReadPassword()
 		return _getch();
 #else
 		char iCh;
-		::read ( STDIN_FILENO, &iCh, 1 );
-		return iCh;
+		return ::read ( STDIN_FILENO, &iCh, 1 )>0 ? iCh : -1;
 #endif
 	};
 
 	char iCh;
-	while ( ( iCh = fnReadChar() )!='\n' && iCh != '\r' )
+	while ( true )
 	{
+		int iRead = fnReadChar();
+		if ( iRead<0 )
+		{
+#ifndef _WIN32
+			tcsetattr ( STDIN_FILENO, TCSANOW, &tOldT );
+#endif
+			sError = "unexpected end of input while reading password";
+			return false;
+		}
+
+		iCh = (char)iRead;
+		if ( iCh=='\n' || iCh == '\r' )
+			break;
+
 		// Handle backspace (127 for Linux/macOS)
 		if ( iCh == '\b' || iCh == 127 )
 		{ 
@@ -86,20 +135,67 @@ static CSphString ReadPassword()
 
 #ifndef _WIN32
 	// restore original terminal
-	tcsetattr ( STDIN_FILENO, TCSANOW, &tOldT );
+	if ( tcsetattr ( STDIN_FILENO, TCSANOW, &tOldT )!=0 )
+	{
+		sError.SetSprintf ( "failed to restore terminal settings: %s", strerror(errno) );
+		return false;
+	}
 #endif
 
 	fprintf ( stdout, "\n" ); // print newline after password entry
-	return CSphString { dBuf };
+	sOut = CSphString { dBuf };
+	return true;
 }
 
-static std::tuple<CSphString, CSphString> ReadUserCred ( PasswordPolicy_e ePolicy, int iMinLen )
+static bool ReadUserCredNonInteractive ( PasswordPolicy_e ePolicy, int iMinLen, CSphString & sLogin, CSphString & sPwd, CSphString & sError )
 {
-	CSphString sLogin;
+	if ( !ReadLine ( sLogin ) )
+	{
+		sError = "unexpected end of input while reading administrator login";
+		return false;
+	}
+	sLogin.Trim();
+	if ( sLogin.IsEmpty() )
+	{
+		sError = "login is empty";
+		return false;
+	}
+
+	if ( !ReadPassword ( false, sPwd, sError ) )
+		return false;
+	sPwd.Trim();
+
+	CSphString sValidationError;
+	if ( !ValidatePassword ( sPwd, ePolicy, iMinLen, sValidationError ) )
+	{
+		sError = sValidationError;
+		return false;
+	}
+
+	CSphString sPwdRe;
+	if ( !ReadPassword ( false, sPwdRe, sError ) )
+		return false;
+	sPwdRe.Trim();
+
+	if ( sPwd!=sPwdRe )
+	{
+		sError = "passwords do not match";
+		return false;
+	}
+
+	return true;
+}
+
+static bool ReadUserCred ( PasswordPolicy_e ePolicy, int iMinLen, CSphString & sLogin, CSphString & sPwd, CSphString & sError )
+{
 	while ( true )
 	{
 		fprintf ( stdout, "Enter a new administrator login:\n" );
-		sLogin = ReadLine();
+		if ( !ReadLine ( sLogin ) )
+		{
+			sError = "unexpected end of input while reading administrator login";
+			return false;
+		}
 		sLogin.Trim();
 		if ( sLogin.IsEmpty() )
 			fprintf ( stdout, "error: login is empty, please try again\n" );
@@ -111,7 +207,8 @@ static std::tuple<CSphString, CSphString> ReadUserCred ( PasswordPolicy_e ePolic
 	{
 		// first pwd entry
 		fprintf ( stdout, "Enter password:\n" );
-		CSphString sPwd = ReadPassword();
+		if ( !ReadPassword ( true, sPwd, sError ) )
+			return false;
 		sPwd.Trim();
 		CSphString sValidationError;
 		if ( !ValidatePassword ( sPwd, ePolicy, iMinLen, sValidationError ) )
@@ -122,17 +219,22 @@ static std::tuple<CSphString, CSphString> ReadUserCred ( PasswordPolicy_e ePolic
 
 		// pwd confirmation
 		fprintf ( stdout, "Re-enter password to confirm:\n" );
-		CSphString sPwdRe = ReadPassword();
+		CSphString sPwdRe;
+		if ( !ReadPassword ( true, sPwdRe, sError ) )
+			return false;
+		sPwdRe.Trim();
 
 		if ( sPwd==sPwdRe )
 		{
 			fprintf ( stdout, "passwords match, proceeding with authentication setup...\n" );
-			return std::make_tuple ( sLogin, sPwd );
+			return true;
 		} else
 		{
 			fprintf ( stdout, "error: passwords do not match, please try again\n" );
 		}
 	}
+
+	return false;
 }
 
 static bool CheckAuthFile ( const CSphString & sFile, CSphString & sError )
@@ -200,7 +302,7 @@ static bool CheckAuthFile ( const CSphString & sFile, CSphString & sError )
 	return false;
 }
 
-int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath )
+int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath, bool bForceNonInteractive )
 {
 	PasswordPolicy_e ePolicy = ParsePasswordPolicy ( hSearchd );
 	int iMinLen = GetPasswordMinLength ( hSearchd );
@@ -231,7 +333,13 @@ int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConf
 	if ( !CheckAuthFile ( sAuthFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
-	auto [ sLogin, sPwd ] = ReadUserCred ( ePolicy, iMinLen );
+	CSphString sLogin, sPwd;
+	bool bNonInteractive = bForceNonInteractive || !IsConsoleInput();
+	bool bOk = bNonInteractive
+		? ReadUserCredNonInteractive ( ePolicy, iMinLen, sLogin, sPwd, sError )
+		: ReadUserCred ( ePolicy, iMinLen, sLogin, sPwd, sError );
+	if ( !bOk )
+		sphFatal ( "failed to read bootstrap credentials: %s", sError.cstr() );
 
 	AuthUserCred_t tEntry;
 	// username

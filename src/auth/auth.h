@@ -36,4 +36,4 @@ bool InsertAuthDocuments ( const RtAccum_t & tAccum, CSphString & sError );
 bool UserSetPassword ( const CSphString & sTargetUser, const CSphString & sPassword,CSphString & sError );
 bool UserCreateToken ( const CSphString & sTargetUser, CSphString & sToken, CSphString & sError );
 
-int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath );
+int AuthBootstrap ( const CSphConfigSection & hSearchd, const CSphString & sConfigFilePath, bool bForceNonInteractive );

@@ -9,11 +9,11 @@ grep -q '^[[:space:]]*auth[[:space:]]*=' /etc/manticoresearch/manticore.conf || 
 Bootstrap preconditions ready
 ––– block: ../base/start-searchd –––
 ––– comment –––
-––– 8.1.1 Bootstrap creates initial admin interactively –––
-EXPECTED: Interactive flow succeeds and reloads auth
+––– 8.1.1 Bootstrap creates initial admin in non-interactive mode –––
+EXPECTED: Non-interactive flow succeeds and reloads auth
 ––– comment –––
 ––– input –––
-printf 'admin\nadminpass\nadminpass\n' | searchd --auth 2>&1 | grep -q "authentication settings successfully created and reloaded" && echo "bootstrap ok"
+printf 'admin\nadminpass\nadminpass\n' | searchd --auth-non-interactive 2>&1 | grep -q "authentication settings successfully created and reloaded" && echo "bootstrap ok"
 ––– output –––
 bootstrap ok
 ––– comment –––
@@ -33,10 +33,10 @@ True
 EXPECTED: Admin credentials work after bootstrap and reload
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS \`1\`;"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS test;"
 ––– output –––
 *************************** 1. row ***************************
-1: 1
+test: 1
 ––– comment –––
 ––– 8.1.4 --auth is documented in --help –––
 EXPECTED: --help includes --auth option

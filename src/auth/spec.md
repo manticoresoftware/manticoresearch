@@ -22,11 +22,10 @@
 9. Configuration
    - Password Policy Model
 10. SQL Commands for Authentication and Authorization (RT Mode)
-11. DUMP AUTH SQL Command
-12. Authentication and Authorization in Replication Clusters
-13. Manticore Buddy Authentication and Authorization
-14. Logging
-15. Clients
+11. Authentication and Authorization in Replication Clusters
+12. Manticore Buddy Authentication and Authorization
+13. Logging
+14. Clients
 
 
 ### Overview
@@ -563,6 +562,49 @@ sequenceDiagram
 6.  **Confirmation:** The bootstrap process waits for a confirmation reply from the daemon and informs the user whether the new authentication settings were successfully loaded.
 
 This one-time procedure is the only supported method for creating the first user, ensuring the system is immediately secured.
+
+#### Non-Interactive Bootstrap (`--auth-non-interactive`)
+
+For automation (CI/CD, containers, init jobs), `searchd` also supports non-interactive bootstrap mode:
+
+```bash
+searchd -c /etc/manticoresearch/manticore.conf --auth-non-interactive
+```
+
+In this mode, credentials are read from standard input as 3 lines:
+1. administrator login
+2. password
+3. password confirmation
+
+Example:
+```bash
+printf 'admin\nStrongPass#2026\nStrongPass#2026\n' | searchd -c /etc/manticoresearch/manticore.conf --auth-non-interactive
+```
+
+Recommended for container builds: use Docker BuildKit secrets instead of inline literals.
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+RUN --mount=type=secret,id=auth_user \
+    --mount=type=secret,id=auth_pass \
+    sh -euc '\
+      searchd -c /etc/manticoresearch/manticore.conf; \
+      timeout 20 sh -c "until grep -q '\''accepting connections'\'' /var/log/manticore/searchd.log; do sleep 1; done"; \
+      { \
+        cat /run/secrets/auth_user; echo; \
+        cat /run/secrets/auth_pass; echo; \
+        cat /run/secrets/auth_pass; echo; \
+      } | searchd -c /etc/manticoresearch/manticore.conf --auth-non-interactive; \
+      searchd --stopwait -c /etc/manticoresearch/manticore.conf; \
+    '
+```
+
+Build command:
+```bash
+DOCKER_BUILDKIT=1 docker build \
+  --secret id=auth_user,src=./auth_user.txt \
+  --secret id=auth_pass,src=./auth_pass.txt .
+```
 
 ### Ongoing User and Permission Management
 

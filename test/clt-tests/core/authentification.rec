@@ -3,7 +3,7 @@ sed -i 's/searchd {/searchd {\nauth = 1/g' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
-printf 'user\npassword\npassword\n' | searchd --auth >/dev/null 2>&1
+printf 'user\npassword\npassword\n' | searchd --auth-non-interactive >/dev/null 2>&1
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––

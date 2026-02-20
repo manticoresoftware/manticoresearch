@@ -13672,6 +13672,7 @@ void ShowHelp ()
 		"--new-cluster\tbootstraps a replication cluster with cluster restart protection\n"
 		"--new-cluster-force\tbootstraps a replication cluster without cluster restart protection\n"
 		"--auth\t\t\trun interactive authentication bootstrap mode\n"
+		"--auth-non-interactive\trun authentication bootstrap mode with stdin input\n"
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
@@ -14901,6 +14902,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	const char*		szCmdConfigFile = nullptr;
 	bool			bMeasureStack = false;
 	bool			bOptAuth = false;
+	bool			bOptAuthNonInteractive = false;
 
 	DWORD			uReplayFlags = 0;
 
@@ -14957,6 +14959,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
 		OPT1 ( "--auth" )			{ bOptAuth = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
+		OPT1 ( "--auth-non-interactive" )	{ bOptAuth = true; bOptAuthNonInteractive = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -15092,7 +15095,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// auth bootstrap after fonfigless \ data_dir setup
 
 	if ( bOptAuth )
-		return AuthBootstrap ( hSearchdpre, g_sConfigFile );
+		return AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 	g_sExePath = sphGetCwd();

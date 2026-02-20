@@ -111,8 +111,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'nonexistent
 ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
 ––– 2.5.9 Error on invalid action –––
-EXPECTED per spec: Error — invalid action
-ACTUAL: BUG — syntax error instead of validation error
+EXPECTED: Error — invalid action
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT invalid ON * TO 'grantuser';" 2>&1
@@ -120,8 +119,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT invalid ON * TO 'grantuse
 ERROR 1064 (42000) at line 1: unknown action 'invalid'
 ––– comment –––
 ––– 2.5.10 Error without ADMIN permission –––
-EXPECTED per spec: Permission denied
-ACTUAL: BUG CRITICAL — nonadmin bypasses ADMIN check, gets duplicate error instead of Permission denied!
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'nonadmin' IDENTIFIED BY 'nonadmin1234';"

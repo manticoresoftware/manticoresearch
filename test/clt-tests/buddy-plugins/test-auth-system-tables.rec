@@ -27,7 +27,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
 ––– output –––
 ––– comment –––
 ––– 6.1.1 User cannot INSERT into system.auth_users –––
-EXPECTED per spec: Permission denied for user 'regular'
+EXPECTED: Permission denied for user 'regular'
 BUG: User gets validation error instead of Permission denied
 (Permission check should happen BEFORE data validation)
 ––– comment –––

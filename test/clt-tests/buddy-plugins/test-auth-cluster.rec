@@ -39,13 +39,13 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
 ––– output –––
 ––– comment –––
 ––– 8.2.1 CREATE CLUSTER AS USER: Valid user with replication –––
-EXPECTED per spec: Command accepted
+EXPECTED: Command accepted
 BUG CRITICAL: AS USER syntax not implemented - syntax error
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER mycluster AS USER 'repluser';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected CLUSTER, expecting USER near 'CLUSTER mycluster AS USER 'repluser''
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'repluser''
 ––– comment –––
 ––– 8.2.2 CREATE CLUSTER AS USER: Invalid user (no replication) –––
 EXPECTED per spec: Error - user lacks replication permission
@@ -54,7 +54,7 @@ BUG CRITICAL: syntax error instead of permission validation
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER badcluster AS USER 'norepluser';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected CLUSTER, expecting USER near 'CLUSTER badcluster AS USER 'norepluser''
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'norepluser''
 ––– comment –––
 ––– 8.2.3 CREATE CLUSTER AS USER: Non-existent user –––
 EXPECTED per spec: Error - user does not exist
@@ -63,7 +63,7 @@ BUG CRITICAL: syntax error instead of user validation
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER fakecluster AS USER 'nonexistent';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected CLUSTER, expecting USER near 'CLUSTER fakecluster AS USER 'nonexistent''
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'nonexistent''
 ––– comment –––
 ––– 8.2.4 ALTER CLUSTER USER: Change assigned user –––
 EXPECTED per spec: Command accepted for valid user

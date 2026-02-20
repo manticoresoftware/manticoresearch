@@ -2,48 +2,46 @@
 Test Bootstrap Mode (searchd --auth).
 Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
-
-Per spec:
-- searchd --auth initializes admin user interactively
-- Prompts for login and password
-- Creates auth.json with hashes
-- Fails if auth.json already has data
-BUG CRITICAL: searchd --auth NOT IMPLEMENTED
-- Flag not in --help output
-- Does not create auth.json
-- No interactive prompts
 ––– comment –––
 ––– input –––
-sed -i '/^searchd/a\    auth = 1' /etc/manticoresearch/manticore.conf && echo "Auth enabled"
+grep -q '^[[:space:]]*auth[[:space:]]*=' /etc/manticoresearch/manticore.conf || sed -i '/^searchd/a\    auth = 1' /etc/manticoresearch/manticore.conf; rm -f /var/lib/manticore/auth.json; echo "Bootstrap preconditions ready"
 ––– output –––
-Auth enabled
+Bootstrap preconditions ready
+––– block: ../base/start-searchd –––
 ––– comment –––
-––– 8.1.1 Bootstrap: searchd --auth should prompt for credentials –––
-EXPECTED per spec: Interactive prompt for login/password
-BUG CRITICAL: --auth flag not implemented, shows normal startup error
+––– 8.1.1 Bootstrap creates initial admin interactively –––
+EXPECTED: Interactive flow succeeds and reloads auth
 ––– comment –––
 ––– input –––
-rm -f /var/lib/manticore/auth.json; searchd --auth 2>&1 | head -5
+printf 'admin\nadminpass\nadminpass\n' | searchd --auth 2>&1 | grep -q "authentication settings successfully created and reloaded" && echo "bootstrap ok"
 ––– output –––
-#!/.*using config file.*/!#
-#!/.*FATAL.*pid file.*/!#
-#!/Manticore.*/!#
-#!/Copyright.*/!#
-#!/Copyright.*/!#
+bootstrap ok
 ––– comment –––
-––– 8.1.2 Bootstrap: auth.json not created –––
-BUG: --auth should create auth.json but doesn't
+––– 8.1.2 auth.json is created and contains admin user –––
+EXPECTED: auth.json exists with users/permissions and admin
 ––– comment –––
 ––– input –––
-test -f /var/lib/manticore/auth.json && echo "file exists" || echo "file not found"
+test -f /var/lib/manticore/auth.json && echo "file exists" || echo "file missing"
 ––– output –––
-file not found
+file exists
+––– input –––
+python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(any(u.get('username')=='admin' for u in d.get('users', [])))"
+––– output –––
+True
 ––– comment –––
-––– 8.1.3 Bootstrap: --auth flag missing from help –––
-EXPECTED per spec: --auth documented in help
-BUG CRITICAL: --auth not shown in searchd --help
+––– 8.1.3 New admin can authenticate over MySQL –––
+EXPECTED: Admin credentials work after bootstrap and reload
 ––– comment –––
 ––– input –––
-searchd --help 2>&1 | grep "\-\-auth" || echo "flag not found"
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS \`1\`;"
 ––– output –––
-flag not found
+*************************** 1. row ***************************
+1: 1
+––– comment –––
+––– 8.1.4 --auth is documented in --help –––
+EXPECTED: --help includes --auth option
+––– comment –––
+––– input –––
+searchd --help 2>&1 | grep -q "\-\-auth" && echo "flag present"
+––– output –––
+flag present

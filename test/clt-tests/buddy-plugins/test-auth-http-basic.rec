@@ -12,8 +12,7 @@ BUG: Invalid Base64 causes empty response with ~3sec timeout
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
 ––– 1.2.1 Successful request with correct Basic Auth –––
-EXPECTED per spec: 200 OK with JSON result
-ACTUAL: Implemented — request succeeds
+EXPECTED: 200 OK with JSON result
 ––– comment –––
 ––– input –––
 curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
@@ -29,8 +28,7 @@ curl -s -u admin:wrongpassword http://127.0.0.1:9308/sql -d "query=SELECT 1"
 {"error":"Access denied for user 'admin' (using password: YES)"}
 ––– comment –––
 ––– 1.2.3 Reject without Authorization header –––
-EXPECTED per spec: 401 Unauthorized or Access denied
-ACTUAL: Different error message but acceptable
+EXPECTED: 401 Unauthorized or Access denied
 ––– comment –––
 ––– input –––
 curl -s http://127.0.0.1:9308/sql -d "query=SELECT 1"
@@ -38,8 +36,7 @@ curl -s http://127.0.0.1:9308/sql -d "query=SELECT 1"
 {"error":"Authorization header field missed"}
 ––– comment –––
 ––– 1.2.4 Reject with invalid Base64 –––
-EXPECTED per spec: Error response
-ACTUAL: Empty response (timeout?) — possible BUG
+EXPECTED: Error response
 ––– comment –––
 ––– input –––
 curl -s -H "Authorization: Basic not-valid-base64!!!" http://127.0.0.1:9308/sql -d "query=SELECT 1"

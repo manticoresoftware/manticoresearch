@@ -24,8 +24,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'tokenuser' IDEN
 generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– comment –––
 ––– 2.4.1 Generate own token (without username) –––
-EXPECTED per spec: Returns token, username, generated_at
-ACTUAL: Implemented — returns token table
+EXPECTED: Returns token, username, generated_at
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN;" 2>&1
@@ -37,8 +36,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN;" 2>&1
 #!/\+[-+]+\+/!#
 ––– comment –––
 ––– 2.4.2 Admin generates token for another user –––
-EXPECTED per spec: Returns token, username, generated_at for tokenuser
-ACTUAL: Implemented — returns token table
+EXPECTED: Returns token, username, generated_at for tokenuser
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';" 2>&1
@@ -50,8 +48,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';" 2>&1
 #!/\+[-+]+\+/!#
 ––– comment –––
 ––– 2.4.3 Repeated TOKEN returns different token –––
-EXPECTED per spec: New token each time, old token invalidated
-ACTUAL: Implemented — old token denied, new token accepted
+EXPECTED: New token each time, old token invalidated
 ––– comment –––
 ––– input –––
 TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
@@ -67,8 +64,7 @@ tokens differ
 #!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 2.4.4 Error for non-existent user –––
-EXPECTED per spec: Error — user does not exist
-ACTUAL: Implemented — user validation error
+EXPECTED: Error — user does not exist
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'nonexistent';" 2>&1
@@ -76,8 +72,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'nonexistent';" 2>&1
 ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
 ––– 2.4.5 Error without ADMIN when generating other's token –––
-EXPECTED per spec: Permission denied
-ACTUAL: Implemented — permission check works
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'other' IDENTIFIED BY 'other1234567';"

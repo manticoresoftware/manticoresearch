@@ -27,7 +27,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
 ––– output –––
 ––– comment –––
 ––– 2.11.1 SHOW TOKEN: User sees own token hash –––
-EXPECTED per spec: Returns bearer_sha256 hash for current user
+EXPECTED: Returns bearer_sha256 hash for current user
 ––– comment –––
 ––– input –––
 MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN;" 2>&1
@@ -39,7 +39,7 @@ MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN;" 2>&1
 #!/\+[-+]+\+/!#
 ––– comment –––
 ––– 2.11.2 SHOW TOKEN FOR: Admin sees other user's token –––
-EXPECTED per spec: Admin can see any user's token hash
+EXPECTED: Admin can see any user's token hash
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';" 2>&1
@@ -51,7 +51,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW TOKEN FOR 'tokenuser';" 2>
 #!/\+[-+]+\+/!#
 ––– comment –––
 ––– 2.11.3 SHOW TOKEN FOR: Non-admin denied –––
-EXPECTED per spec: Permission denied without ADMIN
+EXPECTED: Permission denied without ADMIN
 ––– comment –––
 ––– input –––
 MYSQL_PWD=tokenuser123 mysql -utokenuser -h0 -P9306 -e "SHOW TOKEN FOR 'admin';" 2>&1

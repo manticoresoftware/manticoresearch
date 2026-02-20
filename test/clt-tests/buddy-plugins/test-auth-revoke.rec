@@ -57,8 +57,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'nonexist
 ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
 ––– 2.6.4 Error without ADMIN permission –––
-EXPECTED per spec: Permission denied
-ACTUAL: BUG CRITICAL — nonadmin successfully revokes permission! No ADMIN check!
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'nonadmin' IDENTIFIED BY 'nonadmin1234';"

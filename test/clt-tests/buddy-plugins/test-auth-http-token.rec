@@ -9,8 +9,7 @@ Per spec: POST /token with Basic Auth returns new token
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
 ––– 3.1.1 POST /token with Basic Auth — success –––
-EXPECTED per spec: {"token": "<new_token>"}
-ACTUAL: Implemented — returns token for authenticated user
+EXPECTED: {"token": "<new_token>"}
 ––– comment –––
 ––– input –––
 curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
@@ -18,8 +17,7 @@ curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
 #!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 3.1.2 POST /token without authorization — error –––
-EXPECTED per spec: Access denied
-ACTUAL: OK — different message but correct behavior
+EXPECTED: Access denied
 ––– comment –––
 ––– input –––
 curl -s -X POST http://127.0.0.1:9308/token -d "{}"
@@ -27,7 +25,7 @@ curl -s -X POST http://127.0.0.1:9308/token -d "{}"
 {"error":"Authorization header field missed"}
 ––– comment –––
 ––– 3.1.3 POST /token for non-admin user — success –––
-EXPECTED per spec: Any authenticated user can rotate own token
+EXPECTED: Any authenticated user can rotate own token
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'httpuser' IDENTIFIED BY 'httpuser1234';"

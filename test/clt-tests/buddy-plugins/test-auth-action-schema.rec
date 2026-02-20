@@ -29,7 +29,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'noperm' IDENTIF
 generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
 ––– comment –––
 ––– 4.3.1 CREATE TABLE with SCHEMA — success –––
-EXPECTED per spec: Success (GRANT should apply immediately)
+EXPECTED: Success (GRANT should apply immediately)
 BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
@@ -45,7 +45,7 @@ MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "CREATE TABLE blocked(content
 ERROR 1064 (42000) at line 1: Permission denied for user 'noperm'
 ––– comment –––
 ––– 4.3.3 ALTER TABLE with SCHEMA — success –––
-EXPECTED per spec: Success (GRANT should apply immediately)
+EXPECTED: Success (GRANT should apply immediately)
 BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
@@ -53,7 +53,7 @@ MYSQL_PWD=schemapass1 mysql -uschemauser -h0 -P9306 -e "ALTER TABLE schematest A
 ––– output –––
 ––– comment –––
 ––– 4.3.4 DROP TABLE with SCHEMA — success –––
-EXPECTED per spec: Success (GRANT should apply immediately)
+EXPECTED: Success (GRANT should apply immediately)
 BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––

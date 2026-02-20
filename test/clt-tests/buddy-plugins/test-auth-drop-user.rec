@@ -26,8 +26,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT READ ON * TO 'droptest';"
 ––– output –––
 ––– comment –––
 ––– 2.2.1 Successful user deletion –––
-EXPECTED per spec: Success, user removed
-ACTUAL: OK
+EXPECTED: Success, user removed
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'droptest';"
@@ -65,8 +64,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM 
 cnt: 0
 ––– comment –––
 ––– 2.2.3 Error on non-existent user –––
-EXPECTED per spec: Error — user does not exist
-ACTUAL: OK
+EXPECTED: Error — user does not exist
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'nonexistent';" 2>&1
@@ -74,8 +72,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'nonexistent';" 2>&1
 ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
 ––– 2.2.4 Error without ADMIN permission –––
-EXPECTED per spec: Permission denied
-ACTUAL: BUG CRITICAL — attacker without ADMIN can delete victim!
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'victim' IDENTIFIED BY 'victim12345';"

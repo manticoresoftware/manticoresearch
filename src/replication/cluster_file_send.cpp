@@ -407,7 +407,7 @@ void FileReader_t::RetryFile ( int iRemoteFile, bool bNetError, WriteResult_e eR
 }
 
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
-bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, SstProgress_i & tProgress )
+bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, const CSphString & sUser, SstProgress_i & tProgress )
 {
 	StringBuilder_c tErrors ( ";" );
 
@@ -438,7 +438,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 	VecRefPtrs_t<AgentConn_t*> dNodes;
 	dNodes.Resize ( dReaders.GetLength() );
 	ARRAY_FOREACH ( i, dReaders )
-		dNodes[i] = ClusterFileSend_c::CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_pSyncDst->m_tmTimeoutFile, dReaders[i].m_tFileSendRequest );
+		dNodes[i] = ClusterFileSend_c::CreateAgent ( *dReaders[i].m_pAgentDesc, sUser, dReaders[i].m_pSyncDst->m_tmTimeoutFile, dReaders[i].m_tFileSendRequest );
 
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
@@ -494,7 +494,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 			// remove agent from main vector
 			pAgent->Release();
 
-			AgentConn_t* pNextJob = ClusterFileSend_c::CreateAgent ( *tReader.m_pAgentDesc, tReader.m_pSyncDst->m_tmTimeoutFile, tReader.m_tFileSendRequest );
+			AgentConn_t* pNextJob = ClusterFileSend_c::CreateAgent ( *tReader.m_pAgentDesc, sUser, tReader.m_pSyncDst->m_tmTimeoutFile, tReader.m_tFileSendRequest );
 			dNodes[iAgent] = pNextJob;
 
 			VectorAgentConn_t dNewNode;

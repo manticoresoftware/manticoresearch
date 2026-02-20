@@ -27,6 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
+#include "auth/auth_proto_api.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -80,6 +81,7 @@ enum AgentStats_e
 	eTimeoutsConnect,	///< number of time-outed connections
 	eConnectFailures,	///< failed to connect
 	eNetworkErrors,		///< network error
+	eWrongQuery,		///< bad query
 	eWrongReplies,		///< incomplete reply
 	eUnexpectedClose,	///< agent closed the connection
 	eNetworkCritical,		///< agent answered, but with warnings
@@ -493,6 +495,8 @@ public:
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
 
+	ApiKey_t m_tApiKey;
+
 public:
 	AgentConn_t () = default;
 
@@ -584,7 +588,7 @@ private:
 	void ScheduleCallbacks ();
 	void DisableWrite();
 
-	void BuildData ();
+	bool BuildData ();
 	size_t ReplyBufPlace () const;
 	void InitReplyBuf ( int iSize = 0 );
 	inline bool IsReplyHeader() const { return m_iReplySize<0; }
@@ -635,7 +639,7 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 // uses cooperated wait - i.e. yield instead of pause
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
+int PerformRemoteTasks ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES

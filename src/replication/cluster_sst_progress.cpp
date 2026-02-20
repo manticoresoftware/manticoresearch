@@ -587,14 +587,14 @@ void operator>> ( InputBuffer_c & tIn, UpdateSstProgress_t & tReq )
 	tIn >> tReq.m_tStatus;
 }
 
-static bool SendSstProgress ( const CSphString & sCluster, const VecTraits_T<AgentDesc_t> & dDesc, const SstProgressStatus_t & tStatus )
+static bool SendSstProgress ( const CSphString & sCluster, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc, const SstProgressStatus_t & tStatus )
 {
 	UpdateSstProgress_t tReqData;
 	tReqData.m_tStatus = tStatus;
 	tReqData.m_sCluster = sCluster;
 
 	CmdUpdateSstProgress_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, ReplicationTimeoutQuery(), tReqData );
+	auto dNodes = tReq.MakeAgents ( dDesc, sUser, ReplicationTimeoutQuery(), tReqData );
 	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 
@@ -616,14 +616,14 @@ void ReceiveSstProgress ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphStr
 	}
 }
 
-static void CoPushSstProgress(  const CSphString & sCluster, const CSphVector<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
+static void CoPushSstProgress(  const CSphString & sCluster, const CSphString & sUser, const CSphVector<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
 {
 	while ( !pProgress->IsPushUpdateDone() )
 	{
 		SstProgressStatus_t tStatus;
 		pProgress->GetStatus ( tStatus );
 
-		SendSstProgress ( sCluster, dDesc, tStatus );
+		SendSstProgress ( sCluster, sUser, dDesc, tStatus );
 		if ( pProgress->IsPushUpdateDone() )
 			break;
 
@@ -631,7 +631,7 @@ static void CoPushSstProgress(  const CSphString & sCluster, const CSphVector<Ag
 	}
 }
 
-void SstProgress_i::StartPushUpdates ( const CSphString & sCluster, const VecTraits_T<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
+void SstProgress_i::StartPushUpdates ( const CSphString & sCluster, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress )
 {
 	SstProgress_c * pProgressImpl = static_cast<SstProgress_c *> ( pProgress.Ptr() );
 	assert( pProgressImpl->m_eRole==Role_e::DONOR );
@@ -640,7 +640,7 @@ void SstProgress_i::StartPushUpdates ( const CSphString & sCluster, const VecTra
 	CSphVector<AgentDesc_t> dDescCopy;
 	dDescCopy.Append ( dDesc );
 
-	Threads::Coro::Go ( [sCluster, dDesc = std::move ( dDescCopy ), pProgress] { CoPushSstProgress( sCluster, dDesc, pProgress ); }, Threads::Coro::CurrentScheduler() );
+	Threads::Coro::Go ( [sCluster, sUser, dDesc = std::move ( dDescCopy ), pProgress] { CoPushSstProgress( sCluster, sUser, dDesc, pProgress ); }, Threads::Coro::CurrentScheduler() );
 }
 
 void SstProgress_c::StopPushUpdates ()

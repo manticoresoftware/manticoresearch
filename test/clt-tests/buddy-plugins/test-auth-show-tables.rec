@@ -1,0 +1,72 @@
+––– comment –––
+Test SHOW TABLES filtering by user permissions.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec:
+- Admin sees all tables
+- User with READ ON specific table sees only that table
+- User with READ ON * sees all tables
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create tables and users –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE visible_tbl(content text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE hidden_tbl(content text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE another_tbl(content text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'limited' IDENTIFIED BY 'limited12345';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: limited
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'visible_tbl' TO 'limited';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'allread' IDENTIFIED BY 'allread12345';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: allread
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'allread';"
+––– output –––
+––– comment –––
+––– 2.12.1 SHOW TABLES: Admin sees all tables –––
+EXPECTED per spec: Admin sees all 3 tables
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort
+––– output –––
+Table: another_tbl
+Table: hidden_tbl
+Table: visible_tbl
+––– comment –––
+––– 2.12.2 SHOW TABLES: User sees only permitted tables –––
+EXPECTED per spec: User with read ON 'visible_tbl' sees only visible_tbl
+––– comment –––
+––– input –––
+MYSQL_PWD=limited12345 mysql -E -ulimited -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort
+––– output –––
+Table: visible_tbl
+––– comment –––
+––– 2.12.3 SHOW TABLES: User with wildcard sees all –––
+EXPECTED per spec: User with read ON * sees all tables
+––– comment –––
+––– input –––
+MYSQL_PWD=allread12345 mysql -E -uallread -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort
+––– output –––
+Table: another_tbl
+Table: hidden_tbl
+Table: visible_tbl

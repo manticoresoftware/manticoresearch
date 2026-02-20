@@ -15,6 +15,6 @@
 #include "std/string.h"
 
 // ask remote nodes to delete given cluster by name
-void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSphString& sCluster );
+void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSphString & sCluster, const CSphString & sUser );
 
 

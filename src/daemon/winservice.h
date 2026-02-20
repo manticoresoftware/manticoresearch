@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "sphinxstd.h"
+
 #if _WIN32
 #include <std/ints.h>
 
@@ -41,6 +43,9 @@ void CheckWinSignals ();
 
 int WinStopOrWaitAnother(int iPid, int iWaitTimeout);
 
+const char * WinErrorInfo ();
+
 #endif
 
 bool WinService () noexcept;
+CSphString GetSignalPipeName ( int iPid );

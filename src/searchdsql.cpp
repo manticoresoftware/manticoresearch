@@ -219,11 +219,14 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 	return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
 }
 
+static bool RouteToUser ( const char * szMessage, const char * pLastTokenStart );
+
 void SqlParserTraits_c::ProcessParsingError ( const char* szMessage )
 {
 	// 'wrong parser' is quite empiric - we fire it when from very beginning parser sees syntax error
 	// notice: szMessage here is NOT prefixed with "PXX:"
-	if ( ( m_pBuf == m_pLastTokenStart ) && ( strncmp ( szMessage, "syntax error", 12 ) == 0 ) )
+	if ( ( strncmp ( szMessage, "syntax error", 12 ) == 0 )
+		&& ( m_pBuf == m_pLastTokenStart || RouteToUser ( szMessage, m_pLastTokenStart ) ) )
 		m_bWrongParserSyntaxError = true;
 
 	m_pParseError->SetSprintf ( "%s %s near '%s'", m_sErrorHeader.cstr(), szMessage, m_pLastTokenStart ? m_pLastTokenStart : "(null)" );
@@ -2686,4 +2689,36 @@ bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQu
 	tJson.AddItem ( "order_by", tOrderBy );
 	sSettings = EncodeBase64 ( tJson.AsString() );
 	return true;
+}
+
+static bool AtTokenStart ( const char * pTokenStart, const char * sKeyword )
+{
+	if ( !pTokenStart || !sKeyword )
+		return false;
+
+	const int iLen = (int)strlen ( sKeyword );
+	if ( strncasecmp ( pTokenStart, sKeyword, iLen )!=0 )
+		return false;
+
+	const char cNext = pTokenStart[iLen];
+	return cNext==0 || sphIsSpace(cNext) || cNext=='`' || cNext==';';
+}
+
+bool RouteToUser ( const char * szMessage, const char * pLastTokenStart )
+{
+	if ( !pLastTokenStart )
+		return false;
+
+	// auth grammar adds CREATE/DROP USER to the main parser.
+	// CREATE/DROP TABLE then fails at TABLE with "expecting USER"
+	// (or "expecting TOK_USER"), and should be routed to DDL parser
+	// for canonical P03 diagnostics \ inportant for Buddy
+	const bool bExpectsUser = strstr ( szMessage, "expecting USER" ) || strstr ( szMessage, "expecting TOK_USER" );
+	if ( !bExpectsUser )
+		return false;
+
+	// auth grammar adds CREATE/DROP USER to the main parser.
+	// unrelated CREATE/DROP TABLE/CLUSTER should be routed to DDL parser
+	// for canonical diagnostics and Buddy fallback
+	return AtTokenStart ( pLastTokenStart, "table" ) || AtTokenStart ( pLastTokenStart, "cluster" );
 }

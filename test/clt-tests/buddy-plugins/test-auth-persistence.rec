@@ -1,0 +1,72 @@
+––– comment –––
+Test auth data persistence across searchd restarts.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: Users, permissions, passwords survive daemon restart
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create user, table, permissions, insert data –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE persist_tbl(content text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO persist_tbl(id, content) VALUES(1, 'persistent data');"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'persist_user' IDENTIFIED BY 'persist1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: persist_user
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'persist_user';"
+––– output –––
+––– comment –––
+Verify user works before restart
+––– comment –––
+––– input –––
+MYSQL_PWD=persist1234 mysql -E -upersist_user -h0 -P9306 -e "SELECT * FROM persist_tbl;"
+––– output –––
+*************************** 1. row ***************************
+     id: 1
+content: persistent data
+––– comment –––
+––– Restart searchd –––
+––– comment –––
+––– input –––
+searchd --stopwait > /dev/null 2>&1; sleep 2; rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+––– 6.2.1 User exists after restart –––
+EXPECTED per spec: persist_user still visible in SHOW USERS
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_users WHERE username='persist_user';"
+––– output –––
+*************************** 1. row ***************************
+cnt: 1
+––– comment –––
+––– 6.2.2 Permissions saved after restart –––
+EXPECTED per spec: persist_user can still SELECT (has read permission)
+––– comment –––
+––– input –––
+MYSQL_PWD=persist1234 mysql -E -upersist_user -h0 -P9306 -e "SELECT * FROM persist_tbl;"
+––– output –––
+*************************** 1. row ***************************
+     id: 1
+content: persistent data
+––– comment –––
+––– 6.2.3 Password works after restart –––
+EXPECTED per spec: Original password still works
+––– comment –––
+––– input –––
+MYSQL_PWD=persist1234 mysql -E -upersist_user -h0 -P9306 -e "SELECT 1 AS login_ok;"
+––– output –––
+*************************** 1. row ***************************
+login_ok: 1

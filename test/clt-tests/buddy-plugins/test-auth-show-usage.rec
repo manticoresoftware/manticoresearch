@@ -1,0 +1,80 @@
+––– comment –––
+Test SHOW USAGE command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec:
+- SHOW USAGE — admin sees all users, user sees only own
+- SHOW USAGE FOR 'user' — admin-only targeted lookup
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create test user –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'usageuser' IDENTIFIED BY 'usagepass123';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: usageuser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– comment –––
+––– 2.9.1 Admin sees all users usage –––
+EXPECTED: Admin sees usage rows for all users and empty placeholder usage values
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE;" | grep "username:" | sort | uniq
+––– output –––
+username: admin
+username: system.buddy
+username: usageuser
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE;" | grep -E "queries_per_min:|queries_per_day:|last_login:" | sort | uniq
+––– output –––
+#!/\s*last_login:\s*$/!#
+#!/\s*queries_per_day:\s*$/!#
+#!/\s*queries_per_min:\s*$/!#
+––– comment –––
+––– 2.9.2 User sees only own usage –––
+EXPECTED: Non-admin sees only own usage row and empty placeholder usage values
+––– comment –––
+––– input –––
+MYSQL_PWD=usagepass123 mysql -E -uusageuser -h0 -P9306 -e "SHOW USAGE;" | grep "username:" | sort | uniq
+––– output –––
+username: usageuser
+––– input –––
+MYSQL_PWD=usagepass123 mysql -E -uusageuser -h0 -P9306 -e "SHOW USAGE;" | grep -E "queries_per_min:|queries_per_day:|last_login:" | sort | uniq
+––– output –––
+#!/\s*last_login:\s*$/!#
+#!/\s*queries_per_day:\s*$/!#
+#!/\s*queries_per_min:\s*$/!#
+––– comment –––
+––– 2.9.3 Admin SHOW USAGE FOR returns only target user –––
+EXPECTED: Admin can query usage for a target user
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE FOR 'usageuser';" | grep "username:" | sort | uniq
+––– output –––
+username: usageuser
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE FOR 'usageuser';" | grep -E "queries_per_min:|queries_per_day:|last_login:" | sort | uniq
+––– output –––
+#!/\s*last_login:\s*$/!#
+#!/\s*queries_per_day:\s*$/!#
+#!/\s*queries_per_min:\s*$/!#
+––– comment –––
+––– 2.9.4 Non-admin SHOW USAGE FOR denied –––
+EXPECTED: Non-admin cannot query other users usage
+––– comment –––
+––– input –––
+MYSQL_PWD=usagepass123 mysql -uusageuser -h0 -P9306 -e "SHOW USAGE FOR 'admin';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'usageuser'
+––– comment –––
+––– 2.9.5 Admin SHOW USAGE FOR missing user returns not found –––
+EXPECTED: Unknown target user returns not found
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW USAGE FOR 'nonexistent';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: user 'nonexistent' not found

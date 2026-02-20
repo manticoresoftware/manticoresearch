@@ -1,0 +1,47 @@
+––– comment –––
+Test Bootstrap Mode (searchd --auth).
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+––– comment –––
+––– input –––
+grep -q '^[[:space:]]*auth[[:space:]]*=' /etc/manticoresearch/manticore.conf || sed -i '/^searchd/a\    auth = 1' /etc/manticoresearch/manticore.conf; rm -f /var/lib/manticore/auth.json; echo "Bootstrap preconditions ready"
+––– output –––
+Bootstrap preconditions ready
+––– block: ../base/start-searchd –––
+––– comment –––
+––– 8.1.1 Bootstrap creates initial admin in non-interactive mode –––
+EXPECTED: Non-interactive flow succeeds and reloads auth
+––– comment –––
+––– input –––
+printf 'admin\nadminpass\nadminpass\n' | searchd --auth-non-interactive 2>&1 | grep -q "authentication settings successfully created and reloaded" && echo "bootstrap ok"
+––– output –––
+bootstrap ok
+––– comment –––
+––– 8.1.2 auth.json is created and contains admin user –––
+EXPECTED: auth.json exists with users/permissions and admin
+––– comment –––
+––– input –––
+test -f /var/lib/manticore/auth.json && echo "file exists" || echo "file missing"
+––– output –––
+file exists
+––– input –––
+python3 -c "import json; d=json.load(open('/var/lib/manticore/auth.json')); print(any(u.get('username')=='admin' for u in d.get('users', [])))"
+––– output –––
+True
+––– comment –––
+––– 8.1.3 New admin can authenticate over MySQL –––
+EXPECTED: Admin credentials work after bootstrap and reload
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS test;"
+––– output –––
+*************************** 1. row ***************************
+test: 1
+––– comment –––
+––– 8.1.4 --auth is documented in --help –––
+EXPECTED: --help includes --auth option
+––– comment –––
+––– input –––
+searchd --help 2>&1 | grep -q "\-\-auth" && echo "flag present"
+––– output –––
+flag present

@@ -1,0 +1,87 @@
+––– comment –––
+Test RELOAD AUTH command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (plain mode auth file)
+
+Per spec: RELOAD AUTH reloads authentication data from configured storage (requires ADMIN permission)
+––– comment –––
+––– input –––
+sed -i '/^[[:space:]]*data_dir[[:space:]]*=/d;/^[[:space:]]*auth[[:space:]]*=/d' /etc/manticoresearch/manticore.conf; sed -i '/^searchd/a\    auth = /tmp/auth-reload.json' /etc/manticoresearch/manticore.conf; echo '{"users":[{"username":"admin","salt":"aabbccddeeff00112233aabbccddeeff00112233","hashes":{"password_sha1_no_salt":"74913f5cd5f61ec0bcfdb775414c2fb3d161b620","password_sha256":"bc723b5179630195129574a9cf534e1fa7397f9bd166dd10b1babbe37ea52589","bearer_sha256":"4b72aa7367f065146c7a028bc739c69c8e4bdebf7fe2d1133255c51bf36d8056"}}],"permissions":[{"username":"admin","action":"read","target":"*","allow":true},{"username":"admin","action":"write","target":"*","allow":true},{"username":"admin","action":"schema","target":"*","allow":true},{"username":"admin","action":"admin","target":"*","allow":true}]}' > /tmp/auth-reload.json && chmod 600 /tmp/auth-reload.json && echo "Plain mode auth configured"
+––– output –––
+Plain mode auth configured
+––– block: ../base/start-searchd –––
+––– comment –––
+––– 2.10.1 Admin executes RELOAD AUTH successfully –––
+EXPECTED: Success (empty output)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
+––– output –––
+––– comment –––
+––– 2.10.2 Error without ADMIN permission –––
+EXPECTED: Permission denied
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'nonadmin' IDENTIFIED BY 'nonadmin1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: nonadmin
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=nonadmin1234 mysql -unonadmin -h0 -P9306 -e "RELOAD AUTH;" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: Permission denied for user 'nonadmin'
+––– comment –––
+––– 2.10.3 RELOAD AUTH applies external auth file changes –––
+EXPECTED: Changes in auth file take effect after RELOAD AUTH
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'reloaduser' IDENTIFIED BY 'reloadpass123';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: reloaduser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'reloaduser';"
+––– output –––
+––– input –––
+MYSQL_PWD=reloadpass123 mysql -E -ureloaduser -h0 -P9306 -e "SELECT 1 AS before_edit;"
+––– output –––
+*************************** 1. row ***************************
+before_edit: 1
+––– input –––
+cp /tmp/auth-reload.json /tmp/auth-reload.json.bak && python3 -c "import json; p='/tmp/auth-reload.json'; d=json.load(open(p)); d['users']=[u for u in d.get('users',[]) if u.get('username')!='reloaduser']; d['permissions']=[r for r in d.get('permissions',[]) if r.get('username')!='reloaduser']; json.dump(d, open(p,'w')); print('auth file updated')"
+––– output –––
+auth file updated
+––– input –––
+MYSQL_PWD=reloadpass123 mysql -E -ureloaduser -h0 -P9306 -e "SELECT 1 AS before_reload;"
+––– output –––
+*************************** 1. row ***************************
+before_reload: 1
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
+––– output –––
+––– input –––
+MYSQL_PWD=reloadpass123 mysql -ureloaduser -h0 -P9306 -e "SELECT 1;" 2>&1
+––– output –––
+ERROR 1045 (42000): Access denied for user 'reloaduser' (using password: YES)
+––– comment –––
+––– 2.10.4 RELOAD AUTH fails on invalid auth storage and succeeds after restore –––
+EXPECTED: Invalid file causes reload error; restoring valid file allows reload
+––– comment –––
+––– input –––
+echo '{invalid_json' > /tmp/auth-reload.json && MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;" 2>&1 | grep -F "can not read the '/tmp/auth-reload.json'" && echo "reload failed as expected"
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: can not read the '/tmp/auth-reload\.json'.*/!#
+reload failed as expected
+––– input –––
+cp /tmp/auth-reload.json.bak /tmp/auth-reload.json && MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
+––– output –––
+––– input –––
+MYSQL_PWD=reloadpass123 mysql -E -ureloaduser -h0 -P9306 -e "SELECT 1 AS after_restore;"
+––– output –––
+*************************** 1. row ***************************
+after_restore: 1

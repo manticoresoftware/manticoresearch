@@ -50,6 +50,7 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
+#include "daemon/daemon_ipc.h"
 
 // services
 #include "taskping.h"
@@ -63,6 +64,10 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+
+#include "auth/auth.h"
+#include "auth/auth_common.h"
+#include "auth/auth_proto_mysql.h"
 
 #include <csignal>
 #include <clocale>
@@ -232,7 +237,7 @@ static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 
 const char * sAgentStatsNames[eMaxAgentStat+ehMaxStat]=
 	{ "query_timeouts", "connect_timeouts", "connect_failures",
-		"network_errors", "wrong_replies", "unexpected_closings",
+		"network_errors", "wrong_query", "wrong_replies", "unexpected_closings",
 		"warnings", "succeeded_queries", "total_query_time",
 		"connect_count", "connect_avg", "connect_max" };
 
@@ -273,13 +278,6 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 	if ( bDie )
 		g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
 	return false; // don't lot to stdout
-}
-
-static CSphString GetNamedPipeName ( int iPid )
-{
-	CSphString sRes;
-	sRes.SetSprintf ( "/tmp/searchd_%d", iPid );
-	return sRes;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -440,6 +438,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
+
+	SHUTINFO << "Close auth log ...";
+	AuthDone();
 
 	// close pid
 	SHUTINFO << "Release (close) pid file ...";
@@ -863,7 +864,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 	sError.SetSprintfVa ( sTemplate, ap );
 	va_end ( ap );
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_ERROR );
+	auto tHdr = APIAnswer ( tOut, 0, SEARCHD_ERROR );
 	tOut.SendString ( sError.cstr() );
 
 	// --console logging
@@ -1912,6 +1913,7 @@ static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
 	// and finally most interesting remote case with possibly scattered.
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
+	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -1953,6 +1955,7 @@ static void MakeRemoteNonScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueri
 
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
+	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -2204,6 +2207,10 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	myinfo::SetTaskInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
@@ -2256,6 +2263,9 @@ static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuf
 
 	if ( uVer>=0x102 )
 		tSettings.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
 
 	CSphString sError;
 	SearchFailuresLog_c tFailureLog;
@@ -2564,6 +2574,9 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( tReq.GetError() )
 		return SendErrorReply ( tOut, "invalid or truncated request" );
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sIndexes, tOut ) )
+		return;
+
 	// check index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
@@ -2610,6 +2623,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 			{
 				VecRefPtrsAgentConn_t dAgents;
 				pDist->GetAllHosts ( dAgents );
+				SetSessionAuth ( dAgents );
 
 				// connect to remote agents and query them
 				UpdateRequestBuilder_c tReqBuilder ( pUpd );
@@ -3067,6 +3081,9 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 	bool bGlobalStat = tReq.GetDword ()!=0;
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::SCHEMA, "", tOut ) )
+		return;
+
 	VectorLike dStatus;
 
 	if ( bGlobalStat )
@@ -3097,6 +3114,9 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
+		return;
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, "", tOut ) )
 		return;
 
 	int iTag = CommandFlush ();
@@ -4000,6 +4020,8 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
+		SetSessionAuth ( dAgents );
+
 		pReqBuilder = std::make_unique<PqRequestBuilder_c> ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
 		pParser = std::make_unique<PqReplyParser_c>();
@@ -4089,6 +4111,9 @@ void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tRe
 			SendErrorReply ( tOut, "Can't retrieve doc from input buffer" );
 			return;
 		}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tOpts.m_sIndex, tOut ) )
+		return;
 
 	// working
 	CSphSessionAccum tAcc;
@@ -5333,6 +5358,8 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		int iAgentsReply = 0;
 		if ( !dAgents.IsEmpty() )
 		{
+			SetSessionAuth ( dAgents );
+
 			// connect to remote agents and query them
 			KeywordsRequestBuilder_c tReqBuilder ( tSettings, sQuery );
 			KeywordsReplyParser_c tParser ( tSettings.m_bStats, dKeywords );
@@ -5905,6 +5932,9 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		return;
 	}
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	auto pServed = GetServed ( sIndex );
 	if ( !pServed )
 	{
@@ -6025,6 +6055,8 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 	int iAgentsReply = 0;
 	if ( !dAgents.IsEmpty() )
 	{
+		SetSessionAuth ( dAgents );
+
 		SuggestResult_t tCur;
 		// connect to remote agents and query them
 		SuggestRequestBuilder_c tReqBuilder ( tArgs, sWord );
@@ -6497,12 +6529,22 @@ void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		return bSystem == bIsSystem;
 	};
 
+	CSphString sUser;
+	CSphString sPermsError;
+	bool bAuthCheck = IsAuthEnabled();
+	if ( bAuthCheck )
+		sUser = session::GetUser();
+
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
 		if ( !fnFilter ( dPair ) )
 			continue;
+
+		if ( bAuthCheck && !CheckPerms ( sUser, AuthAction_e::READ, dPair.m_sName, false, sPermsError ) )
+			continue;
+
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else
@@ -7163,7 +7205,7 @@ public:
 		m_iLength = pCur-m_dBuf.Begin();
 	}
 
-	void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR );
@@ -7215,6 +7257,8 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 	// connect to remote agents and query them
 	if ( !dAgents.IsEmpty() )
 	{
+		SetSessionAuth ( dAgents );
+
 		UVarRequestBuilder_c tReqBuilder ( sUserVarName, dSetValues );
 		UVarReplyParser_c tParser;
 		PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
@@ -7245,6 +7289,9 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sUserVar, tOut ) )
+		return;
 
 	SphAttr_t iLast = 0;
 	const BYTE * pCur = dBuf.Begin();
@@ -7548,6 +7595,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			VecRefPtrs_t<AgentConn_t *> dAgents;
 			pDist->GetAllHosts ( dAgents );
+			SetSessionAuth ( dAgents );
 
 			// connect to remote agents and query them
 			// validation happens on remote side; errors will be returned via dFails
@@ -8333,6 +8381,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
 			pDist->GetAllHosts ( dAgents );
+			SetSessionAuth ( dAgents );
 
 			int iGot = 0;
 			int iWarns = 0;
@@ -11365,6 +11414,13 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 	}
 
+	if ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) )
+	{
+		FreezeLastMeta();
+		tOut.Error ( m_sError.cstr(), EMYSQL_ERR::ACCESS_DENIED_ERROR );
+		return true;
+	}
+
 	// handle multi SQL query
 	if ( bParsedOK && dStmt.GetLength()>1 )
 	{
@@ -11771,7 +11827,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CLUSTER_DELETE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
+		if ( GloballyDeleteCluster ( pStmt->m_sCluster, m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -11836,6 +11892,89 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_UNLOCK_TABLES:
 		HandleMysqlUnlockTables ( tOut );
+		return true;
+		
+	case STMT_RELOAD_AUTH:
+		if ( AuthReload ( m_sError ) )
+			tOut.Ok();
+		else
+			tOut.Error ( m_sError.cstr() );
+		return true;
+
+	case STMT_SHOW_PERMISSIONS:
+	{
+		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
+		HandleMysqlShowPerms ( tOut, pTargetUser );
+	}
+		return true;
+
+	case STMT_SHOW_USAGE:
+	{
+		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
+		HandleMysqlShowUsage ( tOut, pTargetUser );
+	}
+		return true;
+
+	case STMT_SHOW_USERS:
+		HandleMysqlShowUsers ( tOut );
+		return true;
+
+	case STMT_SHOW_TOKEN:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		HandleMysqlShowToken ( sUser, tOut );
+	}
+	return true;
+
+	case STMT_SET_PASSWORD:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		if ( UserSetPassword ( sUser, pStmt->m_sSetValue, m_sError ) )
+			tOut.Ok();
+		else
+			tOut.Error ( m_sError.cstr() );
+	}
+	return true;
+
+	case STMT_TOKEN:
+	{
+		const CSphString & sUser = ( pStmt->m_dCallStrings.GetLength() ? pStmt->m_dCallStrings[0] : session::GetUser() );
+		CSphString sToken;
+		if ( !UserCreateToken ( sUser, sToken, m_sError ) )
+		{
+			tOut.Error ( m_sError.cstr() );
+			return true;
+		}
+
+		tOut.HeadBegin ();
+		tOut.HeadColumn ( "username" );
+		tOut.HeadColumn ( "token" );
+		if ( !tOut.HeadEnd () )
+			return true;
+
+		tOut.PutString ( sUser );
+		tOut.PutString ( sToken );
+		if ( !tOut.Commit () )
+			return true;
+
+		tOut.Eof ( false );
+	}
+	return true;
+
+	case STMT_CREATE_USER:
+		HandleMysqlCreateUser ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_DROP_USER:
+		HandleMysqlDropUser ( tOut, *pStmt );
+		return true;
+
+	case STMT_GRANT:
+		HandleMysqlGrant ( tOut, *pStmt, m_sError );
+		return true;
+
+	case STMT_REVOKE:
+		HandleMysqlRevoke ( tOut, *pStmt );
 		return true;
 
 	default:
@@ -11902,6 +12041,11 @@ void session::SetFederatedUser ()
 void session::SetUser ( const CSphString & sUser )
 {
 	GetClientSession()->m_sUser = sUser;
+}
+
+const CSphString & session::GetUser()
+{
+	return GetClientSession()->m_sUser;
 }
 
 void session::SetCurrentDbName ( CSphString sDb )
@@ -13489,14 +13633,18 @@ static void CheckRotate () REQUIRES ( MainThread )
 
 void CheckReopenLogs () REQUIRES ( MainThread )
 {
+	ManageIpcSession();
+
 	if ( !g_bGotSigusr1 )
+		return;
+
+	g_bGotSigusr1 = 0;
+	if ( AuthReloadSignalled ( getpid() ) )
 		return;
 
 	ReopenDaemonLog ();
 	ReopenQueryLog ();
 	ReopenHttpLog();
-
-	g_bGotSigusr1 = 0;
 }
 
 
@@ -13530,6 +13678,8 @@ void ShowHelp ()
 		"\t\t\tare 'accept-desc-timestamp' and 'ignore-open-errors')\n"
 		"--new-cluster\tbootstraps a replication cluster with cluster restart protection\n"
 		"--new-cluster-force\tbootstraps a replication cluster without cluster restart protection\n"
+		"--auth\t\t\trun interactive authentication bootstrap mode\n"
+		"--auth-non-interactive\trun authentication bootstrap mode with stdin input\n"
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"
@@ -14214,6 +14364,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	SetExpansionPhraseLimit ( iExpansionPhraseLimit, bExpansionPhraseWarning );
 
 	g_bAttrAutoconvStrict = hSearchd.GetBool ( "attr_autoconv_strict", false );
+	AuthConfigure ( hSearchd );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -14562,77 +14713,9 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	int iExitCode = 0;
 #if _WIN32
-	WinStopOrWaitAnother(iPid, iWaitTimeout);
+	iExitCode = WinStopOrWaitAnother ( iPid, iWaitTimeout );
 #else
-	CSphString sPipeName;
-	int iPipeCreated = -1;
-	int fdPipe = -1;
-	if ( bWait )
-	{
-		sPipeName = GetNamedPipeName ( iPid );
-		::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
-                int iMask = umask ( 0 );
-		iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
-                umask ( iMask );
-		if ( iPipeCreated!=-1 )
-			fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
-
-		if ( iPipeCreated==-1 )
-			sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
-		else if ( fdPipe<0 )
-			sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
-	}
-
-	if ( kill ( iPid, SIGTERM ) )
-		sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
-	sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
-
-	iExitCode = ( bWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
-	bool bHandshake = true;
-	if ( bWait && fdPipe>=0 )
-		while ( true )
-		{
-			int iReady = sphPoll ( fdPipe, iWaitTimeout );
-
-			// error on wait
-			if ( iReady<0 )
-			{
-				iExitCode = 3;
-				sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerrorm(errno) );
-				break;
-			}
-
-			// timeout
-			if ( iReady==0 )
-			{
-				if ( !bHandshake )
-					continue;
-
-				iExitCode = 1;
-				break;
-			}
-
-			// reading data
-			DWORD uStatus = 0;
-			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
-			if ( iRead!=sizeof(DWORD) )
-			{
-				sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
-				iExitCode = 3; // stopped demon crashed during stop
-				break;
-			}
-			iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
-
-			if ( !bHandshake )
-				break;
-
-			bHandshake = false;
-		}
-	::unlink ( sPipeName.cstr () ); // is ok on linux after it is opened.
-
-	if ( fdPipe>=0 )
-		::close ( fdPipe );
-
+	iExitCode = StopDaemonAndWait ( bWait, iPid, iWaitTimeout );
 #endif
 	return iExitCode;}
 } // static namespace
@@ -14667,19 +14750,60 @@ static void InitBanner()
 }
 
 
-static void CheckSSL()
+static void CheckAddSSL ( bool bForced, CSphConfigSection & hSearchd )
 {
-	// check for SSL inited well
-	for ( const auto & tListener : g_dListeners )
+	CSphString sError;
+	bool bGotSSL = CheckWeCanUseSSL ( &sError );
+	if ( !bGotSSL )
 	{
-		CSphString sError;
-		if ( tListener.m_eProto==Proto_e::HTTPS )
+		// iff SSL is mandatory - fatal error
+		if ( bForced )
 		{
-			if ( !CheckWeCanUseSSL ( &sError ) )
-				sphWarning ( "SSL init error: %s", sError.cstr() );
-
-			break;
+			sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
 		}
+		else // otherwise just a warning and HTTPS listener does not work
+		{
+			for ( const auto & tListener : g_dListeners )
+			{
+				if ( tListener.m_eProto==Proto_e::HTTPS )
+				{
+					sphWarning ( "SSL initialization failed: %s. HTTPS listeners will not be available", sError.cstr() );
+					return;
+				}
+			}
+		}
+	}
+	
+	// add an HTTPS listener for Buddy if none exists
+	// Buddy can connect HTTPS even if the user did not configure it
+	if ( bForced && bGotSSL )
+	{
+		// add default loopback-only HTTPS listener for Buddy
+		for ( const auto & tListener : g_dListeners )
+		{
+			if ( tListener.m_eProto==Proto_e::HTTPS )
+				return;
+		}
+
+		int iMaxPort = -1;
+		for ( CSphVariant * v = hSearchd ( "listen" ); v; v = v->m_pNext )
+		{
+			auto tDesc = ParseListener ( v->cstr () );
+			iMaxPort = Max ( iMaxPort, tDesc.m_iPort + tDesc.m_iPortsCount );
+		}
+
+		if ( iMaxPort!=-1 )
+			iMaxPort++;
+		else
+			iMaxPort = SPHINXAPI_PORT + 1;
+
+		// new listener port
+		AddGlobalListener ( MakeLocalhostListener ( iMaxPort, Proto_e::HTTPS ) );
+		// entry for the show status
+		CSphString sHttps;
+		sHttps.SetSprintf ( "127.0.0.1:%d:HTTPS", iMaxPort );
+		hSearchd.AddEntry ( "listen", sHttps.cstr() );
+		sphLogDebug ( "no HTTPS listener configured, added '%s' for Buddy communication", sHttps.cstr() );
 	}
 }
 
@@ -14784,6 +14908,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
 	bool			bMeasureStack = false;
+	bool			bOptAuth = false;
+	bool			bOptAuthNonInteractive = false;
 
 	DWORD			uReplayFlags = 0;
 
@@ -14839,6 +14965,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster" )	bNewCluster = true;
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
+		OPT1 ( "--auth" )			{ bOptAuth = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
+		OPT1 ( "--auth-non-interactive" )	{ bOptAuth = true; bOptAuthNonInteractive = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -14896,11 +15024,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !WinService() )
 		g_bOptNoDetach = true;
 
-#ifndef NDEBUG
-	// i also want my windows debug builds to skip locking by default
-	// NOTE, this also skips log files!
-	g_bOptNoLock = true;
-#endif
+//#ifndef NDEBUG
+//	// i also want my windows debug builds to skip locking by default
+//	// NOTE, this also skips log files!
+//	g_bOptNoLock = true;
+//#endif
 #endif
 
 	if ( !bOptPIDFile )
@@ -14969,6 +15097,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	sphInitCJson();
 	if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
+
+	////////////////////////////////
+	// auth bootstrap after fonfigless \ data_dir setup
+
+	if ( bOptAuth )
+		return AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );
 
 	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 	g_sExePath = sphGetCwd();
@@ -15061,6 +15195,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// create http log if required
 		if ( hSearchd.Exists ( "log_http" ) )
 			SetupHttpLog ( hSearchd["log_http"] );
+
+		AuthLogInit ( hSearchd );
 	}
 
 #if !_WIN32
@@ -15141,7 +15277,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	FixPathAbsolute ( sSslKey );
 	FixPathAbsolute ( sSslCa );
 	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-	CheckSSL();
+	bool bForcedSsl = false;
+	if ( IsAuthEnabled() && HasBuddyConfigured ( g_sBuddyPath, g_bHasBuddyPath ) )
+	{
+		ForceSsl();
+		bForcedSsl = true;
+	}
+	CheckAddSSL ( bForcedSsl, hSearchd );
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
@@ -15381,7 +15523,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	g_pTickPoolThread = MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
-	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
+
+	RplBootstrap_e eBs = RplBootstrap_e::OFF;
+	if ( bNewClusterForce )
+		eBs = RplBootstrap_e::FORCED;
+	else if ( bNewCluster )
+		eBs = RplBootstrap_e::ON;
+	PrepareClustersOnStartup ( dListenerDescs, eBs );
 
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
@@ -15399,7 +15547,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
-	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
+	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest

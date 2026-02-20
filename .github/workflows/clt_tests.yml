@@ -90,7 +90,7 @@ jobs:
             test_prefix: test/clt-tests/test-configuration/
           - name: Vector-knn
             test_prefix: test/clt-tests/vector-knn/
-              
+
     steps:
       - uses: manticoresoftware/clt@0.7.8
         with:

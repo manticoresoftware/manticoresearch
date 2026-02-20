@@ -35,6 +35,8 @@ void SetDaemonLog ( CSphString && sLog, bool bCloseIfOpened = false );
 void SetLogFileMode ( int iMode ) noexcept;
 void DisableLogSyslog () noexcept;
 bool LogSyslogEnabled () noexcept;
+bool LogIsStdout () noexcept;
+bool LogIsSyslog () noexcept;
 
 // HTTP log
 void SetupHttpLog ( CSphString sHttpLog );

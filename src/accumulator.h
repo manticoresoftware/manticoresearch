@@ -47,6 +47,8 @@ enum class ReplCmd_e {
 	UPDATE_API,
 	UPDATE_QL,
 	UPDATE_JSON,
+	AUTH_ADD,
+	AUTH_DELETE,
 
 	TOTAL
 };

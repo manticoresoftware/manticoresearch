@@ -1,0 +1,51 @@
+––– comment –––
+Test ADMIN permission enforcement.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: ADMIN permission allows CREATE USER, DROP USER, GRANT, REVOKE, SHOW USERS
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create user with admin permission –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'subadmin' IDENTIFIED BY 'subadminpass';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: subadmin
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT admin ON * TO 'subadmin';"
+––– output –––
+––– comment –––
+––– 4.4.1 CREATE USER with ADMIN — success –––
+EXPECTED per spec: Success
+––– comment –––
+––– input –––
+MYSQL_PWD=subadminpass mysql -E -usubadmin -h0 -P9306 -e "CREATE USER 'newuser' IDENTIFIED BY 'newuserpass1';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: newuser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– comment –––
+––– 4.4.2 GRANT with ADMIN — success –––
+EXPECTED per spec: Success
+––– comment –––
+––– input –––
+MYSQL_PWD=subadminpass mysql -usubadmin -h0 -P9306 -e "GRANT read ON * TO 'newuser';"
+––– output –––
+––– comment –––
+––– 4.4.3 SHOW USERS with ADMIN — success –––
+EXPECTED per spec: Success
+––– comment –––
+––– input –––
+MYSQL_PWD=subadminpass mysql -E -usubadmin -h0 -P9306 -e "SHOW USERS;" | grep "username:" | sort
+––– output –––
+username: admin
+username: newuser
+username: subadmin
+username: system.buddy

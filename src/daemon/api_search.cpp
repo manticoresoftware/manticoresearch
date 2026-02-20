@@ -1541,6 +1541,12 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
 
+	CSphString sTmpIndex;
+	const CSphString & sIndex = ( dQueries.IsEmpty() ? sTmpIndex.scstr() : dQueries[0].m_sIndexes );
+	// assumes the multiple queries are to the same index
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	// run queries, send response
 	SearchHandler_c tHandler { std::move (dQueries), !bAgentMode };
 	const CSphQuery & q = tHandler.m_dQueries.First();

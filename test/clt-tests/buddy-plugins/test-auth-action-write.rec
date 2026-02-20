@@ -36,7 +36,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 ––– comment –––
 ––– 4.2.1 INSERT with WRITE — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "INSERT INTO writetest(id, content, tag) VALUES(2, 'new data', 20);"
@@ -52,7 +51,6 @@ ERROR 1064 (42000) at line 1: Permission denied for user 'noperm'
 ––– comment –––
 ––– 4.2.3 UPDATE with WRITE — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "UPDATE writetest SET tag=99 WHERE id=1;"
@@ -60,7 +58,6 @@ MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "UPDATE writetest SET tag=99 
 ––– comment –––
 ––– 4.2.4 DELETE with WRITE — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "DELETE FROM writetest WHERE id=2;"
@@ -68,7 +65,6 @@ MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "DELETE FROM writetest WHERE 
 ––– comment –––
 ––– 4.2.5 TRUNCATE with WRITE — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "TRUNCATE TABLE writetest;"

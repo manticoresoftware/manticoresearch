@@ -92,9 +92,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT READ ON * TO 'attacker';" 2>&1
 ––– output –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
-––– output –––
-––– input –––
 MYSQL_PWD=attacker123 mysql -uattacker -h0 -P9306 -e "DROP USER 'victim';" 2>&1
 ––– output –––
 ERROR 1045 (42000) at line 1: Permission denied for user 'attacker'

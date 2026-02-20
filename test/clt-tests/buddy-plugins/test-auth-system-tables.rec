@@ -22,9 +22,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON * TO 'regular';"
 ––– output –––
-––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
-––– output –––
 ––– comment –––
 ––– 6.1.1 User cannot INSERT into system.auth_users –––
 EXPECTED: Permission denied for user 'regular'

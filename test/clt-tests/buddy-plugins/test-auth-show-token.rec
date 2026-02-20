@@ -22,9 +22,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'tokenuser';"
 ––– output –––
-––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
-––– output –––
 ––– comment –––
 ––– 2.11.1 SHOW TOKEN: User sees own token hash –––
 EXPECTED: Returns bearer_sha256 hash for current user

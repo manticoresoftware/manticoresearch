@@ -34,9 +34,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'norepluser';"
 ––– output –––
-––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
-––– output –––
 ––– comment –––
 ––– 8.2.1 CREATE CLUSTER AS USER: Valid user with replication –––
 EXPECTED: Command accepted

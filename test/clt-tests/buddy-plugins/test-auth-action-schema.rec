@@ -30,7 +30,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 ––– comment –––
 ––– 4.3.1 CREATE TABLE with SCHEMA — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=schemapass1 mysql -uschemauser -h0 -P9306 -e "CREATE TABLE schematest(content text);"
@@ -46,7 +45,6 @@ ERROR 1064 (42000) at line 1: Permission denied for user 'noperm'
 ––– comment –––
 ––– 4.3.3 ALTER TABLE with SCHEMA — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=schemapass1 mysql -uschemauser -h0 -P9306 -e "ALTER TABLE schematest ADD COLUMN tag integer;"
@@ -54,7 +52,6 @@ MYSQL_PWD=schemapass1 mysql -uschemauser -h0 -P9306 -e "ALTER TABLE schematest A
 ––– comment –––
 ––– 4.3.4 DROP TABLE with SCHEMA — success –––
 EXPECTED: Success (GRANT should apply immediately)
-BUG: Requires RELOAD AUTH — permissions don't apply immediately
 ––– comment –––
 ––– input –––
 MYSQL_PWD=schemapass1 mysql -uschemauser -h0 -P9306 -e "DROP TABLE schematest;"

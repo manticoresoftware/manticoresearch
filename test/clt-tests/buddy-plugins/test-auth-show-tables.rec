@@ -42,9 +42,6 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'allread';"
 ––– output –––
-––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
-––– output –––
 ––– comment –––
 ––– 2.12.1 SHOW TABLES: Admin sees all tables –––
 EXPECTED per spec: Admin sees all 3 tables

@@ -30,9 +30,6 @@ Test 1: GRANT READ with budget
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":5}';"
 ––– output –––
-––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
-––– output –––
 ––– comment –––
 Test 2: Budget is visible in system.auth_permissions
 ––– comment –––
@@ -85,9 +82,6 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'budgetus
 ––– output –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":1000}';"
-––– output –––
-––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "RELOAD AUTH;"
 ––– output –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT * FROM system.auth_permissions WHERE username='budgetuser';"

@@ -622,6 +622,11 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expans
 | chang |
 | chong |
 | chung |
+––– comment –––
+Validating that default behaviour for autocomplete is none layouts specified
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name');" | tail -n +4 | sort
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––

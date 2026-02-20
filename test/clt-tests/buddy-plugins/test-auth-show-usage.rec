@@ -25,9 +25,9 @@ EXPECTED: Admin sees usage rows for all users and empty placeholder usage values
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE;" | grep "username:" | sort | uniq
 ––– output –––
-username: admin
-username: system.buddy
-username: usageuser
+#!/\s*username:\s*admin\s*$/!#
+#!/\s*username:\s*system\.buddy\s*$/!#
+#!/\s*username:\s*usageuser\s*$/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE;" | grep -E "queries_per_min:|queries_per_day:|last_login:" | sort | uniq
 ––– output –––
@@ -41,7 +41,7 @@ EXPECTED: Non-admin sees only own usage row and empty placeholder usage values
 ––– input –––
 MYSQL_PWD=usagepass123 mysql -E -uusageuser -h0 -P9306 -e "SHOW USAGE;" | grep "username:" | sort | uniq
 ––– output –––
-username: usageuser
+#!/\s*username:\s*usageuser\s*$/!#
 ––– input –––
 MYSQL_PWD=usagepass123 mysql -E -uusageuser -h0 -P9306 -e "SHOW USAGE;" | grep -E "queries_per_min:|queries_per_day:|last_login:" | sort | uniq
 ––– output –––
@@ -55,7 +55,7 @@ EXPECTED: Admin can query usage for a target user
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE FOR 'usageuser';" | grep "username:" | sort | uniq
 ––– output –––
-username: usageuser
+#!/\s*username:\s*usageuser\s*$/!#
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USAGE FOR 'usageuser';" | grep -E "queries_per_min:|queries_per_day:|last_login:" | sort | uniq
 ––– output –––

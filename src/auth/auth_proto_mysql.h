@@ -31,6 +31,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 bool SqlSkipBuddy();
 
 void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser );
+void HandleMysqlShowUsage ( RowBuffer_i & tOut, const CSphString * pTargetUser );
 void HandleMysqlShowUsers ( RowBuffer_i & tOut );
 void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut );
 

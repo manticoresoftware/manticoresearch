@@ -451,7 +451,7 @@ delete_cluster:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_DELETE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	;
 

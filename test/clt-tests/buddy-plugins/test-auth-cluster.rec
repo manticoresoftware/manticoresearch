@@ -1,14 +1,13 @@
 ––– comment –––
-Test Cluster Commands with AS USER.
+Test Cluster Commands with effective replication user option.
 Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
 Per spec:
-- CREATE CLUSTER ... AS USER 'user' assigns replication user
-- User must have REPLICATION permission
-- ALTER CLUSTER ... USER='user' changes assigned user
-BUG CRITICAL: AS USER syntax not implemented for cluster commands
+- CREATE/JOIN CLUSTER support user option as "'<username>' AS user"
+- Effective user must have REPLICATION permission
+- ALTER CLUSTER supports "UPDATE user '<username>'"
 ––– comment –––
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
@@ -35,47 +34,40 @@ generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'norepluser';"
 ––– output –––
 ––– comment –––
-––– 8.2.1 CREATE CLUSTER AS USER: Valid user with replication –––
+––– 8.2.1 CREATE CLUSTER with explicit effective user: valid replication user –––
 EXPECTED: Command accepted
-BUG CRITICAL: AS USER syntax not implemented - syntax error
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER mycluster AS USER 'repluser';" 2>&1
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER mycluster 'repluser' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'repluser''
 ––– comment –––
-––– 8.2.2 CREATE CLUSTER AS USER: Invalid user (no replication) –––
-EXPECTED per spec: Error - user lacks replication permission
-BUG CRITICAL: syntax error instead of permission validation
+––– 8.2.2 CREATE CLUSTER with explicit effective user: no replication permission –––
+EXPECTED: Error - user lacks replication permission
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER badcluster AS USER 'norepluser';" 2>&1
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER badcluster 'norepluser' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'norepluser''
+ERROR 1064 (42000) at line 1: Permission denied for user 'norepluser'
 ––– comment –––
-––– 8.2.3 CREATE CLUSTER AS USER: Non-existent user –––
-EXPECTED per spec: Error - user does not exist
-BUG CRITICAL: syntax error instead of user validation
+––– 8.2.3 CREATE CLUSTER with explicit effective user: non-existent user –––
+EXPECTED: Error - user does not exist
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER fakecluster AS USER 'nonexistent';" 2>&1
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE CLUSTER fakecluster 'nonexistent' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'nonexistent''
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found
 ––– comment –––
-––– 8.2.4 ALTER CLUSTER USER: Change assigned user –––
-EXPECTED per spec: Command accepted for valid user
-BUG CRITICAL: ALTER CLUSTER ... USER syntax not implemented
+––– 8.2.4 ALTER CLUSTER UPDATE user: change assigned user –––
+EXPECTED: Command accepted for valid user
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster USER='repluser';" 2>&1
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster UPDATE user 'repluser';" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting ADD or DROP or UPDATE near 'USER='repluser''
 ––– comment –––
-––– 8.2.5 JOIN CLUSTER AS USER: Syntax test –––
-EXPECTED per spec: Command accepted
-BUG CRITICAL: AS USER syntax not implemented
+––– 8.2.5 JOIN CLUSTER with explicit effective user: no replication permission –––
+EXPECTED: Error - user lacks replication permission
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "JOIN CLUSTER testcluster AT '127.0.0.1:9312' AS USER 'repluser';" 2>&1
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "JOIN CLUSTER testcluster AT '127.0.0.1:9312' 'norepluser' AS user;" 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected AS, expecting $end near 'AS USER 'repluser''
+ERROR 1064 (42000) at line 1: Permission denied for user 'norepluser'

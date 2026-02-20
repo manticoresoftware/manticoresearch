@@ -11827,7 +11827,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CLUSTER_DELETE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
+		if ( GloballyDeleteCluster ( pStmt->m_sCluster, m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -11905,6 +11905,13 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	{
 		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
 		HandleMysqlShowPerms ( tOut, pTargetUser );
+	}
+		return true;
+
+	case STMT_SHOW_USAGE:
+	{
+		const CSphString * pTargetUser = pStmt->m_dCallStrings.GetLength() ? &pStmt->m_dCallStrings[0] : nullptr;
+		HandleMysqlShowUsage ( tOut, pTargetUser );
 	}
 		return true;
 

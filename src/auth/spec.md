@@ -357,7 +357,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - CALL PQ
     - CALL KEYWORDS
     - SHOW PERMISSIONS
-    - SHOW MY USAGE
+    - SHOW USAGE
 
   - HTTP endpoints that retrieve data without modification:
     - /search
@@ -435,6 +435,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - JOIN CLUSTER
     - DELETE CLUSTER
     - ALTER CLUSTER (ADD, DROP, UPDATE)
+  - For cluster-management statements that specify a cluster user, authorization for replication operations is evaluated against that effective cluster user.
 
 - **admin**:
   - SQL commands that manage users and permissions:
@@ -793,20 +794,29 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
    - `SHOW MY PERMISSIONS` is not supported.
 
 10. **Show Usage Information**
-   - **Admin**: Displays usage statistics for all users.
-   - **Non-admin**: Shows only the current user’s usage.
-   - SQL Command:
+   - **Admin**:
+     - `SHOW USAGE;` displays usage rows for all users.
+     - `SHOW USAGE FOR '<username>';` displays usage for the target user.
+   - **Non-admin**:
+     - `SHOW USAGE;` shows only the current user’s usage row.
+     - `SHOW USAGE FOR '<username>';` returns `Permission denied`.
+   - SQL Commands:
      ```sql
      SHOW USAGE;
+     SHOW USAGE FOR '<username>';
      ```
+   - **Behavior notes (current placeholder implementation):**
+     - `username` column is populated.
+     - `queries_per_min`, `queries_per_day`, and `last_login` are returned as empty strings until usage counters are implemented.
+     - Unknown target user in `SHOW USAGE FOR '<username>'` returns `user '<username>' not found`.
    - Example Output for Admin:
      ```
      +-------------+-----------------+-----------------+--------------------+
      | username    | queries_per_min | queries_per_day | last_login         |
      +-------------+-----------------+-----------------+--------------------+
-     | admin       | 500             | 10000           | 2024-12-15 14:32   |
-     | readonly    | 200             | 5000            | 2024-12-15 12:45   |
-     | custom_user | 50              | 300             | 2024-12-15 15:20   |
+     | admin       |                 |                 |                    |
+     | readonly    |                 |                 |                    |
+     | custom_user |                 |                 |                    |
      +-------------+-----------------+-----------------+--------------------+
      ```
    - Example Output for Non-admin (`custom_user`):
@@ -814,7 +824,15 @@ Please refer to the section **"SQL Commands for Authentication and Authorization
      +-------------+-----------------+-----------------+--------------------+
      | username    | queries_per_min | queries_per_day | last_login         |
      +-------------+-----------------+-----------------+--------------------+
-     | custom_user | 50              | 300             | 2024-12-15 15:20   |
+     | custom_user |                 |                 |                    |
+     +-------------+-----------------+-----------------+--------------------+
+     ```
+   - Example Output for Admin with target user:
+     ```
+     +-------------+-----------------+-----------------+--------------------+
+     | username    | queries_per_min | queries_per_day | last_login         |
+     +-------------+-----------------+-----------------+--------------------+
+     | custom_user |                 |                 |                    |
      +-------------+-----------------+-----------------+--------------------+
      ```
 
@@ -939,26 +957,40 @@ If the `system.auth_users` and `system.auth_permissions` tables (RT Mode) or the
 - Joining a cluster overrides local `system.auth_users` and `system.auth_permissions` with the cluster’s version.
 - Dumps the original local data to `searchd` log as a backup.
 - Ensures all nodes share consistent authentication and authorization data.
-- Replication involves several internal commands, which, while not directly accessible to users, must still be protected by authentication and authorization. To address this, cluster-management SQL commands (`CREATE CLUSTER`, `JOIN CLUSTER`, `DELETE CLUSTER`, and `ALTER CLUSTER`) leverage a special permission action called **replication**, which allows a user to perform replication-related operations.
+- Replication involves several internal commands, which, while not directly accessible to users, must still be protected by authentication and authorization. To address this, cluster-management SQL commands (`CREATE CLUSTER`, `JOIN CLUSTER`, `DELETE CLUSTER`, and `ALTER CLUSTER`) leverage a special permission action called **replication**.
 
 If a cluster is associated with a specific user, that user's credentials will be used for all internal replication commands executed on behalf of the cluster.
+The specified cluster user is the **effective replication user** for that cluster operation.
+If cluster user is not specified in the statement, the session user is used as the effective replication user.
+Open delegation model: any authenticated caller may specify any user as the effective replication user in cluster statements.
+Authorization for replication is evaluated against the effective replication user; if that user lacks the **replication** action, the statement fails.
+The same effective replication user model applies to all cluster-management statements, including `DELETE CLUSTER` and `ALTER CLUSTER` operations (`ADD`, `DROP`, `UPDATE nodes`).
+For cluster statements, follow the same option style used elsewhere in replication syntax: `'<value>' AS <option_name>`.
+
+#### **Persistence of Effective Replication User**
+
+- The cluster's effective replication user is persisted as part of cluster metadata (`user` field) in the internal config (`manticore.json`).
+- On daemon start, cluster metadata (including `user`) is loaded from the internal config and used to initialize replication clusters.
+- Internal replication operations use the persisted effective replication user for authorization on all cluster-management operations (`CREATE`, `JOIN`, `DELETE`, `ALTER`).
+- If no user is specified at statement time, the session user is assigned as effective replication user for that operation.
+- Persisted effective user must be validated on cluster startup (user exists and has `replication` action). If validation fails, startup of that cluster must fail with an authorization error.
+- After successful cluster user assignment/change operations, updated cluster metadata (including effective user) must be saved to internal config immediately.
+- Implementation note: effective replication user is resolved as part of SQL statement permission gate, and replication authorization for cluster-management statements is evaluated against that effective user.
+- Implementation note: on daemon startup, any cluster startup error disables/removes that cluster on the local node only; daemon startup continues with other clusters.
+- Implementation note: successful `JOIN CLUSTER` persists cluster metadata immediately.
 
 #### **CREATE CLUSTER**
 
 The `CREATE CLUSTER` command now allows specifying a user who will own and manage the cluster. The specified user must have the **replication** action, as it is required for performing internal replication operations.
 
-**New Syntax:**
+**Syntax:**
 ```sql
-CREATE CLUSTER <cluster_name> [AS USER '<username>']
-```
-
-**Alternative Syntax:**
-```sql
-CREATE CLUSTER <cluster_name> ['<username>' AS USER]
+CREATE CLUSTER <cluster_name> ['<username>' AS user]
 ```
 
 **Validation:**
-- If the specified user does not have the **replication** action, the command will fail with an error.
+- If `user` is specified, that user must have the **replication** action.
+- If `user` is not specified, the session user must have the **replication** action.
 - It may also fail later when performing one of the internal replication commands. In such cases, the error should be logged in the searchd log.
 
 **Error Message:**
@@ -970,18 +1002,13 @@ User '<username>' is not permitted to do the "replication" action with the targe
 
 The `JOIN CLUSTER` command allows a node to join an existing cluster and optionally specifies the user whose credentials will authenticate the operation. This user must also have the **replication** action.
 
-**New Syntax:**
+**Syntax:**
 ```sql
-JOIN CLUSTER <cluster_name> AT '<ip:port>' [AS USER '<username>']
-```
-
-**Alternative Syntax:**
-```sql
-JOIN CLUSTER <cluster_name> AT '<ip:port>' ['<username>' AS USER]
+JOIN CLUSTER <cluster_name> AT '<ip:port>' ['<username>' AS user]
 ```
 
 **Validation:**
-- Same as for the `CREATE CLUSTER` command.
+- Same as for the `CREATE CLUSTER` command (effective replication user rules).
 - Later on when performing one of the internal replication commands if the specified user lacks the **replication** action, the operation will fail, and the error should be logged.
 
 ---
@@ -990,13 +1017,14 @@ JOIN CLUSTER <cluster_name> AT '<ip:port>' ['<username>' AS USER]
 
 The `ALTER CLUSTER` command introduces the ability to reassign a cluster to a different user. The new user must have the **replication** action to manage the cluster’s internal operations.
 
-**New Syntax:**
+**Syntax:**
 ```sql
-ALTER CLUSTER <cluster_name> USER='<username>'
+ALTER CLUSTER <cluster_name> UPDATE user '<username>'
 ```
+`ALTER CLUSTER ... UPDATE user '<username>'` is the only supported form for reassigning a cluster's effective replication user.
 
 **Validation:**
-- If the new user lacks the **replication** action, the reassignment will fail.
+- The new assigned user must have the **replication** action.
 - Later on when performing one of the internal replication commands if the specified user lacks the **replication** action, the operation will fail, and the error should be logged.
 
 **Error Message:**

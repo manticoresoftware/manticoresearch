@@ -166,6 +166,7 @@
 %token	TOK_TRUE
 %token	TOK_UNFREEZE
 %token	TOK_UPDATE
+%token	TOK_USAGE
 %token	TOK_USER
 %token	TOK_USERS
 %token	TOK_VALUES
@@ -297,7 +298,7 @@ reserved_tokens_without_option:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
-	| TOK_IDENTIFIED | TOK_LOCKS | TOK_SCROLL | TOK_USER | TOK_USERS | TOK_PASSWORD | TOK_PERMISSIONS
+	| TOK_IDENTIFIED | TOK_LOCKS | TOK_SCROLL | TOK_USAGE | TOK_USER | TOK_USERS | TOK_PASSWORD | TOK_PERMISSIONS
 	;
 
 names_transaction_collate:
@@ -1655,6 +1656,15 @@ show_what:
 		{
 			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $3 );
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_PERMISSIONS;
+		}
+	| TOK_USAGE
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_USAGE;
+		}
+	| TOK_USAGE TOK_FOR TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $3 );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_USAGE;
 		}
 	| TOK_USERS
 		{

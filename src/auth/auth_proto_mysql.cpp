@@ -98,6 +98,8 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 	}
 }
 
+bool ReplicationResolveUser ( const SqlStmt_t & tStmt, const CSphString & sSessionUser, CSphString & sRplUser, CSphString & sError );
+
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	if ( !IsAuthEnabled() )
@@ -192,7 +194,12 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 	case STMT_CLUSTER_ALTER_UPDATE:
-		return CheckPerms ( sUser, AuthAction_e::REPLICATION, tStmt.m_sCluster, false, sError );
+	{
+		CSphString sAuthUser;
+		if ( !ReplicationResolveUser ( tStmt, sUser, sAuthUser, sError ) )
+			return false;
+		return CheckPerms ( sAuthUser, AuthAction_e::REPLICATION, tStmt.m_sCluster, false, sError );
+	}
 
 
 	case STMT_SHOW_STATUS:
@@ -212,11 +219,12 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 		 return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError );
 
 	case STMT_SHOW_PERMISSIONS:
+	case STMT_SHOW_USAGE:
 	{
 		if ( !tStmt.m_dCallStrings.GetLength() )
 			return true;
 
-		// SHOW PERMISSIONS FOR '<user>' is an admin-only path.
+		// SHOW PERMISSIONS/USAGE FOR '<user>' is an admin-only path.
 		if ( !CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError ) )
 			return false;
 
@@ -265,6 +273,7 @@ bool SqlSkipBuddy()
 	switch ( pSession->m_eLastStmt )
 	{
 	case STMT_SHOW_USERS:
+	case STMT_SHOW_USAGE:
 	case STMT_SHOW_PERMISSIONS:
 	case STMT_SHOW_TOKEN:
 	case STMT_SET_PASSWORD:
@@ -311,6 +320,15 @@ static bool DumpUserPerms ( const CSphString & sUser, const UserPerms_t & dPerms
 	return true;
 }
 
+static bool DumpUserUsage ( const CSphString & sUser, RowBuffer_i & tOut )
+{
+	tOut.PutString ( sUser );
+	tOut.PutString ( "" );
+	tOut.PutString ( "" );
+	tOut.PutString ( "" );
+	return tOut.Commit ();
+}
+
 void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser )
 {
 	tOut.HeadBegin ();
@@ -345,6 +363,43 @@ void HandleMysqlShowPerms ( RowBuffer_i & tOut, const CSphString * pTargetUser )
 			for ( const auto & tUser : pUsers->m_hUserPerms )
 			{
 				if ( !DumpUserPerms ( tUser.first, tUser.second, tOut ) )
+					return;
+			}
+		}
+	}
+
+	tOut.Eof ( false );
+}
+
+void HandleMysqlShowUsage ( RowBuffer_i & tOut, const CSphString * pTargetUser )
+{
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "username" );
+	tOut.HeadColumn ( "queries_per_min" );
+	tOut.HeadColumn ( "queries_per_day" );
+	tOut.HeadColumn ( "last_login" );
+	if ( !tOut.HeadEnd () )
+		return;
+
+	if ( IsAuthEnabled() )
+	{
+		const CSphString & sSessionUser = session::GetUser();
+		AuthUsersPtr_t pUsers = GetAuth();
+
+		if ( pTargetUser )
+		{
+			assert ( HasAdminPerm ( sSessionUser ) );
+			if ( pUsers->m_hUserToken ( *pTargetUser ) && !DumpUserUsage ( *pTargetUser, tOut ) )
+				return;
+		} else if ( !HasAdminPerm ( sSessionUser ) )
+		{
+			if ( pUsers->m_hUserToken ( sSessionUser ) && !DumpUserUsage ( sSessionUser, tOut ) )
+				return;
+		} else
+		{
+			for ( const auto & tUser : pUsers->m_hUserToken )
+			{
+				if ( !DumpUserUsage ( tUser.first, tOut ) )
 					return;
 			}
 		}

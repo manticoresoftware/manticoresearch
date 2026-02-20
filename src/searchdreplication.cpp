@@ -1586,6 +1586,22 @@ static bool ClusterDescOk ( const ClusterDesc_t& tDesc, bool bForce ) noexcept
 	if ( tDesc.m_dClusterNodes.IsEmpty() )
 		sphWarning ( "no nodes found, create new cluster '%s'", tDesc.m_sName.cstr() );
 
+	if ( IsAuthEnabled() )
+	{
+		if ( tDesc.m_sUser.IsEmpty() )
+		{
+			sphWarning ( "Cluster %s: missing effective replication user, skipped", tDesc.m_sName.cstr() );
+			return false;
+		}
+
+		CSphString sPermError;
+		if ( !CheckPerms ( tDesc.m_sUser, AuthAction_e::REPLICATION, tDesc.m_sName, true, sPermError ) )
+		{
+			sphWarning ( "Cluster %s: invalid effective replication user '%s', %s, skipped", tDesc.m_sName.cstr(), tDesc.m_sUser.cstr(), sPermError.cstr() );
+			return false;
+		}
+	}
+
 	// check cluster path is unique
 	if ( !ClusterCheckPath ( tDesc.m_sPath, tDesc.m_sName.cstr() ) )
 	{
@@ -1839,6 +1855,69 @@ static std::optional<ClusterDesc_t> ClusterDescFromSphinxqlStatement ( const CSp
 	return tDesc;
 }
 
+static CSphString GetUserOption ( const SqlStmt_t & tStmt )
+{
+	CSphString sUser;
+
+	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
+	{
+		if ( !StrEqN ( FromStr ( tStmt.m_dCallOptNames[i] ), "user" ) )
+			continue;
+
+		sUser = tStmt.m_dCallOptValues[i].m_sVal;
+		break;
+	}
+
+	return sUser;
+}
+
+static bool GetClusterEffectiveUser ( const CSphString & sCluster, CSphString & sUser, CSphString & sError )
+{
+	auto pCluster = ClusterByName ( sCluster, nullptr );
+	if ( !pCluster )
+	{
+		sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
+		return false;
+	}
+
+	sUser = pCluster->m_sUser;
+	if ( sUser.IsEmpty() )
+	{
+		sError.SetSprintf ( "cluster '%s' has no effective replication user", sCluster.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+bool ReplicationResolveUser ( const SqlStmt_t & tStmt, const CSphString & sSessionUser, CSphString & sRplUser, CSphString & sError )
+{
+	sRplUser = "";
+
+	switch ( tStmt.m_eStmt )
+	{
+	case STMT_CLUSTER_CREATE:
+	case STMT_JOIN_CLUSTER:
+	{
+		CSphString sStmtUser = GetUserOption ( tStmt );
+		if ( !sStmtUser.IsEmpty() )
+			sRplUser = sStmtUser;
+		else
+			sRplUser = sSessionUser;
+		return true;
+	}
+
+	case STMT_CLUSTER_DELETE:
+	case STMT_CLUSTER_ALTER_ADD:
+	case STMT_CLUSTER_ALTER_DROP:
+	case STMT_CLUSTER_ALTER_UPDATE:
+		return GetClusterEffectiveUser ( tStmt.m_sCluster, sRplUser, sError );
+
+	default:
+		return true;
+	}
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // cluster joins to existed nodes
 /////////////////////////////////////////////////////////////////////////////
@@ -1885,6 +1964,13 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	bool bOk = IsSyncedOrDonor ( pCluster->WaitReady() );
 	if ( bOk && bUpdateNodes )
 		bOk &= DoClusterAlterUpdate ( sCluster, "nodes", NODES_E::BOTH );
+	if ( bOk )
+	{
+		CSphString sSaveError;
+		bOk = SaveConfigInt ( sSaveError );
+		if ( !bOk )
+			TlsMsg::Err ( "%s", sSaveError.cstr() );
+	}
 
 	if ( bOk )
 	{
@@ -1895,6 +1981,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( sphInterrupted() )
 		return TlsMsg::Err ( "%s", "daemon shutdown" );
 
+	if ( !TlsMsg::HasErr() )
 	{
 		ScopedMutex_t tLock ( pCluster->m_tErrorLock );
 		TlsMsg::Err ( pCluster->m_sError.cstr() );

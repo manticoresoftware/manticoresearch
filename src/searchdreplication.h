@@ -56,6 +56,9 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 // cluster creates master node
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues );
 
+// resolve effective replication user for a parsed cluster statement
+bool ReplicationResolveUser ( const SqlStmt_t & tStmt, const CSphString & sSessionUser, CSphString & sRplUser, CSphString & sError );
+
 // cluster deletes
 bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
 

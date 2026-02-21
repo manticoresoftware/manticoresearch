@@ -35,8 +35,86 @@ on:
         description: "Jina API key for CLT tests"
 
 jobs:
+  discover:
+    name: Discover CLT tests
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+      - id: build
+        name: Build matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          roots = [
+              "test/clt-tests/buddy",
+              "test/clt-tests/buddy-plugins",
+              "test/clt-tests/bugs",
+              "test/clt-tests/core",
+              "test/clt-tests/data-manipulation",
+              "test/clt-tests/expected-errors",
+              "test/clt-tests/fulltext-search",
+              "test/clt-tests/mcl",
+              "test/clt-tests/http-interface",
+              "test/clt-tests/indexer",
+              "test/clt-tests/join",
+              "test/clt-tests/kibana",
+              "test/clt-tests/mysqldump/mysql",
+              "test/clt-tests/mysqldump/maria",
+              "test/clt-tests/performance",
+              "test/clt-tests/replication",
+              "test/clt-tests/sharding/cluster",
+              "test/clt-tests/sharding/functional",
+              "test/clt-tests/sharding/replication",
+              "test/clt-tests/sharding/syntax",
+              "test/clt-tests/test-configuration",
+              "test/clt-tests/vector-knn",
+          ]
+
+          tests = []
+          for root in roots:
+              root_path = pathlib.Path(root)
+              if not root_path.exists():
+                  continue
+              for path in sorted(root_path.glob("*.rec")):
+                  # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
+                  tests.append(str(path.with_suffix("")))
+
+          total_jobs = 20
+          if not tests:
+              matrix = {"chunk": []}
+          else:
+              size = (len(tests) + total_jobs - 1) // total_jobs
+              chunks = []
+              for i in range(0, len(tests), size):
+                  group = tests[i : i + size]
+                  chunks.append(
+                      {
+                          "id": len(chunks),
+                          "tests": group,
+                          "test_prefix": "\n".join(group),
+                      }
+                  )
+              matrix = {"chunk": chunks}
+
+          print(f"Found {len(tests)} .rec tests across {len(matrix['chunk'])} jobs")
+          output_path = os.environ["GITHUB_OUTPUT"]
+          with open(output_path, "a", encoding="utf-8") as fh:
+              fh.write(f"matrix={json.dumps(matrix)}\n")
+          PY
+
   clt:
     name: CLT
+    needs: [discover]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     continue-on-error: ${{ inputs.continue_on_error }}
@@ -46,50 +124,7 @@ jobs:
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     strategy:
       fail-fast: false
-      matrix:
-        test-suite:
-          - name: Buddy
-            test_prefix: test/clt-tests/buddy/
-          - name: Buddy-plugins
-            test_prefix: test/clt-tests/buddy-plugins/
-          - name: Bugs
-            test_prefix: test/clt-tests/bugs/
-          - name: Core
-            test_prefix: test/clt-tests/core/
-          - name: Data-manipulation
-            test_prefix: test/clt-tests/data-manipulation/
-          - name: Expected-errors
-            test_prefix: test/clt-tests/expected-errors/
-          - name: Fulltext-search
-            test_prefix: test/clt-tests/fulltext-search/
-          - name: MCL
-            test_prefix: test/clt-tests/mcl/
-          - name: HTTP interface tests
-            test_prefix: test/clt-tests/http-interface/
-          - name: Indexer
-            test_prefix: test/clt-tests/indexer/
-          - name: Join
-            test_prefix: test/clt-tests/join/
-          - name: Kibana
-            test_prefix: test/clt-tests/kibana/
-          - name: mysqldump
-            test_prefix: |-
-              test/clt-tests/mysqldump/mysql/
-              test/clt-tests/mysqldump/maria/
-          - name: Performance
-            test_prefix: test/clt-tests/performance/
-          - name: Replication
-            test_prefix: test/clt-tests/replication/
-          - name: Sharding
-            test_prefix: |-
-              test/clt-tests/sharding/cluster/
-              test/clt-tests/sharding/functional/
-              test/clt-tests/sharding/replication/
-              test/clt-tests/sharding/syntax/
-          - name: Test-configuration
-            test_prefix: test/clt-tests/test-configuration/
-          - name: Vector-knn
-            test_prefix: test/clt-tests/vector-knn/
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
               
     steps:
       - uses: manticoresoftware/clt@0.7.8
@@ -98,7 +133,7 @@ jobs:
           image: ${{ inputs.docker_image }}
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
-          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          test_prefix: ${{ matrix.chunk.test_prefix }}
           comment_mode: failures
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY"
           ui_host: "https://clt.manticoresearch.com"

@@ -84,7 +84,7 @@ void DiskDictTraits_c::DictEntry ( const DictEntry_t& tEntry )
 	m_wrDict.ZipInt ( tEntry.m_iHits );
 
 	// write skiplist location info, if any
-	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
+	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
 
 	++m_iEntries;

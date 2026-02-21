@@ -468,7 +468,7 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
+	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_uVersion, m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
 	// FIXME! add more header checks
 
 }
@@ -533,7 +533,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
+	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_uVersion, m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
 	// FIXME! add more header checks
 }
 
@@ -838,10 +838,10 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 			iDocs = tDictReader.UnzipInt();
 			iHits = tDictReader.UnzipInt();
 			int iHint = 0;
-			if ( iDocs>=DOCLIST_HINT_THRESH )
+			if ( ( iDocs & HITLESS_DOC_MASK )>=DOCLIST_HINT_THRESH )
 				iHint = tDictReader.GetByte();
 
-			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
+			iHint = DoclistHintUnpack ( ( iDocs & HITLESS_DOC_MASK ), (BYTE)iHint );
 
 			if ( m_tIndex.GetSettings().m_eHitless==SPH_HITLESS_SOME && ( iDocs & HITLESS_DOC_FLAG )!=0 )
 			{
@@ -889,8 +889,9 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 		assert ( tIndexSettings.m_iSkiplistBlockSize>0 );
 
-		// skiplist
-		if ( iDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		// Skiplist pointer presence depends on docs count in dictionary layout.
+		// It must be consumed regardless of hitless mode to keep dict parsing aligned.
+		if ( iDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
 			int iSkipsOffset = tDictReader.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
@@ -1045,7 +1046,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			iDoclistOffset = m_tDictReader.UnzipOffset();
 			iDictDocs = m_tDictReader.UnzipInt();
 			iDictHits = m_tDictReader.UnzipInt();
-			if ( iDictDocs>=DOCLIST_HINT_THRESH )
+			if ( ( iDictDocs & HITLESS_DOC_MASK )>=DOCLIST_HINT_THRESH )
 				m_tDictReader.GetByte();
 
 			if ( tIndexSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
@@ -1068,7 +1069,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		}
 
 		int64_t iSkipsOffset = 0;
-		if ( iDictDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		if ( iDictDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
 			if ( m_uVersion<=57 )
 				iSkipsOffset = (int)m_tDictReader.UnzipInt();

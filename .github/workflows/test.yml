@@ -32,19 +32,8 @@ concurrency:
 # Note: Many build jobs skip execution for PRs targeting 'update-buddy-version' branch
 # as these PRs only update dependency versions and don't require full builds/tests
 jobs:
-  commit_info:
-    name: Commit info
-    runs-on: ubuntu-22.04
-    steps:
-      - run: |
-          echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
-          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
-          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
-          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
-
-  check_branch:
-    name: Check branch existence
+  meta:
+    name: Meta
     runs-on: ubuntu-22.04
     outputs:
       columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
@@ -53,8 +42,28 @@ jobs:
       source_hash: ${{ steps.source_hash.outputs.source_hash }}
       image_exists: ${{ steps.image_check.outputs.image_exists }}
       image_tag: ${{ steps.image_check.outputs.image_tag }}
+      image_commit: ${{ steps.image_check.outputs.image_commit }}
+      image_source_hash: ${{ steps.image_check.outputs.image_source_hash }}
+      source: ${{ steps.detect.outputs.source }}
+      test: ${{ steps.detect.outputs.test }}
+      clt: ${{ steps.detect.outputs.clt }}
+      changes_detected: ${{ steps.calc.outputs.changes_detected }} # any relevant change (source/test/clt)
+      skip_builds: ${{ steps.calc.outputs.skip_builds }} # only CLT tests changed and cached test-kit image exists
+      run_builds: ${{ steps.calc.outputs.run_builds }} # build/ubertest jobs
+      run_image_build: ${{ steps.calc.outputs.run_image_build }} # build test-kit image
+      run_clt: ${{ steps.calc.outputs.run_clt }} # run CLT workflow
+      run_image_push: ${{ steps.calc.outputs.run_image_push }} # push test-kit image tags
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Commit info
+        run: |
+          echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
       - name: Check if branch exists in manticoresoftware/columnar
         id: check_branch
         run: |
@@ -64,7 +73,7 @@ jobs:
           else
             BRANCH_NAME="${{ github.ref_name }}"
           fi
-          
+
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
           if [ "$HTTP_STATUS" -eq "200" ]; then
             echo "branch_exists=true" >> $GITHUB_OUTPUT
@@ -90,19 +99,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            git clone --depth 1 --branch "${{ steps.check_branch.outputs.branch_name }}" \
-              https://github.com/manticoresoftware/columnar.git columnar
+            git clone --depth 1 --branch "${{ steps.check_branch.outputs.branch_name }}"               https://github.com/manticoresoftware/columnar.git columnar
             rm -rf columnar/.git
           fi
-          HASH=$(find . -type f \
-            ! -path "./test/clt-tests/*" \
-            ! -path "./columnar/test/clt-tests/*" \
-            ! -path "./.git/*" \
-            -print0 \
-            | sort -z \
-            | xargs -0 md5sum \
-            | md5sum \
-            | awk '{print $1}')
+          HASH=$(find . -type f             ! -path "./test/clt-tests/*"             ! -path "./columnar/test/clt-tests/*"             ! -path "./.git/*"             -print0             | sort -z             | xargs -0 md5sum             | md5sum             | awk '{print $1}')
           echo "source_hash=$HASH" >> $GITHUB_OUTPUT
       - name: Check for existing test kit image
         id: image_check
@@ -113,9 +113,16 @@ jobs:
           TAG="test-kit-${{ steps.sanitize_branch.outputs.branch_tag }}-${{ steps.source_hash.outputs.source_hash }}"
           if docker manifest inspect "ghcr.io/${REPO_OWNER}/manticoresearch:${TAG}" > /dev/null 2>&1; then
             echo "image_exists=true" >> $GITHUB_OUTPUT
-            echo "* Reusing cached test-kit image tag: ${TAG}. Skipping builds/ubertests." >> $GITHUB_STEP_SUMMARY
+            echo "* Reusing cached test-kit image tag: ${TAG}." >> $GITHUB_STEP_SUMMARY
+            docker pull "ghcr.io/${REPO_OWNER}/manticoresearch:${TAG}" > /dev/null
+            image_commit=$(docker inspect -f '{{ index .Config.Labels "org.manticore.testkit.commit" }}' "ghcr.io/${REPO_OWNER}/manticoresearch:${TAG}" || true)
+            image_source_hash=$(docker inspect -f '{{ index .Config.Labels "org.manticore.testkit.source_hash" }}' "ghcr.io/${REPO_OWNER}/manticoresearch:${TAG}" || true)
+            echo "image_commit=${image_commit}" >> $GITHUB_OUTPUT
+            echo "image_source_hash=${image_source_hash}" >> $GITHUB_OUTPUT
           else
             echo "image_exists=false" >> $GITHUB_OUTPUT
+            echo "image_commit=" >> $GITHUB_OUTPUT
+            echo "image_source_hash=" >> $GITHUB_OUTPUT
           fi
           echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
       - name: Set Columnar Locator
@@ -126,35 +133,128 @@ jobs:
           else
             echo "columnar_locator=" >> $GITHUB_OUTPUT
           fi
+      - name: Detect changed files and categories
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="${{ github.sha }}"
+          base=""
+          if [[ -n "${{ steps.image_check.outputs.image_commit }}" ]]; then
+            base="${{ steps.image_check.outputs.image_commit }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
 
-  changes:
-    name: Detect changes in commit
-    runs-on: ubuntu-22.04
-    outputs:
-      source: ${{ steps.filter.outputs.source }}
-      test: ${{ steps.filter.outputs.test }}
-      clt: ${{ steps.filter.outputs.clt }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: manticoresoftware/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            source:
-            - '**'
-            - '!.github/**'
-            - '!manual/**'
-            - '!doc/**'
-            - '!test/**'
-            test:
-            - 'test/**'
-            - '!test/clt-tests/**'
-            clt:
-            - 'test/clt-tests/**'
+          files=""
+          if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
+            files=$(git ls-tree -r --name-only "$head")
+          else
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$base"
+            fi
+            files=$(git diff --name-only "$base" "$head")
+          fi
+
+          {
+            echo "### Changed files"
+            echo "* Base: ${base:-'(none)'}"
+            echo "* Head: ${head}"
+            if [[ -n "${{ steps.image_check.outputs.image_commit }}" ]]; then
+              echo "* Using image commit as base"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -z "$files" && "$base" == "$head" ]]; then
+            echo "* No diff (base == head); forcing full run" >> "$GITHUB_STEP_SUMMARY"
+            files="__force_all__"
+          fi
+          if [[ -n "$files" ]]; then
+            echo "$files" | sed 's/^/* /' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "* (no files)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          export FILES="$files"
+
+          python3 - <<'PY'
+          import os
+
+          files = os.environ.get("FILES", "").splitlines()
+          source = False
+          test = False
+          clt = False
+          for path in files:
+              if not path:
+                  continue
+              if path == "__force_all__":
+                  source = True
+              elif path.startswith("test/clt-tests/"):
+                  clt = True
+              elif path.startswith("test/"):
+                  test = True
+              elif path.startswith(".github/") or path.startswith("manual/") or path.startswith("doc/"):
+                  pass
+              else:
+                  source = True
+          output = os.environ["GITHUB_OUTPUT"]
+          with open(output, "a", encoding="utf-8") as fh:
+              fh.write(f"source={'true' if source else 'false'}\n")
+              fh.write(f"test={'true' if test else 'false'}\n")
+              fh.write(f"clt={'true' if clt else 'false'}\n")
+          PY
+      - name: Calculate gating
+        id: calc
+        run: |
+          set -euo pipefail
+          changes_detected=false
+          if [[ "${{ steps.detect.outputs.source }}" == "true"              || "${{ steps.detect.outputs.test }}" == "true"              || "${{ steps.detect.outputs.clt }}" == "true" ]]; then
+            changes_detected=true
+          fi
+
+          skip_builds=false
+          if [[ "${{ steps.detect.outputs.clt }}" == "true"              && "${{ steps.detect.outputs.source }}" != "true"              && "${{ steps.detect.outputs.test }}" != "true"              && "${{ steps.image_check.outputs.image_exists }}" == "true" ]]; then
+            skip_builds=true
+          fi
+
+          run_builds=false
+          if [[ "$changes_detected" == "true"              && "${{ github.event_name }}" == "pull_request"              && "${{ github.event.pull_request.base.ref }}" == "update-buddy-version" ]]; then
+            run_builds=false
+          elif [[ "$changes_detected" == "true" && "$skip_builds" == "false" ]]; then
+            run_builds=true
+          fi
+
+          run_image_build="$changes_detected"
+          run_clt="$changes_detected"
+          run_image_push=false
+          if [[ "$changes_detected" == "true" && "${{ steps.image_check.outputs.image_exists }}" != "true" ]]; then
+            run_image_push=true
+          fi
+
+          echo "changes_detected=$changes_detected" >> "$GITHUB_OUTPUT"
+          echo "skip_builds=$skip_builds" >> "$GITHUB_OUTPUT"
+          echo "run_builds=$run_builds" >> "$GITHUB_OUTPUT"
+          echo "run_image_build=$run_image_build" >> "$GITHUB_OUTPUT"
+          echo "run_clt=$run_clt" >> "$GITHUB_OUTPUT"
+          echo "run_image_push=$run_image_push" >> "$GITHUB_OUTPUT"
+      - name: Summarize gating
+        run: |
+          {
+            echo "### Gate decisions"
+            echo "* Changes detected (source/test/CLT): ${{ steps.calc.outputs.changes_detected }}"
+            echo "* Skip builds/ubertests (only CLT changes + cached image): ${{ steps.calc.outputs.skip_builds }}"
+            echo "* Run build/ubertest jobs: ${{ steps.calc.outputs.run_builds }}"
+            echo "* Build test-kit image: ${{ steps.calc.outputs.run_image_build }}"
+            echo "* Run CLT tests: ${{ steps.calc.outputs.run_clt }}"
+            echo "* Push test-kit image tags: ${{ steps.calc.outputs.run_image_push }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   win_bundle:
     # Skip build jobs for PRs targeting 'update-buddy-version' branch (buddy version updates don't need full builds)
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:
@@ -181,13 +281,13 @@ jobs:
           tar -xf boost_1_75_0.tgz
 
   build_linux_debug:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       artifact_name: debug_build
       cache_key: build_linux_debug_x86_64
       cmake_command: |
@@ -197,185 +297,61 @@ jobs:
   test_linux_debug:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux debug mode tests
-    needs: [build_linux_debug, check_branch]
+    needs: [build_linux_debug, meta]
     uses: ./.github/workflows/test_template.yml
     with:
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       build_artifact_name: debug_build
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
       timeout: 10
 
   build_linux_release:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
     with:
       artifact_name: release_build
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       cache_key: build_linux_release_x86_64
+      artifact_list: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno build/manticore*deb"
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export PACK=1
+        export PACK_KEEP_TESTS=1
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+        cmake --build build --target package
 
   test_linux_release:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests
-    needs: [build_linux_release, check_branch]
+    needs: [build_linux_release, meta]
     uses: ./.github/workflows/test_template.yml
     with:
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       build_artifact_name: release_build
       artifact_name: release_test_results
       results_name: "Linux release test results"
       timeout: 10
 
 
-  pack_jammy_cache_check:
-    needs: changes
-    name: Jammy x86_64 package [check cache]
-    runs-on: ubuntu-22.04
-    outputs:
-      cache-key: ${{ steps.generate-key.outputs.cache-key }}
-      cache-hit: ${{ steps.cache.outputs.cache-hit }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Generate cache key
-        id: generate-key
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            branch=${{ github.head_ref }}
-          else
-            branch=$(git rev-parse --abbrev-ref HEAD)
-          fi
-          cache_key="jammy-build-${branch}"
-          echo "cache-key=${cache_key}" >> $GITHUB_OUTPUT
-
-      - name: Set up cache
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: ${{ steps.generate-key.outputs.cache-key }}
-
-      - name: Override cache hit
-        id: override-cache-hit
-        run: |
-          if [ "${{ needs.changes.outputs.source }}" == "true" ]; then
-            echo "cache-hit=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload build artifacts from cache
-        if: ${{ steps.override-cache-hit.outputs.cache-hit == 'true' }}
-        uses: manticoresoftware/upload_artifact_with_retries@v4
-        with:
-          name: build_jammy_RelWithDebInfo_x86_64
-          path: "build/manticore*deb"
-
-  pack_jammy:
-    needs: [pack_jammy_cache_check, changes, check_branch]
-    if: |
-      (needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
-      needs.changes.outputs.source == 'true') &&
-      needs.check_branch.outputs.image_exists != 'true'
-    name: Jammy x86_64 package [build]
-    uses: ./.github/workflows/build_template.yml
-    with:
-      DISTR: jammy
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
-      arch: x86_64
-      cmake_command: |
-        mkdir build
-        cd build
-        cmake -DPACK=1 ..
-        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
-        cmake --build . --target package
-      cache_key: pack_jammy_x86_64
-      artifact_list: "build/manticore*deb"
-
-  pack_jammy_cache_update:
-    if: (needs.pack_jammy_cache_check.outputs.cache-hit != 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    name: Jammy x86_64 package [update cache]
-    needs: [pack_jammy, pack_jammy_cache_check]
+  # When only CLT changed and a cached image exists, build jobs are skipped. A job that needs
+  # build_linux_release would then be skipped too (GitHub skips dependents of skipped jobs),
+  # so we use a separate reuse-only job that only needs meta. That way CLT always runs when
+  # run_clt is true and we have a test-kit image (either built or reused).
+  test_kit_docker_reuse:
+    name: Test Kit docker image (reuse cache)
+    needs: [meta]
+    if: needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists == 'true'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-
-      - name: Download built x86_64 Ubuntu Jammy packages
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: build_jammy_RelWithDebInfo_x86_64
-          path: .
-
-      - name: Save cache
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: ${{ needs.pack_jammy_cache_check.outputs.cache-key }}
-
-  test_kit_docker_build:
-    name: Test Kit docker image
-    needs:
-      - pack_jammy
-      - pack_jammy_cache_check
-      - check_branch
-      - test_linux_debug
-      - test_linux_release
-      - test_windows
-      - build_aarch64
-      - build_freebsd
-    if: always() && needs.pack_jammy.result != 'failure'
-    runs-on: ubuntu-22.04
-    outputs:
-      out-build: ${{ steps.build.outputs.build_image }}
-      deps_success: ${{ steps.prereq_status.outputs.deps_success }}
-    steps:
-      - name: Evaluate prerequisite results
-        id: prereq_status
-        run: |
-          set -euo pipefail
-          results=(
-            "${{ needs.test_linux_debug.result }}"
-            "${{ needs.test_linux_release.result }}"
-            "${{ needs.test_windows.result }}"
-            "${{ needs.pack_jammy.result }}"
-            "${{ needs.build_aarch64.result }}"
-            "${{ needs.build_freebsd.result }}"
-          )
-          ok=true
-          for result in "${results[@]}"; do
-            if [[ "$result" != "success" ]]; then
-              ok=false
-            fi
-          done
-          echo "deps_success=$ok" >> $GITHUB_OUTPUT
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v3
-      - name: Download built x86_64 Ubuntu Jammy packages
-        if: needs.check_branch.outputs.image_exists != 'true'
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        with:
-          name: build_jammy_RelWithDebInfo_x86_64
-          path: .
-      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
-      # - run: |
-      #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
-      #     unzip build_jammy_RelWithDebInfo_x86_64.zip
-      #     tar -xvf artifact.tar
-      - name: Calculate short commit hash
-        id: sha
-        if: needs.check_branch.outputs.image_exists != 'true'
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Reuse cached test kit image
-        if: needs.check_branch.outputs.image_exists == 'true'
         env:
           REPO_OWNER: ${{ github.repository_owner }}
-          IMAGE_TAG: ${{ needs.check_branch.outputs.image_tag }}
+          IMAGE_TAG: ${{ needs.meta.outputs.image_tag }}
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${REPO_OWNER}/manticoresearch:${IMAGE_TAG}"
@@ -384,9 +360,39 @@ jobs:
           docker create --name manticore-test-kit-src --entrypoint /bin/sh test-kit:img -c "true"
           docker export manticore-test-kit-src > manticore_test_kit.img
           docker rm manticore-test-kit-src
+      - name: Upload docker image artifact
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: manticore_test_kit.img
+          path: manticore_test_kit.img
+
+  test_kit_docker_build:
+    name: Test Kit docker image
+    needs:
+      - build_linux_release
+      - meta
+    if: needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists != 'true'
+    runs-on: ubuntu-22.04
+    outputs:
+      out-build: ${{ steps.build.outputs.build_image }}
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download built x86_64 Ubuntu Jammy packages
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: release_build
+          path: .
+      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
+      # - run: |
+      #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
+      #     unzip build_jammy_RelWithDebInfo_x86_64.zip
+      #     tar -xvf artifact.tar
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Building docker
         id: build
-        if: needs.check_branch.outputs.image_exists != 'true'
         run: |
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
@@ -397,9 +403,9 @@ jobs:
           path: manticore_test_kit.img
 
   clt:
-    if: always() && needs.test_kit_docker_build.result != 'failure'
+    if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
     name: CLT
-    needs: test_kit_docker_build
+    needs: [test_kit_docker_build, test_kit_docker_reuse, meta]
     uses: ./.github/workflows/clt_tests.yml
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -412,21 +418,25 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.changes.outputs.source == 'true' && needs.check_branch.outputs.image_exists != 'true'
+    if: always() && needs.meta.outputs.run_image_push == 'true'
     needs:
-      - changes
       - clt
-      - check_branch
+      - meta
       - test_kit_docker_build
+      - test_kit_docker_reuse
+      - test_linux_debug
+      - test_linux_release
+      - test_windows
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
     env:
       GHCR_USER: ${{ vars.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
       REPO_OWNER: ${{ github.repository_owner }}
-      SOURCE_HASH: ${{ needs.check_branch.outputs.source_hash }}
-      BRANCH_TAG: ${{ needs.check_branch.outputs.branch_tag }}
-      HASH_TAG_OK: ${{ needs.test_kit_docker_build.outputs.deps_success }}
+      SOURCE_HASH: ${{ needs.meta.outputs.source_hash }}
+      BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
+      HASH_TAG_OK: ${{ needs.test_linux_debug.result == 'success' && needs.test_linux_release.result == 'success' && needs.test_windows.result == 'success' }}
+      IMAGE_BUILD_COMMIT: ${{ github.sha }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -444,14 +454,14 @@ jobs:
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
     # Use -VV instead of -V below for more verbose output
     with:
       arch: aarch64
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       cmake_command: |
         mkdir build
         cd build
@@ -460,13 +470,13 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: freebsd13
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       boost_url_key: none
       cmake_command: |
         mkdir build
@@ -476,8 +486,8 @@ jobs:
       cache_key: build_freebsd_x86_64
 
   build_windows:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.meta.outputs.run_builds == 'true'
+    needs: [meta]
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -489,86 +499,15 @@ jobs:
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
       artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/indexer.pdb build/src/Debug/searchd.exe build/src/Debug/searchd.pdb build/src/gtests/Debug/gmanticoretest.exe build/src/gtests/Debug/gmanticoretest.pdb build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
 
   test_windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests
-    needs: [build_windows, win_bundle, check_branch]
+    needs: [build_windows, win_bundle, meta]
     uses: ./.github/workflows/win_test_template.yml
-    strategy:
-      fail-fast: false
-      matrix:
-        name: [1_400, 401_650, 651_and_on]
-        include:
-          - name: 1_400
-            start: 1
-            end: 400
-          - name: 401_650
-            start: 401
-            end: 650
-          - name: 651_and_on
-            start: 651
-            end: 999999
     with:
-      CTEST_START: ${{ matrix.start }}
-      CTEST_END: ${{ matrix.end }}
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
-      artifact_name: windows_test_${{ matrix.name }}
-
-  windows_tests_report:
-    name: Windows tests summary and report
-    needs: test_windows
-    runs-on: ubuntu-22.04
-    container:
-      image: manticoresearch/ubertests_public:331
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Download test report artifacts 1_400
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_1_400
-          path: .
-      - name: Download test report artifacts 401_650
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_401_650
-          path: .
-      - name: Download test report artifacts 651_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_651_and_on
-          path: .
-      - name: Convert the XML to JUnit format
-        run: |
-          shopt -s nullglob
-          for dir in build/xml_*; do
-            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
-              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
-            fi
-          done
-        shell: bash
-      - name: Publish test results
-        uses: manticoresoftware/publish-unit-test-result-action@v2
-        with:
-          check_name: Windows test results
-          compare_to_earlier_commit: false
-          files: build/xml_*/junit_tests.xml
-          comment_mode: failures
-      - name: Per-test results
-        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
-        run: |
-          for file in build/status*; do echo -n "$file: "; cat "$file"; done
-          grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'
-        shell: bash
-      - name: Upload combined artifacts
-        if: always()
-        continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
-        with:
-          name: windows_test_resuls
-          path: build
+      CTEST_START: 1
+      CTEST_END: 999999
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
+      artifact_name: windows_test_results

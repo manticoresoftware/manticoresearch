@@ -842,6 +842,10 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 					continue;
 				sphLogDebugv( "SyncSockRead: select got SIGTERM, exit -1, sock=%d", pSock->GetSocket() );
 			}
+			// Polling can transiently fail on non-blocking sockets (or return -1 with stale errno on some OSes).
+			// Retry until timeout boundary rather than turning this into a hard read error.
+			if ( iErr==EAGAIN || iErr==EWOULDBLOCK || iErr==0 )
+				continue;
 			return -1;
 		}
 
@@ -904,6 +908,9 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 					continue;
 				sphLogDebugv( "SyncSockRead: select got SIGTERM, exit -1, sock=%d", pSock->GetSocket() );
 			}
+			// Poll/read readiness can race on non-blocking sockets; retry on transient would-block.
+			if ( iErr==EAGAIN || iErr==EWOULDBLOCK )
+				continue;
 			return -1;
 		}
 

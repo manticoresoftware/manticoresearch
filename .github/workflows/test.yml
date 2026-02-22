@@ -156,7 +156,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [changes, check_branch]
     outputs:
-      run_any: ${{ steps.calc.outputs.run_any }} # any relevant change (source/test/clt)
+      changes_detected: ${{ steps.calc.outputs.changes_detected }} # any relevant change (source/test/clt)
       skip_builds: ${{ steps.calc.outputs.skip_builds }} # only CLT tests changed and cached test-kit image exists
       run_builds: ${{ steps.calc.outputs.run_builds }} # build/ubertest jobs
       run_image_build: ${{ steps.calc.outputs.run_image_build }} # build test-kit image
@@ -167,11 +167,11 @@ jobs:
         id: calc
         run: |
           set -euo pipefail
-          run_any=false
+          changes_detected=false
           if [[ "${{ needs.changes.outputs.source }}" == "true" \
              || "${{ needs.changes.outputs.test }}" == "true" \
              || "${{ needs.changes.outputs.clt }}" == "true" ]]; then
-            run_any=true
+            changes_detected=true
           fi
 
           skip_builds=false
@@ -183,27 +183,38 @@ jobs:
           fi
 
           run_builds=false
-          if [[ "$run_any" == "true" \
+          if [[ "$changes_detected" == "true" \
              && "${{ github.event_name }}" == "pull_request" \
              && "${{ github.event.pull_request.base.ref }}" == "update-buddy-version" ]]; then
             run_builds=false
-          elif [[ "$run_any" == "true" && "$skip_builds" == "false" ]]; then
+          elif [[ "$changes_detected" == "true" && "$skip_builds" == "false" ]]; then
             run_builds=true
           fi
 
-          run_image_build="$run_any"
-          run_clt="$run_any"
+          run_image_build="$changes_detected"
+          run_clt="$changes_detected"
           run_image_push=false
-          if [[ "$run_any" == "true" && "${{ needs.check_branch.outputs.image_exists }}" != "true" ]]; then
+          if [[ "$changes_detected" == "true" && "${{ needs.check_branch.outputs.image_exists }}" != "true" ]]; then
             run_image_push=true
           fi
 
-          echo "run_any=$run_any" >> "$GITHUB_OUTPUT"
+          echo "changes_detected=$changes_detected" >> "$GITHUB_OUTPUT"
           echo "skip_builds=$skip_builds" >> "$GITHUB_OUTPUT"
           echo "run_builds=$run_builds" >> "$GITHUB_OUTPUT"
           echo "run_image_build=$run_image_build" >> "$GITHUB_OUTPUT"
           echo "run_clt=$run_clt" >> "$GITHUB_OUTPUT"
           echo "run_image_push=$run_image_push" >> "$GITHUB_OUTPUT"
+      - name: Summarize gating
+        run: |
+          {
+            echo "### Gate decisions"
+            echo "* Changes detected (source/ubertest/CLT tests): ${{ steps.calc.outputs.changes_detected }}"
+            echo "* Skip builds/ubertests (only CLT changes + cached image): ${{ steps.calc.outputs.skip_builds }}"
+            echo "* Run build/ubertest jobs: ${{ steps.calc.outputs.run_builds }}"
+            echo "* Build test-kit image: ${{ steps.calc.outputs.run_image_build }}"
+            echo "* Run CLT tests: ${{ steps.calc.outputs.run_clt }}"
+            echo "* Push test-kit image tags: ${{ steps.calc.outputs.run_image_push }}"
+          } >> "$GITHUB_STEP_SUMMARY"
   win_bundle:
     # Skip build jobs for PRs targeting 'update-buddy-version' branch (buddy version updates don't need full builds)
     if: needs.gate.outputs.run_builds == 'true'

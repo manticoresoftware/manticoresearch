@@ -113,7 +113,7 @@ jobs:
           TAG="test-kit-${{ steps.sanitize_branch.outputs.branch_tag }}-${{ steps.source_hash.outputs.source_hash }}"
           if docker manifest inspect "ghcr.io/${REPO_OWNER}/manticoresearch:${TAG}" > /dev/null 2>&1; then
             echo "image_exists=true" >> $GITHUB_OUTPUT
-            echo "* Reusing cached test-kit image tag: ${TAG}. Skipping builds/ubertests." >> $GITHUB_STEP_SUMMARY
+            echo "* Reusing cached test-kit image tag: ${TAG}." >> $GITHUB_STEP_SUMMARY
           else
             echo "image_exists=false" >> $GITHUB_OUTPUT
           fi
@@ -151,10 +151,63 @@ jobs:
             - '!test/clt-tests/**'
             clt:
             - 'test/clt-tests/**'
+  gate:
+    name: Gate
+    runs-on: ubuntu-22.04
+    needs: [changes, check_branch]
+    outputs:
+      run_any: ${{ steps.calc.outputs.run_any }} # any relevant change (source/test/clt)
+      skip_builds: ${{ steps.calc.outputs.skip_builds }} # only CLT tests changed and cached test-kit image exists
+      run_builds: ${{ steps.calc.outputs.run_builds }} # build/ubertest jobs
+      run_image_build: ${{ steps.calc.outputs.run_image_build }} # build test-kit image
+      run_clt: ${{ steps.calc.outputs.run_clt }} # run CLT workflow
+      run_image_push: ${{ steps.calc.outputs.run_image_push }} # push test-kit image tags
+    steps:
+      - name: Calculate gating
+        id: calc
+        run: |
+          set -euo pipefail
+          run_any=false
+          if [[ "${{ needs.changes.outputs.source }}" == "true" \
+             || "${{ needs.changes.outputs.test }}" == "true" \
+             || "${{ needs.changes.outputs.clt }}" == "true" ]]; then
+            run_any=true
+          fi
+
+          skip_builds=false
+          if [[ "${{ needs.changes.outputs.clt }}" == "true" \
+             && "${{ needs.changes.outputs.source }}" != "true" \
+             && "${{ needs.changes.outputs.test }}" != "true" \
+             && "${{ needs.check_branch.outputs.image_exists }}" == "true" ]]; then
+            skip_builds=true
+          fi
+
+          run_builds=false
+          if [[ "$run_any" == "true" \
+             && "${{ github.event_name }}" == "pull_request" \
+             && "${{ github.event.pull_request.base.ref }}" == "update-buddy-version" ]]; then
+            run_builds=false
+          elif [[ "$run_any" == "true" && "$skip_builds" == "false" ]]; then
+            run_builds=true
+          fi
+
+          run_image_build="$run_any"
+          run_clt="$run_any"
+          run_image_push=false
+          if [[ "$run_any" == "true" && "${{ needs.check_branch.outputs.image_exists }}" != "true" ]]; then
+            run_image_push=true
+          fi
+
+          echo "run_any=$run_any" >> "$GITHUB_OUTPUT"
+          echo "skip_builds=$skip_builds" >> "$GITHUB_OUTPUT"
+          echo "run_builds=$run_builds" >> "$GITHUB_OUTPUT"
+          echo "run_image_build=$run_image_build" >> "$GITHUB_OUTPUT"
+          echo "run_clt=$run_clt" >> "$GITHUB_OUTPUT"
+          echo "run_image_push=$run_image_push" >> "$GITHUB_OUTPUT"
   win_bundle:
     # Skip build jobs for PRs targeting 'update-buddy-version' branch (buddy version updates don't need full builds)
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.gate.outputs.run_builds == 'true'
+    needs: [changes, check_branch, gate]
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:
@@ -181,8 +234,8 @@ jobs:
           tar -xf boost_1_75_0.tgz
 
   build_linux_debug:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.gate.outputs.run_builds == 'true'
+    needs: [changes, check_branch, gate]
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -207,8 +260,8 @@ jobs:
       timeout: 10
 
   build_linux_release:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.gate.outputs.run_builds == 'true'
+    needs: [changes, check_branch, gate]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -241,7 +294,8 @@ jobs:
     needs:
       - build_linux_release
       - check_branch
-    if: always() && needs.build_linux_release.result != 'failure'
+      - gate
+    if: always() && needs.gate.outputs.run_image_build == 'true' && needs.build_linux_release.result != 'failure'
     runs-on: ubuntu-22.04
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
@@ -289,9 +343,9 @@ jobs:
           path: manticore_test_kit.img
 
   clt:
-    if: always() && needs.test_kit_docker_build.result != 'failure'
+    if: needs.gate.outputs.run_clt == 'true' && needs.test_kit_docker_build.result != 'failure'
     name: CLT
-    needs: test_kit_docker_build
+    needs: [test_kit_docker_build, gate]
     uses: ./.github/workflows/clt_tests.yml
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -304,11 +358,12 @@ jobs:
       ref: ${{ github.sha }}
 
   test_kit_docker_push:
-    if: always() && needs.changes.outputs.source == 'true' && needs.check_branch.outputs.image_exists != 'true'
+    if: always() && needs.gate.outputs.run_image_push == 'true'
     needs:
       - changes
       - clt
       - check_branch
+      - gate
       - test_kit_docker_build
       - test_linux_debug
       - test_linux_release
@@ -339,8 +394,8 @@ jobs:
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.gate.outputs.run_builds == 'true'
+    needs: [changes, check_branch, gate]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
     # Use -VV instead of -V below for more verbose output
@@ -355,8 +410,8 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.gate.outputs.run_builds == 'true'
+    needs: [changes, check_branch, gate]
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -371,8 +426,8 @@ jobs:
       cache_key: build_freebsd_x86_64
 
   build_windows:
-    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.check_branch.outputs.image_exists != 'true'
-    needs: [changes, check_branch]
+    if: needs.gate.outputs.run_builds == 'true'
+    needs: [changes, check_branch, gate]
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
     with:

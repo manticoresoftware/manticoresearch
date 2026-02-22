@@ -1,5 +1,6 @@
 Test for issue #599: Error Code: 1064. no such table after adding fuzzy with JOIN and FACET
 https://github.com/manticoresoftware/manticoresearch-buddy/issues/599
+TEST
 
 Bug: Query with LEFT JOIN, FACET, and OPTION fuzzy=1 fails with 'no such table' error.
 The query works without fuzzy option but fails when fuzzy is added.

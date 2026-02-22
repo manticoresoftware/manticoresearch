@@ -31,6 +31,7 @@ jobs:
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: ${{ inputs.CTEST_START }}
       CTEST_END: ${{ inputs.CTEST_END }}
+      CTEST_RESOURCE: ${{ github.workspace }}\\misc\\ctest\\ubertests\\ubertests_docker_image\\resource.json
       # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
       # CTEST_REGEX: test_234
       NO_BUILD: 1
@@ -64,7 +65,7 @@ jobs:
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --install mysql
           net start mysql
-          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; grant all on test.* to 'test'@'localhost'; flush privileges;" -uroot
+          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; create database test1; create database test2; create database test3; create database test4; create database test5; create database test6; create database test7; create database test8; create database test9; grant all on test.* to 'test'@'localhost'; grant all on test1.* to 'test'@'localhost'; grant all on test2.* to 'test'@'localhost'; grant all on test3.* to 'test'@'localhost'; grant all on test4.* to 'test'@'localhost'; grant all on test5.* to 'test'@'localhost'; grant all on test6.* to 'test'@'localhost'; grant all on test7.* to 'test'@'localhost'; grant all on test8.* to 'test'@'localhost'; grant all on test9.* to 'test'@'localhost'; flush privileges;" -uroot
       # TODO: Uncomment the below if there's no more OpenSSL in the runner like it happened in Sep 2023 (https://github.com/actions/runner-images/issues/8344)
       # - name: Install OpenSSL
       #   run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1
@@ -78,10 +79,6 @@ jobs:
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
         run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
-        continue-on-error: true
-      - name: Remember status
-        if: always()
-        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
         continue-on-error: true
       - name: Prepare test results
         if: always()
@@ -97,3 +94,49 @@ jobs:
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status* build/test_*/*mdmp"
+
+  report_windows:
+    name: Windows tests summary and report
+    needs: test_windows
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/ubertests_public:331
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Download test report artifacts
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        continue-on-error: true
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .
+      - name: Convert the XML to JUnit format
+        run: |
+          shopt -s nullglob
+          for dir in build/xml_*; do
+            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
+              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
+            fi
+          done
+        shell: bash
+      - name: Publish test results
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        with:
+          check_name: Windows test results
+          compare_to_earlier_commit: false
+          files: build/xml_*/junit_tests.xml
+          comment_mode: failures
+      - name: Verify test job result
+        run: |
+          if [[ "${{ needs.test_windows.result }}" != "success" ]]; then
+            echo "Windows tests job failed (result: ${{ needs.test_windows.result }})"
+            exit 1
+          fi
+        shell: bash
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: build

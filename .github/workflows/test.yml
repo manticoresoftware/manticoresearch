@@ -136,6 +136,8 @@ jobs:
       clt: ${{ steps.filter.outputs.clt }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Summarize changed files
         run: |
           set -euo pipefail
@@ -145,6 +147,14 @@ jobs:
           else
             base="${{ github.event.before }}"
             head="${{ github.sha }}"
+          fi
+          if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
+            echo "### Changed files" >> "$GITHUB_STEP_SUMMARY"
+            git ls-tree -r --name-only "$head" | sed 's/^/* /' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$base"
           fi
           echo "### Changed files" >> "$GITHUB_STEP_SUMMARY"
           git diff --name-only "$base" "$head" \

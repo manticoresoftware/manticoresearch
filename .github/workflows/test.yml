@@ -167,6 +167,10 @@ jobs:
               echo "* Using image commit as base"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -z "$files" && "$base" == "$head" ]]; then
+            echo "* No diff (base == head); forcing full run" >> "$GITHUB_STEP_SUMMARY"
+            files="__force_all__"
+          fi
           if [[ -n "$files" ]]; then
             echo "$files" | sed 's/^/* /' >> "$GITHUB_STEP_SUMMARY"
           else
@@ -185,7 +189,9 @@ jobs:
           for path in files:
               if not path:
                   continue
-              if path.startswith("test/clt-tests/"):
+              if path == "__force_all__":
+                  source = True
+              elif path.startswith("test/clt-tests/"):
                   clt = True
               elif path.startswith("test/"):
                   test = True

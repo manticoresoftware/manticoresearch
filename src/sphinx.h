@@ -516,6 +516,7 @@ struct KnnSearchSettings_t
 	int				m_iEf = 0;				///< KNN ef
 	bool			m_bRescore = true;		///< KNN rescoring
 	float			m_fOversampling = 3.0f;	///< KNN oversampling
+	bool			m_bOnTheFlyFiltering = false;	///< Enable on-the-fly filtering during HNSW search (disabled by default)
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
 

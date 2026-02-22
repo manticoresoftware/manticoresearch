@@ -80,10 +80,6 @@ jobs:
         # Add -VV to ctest to display extra debug info
         run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
-      - name: Remember status
-        if: always()
-        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-        continue-on-error: true
       - name: Prepare test results
         if: always()
         run: |
@@ -130,17 +126,10 @@ jobs:
           compare_to_earlier_commit: false
           files: build/xml_*/junit_tests.xml
           comment_mode: failures
-      - name: Per-test results
+      - name: Verify test job result
         run: |
-          total=$(ls build/status* 2>/dev/null | wc -l)
-          success=$(grep -o "success" build/status* 2>/dev/null | wc -l || true)
-          for file in build/status*; do echo -n "$file: "; cat "$file"; done
-          if [ "$total" -eq 0 ]; then
-            echo "No status files found"
-            exit 1
-          fi
-          if [ "$success" -ne "$total" ]; then
-            echo "Found only $success successful runs out of $total"
+          if [[ "${{ needs.test_windows.result }}" != "success" ]]; then
+            echo "Windows tests job failed (result: ${{ needs.test_windows.result }})"
             exit 1
           fi
         shell: bash

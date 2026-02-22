@@ -280,7 +280,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( tKNN.m_iEf );
 		tOut.SendInt ( tKNN.m_bRescore );
 		tOut.SendFloat ( tKNN.m_fOversampling );
-		tOut.SendInt ( tKNN.m_bOnTheFlyFilter );
+		tOut.SendInt ( tKNN.m_bPrefilter );
 		tOut.SendInt ( tKNN.m_bFullscan );
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
@@ -1073,7 +1073,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 			if ( uMasterVer>=28 )
 			{
-				tKNN.m_bOnTheFlyFilter = !!tReq.GetInt();
+				tKNN.m_bPrefilter = !!tReq.GetInt();
 				tKNN.m_bFullscan = !!tReq.GetInt();
 			}
 

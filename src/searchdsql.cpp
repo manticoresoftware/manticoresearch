@@ -1474,7 +1474,7 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		if ( tOpt.m_eType!=VariantType_e::BIGINT )
 			return false;
 
-		tKNN.m_bOnTheFlyFilter = !!tOpt.m_iValue;
+		tKNN.m_bPrefilter = !!tOpt.m_iValue;
 		return true;
 	}
 	else if ( sName=="fullscan" )

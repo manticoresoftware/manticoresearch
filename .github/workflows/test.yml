@@ -136,6 +136,19 @@ jobs:
       clt: ${{ steps.filter.outputs.clt }}
     steps:
       - uses: actions/checkout@v4
+      - name: Summarize changed files
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+          echo "### Changed files" >> "$GITHUB_STEP_SUMMARY"
+          git diff --name-only "$base" "$head" \
+            | sed 's/^/* /' >> "$GITHUB_STEP_SUMMARY"
       - uses: manticoresoftware/paths-filter@v3
         id: filter
         with:
@@ -457,25 +470,11 @@ jobs:
     name: Windows tests
     needs: [build_windows, win_bundle, check_branch]
     uses: ./.github/workflows/win_test_template.yml
-    strategy:
-      fail-fast: false
-      matrix:
-        name: [1_400, 401_650, 651_and_on]
-        include:
-          - name: 1_400
-            start: 1
-            end: 400
-          - name: 401_650
-            start: 401
-            end: 650
-          - name: 651_and_on
-            start: 651
-            end: 999999
     with:
-      CTEST_START: ${{ matrix.start }}
-      CTEST_END: ${{ matrix.end }}
+      CTEST_START: 1
+      CTEST_END: 999999
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
-      artifact_name: windows_test_${{ matrix.name }}
+      artifact_name: windows_test_results
 
   windows_tests_report:
     name: Windows tests summary and report
@@ -490,19 +489,7 @@ jobs:
         uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
-          name: windows_test_1_400
-          path: .
-      - name: Download test report artifacts 401_650
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_401_650
-          path: .
-      - name: Download test report artifacts 651_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
-        with:
-          name: windows_test_651_and_on
+          name: windows_test_results
           path: .
       - name: Convert the XML to JUnit format
         run: |

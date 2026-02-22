@@ -280,6 +280,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( tKNN.m_iEf );
 		tOut.SendInt ( tKNN.m_bRescore );
 		tOut.SendFloat ( tKNN.m_fOversampling );
+		tOut.SendInt ( tKNN.m_bOnTheFlyFilter );
+		tOut.SendInt ( tKNN.m_bFullscan );
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
@@ -1067,6 +1069,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 					SendErrorReply ( tOut, "oversampling parameter must be >= 1.0" );
 					return false;
 				}
+			}
+
+			if ( uMasterVer>=28 )
+			{
+				tKNN.m_bOnTheFlyFilter = !!tReq.GetInt();
+				tKNN.m_bFullscan = !!tReq.GetInt();
 			}
 
 			tKNN.m_dVec.Resize ( tReq.GetInt() );

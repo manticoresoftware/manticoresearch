@@ -135,7 +135,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 27
+	VER_COMMAND_SEARCH_MASTER = 28
 };
 
 

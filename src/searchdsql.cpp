@@ -1469,6 +1469,22 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		tKNN.m_bRescore = !!tOpt.m_iValue;
 		return true;
 	}
+	else if ( sName=="filter" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bOnTheFlyFilter = !!tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="fullscan" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bFullscan = !!tOpt.m_iValue;
+		return true;
+	}
 	else if ( sName=="k" )
 	{
 		if ( tOpt.m_eType!=VariantType_e::BIGINT )

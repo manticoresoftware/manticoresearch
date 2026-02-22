@@ -195,12 +195,9 @@ jobs:
                   source = True
           output = os.environ["GITHUB_OUTPUT"]
           with open(output, "a", encoding="utf-8") as fh:
-              fh.write(f"source={'true' if source else 'false'}
-")
-              fh.write(f"test={'true' if test else 'false'}
-")
-              fh.write(f"clt={'true' if clt else 'false'}
-")
+              fh.write(f"source={'true' if source else 'false'}\n")
+              fh.write(f"test={'true' if test else 'false'}\n")
+              fh.write(f"clt={'true' if clt else 'false'}\n")
           PY
       - name: Calculate gating
         id: calc

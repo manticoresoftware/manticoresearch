@@ -98,3 +98,56 @@ jobs:
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status* build/test_*/*mdmp"
+
+  report_windows:
+    name: Windows tests summary and report
+    needs: test_windows
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/ubertests_public:331
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Download test report artifacts
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        continue-on-error: true
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .
+      - name: Convert the XML to JUnit format
+        run: |
+          shopt -s nullglob
+          for dir in build/xml_*; do
+            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
+              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
+            fi
+          done
+        shell: bash
+      - name: Publish test results
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        with:
+          check_name: Windows test results
+          compare_to_earlier_commit: false
+          files: build/xml_*/junit_tests.xml
+          comment_mode: failures
+      - name: Per-test results
+        run: |
+          total=$(ls build/status* 2>/dev/null | wc -l)
+          success=$(grep -o "success" build/status* 2>/dev/null | wc -l || true)
+          for file in build/status*; do echo -n "$file: "; cat "$file"; done
+          if [ "$total" -eq 0 ]; then
+            echo "No status files found"
+            exit 1
+          fi
+          if [ "$success" -ne "$total" ]; then
+            echo "Found only $success successful runs out of $total"
+            exit 1
+          fi
+        shell: bash
+      - name: Upload combined artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: build

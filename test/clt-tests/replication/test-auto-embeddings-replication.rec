@@ -40,11 +40,11 @@ mysql -h0 -P1306 -e "insert into c:t(f) values('bread');"; echo $?
 ––– comment –––
 Post-check on joiner node (regression: crash used to happen in replicated commit path)
 ––– input –––
-mysql -N -h0 -P2306 -e "debug wait c status 2 like 'state' option 'timeout'=30;" | awk '{print $2}'
+mysql -E -h0 -P2306 -e "debug wait c status 2 like 'state' option 'timeout'=30;" | awk '/Value:/{print $2}'
 ––– output –––
 2
 ––– input –––
-mysql -N -h0 -P2306 -e "select f from c:t order by id asc;"
+mysql -E -h0 -P2306 -e "select id, f from c:t order by id asc;" | awk '/f:/{print $2}'
 ––– output –––
 bread
 

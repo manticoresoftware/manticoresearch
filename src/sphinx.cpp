@@ -11679,10 +11679,6 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	if ( !tIndexChecker.OpenFiles() )
 		return 1;
 
-	auto resolvePath = [pFilenameBuilder] ( const CSphString & s ) -> CSphString {
-		return pFilenameBuilder ? pFilenameBuilder->GetFullPath ( s ) : s;
-	};
-
 	// Resolve paths relative to index directory (disk chunks store relative names in the header).
 	CSphString sHitlessToLoad = m_tSettings.m_sHitlessFiles;
 	if ( pFilenameBuilder && !sHitlessToLoad.IsEmpty() )
@@ -11691,8 +11687,8 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 		sphSplit ( dHitless, sHitlessToLoad.cstr(), " \t," );
 		StringBuilder_c sResolved ( ", " );
 		for ( const CSphString & sFile : dHitless )
-			if ( !sFile.IsEmpty() )
-				sResolved << resolvePath ( sFile );
+				sResolved << FormatPath ( sFile, pFilenameBuilder );
+
 		sHitlessToLoad = sResolved.cstr();
 	}
 	if ( !LoadHitlessWords ( sHitlessToLoad, m_pTokenizer, m_pDict, tIndexChecker.GetHitlessWords(), m_sLastError ) )
@@ -11703,7 +11699,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	const CSphTokenizerSettings & tTokenizerSettings = m_pTokenizer->GetSettings ();
 	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() )
 	{
-		CSphString sSynonymsFile = resolvePath ( tTokenizerSettings.m_sSynonymsFile );
+		CSphString sSynonymsFile = FormatPath ( tTokenizerSettings.m_sSynonymsFile, pFilenameBuilder );
 		if ( !tStat.Collect ( sSynonymsFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open exceptions '%s': %s", sSynonymsFile.cstr(), sError.cstr() );
 	}
@@ -11723,7 +11719,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 
 		CSphString sStopFile;
 		sStopFile.SetBinary ( sNameStart, int ( pStop-sNameStart ) );
-		sStopFile = resolvePath ( sStopFile );
+		sStopFile = FormatPath ( sStopFile, pFilenameBuilder );
 		if ( !tStat.Collect ( sStopFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open stopwords '%s': %s", sStopFile.cstr(), sError.cstr() );
 	}
@@ -11732,7 +11728,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	{
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 		{
-			CSphString sWordforms = resolvePath ( tDictSettings.m_dWordforms[i] );
+			CSphString sWordforms = FormatPath ( tDictSettings.m_dWordforms[i], pFilenameBuilder );
 			if ( !tStat.Collect ( sWordforms.cstr(), &sError ) )
 				tReporter.Fail ( "unable to open wordforms '%s': %s", sWordforms.cstr(), sError.cstr() );
 		}

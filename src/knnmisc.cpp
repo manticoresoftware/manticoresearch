@@ -14,6 +14,7 @@
 #include "exprtraits.h"
 #include "sphinxint.h"
 #include "fileio.h"
+#include "memio.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
 
@@ -66,9 +67,37 @@ void EmbeddingsSrc_c::Remove ( const CSphFixedVector<RowID_t> & dRowMap )
 
 ///////////////////////////////////////////////////////////////////////////////
 
+bool EmbeddingsSrc_c::Has ( RowID_t tRowID, int iAttr ) const
+{
+	return ( iAttr>=0 && iAttr<m_dStored.GetLength() && tRowID>=0 && tRowID<m_dStored[iAttr].GetLength() );
+}
+
 const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
 {
+	assert ( Has ( tRowID, iAttr ) );
 	return m_dStored[iAttr][tRowID];
+}
+
+void EmbeddingsSrc_c::Save ( MemoryWriter_c & tWriter ) const
+{
+	tWriter.PutDword ( m_dStored.GetLength() );
+	for ( const auto & dRows : m_dStored )
+	{
+		tWriter.PutDword ( dRows.GetLength() );
+		for ( const auto & dSrc : dRows )
+			SaveArray ( dSrc, tWriter );
+	}
+}
+
+void EmbeddingsSrc_c::Load ( MemoryReader_c & tReader )
+{
+	m_dStored.Resize ( tReader.GetDword() );
+	for ( auto & dRows : m_dStored )
+	{
+		dRows.Resize ( tReader.GetDword() );
+		for ( auto & dSrc : dRows )
+			GetArray ( dSrc, tReader );
+	}
 }
 
 

@@ -10339,6 +10339,8 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 	tCtx.m_uFlags = tStmt.m_uAttrFlags;
 	tCtx.m_eEngine = tStmt.m_eEngine;
 	tCtx.m_tKNN = tStmt.m_tAlterKNN;
+	tCtx.m_tKNNModel = tStmt.m_tAlterKNNModel;
+	tCtx.m_sKNNFrom = tStmt.m_sAlterKnnFrom;
 
 	if ( bIndexed || bStored )
 	{

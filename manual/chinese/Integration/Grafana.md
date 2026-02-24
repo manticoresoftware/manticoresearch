@@ -4,7 +4,7 @@
 
 [Grafana](https://grafana.com/) 是一个开源的数据可视化和监控平台，允许您创建交互式仪表盘和图表。Manticore Search 使用默认的 MySQL 连接器与 Grafana 无缝集成，使您能够实时可视化搜索数据、监控性能指标并分析趋势。
 
-目前，Grafana 版本 10.0-12.3 均经过测试并支持。
+目前测试并支持Grafana版本10.0-12.4。
 
 ## 前提条件
 

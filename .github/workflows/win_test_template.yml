@@ -18,6 +18,10 @@ on:
         required: false
         type: string
         default: ""
+    outputs:
+      test_outcome:
+        description: Outcome of the test step (success/failure)
+        value: ${{ jobs.test_windows.outputs.test_outcome }}
 
 jobs:
   test_windows:
@@ -36,6 +40,8 @@ jobs:
       # CTEST_REGEX: test_234
       NO_BUILD: 1
       COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
+    outputs:
+      test_outcome: ${{ steps.test.outcome }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -82,9 +88,10 @@ jobs:
         continue-on-error: true
       - name: Prepare test results
         if: always()
+        shell: bash
         run: |
-          mkdir build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-          cp -r build/Testing/2*/*.xml build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
+          mkdir -p build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
+          cp -r build/Testing/*/Test.xml build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
           cp -r build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
         continue-on-error: true
       - name: Upload test artifacts
@@ -93,7 +100,7 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status* build/test_*/*mdmp"
+          path: "build/test*/Test.xml build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log"
 
   report_windows:
     name: Windows tests summary and report
@@ -113,10 +120,9 @@ jobs:
       - name: Convert the XML to JUnit format
         run: |
           shopt -s nullglob
-          for dir in build/xml_*; do
-            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
-              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
-            fi
+          for xml in build/test_*/Test.xml; do
+            out="build/junit_$(basename "$(dirname "$xml")").xml"
+            xsltproc -o "$out" misc/junit/ctest2junit.xsl "$xml"
           done
         shell: bash
       - name: Publish test results
@@ -124,7 +130,7 @@ jobs:
         with:
           check_name: Windows test results
           compare_to_earlier_commit: false
-          files: build/xml_*/junit_tests.xml
+          files: build/junit_*.xml
           comment_mode: failures
       - name: Verify test job result
         run: |
@@ -133,10 +139,3 @@ jobs:
             exit 1
           fi
         shell: bash
-      - name: Upload combined artifacts
-        if: always()
-        continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
-        with:
-          name: ${{ inputs.artifact_name }}
-          path: build

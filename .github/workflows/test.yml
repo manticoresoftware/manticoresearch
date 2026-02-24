@@ -53,6 +53,7 @@ jobs:
       run_image_build: ${{ steps.calc.outputs.run_image_build }} # build test-kit image
       run_clt: ${{ steps.calc.outputs.run_clt }} # run CLT workflow
       run_image_push: ${{ steps.calc.outputs.run_image_push }} # push test-kit image tags
+      skip_clt_reason: ${{ steps.related_prs.outputs.skip_clt_reason }} # explanation for CLT skip
     steps:
       - uses: actions/checkout@v4
         with:
@@ -195,7 +196,7 @@ jobs:
                   clt = True
               elif path.startswith("test/"):
                   test = True
-              elif path.startswith(".github/") or path.startswith("manual/") or path.startswith("doc/"):
+              elif path.startswith("manual/") or path.startswith("doc/"):
                   pass
               else:
                   source = True
@@ -205,6 +206,22 @@ jobs:
               fh.write(f"test={'true' if test else 'false'}\n")
               fh.write(f"clt={'true' if clt else 'false'}\n")
           PY
+      - name: Check related PRs for branch
+        id: related_prs
+        run: |
+          set -euo pipefail
+          reason=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            for repo in columnar manticoresearch-buddy; do
+              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls?state=open&head=${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }}&per_page=1" || true) | tr -d '[:space:]')"
+              if [[ "$response" != "[]" && "$response" != "" ]]; then
+                reason+="$repo: open PR for ${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }} | "
+              fi
+            done
+
+            reason="${reason%% | }"
+          fi
+          echo "skip_clt_reason=$reason" >> "$GITHUB_OUTPUT"
       - name: Calculate gating
         id: calc
         run: |
@@ -228,6 +245,9 @@ jobs:
 
           run_image_build="$changes_detected"
           run_clt="$changes_detected"
+          if [[ -n "${{ steps.related_prs.outputs.skip_clt_reason }}" ]]; then
+            run_clt=false
+          fi
           run_image_push=false
           if [[ "$changes_detected" == "true" && "${{ steps.image_check.outputs.image_exists }}" != "true" ]]; then
             run_image_push=true
@@ -249,6 +269,9 @@ jobs:
             echo "* Build test-kit image: ${{ steps.calc.outputs.run_image_build }}"
             echo "* Run CLT tests: ${{ steps.calc.outputs.run_clt }}"
             echo "* Push test-kit image tags: ${{ steps.calc.outputs.run_image_push }}"
+            if [[ -n "${{ steps.related_prs.outputs.skip_clt_reason }}" ]]; then
+              echo "* CLT skip reason: ${{ steps.related_prs.outputs.skip_clt_reason }}"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   win_bundle:
@@ -511,3 +534,83 @@ jobs:
       CTEST_END: 999999
       COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       artifact_name: windows_test_results
+
+  final_status:
+    name: Final status
+    needs:
+      - build_linux_debug
+      - test_linux_debug
+      - build_linux_release
+      - test_linux_release
+      - build_windows
+      - test_windows
+      - build_freebsd
+      - build_aarch64
+      - clt
+      - meta
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Fail if any required job failed
+        run: |
+          set -euo pipefail
+          failed=0
+          results=(
+            "build_linux_debug:${{ needs.build_linux_debug.result }}"
+            "test_linux_debug:${{ needs.test_linux_debug.result }}:${{ needs.test_linux_debug.outputs.test_outcome }}"
+            "build_linux_release:${{ needs.build_linux_release.result }}"
+            "test_linux_release:${{ needs.test_linux_release.result }}:${{ needs.test_linux_release.outputs.test_outcome }}"
+            "build_windows:${{ needs.build_windows.result }}"
+            "test_windows:${{ needs.test_windows.result }}:${{ needs.test_windows.outputs.test_outcome }}"
+            "build_freebsd:${{ needs.build_freebsd.result }}"
+            "build_aarch64:${{ needs.build_aarch64.result }}"
+          )
+          {
+            echo "### Final status"
+            for entry in "${results[@]}"; do
+              name="${entry%%:*}"
+              rest="${entry#*:}"
+              result="${rest%%:*}"
+              outcome="${rest#*:}"
+              if [[ "$name" == test_* ]]; then
+                if [[ "$outcome" != "$result" && -n "$outcome" ]]; then
+                  echo "* $name: $result (ctest: $outcome)"
+                else
+                  echo "* $name: $result"
+                fi
+              else
+                echo "* $name: $result"
+              fi
+            done
+            if [[ "${{ needs.meta.outputs.run_clt }}" == "true" ]]; then
+              echo "* clt: ${{ needs.clt.result }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          for entry in "${results[@]}"; do
+            name="${entry%%:*}"
+            rest="${entry#*:}"
+            result="${rest%%:*}"
+            outcome="${rest#*:}"
+            if [[ "$name" == test_* && "$result" == "success" && "$outcome" == "failure" ]]; then
+              echo "$name: ctest failed"
+              failed=1
+              continue
+            fi
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "$name: $result"
+              failed=1
+            fi
+          done
+          if [[ "${{ needs.meta.outputs.run_clt }}" == "true" ]]; then
+            result="${{ needs.clt.result }}"
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "clt: $result"
+              failed=1
+            fi
+          fi
+          if [[ "$failed" -ne 0 ]]; then
+            echo "* Overall: failure" >> "$GITHUB_STEP_SUMMARY"
+            echo "One or more build/test jobs failed"
+            exit 1
+          fi
+          echo "* Overall: success" >> "$GITHUB_STEP_SUMMARY"

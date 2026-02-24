@@ -3013,9 +3013,15 @@ NodeEstimate_t ExtAnd_c::Estimate ( int64_t iTotalDocs ) const
 	auto tLeftEstimate = m_pLeft->Estimate(iTotalDocs);
 	auto tRightEstimate = m_pRight->Estimate(iTotalDocs);
 
-	float fRatio = float(tLeftEstimate.m_fCost)/iTotalDocs*float(tRightEstimate.m_fCost)/iTotalDocs;
+	if ( !tLeftEstimate.m_iDocs || !tRightEstimate.m_iDocs || iTotalDocs<=0 )
+		return { 0.0f, 0, tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
+
+	float fIntersection = float(tLeftEstimate.m_iDocs)/iTotalDocs*float(tRightEstimate.m_iDocs)/iTotalDocs;
+	int64_t iDocs = int64_t(fIntersection*iTotalDocs);
+	iDocs = Min ( iDocs, Min ( tLeftEstimate.m_iDocs, tRightEstimate.m_iDocs ) );
+
 	float fCost = CalcFTIntersectCost ( tLeftEstimate, tRightEstimate, iTotalDocs, MAX_BLOCK_DOCS, MAX_BLOCK_DOCS );
-	return { fCost, int64_t(fRatio*iTotalDocs), tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
+	return { fCost, iDocs, tLeftEstimate.m_iTerms+tRightEstimate.m_iTerms };
 }
 
 

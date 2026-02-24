@@ -292,6 +292,16 @@ insert into hit_1(id, title) values (1, 'protest, to teach, to feed, and'), (2, 
 	flush ramchunk hitless;
 	select * from hitless where match('b');
 	show meta;
+
+	<!-- runtime hitless+skiplist stress: force > skiplist_block_size docs in one disk chunk -->
+	insert into hitless(id, title) values (100,'a b'),(101,'a b'),(102,'a b'),(103,'a b'),(104,'a b'),(105,'a b'),(106,'a b'),(107,'a b'),(108,'a b'),(109,'a b'),(110,'a b'),(111,'a b'),(112,'a b'),(113,'a b'),(114,'a b'),(115,'a b'),(116,'a b'),(117,'a b'),(118,'a b'),(119,'a b'),(120,'a b'),(121,'a b'),(122,'a b'),(123,'a b'),(124,'a b'),(125,'a b'),(126,'a b'),(127,'a b'),(128,'a b'),(129,'a b'),(130,'a b'),(131,'a b'),(132,'a b');
+	insert into hitless(id, title) values (133,'a b'),(134,'a b'),(135,'a b'),(136,'a b'),(137,'a b'),(138,'a b'),(139,'a b'),(140,'a b'),(141,'a b'),(142,'a b'),(143,'a b'),(144,'a b'),(145,'a b'),(146,'a b'),(147,'a b'),(148,'a b'),(149,'a b'),(150,'a b'),(151,'a b'),(152,'a b'),(153,'a b'),(154,'a b'),(155,'a b'),(156,'a b'),(157,'a b'),(158,'a b'),(159,'a b'),(160,'a b'),(161,'a b'),(162,'a b'),(163,'a b'),(164,'a b'),(165,'a b');
+	insert into hitless(id, title) values (1000,'a rare');
+	flush ramchunk hitless;
+	select * from hitless where match('a rare') order by id asc;
+	show meta;
+	select * from hitless where match('rare') order by id asc;
+	show meta;
     
 </sphinxql></queries>
 

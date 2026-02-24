@@ -284,14 +284,13 @@ void CWordlist::Reset ()
 }
 
 
-bool CWordlist::Preread ( const CSphString & sName, DWORD uVersion, bool bWordDict, int iSkiplistBlockSize, CSphString & sError )
+bool CWordlist::Preread ( const CSphString & sName, bool bWordDict, int iSkiplistBlockSize, CSphString & sError )
 {
 	assert ( m_iDictCheckpointsOffset>0 );
 
 	m_bWordDict = bWordDict;
 	m_iWordsEnd = m_iDictCheckpointsOffset; // set wordlist end
 	m_iSkiplistBlockSize = iSkiplistBlockSize;
-	m_bLegacyHitlessSkiplistLayout = ( uVersion<68 );
 
 	////////////////////////////
 	// preload word checkpoints
@@ -466,9 +465,9 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & 
 		const int iDocs = UnzipIntBE ( pBuf );
 		const int iHits = UnzipIntBE ( pBuf );
 		SphOffset_t iSkiplistPos = 0;
-			const int iLayoutDocs = m_bLegacyHitlessSkiplistLayout ? iDocs : ( iDocs & HITLESS_DOC_MASK );
-			if ( iLayoutDocs > m_iSkiplistBlockSize )
-				iSkiplistPos = UnzipOffsetBE ( pBuf );
+		const int iLayoutDocs = iDocs & HITLESS_DOC_MASK;
+		if ( iLayoutDocs > m_iSkiplistBlockSize )
+			iSkiplistPos = UnzipOffsetBE ( pBuf );
 
 		assert ( iDeltaOffset );
 		assert ( iDocs );
@@ -530,7 +529,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
-		KeywordsBlockReader_c tDictReader ( AcquireDict ( pCheckpoint ), m_iSkiplistBlockSize, m_bLegacyHitlessSkiplistLayout );
+		KeywordsBlockReader_c tDictReader ( AcquireDict ( pCheckpoint ), m_iSkiplistBlockSize );
 		while ( tDictReader.UnpackWord() )
 		{
 			// block is sorted
@@ -590,7 +589,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	ARRAY_FOREACH ( i, dPoints )
 	{
 		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
-		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_iSkiplistBlockSize, m_bLegacyHitlessSkiplistLayout );
+		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_iSkiplistBlockSize );
 		while ( tDictReader.UnpackWord() )
 		{
 			if ( sphInterrupted () )
@@ -647,7 +646,7 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 	{
 		const auto & tCP = m_dCheckpoints[i];
 
-		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset, m_iSkiplistBlockSize, m_bLegacyHitlessSkiplistLayout );
+		KeywordsBlockReader_c tDictReader ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset, m_iSkiplistBlockSize );
 		while ( tDictReader.UnpackWord() )
 		{
 			if ( sphInterrupted () )
@@ -704,9 +703,8 @@ bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) cons
 
 //////////////////////////////////////////////////////////////////////////
 
-KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bLegacyHitlessSkipPointers )
+KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize )
 	: m_iSkiplistBlockSize ( iSkiplistBlockSize )
-	, m_bLegacyHitlessSkipPointers ( bLegacyHitlessSkipPointers )
 {
 	Reset ( pBuf );
 }
@@ -750,6 +748,7 @@ bool KeywordsBlockReader_c::UnpackWord()
 		iMatch = *m_pBuf++;
 	}
 
+	assert ( iDelta>0 );
 	assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
 	assert ( iMatch<=(int)strlen ( (char *)m_sWord.data() ) );
 
@@ -762,10 +761,10 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
 	m_iDocs = UnzipIntBE ( m_pBuf );
 	m_iHits = UnzipIntBE ( m_pBuf );
-	const int iLayoutDocs = m_bLegacyHitlessSkipPointers ? m_iDocs : ( m_iDocs & HITLESS_DOC_MASK );
-	m_uHint = ( iLayoutDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
-	m_iDoclistHint = DoclistHintUnpack ( iLayoutDocs, m_uHint );
-	if ( iLayoutDocs>m_iSkiplistBlockSize )
+	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
+	m_uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
+	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, m_uHint );
+	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
 		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
 	else
 		m_iSkiplistOffset = 0;

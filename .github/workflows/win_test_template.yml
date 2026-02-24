@@ -113,10 +113,9 @@ jobs:
       - name: Convert the XML to JUnit format
         run: |
           shopt -s nullglob
-          for dir in build/xml_*; do
-            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
-              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
-            fi
+          for xml in build/xml_*/Test.xml; do
+            out="build/junit_$(basename "$(dirname "$xml")").xml"
+            xsltproc -o "$out" misc/junit/ctest2junit.xsl "$xml"
           done
         shell: bash
       - name: Publish test results
@@ -124,7 +123,7 @@ jobs:
         with:
           check_name: Windows test results
           compare_to_earlier_commit: false
-          files: build/xml_*/junit_tests.xml
+          files: build/junit_*.xml
           comment_mode: failures
       - name: Verify test job result
         run: |

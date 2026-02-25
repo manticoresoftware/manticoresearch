@@ -7,3 +7,17 @@ mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'
 *************************** 1. row ***************************
 Counter: cluster_#!/[a-z]+/!#_status
   Value: primary
+––– comment –––
+Some helful methods to avoid duplications when we testing various sharding scenarios
+––– input –––
+show_shards() {
+	shards=$(mysql -h0 -P$1 -e "show create table $2 option force=1\G" | grep "Create Table" | cut -d: -f2-)
+	echo $shards | grep -oP "agent='[^']*'" | sed "s/agent='//g; s/'//g" | tr '|' '\n' | awk -F: '{agents[$3] = agents[$3] ? agents[$3] " " $1 ":" $2 : $1 ":" $2} END {for (t in agents) print t ": " agents[t]}' | sort
+}
+––– output –––
+––– input –––
+check_cluster_status() {
+	mysql -h0 -P$1 -e "SHOW STATUS LIKE 'cluster_${2}_status'\\G" | grep -q "Value: primary" && echo "OK" || echo "FAIL"
+}
+––– output –––
+

@@ -4,7 +4,7 @@
 
 [Grafana](https://grafana.com/) is an open-source data visualization and monitoring platform that allows you to create interactive dashboards and charts. Manticore Search integrates seamlessly with Grafana using the default MySQL connector, enabling you to visualize search data, monitor performance metrics, and analyze trends in real-time.
 
-Currently, Grafana versions 10.0-12.3 are tested and supported.
+Currently, Grafana versions 10.0-12.4 are tested and supported.
 
 ## Prerequisites
 

@@ -16,6 +16,9 @@
 #include "indexsettings.h"
 #include "secondaryindex.h"
 
+class MemoryWriter_c;
+class MemoryReader_c;
+
 class TableEmbeddings_c
 {
 public:
@@ -34,6 +37,9 @@ public:
 	void	Add ( int iAttr, CSphVector<char> & dSrc );
 	void	Remove ( const CSphFixedVector<RowID_t> & dRowMap );
 	const VecTraits_T<char> Get ( RowID_t tRowID, int iAttr ) const;
+	bool	Has ( RowID_t tRowID, int iAttr ) const;
+	void	Save ( MemoryWriter_c & tWriter ) const;
+	void	Load ( MemoryReader_c & tReader );
 
 private:
 	CSphVector<CSphVector<CSphVector<char>>> m_dStored;

@@ -41,6 +41,28 @@ show tables;
 call pq ('pq', 'test 1', 1 as docs, 0 as docs_json );
 drop table pq;
 
+<!-- part 1: generate legacy RT67 hitless on master -->
+<!--
+create table rt67 (title text) hitless_words='a';
+insert into rt67(id, title) values
+    (1,'a b'),(2,'a b'),(3,'a b'),(4,'a b'),(5,'a b'),(6,'a b'),(7,'a b'),(8,'a b'),(9,'a b'),(10,'a b'),(11,'a b'),(12,'a b'),(13,'a b'),(14,'a b'),(15,'a b'),(16,'a b'),(17,'a b'),(18,'a b'),(19,'a b'),(20,'a b'),(21,'a b'),(22,'a b'),(23,'a b'),(24,'a b'),(25,'a b'),(26,'a b'),(27,'a b'),(28,'a b'),(29,'a b'),(30,'a b'),(31,'a b'),(32,'a b'),(33,'a b'),(34,'a b'),(35,'a b'),(36,'a b'),(37,'a b'),(38,'a b'),(39,'a b'),(40,'a b'),(41,'a b'),(42,'a b'),(43,'a b'),(44,'a b'),(45,'a b'),(46,'a b'),(47,'a b'),(48,'a b');
+insert into rt67(id, title) values
+    (49,'a b'),(50,'a b'),(51,'a b'),(52,'a b'),(53,'a b'),(54,'a b'),(55,'a b'),(56,'a b'),(57,'a b'),(58,'a b'),(59,'a b'),(60,'a b'),(61,'a b'),(62,'a b'),(63,'a b'),(64,'a b'),(65,'a b'),(66,'a b'),(67,'a b'),(68,'a b'),(69,'a b'),(70,'a b'),(71,'a b'),(72,'a b'),(73,'a b'),(74,'a b'),(75,'a b'),(76,'a b'),(77,'a b'),(78,'a b'),(79,'a b'),(80,'a b'),(81,'a b'),(82,'a b'),(83,'a b'),(84,'a b'),(85,'a b'),(86,'a b'),(87,'a b'),(88,'a b'),(89,'a b'),(90,'a b'),(91,'a b'),(92,'a b'),(93,'a b'),(94,'a b'),(95,'a b'),(96,'a b');
+insert into rt67(id, title) values (1000,'a rare');
+flush ramchunk rt67;
+select * from rt67 where match('a rare') order by id asc;
+show meta;
+drop table rt67;
+-->
+
+<!-- part 2: runtime warning on ver <68 hitless dicts -->
+import table rt67 from '<this_test/>/data/rt67/rt67';
+show tables;
+drop table rt67;
+<!-- still crashes the daemon on ver < 68 tables
+select * from hitless where match('a rare') order by id asc;
+-->
+
 </sphinxql></queries>
 
 </test>

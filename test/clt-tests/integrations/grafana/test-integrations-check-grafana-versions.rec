@@ -24,11 +24,12 @@ TESTED_VERSIONS="10.0
 12.0
 12.1
 12.2
-12.3"
+12.3
+12.4"
 
 # Check for NEW versions (after latest tested)
 # WARNING: Also update GRAFANA_LATEST below when changing this!
-LATEST_TESTED_VERSION="12.3"
+LATEST_TESTED_VERSION="12.4"
 NEW_VERSIONS=$(curl -s "https://hub.docker.com/v2/repositories/grafana/grafana/tags/?page_size=100" \
 | jq -r ".results[].name" \
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
@@ -63,7 +64,7 @@ echo "Using tested versions:"
 echo "$TESTED_VERSIONS"
 SCRIPT
 ––– output –––
-✅ No new versions found after 12.3
+✅ No new versions found after 12.4
 Using tested versions:
 10.0
 10.1
@@ -78,6 +79,7 @@ Using tested versions:
 12.1
 12.2
 12.3
+12.4
 ––– comment –––
 If new versions are detected, test will fail with detailed instructions:
 - Lists files that need to be updated in manticoresearch repo
@@ -91,7 +93,7 @@ echo "Checking Grafana version references in documentation..."
 echo ""
 
 # Must match LATEST_TESTED_VERSION above
-GRAFANA_LATEST="12.3"
+GRAFANA_LATEST="12.4"
 
 # 1. Check manual documentation (local file mounted via workflow)
 echo "=== Checking manual documentation ==="
@@ -146,8 +148,8 @@ SCRIPT
 Checking Grafana version references in documentation...
 === Checking manual documentation ===
 ✓ Checking /manual/english/Integration/Grafana.md
-✅ Manual: versions 10.0-12.3 are
+✅ Manual: versions 10.0-12.4 are
 === Checking website blog post ===
 ✓ Fetching https://manticoresearch.com/blog/manticoresearch-grafana-integration/
-✅ Blog: contains 12.3
+✅ Blog: contains 12.4
 ✅ Documentation validation complete

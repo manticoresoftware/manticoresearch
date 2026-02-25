@@ -40,6 +40,10 @@ on:
         required: false
         type: string
         default: ""
+    outputs:
+      test_outcome:
+        description: Outcome of the test step (success/failure)
+        value: ${{ jobs.test.outputs.test_outcome }}
 
 jobs:
   test:
@@ -47,6 +51,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: ${{ inputs.timeout }}
     continue-on-error: true
+    outputs:
+      test_outcome: ${{ steps.test.outcome }}
     defaults:
       run:
         shell: bash

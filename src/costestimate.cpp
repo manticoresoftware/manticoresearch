@@ -538,8 +538,6 @@ float CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t &
 	const float THRESH = 0.05f;
 	if ( fIntersection > THRESH )
 	{
-		float fIntersection = float(tEst1.m_iDocs)/iTotalDocs*float(tEst2.m_iDocs)/iTotalDocs;
-
 		iCorrectedDocs1 = int64_t(tEst1.m_iDocs*fIntersection);
 		iCorrectedDocs2 = int64_t(tEst2.m_iDocs*fIntersection);
 

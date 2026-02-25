@@ -80,7 +80,7 @@ struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 		bool bReadError = ( ( m_uGotEvents & IS_READ ) && ( m_uGotEvents & IS_ERRHUP ) );
 		bool bWriteError = ( ( m_uGotEvents & IS_WRITE ) && ( m_uGotEvents & IS_ERR ) );
 
-		if ( bReadError && ( ( m_uGotEvents & IS_ERRHUP ) == IS_ERRHUP ) )
+		if ( bReadError && ( ( m_uGotEvents & IS_ERRHUP ) == IS_HUP ) )
 			sphSockSetErrno ( ECONNRESET );
 
 		return bReadError || bWriteError;

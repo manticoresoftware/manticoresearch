@@ -67,6 +67,11 @@ Testing version: mariadb:10.5
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.5 completed successfully
+Testing cluster:table with mariadb:10.5...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.6
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -95,6 +100,11 @@ Testing version: mariadb:10.6
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.6 completed successfully
+Testing cluster:table with mariadb:10.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.7
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -123,6 +133,11 @@ Testing version: mariadb:10.7
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.7 completed successfully
+Testing cluster:table with mariadb:10.7...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.8
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -151,6 +166,11 @@ Testing version: mariadb:10.8
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.8 completed successfully
+Testing cluster:table with mariadb:10.8...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.9
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -179,6 +199,11 @@ Testing version: mariadb:10.9
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.9 completed successfully
+Testing cluster:table with mariadb:10.9...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.10
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -207,6 +232,11 @@ Testing version: mariadb:10.10
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.10 completed successfully
+Testing cluster:table with mariadb:10.10...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:10.11
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -235,6 +265,11 @@ Testing version: mariadb:10.11
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:10.11 completed successfully
+Testing cluster:table with mariadb:10.11...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -263,6 +298,11 @@ Testing version: mariadb:11.0
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.0 completed successfully
+Testing cluster:table with mariadb:11.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.1
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -291,6 +331,11 @@ Testing version: mariadb:11.1
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.1 completed successfully
+Testing cluster:table with mariadb:11.1...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -319,6 +364,11 @@ Testing version: mariadb:11.2
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.2 completed successfully
+Testing cluster:table with mariadb:11.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.3-rc
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -347,6 +397,11 @@ Testing version: mariadb:11.3-rc
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.3-rc completed successfully
+Testing cluster:table with mariadb:11.3-rc...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.4
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -375,6 +430,11 @@ Testing version: mariadb:11.4
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.4 completed successfully
+Testing cluster:table with mariadb:11.4...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.5
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -403,6 +463,11 @@ Testing version: mariadb:11.5
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.5 completed successfully
+Testing cluster:table with mariadb:11.5...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.6
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -431,6 +496,11 @@ Testing version: mariadb:11.6
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.6 completed successfully
+Testing cluster:table with mariadb:11.6...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.7
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -459,6 +529,11 @@ Testing version: mariadb:11.7
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.7 completed successfully
+Testing cluster:table with mariadb:11.7...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:11.8
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -487,6 +562,11 @@ Testing version: mariadb:11.8
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:11.8 completed successfully
+Testing cluster:table with mariadb:11.8...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:12.0
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -515,6 +595,11 @@ Testing version: mariadb:12.0
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:12.0 completed successfully
+Testing cluster:table with mariadb:12.0...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:12.1
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -543,6 +628,11 @@ Testing version: mariadb:12.1
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:12.1 completed successfully
+Testing cluster:table with mariadb:12.1...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:12.2
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -571,6 +661,11 @@ Testing version: mariadb:12.2
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:12.2 completed successfully
+Testing cluster:table with mariadb:12.2...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 Testing version: mariadb:latest
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |
@@ -599,6 +694,11 @@ Testing version: mariadb:latest
    Query log content:
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (%{IPADDR}:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found %{NUMBER} */ SELECT * FROM t ORDER BY id asc;
 Dump mariadb:latest completed successfully
+Testing cluster:table with mariadb:latest...
+  Testing WITHOUT --skip-lock-tables (should fail)...
+  ✅ Expected: mariadb-dump failed without --skip-lock-tables
+  Testing WITH --skip-lock-tables (should succeed)...
+  ✅ Workaround successful: dump contains data with --skip-lock-tables
 All MariaDB versions tested successfully!
 Checking documentation versions...
 Checking documentation file...

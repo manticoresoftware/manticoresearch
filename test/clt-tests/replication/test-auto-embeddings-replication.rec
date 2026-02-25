@@ -1,0 +1,55 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Create auto-embeddings table and replication cluster on node 1
+––– input –––
+mysql -h0 -P1306 -e "drop table if exists t;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table t (f text, v float_vector knn_type='hnsw' hnsw_similarity='COSINE' model_name='sentence-transformers/all-MiniLM-L6-v2' from='f');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create cluster c;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "alter cluster c add t;"; echo $?
+––– output –––
+0
+––– comment –––
+Join node 2 to cluster
+––– input –––
+mysql -h0 -P2306 -e "join cluster c at '127.0.0.1:1312';"; echo $?
+––– output –––
+0
+––– comment –––
+Insert into clustered table on donor node
+––– input –––
+mysql -h0 -P1306 -e "insert into c:t(f) values('bread');"; echo $?
+––– output –––
+0
+––– comment –––
+Post-check on joiner node (regression: crash used to happen in replicated commit path)
+––– input –––
+mysql -E -h0 -P2306 -e "debug wait c status 2 like 'state' option 'timeout'=30;" | awk '/Value:/{print $2}'
+––– output –––
+2
+––– input –––
+mysql -E -h0 -P2306 -e "select id, f from c:t order by id asc;" | awk '/f:/{print $2}'
+––– output –––
+bread
+––– comment –––
+Cleanup
+––– input –––
+mysql -h0 -P1306 -e "alter cluster c drop t;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "drop table t;"
+––– output –––

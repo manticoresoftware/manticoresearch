@@ -85,6 +85,7 @@
 %token	TOK_TEXT
 %token	TOK_TIMESTAMP
 %token	TOK_TYPE
+%token	TOK_USER
 %token	TOK_UINT
 %token	TOK_UPDATE
 %token	TOK_USE_GPU
@@ -116,6 +117,7 @@ tableident:
     | TOK_ENGINE
     | TOK_MVA
     | TOK_MVA64
+    | TOK_USER
 	;
 
 ident:
@@ -257,6 +259,13 @@ alter:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
+		}
+	| alter_cluster_ident TOK_UPDATE TOK_USER TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
+			tStmt.m_sSetName = "user";
+			pParser->ToString ( tStmt.m_sStringParam, $4 ).Unquote();
 		}
 	| alter_cluster_ident TOK_UPDATE tablename
 		{

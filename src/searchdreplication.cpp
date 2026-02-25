@@ -17,6 +17,7 @@
 #include "accumulator.h"
 #include "fileutils.h"
 #include "coroutine.h"
+#include "std/spinlock.h"
 #include "digest_sha1.h"
 #include "tracer.h"
 #include "auth/auth.h"
@@ -124,6 +125,27 @@ public:
 	void SetViewNodes ( StrVec_t&& dNodes );
 	StrVec_t GetIndexes() const noexcept EXCLUDES ( m_tIndexLock );
 	const CSphString & GetNodeName () const { return m_sNodeName; }
+	CSphString GetUserSnapshot () const EXCLUDES ( m_tUserLock )
+	{
+		sph::Spinlock_lock tUserLock { m_tUserLock };
+		return m_sUser;
+	}
+	bool SetUserSnapshotIfChanged ( const CSphString & sNewUser, CSphString & sOldUser ) EXCLUDES ( m_tUserLock )
+	{
+		sph::Spinlock_lock tUserLock { m_tUserLock };
+		if ( m_sUser==sNewUser )
+			return false;
+
+		sOldUser = m_sUser;
+		m_sUser = sNewUser;
+		return true;
+	}
+	void RollbackUserSnapshot ( const CSphString & sExpectedCurrent, const CSphString & sRollbackUser ) EXCLUDES ( m_tUserLock )
+	{
+		sph::Spinlock_lock tUserLock { m_tUserLock };
+		if ( m_sUser==sExpectedCurrent )
+			m_sUser = sRollbackUser;
+	}
 
 	template<typename ACTION>
 	void FilterViewNodes ( ACTION&& Verb ) const
@@ -227,6 +249,7 @@ private:
 
 	mutable Threads::Coro::RWLock_c m_tOptsLock;
 	mutable Threads::Coro::RWLock_c m_tIndexLock;
+	mutable sph::Spinlock_c m_tUserLock;
 	sph::StringSet m_hIndexesLoaded;	// list of index name loaded into daemon but not yet in cluster used for donor to send indexes into joiner
 
 #ifndef NDEBUG
@@ -1032,7 +1055,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 
 	const ReplicationCommand_t & tCmd = *tAcc.m_dCmd[0];
 	bool bCmdCluster = ( tAcc.m_dCmd.GetLength()==1
-		&& ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_DROP ) );
+		&& ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_DROP || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_UPDATE_USER ) );
 	if ( bCmdCluster )
 	{
 		if ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD && !CheckIndexesExists ( tCmd.m_sIndex ) )
@@ -1277,6 +1300,10 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 			bTOI = true;
 			tKeys.AddKeys ( 1, false )[0] = uIndex;
 			break;
+		case ReplCmd_e::CLUSTER_ALTER_UPDATE_USER:
+			bTOI = true;
+			tKeys.AddKeys ( 1, false )[0] = sphFNV64 ( tCmdCluster.m_sCluster.cstr() );
+			break;
 
 		case ReplCmd_e::RT_TRX:
 		case ReplCmd_e::AUTH_ADD:
@@ -1404,6 +1431,38 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 	sphLogDebugRpl ( "SetIndexesClusterTOI finished '%s' for cluster '%s': indexes '%s' > '%s', error: %s", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), Vec2Str ( pCluster->GetIndexes() ).cstr(), sError.scstr() );
 
 	return bSaved;
+}
+
+bool SetClusterUserTOI ( const ReplicationCommand_t * pCmd )
+{
+	assert ( pCmd );
+	assert ( pCmd->m_eCommand==ReplCmd_e::CLUSTER_ALTER_UPDATE_USER );
+
+	auto pCluster = ClusterByName ( pCmd->m_sCluster );
+	if ( !pCluster )
+		return false;
+
+	const CSphString & sNewUser = pCmd->m_sIndex;
+	if ( sNewUser.IsEmpty() )
+		return TlsMsg::Err ( "invalid cluster user in UPDATE statement" );
+
+	if ( IsAuthEnabled() )
+	{
+		CSphString sPermError;
+		if ( !CheckPerms ( sNewUser, AuthAction_e::REPLICATION, pCmd->m_sCluster, true, sPermError ) )
+			return TlsMsg::Err ( "%s", sPermError.cstr() );
+	}
+
+	CSphString sOldUser;
+	if ( !pCluster->SetUserSnapshotIfChanged ( sNewUser, sOldUser ) )
+		return true;
+
+	TLS_MSG_STRING ( sError );
+	bool bSaved = SaveConfigInt ( sError );
+	if ( !bSaved )
+		pCluster->RollbackUserSnapshot ( sNewUser, sOldUser );
+
+	return ( bSaved || TlsMsg::Err ( "%s", sError.cstr() ) );
 }
 
 static bool ValidateUpdate ( const ReplicationCommand_t & tCmd )
@@ -1643,7 +1702,7 @@ static void CoReplicationServiceStart ( RplBootstrap_e eBs ) EXCLUDES ( g_tClust
 		auto& sName = tCluster.first;
 		auto& pCluster = tCluster.second;
 
-		if ( !CheckRemotesVersions ( *pCluster, false ) )
+		if ( !CheckRemotesVersions ( *pCluster, false, pCluster->m_sUser ) )
 		{
 			sphWarning ( "remote version check failed: %s", TlsMsg::szError() );
 			continue;
@@ -1911,7 +1970,25 @@ bool ReplicationResolveUser ( const SqlStmt_t & tStmt, const CSphString & sSessi
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 	case STMT_CLUSTER_ALTER_UPDATE:
+	{
+		if ( tStmt.m_eStmt==STMT_CLUSTER_ALTER_UPDATE && tStmt.m_sSetName=="user" )
+		{
+			if ( tStmt.m_sStringParam.IsEmpty() )
+			{
+				sError.SetSprintf ( "invalid cluster user in UPDATE statement" );
+				return false;
+			}
+			if ( !CheckClusterExists ( tStmt.m_sCluster ) )
+			{
+				sError.SetSprintf ( "unknown cluster '%s'", tStmt.m_sCluster.cstr() );
+				return false;
+			}
+			sRplUser = tStmt.m_sStringParam;
+			return true;
+		}
+
 		return GetClusterEffectiveUser ( tStmt.m_sCluster, sRplUser, sError );
+	}
 
 	default:
 		return true;
@@ -1939,7 +2016,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	// need to clean up Galera system files left from previous cluster
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
 
-	if ( !CheckRemotesVersions ( tDesc.value(), true ) )
+	if ( !CheckRemotesVersions ( tDesc.value(), true, tDesc.value().m_sUser ) )
 		return false;
 
 	if ( !GetRemotesAuth ( tDesc.value() ) )
@@ -2154,6 +2231,16 @@ bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & t
 
 	tState.m_eState = pCluster->GetState();
 	tState.m_sNode = pCluster->GetNodeName();
+	return true;
+}
+
+bool ClusterGetDonorMeta ( const CSphString & sCluster, CSphString & sUser ) EXCLUDES ( g_tClustersLock )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+		return false;
+
+	sUser = pCluster->GetUserSnapshot();
 	return true;
 }
 
@@ -2608,10 +2695,28 @@ StrVec_t ClusterGetAllNodes ( const CSphString & sCluster ) EXCLUDES ( g_tCluste
 }
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
-bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError )
+bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, const CSphString & sValue, CSphString & sError )
 {
 	TlsMsg::ResetErr();
-	auto bOk = DoClusterAlterUpdate ( sCluster, sUpdate, NODES_E::VIEW );
+
+	bool bOk = false;
+	if ( sUpdate=="nodes" )
+	{
+		bOk = DoClusterAlterUpdate ( sCluster, sUpdate, NODES_E::VIEW );
+	} else if ( sUpdate=="user" )
+	{
+		if ( sValue.IsEmpty() )
+			bOk = TlsMsg::Err ( "invalid cluster user in UPDATE statement" );
+		else
+		{
+			RtAccum_t tAcc;
+			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_UPDATE_USER, sValue, sCluster );
+			pCmd->m_bCheckIndex = false;
+			bOk = HandleCmdReplicate ( tAcc );
+		}
+	} else
+		bOk = TlsMsg::Err ( "unhandled statement, only UPDATE nodes or UPDATE user are supported, got '%s'", sUpdate.cstr() );
+
 	TlsMsg::MoveError ( sError );
 	return bOk;
 }

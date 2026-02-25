@@ -49,6 +49,7 @@ enum class ReplCmd_e {
 	UPDATE_JSON,
 	AUTH_ADD,
 	AUTH_DELETE,
+	CLUSTER_ALTER_UPDATE_USER,
 
 	TOTAL
 };

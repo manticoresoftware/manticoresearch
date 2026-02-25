@@ -160,11 +160,11 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		break;
 
 	case E_CLUSTER::GET_NODE_VER:
-		ReceiveClusterGetVer ( false, tOut );
+		ReceiveClusterGetVer ( false, tOut, tBuf );
 		break;
 
 	case E_CLUSTER::GET_NODE_VER_ID:
-		ReceiveClusterGetVer ( true, tOut );
+		ReceiveClusterGetVer ( true, tOut, tBuf );
 		break;
 
 	case E_CLUSTER::UPDATE_SST_PROGRESS:

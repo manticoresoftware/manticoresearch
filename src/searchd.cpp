@@ -11844,7 +11844,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_CLUSTER_ALTER_UPDATE:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
+		if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, pStmt->m_sStringParam, m_tLastMeta.m_sError ) )
 			tOut.Ok();
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );

@@ -109,6 +109,12 @@ bool CommitMonitor_c::CommitTOI()
 		sphLogDebugRpl ( "CommitTOI %s for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
 		return bOk;
 	}
+	case ReplCmd_e::CLUSTER_ALTER_UPDATE_USER:
+	{
+		bool bOk = SetClusterUserTOI ( &tCmd );
+		sphLogDebugRpl ( "CommitTOI %s update user for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
+		return bOk;
+	}
 	default:
 		return TlsMsg::Err ( "unknown command '%d'", (int) tCmd.m_eCommand );
 	}

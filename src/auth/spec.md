@@ -435,7 +435,7 @@ The actions `read`, `write`, `schema`, `replication` and `admin` map to specific
     - JOIN CLUSTER
     - DELETE CLUSTER
     - ALTER CLUSTER (ADD, DROP, UPDATE)
-  - For cluster-management statements that specify a cluster user, authorization for replication operations is evaluated against that effective cluster user.
+  - For cluster-management statements, authorization for replication operations is evaluated against the resolved effective replication user (see section "Authentication and Authorization in Replication Clusters").
 
 - **admin**:
   - SQL commands that manage users and permissions:
@@ -959,20 +959,35 @@ If the `system.auth_users` and `system.auth_permissions` tables (RT Mode) or the
 - Ensures all nodes share consistent authentication and authorization data.
 - Replication involves several internal commands, which, while not directly accessible to users, must still be protected by authentication and authorization. To address this, cluster-management SQL commands (`CREATE CLUSTER`, `JOIN CLUSTER`, `DELETE CLUSTER`, and `ALTER CLUSTER`) leverage a special permission action called **replication**.
 
-If a cluster is associated with a specific user, that user's credentials will be used for all internal replication commands executed on behalf of the cluster.
-The specified cluster user is the **effective replication user** for that cluster operation.
-If cluster user is not specified in the statement, the session user is used as the effective replication user.
-Open delegation model: any authenticated caller may specify any user as the effective replication user in cluster statements.
-Authorization for replication is evaluated against the effective replication user; if that user lacks the **replication** action, the statement fails.
-The same effective replication user model applies to all cluster-management statements, including `DELETE CLUSTER` and `ALTER CLUSTER` operations (`ADD`, `DROP`, `UPDATE nodes`).
-For cluster statements, follow the same option style used elsewhere in replication syntax: `'<value>' AS <option_name>`.
+Terms:
+- **cluster user**: persisted user in cluster metadata (`user` field).
+- **effective replication user**: user used for replication authorization and internal replication API calls for a specific statement.
+
+User resolution rules (`initial_cluster_user` model):
+1. `CREATE CLUSTER`:
+   - Effective replication user is statement `'<username>' AS user` if provided, otherwise session user.
+   - On success, this effective user is persisted as cluster user.
+2. `JOIN CLUSTER`:
+   - Effective replication user is statement `'<username>' AS user` if provided, otherwise session user.
+   - This user is used only to execute the join operation.
+   - After successful join, persisted cluster user is taken from donor cluster metadata.
+3. `DELETE CLUSTER`, `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`:
+   - Effective replication user is always persisted cluster user.
+   - Session user and statement options do not override this.
+4. `ALTER CLUSTER <cluster_name> UPDATE user '<username>'`:
+   - `'<username>'` is the new cluster user value.
+   - On success, the new cluster user is persisted and propagated to remote nodes.
+
+Open delegation model remains in effect:
+- Any authenticated caller may provide a user for `CREATE CLUSTER` / `JOIN CLUSTER`, or set a new cluster user via `ALTER ... UPDATE user`.
+- Authorization for replication is evaluated against the resolved effective replication user.
 
 #### **Persistence of Effective Replication User**
 
 - The cluster's effective replication user is persisted as part of cluster metadata (`user` field) in the internal config (`manticore.json`).
 - On daemon start, cluster metadata (including `user`) is loaded from the internal config and used to initialize replication clusters.
-- Internal replication operations use the persisted effective replication user for authorization on all cluster-management operations (`CREATE`, `JOIN`, `DELETE`, `ALTER`).
-- If no user is specified at statement time, the session user is assigned as effective replication user for that operation.
+- Internal replication operations use the persisted cluster user by default for cluster-management operations.
+- `CREATE CLUSTER` and `JOIN CLUSTER` are the only statements that may resolve effective replication user from session user when statement user is not specified.
 - Persisted effective user must be validated on cluster startup (user exists and has `replication` action). If validation fails, startup of that cluster must fail with an authorization error.
 - After successful cluster user assignment/change operations, updated cluster metadata (including effective user) must be saved to internal config immediately.
 - Implementation note: effective replication user is resolved as part of SQL statement permission gate, and replication authorization for cluster-management statements is evaluated against that effective user.
@@ -1008,23 +1023,52 @@ JOIN CLUSTER <cluster_name> AT '<ip:port>' ['<username>' AS user]
 ```
 
 **Validation:**
-- Same as for the `CREATE CLUSTER` command (effective replication user rules).
+- Same as for the `CREATE CLUSTER` command (effective replication user rules for statement execution).
 - Later on when performing one of the internal replication commands if the specified user lacks the **replication** action, the operation will fail, and the error should be logged.
+- After successful join, the cluster user persisted on the joiner is the cluster user received from the donor.
+
+---
+
+#### **DELETE CLUSTER**
+
+The `DELETE CLUSTER` command removes the cluster.
+
+**Syntax:**
+```sql
+DELETE CLUSTER <cluster_name>
+```
+
+Not supported:
+- `DELETE CLUSTER <cluster_name> '<username>' AS user`
+
+**Validation:**
+- Effective replication user is the persisted cluster user.
+- The persisted cluster user must have the **replication** action for this cluster target.
 
 ---
 
 #### **ALTER CLUSTER**
 
-The `ALTER CLUSTER` command introduces the ability to reassign a cluster to a different user. The new user must have the **replication** action to manage the cluster’s internal operations.
+The `ALTER CLUSTER` command supports index membership changes, node-list refresh, and cluster-user reassignment.
 
 **Syntax:**
 ```sql
+ALTER CLUSTER <cluster_name> ADD <table_or_tables>
+ALTER CLUSTER <cluster_name> DROP <table_or_tables>
+ALTER CLUSTER <cluster_name> UPDATE nodes
 ALTER CLUSTER <cluster_name> UPDATE user '<username>'
 ```
 `ALTER CLUSTER ... UPDATE user '<username>'` is the only supported form for reassigning a cluster's effective replication user.
 
+Not supported:
+- `ALTER CLUSTER <cluster_name> ADD ... '<username>' AS user`
+- `ALTER CLUSTER <cluster_name> DROP ... '<username>' AS user`
+- `ALTER CLUSTER <cluster_name> UPDATE nodes '<username>' AS user`
+- `ALTER CLUSTER <cluster_name> UPDATE '<username>' AS user`
+
 **Validation:**
-- The new assigned user must have the **replication** action.
+- For `ADD`, `DROP`, and `UPDATE nodes`, effective replication user is the persisted cluster user.
+- For `UPDATE user '<username>'`, the new assigned user must have the **replication** action.
 - Later on when performing one of the internal replication commands if the specified user lacks the **replication** action, the operation will fail, and the error should be logged.
 
 **Error Message:**

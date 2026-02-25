@@ -169,6 +169,10 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 			RPL_TNX << "pq-cluster-alter-drop, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
+		case ReplCmd_e::CLUSTER_ALTER_UPDATE_USER:
+			RPL_TNX << "cluster-alter-update-user, user '" << pCmd->m_sIndex.cstr() << "'";
+			break;
+
 		case ReplCmd_e::RT_TRX:
 			m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion );
 			RPL_TNX << "rt trx, table '" << pCmd->m_sIndex.cstr() << "'";

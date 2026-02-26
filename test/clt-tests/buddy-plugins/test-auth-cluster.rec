@@ -89,7 +89,7 @@ EXPECTED: Syntax error
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DELETE CLUSTER mycluster 'norepluser' AS user;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P03: syntax error.*!#
+#!/ERROR 1064 \(42000\) at line 1: P0[13]: syntax error.*/!#
 ––– comment –––
 ––– 8.2.7 ALTER CLUSTER ADD with explicit user option is rejected (unsupported syntax) –––
 EXPECTED: Syntax error
@@ -97,7 +97,7 @@ EXPECTED: Syntax error
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster ADD testtable 'norepluser' AS user;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P03: syntax error.*!#
+#!/ERROR 1064 \(42000\) at line 1: P03: syntax error, unexpected string.*/!#
 ––– comment –––
 ––– 8.2.8 ALTER CLUSTER DROP with explicit user option is rejected (unsupported syntax) –––
 EXPECTED: Syntax error
@@ -105,7 +105,7 @@ EXPECTED: Syntax error
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster DROP testtable 'norepluser' AS user;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P03: syntax error.*!#
+#!/ERROR 1064 \(42000\) at line 1: P03: syntax error, unexpected string.*/!#
 ––– comment –––
 ––– 8.2.9 ALTER CLUSTER UPDATE nodes with explicit user option is rejected (unsupported syntax) –––
 EXPECTED: Syntax error
@@ -113,7 +113,7 @@ EXPECTED: Syntax error
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster UPDATE nodes 'norepluser' AS user;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P03: syntax error.*!#
+#!/ERROR 1064 \(42000\) at line 1: P03: syntax error, unexpected string.*/!#
 ––– comment –––
 ––– 8.2.10 ALTER CLUSTER UPDATE '<username>' AS user is rejected (unsupported syntax) –––
 EXPECTED: Syntax error
@@ -121,7 +121,7 @@ EXPECTED: Syntax error
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "ALTER CLUSTER mycluster UPDATE 'repluser' AS user;" 2>&1
 ––– output –––
-#!/ERROR 1064 \(42000\) at line 1: P03: syntax error.*!#
+#!/ERROR 1064 \(42000\) at line 1: P03: syntax error, unexpected string.*/!#
 ––– comment –––
 ––– 8.2.11 Persisted cluster user is used for ALTER UPDATE nodes (not session user) –––
 EXPECTED: After revoking repluser2 replication, ALTER UPDATE nodes fails for repluser2

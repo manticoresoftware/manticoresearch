@@ -277,7 +277,6 @@ static bool CheckRemoteVersionsId ( const ClusterDesc_t & tDesc, const AgentConn
 
 bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, bool bWithServerId, CSphString & sUser )
 {
-	sUser = "";
 	ClusterNodeVer_c::REQUEST_T tReqVer;
 	ClusterNodeVerId_c::REQUEST_T tReqId;
 	tReqId.m_sCluster = tDesc.m_sName;

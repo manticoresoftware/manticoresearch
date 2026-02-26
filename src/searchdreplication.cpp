@@ -1702,11 +1702,13 @@ static void CoReplicationServiceStart ( RplBootstrap_e eBs ) EXCLUDES ( g_tClust
 		auto& sName = tCluster.first;
 		auto& pCluster = tCluster.second;
 
-		if ( !CheckRemotesVersions ( *pCluster, false, pCluster->m_sUser ) )
+		CSphString sRemoteUser;
+		if ( !CheckRemotesVersions ( *pCluster, false, sRemoteUser ) )
 		{
 			sphWarning ( "remote version check failed: %s", TlsMsg::szError() );
 			continue;
 		}
+		pCluster->m_sUser = sRemoteUser;
 
 		// need to fetch auth from all other nodes only for non leader
 		if ( eBs==RplBootstrap_e::OFF && !GetRemotesAuth ( *pCluster ) )
@@ -2016,8 +2018,10 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	// need to clean up Galera system files left from previous cluster
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
 
-	if ( !CheckRemotesVersions ( tDesc.value(), true, tDesc.value().m_sUser ) )
+	CSphString sRemoteUser;
+	if ( !CheckRemotesVersions ( tDesc.value(), true, sRemoteUser ) )
 		return false;
+	tDesc.value().m_sUser = sRemoteUser;
 
 	if ( !GetRemotesAuth ( tDesc.value() ) )
 		return false;

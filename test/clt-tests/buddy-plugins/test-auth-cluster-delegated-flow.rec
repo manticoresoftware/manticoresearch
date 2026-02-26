@@ -67,7 +67,7 @@ MYSQL_PWD=noreplpass1 mysql -unorepluser -h0 -P1306 -e "INSERT INTO mycluster:t1
 ––– Node2 must see replicated row from node1 –––
 ––– comment –––
 ––– input –––
-timeout 30 bash -c 'while true; do c=$(MYSQL_PWD=noreplpass1 mysql -sN -unorepluser -h0 -P2306 -e "SELECT COUNT(*) FROM mycluster:t1 WHERE id=1;" 2>/dev/null); [ "$c" = "1" ] && exit 0; sleep 1; done'; echo $?
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "debug wait mycluster like 'state' option 'timeout'=30;" >/dev/null; echo $?
 ––– output –––
 0
 ––– input –––

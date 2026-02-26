@@ -16,7 +16,7 @@ on:
       - 'galera_packaging/**'
   push:
     branches:
-      - manticore-*
+      - branch-5f07ec462
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
@@ -59,7 +59,7 @@ jobs:
         github.event_name == 'push'
         &&
         startsWith(
-          github.ref, 'refs/heads/manticore-'
+          github.ref, 'refs/heads/branch-5f07ec462'
         )
       )
     steps:
@@ -157,12 +157,6 @@ jobs:
     name: OK to publish?
     runs-on: ubuntu-22.04
     needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
-    if: |
-      (github.repository == 'manticoresoftware/manticoresearch')
-      && (
-        (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
-        || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      )
     steps:
       - run: echo "Ready to publish"
 
@@ -258,7 +252,7 @@ jobs:
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: win_installer
           path: build/manticore-*.exe

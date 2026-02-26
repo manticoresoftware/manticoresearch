@@ -1,51 +1,112 @@
 ––– comment –––
-Test Binary Protocol Authentication (inter-daemon communication).
+Test Binary Protocol authentication through distributed remote-agent search.
 Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
 Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
 Admin credentials: admin / adminpass (bootstrap via auth.json)
 
 Per spec:
-- Binary protocol uses AES-256-GCM encryption
-- 12-byte nonce: sender ID (4) + Boot ID (4) + counter (4)
-- PKCS5_PBKDF2_HMAC-SHA256 for key derivation
-- Replay protection via monotonic counter
-Note: Binary protocol is internal, testing via cluster replication indirectly
-––– comment –––
-––– block: ../base/start-searchd-with-auth –––
-––– comment –––
-––– 8.3.1 Binary Protocol: Internal communication enabled –––
-EXPECTED per spec: searchd listens on binary port with auth
-Note: Direct binary protocol testing requires special client
+- Binary protocol is inter-daemon only (not a public client API)
+- Inter-daemon auth requires matching username and matching stored auth material
+- Distributed table remote-agent queries use inter-daemon communication
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW STATUS LIKE 'uptime';"
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– comment –––
+––– Setup: remote table + distributed table (agent-only) on node1 –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "CREATE TABLE remote_bp(id BIGINT, title TEXT);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "CREATE TABLE dist_bp type='distributed' agent='127.0.0.1:2312:remote_bp';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "INSERT INTO remote_bp(id,title) VALUES(2,'remote-row');"
+––– output –––
+––– comment –––
+––– Setup: create distreader on node1, then sync auth material to node2 –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P1306 -e "CREATE USER 'distreader' IDENTIFIED BY 'distpass1234';"
 ––– output –––
 *************************** 1. row ***************************
-Counter: uptime
-#!/\s*Value:\s*[0-9]+/!#
+       token: #!/[0-9a-f]{64}/!#
+    username: distreader
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P1306 -e "GRANT read ON * TO 'distreader';"
+––– output –––
+––– input –––
+cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; echo "auth synced"
+––– output –––
+auth synced
 ––– comment –––
-––– 8.3.2 Binary Protocol: Cluster status check –––
-EXPECTED per spec: Cluster commands work through binary protocol
-Note: Single node test, full test requires multi-node
+––– 8.3.1 Distributed query with synced auth material –––
+EXPECTED: Success, remote row is returned through agent
 ––– comment –––
 ––– input –––
-MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS cluster_test;"
+MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT id,title FROM dist_bp ORDER BY id ASC;"
 ––– output –––
-*************************** 1. row ***************************
-cluster_test: 1
+#!/\+[-+]+\+/!#
+#!/\|[[:space:]]*2[[:space:]]*\|[[:space:]]*remote-row[[:space:]]*\|/!#
+#!/\+[-+]+\+/!#
 ––– comment –––
-––– 8.3.3 Binary Protocol: Verify auth config active –––
-EXPECTED per spec: Auth is enabled in daemon
+––– 8.3.2 Same username but different auth material on remote node –––
+EXPECTED: Distributed query fails with explicit remote auth (bad tag) error; auth log reports mismatch
 ––– comment –––
 ––– input –––
-grep -c "auth = 1" /etc/manticoresearch/manticore.conf
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "DROP USER 'distreader'; CREATE USER 'distreader' IDENTIFIED BY 'distpass1234'; GRANT read ON * TO 'distreader';" >/dev/null; echo "remote user recreated"
 ––– output –––
-1
+remote user recreated
+––– input –––
+MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT COUNT(*) FROM dist_bp;"
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: GCM authentication failed \(bad tag\)/!#
+––– input –––
+timeout 5 bash -c 'until grep -q "distreader.*GCM authentication failed (bad tag)" /var/log/manticore-2/searchd.log.auth; do sleep 0.1; done'; echo $?
+––– output –––
+0
 ––– comment –––
-Note: Full binary protocol tests (AES-256-GCM, nonce validation, replay protection)
-require specialized tooling or multi-node cluster setup.
-The binary protocol is used internally for:
-- Inter-daemon replication
-- Cluster node communication
-These are covered indirectly through cluster tests.
+––– 8.3.3 User missing on remote node –––
+EXPECTED: Distributed query fails with explicit remote unknown user error
 ––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "DROP USER 'distreader';" >/dev/null; echo "remote user dropped"
+––– output –––
+remote user dropped
+––– input –––
+MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT COUNT(*) FROM dist_bp;"
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: (unknown|unknow) user 'distreader'/!#
+––– comment –––
+––– 8.3.4 Auth succeeds but remote READ permission denied –––
+EXPECTED: Query fails with explicit remote permission denied error
+––– comment –––
+––– input –––
+cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "REVOKE read ON * FROM 'distreader';" >/dev/null; echo "remote permissions narrowed"
+––– output –––
+remote permissions narrowed
+––– input –––
+MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT COUNT(*) FROM dist_bp;"
+––– output –––
+#!/ERROR 1064 \(42000\) at line 1: table dist_bp: agent 127\.0\.0\.1:2312: remote error: Permission denied for user 'distreader'/!#
+––– comment –––
+––– 8.3.5 Recovery: sync auth back and query succeeds again –––
+EXPECTED: Previously failing distributed query succeeds after auth sync
+––– comment –––
+––– input –––
+cp /var/log/manticore-1/auth.json /var/log/manticore-2/auth.json; MYSQL_PWD=adminpass mysql -uadmin -h0 -P2306 -e "RELOAD AUTH;" >/dev/null; echo "auth resynced"
+––– output –––
+auth resynced
+––– input –––
+MYSQL_PWD=distpass1234 mysql -NB -udistreader -h0 -P1306 -e "SELECT id,title FROM dist_bp ORDER BY id ASC;"
+––– output –––
+#!/\+[-+]+\+/!#
+#!/\|[[:space:]]*2[[:space:]]*\|[[:space:]]*remote-row[[:space:]]*\|/!#
+#!/\+[-+]+\+/!#

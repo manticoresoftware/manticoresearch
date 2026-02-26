@@ -27,7 +27,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO denied_tbl(id, cont
 ––– output –––
 ––– comment –––
 ––– 5.1.1 Deny overrides allow –––
-EXPECTED per spec: explicit deny overrides wildcard allow
+EXPECTED: explicit deny overrides wildcard allow
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'denyuser' IDENTIFIED BY 'denyuserpass';"
@@ -54,7 +54,7 @@ MYSQL_PWD=denyuserpass mysql -udenyuser -h0 -P9306 -e "SELECT * FROM denied_tbl;
 ERROR 1064 (42000) at line 1: Permission denied for user 'denyuser'
 ––– comment –––
 ––– 5.1.2 Specific target beats wildcard –––
-EXPECTED per spec: Grant on specific table works, other tables denied
+EXPECTED: Grant on specific table works, other tables denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'specificuser' IDENTIFIED BY 'specificpass';"
@@ -78,7 +78,7 @@ MYSQL_PWD=specificpass mysql -uspecificuser -h0 -P9306 -e "SELECT * FROM denied_
 ERROR 1064 (42000) at line 1: Permission denied for user 'specificuser'
 ––– comment –––
 ––– 5.1.3 Default deny (no rules = denied) –––
-EXPECTED per spec: User without any grants is denied everything
+EXPECTED: User without any grants is denied everything
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'norules' IDENTIFIED BY 'norulespass1';"

@@ -44,7 +44,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'allread';"
 ––– output –––
 ––– comment –––
 ––– 2.12.1 SHOW TABLES: Admin sees all tables –––
-EXPECTED per spec: Admin sees all 3 tables
+EXPECTED: Admin sees all 3 tables
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort
@@ -54,7 +54,7 @@ Table: hidden_tbl
 Table: visible_tbl
 ––– comment –––
 ––– 2.12.2 SHOW TABLES: User sees only permitted tables –––
-EXPECTED per spec: User with read ON 'visible_tbl' sees only visible_tbl
+EXPECTED: User with read ON 'visible_tbl' sees only visible_tbl
 ––– comment –––
 ––– input –––
 MYSQL_PWD=limited12345 mysql -E -ulimited -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort
@@ -62,7 +62,7 @@ MYSQL_PWD=limited12345 mysql -E -ulimited -h0 -P9306 -e "SHOW TABLES;" | grep "T
 Table: visible_tbl
 ––– comment –––
 ––– 2.12.3 SHOW TABLES: User with wildcard sees all –––
-EXPECTED per spec: User with read ON * sees all tables
+EXPECTED: User with read ON * sees all tables
 ––– comment –––
 ––– input –––
 MYSQL_PWD=allread12345 mysql -E -uallread -h0 -P9306 -e "SHOW TABLES;" | grep "Table:" | sort

@@ -37,7 +37,7 @@ MYSQL_PWD=repluserpass mysql -urepluser -h0 -P9306 -e "CREATE CLUSTER testcluste
 ––– output –––
 ––– comment –––
 ––– 4.5.2 CREATE CLUSTER without REPLICATION — denied –––
-EXPECTED per spec: Permission denied
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "CREATE CLUSTER blocked;" 2>&1
@@ -45,7 +45,7 @@ MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "CREATE CLUSTER blocked;" 2>&
 ERROR 1064 (42000) at line 1: Permission denied for user 'noperm'
 ––– comment –––
 ––– 4.5.3 SHOW STATUS requires SCHEMA (replication-only user denied) –––
-EXPECTED per spec mapping: Permission denied (SHOW STATUS is schema action)
+EXPECTED: Permission denied (SHOW STATUS is checked as schema action)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=repluserpass mysql -urepluser -h0 -P9306 -e "SHOW STATUS LIKE 'cluster%';"
@@ -53,7 +53,7 @@ MYSQL_PWD=repluserpass mysql -urepluser -h0 -P9306 -e "SHOW STATUS LIKE 'cluster
 ERROR 1064 (42000) at line 1: Permission denied for user 'repluser'
 ––– comment –––
 ––– 4.5.4 SHOW STATUS succeeds after granting SCHEMA –––
-EXPECTED per spec mapping: Success after explicit schema grant
+EXPECTED: Success after explicit schema grant
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT schema ON * TO 'repluser';"

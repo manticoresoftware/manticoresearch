@@ -36,7 +36,7 @@ MYSQL_PWD=schemapass1 mysql -uschemauser -h0 -P9306 -e "CREATE TABLE schematest(
 ––– output –––
 ––– comment –––
 ––– 4.3.2 CREATE TABLE without SCHEMA — denied –––
-EXPECTED per spec: Permission denied
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "CREATE TABLE blocked(content text);" 2>&1

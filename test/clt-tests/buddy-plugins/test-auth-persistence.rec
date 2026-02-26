@@ -44,7 +44,7 @@ searchd --stopwait > /dev/null 2>&1; sleep 2; rm -f /var/log/manticore/searchd.l
 Buddy started!
 ––– comment –––
 ––– 6.2.1 User exists after restart –––
-EXPECTED per spec: persist_user still visible in SHOW USERS
+EXPECTED: persist_user still visible in SHOW USERS
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_users WHERE username='persist_user';"
@@ -53,7 +53,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM 
 cnt: 1
 ––– comment –––
 ––– 6.2.2 Permissions saved after restart –––
-EXPECTED per spec: persist_user can still SELECT (has read permission)
+EXPECTED: persist_user can still SELECT (has read permission)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=persist1234 mysql -E -upersist_user -h0 -P9306 -e "SELECT * FROM persist_tbl;"
@@ -63,7 +63,7 @@ MYSQL_PWD=persist1234 mysql -E -upersist_user -h0 -P9306 -e "SELECT * FROM persi
 content: persistent data
 ––– comment –––
 ––– 6.2.3 Password works after restart –––
-EXPECTED per spec: Original password still works
+EXPECTED: Original password still works
 ––– comment –––
 ––– input –––
 MYSQL_PWD=persist1234 mysql -E -upersist_user -h0 -P9306 -e "SELECT 1 AS login_ok;"

@@ -29,7 +29,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON 'testtable' TO '
 ––– output –––
 ––– comment –––
 ––– 2.6.1 Successful REVOKE of existing permission –––
-EXPECTED per spec: Success (empty output)
+EXPECTED: Success (empty output)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'revokeuser';"
@@ -41,7 +41,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM 
 cnt: 0
 ––– comment –––
 ––– 2.6.2 Error on non-existent permission –––
-EXPECTED per spec: Error — does not have permission
+EXPECTED: Error — does not have permission
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE schema ON * FROM 'revokeuser';" 2>&1
@@ -49,7 +49,7 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE schema ON * FROM 'revoke
 ERROR 1064 (42000) at line 1: user 'revokeuser' does not have 'schema' permission on '*'
 ––– comment –––
 ––– 2.6.3 Error for non-existent user –––
-EXPECTED per spec: Error — user does not exist
+EXPECTED: Error — user does not exist
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'nonexistent';" 2>&1

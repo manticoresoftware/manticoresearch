@@ -42,7 +42,7 @@ MYSQL_PWD=writerpass1 mysql -uwriter -h0 -P9306 -e "INSERT INTO writetest(id, co
 ––– output –––
 ––– comment –––
 ––– 4.2.2 INSERT without WRITE — denied –––
-EXPECTED per spec: Permission denied
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "INSERT INTO writetest(id, content, tag) VALUES(3, 'blocked', 30);" 2>&1

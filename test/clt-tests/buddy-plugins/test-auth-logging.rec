@@ -60,7 +60,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "DROP USER 'grantlog';"
 ––– output –––
 ––– comment –––
 ––– 7.1.4 Failed authentication is logged –––
-EXPECTED per spec: Failed login attempts appear in log
+EXPECTED: Failed login attempts appear in log
 ––– comment –––
 ––– input –––
 MYSQL_PWD=wrongpass mysql -ufakeuser -h0 -P9306 -e "SELECT 1;" 2>&1

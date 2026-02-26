@@ -20,7 +20,7 @@ curl -s -u admin:adminpass -X POST http://127.0.0.1:9308/token -d "{}"
 #!/\s*\{"token":"[0-9a-f]{64}"\}/!#
 ––– comment –––
 ––– 1.2.2 Reject with wrong password –––
-EXPECTED per spec: Access denied error
+EXPECTED: Access denied error
 ––– comment –––
 ––– input –––
 curl -s -u admin:wrongpassword http://127.0.0.1:9308/sql -d "query=SELECT 1"

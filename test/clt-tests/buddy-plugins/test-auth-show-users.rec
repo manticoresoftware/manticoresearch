@@ -9,7 +9,7 @@ Per spec: SHOW USERS — lists all users (requires ADMIN permission)
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
 ––– 2.7.1 Admin sees all users –––
-EXPECTED per spec: List of all users
+EXPECTED: List of all users
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW USERS;" | grep "username:" | sort
@@ -31,7 +31,7 @@ username: system.buddy
 username: testuser
 ––– comment –––
 ––– 2.7.2 Error without ADMIN permission –––
-EXPECTED per spec: Permission denied
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=testpass1234 mysql -utestuser -h0 -P9306 -e "SHOW USERS;" 2>&1

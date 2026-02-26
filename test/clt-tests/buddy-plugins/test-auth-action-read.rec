@@ -46,7 +46,7 @@ content: test data
     tag: 10
 ––– comment –––
 ––– 4.1.2 SELECT without READ — denied –––
-EXPECTED per spec: Permission denied
+EXPECTED: Permission denied
 ––– comment –––
 ––– input –––
 MYSQL_PWD=nopermpass1 mysql -unoperm -h0 -P9306 -e "SELECT * FROM readtest;" 2>&1

@@ -9,7 +9,7 @@ Format: {"users":[...], "permissions":[...]}
 ––– block: ../base/start-searchd-with-auth –––
 ––– comment –––
 ––– 6.3.1 Bootstrap from auth.json –––
-EXPECTED per spec: Admin user from auth.json is loaded
+EXPECTED: Admin user from auth.json is loaded
 ––– comment –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM system.auth_users WHERE username='admin';"
@@ -23,7 +23,7 @@ MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT COUNT(*) AS cnt FROM 
 cnt: 4
 ––– comment –––
 ––– 6.3.2 JSON format matches specification –––
-EXPECTED per spec: auth.json has users array and permissions array
+EXPECTED: auth.json has users array and permissions array
 ––– comment –––
 ––– input –––
 cat /var/lib/manticore/auth.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('users' in d and 'permissions' in d)"

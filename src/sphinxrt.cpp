@@ -79,15 +79,27 @@ using namespace Threads;
 // rt-segments tuning
 
 // rate limit for flushing RAM chunk as disk chunk. Rate applied to rt_mem_limit, calculated value used as limit, when we start flushing
-constexpr double INITIAL_SAVE_RATE_LIMIT		= 0.5;		///< we start rate limiting from this value.
-constexpr double MIN_SAVE_RATE_LIMIT			= 0.333333;	///< minimal rate limit. Calculated value will never be less that that bound
-constexpr double MAX_SAVE_RATE_LIMIT			= 0.95;		///< maximal rate limit. It most probably may be reached with very low insertion rate
-constexpr double SAVE_RATE_LIMIT_EMERGENCY_STEP	= 0.05;		///< emergency back-off.
-constexpr int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a time
 constexpr int MAX_SEGMENTS						= 32;
 constexpr int MAX_PROGRESSION_SEGMENT			= 8;
 constexpr int64_t MAX_SEGMENT_VECTOR_LEN		= INT_MAX;
-constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );	///< if on load N of segments exceedes this value - perform safe loading
+constexpr double INITIAL_SAVE_RATE_LIMIT		= 0.5;		///< we start rate limiting from this value.
+constexpr double SAVE_RATE_LIMIT_EMERGENCY_STEP	= 0.05;		///< emergency back-off.
+
+int SIMULTANEOUS_SAVE_LIMIT			= 2;		///< how many save ops we allow a time
+int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );	///< if on load N of segments exceedes this value - perform safe loading
+double MIN_SAVE_RATE_LIMIT			= 1.0/(SIMULTANEOUS_SAVE_LIMIT+1.0);	///< minimal rate limit. Calculated value will never be less that that bound
+double MAX_SAVE_RATE_LIMIT			= 0.95;		///< maximal rate limit. It most probably may be reached with very low insertion rate
+
+
+// in test mode - forcibly invoke high-concurrency pattern to reveal possibly races (like #4207)
+static void SetTightConcurrencyLimits()
+{
+	sphInfo("Test mode: set SIMULTANEOUS_SAVE_LIMIT = 4");
+	SIMULTANEOUS_SAVE_LIMIT			= 4;
+	MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_LIMIT + 1 );
+	MIN_SAVE_RATE_LIMIT				= 1.0/(SIMULTANEOUS_SAVE_LIMIT+1.0);
+	MAX_SAVE_RATE_LIMIT				= MIN_SAVE_RATE_LIMIT;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4623,6 +4635,13 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		break;
 	}
 
+	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
+	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
+	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
+	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
+	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
+	END_SCHED( "rt" );
+
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
@@ -4667,13 +4686,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 			dNewFieldLensDisk[i] = m_dFieldLensDisk[i] + tStats.m_dFieldLens[i];
 		}
 	}
-
-	// here is pickpoint: if we save some chunks in parallel, here we *NEED* to be sure, that later is not published before older
-	// That is about binlog consistency: if we save trx 1-1000 and at the same time 1000-1010, last might finish faster, but it can't be committed immediately,
-	// as last highest trx will be 1010, and nobody knows, that actually 1-1000 are not yet safe.
-	BEGIN_SCHED ( "rt", "SaveDiskChunk-wait" ); // iSaveOp as id
-	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
-	END_SCHED( "rt" );
 
 	IntVec_t dChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
@@ -11143,6 +11155,7 @@ static bool g_bTestMode = false;
 void sphRTSetTestMode ()
 {
 	g_bTestMode = true;
+	SetTightConcurrencyLimits();
 }
 
 
@@ -11721,7 +11734,7 @@ static bool AttachRtChunkExtCopy ( const CSphIndex & tSrcIndex, CSphIndex & tDst
 	return true;
 }
 
-bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError )
+bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	// prevent optimize to start during the disk chunks stealing
 	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
@@ -11768,7 +11781,7 @@ bool RtIndex_c::AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, 
 	return true;
 }
 
-bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError )
+bool RtIndex_c::AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	// prevent optimize to start during the disk chunks stealing
 	OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );

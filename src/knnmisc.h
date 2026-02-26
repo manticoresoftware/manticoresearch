@@ -17,6 +17,8 @@
 #include "secondaryindex.h"
 
 class CSphQueryContext;
+class MemoryWriter_c;
+class MemoryReader_c;
 
 class TableEmbeddings_c
 {
@@ -36,6 +38,9 @@ public:
 	void	Add ( int iAttr, CSphVector<char> & dSrc );
 	void	Remove ( const CSphFixedVector<RowID_t> & dRowMap );
 	const VecTraits_T<char> Get ( RowID_t tRowID, int iAttr ) const;
+	bool	Has ( RowID_t tRowID, int iAttr ) const;
+	void	Save ( MemoryWriter_c & tWriter ) const;
+	void	Load ( MemoryReader_c & tReader );
 
 private:
 	CSphVector<CSphVector<CSphVector<char>>> m_dStored;
@@ -64,6 +69,6 @@ void							BuildTrainKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowit
 bool							BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );
 std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, CSphString & sError );
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool & bError, CSphString & sError );
-std::unique_ptr<knn::KNNFilter_i> CreateKNNOnTheFlyFilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
+std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
 ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings );

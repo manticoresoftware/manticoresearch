@@ -74,7 +74,10 @@ fi
 echo "Going to push to '$img_url' and ('$img_url_latest', '$img_url_tag', '$img_url_branch', '$img_url_hash') (if not empty) if there's access to the registry"
 
 # exporting the image, it also squashes all the layers into one
-docker import ./manticore_test_kit.img "$img_url"
+docker import \
+	--change "LABEL org.manticore.testkit.source_hash=${SOURCE_HASH}" \
+	--change "LABEL org.manticore.testkit.commit=${IMAGE_BUILD_COMMIT}" \
+	./manticore_test_kit.img "$img_url"
 [ -n "$img_url_latest" ] && docker tag "$img_url" "$img_url_latest"
 [ -n "$img_url_tag" ] && docker tag "$img_url" "$img_url_tag"
 [ -n "$img_url_branch" ] && docker tag "$img_url" "$img_url_branch"

@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "querycontext.h"
 #include "fileio.h"
+#include "memio.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
 
@@ -67,9 +68,37 @@ void EmbeddingsSrc_c::Remove ( const CSphFixedVector<RowID_t> & dRowMap )
 
 ///////////////////////////////////////////////////////////////////////////////
 
+bool EmbeddingsSrc_c::Has ( RowID_t tRowID, int iAttr ) const
+{
+	return ( iAttr>=0 && iAttr<m_dStored.GetLength() && tRowID>=0 && tRowID<m_dStored[iAttr].GetLength() );
+}
+
 const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
 {
+	assert ( Has ( tRowID, iAttr ) );
 	return m_dStored[iAttr][tRowID];
+}
+
+void EmbeddingsSrc_c::Save ( MemoryWriter_c & tWriter ) const
+{
+	tWriter.PutDword ( m_dStored.GetLength() );
+	for ( const auto & dRows : m_dStored )
+	{
+		tWriter.PutDword ( dRows.GetLength() );
+		for ( const auto & dSrc : dRows )
+			SaveArray ( dSrc, tWriter );
+	}
+}
+
+void EmbeddingsSrc_c::Load ( MemoryReader_c & tReader )
+{
+	m_dStored.Resize ( tReader.GetDword() );
+	for ( auto & dRows : m_dStored )
+	{
+		dRows.Resize ( tReader.GetDword() );
+		for ( auto & dSrc : dRows )
+			GetArray ( dSrc, tReader );
+	}
 }
 
 
@@ -102,10 +131,10 @@ void NormalizeVec ( VecTraits_T<float> & dData )
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class KNNOnTheFlyFilter_c : public knn::KNNFilter_i
+class KNNPrefilter_c : public knn::KNNFilter_i
 {
 public:
-			KNNOnTheFlyFilter_c ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
+			KNNPrefilter_c ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
 	bool	IsAllowed ( uint32_t tRowID ) const override;
 	int64_t GetFilterCount() const override	{ return m_iFilterCount; }
@@ -119,7 +148,7 @@ private:
 };
 
 
-KNNOnTheFlyFilter_c::KNNOnTheFlyFilter_c ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount )
+KNNPrefilter_c::KNNPrefilter_c ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount )
 	: m_tCtx ( tCtx )
 	, m_pAttrPool ( pAttrPool )
 	, m_iStride ( iStride )
@@ -129,7 +158,7 @@ KNNOnTheFlyFilter_c::KNNOnTheFlyFilter_c ( const CSphQueryContext & tCtx, const 
 }
 
 
-bool KNNOnTheFlyFilter_c::IsAllowed ( uint32_t tRowID ) const
+bool KNNPrefilter_c::IsAllowed ( uint32_t tRowID ) const
 {
 	assert(m_tCtx.m_pFilter);
 
@@ -144,9 +173,9 @@ bool KNNOnTheFlyFilter_c::IsAllowed ( uint32_t tRowID ) const
 }
 
 
-std::unique_ptr<knn::KNNFilter_i> CreateKNNOnTheFlyFilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount )
+std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount )
 {
-	return std::make_unique<KNNOnTheFlyFilter_c> ( tCtx, pAttrPool, iStride, iDynamicSize, iFilterCount );
+	return std::make_unique<KNNPrefilter_c> ( tCtx, pAttrPool, iStride, iDynamicSize, iFilterCount );
 }
 
 ///////////////////////////////////////////////////////////////////////////////

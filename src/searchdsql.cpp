@@ -1469,7 +1469,7 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		tKNN.m_bRescore = !!tOpt.m_iValue;
 		return true;
 	}
-	else if ( sName=="filter" )
+	else if ( sName=="prefilter" )
 	{
 		if ( tOpt.m_eType!=VariantType_e::BIGINT )
 			return false;

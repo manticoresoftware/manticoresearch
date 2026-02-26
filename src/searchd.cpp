@@ -7793,15 +7793,31 @@ static bool IsNullSet ( const CSphMatch	& tMatch, int iAttr, SphAttr_t tNullMask
 static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrsToSend, const ISphSchema & tSchema, RowBuffer_i & dRows, const CSphColumnInfo * pNullBitmaskAttr )
 {
 	SphAttr_t tNullMask = pNullBitmaskAttr ? tMatch.GetAttr ( pNullBitmaskAttr->m_tLocator ) : 0;
+	const int iAttrs = tSchema.GetAttrsCount();
+	const BYTE* pBitmask = nullptr;
+	if ( pNullBitmaskAttr )
+	{
+		if ( pNullBitmaskAttr->m_eAttrType==SPH_ATTR_STRINGPTR )
+		{
+			ByteBlob_t tBlob = sphUnpackPtrAttr ( (const BYTE*)tNullMask );
+			assert ( iAttrs <= tBlob.second*8 );
+			pBitmask = tBlob.first;
+		} else
+		{
+			pBitmask = (const BYTE*) &tNullMask;
+			assert ( iAttrs < 64 );
+		}
+	}
+	dRows.DataStart ( pBitmask );
 
-	for ( int i=0; i < tSchema.GetAttrsCount(); i++ )
+	for ( int i=0; i < iAttrs; i++ )
 	{
 		if ( !tAttrsToSend.BitGet(i) )
 			continue;
 
 		if ( IsNullSet ( tMatch, i, tNullMask, pNullBitmaskAttr ) )
 		{
-			dRows.PutString("NULL");
+			dRows.SkipNULL();
 			continue;
 		}
 
@@ -7817,23 +7833,23 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		case SPH_ATTR_TIMESTAMP:
 		case SPH_ATTR_BOOL:
 		case SPH_ATTR_TOKENCOUNT:
-			dRows.PutNumAsString ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
+			dRows.PutDWORD ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
 			break;
 
 		case SPH_ATTR_BIGINT:
-			dRows.PutNumAsString( tMatch.GetAttr(tLoc) );
+			dRows.PutInt64 ( tMatch.GetAttr(tLoc) );
 			break;
 
 		case SPH_ATTR_UINT64:
-			dRows.PutNumAsString( (uint64_t)tMatch.GetAttr(tLoc) );
+			dRows.PutUint64 ( (uint64_t)tMatch.GetAttr(tLoc) );
 			break;
 
 		case SPH_ATTR_FLOAT:
-			dRows.PutFloatAsString ( tMatch.GetAttrFloat(tLoc) );
+			dRows.PutFloat ( tMatch.GetAttrFloat(tLoc) );
 			break;
 
 		case SPH_ATTR_DOUBLE:
-			dRows.PutDoubleAsString ( tMatch.GetAttrDouble(tLoc) );
+			dRows.PutDouble ( tMatch.GetAttrDouble(tLoc) );
 			break;
 
 		case SPH_ATTR_INT64SET_PTR:

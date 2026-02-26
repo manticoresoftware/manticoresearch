@@ -100,7 +100,7 @@ int64_t FilterSelectivityEstimator_c::EstimateImplicitAnd () const
 		fEst = fEst*iSel/fTotal;
 	}
 
-	return ClampEstimate ( (int64_t)fEst );
+	return ClampEstimate ( (int64_t)round(fEst) );
 }
 
 
@@ -126,7 +126,7 @@ int64_t FilterSelectivityEstimator_c::EstimateNode ( int iNode ) const
 	}
 
 	double fEst = ((double)iLeft * (double)iRight) / fTotal;
-	return ClampEstimate ( (int64_t)fEst );
+	return ClampEstimate ( (int64_t)round(fEst) );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -664,8 +664,6 @@ float CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t &
 	const float THRESH = 0.05f;
 	if ( fIntersection > THRESH )
 	{
-		float fIntersection = float(tEst1.m_iDocs)/iTotalDocs*float(tEst2.m_iDocs)/iTotalDocs;
-
 		iCorrectedDocs1 = int64_t(tEst1.m_iDocs*fIntersection);
 		iCorrectedDocs2 = int64_t(tEst2.m_iDocs*fIntersection);
 

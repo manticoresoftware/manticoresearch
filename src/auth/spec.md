@@ -305,6 +305,7 @@ For detailed technical specifications, refer to the [Specification: Secure Binar
 2.  **Mutual Authentication:** Both the client (Daemon Agent) and the server (API Server/Master Daemon) use the same pre-shared or derived symmetric key for encryption and decryption, establishing trust in both directions of communication.
 3.  **Replay Protection:** The protocol mandates a robust, stateful **12-byte structured nonce** composed of a sender ID, a monotonic Boot ID (unique per daemon lifetime), and an atomically incrementing message counter. This prevents adversaries from replaying old, captured messages.
 4.  **Key Derivation:** The symmetric AES-256 key used for the session is derived from the user's securely stored password hash and salt using **PKCS5\_PBKDF2\_HMAC-SHA256**. This key is unique per user and is never transmitted over the network.
+    - For inter-daemon replication traffic, matching username alone is not sufficient. Nodes must hold matching stored auth material for that user (including salt/hash-derived key inputs), otherwise encrypted API authentication fails.
 
 #### Binary Packet Format (Encrypted)
 
@@ -315,6 +316,8 @@ The binary packets sent over the wire include an unencrypted header (containing 
 #### Authentication Failure and Error Handling
 
 If decryption fails (due to wrong key, tampering detected by the GCM tag, or a detected nonce replay attack), the message is rejected. The server replies with a status code indicating an authentication or integrity failure (e.g., `STATUS_AUTH_ERROR` or similar internal status codes).
+
+In replication clusters, a common cause of decryption/authentication failure is inconsistent auth data for the same username across nodes (for example, the user was created independently on different nodes, producing different key material). This must be treated as an auth-data consistency problem, not as a username/permission resolution problem.
 
 #### Usage Recommendations
 
@@ -958,6 +961,7 @@ If the `system.auth_users` and `system.auth_permissions` tables (RT Mode) or the
 - Dumps the original local data to `searchd` log as a backup.
 - Ensures all nodes share consistent authentication and authorization data.
 - Replication involves several internal commands, which, while not directly accessible to users, must still be protected by authentication and authorization. To address this, cluster-management SQL commands (`CREATE CLUSTER`, `JOIN CLUSTER`, `DELETE CLUSTER`, and `ALTER CLUSTER`) leverage a special permission action called **replication**.
+- For these internal replication API calls, effective replication identity is `(username + matching stored auth material)`. Username equality alone does not guarantee successful inter-node authentication.
 
 Terms:
 - **cluster user**: persisted user in cluster metadata (`user` field).
@@ -989,6 +993,7 @@ Open delegation model remains in effect:
 - Internal replication operations use the persisted cluster user by default for cluster-management operations.
 - `CREATE CLUSTER` and `JOIN CLUSTER` are the only statements that may resolve effective replication user from session user when statement user is not specified.
 - Persisted effective user must be validated on cluster startup (user exists and has `replication` action). If validation fails, startup of that cluster must fail with an authorization error.
+- In addition to username/action validation, nodes participating in cluster operations must have consistent auth records for the effective replication user. If auth records differ between nodes for that username, internal API authentication fails and cluster operations (such as join) can fail.
 - After successful cluster user assignment/change operations, updated cluster metadata (including effective user) must be saved to internal config immediately.
 - Implementation note: effective replication user is resolved as part of SQL statement permission gate, and replication authorization for cluster-management statements is evaluated against that effective user.
 - Implementation note: on daemon startup, any cluster startup error disables/removes that cluster on the local node only; daemon startup continues with other clusters.
@@ -1025,6 +1030,7 @@ JOIN CLUSTER <cluster_name> AT '<ip:port>' ['<username>' AS user]
 **Validation:**
 - Same as for the `CREATE CLUSTER` command (effective replication user rules for statement execution).
 - Later on when performing one of the internal replication commands if the specified user lacks the **replication** action, the operation will fail, and the error should be logged.
+- If the username exists on both nodes but auth material is inconsistent, internal replication API authentication fails (for example, GCM tag verification failure), and join may fail with an error such as inability to fetch donor metadata/user.
 - After successful join, the cluster user persisted on the joiner is the cluster user received from the donor.
 
 ---
@@ -1201,6 +1207,7 @@ Tracks high-level changes to the authentication state.
 *   **Cluster join (`CRITICAL`):** A high-priority message is logged when a node joins a cluster and its local authentication data is about to be overwritten.
 *   **Local auth data backup (`INFO`):** When joining a cluster, the node's original authentication data is dumped to the log as a JSON backup before being replaced.
 *   **Failed Actions (`WARN`):** Any administrative action that fails (e.g., trying to create a duplicate user) is logged with an error reason.
+*   **Replication API auth mismatch (`WARN`):** If internal replication API auth fails because nodes have inconsistent auth material for the same username, a warning is logged (for example, `GCM authentication failed (bad tag)`), and related cluster operation failures are expected.
 
 ---
 

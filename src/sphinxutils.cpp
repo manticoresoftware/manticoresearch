@@ -1093,6 +1093,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
 	{ "attr_autoconv_strict",	0, NULL },
+	{ "auth",					0, NULL },
+	{ "auth_log_level",			0, NULL },
+	{ "auth_password_policy",	0, NULL },
+	{ "auth_password_min_length",	0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3257,7 +3261,7 @@ void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char* szPath, boo
 
 	m_pLibrary = dlopen ( szPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
 	if ( !m_pLibrary )
-		sphLogDebug ( "dlopen(%s) failed", szPath );
+		sphLogDebug ( "dlopen(%s) failed: %s", szPath, dlerror() );
 	else
 		sphLogDebug ( "dlopen(%s)=%p", szPath, m_pLibrary );
 }

@@ -169,6 +169,10 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 			RPL_TNX << "pq-cluster-alter-drop, table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 
+		case ReplCmd_e::CLUSTER_ALTER_UPDATE_USER:
+			RPL_TNX << "cluster-alter-update-user, user '" << pCmd->m_sIndex.cstr() << "'";
+			break;
+
 		case ReplCmd_e::RT_TRX:
 			m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion );
 			RPL_TNX << "rt trx, table '" << pCmd->m_sIndex.cstr() << "'";
@@ -194,6 +198,12 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 			RPL_TNX << "update " << ( pCmd->m_eCommand == ReplCmd_e::UPDATE_QL ? "ql" : "json" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
 			break;
 		}
+
+		case ReplCmd_e::AUTH_ADD:
+		case ReplCmd_e::AUTH_DELETE:
+			RPL_TNX << "auth " << ( pCmd->m_eCommand==ReplCmd_e::AUTH_DELETE ? "delete" : "replace" ) << ", table '" << pCmd->m_sIndex.cstr() << "'";
+			m_tAcc.LoadRtTrx ( tReq, pCmd->m_uVersion );
+			break;
 
 		default:
 			sphWarning ( "unsupported replication command %d", (int) pCmd->m_eCommand );

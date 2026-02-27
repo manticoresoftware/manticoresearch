@@ -35,6 +35,10 @@
 #include "netfetch.h"
 #include "searchdbuddy.h"
 #include "daemon/logger.h"
+#include "auth/auth.h"
+#include "auth/auth_proto_http.h"
+#include "auth/auth_log.h"
+#include "searchdssl.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
@@ -68,6 +72,9 @@ static int g_iBuddyVersion = 3;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
 static CSphString g_sContainerName;
+static const CSphString g_sBuddyTokenName ( "BUDDY_TOKEN" );
+static const CSphString g_sBuddySslCertName ( "BUDDY_SSL_CERT_CONTENT" );
+static const CSphString g_sBuddySslKeyName ( "BUDDY_SSL_KEY_CONTENT" );
 
 // windows docker needs port XXX:9999 port mapping
 static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
@@ -375,12 +382,32 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	std::unique_ptr<boost::process::child> pBuddy;
 	std::error_code tErrorCode;
 
+	boost::process::environment tEnv = boost::this_process::environment();
+	if ( IsAuthEnabled() )
+	{
+		CSphString sToken, sTokenError;
+		if ( CreateBuddyToken ( sToken, sTokenError ) )
+			tEnv[g_sBuddyTokenName.cstr()] = sToken.scstr();
+		else
+			sphLogDebug ( "[BUDDY] token error: %s", sTokenError.cstr() );
+	}
+	if ( CheckWeCanUseSSL() )
+	{
+		CSphString sSslCert = GetSslCert();
+		CSphString sSslKey = GetSslKey();
+		if ( !sSslCert.IsEmpty() && !sSslKey.IsEmpty() )
+		{
+			tEnv[g_sBuddySslCertName.cstr()] = sSslCert.scstr();
+			tEnv[g_sBuddySslKeyName.cstr()] = sSslKey.scstr();
+		}
+	}
+
 #if _WIN32
 	BuddyWindow_t tWnd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
+	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ), tEnv ) );
 #else
 	PreservedStd_t tPreserveStd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd ) );
+	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd, tEnv ) );
 #endif
 
 	if ( !pBuddy->running ( tErrorCode ) )
@@ -445,7 +472,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 	SetContainerName ( sConfigFilePath );
 	// should not check buddy related code if buddy disabled at config
-	if ( bHasBuddyPath && sConfigPath.IsEmpty() )
+	if ( !HasBuddyConfigured ( sConfigPath, bHasBuddyPath ) )
 		return;
 
 	ARRAY_FOREACH ( i, dListeners )
@@ -600,8 +627,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 				tBuddyQuery.NamedValNE ( "body", "null" );
 		}
 		tBuddyQuery.NamedVal ( "version", g_iBuddyVersion );
-		if ( !bHttp )
-			tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
+		tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
 
 		{
 			tBuddyQuery.Named ( "message" );
@@ -625,6 +651,13 @@ bool IsBuddyQuery ( const OptionsHash_t & hOptions )
 	return pProhibit != nullptr && ( pProhibit->Begins ( "Manticore Buddy" ) );
 }
 
+struct BuddyReplyLog_t
+{
+	CSphString m_sType;
+	CSphString m_sSeverity;
+	CSphString m_sMessage;
+};
+
 struct BuddyReply_t
 {
 	JsonObj_c m_tRoot;
@@ -633,7 +666,39 @@ struct BuddyReply_t
 	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
 	CSphString m_sContentType;
+
+	CSphVector<BuddyReplyLog_t> m_dLogs;
 };
+
+static void ProcessBuddyLogs ( const BuddyReply_t & tReply )
+{
+	for ( const auto & tLog : tReply.m_dLogs )
+	{
+		if ( tLog.m_sType!="auth" )
+			continue;
+
+		AuthLogLevel_e eLevel = AuthLogLevel_e::INFO;
+		if ( tLog.m_sSeverity=="WARN" )
+			eLevel = AuthLogLevel_e::WARNING;
+		else if ( tLog.m_sSeverity=="ERROR" )
+			eLevel = AuthLogLevel_e::ERR;
+		else if ( tLog.m_sSeverity=="CRITICAL" )
+			eLevel = AuthLogLevel_e::CRITICAL;
+
+		AuthLog().Log ( eLevel, tLog.m_sMessage.cstr() );
+	}
+}
+
+static void ParseBuddyLog ( const JsonObj_c & tItem, BuddyReply_t & tParsed, CSphString & sError )
+{
+	if ( !tItem.IsObj() )
+		return;
+
+	auto & tEntry = tParsed.m_dLogs.Add();
+	tItem.FetchStrItem ( tEntry.m_sType, "type", sError, false );
+	tItem.FetchStrItem ( tEntry.m_sSeverity, "severity", sError, false );
+	tItem.FetchStrItem ( tEntry.m_sMessage, "message", sError, false );
+}
 
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
 {
@@ -676,6 +741,21 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 
 	if ( !tParsed.m_tRoot.FetchStrItem ( tParsed.m_sContentType, "content_type", sError, true ) )
 		return false;
+
+	// optional log array with object items
+	JsonObj_c tLogs = tParsed.m_tRoot.GetItem ( "log" );
+	if ( tLogs )
+	{
+		if ( tLogs.IsArray() )
+		{
+			for ( const auto & tItem : tLogs )
+				ParseBuddyLog ( tItem, tParsed, sError );
+
+		} else if ( tLogs.IsObj() )
+		{
+			ParseBuddyLog ( tLogs, tParsed, sError );
+		}
+	}
 
 	return true;
 }
@@ -746,9 +826,9 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || IsBuddyQuery ( hOptions ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || tRes.m_eEndpoint==EHTTP_ENDPOINT::TOKEN || IsBuddyQuery ( hOptions ) || tRes.m_bSkipBuddy )
 	{
-		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI )
+		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI && !tRes.m_bSkipBuddy )
 		{
 			if ( !HasBuddy() )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );
@@ -802,6 +882,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
+
+	ProcessBuddyLogs ( tReplyParsed );
+
 	if ( ( bHttpEndpoint && tReplyParsed.m_sType!="json response" ) || ( !bHttpEndpoint && tReplyParsed.m_sType!="sql response" ) )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), tReplyParsed.m_sType.cstr(), tReplyRaw.second.cstr() );
@@ -880,6 +963,9 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
+
+	ProcessBuddyLogs ( tReplyParsed );
+
 	if ( tReplyParsed.m_sType!="sql response" )
 	{
 		LogSphinxqlError ( sSrcQuery.first, tError );
@@ -906,6 +992,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
+
 }
 
 #ifdef _WIN32
@@ -926,6 +1013,8 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 		sCmd.Appendf ( "-v \"%s\":/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
+	if ( IsAuthEnabled() )
+		sCmd.Appendf ( "-e %s", g_sBuddyTokenName.cstr() ); // BUDDY_TOKEN for all request into daemon from the env variable
 	sCmd.Appendf ( "%s /buddy/src/main.php", sDefaultBuddyDockerImage ); // docker image and the buddy start command
 
 	return CSphString ( sCmd );
@@ -1005,4 +1094,9 @@ void BuddySetLogLevel ( ESphLogLevel eLogLevel )
 	sUrl.SetSprintf ( "%s/config", g_sUrlBuddy.cstr() );
 
 	PostToHelperUrl ( sUrl, (Str_t)tBuddyQuery, dHeaders );
+}
+
+bool HasBuddyConfigured ( const CSphString & sConfigPath, bool bHasBuddyPath )
+{
+	return ( !bHasBuddyPath || !sConfigPath.IsEmpty() );
 }

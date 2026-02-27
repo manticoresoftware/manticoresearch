@@ -11,6 +11,7 @@
 //
 
 #include "winservice.h"
+#include "daemon_ipc.h"
 
 static bool				g_bService		= false;
 bool WinService () noexcept
@@ -358,11 +359,10 @@ void SetupWinService ( int& argc, char **& argv )
 		}
 	}
 
-	char szPipeName[64];
-	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", getpid() );
-	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND,
-	                            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT,
-	                            PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
+	CSphString sPipeName = GetSignalPipeName ( getpid() );
+	g_hPipe = CreateNamedPipe ( sPipeName.cstr(), PIPE_ACCESS_INBOUND,
+								PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT,
+								PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
 	ConnectNamedPipe ( g_hPipe, NULL );
 }
 
@@ -386,7 +386,7 @@ void CloseWinPipe ()
 
 void CheckWinSignals ()
 {
-	 auto & g_bGotSighup = sphGetGotSighup();
+	auto & g_bGotSighup = sphGetGotSighup();
 	BYTE dPipeInBuf[WIN32_PIPE_BUFSIZE];
 	DWORD nBytesRead = 0;
 	BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, WIN32_PIPE_BUFSIZE, &nBytesRead, NULL );
@@ -405,6 +405,11 @@ void CheckWinSignals ()
 				if ( g_bService )
 					g_bServiceStop = true;
 				break;
+
+			case PIPE_CMD_CHECK_CMD:
+				ProcessAuthReloadPipe ( getpid() );
+				break;
+
 			}
 		}
 
@@ -415,17 +420,13 @@ void CheckWinSignals ()
 
 int WinStopOrWaitAnother(int iPid, int iWaitTimeout)
 {
-
 	bool bTerminatedOk = false;
-
-	char szPipeName[64];
-	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
+	CSphString sPipeName = GetSignalPipeName ( iPid );
 
 	HANDLE hPipe = INVALID_HANDLE_VALUE;
-
 	while ( hPipe==INVALID_HANDLE_VALUE )
 	{
-		hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
+		hPipe = CreateFile ( sPipeName.cstr(), GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
 		if ( hPipe==INVALID_HANDLE_VALUE )
 		{
@@ -435,7 +436,7 @@ int WinStopOrWaitAnother(int iPid, int iWaitTimeout)
 				break;
 			}
 
-			if ( !WaitNamedPipe ( szPipeName, iWaitTimeout/1000 ) )
+			if ( !WaitNamedPipe ( sPipeName.cstr(), iWaitTimeout/1000 ) )
 			{
 				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
 				break;
@@ -465,3 +466,10 @@ int WinStopOrWaitAnother(int iPid, int iWaitTimeout)
 }
 
 #endif // _WIN32
+
+CSphString GetSignalPipeName ( int iPid )
+{
+	CSphString sName;
+	sName.SetSprintf ( "\\\\.\\pipe\\searchd_%d", iPid );
+	return sName;
+}

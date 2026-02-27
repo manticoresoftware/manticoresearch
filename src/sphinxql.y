@@ -36,6 +36,7 @@
 
 %token	TOK_AGENT
 %token	TOK_ALL
+%token	TOK_ALLOW
 %token	TOK_ANY
 %token	TOK_AS
 %token	TOK_ASC
@@ -43,6 +44,7 @@
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
 %token	TOK_BIGINT
+%token	TOK_BUDGET
 %token	TOK_BY
 %token	TOK_CALL
 %token	TOK_CHARACTER
@@ -64,6 +66,7 @@
 %token	TOK_DISTINCT
 %token	TOK_DIV
 %token	TOK_DOUBLE
+%token	TOK_DROP
 %token	TOK_EXPLAIN
 %token	TOK_FACET
 %token	TOK_FALSE
@@ -72,6 +75,7 @@
 %token	TOK_FORCE
 %token	TOK_FROM
 %token	TOK_FREEZE
+%token	TOK_GRANT
 %token	TOK_GLOBAL
 %token	TOK_GROUP
 %token	TOK_GROUPBY
@@ -88,6 +92,7 @@
 %token	TOK_HOSTNAMES
 %token	TOK_HOUR
 %token	TOK_IGNORE
+%token	TOK_IDENTIFIED
 %token	TOK_IN
 %token	TOK_INDEX
 %token	TOK_INDEXES
@@ -123,6 +128,8 @@
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
+%token	TOK_PASSWORD
+%token	TOK_PERMISSIONS
 %token	TOK_PLAN
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
@@ -134,6 +141,7 @@
 %token	TOK_RELOAD
 %token	TOK_REPLACE
 %token	TOK_REMAP
+%token	TOK_REVOKE
 %token	TOK_ROLLBACK
 %token	TOK_SCROLL
 %token	TOK_SECOND
@@ -153,16 +161,21 @@
 %token	TOK_TABLES
 %token	TOK_THREADS
 %token	TOK_TO
+%token	TOK_TOKEN
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_UNFREEZE
 %token	TOK_UPDATE
+%token	TOK_USAGE
+%token	TOK_USER
+%token	TOK_USERS
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
 %token	TOK_WEEK
 %token	TOK_WEIGHT
 %token	TOK_WHERE
+%token	TOK_WITH
 %token	TOK_WITHIN
 %token	TOK_YEAR
 
@@ -224,6 +237,10 @@ multi_stmt_list:
 statement:
 	insert_into
 	| delete_from
+	| create_user_stmt
+	| drop_user_stmt
+	| grant_stmt
+	| revoke_stmt
 	| transact_op
 	| call_proc
 	| describe
@@ -238,6 +255,7 @@ multi_stmt:
 	select
 	| show_stmt
 	| set_stmt
+	| token_stmt
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -260,25 +278,27 @@ multi_stmt:
 
 reserved_tokens_without_option:
 	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC
-	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
+		| TOK_ALLOW
+		| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
-	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
+	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE | TOK_DROP
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
+	| TOK_BUDGET
 	| TOK_FLOAT | TOK_FOR | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO
 	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
 	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
-	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
+	| TOK_GRANT | TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
 	| TOK_REMAP | TOK_REPLACE
-	| TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
+	| TOK_REVOKE | TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
-	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
+	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
-	| TOK_LOCKS | TOK_SCROLL
+	| TOK_IDENTIFIED | TOK_LOCKS | TOK_SCROLL | TOK_USAGE | TOK_USER | TOK_USERS | TOK_PASSWORD | TOK_PERMISSIONS
 	;
 
 names_transaction_collate:
@@ -1628,6 +1648,42 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_LOCKS;
 		}
+	| TOK_PERMISSIONS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_PERMISSIONS;
+		}
+	| TOK_PERMISSIONS TOK_FOR TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $3 );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_PERMISSIONS;
+		}
+	| TOK_USAGE
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_USAGE;
+		}
+	| TOK_USAGE TOK_FOR TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $3 );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_USAGE;
+		}
+	| TOK_USERS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_USERS;
+		}
+	| TOK_TOKEN
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TOKEN;
+		}
+	| TOK_TOKEN TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $2 );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TOKEN;
+		}
+	| TOK_TOKEN TOK_FOR TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $3 );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TOKEN;
+		}
 	;
 
 index_or_table:
@@ -1655,6 +1711,98 @@ set_stmt:
 	| TOK_SET TOK_NAMES ident_or_string_or_num_or_nulls opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET sysvar '=' ident_or_string_or_num_or_nulls	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET ident_or_string_or_num_or_nulls { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_PASSWORD TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET_PASSWORD;
+			pParser->m_pStmt->m_sSetValue = pParser->ToStringUnescape ( $3 );
+		}
+	| TOK_SET TOK_PASSWORD TOK_QUOTED_STRING TOK_FOR TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET_PASSWORD;
+			pParser->m_pStmt->m_sSetValue = pParser->ToStringUnescape ( $3 );
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $5 );
+		}
+	;
+
+token_stmt:
+	TOK_TOKEN
+		{
+			pParser->m_pStmt->m_eStmt = STMT_TOKEN;
+		}
+	| TOK_TOKEN TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $2 );
+			pParser->m_pStmt->m_eStmt = STMT_TOKEN;
+		}
+	;
+
+create_user_stmt:
+	TOK_CREATE TOK_USER TOK_QUOTED_STRING TOK_IDENTIFIED TOK_BY TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_CREATE_USER;
+			pParser->m_pStmt->m_sAuthUser = pParser->ToStringUnescape ( $3 );
+			pParser->m_pStmt->m_sAuthPassword = pParser->ToStringUnescape ( $6 );
+		}
+	;
+
+drop_user_stmt:
+	TOK_DROP TOK_USER TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DROP_USER;
+			pParser->m_pStmt->m_sAuthUser = pParser->ToStringUnescape ( $3 );
+		}
+	;
+
+grant_stmt:
+	TOK_GRANT ident TOK_ON grant_target TOK_TO TOK_QUOTED_STRING opt_grant_options
+		{
+			pParser->m_pStmt->m_eStmt = STMT_GRANT;
+			pParser->ToString ( pParser->m_pStmt->m_sAuthAction, $2 );
+			pParser->m_pStmt->m_sAuthAction.ToLower();
+			pParser->m_pStmt->m_sAuthUser = pParser->ToStringUnescape ( $6 );
+		}
+	;
+
+revoke_stmt:
+	TOK_REVOKE ident TOK_ON grant_target TOK_FROM TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_REVOKE;
+			pParser->ToString ( pParser->m_pStmt->m_sAuthAction, $2 );
+			pParser->m_pStmt->m_sAuthAction.ToLower();
+			pParser->m_pStmt->m_sAuthUser = pParser->ToStringUnescape ( $6 );
+		}
+	;
+
+grant_target:
+	'*'
+		{
+			pParser->m_pStmt->m_sAuthTarget = "*";
+		}
+	| ident
+		{
+			pParser->ToString ( pParser->m_pStmt->m_sAuthTarget, $1 );
+		}
+	| TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_sAuthTarget = pParser->ToStringUnescape ( $1 );
+		}
+	;
+
+opt_grant_options:
+	// empty
+	| TOK_WITH TOK_BUDGET TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_sAuthBudget = pParser->ToStringUnescape ( $3 );
+		}
+	| TOK_WITH TOK_ALLOW const_int
+		{
+			pParser->m_pStmt->m_iAuthAllow = (int)$3.GetValueInt();
+		}
+	| TOK_WITH TOK_ALLOW const_int TOK_BUDGET TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_iAuthAllow = (int)$3.GetValueInt();
+			pParser->m_pStmt->m_sAuthBudget = pParser->ToStringUnescape ( $5 );
+		}
 	;
 
 opt_collate:

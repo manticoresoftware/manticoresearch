@@ -26,6 +26,7 @@
 
 %token	TOK_ATTACH
 %token	TOK_ATTRIBUTES
+%token  TOK_AUTH
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_BAD_NUMERIC
 %token	TOK_CACHE
@@ -105,6 +106,7 @@ statement:
     | freeze_indexes
     | unfreeze_indexes
   	| kill_connid
+	| reload_auth
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -449,7 +451,7 @@ delete_cluster:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_DELETE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	;
 
@@ -511,6 +513,13 @@ option_item:
 		}
 	;
 
+reload_auth:
+	TOK_RELOAD TOK_AUTH
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_RELOAD_AUTH;
+		}
+	;
 
 %%
 

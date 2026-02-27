@@ -16,13 +16,15 @@
 #include "searchdsql.h"
 #include "debug_cmds.h"
 
+#include <utility>
+
 void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowInformationTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowSessions ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
-void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CSphString & sThreadFormat );
 
 // process @@system.something
 static bool ParseSystem ( TableFeeder_fn & fnFeed, const CSphString & sName, SqlStmt_t * pStmt )
@@ -62,7 +64,11 @@ static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, Sq
 	else if ( StrEqN ( FROMS (".@status"), sName.cstr() ) ) // select .. idx.status
 		fnFeed = [pStmt] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, pStmt ); };
 	else if ( StrEqN ( FROMS (".@files"), sName.cstr() ) ) // select .. from idx.files
-		fnFeed = [pStmt] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, pStmt ); };
+	{
+		CSphString sIndex = pStmt->m_sIndex;
+		CSphString sThreadFormat = pStmt->m_sThreadFormat;
+		fnFeed = [sIndex = std::move ( sIndex ), sThreadFormat = std::move ( sThreadFormat )] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, sIndex, sThreadFormat ); };
+	}
 	else
 		return false;
 	return true;
@@ -71,7 +77,8 @@ static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, Sq
 
 bool SearchHandler_c::ParseSysVarsAndTables ()
 {
-	const char* szVar = m_dLocal.First().m_sName.cstr();
+	CSphString sVar = m_dLocal.First().m_sName;
+	const char* szVar = sVar.cstr();
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
 	const char* szEssence = "variable";
 	bool bValid = false;
@@ -124,7 +131,8 @@ bool SearchHandler_c::ParseSysVarsAndTables ()
 
 bool SearchHandler_c::ParseIdxSubkeys ()
 {
-	const char* szVar = m_dLocal.First().m_sName.cstr();
+	CSphString sVar = m_dLocal.First().m_sName;
+	const char* szVar = sVar.cstr();
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
 
 	assert ( !dSubkeys.IsEmpty () );

@@ -8404,6 +8404,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
 	QueryProfile_c tProfile;
+	SqlStmt_t * pFirstSelectStmt = nullptr;
 
 	iSelect = 0;
 	for ( auto & tStmt : dStmt )
@@ -8412,6 +8413,9 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		{
 		case STMT_SELECT:
 			{
+				if ( !pFirstSelectStmt )
+					pFirstSelectStmt = &tStmt;
+
 				// no log for search queries from the buddy in the info verbosity
 				if ( session::IsQueryLogDisabled() )
 					tStmt.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
@@ -8432,6 +8436,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		default: break;
 		}
 	}
+	tHandler.m_pStmt = pFirstSelectStmt;
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
@@ -9202,7 +9207,7 @@ void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 }
 
 // same for select ... from index.files
-void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CSphString & sThreadFormat )
 {
 	tOut.HeadBegin ();
 	tOut.HeadColumn ( "file" );
@@ -9211,8 +9216,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	if ( !tOut.HeadEnd () )
 		return;
 
-	const auto & tStmt = *pStmt;
-	auto pServed = GetServed ( tStmt.m_sIndex );
+	auto pServed = GetServed ( sIndex );
 	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
 		tOut.Error ( "FILES requires an existing local table" );
@@ -9223,7 +9227,7 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	StrVec_t dExt;
 	RIdx_c ( pServed )->GetIndexFiles ( dFiles, dExt );
 
-	auto sFormat = tStmt.m_sThreadFormat;
+	auto sFormat = sThreadFormat;
 	if ( sFormat!="external" )
 		ARRAY_CONSTFOREACH( i, dFiles )
 		{

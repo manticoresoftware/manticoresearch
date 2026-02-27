@@ -168,6 +168,9 @@ select * from test1 where match ('9');
 select * from test1 where match ('test 9');
 </sphinxql>
 
+<!-- regression https://github.com/manticoresoftware/manticoresearch/issues/4307: raw /sql multi-statement with system subtables should not crash -->
+<query endpoint="sql?mode=raw" method="post">select id from test.@files; show meta</query>
+
 </queries>
 
 </test>

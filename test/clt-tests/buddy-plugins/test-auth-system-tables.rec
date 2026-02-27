@@ -25,8 +25,6 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON * TO 'regular';"
 ––– comment –––
 ––– 6.1.1 User cannot INSERT into system.auth_users –––
 EXPECTED: Permission denied for user 'regular'
-BUG: User gets validation error instead of Permission denied
-(Permission check should happen BEFORE data validation)
 ––– comment –––
 ––– input –––
 MYSQL_PWD=regular1234 mysql -uregular -h0 -P9306 -e "INSERT INTO system.auth_users(username, salt, hashes) VALUES('hacker', 'aabb', '{\"password_sha1_no_salt\":\"aabb\"}');" 2>&1

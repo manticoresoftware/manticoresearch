@@ -8404,7 +8404,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
 	QueryProfile_c tProfile;
-	SqlStmt_t * pFirstSelectStmt = nullptr;
 
 	iSelect = 0;
 	for ( auto & tStmt : dStmt )
@@ -8413,8 +8412,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		{
 		case STMT_SELECT:
 			{
-				if ( !pFirstSelectStmt )
-					pFirstSelectStmt = &tStmt;
+				if ( !tHandler.m_pStmt )
+					tHandler.m_pStmt = &tStmt;
 
 				// no log for search queries from the buddy in the info verbosity
 				if ( session::IsQueryLogDisabled() )
@@ -8436,7 +8435,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		default: break;
 		}
 	}
-	tHandler.m_pStmt = pFirstSelectStmt;
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );

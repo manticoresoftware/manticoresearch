@@ -16,8 +16,6 @@
 #include "searchdsql.h"
 #include "debug_cmds.h"
 
-#include <utility>
-
 void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowInformationTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
@@ -77,8 +75,7 @@ static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, Sq
 
 bool SearchHandler_c::ParseSysVarsAndTables ()
 {
-	CSphString sVar = m_dLocal.First().m_sName;
-	const char* szVar = sVar.cstr();
+	const char* szVar = m_dLocal.First().m_sName.cstr();
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
 	const char* szEssence = "variable";
 	bool bValid = false;
@@ -131,8 +128,7 @@ bool SearchHandler_c::ParseSysVarsAndTables ()
 
 bool SearchHandler_c::ParseIdxSubkeys ()
 {
-	CSphString sVar = m_dLocal.First().m_sName;
-	const char* szVar = sVar.cstr();
+	const char* szVar = m_dLocal.First().m_sName.cstr();
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
 
 	assert ( !dSubkeys.IsEmpty () );

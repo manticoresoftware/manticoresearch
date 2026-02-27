@@ -1504,7 +1504,16 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	// we replaced it with a stored expression
 	// now we want to create a columnar filter based on the original columnar attribute
 	if ( tCol.IsStoredExpr() )
-		return true;
+	{
+		CSphString sAliasedCol;
+		tCol.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+		int iAliasedAttr = tSchema.GetAttrIndex ( sAliasedCol.cstr() );
+		if ( iAliasedAttr<0 )
+			return false;
+
+		const CSphColumnInfo & tAliasedAttr = tSchema.GetAttr ( iAliasedAttr );
+		return tAliasedAttr.IsColumnar() || tAliasedAttr.IsColumnarExpr();
+	}
 
 	return false;
 }

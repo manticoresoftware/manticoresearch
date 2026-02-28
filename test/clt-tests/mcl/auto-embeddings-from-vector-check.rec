@@ -106,7 +106,6 @@ Test error case: FROM specified but empty
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_from_set_to_empty (title1 TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') " 2>&1
 ––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_from_set_to_empty': 'from' setting empty for KNN attribute 'embedding_vector'
 ––– comment –––
 Test multiple fields in FROM clause
 ––– input –––

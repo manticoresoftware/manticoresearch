@@ -27,6 +27,7 @@
 #include <string.h>
 #include <limits.h>
 #include <optional>
+#include <functional>
 
 #if _WIN32
 #include <winsock2.h>
@@ -769,6 +770,7 @@ struct CSphAttrUpdate
 	bool							m_bIgnoreNonexistent = false;	///< whether to warn about non-existen attrs, or just silently ignore them
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 	bool							m_bReusable = true;				///< whether update is standalone and never rewritten, or need deep-copy
+	bool							m_bRebuildEmbeddings = false;	///< internal: allow updating KNN-indexed float_vector (REBUILD EMBEDDINGS)
 
 	inline int GetRowOffset (int i) const
 	{
@@ -817,6 +819,7 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 };
 
 void CommitUpdateAttributes ( int64_t * pTID, const char* szName, const CSphAttrUpdate & tUpd );
+AttrUpdateSharedPtr_t CreateFloatVectorAttrUpdate ( const CSphString & sAttrName, const CSphVector<DocID_t> & dDocids, const std::vector<std::vector<float>> & dEmbeddings, int iEmptyVectorDims );
 
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
@@ -1338,6 +1341,13 @@ public:
 	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
+	/// When fnRunUnderWriteLock is provided, hold index write lock only around update and AlterKNN (allows SELECT to run during collect/generate).
+	using RunUnderWriteLock_fn = std::function<void(std::function<void()>)>;
+	virtual bool					RebuildEmbeddings ( CSphString & sError, RunUnderWriteLock_fn fnRunUnderWriteLock, CSphString & sWarning ) { return true; }
+	/// Collect (docid, from_text) for docs where embedding attr at iAttrIdx is empty. Used by RT RebuildEmbeddings for disk chunks.
+	/// iEmptyVectorDims: when > 0, treat zero vector of this length as empty (ADD COLUMN default); 0 = use schema m_tKNN.m_iDims.
+	/// iMaxDocs: when > 0, stop after adding this many; *pStartRowID in/out: start from this row, set to next row to resume.
+	virtual bool					CollectDocsWithEmptyEmbedding ( int iAttrIdx, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iEmptyVectorDims = 0, int iMaxDocs = 0, RowID_t * pStartRowID = nullptr ) const { return true; }
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 

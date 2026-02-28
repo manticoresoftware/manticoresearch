@@ -34,6 +34,7 @@ This feature only supports adding one field at a time for RT tables or the expan
 * Newly created attribute's values are set to 0.
 * `ALTER` will not work for distributed tables and tables without any attributes.
 * You can't delete the `id` column.
+* You cannot drop a column (full-text field or string attribute) that is used as an embedding source (listed in `FROM`) by a `float_vector` attribute. The error will be: `cannot drop column 'X': used as embedding source (FROM) by float_vector attribute 'Y'`. Drop the float_vector column first.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
 * Adding/dropping full-text field is only supported in the [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
 
@@ -315,6 +316,33 @@ The command reprocesses all vector data in the table and rebuilds the KNN index 
 <!-- request Example -->
 ```sql
 ALTER TABLE rt REBUILD KNN;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Rebuilding embeddings
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS
+```
+
+`REBUILD EMBEDDINGS` fills empty `float_vector` (embedding) columns in existing rows using the configured embedding model and `FROM` source. Use it when you added a new `float_vector` column with `MODEL_NAME` and `FROM` — existing rows get a zero vector by default; run `REBUILD EMBEDDINGS` to generate embeddings from the source text (e.g. from fields or string attributes).
+
+Rows where you explicitly set the vector to `()` or `NULL` (explicitly empty) show as `NULL` and are excluded from vector search; `REBUILD EMBEDDINGS` does not fill them.
+
+Only row-wise `float_vector` attributes that have a model and `FROM` configured are processed. Columnar embedding attributes are not supported. The command processes attributes in chunks (up to 1000 docs per batch) and repeats until no more empty embeddings are found, so new rows inserted during the run can be picked up in a later pass.
+
+Other queries and operations (e.g. `SELECT`, `INSERT`, `REPLACE`) can run while `REBUILD EMBEDDINGS` is in progress; the index write lock is held only during each update batch and the final KNN index rebuild. Progress is visible in `SHOW THREADS` (`Info` column).
+
+<!-- request Example -->
+```sql
+ALTER TABLE products REBUILD EMBEDDINGS;
 ```
 
 <!-- response Example -->

@@ -480,6 +480,96 @@ private:
 };
 
 
+/// LENGTH() evaluator for blob-stored float_vector (returns number of dimensions)
+static FORCE_INLINE int GetFloatVectorDims ( ByteBlob_t tBlob )
+{
+	if ( !tBlob.first )
+		return 0;
+
+	if ( tBlob.second == (int)sizeof(DWORD) )
+	{
+		DWORD u = *(const DWORD *)tBlob.first;
+		if ( u == 0 || u == 2 )
+			return 0;
+	}
+
+	return tBlob.second / (int)sizeof(float);
+}
+
+class Expr_FloatVectorLength_c : public Expr_WithLocator_c
+{
+public:
+	Expr_FloatVectorLength_c ( const CSphAttrLocator & tLoc, const CSphString & sAttr )
+		: Expr_WithLocator_c ( tLoc, sAttr )
+	{}
+
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		auto dBlob = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return GetFloatVectorDims ( dBlob );
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		Expr_WithLocator_c::Command ( eCmd, pArg );
+		if ( eCmd == SPH_EXPR_SET_BLOB_POOL )
+			m_pBlobPool = (const BYTE*)pArg;
+	}
+
+	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_FloatVectorLength_c");
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final { return new Expr_FloatVectorLength_c ( *this ); }
+
+protected:
+	const BYTE * m_pBlobPool { nullptr };
+
+private:
+	Expr_FloatVectorLength_c ( const Expr_FloatVectorLength_c & rhs )
+		: Expr_WithLocator_c ( rhs )
+	{}
+};
+
+
+/// item(float_vector, N): returns Nth element (0-based) from float_vector; out-of-range returns 0.0f.
+/// When the float_vector is explicitly empty (NULL), returns SphFloatExprNull() so result set sends NULL.
+class Expr_FloatVectorItem_c : public Expr_Binary_c
+{
+public:
+	Expr_FloatVectorItem_c ( ISphExpr * pVec, ISphExpr * pIndex )
+		: Expr_Binary_c ( "Expr_FloatVectorItem_c", pVec, pIndex )
+	{}
+
+	float Eval ( const CSphMatch & tMatch ) const final
+	{
+		ByteBlob_t tBlob = m_pFirst->MvaEval ( tMatch );
+		if ( sphIsExplicitlyEmptyFloatVector ( tBlob.first, tBlob.second ) )
+			return SphFloatExprNull();
+		int i = (int)m_pSecond->IntEval ( tMatch );
+		int n = GetFloatVectorDims ( tBlob );
+		if ( i < 0 || i >= n || !tBlob.first )
+			return 0.0f;
+		return ( (const float *)tBlob.first )[i];
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_FloatVectorItem_c");
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final { return new Expr_FloatVectorItem_c ( *this ); }
+
+private:
+	Expr_FloatVectorItem_c ( const Expr_FloatVectorItem_c & rhs ) : Expr_Binary_c ( rhs ) {}
+};
+
+
 class Expr_GetConst_c : public Expr_NoLocator_c
 {
 public:
@@ -3659,6 +3749,7 @@ enum Tokh_e : BYTE
 	FUNC_DATE_HISTOGRAM,
 
 	FUNC_UUID_SHORT,
+	FUNC_ITEM,
 
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
 	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
@@ -3811,6 +3902,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "date_histogram",	FUNC_DATE_HISTOGRAM	},
 
 	{ "uuid_short",		FUNC_UUID_SHORT	},
+	{ "item",			FUNC_ITEM		},
 
 	// other reserved (operators, columns, etc.)
 	{ "count",			TOKH_COUNT			},
@@ -3862,53 +3954,54 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] =
 	{
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 10, 10,
-		27, 49, 9, 6, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 29, 64, 14, 5, 5,
-		31, 25, 64, 6, 167, 14, 41, 7, 7, 38,
-		16, 16, 20, 13, 6, 36, 75, 58, 35, 32,
-		15, 167, 167, 167, 167, 49, 167, 29, 64, 14,
-		5, 5, 31, 25, 64, 6, 167, 14, 41, 7,
-		7, 38, 16, 16, 20, 13, 6, 36, 75, 58,
-		35, 32, 15, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 20, 19,
+		18, 41, 7, 4, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 42, 72, 13, 4, 4,
+		36, 21, 67, 4, 178, 17, 33, 6, 13, 25,
+		29, 25, 18, 12, 5, 47, 57, 53, 66, 30,
+		15, 178, 178, 178, 178, 34, 178, 42, 72, 13,
+		4, 4, 36, 21, 67, 4, 178, 17, 33, 6,
+		13, 25, 29, 25, 18, 12, 5, 47, 57, 53,
+		66, 30, 15, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178, 178, 178, 178, 178,
+		178, 178, 178, 178, 178, 178
 	};
 
 	const static short dIndexes[] =
 	{
 		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, 37, -1, -1, -1, -1,
-		104, 106, 102, -1, 29, 63, 34, 62, -1, 70,
-		4, 93, -1, 87, 65, 41, 12, 94, 99, 33,
-		9, 80, 100, 5, 52, 45, 73, 46, 44, 10,
-		6, 61, 60, 88, 76, 69, 64, 68, 1, 57,
-		101, 24, 91, 95, 58, 48, 36, -1, 96, -1,
-		49, 50, 16, 56, 105, -1, 25, 39, 59, 85,
-		30, 40, 83, 77, 15, 89, 72, 38, 71, 18,
-		81, 8, 28, 43, 55, 17, 75, 79, 26, 92,
-		42, 97, 47, 22, 27, 19, 2, 11, -1, 13,
-		-1, -1, 66, -1, 74, -1, 53, -1, -1, 78,
-		-1, -1, 90, -1, 7, 21, 0, -1, 67, 84,
-		-1, -1, 3, 51, 107, 31, -1, -1, 98, 86,
-		82, -1, -1, 54, 23, -1, -1, -1, 14, -1,
-		35, -1, -1, -1, 20, -1, -1, -1, 103, -1,
-		-1, -1, -1, -1, -1, -1, 32
+		-1, -1, -1, -1, -1, -1, -1, 105, 107, 37,
+		-1, 63, 34, 62, 96, 70, 103, 93, -1, 87,
+		41, -1, -1, 94, 100, 29, -1, 65, 52, 12,
+		5, 4, 33, 80, 10, 102, 61, 60, 6, 45,
+		46, 44, -1, 101, 36, 76, 73, 69, 64, 68,
+		25, 91, 40, 88, -1, 9, -1, 16, 85, 1,
+		95, 48, 77, 50, 57, 106, 24, 15, 58, 72,
+		56, 47, 59, 97, 49, 26, 27, 2, 43, 98,
+		13, 89, 38, 71, 7, 17, 18, 55, 8, 92,
+		39, 78, 42, 83, -1, 75, 66, 90, 11, 3,
+		28, 74, 19, 84, 81, 22, 108, -1, 86, -1,
+		79, 104, 0, -1, -1, 35, 32, -1, -1, -1,
+		99, -1, 21, 53, -1, 51, 67, -1, 31, -1,
+		54, 30, -1, -1, -1, -1, 14, -1, -1, -1,
+		-1, -1, -1, -1, 23, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, 20, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, 82
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -4100,6 +4193,7 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"date_histogram",*/		2,	TOK_FUNC,		/*FUNC_DATE_HISTOGRAM,	*/	SPH_ATTR_INTEGER },
 	
 	{ /*"uuid_short",*/			0,	TOK_FUNC,		/*FUNC_UUID_SHORT,		*/	SPH_ATTR_BIGINT },
+	{ /*"item",*/				2,	TOK_FUNC,		/*FUNC_ITEM,				*/	SPH_ATTR_FLOAT },
 };
 
 
@@ -4119,7 +4213,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "utc_time", "utc_timestamp", "timediff", "datediff", "date_add", "date_sub", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
 		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein", "date_format"
-		, "database", "user", "version", "range", "histogram", "date_range", "date_histogram", "uuid_short" };
+		, "database", "user", "version", "range", "histogram", "date_range", "date_histogram", "uuid_short", "item" };
 
 	return dNames[iFunc];
 }
@@ -4395,6 +4489,7 @@ private:
 	bool					CheckStoredArg ( ISphExpr * pExpr );
 	bool					PrepareFuncArgs ( const ExprNode_t & tNode, bool bSkipChildren, CSphRefcountedPtr<ISphExpr> & pLeft, CSphRefcountedPtr<ISphExpr> & pRight, VecRefPtrs_t<ISphExpr*> & dArgs );
 	ISphExpr *				CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & dArgs );
+	ISphExpr *				CreateExprFloatVectorItem ( int iNode, const VecRefPtrs_t<ISphExpr*> & dArgs );
 	CSphString				GetNameByLocator ( int iNode ) const;
 	CSphString				GetNameByLocator ( const ExprNode_t & tNode ) const;
 
@@ -4535,6 +4630,9 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 
 	case SPH_ATTR_INT64SET:
 	case SPH_ATTR_INT64SET_PTR:		iRes = TOK_ATTR_MVA64; break;
+
+	case SPH_ATTR_FLOAT_VECTOR:
+	case SPH_ATTR_FLOAT_VECTOR_PTR:	iRes = TOK_ATTR_FLOAT_VECTOR; break;
 
 	case SPH_ATTR_STRING:
 	case SPH_ATTR_STRINGPTR:		iRes = TOK_ATTR_STRING; break;
@@ -5289,6 +5387,7 @@ static const char * TokName (int iTok, int iFunc)
 		case TOK_ATTR_FLOAT:   return "attr_float";
 		case TOK_ATTR_MVA32:   return "attr_mva32";
 		case TOK_ATTR_MVA64:   return "attr_mva64";
+		case TOK_ATTR_FLOAT_VECTOR: return "attr_float_vector";
 		case TOK_ATTR_STRING:  return "attr_string";
 		case TOK_ATTR_FACTORS: return "attr_factors";
 		case TOK_IF:           return "if";
@@ -6696,6 +6795,34 @@ ISphExpr * ExprParser_t::CreateColumnarMvaNode ( int iAttr )
 	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.IsStored() );
 }
 
+ISphExpr * ExprParser_t::CreateExprFloatVectorItem ( int iNode, const VecRefPtrs_t<ISphExpr*> & dArgs )
+{
+	const ExprNode_t & tNode = m_dNodes[iNode];
+	CSphVector<int> dArgNodes = GatherArgNodes ( tNode.m_iLeft );
+	if ( dArgNodes.GetLength() != 2 )
+	{
+		m_sCreateError = "item() requires 2 arguments";
+		return nullptr;
+	}
+	const ExprNode_t & tVecNode = m_dNodes[dArgNodes[0]];
+	ISphExpr * pVec = nullptr;
+	if ( tVecNode.m_iToken == TOK_ATTR_FLOAT_VECTOR )
+		pVec = new Expr_GetMva_c ( tVecNode.m_tLocator, GetNameByLocator ( tVecNode ) );
+	else if ( tVecNode.m_iToken == TOK_COLUMNAR_FLOATVEC )
+		pVec = dArgs[0];
+	else
+	{
+		m_sCreateError = "item() first argument must be a float_vector attribute";
+		return nullptr;
+	}
+	ISphExpr * pResult = new Expr_FloatVectorItem_c ( pVec, dArgs[1] );
+	// Release our reference to pVec; Expr_Binary_c took ownership via SafeAddRef. Without this,
+	// the blob-path pVec would leak (dArgs[0] is a different expr that the caller will release).
+	if ( tVecNode.m_iToken == TOK_ATTR_FLOAT_VECTOR )
+		SafeRelease ( pVec );
+	return pResult;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 struct LevenshteinOptions_t
@@ -7071,6 +7198,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_UTC_TIMESTAMP:	return CreateExprCurTime ( true, true );
 	case FUNC_TIMEDIFF:			return CreateExprTimeDiff ( dArgs[0], dArgs[1] );
 	case FUNC_DATEDIFF:			return CreateExprDateDiff ( dArgs[0], dArgs[1] );
+	case FUNC_ITEM:				return CreateExprFloatVectorItem ( iNode, dArgs );
 	case FUNC_DATEADD:			return CreateExprDateAdd ( iNode, true );
 	case FUNC_DATESUB:			return CreateExprDateAdd ( iNode, false );
 
@@ -7290,6 +7418,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_STRING:	return new Expr_GetString_c ( tNode.m_tLocator, GetNameByLocator(tNode) );
 		case TOK_ATTR_MVA64:
 		case TOK_ATTR_MVA32:	return new Expr_GetMva_c ( tNode.m_tLocator, GetNameByLocator(tNode) );
+		case TOK_ATTR_FLOAT_VECTOR:	return new Expr_FloatVectorLength_c ( tNode.m_tLocator, GetNameByLocator(tNode) );
 		case TOK_ATTR_FACTORS:	return new Expr_GetFactorsAttr_c ( tNode.m_tLocator, GetNameByLocator(tNode) );
 
 		case TOK_COLUMNAR_INT:		return CreateColumnarIntNode ( tNode.m_iLocator, SPH_ATTR_INTEGER );
@@ -9036,12 +9165,14 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 		case TOK_ATTR_STRING:			return new Expr_StrLength_c(pLeft);
 		case TOK_ATTR_MVA32:
 		case TOK_ATTR_MVA64:			return new Expr_MVALength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName, tLeft.m_iToken==TOK_ATTR_MVA64 );
+		case TOK_ATTR_FLOAT_VECTOR:	return new Expr_FloatVectorLength_c ( tLeft.m_tLocator, m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_UINT32SET:	return CreateExpr_ColumnarMva32Length ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_INT64SET:		return CreateExpr_ColumnarMva64Length ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
+		case TOK_COLUMNAR_FLOATVEC:		return CreateExpr_ColumnarFloatVecLength ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_COLUMNAR_STRING:		return CreateExpr_ColumnarStringLength ( m_pSchema->GetAttr(tLeft.m_iLocator).m_sName );
 		case TOK_ATTR_JSON:				return new Expr_JsonFieldLength_c ( pLeft );
 		default:
-			m_sCreateError = "LENGTH() argument must be MVA or JSON or STRING field";
+			m_sCreateError = "LENGTH() argument must be MVA, JSON, STRING, or float_vector field";
 			return nullptr;
 	}
 }
@@ -9415,8 +9546,8 @@ int ExprParser_t::AddNodeString ( int64_t iValue )
 int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 {
 	assert ( iTokenType==TOK_ATTR_INT || iTokenType==TOK_ATTR_BITS || iTokenType==TOK_ATTR_FLOAT
-		|| iTokenType==TOK_ATTR_MVA32 || iTokenType==TOK_ATTR_MVA64 || iTokenType==TOK_ATTR_STRING
-		|| iTokenType==TOK_ATTR_FACTORS || iTokenType==TOK_ATTR_JSON );
+		|| iTokenType==TOK_ATTR_MVA32 || iTokenType==TOK_ATTR_MVA64 || iTokenType==TOK_ATTR_FLOAT_VECTOR
+		|| iTokenType==TOK_ATTR_STRING || iTokenType==TOK_ATTR_FACTORS || iTokenType==TOK_ATTR_JSON );
 
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = iTokenType;
@@ -9429,6 +9560,7 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	case TOK_ATTR_FLOAT:	tNode.m_eRetType = SPH_ATTR_FLOAT;			break;
 	case TOK_ATTR_MVA32:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET;	break;
 	case TOK_ATTR_MVA64:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_INT64SET_PTR : SPH_ATTR_INT64SET;	break;
+	case TOK_ATTR_FLOAT_VECTOR:	tNode.m_eRetType = SPH_ATTR_FLOAT_VECTOR_PTR;	break;
 	case TOK_ATTR_STRING:	tNode.m_eRetType = SPH_ATTR_STRING;			break;
 	case TOK_ATTR_FACTORS:	tNode.m_eRetType = SPH_ATTR_FACTORS;		break;
 	case TOK_ATTR_JSON:		tNode.m_eRetType = SPH_ATTR_JSON_FIELD;		break;

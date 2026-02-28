@@ -150,6 +150,11 @@ jobs:
             base="${{ github.event.before }}"
           fi
 
+          # Prefer the previous commit if base is missing/invalid sentinel.
+          if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
+            base="$(git rev-parse "${head}^" 2>/dev/null || true)"
+          fi
+
           files=""
           if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
             files=$(git ls-tree -r --name-only "$head")

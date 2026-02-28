@@ -104,6 +104,63 @@ bool				sphIsBlobAttr ( const CSphColumnInfo & tAttr );
 
 bool				IsMvaAttr ( ESphAttr eAttr );
 
+// REBUILD EMBEDDINGS helper:
+// true for vectors that should be auto-filled (0 bytes, placeholder DWORD=1, or all-zero fixed-dim vector).
+// false for explicit empty markers (DWORD=0 or DWORD=2) and non-empty vectors.
+FORCE_INLINE bool sphIsEmptyEmbeddingToFill ( const BYTE * pData, int iBytes, int iDims )
+{
+	if ( iBytes==0 )
+		return true;
+
+	if ( !pData )
+		return false;
+
+	if ( iBytes==(int)sizeof(DWORD) )
+		return *(const DWORD *)pData==1;
+
+	if ( iDims<=0 || iBytes!=iDims*(int)sizeof(float) )
+		return false;
+
+	const DWORD * pVals = (const DWORD *)pData;
+	int iVals = iBytes / (int)sizeof(DWORD);
+	for ( int i = 0; i < iVals; i++ )
+		if ( pVals[i]!=0 )
+			return false;
+
+	return true;
+}
+
+// Display helper: true when float_vector blob is "explicitly empty" and should be shown as NULL in SELECT.
+// Cases: 0 bytes (no value / not provided and no FROM), or 4-byte sentinel 0/2 (user provided () or explicitly empty).
+FORCE_INLINE bool sphIsExplicitlyEmptyFloatVector ( const BYTE * pData, int iBytes )
+{
+	if ( !pData || iBytes==0 )
+		return true;
+	if ( iBytes==(int)sizeof(DWORD) )
+	{
+		DWORD u = *(const DWORD *)pData;
+		return ( u==0 || u==2 ); // explicitly empty markers
+	}
+	return false;
+}
+
+// Sentinel float used by expressions (e.g. item(float_vector,N)) to mean NULL when the vector is explicitly empty.
+// Compare with SphIsFloatExprNull(); send as NULL in result sets instead of this value.
+FORCE_INLINE float SphFloatExprNull ()
+{
+	uint32_t u = 0x7fc00001u; // quiet NaN, payload 1
+	float f;
+	memcpy ( &f, &u, sizeof(f) );
+	return f;
+}
+FORCE_INLINE bool SphIsFloatExprNull ( float f )
+{
+	uint32_t u = 0x7fc00001u;
+	uint32_t bits;
+	memcpy ( &bits, &f, sizeof(bits) );
+	return bits == u;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes
 
@@ -174,4 +231,3 @@ FORCE_INLINE void sphDeallocatePacked ( const BYTE* pBlob )
 const char * AttrType2Str ( ESphAttr eAttrType );
 
 #endif
-

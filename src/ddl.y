@@ -38,6 +38,7 @@
 %token	TOK_CREATE
 %token	TOK_DOUBLE
 %token	TOK_DROP
+%token	TOK_EMBEDDINGS
 %token	TOK_ENGINE
 %token	TOK_EXISTS
 %token	TOK_FAST_FETCH
@@ -269,6 +270,11 @@ alter:
    			SqlStmt_t & tStmt = *pParser->m_pStmt;
    			tStmt.m_eStmt = STMT_ALTER_REBUILD_KNN;
    		}
+	| alter_table_name TOK_REBUILD TOK_EMBEDDINGS
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_REBUILD_EMBEDDINGS;
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

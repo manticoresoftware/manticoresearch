@@ -12,6 +12,7 @@
 
 #include "sphinxsort.h"
 #include "sortcomp.h"
+#include "attribute.h"
 #include "aggregate.h"
 #include "distinct.h"
 #include "netreceive_ql.h"
@@ -706,6 +707,20 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 
 		if ( i == 0 )
 			eAttrType = SPH_ATTR_UINT64;
+		auto fnPutFloatVector = [&dRows] ( ByteBlob_t dBlob )
+		{
+			if ( sphIsExplicitlyEmptyFloatVector ( dBlob.first, dBlob.second ) )
+			{
+				dRows.PutNULL();
+				return;
+			}
+
+			StringBuilder_c dStr;
+			dStr << "(";
+			sphFloatVec2Str ( dBlob, dStr );
+			dStr << ")";
+			dRows.PutArray ( dStr, false );
+		};
 
 		switch ( eAttrType )
 		{
@@ -753,7 +768,13 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			break;
 
 		case SPH_ATTR_FLOAT:
-			dRows.PutFloatAsString ( tMatch.GetAttrFloat ( tLoc ) );
+			{
+				float f = tMatch.GetAttrFloat ( tLoc );
+				if ( SphIsFloatExprNull ( f ) )
+					dRows.PutNULL();
+				else
+					dRows.PutFloatAsString ( f );
+			}
 			break;
 
 		case SPH_ATTR_DOUBLE:
@@ -784,24 +805,11 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			}
 
 		case SPH_ATTR_FLOAT_VECTOR:
-			{
-				StringBuilder_c dStr;
-				auto dFloatVec = sphGetBlobAttr ( tMatch, tLoc, pBlobPool );
-				dStr << "(";
-				sphFloatVec2Str ( dFloatVec, dStr );
-				dStr << ")";
-				dRows.PutArray ( dStr, false );
-			}
+			fnPutFloatVector ( sphGetBlobAttr ( tMatch, tLoc, pBlobPool ) );
 			break;
 
 		case SPH_ATTR_FLOAT_VECTOR_PTR:
-			{
-				StringBuilder_c dStr;
-				dStr << "(";
-				sphPackedFloatVec2Str ( (const BYTE*)tMatch.GetAttr(tLoc), dStr );
-				dStr << ")";
-				dRows.PutArray ( dStr, false );
-			}
+			fnPutFloatVector ( sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr(tLoc) ) );
 			break;
 
 		case SPH_ATTR_JSON:

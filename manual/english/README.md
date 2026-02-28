@@ -123,6 +123,8 @@
     * [• Renaming a real-time table](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• Updating table FT settings in plain mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• Rebuilding a secondary index](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
+    * [• Rebuilding a KNN index](Updating_table_schema_and_settings.md#Rebuilding-a-KNN-index)
+    * [• Rebuilding embeddings](Updating_table_schema_and_settings.md#Rebuilding-embeddings)
     * [• Changing a distributed table](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ Functions]
     * [• Mathematical functions](Functions/Mathematical_functions.md)

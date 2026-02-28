@@ -510,6 +510,7 @@ ISphExpr * CreateExpr_ColumnarStringIn ( const CSphString & sName, ConstList_c *
 ISphExpr * CreateExpr_ColumnarStringLength ( const CSphString & sName )	{ return new Expr_Columnar_StringLength_c(sName); }
 ISphExpr * CreateExpr_ColumnarMva32Length ( const CSphString & sName )	{ return new Expr_Columnar_MvaLength_T<DWORD>(sName); }
 ISphExpr * CreateExpr_ColumnarMva64Length ( const CSphString & sName )	{ return new Expr_Columnar_MvaLength_T<uint64_t>(sName); }
+ISphExpr * CreateExpr_ColumnarFloatVecLength ( const CSphString & sName )	{ return new Expr_Columnar_MvaLength_T<float>(sName); }
 
 ISphExpr * CreateExpr_ColumnarMva32Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc )	{ return new Expr_ColumnarMVAAggr_T<DWORD> ( pExpr, eFunc ); }
 ISphExpr * CreateExpr_ColumnarMva64Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc )	{ return new Expr_ColumnarMVAAggr_T<int64_t> ( pExpr, eFunc ); }

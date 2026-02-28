@@ -133,6 +133,7 @@ CSphString ColumnarAttrType2Str ( common::AttrType_e eType )
 PlainOrColumnar_t::PlainOrColumnar_t ( const CSphColumnInfo & tAttr, int iColumnar )
 {
 	m_eType = tAttr.m_eAttrType;
+	m_iDims = tAttr.m_tKNN.m_iDims;
 	if ( tAttr.IsColumnar() )
 		m_iColumnarId = iColumnar;
 	else

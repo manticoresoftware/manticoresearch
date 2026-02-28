@@ -1745,6 +1745,7 @@ insert_val:
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
 	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_iValues = $2.m_iValues; }
 	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
+	| TOK_NULL				{ $$.m_iType = TOK_NULL; }
 	;
 
 //////////////////////////////////////////////////////////////////////////

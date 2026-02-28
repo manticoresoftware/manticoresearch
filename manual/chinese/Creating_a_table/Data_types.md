@@ -2506,9 +2506,10 @@ let search_res = search_api.search(search_req).await;
 - 执行 KNN（k-最近邻）向量搜索以查找相似文档
 - 构建语义搜索、推荐和 AI 驱动的功能
 - 使用自动嵌入从文本中自动生成向量
+- 在表达式中使用 `LENGTH(float_vector_attr)` 获取向量维度（组件数量）
 
 **你不能做到：**
-- `UPDATE` `float_vector` 值（必须使用 `REPLACE` 代替）
+- `UPDATE` `float_vector` 值（与 KNN 不同，必须使用 `REPLACE`）
 - 在常规过滤器或排序中使用浮点向量
 - 除了通过向量搜索操作，不能通过 `float_vector` 值进行过滤
 
@@ -2611,7 +2612,7 @@ CREATE TABLE products_all_fields (
 - **特定字段**：`FROM='title'` - 仅使用标题字段
 - **多个字段**：`FROM='title,description'` - 将标题和描述字段连接并使用
 - **所有文本字段**：`FROM=''`（空）- 表中的所有 `text`（全文字段）和 `string`（字符串属性）字段用于嵌入生成
-- **空向量**：仍然可以使用 `()` 插入空向量以排除文档从向量搜索
+- **空向量（NULL）：** 你可以通过 `()` 或 `NULL` 插入或替换向量列；该值存储为空并在结果中显示为 `NULL`。带有空向量的文档将被排除在 KNN 搜索之外。`INSERT` 中的 `NULL` 是被接受的，这样 mysqldump 导出（将空列写为 NULL）可以无错误地恢复。
 
 #### 使用自动嵌入插入数据
 

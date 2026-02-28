@@ -347,7 +347,7 @@ GROUP BY price_range ORDER BY price_range ASC;
 `INTERVAL(expr,point1,point2,point3,...)` 接受两个或更多参数，并返回第一个参数小于该参数的参数的索引：如果 `expr<point1` 返回 0，如果 `point1<=expr<point2` 返回 1，依此类推。要求 `point1<point2<...<pointN` 才能正确工作。
 
 ### LENGTH()
-`LENGTH(attr_mva)` 函数返回 MVA 集合中的元素数量。它适用于 32 位和 64 位 MVA 属性。`LENGTH(attr_json)` 返回 JSON 字段的长度。返回值取决于字段类型。例如，`LENGTH(json_attr.some_int)` 总是返回 1，而 `LENGTH(json_attr.some_array)` 返回数组中的元素数量。`LENGTH(string_expr)` 函数返回从表达式结果得到的字符串长度。
+`LENGTH(attr_mva)` 函数返回 MVA 集合中的元素数量。它适用于 32 位和 64 位 MVA 属性。`LENGTH(attr_float_vector)` 返回列式 `float_vector` 属性中的维度（浮点数）数量。`LENGTH(attr_json)` 返回 JSON 中字段的长度。返回值取决于字段类型。例如，`LENGTH(json_attr.some_int)` 始终返回 1，而 `LENGTH(json_attr.some_array)` 返回数组中的元素数量。`LENGTH(string_expr)` 函数返回表达式结果字符串的长度。
 [TO_STRING()](../Functions/Type_casting_functions.md#TO_STRING%28%29) 必须包围表达式，无论表达式返回非字符串还是仅仅是字符串属性。
 
 ### RANGE()

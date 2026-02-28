@@ -4382,6 +4382,7 @@ public:
 
 	bool		SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError );
 	void		SetDefaultAttrValue ( int iCol );
+	void		SetExplicitlyEmptyAttrValue ( int iCol );
 
 	bool		SetFieldValue ( int iField, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
 	void		SetDefaultFieldValue ( int iField );
@@ -4606,7 +4607,40 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 		m_dStrings.Add(nullptr);
 
 	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+	{
+		// When no value is provided for float_vector, store explicitly empty so SELECT shows NULL
+		// (same for MVA: empty set). With FROM/MODEL, REBUILD EMBEDDINGS can fill later.
 		AddMVALength ( 0, true );
+	}
+
+	SqlInsert_t tDefaultVal;
+	tDefaultVal.m_iType = SqlInsert_t::CONST_INT;
+	tDefaultVal.SetValueInt(0);
+
+	SphAttr_t tAttr;
+	CSphString sError;
+	if ( CSphMatchVariant::ConvertPlainAttr ( tDefaultVal, tCol.m_eAttrType, &tCol.m_sName, tAttr, false, sError ) )
+	{
+		if ( tCol.IsColumnar() )
+			m_dColumnarAttrs [ m_dColumnarRemap[iCol] ] = tAttr;
+		else
+			m_tDoc.SetAttr ( tLoc, tAttr );
+	}
+}
+
+
+void AttributeConverter_c::SetExplicitlyEmptyAttrValue ( int iCol )
+{
+	const CSphColumnInfo & tCol = m_tSchema.GetAttr(iCol);
+	CSphAttrLocator tLoc = tCol.m_tLocator;
+	tLoc.m_bDynamic = true;
+
+	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
+		m_dStrings.Add(nullptr);
+
+	// NULL in INSERT means explicitly empty (same as ()); use bDefault=false so accumulator writes sentinel 2.
+	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+		AddMVALength ( 0, false );
 
 	SqlInsert_t tDefaultVal;
 	tDefaultVal.m_iType = SqlInsert_t::CONST_INT;
@@ -4633,6 +4667,13 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 
 	if ( !CheckInsertTypes ( tCol, tVal, iRow, iQuerySchemaIdx ) )
 		return false;
+
+	// NULL in INSERT means explicitly empty (same as ()); mysqldump restore. Use bDefault=false so sentinel 2.
+	if ( tVal.m_iType==SqlInsert_t::TOK_NULL )
+	{
+		SetExplicitlyEmptyAttrValue ( iCol );
+		return true;
+	}
 
 	SphAttr_t tAttr;
 	if ( CSphMatchVariant::ConvertPlainAttr ( tVal, tCol.m_eAttrType, &tCol.m_sName, tAttr, bDocId, sError ) )
@@ -6560,7 +6601,6 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 			return false;
 		}
 
-
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
@@ -7707,7 +7747,15 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 					break;
 				case SPH_ATTR_INTEGER:	dRows.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
 				case SPH_ATTR_BIGINT:	dRows.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
-				case SPH_ATTR_FLOAT:	dRows.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
+				case SPH_ATTR_FLOAT:
+					{
+						float f = pExpr->Eval ( tMatch );
+						if ( SphIsFloatExprNull ( f ) )
+							dRows.PutNULL();
+						else
+							dRows.PutFloatAsString ( f );
+					}
+					break;
 				default:
 					dRows.PutNULL();
 					break;
@@ -7804,7 +7852,13 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 			break;
 
 		case SPH_ATTR_FLOAT:
-			dRows.PutFloat ( tMatch.GetAttrFloat(tLoc) );
+			{
+				float f = tMatch.GetAttrFloat ( tLoc );
+				if ( SphIsFloatExprNull ( f ) )
+					dRows.PutNULL();
+				else
+					dRows.PutFloat ( f );
+			}
 			break;
 
 		case SPH_ATTR_DOUBLE:
@@ -7822,9 +7876,15 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 
 		case SPH_ATTR_FLOAT_VECTOR_PTR:
 		{
-			StringBuilder_c dStr;
-			sphPackedFloatVec2Str ( (const BYTE *)tMatch.GetAttr(tLoc), dStr );
-			dRows.PutArray ( dStr, false );
+			auto dBlob = sphUnpackPtrAttr ( (const BYTE *)tMatch.GetAttr(tLoc) );
+			if ( sphIsExplicitlyEmptyFloatVector ( dBlob.first, dBlob.second ) )
+				dRows.PutNULL();
+			else
+			{
+				StringBuilder_c dStr;
+				sphFloatVec2Str ( dBlob, dStr );
+				dRows.PutArray ( dStr, false );
+			}
 		}
 		break;
 
@@ -9495,7 +9555,15 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			case SPH_ATTR_INTEGER:	tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
 			case SPH_ATTR_BIGINT:	tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
 			case SPH_ATTR_UINT64:	tOut.PutNumAsString ( (uint64_t)pExpr->Int64Eval ( tMatch ) ); break;
-			case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
+			case SPH_ATTR_FLOAT:
+				{
+					float f = pExpr->Eval ( tMatch );
+					if ( SphIsFloatExprNull ( f ) )
+						tOut.PutNULL();
+					else
+						tOut.PutFloatAsString ( f );
+				}
+				break;
 			case SPH_ATTR_DOUBLE:	tOut.PutDoubleAsString ( pExpr->Eval ( tMatch ) ); break;
 			default:
 				tOut.PutNULL();
@@ -10319,6 +10387,12 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 		return;
 	}
 
+	if ( !tStmt.m_tAlterKNNModel.m_sModelName.empty() && !tStmt.m_bAlterKnnFromSpecified )
+	{
+		sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", sAttrToAdd.cstr() );
+		return;
+	}
+
 	AttrAddRemoveCtx_t tCtx;
 	tCtx.m_sName = sAttrToAdd;
 	tCtx.m_eType = tStmt.m_eAlterColType;
@@ -10384,6 +10458,7 @@ enum class Alter_e
 	ModifyColumn,
 	RebuildSI,
 	RebuildKNN,
+	RebuildEmbeddings,
 	ApiKey
 };
 
@@ -10421,6 +10496,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			return;
 		}
 
+	CSphString sRebuildWarning;
 	for ( const auto &sName : dNames )
 	{
 		auto pServed = GetServed ( sName );
@@ -10475,6 +10551,24 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			WIdx_c(pServed)->AlterKNN(sAlterError);
 			break;
 
+		case Alter_e::RebuildEmbeddings:
+			{
+				// Hold write lock only during update and AlterKNN so SELECT can run during collect/generate
+				auto* pIndex = UnlockedHazardIdxFromServed ( *pServed );
+				if ( pIndex )
+				{
+					auto fnRunUnderWriteLock = [pServed] ( std::function<void()> fn )
+					{
+						WIdx_c w ( pServed );
+						fn ();
+					};
+					pIndex->RebuildEmbeddings ( sAlterError, fnRunUnderWriteLock, sRebuildWarning );
+				}
+				else
+					sAlterError = "index not ready";
+			}
+			break;
+
 		case Alter_e::ApiKey:
 			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
 			break;
@@ -10491,7 +10585,10 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		tOut.Error ( sReport.cstr() );
 		return;
 	}
-	tOut.Ok();
+	if ( !sRebuildWarning.IsEmpty() )
+		tOut.Ok ( 0, 1, sRebuildWarning.cstr(), false, 0 );
+	else
+		tOut.Ok();
 }
 
 
@@ -11677,6 +11774,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_REBUILD_KNN:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
+		return true;
+
+	case STMT_ALTER_REBUILD_EMBEDDINGS:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildEmbeddings );
 		return true;
 
 	case STMT_ALTER_EMBEDDINGS_API_KEY:

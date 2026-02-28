@@ -4,7 +4,7 @@
 
 `UPDATE` 命令用于更改指定表中现有文档的[行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)属性值。请注意，您无法更新全文字段或列式存储属性的内容。如果有此需求，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
 
-RT、PQ 和普通表均支持属性更新。只要属性存储在[行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中，所有属性类型都可以更新。
+RT、PQ 和普通表支持属性更新。只要属性存储在 [按行存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 中，所有属性类型都可以更新。例外情况：具有 KNN 索引（例如 `knn_type='hnsw'`）的 `float_vector` 属性无法更新。要更改此类向量，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。没有 KNN 索引的 `float_vector` 可以正常更新。
 
 请注意，文档 ID 无法更新。
 

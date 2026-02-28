@@ -347,7 +347,7 @@ GROUP BY price_range ORDER BY price_range ASC;
 `INTERVAL(expr,point1,point2,point3,...)` takes 2 or more arguments and returns the index of the argument that is less than the first argument: it returns 0 if `expr<point1`, 1 if `point1<=expr<point2`, and so on. It is required that `point1<point2<...<pointN` for this function to work correctly.
 
 ### LENGTH()
-`LENGTH(attr_mva)` function returns the number of elements in an MVA set. It works with both 32-bit and 64-bit MVA attributes. `LENGTH(attr_json)` returns the length of a field in JSON. The return value depends on the type of field. For example, `LENGTH(json_attr.some_int)` always returns 1, and `LENGTH(json_attr.some_array)` returns the number of elements in the array. `LENGTH(string_expr)` function returns the length of the string resulting from an expression.
+`LENGTH(attr_mva)` function returns the number of elements in an MVA set. It works with both 32-bit and 64-bit MVA attributes. `LENGTH(attr_float_vector)` returns the number of dimensions (floats) in a columnar `float_vector` attribute. `LENGTH(attr_json)` returns the length of a field in JSON. The return value depends on the type of field. For example, `LENGTH(json_attr.some_int)` always returns 1, and `LENGTH(json_attr.some_array)` returns the number of elements in the array. `LENGTH(string_expr)` function returns the length of the string resulting from an expression.
 [TO_STRING()](../Functions/Type_casting_functions.md#TO_STRING%28%29) must enclose the expression, regardless of whether the expression returns a non-string or it's simply a string attribute.
 
 ### RANGE()

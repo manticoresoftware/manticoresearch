@@ -6,6 +6,7 @@
 <requires>
 	<knn/>
 	<force-rt/>
+	<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>

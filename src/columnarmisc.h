@@ -35,6 +35,7 @@ struct PlainOrColumnar_t
 	CSphAttrLocator	m_tLocator;
 	int				m_iColumnarId = -1;
 	ESphAttr		m_eType = SPH_ATTR_NONE;
+	int				m_iDims = 0;	// for float_vector KNN: expected vector size (so we can pass zero vector for explicitly empty)
 
 					PlainOrColumnar_t() = default;
 					PlainOrColumnar_t ( const CSphColumnInfo & tAttr, int iColumnar );

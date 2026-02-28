@@ -299,7 +299,11 @@ float Expr_KNNDist_c::CalcDist ( const CSphMatch & tMatch ) const
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
 	VecTraits_T<float> dData ( (float*)tRes.first, tRes.second / sizeof(float) );
-	if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
+	int iExpectedDims = m_tAttr.m_tKNN.m_iDims;
+	// Schema may have m_iDims==0 after ADD COLUMN with model (set on load); accept vector if it matches anchor size
+	if ( iExpectedDims<=0 )
+		iExpectedDims = (int)m_dAnchor.GetLength();
+	if ( dData.GetLength()!=(size_t)iExpectedDims )
 		return FLT_MAX;
 
 	return m_pDistCalc->CalcDist ( { dData.Begin(), (size_t)dData.GetLength() }, { m_dAnchor.Begin(), (size_t)m_dAnchor.GetLength() } );
@@ -694,12 +698,36 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 template <typename ACTION>
 static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
-	ARRAY_FOREACH ( i, dAttrs )
+	// Zero vector for explicitly empty (sentinel) rows so the builder gets one vector per row and Load/CreateIterator work.
+	// Keep a per-thread buffer to avoid a shared mutable static.
+	thread_local CSphVector<float> s_dZeroVec;
+	for ( int i = 0; i < dAttrs.GetLength(); i++ )
 	{
 		assert ( dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR );
 		const BYTE * pSrc = nullptr;
 		int iBytes = dAttrs[i].Get ( tRowID, pRow, pPool, dIterators, pSrc );
 		int iValues = iBytes / sizeof(float);
+
+		// Explicitly empty (sentinel 0 or 2): pass zero vector of expected dims so KNN index stays dense per attr.
+		if ( iBytes == (int)sizeof(DWORD) && pSrc )
+		{
+			DWORD u = *(const DWORD *)pSrc;
+			if ( u == 0 || u == 2 )
+			{
+				int iDims = dAttrs[i].m_iDims;
+				if ( iDims > 0 )
+				{
+					if ( s_dZeroVec.GetLength() < (int)iDims )
+					{
+						s_dZeroVec.Resize ( iDims );
+						s_dZeroVec.ZeroVec();
+					}
+					if ( !fnAction ( i, { s_dZeroVec.Begin(), (size_t)iDims } ) )
+						return false;
+				}
+				continue;
+			}
+		}
 
 		if ( iValues && !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
 			return false;

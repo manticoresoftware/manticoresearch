@@ -4,7 +4,7 @@
 
 The `UPDATE` command changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
+Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages). Exception: `float_vector` attributes that have a KNN index (e.g. `knn_type='hnsw'`) cannot be updated. Use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) to change such vectors. A float_vector without a KNN index can be updated normally.
 
 Note that the document ID cannot be updated.
 

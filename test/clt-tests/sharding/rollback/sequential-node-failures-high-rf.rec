@@ -1,0 +1,165 @@
+Test sequential node failures with RF=3 - validates rebalance happens after each failure with no shard duplication
+
+––– comment –––
+Start 4-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create table with RF=3 (high redundancy) - 3 shards across 4 nodes
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:${TABLE_NAME} (id bigint, value string) shards='3' rf='3'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${TABLE_NAME} (id, value) VALUES (1, 'Widget A'), (2, 'Widget B'), (3, 'Widget C')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify initial shard layout - each shard on 3 of 4 nodes
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312 127.0.0.1:4312
+system.t_s2: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:4312
+––– comment –––
+Kill node 1 - first failure
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 killed"
+––– output –––
+Node 1 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3,4}/searchd.log); echo $?
+––– output –––
+0
+––– input –––
+sleep 10; cat /var/log/manticore-{2,3,4}/searchd.log
+––– output –––
+––– comment –––
+Verify remaining 3 nodes maintain quorum
+––– input –––
+for i in 2 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify rebalance happened - node 1 shards redistributed to node 4 (no duplication, still RF=3)
+––– input –––
+show_shards 2306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:2312 127.0.0.1:3312 127.0.0.1:4312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312 127.0.0.1:4312
+system.t_s2: 127.0.0.1:2312 127.0.0.1:3312 127.0.0.1:4312
+––– comment –––
+Verify data still fully accessible after first failure
+––– input –––
+mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    3 |
++------+
+––– comment –––
+Kill node 2 - second sequential failure
+––– input –––
+export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 2 killed"
+––– output –––
+Node 2 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{3,4}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Verify remaining 2 nodes maintain quorum
+––– input –––
+for i in 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify data still accessible - RF=3 but only 2 nodes left, shards degraded but readable
+––– input –––
+mysql -h0 -P3306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    3 |
++------+
+––– comment –––
+Restart node 1
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Restart node 2
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Give some time for nodes to rejoin and resync
+––– input –––
+
+sleep 5
+––– output –––
+––– comment –––
+Check all 4 nodes are synced
+––– input –––
+for i in 1 2 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify shards are back to RF=3 with no duplication - each shard on exactly 3 nodes
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:4312
+system.t_s2: 127.0.0.1:1312 127.0.0.1:3312 127.0.0.1:4312
+––– comment –––
+Verify full data integrity across all nodes
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    3 |
++------+
+––– comment –––
+Cleanup
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS ${TABLE_NAME}"; echo $?
+––– output –––
+0
+

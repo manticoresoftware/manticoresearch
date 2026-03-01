@@ -36,9 +36,9 @@ export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-
 ––– output –––
 Node 1 killed
 ––– comment –––
-We should wait at leat 5 sec until another master will pick up due to network issues
+Wait to be sure port is gone
 ––– input –––
-sleep 6
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– output –––
 ––– comment –––
 If grep fails due to missing string or timeout, return non-zero

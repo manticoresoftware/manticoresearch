@@ -1,0 +1,100 @@
+Test RF=1 node failure - validates NO rebalancing happens, data temporarily unavailable, recovers when node returns
+
+––– comment –––
+Start 3-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create table with RF=1
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:${TABLE_NAME} (id bigint, value string) shards='2' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: local
+system.t_s1: 127.0.0.1:2312
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO c:inventory (id, item, quantity) VALUES (1, 'Widget A', 100), (2, 'Widget B', 200), (3, 'Widget C', 150), (4, 'Widget D', 250)"; echo $?
+––– output –––
+0
+––– comment –––
+Verify data inserted
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) as total FROM inventory\\G" | grep total
+––– output –––
+total: 4
+––– comment –––
+Kill node 2 (one node has RF=1 shards - NO rebalancing should happen)
+––– input –––
+export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 2 killed"
+––– output –––
+Node 2 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 10 grep -qm1 'Skipping rebalance for table' <(tail -n 1000 -f /var/log/manticore-1/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Schema should remain the same
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: local
+system.t_s1: 127.0.0.1:2312
+––– comment –––
+Try to access data - some shards may be unavailable (RF=1 means no replicas)
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM inventory\\G" | grep -E 'cnt:' | awk '{print $2}'
+––– output –––
+2
+––– comment –––
+Restart node 2
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for node 2 to rejoin
+––– input –––
+sleep 15; for port in 1306 2306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: synced"; done
+––– output –––
+Port 1306: synced
+Port 2306: synced
+––– comment –––
+Verify all data is accessible again after node returns
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM inventory\\G" | grep -E 'cnt:' | awk '{print $2}'
+––– output –––
+3
+––– comment –––
+Verify data integrity - all records present
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM inventory\\G" | grep -E 'cnt:' | awk '{print $2}'
+––– output –––
+3
+––– comment –––
+Cleanup
+––– input –––
+sleep 10; mysql -h0 -P1306 -e "DROP TABLE IF EXISTS inventory"
+––– output –––

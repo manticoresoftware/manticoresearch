@@ -29,13 +29,13 @@ system.t_s1: 127.0.0.1:2312
 ––– comment –––
 Insert test data
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO c:inventory (id, item, quantity) VALUES (1, 'Widget A', 100), (2, 'Widget B', 200), (3, 'Widget C', 150), (4, 'Widget D', 250)"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO ${TABLE_NAME} (id, value) VALUES (1, 'Widget A'), (2, 'Widget B'), (3, 'Widget C'), (4, 'Widget D')"; echo $?
 ––– output –––
 0
 ––– comment –––
 Verify data inserted
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) as total FROM inventory\\G" | grep total
+mysql -h0 -P1306 -e "SELECT COUNT(*) as total FROM ${TABLE_NAME}\\G" | grep total
 ––– output –––
 total: 4
 ––– comment –––
@@ -65,7 +65,7 @@ system.t_s1: 127.0.0.1:2312
 ––– comment –––
 Try to access data - some shards may be unavailable (RF=1 means no replicas)
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM inventory\\G" | grep -E 'cnt:' | awk '{print $2}'
+mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM ${TABLE_NAME}\\G" | grep -E 'cnt:' | awk '{print $2}'
 ––– output –––
 2
 ––– comment –––
@@ -82,19 +82,8 @@ sleep 15; for port in 1306 2306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS
 Port 1306: synced
 Port 2306: synced
 ––– comment –––
-Verify all data is accessible again after node returns
-––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM inventory\\G" | grep -E 'cnt:' | awk '{print $2}'
-––– output –––
-3
-––– comment –––
 Verify data integrity - all records present
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM inventory\\G" | grep -E 'cnt:' | awk '{print $2}'
+mysql -h0 -P1306 -e "SELECT COUNT(*) as cnt FROM ${TABLE_NAME}\\G" | grep -E 'cnt:' | awk '{print $2}'
 ––– output –––
-3
-––– comment –––
-Cleanup
-––– input –––
-sleep 10; mysql -h0 -P1306 -e "DROP TABLE IF EXISTS inventory"
-––– output –––
+4

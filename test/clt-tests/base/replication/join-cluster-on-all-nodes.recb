@@ -8,11 +8,20 @@ mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'
 Counter: cluster_#!/[a-z]+/!#_status
   Value: primary
 ––– comment –––
-Some helful methods to avoid duplications when we testing various sharding scenarios
+Some helpful methods to avoid duplications when we testing various sharding scenarios
 ––– input –––
 show_shards() {
 	shards=$(mysql -h0 -P$1 -e "show create table $2 option force=1\G" | grep "Create Table" | cut -d: -f2-)
-	echo $shards | grep -oP "agent='[^']*'" | sed "s/agent='//g; s/'//g" | tr '|' '\n' | awk -F: '{agents[$3] = agents[$3] ? agents[$3] " " $1 ":" $2 : $1 ":" $2} END {for (t in agents) print t ": " agents[t]}' | sort
+
+	(
+		# Handle local shards
+		echo $shards | grep -oP "local='[^']*'" | sed "s/local='//g; s/'//g" | tr ',' '\n' | while read -r tbl; do
+			[ -n "$tbl" ] && echo "$tbl: local"
+		done
+
+		# Handle agent shards
+		echo $shards | grep -oP "agent='[^']*'" | sed "s/agent='//g; s/'//g" | tr '|' '\n' | awk -F: '{agents[$3] = agents[$3] ? agents[$3] " " $1 ":" $2 : $1 ":" $2} END {for (t in agents) print t ": " agents[t]}'
+	) | sort
 }
 ––– output –––
 ––– input –––

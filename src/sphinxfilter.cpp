@@ -1998,23 +1998,6 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 }
 
 
-int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx )
-{
-	if ( !tCtx.m_pHistograms )
-		return tCtx.m_iTotalDocs;
-
-	Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tSettings.m_sAttrName );
-	if ( !pHistogram || pHistogram->IsOutdated() )
-		return tCtx.m_iTotalDocs;
-
-	HistogramRset_t tEstimate;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
-		return tCtx.m_iTotalDocs;
-
-	return tEstimate.m_iTotal;
-}
-
-
 static bool ValuesAreSame ( const CSphVector<SphAttr_t> & dLeft, const CSphVector<SphAttr_t> & dRight )
 {
 	if ( dLeft.GetLength()!=dRight.GetLength() )

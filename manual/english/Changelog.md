@@ -151,6 +151,7 @@ Version [v14.0.0](https://github.com/manticoresoftware/manticoresearch/releases/
 * 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [ PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling) option to fuzzy and autocomplete plugins.
 
 ### Bug Fixes
+* 🪲 [ Issue #4299](https://github.com/manticoresoftware/manticoresearch/issues/4299) Added testing for Grafana version 12.4.
 * 🪲 [ Issue #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) Added testing for Grafana version 12.3.
 * 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [ Issue #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) Fixed a crash caused by using `max(ft field)`.
 * 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [ PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) Fixed an error when using an empty filter name.

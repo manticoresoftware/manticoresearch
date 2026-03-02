@@ -303,6 +303,8 @@ public:
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
 	knn::IndexSettings_t	m_tAlterKNN;
+	knn::ModelSettings_t	m_tAlterKNNModel;
+	CSphString				m_sAlterKnnFrom;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

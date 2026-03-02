@@ -21,6 +21,7 @@
 #include "sqlchecks/checks.h"
 
 extern int g_iClientQlTimeoutS;    // sec
+extern int g_iClientQlWaitTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
 extern CSphString g_sMySQLVersion;
 constexpr bool bSendOkInsteadofEOF = true; // _if_ client support - send OK packet instead of EOF (in mysql proto).
@@ -868,6 +869,7 @@ struct CLIENT
 	static constexpr DWORD CONNECT_WITH_DB = 8;
 	static constexpr DWORD COMPRESS = 32;
 	static constexpr DWORD PROTOCOL_41 = 512;
+	static constexpr DWORD CLIENT_INTERACTIVE = 1024;
 	static constexpr DWORD SSL = 2048;
 //	static constexpr DWORD RESERVED = 16384; // DEPRECATED: Old flag for 4.1 protocol
 	static constexpr DWORD RESERVED2 = 32768; // DEPRECATED: Old flag for 4.1 authentication \ CLIENT_SECURE_CONNECTION.
@@ -1081,6 +1083,11 @@ public:
 	[[nodiscard]] bool DeprecateEOF() const noexcept
 	{
 		return ( m_uCapabilities & CLIENT::DEPRECATE_EOF ) != 0;
+	}
+
+	[[nodiscard]] bool ClientInteractive() const noexcept
+	{
+		return ( m_uCapabilities & CLIENT::CLIENT_INTERACTIVE ) != 0;
 	}
 };
 
@@ -1783,6 +1790,17 @@ DEFINE_RENDER( QlCompressedInfo_t )
 	}
 }
 
+static int GetEffectiveTimeout ( bool bInteractive = false )
+{
+	if ( bInteractive )
+	{
+		const int iTimeout = session::Info().GetTimeoutS(); // by default -1, means 'default'
+		return ( iTimeout<0 ? g_iClientQlTimeoutS : iTimeout );
+	}
+	const int iTimeout = session::Info().GetWaitTimeoutS(); // by default -1, means 'default'
+	return ( iTimeout<0 ? g_iClientQlWaitTimeoutS : iTimeout );
+}
+
 // main sphinxql server
 void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
@@ -1825,32 +1843,21 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 	CSphString sError;
 	bool bAuthed = false;
+	bool bInteractive = false;
 	BYTE uPacketID = 1;
 	int iPacketLen;
 	int iTimeoutS = -1;
-	int iWTimeoutS = -1;
 	do
 	{
 		tSess.SetKilled ( false );
 		// check for updated timeout
-		auto iCurrentTimeout = tSess.GetTimeoutS(); // by default -1, means 'default'
-		if ( iCurrentTimeout<0 )
-			iCurrentTimeout = g_iClientQlTimeoutS;
 
+		const int iCurrentTimeout = GetEffectiveTimeout ( bInteractive );
 		if ( iCurrentTimeout!=iTimeoutS )
 		{
 			iTimeoutS = iCurrentTimeout;
 			pIn->SetTimeoutUS ( S2US * iTimeoutS );
-		}
-
-		iCurrentTimeout = tSess.GetWTimeoutS(); // by default -1, means 'default'
-		if ( iCurrentTimeout < 0 )
-			iCurrentTimeout = g_iClientQlTimeoutS;
-
-		if ( iCurrentTimeout != iWTimeoutS )
-		{
-			iWTimeoutS = iCurrentTimeout;
-			pOut->SetWTimeoutUS( S2US * iWTimeoutS );
+			pOut->SetWTimeoutUS( S2US * iTimeoutS );
 		}
 
 		pIn->DiscardProcessed ();
@@ -1962,6 +1969,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;
 			session::SetDeprecatedEOF ( tResponse.DeprecateEOF() );
+			bInteractive = tResponse.ClientInteractive();
 
 			if ( bCanZstdCompression && tResponse.WantZstd() )
 			{

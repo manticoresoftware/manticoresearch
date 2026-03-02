@@ -362,9 +362,6 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf, con
 	if ( tQuery.m_uMaxQueryMsec != g_tDefaultQuery.m_uMaxQueryMsec )
 		tBuf.Appendf ( "max_query_time=%u", tQuery.m_uMaxQueryMsec );
 
-	if ( tQuery.m_iMaxPredictedMsec != g_tDefaultQuery.m_iMaxPredictedMsec )
-		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
-
 	if ( tQuery.m_iRetryCount != DEFAULT_QUERY_RETRY )
 		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
 

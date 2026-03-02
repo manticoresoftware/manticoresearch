@@ -99,6 +99,10 @@ public:
 	void AppendEscapedSkippingComma ( const char* sText );
 	void AppendEscapedSkippingCommaNoQuotes ( const char* sText );
 
+	// dedicated EscBld::eEscape | EscBld::eSkipComma
+	void AppendEscapedSkippingComma ( const char* sText, int iLen );
+	void AppendEscapedSkippingCommaNoQuotes ( const char* sText, int iLen );
+
 	// dedicated EscBld::eEscape with comma
 	void AppendEscapedWithComma ( const char* sText );
 	void AppendEscapedWithCommaNoQuotes ( const char* sText );
@@ -128,6 +132,8 @@ public:
 private:
 	template<bool BQUOTE = true>
 	void AppendEscapedSkippingCommaT ( const char* sText );
+	template<bool BQUOTE = true>
+	void AppendEscapedSkippingCommaT ( const char* sText, int iLen );
 	template<bool BQUOTE = true>
 	void AppendEscapedWithCommaT ( const char* sText );
 	template <bool BQUOTE = true>

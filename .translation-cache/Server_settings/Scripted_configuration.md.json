@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339770
+    },
+    "__meta": {
+        "source_text": "# Scripted configuration\n\nManticore configuration supports shebang syntax, allowing the configuration to be written in a programming language and interpreted at loading. This enables dynamic settings, such as generating tables by querying a database table, modifying settings based on external factors, or including external files containing table and source declarations.\n\nThe configuration file is parsed by the declared interpreter, and the output is used as the actual configuration. This occurs each time the configuration is read, not only at searchd startup.\n\nNote: This feature is not available on the Windows platform.\n\nIn the following example, PHP is used to create multiple tables with different names and to scan a specific folder for files containing extra table declarations:\n\n```php\n#!/usr/bin/php\n...\n<?php for ($i=1; $i<=6; $i++) { ?>\ntable test_<?=$i?> {\n  type = rt\n  path = /var/lib/manticore/data/test_<?=$i?>\n  rt_field = subject\n  ...\n }\n <?php } ?>\n ...\n\n <?php\n $confd_folder='/etc/manticore.conf.d/';\n $files = scandir($confd_folder);\n foreach($files as $file)\n {\n         if(($file == '.') || ($file =='..'))\n         {} else {\n                 $fp = new SplFileInfo($confd_folder.$file);\n                 if('conf' == $fp->getExtension()){\n                         include ($confd_folder.$file);\n                 }\n         }\n }\n ?>\n```\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "edfafe19daec7926fce9f7c40ba8088d"
     }
 }

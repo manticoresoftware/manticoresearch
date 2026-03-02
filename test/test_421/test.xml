@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>possible duplicates on replace</name>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path = <data_path/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<var name="aa">a</var>
+<repeat count="500"><var name="aa" delimiter="">a</var></repeat>
+
+<var name="i1">(1001,'<aa/>')</var>
+<repeat count="14" vars="i" init="2" inc="1"><var name="i1" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1017" inc="1"><var name="i1" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i2">(1031,'<aa/>')</var>
+<repeat count="14" vars="i" init="32" inc="1"><var name="i2" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1047" inc="1"><var name="i2" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i3">(1061,'<aa/>')</var>
+<repeat count="14" vars="i" init="62" inc="1"><var name="i3" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1077" inc="1"><var name="i3" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i4">(1091,'<aa/>')</var>
+<repeat count="14" vars="i" init="92" inc="1"><var name="i4" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1107" inc="1"><var name="i4" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i5">(1121,'<aa/>')</var>
+<repeat count="14" vars="i" init="122" inc="1"><var name="i5" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1137" inc="1"><var name="i5" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i6">(1151,'<aa/>')</var>
+<repeat count="14" vars="i" init="152" inc="1"><var name="i6" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1167" inc="1"><var name="i6" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i7">(1181,'<aa/>')</var>
+<repeat count="14" vars="i" init="182" inc="1"><var name="i7" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1197" inc="1"><var name="i7" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i8">(1211,'<aa/>')</var>
+<repeat count="14" vars="i" init="212" inc="1"><var name="i8" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1227" inc="1"><var name="i8" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i9">(1241,'<aa/>')</var>
+<repeat count="14" vars="i" init="242" inc="1"><var name="i9" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1257" inc="1"><var name="i9" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i10">(1271,'<aa/>')</var>
+<repeat count="14" vars="i" init="272" inc="1"><var name="i10" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat count="34" vars="i" init="1287" inc="1"><var name="i10" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i11">(1301,'<aa/>')</var>
+<repeat init="302" count="14" vars="i" inc="1"><var name="i11" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1317" count="34" vars="i" inc="1"><var name="i11" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i12">(1331,'<aa/>')</var>
+<repeat init="332" count="14" vars="i" inc="1"><var name="i12" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1347" count="34" vars="i" inc="1"><var name="i12" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i13">(1361,'<aa/>')</var>
+<repeat init="362" count="14" vars="i" inc="1"><var name="i13" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1377" count="34" vars="i" inc="1"><var name="i13" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i14">(1391,'<aa/>')</var>
+<repeat init="392" count="14" vars="i" inc="1"><var name="i14" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1407" count="34" vars="i" inc="1"><var name="i14" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i15">(1421,'<aa/>')</var>
+<repeat init="422" count="14" vars="i" inc="1"><var name="i15" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1437" count="34" vars="i" inc="1"><var name="i15" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i16">(1451,'<aa/>')</var>
+<repeat init="452" count="14" vars="i" inc="1"><var name="i16" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1467" count="34" vars="i" inc="1"><var name="i16" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i17">(1481,'<aa/>')</var>
+<repeat init="482" count="14" vars="i" inc="1"><var name="i17" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1497" count="34" vars="i" inc="1"><var name="i17" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i18">(1511,'<aa/>')</var>
+<repeat init="512" count="14" vars="i" inc="1"><var name="i18" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1527" count="34" vars="i" inc="1"><var name="i18" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i19">(1541,'<aa/>')</var>
+<repeat init="542" count="14" vars="i" inc="1"><var name="i19" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1557" count="34" vars="i" inc="1"><var name="i19" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<var name="i20">(1571,'<aa/>')</var>
+<repeat init="572" count="14" vars="i" inc="1"><var name="i20" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+<repeat init="1587" count="34" vars="i" inc="1"><var name="i20" delimiter=", ">(<i/>, '<aa/>')</var></repeat>
+
+<sphinxql skip="1" >
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values <i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+</sphinxql>
+<sphinxql skip="1">
+	drop table if exists t;
+	CREATE TABLE t(s string) rt_mem_limit='128k';
+	replace into t values<i1/>;
+	replace into t values<i2/>;
+	replace into t values<i3/>;
+	replace into t values<i4/>;
+	replace into t values<i5/>;
+	replace into t values<i6/>;
+	replace into t values<i7/>;
+	replace into t values<i8/>;
+	replace into t values<i9/>;
+	replace into t values<i10/>;
+	replace into t values<i11/>;
+	replace into t values<i12/>;
+	replace into t values<i13/>;
+	replace into t values<i14/>;
+	replace into t values<i15/>;
+	replace into t values<i16/>;
+	replace into t values<i17/>;
+	replace into t values<i18/>;
+	replace into t values<i19/>;
+	replace into t values<i20/>;
+</sphinxql>
+<sphinxql>
+	select count(*) from t;
+	drop table if exists t;
+</sphinxql>
+</queries>
+</test>
+

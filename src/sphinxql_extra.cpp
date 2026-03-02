@@ -12,7 +12,6 @@
 
 
 #include "sphinxql_extra.h"
-#include "sphinxql_debug.h"
 
 struct BlobLocator_t
 {

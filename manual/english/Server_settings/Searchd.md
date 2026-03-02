@@ -1522,6 +1522,23 @@ shutdown_timeout = 3m # wait for up to 3 minutes
 
 SHA1 hash of the password required to invoke the 'shutdown' command from a VIP Manticore SQL connection. Without it,[debug](../Reporting_bugs.md#DEBUG) 'shutdown' subcommand will never cause the server to stop. Note that such simple hashing should not be considered strong protection, as we don't use a salted hash or any kind of modern hash function. It is intended as a fool-proof measure for housekeeping daemons in a local network.
 
+### skiplist_cache_size
+
+<!-- example conf skiplist_cache_size -->
+This setting specifies the maximum size of the in-memory cache for decompressed skiplists. Optional, the default is 64M.
+
+Skiplists are used to speed up seeking in large doclists. Caching them avoids repeatedly decompressing the same skiplist data across queries. Set this option to `0` to disable caching.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+skiplist_cache_size = 128M
+```
+<!-- end -->
+
 ### snippets_file_prefix
 
 <!-- example conf snippets_file_prefix -->

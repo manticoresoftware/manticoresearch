@@ -260,6 +260,36 @@ public:
 		}
 	}
 
+	void PutFloat ( float fVal ) final
+	{
+		PutFloatAsString ( fVal, nullptr );
+	}
+
+	void PutDouble ( double fVal ) final
+	{
+		PutDoubleAsString ( fVal, nullptr );
+	}
+
+	void PutInt ( int iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutInt64 ( int64_t iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutDWORD ( DWORD uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
 	void PutArray ( const ByteBlob_t&, bool ) override {}
 
 	// pack string
@@ -462,6 +492,12 @@ public:
 	void PutNumAsString ( uint64_t ) override {}
 	void PutNumAsString ( int ) override {}
 	void PutNumAsString ( DWORD ) override {}
+	void PutFloat ( float fVal ) override {}
+	void PutDouble ( double fVal ) override {}
+	void PutInt ( int iVal ) override {}
+	void PutInt64 ( int64_t iVal ) override {}
+	void PutDWORD ( DWORD uVal ) override {}
+	void PutUint64 ( uint64_t uVal ) override {}
 	void PutArray ( const ByteBlob_t&, bool ) override {}
 	void PutString ( Str_t ) override {}
 	void PutMicrosec ( int64_t ) override {}

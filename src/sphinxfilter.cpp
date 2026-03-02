@@ -1847,13 +1847,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	if ( tCtx.m_sJoinIdx.IsEmpty() )
 		return;
 
-	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pMatchSchema, tCtx.m_sJoinIdx.cstr() );
-
-	bool bHaveNullFilters = false;
-	for ( const auto & i : dRightFilters )
-		bHaveNullFilters |= dModified[i.first].m_eType==SPH_FILTER_NULL;
-
-	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() && dRightFilters.GetLength() && ( bHaveNullFilters || dRightFilters.GetLength()!=dModified.GetLength() ) )
+	if ( NeedPostJoinFilterEvaluation ( dModified, tCtx.m_sJoinIdx, tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength(), tCtx.m_eJoinType, *tCtx.m_pMatchSchema ) )
 	{
 		// mixed joined and non-joined filters; they will be handled in join sorter
 		// remove all filters from the query (keep the @rowid/pseudo_sharding filter)

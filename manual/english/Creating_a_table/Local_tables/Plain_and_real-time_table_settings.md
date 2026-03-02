@@ -100,8 +100,9 @@ By default, the original content of full-text fields is indexed and stored when 
 Value: A comma-separated list of **full-text** fields that should be stored. An empty value (i.e. `stored_fields =` ) disables the storage of original values for all fields.
 
 Note: In the case of a real-time table, the fields listed in `stored_fields` should also be declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
-
 Also, note that you don't need to list attributes in `stored_fields`, since their original values are stored anyway. `stored_fields` can only be used for full-text fields.
+
+Note: In a distributed table setup, document IDs must be unique across all agent tables. If multiple agents contain the same document ID, retrieving stored fields may return values from a different agent than the matched row.
 
 See also [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) for document storage compression options.
 
@@ -1012,4 +1013,3 @@ The following settings are supported. They are all described in section [NLP and
 * [stored_only_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
 * [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 <!-- proofread -->
-

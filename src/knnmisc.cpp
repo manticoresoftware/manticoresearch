@@ -409,7 +409,12 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 	const auto & tKNN = tAttr.m_tKNN;
 
 	sRes << " knn_type='hnsw'";
-	sRes << " knn_dims='" << tKNN.m_iDims << "'";
+	
+	const auto & tKNNModel = tAttr.m_tKNNModel;
+	// Only output knn_dims when model_name is empty (model_name determines dimensions)
+	if ( tKNNModel.m_sModelName.empty() )
+		sRes << " knn_dims='" << tKNN.m_iDims << "'";
+	
 	sRes << " hnsw_similarity='" << HNSWSimilarity2Str ( tKNN.m_eHNSWSimilarity ) << "'";
 
 	knn::IndexSettings_t tDefault;
@@ -418,11 +423,13 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNN.m_iHNSWEFConstruction!=tDefault.m_iHNSWEFConstruction )
 		sRes << " hnsw_ef_construction='" << tKNN.m_iHNSWEFConstruction << "'";
-
-	const auto & tKNNModel = tAttr.m_tKNNModel;
 	knn::ModelSettings_t tDefaultModel;
 	if ( !tKNNModel.m_sModelName.empty() )
+	{
 		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
+		if ( !tAttr.m_sKNNFrom.IsEmpty() )
+			sRes << " FROM='" << tAttr.m_sKNNFrom.cstr() << "'";
+	}
 
 	if ( !tKNNModel.m_sCachePath.empty() )
 		sRes << " cache_path='" << tKNNModel.m_sCachePath.c_str() << "'";

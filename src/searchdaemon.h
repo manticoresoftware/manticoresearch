@@ -135,7 +135,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 26
+	VER_COMMAND_SEARCH_MASTER = 27
 };
 
 
@@ -491,6 +491,17 @@ public:
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
+	WORD			GetLSBWord ()
+	{
+#if USE_LITTLE_ENDIAN
+		return GetT<WORD> ();
+#else
+		BYTE dB[2];
+		GetBytes(dB,2);
+		return dB[0] + ( dB[1]<<8 );
+#endif
+	}
+
 	DWORD			GetLSBDword ()
 	{
 #if USE_LITTLE_ENDIAN
@@ -499,6 +510,17 @@ public:
 		BYTE dB[4];
 		GetBytes(dB,4);
 		return dB[0] + ( dB[1]<<8 ) + ( dB[2]<<16 ) + ( dB[3]<<24 );
+#endif
+	}
+
+	uint64_t		GetLSBUint64 ()
+	{
+#if USE_LITTLE_ENDIAN
+		return GetT<uint64_t> ();
+#else
+		BYTE dB[8];
+		GetBytes(dB,8);
+		return (uint64_t)dB[0] + ( (uint64_t)dB[1]<<8 ) + ( (uint64_t)dB[2]<<16 ) + ( (uint64_t)dB[3]<<24 ) + ( (uint64_t)dB[4]<<32 ) + ( (uint64_t)dB[5]<<40 ) + ( (uint64_t)dB[6]<<48 ) + ( (uint64_t)dB[7]<<56 );
 #endif
 	}
 
@@ -1423,6 +1445,7 @@ enum MysqlColumnType_e
 	MYSQL_COL_FLOAT		= 4,
 	MYSQL_COL_DOUBLE	= 5,
 	MYSQL_COL_LONGLONG	= 8,
+	MYSQL_TYPE_VAR_STRING = 253,
 	MYSQL_COL_STRING	= 254,
 	MYSQL_COL_UINT64	= 508
 };
@@ -1489,6 +1512,12 @@ public:
 	virtual void PutNumAsString ( uint64_t uVal ) = 0;
 	virtual void PutNumAsString ( int iVal ) = 0;
 	virtual void PutNumAsString ( DWORD uVal ) = 0;
+	virtual void PutFloat ( float fVal ) = 0;
+	virtual void PutDouble ( double fVal ) = 0;
+	virtual void PutInt ( int iVal ) = 0;
+	virtual void PutInt64 ( int64_t iVal ) = 0;
+	virtual void PutDWORD ( DWORD uVal ) = 0;
+	virtual void PutUint64 ( uint64_t uVal ) = 0;
 
 	// pack raw array (i.e. packed length, then blob)
 	virtual void PutArray ( const ByteBlob_t&, bool bSendEmpty = false ) = 0;
@@ -1499,6 +1528,8 @@ public:
 	virtual void PutMicrosec ( int64_t iUsec ) = 0;
 
 	virtual void PutNULL() = 0;
+
+	virtual void SkipNULL() {}
 
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
@@ -1662,8 +1693,11 @@ public:
 		return HeadEnd();
 	}
 
+	virtual void DataStart ( const BYTE* ) {}
+
 	bool DataRow ( const VecTraits_T<CSphString>& dRow )
 	{
+		DataStart (nullptr);
 		for ( const auto& dValue : dRow )
 			PutString ( dValue );
 		return Commit();

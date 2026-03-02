@@ -167,6 +167,7 @@ public:
 
 	virtual bool					TokenIsBlended () const noexcept { return m_bBlended; }
 	virtual bool					TokenIsBlendedPart () const noexcept { return m_bBlendedPart; }
+	virtual bool					TokenIsBlendedHead () const noexcept { return false; }
 	virtual int						SkipBlended () { return 0; }
 
 public:

@@ -1,81 +1,80 @@
 ––– comment –––
-This test verifies advanced ConversationalRag plugin features:
-- Multiple RAG models with different configurations
-- Multiple content fields handling
-- Conversation tracking across multiple queries
-- Complex document structures with multiple text fields
-––– input –––
-export SEARCHD_FLAGS="--iostats --cpustats"
-––– output –––
+ConversationalRag Plugin: Advanced Features Tests
+Tests advanced configuration and behavior:
+- Content fields handling (single, multiple, all fields)
+- Style prompt effect (pirate style, default)
+- Model settings: k_results parameter (1 vs 5 documents)
+- Conversation isolation (independent UUIDs don't share context)
+Based on issue #3978 and PR #625 (manticoresearch-buddy)
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
-Clean up any existing data
+Setup: Create test table with 15 documents across 3 categories
+Same dataset as intent tests for consistent behavior
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS knowledge_base;"
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
 ––– output –––
-––– comment –––
-Create a complex table with multiple text fields and auto-embeddings
 ––– input –––
 mysql -h0 -P9306 << EOF
-CREATE TABLE knowledge_base (
+CREATE TABLE docs (
     id BIGINT,
-    title TEXT,
-    summary TEXT,
     content TEXT,
+    title TEXT,
     category TEXT,
-    tags TEXT,
     embedding_vector FLOAT_VECTOR
     knn_type='hnsw'
     hnsw_similarity='cosine'
     model_name='sentence-transformers/all-MiniLM-L6-v2'
-    from='content'
+    from='content,title'
     api_key='\${OPENAI_API_KEY}'
 ) TYPE='rt';
 EOF
 ––– output –––
 ––– comment –––
-Insert test documents with rich content
+Insert 15 test documents: AI (5), Entertainment (5), Programming (5)
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
-INSERT INTO knowledge_base (id, title, summary, content, category, tags)
-VALUES
-(1, 'Getting Started with Manticore', 'Quick start guide', 'Install Manticore Search and configure your first index', 'Tutorial', 'installation,quickstart'),
-(2, 'Vector Search Explained', 'Understanding vectors', 'Vector search uses embeddings to find semantically similar documents', 'Concepts', 'vectors,knn,similarity'),
-(3, 'Full-Text Search Guide', 'Text search basics', 'Use MATCH() operator for full-text search with ranking', 'Tutorial', 'fulltext,match,ranking'),
-(4, 'RAG Architecture', 'RAG pattern overview', 'Retrieval-Augmented Generation combines search with LLM for intelligent responses', 'Advanced', 'rag,llm,ai'),
-(5, 'Clustering Setup', 'Distributed search', 'Configure replication and sharding for high availability', 'Advanced', 'cluster,replication,sharding');
+INSERT INTO docs (id, content, title, category) VALUES
+(1, 'Retrieval-Augmented Generation is a technique that combines information retrieval with large language models. RAG systems first search a knowledge base for relevant documents, then use an LLM to generate answers grounded in the retrieved context. This approach reduces hallucinations and provides traceable sources.', 'RAG Technology Overview', 'AI'),
+(2, 'Vector search uses mathematical embeddings to find semantically similar documents. Each document is converted into a high-dimensional vector, and similarity is computed using metrics like cosine distance. This enables finding conceptually related content even without exact keyword matches.', 'Vector Search and Embeddings', 'AI'),
+(3, 'Neural networks are computational models inspired by biological brain structure. Deep learning networks with multiple layers can learn hierarchical representations of data. They power modern AI applications from image recognition to natural language understanding.', 'Neural Networks Fundamentals', 'AI'),
+(4, 'Natural Language Processing enables computers to understand and generate human language. Modern NLP uses transformer architectures like BERT and GPT for tasks such as sentiment analysis, translation, and text summarization. These models are pre-trained on massive text corpora.', 'NLP and Language Models', 'AI'),
+(5, 'Computer vision is a field of AI that trains computers to interpret visual information from images and videos. Applications include facial recognition, autonomous driving, medical imaging diagnosis, and object detection in surveillance systems.', 'Computer Vision Applications', 'AI'),
+(6, 'Breaking Bad is a critically acclaimed television series about Walter White, a high school chemistry teacher diagnosed with terminal lung cancer. He partners with former student Jesse Pinkman to manufacture and sell methamphetamine. The show explores themes of morality, family, and the consequences of choices.', 'Breaking Bad TV Series', 'Entertainment'),
+(7, 'The Mandalorian is a Star Wars television series following a lone bounty hunter named Din Djarin in the outer reaches of the galaxy. He discovers and protects a young alien called Grogu, also known as Baby Yoda. The show features epic space battles and explores Mandalorian warrior culture.', 'The Mandalorian Series', 'Entertainment'),
+(8, 'Stranger Things is a science fiction horror series set in the 1980s in the fictional town of Hawkins, Indiana. A group of kids uncover secret government experiments and a parallel dimension called the Upside Down. The show blends supernatural mystery with nostalgic pop culture references.', 'Stranger Things Overview', 'Entertainment'),
+(9, 'Game of Thrones is an epic fantasy series based on George R.R. Martin novels about noble families fighting for control of the Iron Throne. The show features dragons, political intrigue, betrayal, and massive battle sequences across the continents of Westeros and Essos.', 'Game of Thrones Summary', 'Entertainment'),
+(10, 'The Office is a mockumentary sitcom depicting the everyday lives of office employees at the Dunder Mifflin paper company in Scranton, Pennsylvania. Michael Scott, the bumbling regional manager, creates awkward and hilarious situations. The show is known for its dry humor and relatable workplace dynamics.', 'The Office Comedy Series', 'Entertainment'),
+(11, 'Python is a high-level interpreted programming language known for its clean syntax and readability. It is widely used in web development with Django and Flask frameworks, data science with pandas and NumPy, and machine learning with TensorFlow and PyTorch libraries.', 'Python Programming Language', 'Programming'),
+(12, 'JavaScript is the primary language for web development, running in browsers and on servers via Node.js. It supports event-driven programming, closures, and prototype-based object orientation. Modern JavaScript uses ES6+ features like arrow functions, async/await, and destructuring.', 'JavaScript Web Development', 'Programming'),
+(13, 'Rust is a systems programming language focused on safety, speed, and concurrency without a garbage collector. Its ownership model prevents memory leaks and data races at compile time. Rust is popular for building high-performance web servers, embedded systems, and command-line tools.', 'Rust Systems Programming', 'Programming'),
+(14, 'Go, also known as Golang, is a statically typed language developed by Google for building scalable network services and cloud infrastructure. It features built-in concurrency with goroutines and channels, fast compilation, and a comprehensive standard library for HTTP servers and microservices.', 'Go Language for Cloud', 'Programming'),
+(15, 'Docker is a containerization platform that packages applications and their dependencies into lightweight, portable containers. Containers ensure consistent behavior across development, testing, and production environments. Docker Compose orchestrates multi-container applications with simple YAML configuration files.', 'Docker Containerization', 'Programming');
 EOF
 ––– output –––
 ––– comment –––
-Verify all documents are inserted
+Wait for auto-embeddings generation (async via Buddy)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM knowledge_base;"
+mysql -h0 -P9306 -e "debug sleep 20;" > /dev/null 2>&1
+––– output –––
+––– comment –––
+Verify all 15 documents inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM docs;"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
-|        5 |
+|       15 |
 +----------+
 ––– comment –––
-Create multiple RAG models with different configurations
+==========================================================================
+SECTION A: Content Fields Handling
+Tests: single field, two fields, three fields
+==========================================================================
+––– comment –––
+Create a basic model for content fields tests
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL fast_assistant (llm_provider='openai', llm_model='gpt-3.5-turbo', settings='{\"temperature\":0.5, \"max_tokens\":1000, \"k_results\":3}');"
-––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
-––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL detailed_assistant (llm_provider='openai', llm_model='gpt-4o', style_prompt='You are an expert technical writer. Provide detailed, accurate explanations.', settings='{\"temperature\":0.3, \"max_tokens\":4000, \"k_results\":5}');"
-––– output –––
-+--------------------------------------+
-| uuid                                 |
-+--------------------------------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
-+--------------------------------------+
-––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (llm_provider='openai', llm_model='gpt-4o-mini', style_prompt='You are a helpful and friendly assistant. Use simple language.', settings='{\"temperature\":0.7, \"max_tokens\":2000, \"k_results\":4}');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL fields_assistant (llm_provider='openai', llm_model='gpt-4o-mini');"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -83,71 +82,213 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (llm_provider='openai',
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– comment –––
-Verify all models are created
+Test A1: Single content field — 'content' only
+Expected: response based on content text, sources present
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is vector search?', 'docs', 'fields_assistant', 'content')\G" | tee /tmp/rag_adv_a1.txt | grep -E "conversation_uuid:|response:|sources:"
 ––– output –––
-+--------------------------------------+--------------------+--------------+---------------+------------+
-| uuid                                 | name               | llm_provider | llm_model     | created_at |
-+--------------------------------------+--------------------+--------------+---------------+------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | detailed_assistant | openai       | gpt-4o        | %{NUMBER} |
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | creative_assistant | openai       | gpt-4o-mini   | %{NUMBER} |
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | fast_assistant     | openai       | gpt-3.5-turbo | %{NUMBER} |
-+--------------------------------------+--------------------+--------------+---------------+------------+
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
 ––– comment –––
-Test with single content field
+Test A2: Two content fields — 'title,content'
+Expected: sources include both title and content data
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about vector search', 'knowledge_base', 'fast_assistant', 'content')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG', 'docs', 'fields_assistant', 'title,content')\G" | tee /tmp/rag_adv_a2.txt | grep -E "conversation_uuid:|response:|sources:"
 ––– output –––
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
 ––– comment –––
-Test with two content fields (title, content)
+Verify A2: sources contain title field data
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Explain vector search', 'knowledge_base', 'detailed_assistant', 'title,content')\G;"
+grep -c '"title"' /tmp/rag_adv_a2.txt
 ––– output –––
+#!/[1-9][0-9]*/!#
 ––– comment –––
-Test with multiple content fields (title, summary, content)
+Test A3: Three content fields — 'title,content,category'
+Expected: sources include all three fields
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant', 'title,summary,content')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Explain neural networks', 'docs', 'fields_assistant', 'title,content,category')\G" | tee /tmp/rag_adv_a3.txt | grep -E "conversation_uuid:|response:|sources:"
 ––– output –––
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
 ––– comment –––
-Test conversation tracking - first message in a new conversation
+Verify A3: sources contain category field data
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is clustering?', 'knowledge_base', 'fast_assistant', 'title,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;"
+grep -c '"category"' /tmp/rag_adv_a3.txt
 ––– output –––
+#!/[1-9][0-9]*/!#
 ––– comment –––
-Test conversation tracking - follow-up message (should maintain context)
+Cleanup fields_assistant model
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('How do I configure it?', 'knowledge_base', 'fast_assistant', 'title,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;"
-––– output –––
-––– comment –––
-Test different model on same conversation
-––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What are best practices?', 'knowledge_base', 'detailed_assistant', 'title,summary,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;"
-––– output –––
-––– comment –––
-Test independent conversation - different context
-––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Show me tutorials', 'knowledge_base', 'creative_assistant', 'content', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;"
-––– output –––
-*************************** 1. row ***************************
-––– comment –––
-Cleanup - drop all models
-––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL fast_assistant;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL detailed_assistant;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL creative_assistant;"
+mysql -h0 -P9306 -e "DROP RAG MODEL fields_assistant;"
 ––– output –––
 ––– comment –––
-Verify all models are dropped
+==========================================================================
+SECTION B: Style Prompt Effect (soft assertions)
+Tests: custom style prompt vs default prompt
+==========================================================================
+––– comment –––
+Test B1: Model with custom pirate style prompt
+Expected: model accepts style_prompt and returns valid response (soft check)
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;"
+mysql -h0 -P9306 -e "CREATE RAG MODEL pirate_assistant (llm_provider='openai', llm_model='gpt-4o-mini', style_prompt='You are a pirate. Always respond in pirate speak using words like arr, matey, ye.');"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– comment –––
+Verify pirate model has correct style_prompt via DESCRIBE
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE RAG MODEL pirate_assistant\G" | grep -A1 'style_prompt'
+––– output –––
+property: style_prompt
+   value: #!/.*[Yy]ou are a pirate.*/!#
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python programming', 'docs', 'pirate_assistant', 'content,title')\G" | tee /tmp/rag_adv_b1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test B2: Model with default (empty) style prompt
+Expected: default behavior, valid response
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL default_assistant (llm_provider='openai', llm_model='gpt-4o-mini');"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python programming', 'docs', 'default_assistant', 'content,title')\G" | tee /tmp/rag_adv_b2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Cleanup style models
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL pirate_assistant;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL default_assistant;"
 ––– output –––
 ––– comment –––
-Cleanup table
+==========================================================================
+SECTION C: k_results Parameter
+Tests: k_results=1 (single document) vs k_results=5 (multiple documents)
+==========================================================================
+––– comment –––
+Test C1: Model with k_results=1 — should return exactly 1 source document
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS knowledge_base;"
+mysql -h0 -P9306 -e "CREATE RAG MODEL single_result_assistant (llm_provider='openai', llm_model='gpt-4o-mini', settings='{\"k_results\":1}');"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about AI', 'docs', 'single_result_assistant', 'content,title')\G" | tee /tmp/rag_adv_c1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify C1: sources contain exactly 1 document (count "id" occurrences)
+––– input –––
+grep -o '"id"' /tmp/rag_adv_c1.txt | wc -l | tr -d ' '
+––– output –––
+1
+––– comment –––
+Test C2: Model with k_results=5 — should return up to 5 source documents
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL multi_result_assistant (llm_provider='openai', llm_model='gpt-4o-mini', settings='{\"k_results\":5}');"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about AI', 'docs', 'multi_result_assistant', 'content,title')\G" | tee /tmp/rag_adv_c2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: #!/[a-z0-9-]+/!#
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify C2: sources contain more than 1 document
+––– input –––
+grep -o '"id"' /tmp/rag_adv_c2.txt | wc -l | tr -d ' '
+––– output –––
+#!/[2-9][0-9]*/!#
+––– comment –––
+Cleanup k_results models
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL single_result_assistant;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL multi_result_assistant;"
+––– output –––
+––– comment –––
+==========================================================================
+SECTION D: Conversation Isolation
+Tests: two independent conversations don't share context
+==========================================================================
+––– comment –––
+Create a shared model for isolation tests
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL isolation_assistant (llm_provider='openai', llm_model='gpt-4o-mini');"
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– comment –––
+Test D1: Conversation A — query about AI
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'isolation_assistant', 'content,title', 'conv-iso-aaa')\G" | tee /tmp/rag_adv_d1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-iso-aaa
+         response: #!/.*(RAG|[Rr]etrieval).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify D1: sources contain AI category
+––– input –––
+grep -c '"category":"AI"' /tmp/rag_adv_d1.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test D2: Conversation B (different UUID) — query about movies
+Expected: no AI context leaks from Conversation A
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about TV shows and movies', 'docs', 'isolation_assistant', 'content,title', 'conv-iso-bbb')\G" | tee /tmp/rag_adv_d2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-iso-bbb
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Verify D2: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_adv_d2.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Cleanup isolation model
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL isolation_assistant;"
+––– output –––
+––– comment –––
+==========================================================================
+Cleanup
+==========================================================================
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
 ––– output –––

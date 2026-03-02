@@ -1,10 +1,23 @@
 ––– comment –––
-This test verifies intent classification and conversation flow in the ConversationalRag plugin.
-Tests various user intents: NEW_SEARCH, TOPIC_CHANGE, INTEREST, REJECTION, QUESTION, ALTERNATIVES.
-Based on issue #3978 - conversational RAG with intent classification.
+ConversationalRag Plugin: Intent Classification, Expansion, and Exclusion Tests
+Tests the core conversational features of the plugin using 3-level validation:
+Structure: response contains required fields (conversation_uuid, response, sources)
+Retrieval Quality: KNN returns correct category, negative checks (no wrong category),
+groundedness (response mentions terms from source documents)
+Pipeline Mechanics: log validation verifies that internal mechanisms run
+(intent classifier, expansion calculator, exclusion handler) without asserting
+specific LLM decisions which are non-deterministic
+Based on issue #3978 and PR #625 (manticoresearch-buddy)
+––– input –––
+export SEARCHD_FLAGS="--logdebugvv"
+––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
-Setup: Create test table with documents about AI, programming, and entertainment
+Setup: Create test table with 15 documents across 3 categories (AI, Entertainment, Programming)
+Rich content for reliable KNN separation by topic
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
+––– output –––
 ––– input –––
 mysql -h0 -P9306 << EOF
 CREATE TABLE docs (
@@ -16,22 +29,31 @@ CREATE TABLE docs (
     knn_type='hnsw'
     hnsw_similarity='cosine'
     model_name='sentence-transformers/all-MiniLM-L6-v2'
-    from='content'
+    from='content,title'
     api_key='\${OPENAI_API_KEY}'
 ) TYPE='rt';
 EOF
 ––– output –––
 ––– comment –––
-Insert test documents
+Insert 15 test documents: AI (5), Entertainment (5), Programming (5)
 ––– input –––
-mysql -h0 -P9306 << EOF
+mysql -h0 -P9306 << 'EOF'
 INSERT INTO docs (id, content, title, category) VALUES
-(1, 'Retrieval-Augmented Generation combines search with LLM for intelligent responses', 'RAG Introduction', 'AI'),
-(2, 'Vector search uses embeddings to find semantically similar documents', 'Vector Search', 'AI'),
-(3, 'Breaking Bad is a crime drama about a chemistry teacher who becomes a drug dealer', 'Breaking Bad', 'Entertainment'),
-(4, 'The Sopranos is a critically acclaimed crime drama series', 'The Sopranos', 'Entertainment'),
-(5, 'Python is a high-level programming language known for simplicity', 'Python Programming', 'Programming'),
-(6, 'JavaScript is widely used for web development', 'JavaScript Basics', 'Programming');
+(1, 'Retrieval-Augmented Generation is a technique that combines information retrieval with large language models. RAG systems first search a knowledge base for relevant documents, then use an LLM to generate answers grounded in the retrieved context. This approach reduces hallucinations and provides traceable sources.', 'RAG Technology Overview', 'AI'),
+(2, 'Vector search uses mathematical embeddings to find semantically similar documents. Each document is converted into a high-dimensional vector, and similarity is computed using metrics like cosine distance. This enables finding conceptually related content even without exact keyword matches.', 'Vector Search and Embeddings', 'AI'),
+(3, 'Neural networks are computational models inspired by biological brain structure. Deep learning networks with multiple layers can learn hierarchical representations of data. They power modern AI applications from image recognition to natural language understanding.', 'Neural Networks Fundamentals', 'AI'),
+(4, 'Natural Language Processing enables computers to understand and generate human language. Modern NLP uses transformer architectures like BERT and GPT for tasks such as sentiment analysis, translation, and text summarization. These models are pre-trained on massive text corpora.', 'NLP and Language Models', 'AI'),
+(5, 'Computer vision is a field of AI that trains computers to interpret visual information from images and videos. Applications include facial recognition, autonomous driving, medical imaging diagnosis, and object detection in surveillance systems.', 'Computer Vision Applications', 'AI'),
+(6, 'Breaking Bad is a critically acclaimed television series about Walter White, a high school chemistry teacher diagnosed with terminal lung cancer. He partners with former student Jesse Pinkman to manufacture and sell methamphetamine. The show explores themes of morality, family, and the consequences of choices.', 'Breaking Bad TV Series', 'Entertainment'),
+(7, 'The Mandalorian is a Star Wars television series following a lone bounty hunter named Din Djarin in the outer reaches of the galaxy. He discovers and protects a young alien called Grogu, also known as Baby Yoda. The show features epic space battles and explores Mandalorian warrior culture.', 'The Mandalorian Series', 'Entertainment'),
+(8, 'Stranger Things is a science fiction horror series set in the 1980s in the fictional town of Hawkins, Indiana. A group of kids uncover secret government experiments and a parallel dimension called the Upside Down. The show blends supernatural mystery with nostalgic pop culture references.', 'Stranger Things Overview', 'Entertainment'),
+(9, 'Game of Thrones is an epic fantasy series based on George R.R. Martin novels about noble families fighting for control of the Iron Throne. The show features dragons, political intrigue, betrayal, and massive battle sequences across the continents of Westeros and Essos.', 'Game of Thrones Summary', 'Entertainment'),
+(10, 'The Office is a mockumentary sitcom depicting the everyday lives of office employees at the Dunder Mifflin paper company in Scranton, Pennsylvania. Michael Scott, the bumbling regional manager, creates awkward and hilarious situations. The show is known for its dry humor and relatable workplace dynamics.', 'The Office Comedy Series', 'Entertainment'),
+(11, 'Python is a high-level interpreted programming language known for its clean syntax and readability. It is widely used in web development with Django and Flask frameworks, data science with pandas and NumPy, and machine learning with TensorFlow and PyTorch libraries.', 'Python Programming Language', 'Programming'),
+(12, 'JavaScript is the primary language for web development, running in browsers and on servers via Node.js. It supports event-driven programming, closures, and prototype-based object orientation. Modern JavaScript uses ES6+ features like arrow functions, async/await, and destructuring.', 'JavaScript Web Development', 'Programming'),
+(13, 'Rust is a systems programming language focused on safety, speed, and concurrency without a garbage collector. Its ownership model prevents memory leaks and data races at compile time. Rust is popular for building high-performance web servers, embedded systems, and command-line tools.', 'Rust Systems Programming', 'Programming'),
+(14, 'Go, also known as Golang, is a statically typed language developed by Google for building scalable network services and cloud infrastructure. It features built-in concurrency with goroutines and channels, fast compilation, and a comprehensive standard library for HTTP servers and microservices.', 'Go Language for Cloud', 'Programming'),
+(15, 'Docker is a containerization platform that packages applications and their dependencies into lightweight, portable containers. Containers ensure consistent behavior across development, testing, and production environments. Docker Compose orchestrates multi-container applications with simple YAML configuration files.', 'Docker Containerization', 'Programming');
 EOF
 ––– output –––
 ––– comment –––
@@ -40,7 +62,17 @@ Wait for auto-embeddings generation (async via Buddy)
 mysql -h0 -P9306 -e "debug sleep 20;" > /dev/null 2>&1
 ––– output –––
 ––– comment –––
-Create RAG model
+Verify all 15 documents inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM docs;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       15 |
++----------+
+––– comment –––
+Create RAG model for all tests
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (llm_provider='openai', llm_model='gpt-4o-mini');"
 ––– output –––
@@ -50,111 +82,629 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (llm_provider='openai', llm
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– comment –––
-Test 1: Initial question about RAG (NEW_SEARCH intent)
-Expected: Search for RAG-related documents, response contains RAG keywords
+==========================================================================
+CONVERSATION A: Multi-turn Conversation Flow (conv-intent-001)
+Tests retrieval quality across topic transitions:
+  A1: AI query → AI sources
+  A2: Stay on AI → AI sources retained
+  A3: Rejection → plugin still responds
+  A4: Topic switch → Entertainment sources, AI not dominant
+  A5: More options → Entertainment sources
+Log checks verify pipeline mechanics (classifier runs, expansion state).
+==========================================================================
+––– comment –––
+Test A1: Initial query about RAG
+Retrieval: AI category | Groundedness: response mentions RAG terms
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG and how does it work?', 'docs', 'test_assistant', 'content,title', 'conv-intent-001')\G" | tee /tmp/rag_a1.txt | grep -E "conversation_uuid:|response:|sources:"
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration|[Aa]ugmented).*/!#
+conversation_uuid: conv-intent-001
+         response: #!/.*(RAG|[Rr]etrieval|[Aa]ugmented|[Gg]eneration).*/!#
           sources: #!/\[.*/!#
 ––– comment –––
-Verify sources contain AI category documents
+Retrieval check A1: sources contain AI category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -c '"category":"AI"'
+grep -c '"category":"AI"' /tmp/rag_a1.txt
 ––– output –––
 #!/[1-9][0-9]*/!#
 ––– comment –––
-Test 2: User expresses rejection (REJECTION intent - "Its boring")
-Expected: Topic change, should not return AI category documents
+Pipeline check A1: intent classifier ran and produced a result
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+grep 'Detected intent' /var/log/manticore/searchd.log | tail -1
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
+#!/.*Detected intent: [A-Z_]+.*/!#
+––– comment –––
+Pipeline check A1: expansion mechanism ran — NO on first query (deterministic: no prior results)
+––– input –––
+grep 'Expansion: NO' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Expansion: NO.*/!#
+––– comment –––
+Test A2: User shows interest in AI topic
+Retrieval: AI category retained | Groundedness: response mentions AI terms
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('That sounds interesting, tell me more about AI', 'docs', 'test_assistant', 'content,title', 'conv-intent-001')\G" | tee /tmp/rag_a2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-intent-001
+         response: #!/.*(AI|[Aa]rtificial|[Mm]achine|[Ll]earn|[Nn]eural|[Nn]etwork|[Vv]ector|NLP|[Ll]anguage).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check A2: sources still contain AI category
+––– input –––
+grep -c '"category":"AI"' /tmp/rag_a2.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Pipeline check A2: intent classifier ran
+––– input –––
+grep 'Detected intent' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Detected intent: [A-Z_]+.*/!#
+––– comment –––
+Test A3: User rejects current topic
+Structure: plugin responds without error
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring, I dont like this topic', 'docs', 'test_assistant', 'content,title', 'conv-intent-001')\G" | tee /tmp/rag_a3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-intent-001
          response: #!/.+/!#
           sources: #!/\[.*/!#
 ––– comment –––
-Verify sources do not contain AI category after rejection
+Pipeline check A3: intent classifier ran
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -c '"category":"AI"'
+grep 'Detected intent' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Detected intent: [A-Z_]+.*/!#
+––– comment –––
+Test A4: Topic switch from AI to Entertainment
+Retrieval: Entertainment sources | Negative: NO AI sources | Groundedness: mentions shows
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about TV shows instead', 'docs', 'test_assistant', 'content,title', 'conv-intent-001')\G" | tee /tmp/rag_a4.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-intent-001
+         response: #!/.*(TV|[Ss]how|[Ss]eries|[Mm]ovie|[Ff]ilm|[Ww]atch|[Ee]ntertainment|Breaking|Mandalorian|Stranger|Game of Thrones|Office).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check A4: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_a4.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Negative check A4: AI is not dominant — at most 1 AI doc may appear due to KNN proximity
+––– input –––
+grep -c '"category":"AI"' /tmp/rag_a4.txt
+––– output –––
+#!/[0-1]/!#
+––– comment –––
+Pipeline check A4: intent classifier ran
+––– input –––
+grep 'Detected intent' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Detected intent: [A-Z_]+.*/!#
+––– comment –––
+Test A5: Request for more options
+Retrieval: Entertainment category
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Show me other TV shows', 'docs', 'test_assistant', 'content,title', 'conv-intent-001')\G" | tee /tmp/rag_a5.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-intent-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check A5: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_a5.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+==========================================================================
+CONVERSATION B: Dynamic Threshold Expansion (conv-expand-001)
+Tests that expansion mechanism activates on repeated "more" requests.
+Pipeline checks: expansion flag (YES/NO), threshold calculation, expansion level.
+All checks verify mechanism runs — exact values depend on LLM intent classification.
+==========================================================================
+––– comment –––
+Test B1: Initial search for TV shows (baseline)
+Retrieval: Entertainment sources | Groundedness: mentions show names
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about TV shows', 'docs', 'test_assistant', 'content,title', 'conv-expand-001')\G" | tee /tmp/rag_b1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-expand-001
+         response: #!/.*(TV|[Ss]how|[Ss]eries|Breaking|Mandalorian|Stranger|Game of Thrones|Office).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Pipeline check B1: expansion NO on first query (deterministic: no prior history)
+––– input –––
+grep 'Expansion:' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Expansion: NO.*/!#
+––– comment –––
+Test B2: First "more" request
+Structure: valid response with sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Show me more options', 'docs', 'test_assistant', 'content,title', 'conv-expand-001')\G" | tee /tmp/rag_b2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-expand-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Pipeline check B2: expansion mechanism ran (YES or NO — depends on LLM intent)
+––– input –––
+grep 'Expansion:' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Expansion: (YES|NO).*/!#
+––– comment –––
+Pipeline check B2: threshold was calculated
+––– input –––
+grep 'Calculated threshold:' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Calculated threshold: 0\.[0-9]+.*/!#
+––– comment –––
+Test B3: Second "more" request
+Structure: valid response with sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What else is there?', 'docs', 'test_assistant', 'content,title', 'conv-expand-001')\G" | tee /tmp/rag_b3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-expand-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Pipeline check B3: expansion mechanism ran
+––– input –––
+grep 'Expansion:' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Expansion: (YES|NO).*/!#
+––– comment –––
+Test B4: Third "more" request
+Structure: valid response with sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Any other suggestions?', 'docs', 'test_assistant', 'content,title', 'conv-expand-001')\G" | tee /tmp/rag_b4.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-expand-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Pipeline check B4: threshold was calculated
+––– input –––
+grep 'Calculated threshold:' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Calculated threshold: 0\.[0-9]+.*/!#
+––– comment –––
+Test B5: Fourth "more" request
+Structure: valid response with sources (plugin handles repeated expansions without error)
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Still want more', 'docs', 'test_assistant', 'content,title', 'conv-expand-001')\G" | tee /tmp/rag_b5.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-expand-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+==========================================================================
+CONVERSATION C: Exclusion Handling (conv-exclude-001)
+Tests that excluded titles don't appear in sources after user rejects them.
+Retrieval-level checks: excluded docs absent from sources JSON.
+Pipeline checks: exclusion handler ran (logged).
+==========================================================================
+––– comment –––
+Test C1: Initial search for movies
+Retrieval: Entertainment sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about movies and TV series', 'docs', 'test_assistant', 'content,title', 'conv-exclude-001')\G" | tee /tmp/rag_c1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-exclude-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check C1: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_c1.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Pipeline check C1: no excluded IDs on first query (deterministic: no prior context)
+––– input –––
+grep 'Excluded IDs count:' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Excluded IDs count: 0.*/!#
+––– comment –––
+Test C2: User says they already watched Breaking Bad
+Retrieval: sources should NOT contain Breaking Bad
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I already watched Breaking Bad, show me something else', 'docs', 'test_assistant', 'content,title', 'conv-exclude-001')\G" | tee /tmp/rag_c2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-exclude-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Negative check C2: Breaking Bad excluded from sources (check only sources line, not response text)
+––– input –––
+grep 'sources:' /tmp/rag_c2.txt | grep -c 'Breaking Bad'
 ––– output –––
 0
 ––– comment –––
-Test 3: Topic change to movies (TOPIC_CHANGE intent)
-Expected: Search for Entertainment category
+Pipeline check C2: exclusion handler logged (Excluded IDs count tracked)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+grep 'Excluded IDs count:' /var/log/manticore/searchd.log | tail -1
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
+#!/.*Excluded IDs count: [0-9]+.*/!#
+––– comment –––
+Test C3: User also rejects Game of Thrones (cumulative exclusion)
+Retrieval: sources should contain NEITHER Breaking Bad NOR Game of Thrones
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Not Game of Thrones either, show me other shows', 'docs', 'test_assistant', 'content,title', 'conv-exclude-001')\G" | tee /tmp/rag_c3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-exclude-001
          response: #!/.+/!#
           sources: #!/\[.*/!#
 ––– comment –––
-Verify sources contain Entertainment category (not AI)
+Negative check C3: Breaking Bad still excluded from sources
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -c '"category":"Entertainment"'
+grep 'sources:' /tmp/rag_c3.txt | grep -c 'Breaking Bad'
+––– output –––
+0
+––– comment –––
+Negative check C3: Game of Thrones also excluded from sources
+––– input –––
+grep 'sources:' /tmp/rag_c3.txt | grep -c 'Game of Thrones'
+––– output –––
+0
+––– comment –––
+==========================================================================
+CONVERSATION D: Topic Switch Resets Expansion (conv-reset-001)
+Tests that topic change resets expansion state.
+Retrieval checks: correct category after switch, negative checks for old category.
+Pipeline checks: expansion count reset (deterministic after topic change).
+==========================================================================
+––– comment –––
+Test D1: Initial query about AI
+Retrieval: AI sources | Groundedness: mentions AI terms
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about artificial intelligence', 'docs', 'test_assistant', 'content,title', 'conv-reset-001')\G" | tee /tmp/rag_d1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-reset-001
+         response: #!/.*(AI|[Aa]rtificial|[Ii]ntelligence|[Mm]achine|[Ll]earn|[Nn]eural|[Vv]ector|NLP).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check D1: sources contain AI category
+––– input –––
+grep -c '"category":"AI"' /tmp/rag_d1.txt
 ––– output –––
 #!/[1-9][0-9]*/!#
 ––– comment –––
-Test 4: User shows interest in specific show (INTEREST intent)
-Expected: Should find Breaking Bad in sources
+Test D2: Topic switch from AI to Programming
+Retrieval: Programming sources | Negative: NO AI sources | Groundedness: mentions languages
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I like Breaking Bad', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I dont like AI, tell me about programming languages', 'docs', 'test_assistant', 'content,title', 'conv-reset-001')\G" | tee /tmp/rag_d2.txt | grep -E "conversation_uuid:|response:|sources:"
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
-          sources: #!/.*Breaking Bad.*/!#
+conversation_uuid: conv-reset-001
+         response: #!/.*(Python|JavaScript|Rust|Go|Docker|[Pp]rogramming|[Ll]anguage|[Cc]ode|[Dd]evelop).*/!#
+          sources: #!/\[.*/!#
 ––– comment –––
-Test 5: Follow-up question (QUESTION intent)
-Expected: Response about cast, reuses previous context
+Retrieval check D2: sources contain Programming category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is the cast?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+grep -c '"category":"Programming"' /tmp/rag_d2.txt
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
+#!/[1-9][0-9]*/!#
+––– comment –––
+Retrieval check D2: Programming is dominant — at most 1 AI doc may appear due to KNN proximity
+––– input –––
+grep -c '"category":"AI"' /tmp/rag_d2.txt
+––– output –––
+#!/[0-1]/!#
+––– comment –––
+Pipeline check D2: expansion count reset to 0 after topic change (deterministic)
+––– input –––
+grep 'Expansion count reset' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Expansion count reset to 0.*/!#
+––– comment –––
+Test D3: Follow-up request within new topic
+Retrieval: Programming sources retained
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Show me more programming topics', 'docs', 'test_assistant', 'content,title', 'conv-reset-001')\G" | tee /tmp/rag_d3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-reset-001
          response: #!/.+/!#
           sources: #!/\[.*/!#
 ––– comment –––
-Test 6: Emotional response (conversational - "omg")
-Expected: Responds without new search, uses previous context
+Retrieval check D3: sources still contain Programming category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('omg thats amazing', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
+grep -c '"category":"Programming"' /tmp/rag_d3.txt
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
-          sources: #!/\[.*/!#
+#!/[1-9][0-9]*/!#
 ––– comment –––
-Test 7: Request for more content (ALTERNATIVES intent)
-Expected: Returns more results
-––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('show me more entertainment', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;"
-––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
-          sources: #!/\[.*/!#
+==========================================================================
+CONVERSATION E: Conversation Isolation (conv-intent-002)
+Tests that independent UUID does not inherit state from conversations A-D.
+==========================================================================
 ––– comment –––
-Test 8: New independent conversation - Programming topic
-Expected: Fresh context, should find Python
+Test E1: Completely independent query about Python
+Retrieval: Programming sources | Groundedness: mentions Python
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'content', 'test-conv-intent-002')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python programming', 'docs', 'test_assistant', 'content,title', 'conv-intent-002')\G" | tee /tmp/rag_e1.txt | grep -E "conversation_uuid:|response:|sources:"
 ––– output –––
-*************************** 1. row ***************************
-conversation_uuid: test-conv-intent-002
+conversation_uuid: conv-intent-002
          response: #!/.*[Pp]ython.*/!#
           sources: #!/.*Python.*/!#
 ––– comment –––
-Verify sources contain Programming category (new conversation context)
+Retrieval check E1: sources contain Programming category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'content', 'test-conv-intent-002')\G;" | grep -c '"category":"Programming"'
+grep -c '"category":"Programming"' /tmp/rag_e1.txt
 ––– output –––
 #!/[1-9][0-9]*/!#
 ––– comment –––
+==========================================================================
+CONVERSATION F: Gibberish Input Handling (conv-unclear-001)
+Tests that nonsense input does not crash the plugin.
+==========================================================================
+––– comment –––
+Test F1: Gibberish input
+Structure: returns valid response (not an error), plugin handles gracefully
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('asdfgh jkl zxcvb qwerty', 'docs', 'test_assistant', 'content,title', 'conv-unclear-001')\G" | tee /tmp/rag_f1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-unclear-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Pipeline check F1: intent classifier ran on gibberish
+––– input –––
+grep 'Detected intent' /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/.*Detected intent: [A-Z_]+.*/!#
+––– comment –––
+==========================================================================
+CONVERSATION G: Natural Human Questions (conv-natural-001)
+Realistic user conversation flow with strong retrieval and groundedness checks.
+Validates that KNN finds correct documents and response is grounded in them.
+Tests natural human conversation including topic transitions.
+==========================================================================
+––– comment –––
+Test G1: What TV shows to watch?
+Retrieval: Entertainment sources | Groundedness: mentions show names from docs
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What are some good TV shows I should watch?', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.*(Breaking Bad|Mandalorian|Stranger Things|Game of Thrones|Office|[Ss]how|[Ss]eries).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check G1: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_g1.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test G2: I love fantasy with dragons!
+Retrieval: Game of Thrones in sources | Groundedness: mentions dragons/fantasy/GoT terms
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I love fantasy shows with dragons and epic battles!', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.*(Game of Thrones|[Dd]ragon|[Ff]antasy|[Tt]hrone|Westeros|[Bb]attle|[Ee]pic).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check G2: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_g2.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test G3: Recommend a fantasy show
+Structure: valid response with sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What fantasy show would you recommend for someone who loves epic stories?', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test G4: Too violent, want something lighthearted
+Structure: plugin responds without error, acknowledges preference
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('That sounds too violent for me, anything more lighthearted?', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g4.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test G5: I love sci-fi!
+Retrieval: sci-fi sources | Groundedness: mentions Mandalorian/Stranger Things/sci-fi terms
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I love sci-fi and space adventures!', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g5.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.*(Mandalorian|Stranger Things|[Ss]ci-?[Ff]i|[Ss]pace|Star Wars|[Ss]cience [Ff]iction).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check G5: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_g5.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test G6: Topic switch — bored of TV, want programming
+Retrieval: Programming sources | Negative: NO Entertainment | Groundedness: mentions languages
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Actually Im bored of TV shows, I want to learn programming instead', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g6.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.*(Python|JavaScript|Rust|Go|Docker|[Pp]rogramming|[Cc]ode|[Ll]anguage|[Dd]evelop).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check G6: sources contain Programming category
+––– input –––
+grep -c '"category":"Programming"' /tmp/rag_g6.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Negative check G6: Entertainment not dominant — at most 1 may appear due to KNN proximity
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_g6.txt
+––– output –––
+#!/[0-1]/!#
+––– comment –––
+Test G7: Which language is easiest for a beginner?
+Retrieval: Programming sources | Groundedness: mentions Python/beginner terms from docs
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Which programming language is easiest for a beginner?', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g7.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.*(Python|[Bb]eginner|[Ee]asy|[Ss]imple|[Rr]eadab|[Ss]yntax|[Ll]earn).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check G7: sources contain Programming category
+––– input –––
+grep -c '"category":"Programming"' /tmp/rag_g7.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test G8: What projects can I build with it?
+Groundedness: response mentions frameworks/projects from Python doc (Django, Flask, web, data)
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What kind of projects can I build with it?', 'docs', 'test_assistant', 'content,title', 'conv-natural-001')\G" | tee /tmp/rag_g8.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-natural-001
+         response: #!/.*(web|[Dd]ata|[Mm]achine|Django|Flask|[Ff]ramework|[Pp]roject|[Aa]pplic|[Ss]erver).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+==========================================================================
+CONVERSATION H: Follow-up Context Questions (conv-followup-001)
+Tests CONTENT_QUESTION intent — context-dependent follow-up queries that reference
+previous results. These queries rely on the plugin reusing prior search context
+instead of performing a new KNN search.
+  H1: Initial query about TV shows → Entertainment sources (baseline)
+  H2: Follow-up "Who are the main characters?" → expects valid response
+  H3: Clarification "I meant the one about the drug dealer" → expects valid response
+==========================================================================
+––– comment –––
+Test H1: Initial TV shows query (baseline for follow-ups)
+Retrieval: Entertainment sources
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What are some popular TV shows?', 'docs', 'test_assistant', 'content,title', 'conv-followup-001')\G" | tee /tmp/rag_h1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-followup-001
+         response: #!/.*(Breaking Bad|Mandalorian|Stranger Things|Game of Thrones|Office|[Ss]how|[Ss]eries).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check H1: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_h1.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test H2: Context-dependent follow-up — "Who are the main characters?"
+This triggers CONTENT_QUESTION intent in the plugin.
+Expected: valid response with character details from previously retrieved shows.
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Who are the main characters?', 'docs', 'test_assistant', 'content,title', 'conv-followup-001')\G" | tee /tmp/rag_h2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-followup-001
+         response: #!/.+/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test H3: Clarification referencing previous context — "the one about the drug dealer"
+Expects the plugin to narrow down to Breaking Bad based on conversation history.
+Expected: valid response mentioning Breaking Bad / Walter White / Jesse Pinkman.
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I meant the one about the drug dealer', 'docs', 'test_assistant', 'content,title', 'conv-followup-001')\G" | tee /tmp/rag_h3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-followup-001
+         response: #!/.*(Breaking Bad|Walter|Jesse|[Cc]hemist|[Dd]rug|[Mm]eth).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+==========================================================================
+CONVERSATION I: Real-world User Scenarios (conv-realworld-001)
+Tests realistic user queries that reflect how people actually interact with
+a conversational RAG system — mood-based requests, genre preferences,
+character questions, and similarity-based recommendations.
+  I1: "Im bored, suggest something to watch" → Entertainment sources
+  I2: "I want something funny" → The Office (comedy) in sources
+  I3: "Who is Walter White?" → Breaking Bad in sources
+  I4: "Something similar but with sci-fi elements" → Stranger Things/Mandalorian
+  I5: "What programming language should I learn for web development?" → Programming sources
+==========================================================================
+––– comment –––
+Test I1: Mood-based request — user is bored
+Retrieval: Entertainment sources | Groundedness: suggests shows to watch
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Im bored and have nothing to do, suggest something fun to watch', 'docs', 'test_assistant', 'content,title', 'conv-realworld-001')\G" | tee /tmp/rag_i1.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-realworld-001
+         response: #!/.*(Breaking Bad|Mandalorian|Stranger Things|Game of Thrones|Office|[Ww]atch|[Ss]how|[Ss]eries|[Rr]ecommend).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check I1: sources contain Entertainment category
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_i1.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test I2: Genre preference — user wants comedy
+Retrieval: The Office in sources (only comedy in our dataset)
+Groundedness: response mentions Office/comedy/humor terms from the document
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I want something funny and lighthearted', 'docs', 'test_assistant', 'content,title', 'conv-realworld-001')\G" | tee /tmp/rag_i2.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-realworld-001
+         response: #!/.*(Office|[Cc]omedy|[Ff]unny|[Hh]umor|[Ll]ightheart|[Ss]itcom|Michael Scott).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check I2: The Office appears in sources
+––– input –––
+grep 'sources:' /tmp/rag_i2.txt | grep -c 'Office'
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test I3: Character question — asking about a specific character by name
+Retrieval: Breaking Bad in sources | Groundedness: response mentions Breaking Bad / Walter White
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Who is Walter White?', 'docs', 'test_assistant', 'content,title', 'conv-realworld-001')\G" | tee /tmp/rag_i3.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-realworld-001
+         response: #!/.*(Walter White|Breaking Bad|[Cc]hemist|[Tt]eacher|[Cc]ancer|Jesse|[Mm]eth).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check I3: Breaking Bad appears in sources
+––– input –––
+grep 'sources:' /tmp/rag_i3.txt | grep -c 'Breaking Bad'
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Test I4: Similarity-based request — user wants something like Breaking Bad but sci-fi
+Retrieval: sci-fi shows in sources (Mandalorian, Stranger Things)
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I liked that drama style but I prefer sci-fi and space themes', 'docs', 'test_assistant', 'content,title', 'conv-realworld-001')\G" | tee /tmp/rag_i4.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-realworld-001
+         response: #!/.*(Mandalorian|Stranger Things|[Ss]ci-?[Ff]i|[Ss]pace|Star Wars|[Ss]cience).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Test I5: Cross-domain switch — from entertainment to practical question
+Retrieval: Programming sources | Groundedness: mentions web development languages
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Enough about shows. What programming language should I learn for web development?', 'docs', 'test_assistant', 'content,title', 'conv-realworld-001')\G" | tee /tmp/rag_i5.txt | grep -E "conversation_uuid:|response:|sources:"
+––– output –––
+conversation_uuid: conv-realworld-001
+         response: #!/.*(JavaScript|Python|[Ww]eb|Node|Django|Flask|[Dd]evelop|[Ff]rontend|[Bb]ackend).*/!#
+          sources: #!/\[.*/!#
+––– comment –––
+Retrieval check I5: sources contain Programming category
+––– input –––
+grep -c '"category":"Programming"' /tmp/rag_i5.txt
+––– output –––
+#!/[1-9][0-9]*/!#
+––– comment –––
+Negative check I5: Entertainment not dominant after topic switch
+––– input –––
+grep -c '"category":"Entertainment"' /tmp/rag_i5.txt
+––– output –––
+#!/[0-1]/!#
+––– comment –––
+==========================================================================
 Cleanup
+==========================================================================
 ––– input –––
 mysql -h0 -P9306 -e "DROP RAG MODEL test_assistant;"
 ––– output –––

@@ -97,11 +97,16 @@ EOF
 ––– output –––
 ERROR 1064 (42000) at line 1: #!/.*/!#
 ––– comment –––
-Test 9: DROP non-existent RAG MODEL
+Test 9: DROP non-existent RAG MODEL (without IF EXISTS — should error)
 ––– input –––
 mysql -h0 -P9306 -e "DROP RAG MODEL nonexistent_model;"
 ––– output –––
 ERROR 1064 (42000) at line 1: #!/.*/!#
+––– comment –––
+Test 9a: DROP RAG MODEL IF EXISTS on non-existent model — should NOT error
+––– input –––
+mysql -h0 -P9306 -e "DROP RAG MODEL IF EXISTS nonexistent_model;"
+––– output –––
 ––– comment –––
 Test 10: CREATE RAG MODEL with invalid temperature (below 0)
 ––– input –––
@@ -138,6 +143,19 @@ Test 15: CREATE RAG MODEL with k_results greater than 50
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_k_high_model (llm_provider='openai', llm_model='gpt-4o-mini', k_results='51');"
 ––– output –––
 ERROR 1064 (42000) at line 1: #!/.*k_results.*1.*50.*/!#
+––– comment –––
+Test 16: CALL CONVERSATIONAL_RAG with empty content_fields — required parameter
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+CALL CONVERSATIONAL_RAG(
+    'test query',
+    'test_docs',
+    'valid_model',
+    ''
+);
+EOF
+––– output –––
+ERROR 1064 (42000) at line 1: #!/.*/!#
 ––– comment –––
 Cleanup
 ––– input –––

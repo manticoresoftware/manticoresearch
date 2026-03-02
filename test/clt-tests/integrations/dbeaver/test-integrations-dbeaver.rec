@@ -122,18 +122,12 @@ Variable_name: threads_ex_effective
 Variable_name: cluster_user
         Value: cluster
 *************************** 20. row ***************************
-Variable_name: wait_timeout
-        Value: 28800
-*************************** 21. row ***************************
-Variable_name: interactive_timeout
-        Value: 900
-*************************** 22. row ***************************
 Variable_name: thread_stack
         Value: 1048576
-*************************** 23. row ***************************
+*************************** 21. row ***************************
 Variable_name: threads_ex
         Value:
-*************************** 24. row ***************************
+*************************** 22. row ***************************
 Variable_name: user
         Value: root
 ––– input –––
@@ -228,7 +222,7 @@ mysql -h0 -P9306 -e "SELECT @@interactive_timeout"
 +-----------------------+
 | @@interactive_timeout |
 +-----------------------+
-|                   900 |
+| 28800                 |
 +-----------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@license"
@@ -289,7 +283,7 @@ mysql -h0 -P9306 -e "SELECT @@wait_timeout"
 +----------------+
 | @@wait_timeout |
 +----------------+
-|          28800 |
+| 28800          |
 +----------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@GLOBAL.character_set_server"

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ALTER TABLE settings with auto-embeddings</name>
+
+<requires>
+	<force-rt/>
+	<knn/>
+	<embeddings/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+<!-- regression: ALTER TABLE with settings fails for tables with auto-embeddings (issue #4131) -->
+create table test_auto_embed ( f text, v FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='f' );
+insert into test_auto_embed (id, f) values (1, 'test document');
+select * from test_auto_embed;
+show create table test_auto_embed;
+
+<!-- Test ALTER TABLE with various full-text settings -->
+alter table test_auto_embed html_strip='1';
+show create table test_auto_embed;
+insert into test_auto_embed (id, f) values (2, 'another test');
+select * from test_auto_embed;
+
+alter table test_auto_embed index_sp='1';
+show create table test_auto_embed;
+
+alter table test_auto_embed index_zones='h*';
+show create table test_auto_embed;
+
+drop table test_auto_embed;
+</sphinxql>
+
+</queries>
+
+</test>

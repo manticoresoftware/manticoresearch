@@ -1,0 +1,77 @@
+a:1:{i:0;a:28:{i:0;a:2:{s:8:"sphinxql";s:116:"create table t_filter (title text, category int, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:429:"insert into t_filter values 
+		(1, 'doc1', 1, (0.1, 0.2, 0.3, 0.4)),
+		(2, 'doc2', 2, (0.2, 0.3, 0.4, 0.5)),
+		(3, 'doc3', 3, (0.3, 0.4, 0.5, 0.6)),
+		(4, 'doc4', 1, (0.4, 0.5, 0.6, 0.7)),
+		(5, 'doc5', 2, (0.5, 0.6, 0.7, 0.8)),
+		(6, 'doc6', 3, (0.6, 0.7, 0.8, 0.9)),
+		(7, 'doc7', 1, (0.7, 0.8, 0.9, 1.0)),
+		(8, 'doc8', 2, (0.8, 0.9, 1.0, 1.1)),
+		(9, 'doc9', 3, (0.9, 1.0, 1.1, 1.2)),
+		(10, 'doc10', 1, (1.0, 1.1, 1.2, 1.3))";s:14:"total_affected";i:10;}i:2;a:2:{s:8:"sphinxql";s:23:"flush ramchunk t_filter";s:14:"total_affected";i:0;}i:3;a:3:{s:8:"sphinxql";s:125:"select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0}) and category=1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:3:{s:2:"id";s:1:"4";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.04000000";}}}i:4;a:3:{s:8:"sphinxql";s:136:"select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0,fullscan=1}) and category=1";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:2:"id";s:1:"4";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.04000000";}i:1;a:3:{s:2:"id";s:1:"1";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.16000001";}i:2;a:3:{s:2:"id";s:1:"7";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.63999993";}i:3;a:3:{s:2:"id";s:2:"10";s:8:"category";s:1:"1";s:4:"dist";s:10:"1.95999992";}}}i:5;a:3:{s:8:"sphinxql";s:137:"select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0,prefilter=1}) and category=1";s:10:"total_rows";i:4;s:4:"rows";a:4:{i:0;a:3:{s:2:"id";s:1:"4";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.04000000";}i:1;a:3:{s:2:"id";s:1:"1";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.16000001";}i:2;a:3:{s:2:"id";s:1:"7";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.63999993";}i:3;a:3:{s:2:"id";s:2:"10";s:8:"category";s:1:"1";s:4:"dist";s:10:"1.95999992";}}}i:6;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:199:"{
+	"table": "t_filter",
+	"knn": {
+		"k": 2,
+		"field": "vec",
+		"query": [0.3, 0.4, 0.5, 0.6],
+		"oversampling": 1.0,
+		"filter": {
+			"bool": { "must": [ { "equals": { "category": 1 } } ] }
+		}
+	}
+}";s:4:"rows";s:493:"{"timed_out":false,"hits":{"total":4,"total_relation":"eq","hits":[{"_id":4,"_score":1,"_knn_dist":0.04,"_source":{"title":"doc4","category":1,"vec":[0.4,0.5,0.6,0.7]}},{"_id":1,"_score":1,"_knn_dist":0.16000001,"_source":{"title":"doc1","category":1,"vec":[0.1,0.2,0.3,0.4]}},{"_id":7,"_score":1,"_knn_dist":0.63999993,"_source":{"title":"doc7","category":1,"vec":[0.7,0.8,0.9,1]}},{"_id":10,"_score":1,"_knn_dist":1.95999992,"_source":{"title":"doc10","category":1,"vec":[1,1.1,1.2,1.3]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:219:"{
+	"table": "t_filter",
+	"knn": {
+		"k": 2,
+		"field": "vec",
+		"query": [0.3, 0.4, 0.5, 0.6],
+		"oversampling": 1.0,
+		"fullscan": true,
+		"filter": {
+			"bool": { "must": [ { "equals": { "category": 1 } } ] }
+		}
+	}
+}";s:4:"rows";s:493:"{"timed_out":false,"hits":{"total":4,"total_relation":"eq","hits":[{"_id":4,"_score":1,"_knn_dist":0.04,"_source":{"title":"doc4","category":1,"vec":[0.4,0.5,0.6,0.7]}},{"_id":1,"_score":1,"_knn_dist":0.16000001,"_source":{"title":"doc1","category":1,"vec":[0.1,0.2,0.3,0.4]}},{"_id":7,"_score":1,"_knn_dist":0.63999993,"_source":{"title":"doc7","category":1,"vec":[0.7,0.8,0.9,1]}},{"_id":10,"_score":1,"_knn_dist":1.95999992,"_source":{"title":"doc10","category":1,"vec":[1,1.1,1.2,1.3]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:8;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"{
+	"table": "t_filter",
+	"knn": {
+		"k": 2,
+		"field": "vec",
+		"query": [0.3, 0.4, 0.5, 0.6],
+		"oversampling": 1.0
+	},
+	"query":
+	{
+		"bool": { "must": [ { "equals": { "category": 1 } } ] }
+	}
+}";s:4:"rows";s:171:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":4,"_score":1,"_knn_dist":0.04,"_source":{"title":"doc4","category":1,"vec":[0.4,0.5,0.6,0.7]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:2:{s:8:"sphinxql";s:114:"create table t_price (title text, price float, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')";s:14:"total_affected";i:0;}i:10;a:2:{s:8:"sphinxql";s:309:"insert into t_price values 
+		(1, 'cheap1', 10.0, (0.1, 0.2, 0.3, 0.4)),
+		(2, 'cheap2', 20.0, (0.2, 0.3, 0.4, 0.5)),
+		(3, 'expensive1', 80.0, (0.8, 0.9, 1.0, 1.1)),
+		(4, 'expensive2', 90.0, (0.9, 1.0, 1.1, 1.2)),
+		(5, 'cheap3', 30.0, (0.3, 0.4, 0.5, 0.6)),
+		(6, 'expensive3', 100.0, (1.0, 1.1, 1.2, 1.3))";s:14:"total_affected";i:6;}i:11;a:2:{s:8:"sphinxql";s:22:"flush ramchunk t_price";s:14:"total_affected";i:0;}i:12;a:3:{s:8:"sphinxql";s:119:"select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0}) and price<50";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:3:{s:2:"id";s:1:"2";s:5:"price";s:9:"20.000000";s:4:"dist";s:8:"0.000000";}i:1;a:3:{s:2:"id";s:1:"1";s:5:"price";s:9:"10.000000";s:4:"dist";s:8:"0.040000";}}}i:13;a:3:{s:8:"sphinxql";s:131:"select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, fullscan=1}) and price<50";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:2:"id";s:1:"2";s:5:"price";s:9:"20.000000";s:4:"dist";s:8:"0.000000";}i:1;a:3:{s:2:"id";s:1:"1";s:5:"price";s:9:"10.000000";s:4:"dist";s:8:"0.040000";}i:2;a:3:{s:2:"id";s:1:"5";s:5:"price";s:9:"30.000000";s:4:"dist";s:10:"0.04000000";}}}i:14;a:3:{s:8:"sphinxql";s:132:"select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, prefilter=1}) and price<50";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:2:"id";s:1:"2";s:5:"price";s:9:"20.000000";s:4:"dist";s:8:"0.000000";}i:1;a:3:{s:2:"id";s:1:"1";s:5:"price";s:9:"10.000000";s:4:"dist";s:8:"0.040000";}i:2;a:3:{s:2:"id";s:1:"5";s:5:"price";s:9:"30.000000";s:4:"dist";s:10:"0.04000000";}}}i:15;a:2:{s:8:"sphinxql";s:124:"select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0}) and price=100";s:10:"total_rows";i:0;}i:16;a:3:{s:8:"sphinxql";s:136:"select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, fullscan=1}) and price=100";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:3:{s:2:"id";s:1:"6";s:5:"price";s:10:"100.000000";s:4:"dist";s:10:"1.08160007";}}}i:17;a:3:{s:8:"sphinxql";s:137:"select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, prefilter=1}) and price=100";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:3:{s:2:"id";s:1:"6";s:5:"price";s:10:"100.000000";s:4:"dist";s:10:"1.08160007";}}}i:18;a:2:{s:8:"sphinxql";s:18:"drop table t_price";s:14:"total_affected";i:0;}i:19;a:2:{s:8:"sphinxql";s:19:"drop table t_filter";s:14:"total_affected";i:0;}i:20;a:2:{s:8:"sphinxql";s:128:"create table t_large (title text, category int, price float, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')";s:14:"total_affected";i:0;}i:21;a:2:{s:8:"sphinxql";s:1308:"insert into t_large values 
+		(1, 'doc1', 1, 10.0, (0.05, 0.15, 0.25, 0.35)),
+		(2, 'doc2', 2, 20.0, (0.10, 0.20, 0.30, 0.40)),
+		(3, 'doc3', 3, 30.0, (0.15, 0.25, 0.35, 0.45)),
+		(4, 'doc4', 1, 40.0, (0.20, 0.30, 0.40, 0.50)),
+		(5, 'doc5', 2, 50.0, (0.25, 0.35, 0.45, 0.55)),
+		(6, 'doc6', 3, 60.0, (0.30, 0.40, 0.50, 0.60)),
+		(7, 'doc7', 1, 70.0, (0.35, 0.45, 0.55, 0.65)),
+		(8, 'doc8', 2, 80.0, (0.40, 0.50, 0.60, 0.70)),
+		(9, 'doc9', 3, 90.0, (0.45, 0.55, 0.65, 0.75)),
+		(10, 'doc10', 1, 100.0, (0.50, 0.60, 0.70, 0.80)),
+		(11, 'doc11', 2, 15.0, (0.55, 0.65, 0.75, 0.85)),
+		(12, 'doc12', 3, 25.0, (0.60, 0.70, 0.80, 0.90)),
+		(13, 'doc13', 1, 35.0, (0.65, 0.75, 0.85, 0.95)),
+		(14, 'doc14', 2, 45.0, (0.70, 0.80, 0.90, 1.00)),
+		(15, 'doc15', 3, 55.0, (0.75, 0.85, 0.95, 1.05)),
+		(16, 'doc16', 1, 65.0, (0.80, 0.90, 1.00, 1.10)),
+		(17, 'doc17', 2, 75.0, (0.85, 0.95, 1.05, 1.15)),
+		(18, 'doc18', 3, 85.0, (0.90, 1.00, 1.10, 1.20)),
+		(19, 'doc19', 1, 95.0, (0.95, 1.05, 1.15, 1.25)),
+		(20, 'doc20', 2, 5.0, (1.00, 1.10, 1.20, 1.30)),
+		(21, 'doc21', 3, 12.0, (0.12, 0.22, 0.32, 0.42)),
+		(22, 'doc22', 1, 22.0, (0.22, 0.32, 0.42, 0.52)),
+		(23, 'doc23', 2, 32.0, (0.32, 0.42, 0.52, 0.62)),
+		(24, 'doc24', 3, 42.0, (0.42, 0.52, 0.62, 0.72)),
+		(25, 'doc25', 1, 52.0, (0.52, 0.62, 0.72, 0.82))";s:14:"total_affected";i:25;}i:22;a:2:{s:8:"sphinxql";s:22:"flush ramchunk t_large";s:14:"total_affected";i:0;}i:23;a:3:{s:8:"sphinxql";s:108:"select id, category, knn_dist() dist from t_large where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and category=1";s:10:"total_rows";i:3;s:4:"rows";a:3:{i:0;a:3:{s:2:"id";s:1:"4";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.01000000";}i:1;a:3:{s:2:"id";s:2:"22";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.01960000";}i:2;a:3:{s:2:"id";s:1:"1";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.04000000";}}}i:24;a:3:{s:8:"sphinxql";s:123:"select id, category, knn_dist() dist from t_large where knn(vec, 3, (0.15, 0.25, 0.35, 0.45), {prefilter=1}) and category=1";s:10:"total_rows";i:9;s:4:"rows";a:9:{i:0;a:3:{s:2:"id";s:1:"4";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.01000000";}i:1;a:3:{s:2:"id";s:2:"22";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.01960000";}i:2;a:3:{s:2:"id";s:1:"1";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.04000000";}i:3;a:3:{s:2:"id";s:1:"7";s:8:"category";s:1:"1";s:4:"dist";s:8:"0.160000";}i:4;a:3:{s:2:"id";s:2:"10";s:8:"category";s:1:"1";s:4:"dist";s:8:"0.490000";}i:5;a:3:{s:2:"id";s:2:"25";s:8:"category";s:1:"1";s:4:"dist";s:10:"0.54760003";}i:6;a:3:{s:2:"id";s:2:"13";s:8:"category";s:1:"1";s:4:"dist";s:8:"1.000000";}i:7;a:3:{s:2:"id";s:2:"16";s:8:"category";s:1:"1";s:4:"dist";s:10:"1.68999994";}i:8;a:3:{s:2:"id";s:2:"19";s:8:"category";s:1:"1";s:4:"dist";s:8:"2.560000";}}}i:25;a:3:{s:8:"sphinxql";s:103:"select id, price, knn_dist() dist from t_large where knn(vec, 2, (0.25, 0.35, 0.45, 0.55)) and price<30";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:3:{s:2:"id";s:2:"22";s:5:"price";s:9:"22.000000";s:4:"dist";s:10:"0.00360000";}}}i:26;a:3:{s:8:"sphinxql";s:118:"select id, price, knn_dist() dist from t_large where knn(vec, 2, (0.25, 0.35, 0.45, 0.55), {prefilter=1}) and price<30";s:10:"total_rows";i:7;s:4:"rows";a:7:{i:0;a:3:{s:2:"id";s:2:"22";s:5:"price";s:9:"22.000000";s:4:"dist";s:10:"0.00360000";}i:1;a:3:{s:2:"id";s:2:"21";s:5:"price";s:9:"12.000000";s:4:"dist";s:10:"0.06760000";}i:2;a:3:{s:2:"id";s:1:"2";s:5:"price";s:9:"20.000000";s:4:"dist";s:10:"0.09000000";}i:3;a:3:{s:2:"id";s:1:"1";s:5:"price";s:9:"10.000000";s:4:"dist";s:8:"0.160000";}i:4;a:3:{s:2:"id";s:2:"11";s:5:"price";s:9:"15.000000";s:4:"dist";s:10:"0.35999998";}i:5;a:3:{s:2:"id";s:2:"12";s:5:"price";s:9:"25.000000";s:4:"dist";s:10:"0.48999998";}i:6;a:3:{s:2:"id";s:2:"20";s:5:"price";s:8:"5.000000";s:4:"dist";s:8:"2.250000";}}}i:27;a:2:{s:8:"sphinxql";s:18:"drop table t_large";s:14:"total_affected";i:0;}}}

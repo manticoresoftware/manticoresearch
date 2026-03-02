@@ -212,6 +212,55 @@ void EscapedStringBuilder_T<Q>::AppendEscapedWithCommaNoQuotes ( const char* sTe
 	AppendEscapedWithCommaT<false> ( sText, iLength );
 }
 
+// dedicated EscBld::eEscape with comma with external len
+template<typename Q>
+template<bool BQUOTE>
+void EscapedStringBuilder_T<Q>::AppendEscapedSkippingCommaT ( const char* sText, int iLen )
+{
+	if ( !iLen )
+	{
+		if constexpr ( BQUOTE )
+			return AppendEmptyQuotes();
+		return;
+	}
+
+	GrowEnough ( BQUOTE ? 7 : 5 ); // 2 quotes, terminator, and possible 4 for long escaping
+	const char* pSrc = sText;
+	auto* pCur = (BYTE*)end();
+	auto pEnd = (BYTE*)m_szBuffer + m_iSize;
+
+	if constexpr ( BQUOTE )
+		*pCur++ = Q::cQuote;
+	for ( ; iLen; ++pSrc, --iLen )
+	{
+		Q::EscapeChar ( pCur, *pSrc );
+
+		if ( pCur > ( pEnd - 8 ) ) // need 1 ending quote, terminator, and m.b. long escaping
+		{
+			m_iUsed = pCur - (BYTE*)m_szBuffer;
+			GrowEnough ( 32 );
+			pEnd = (BYTE*)m_szBuffer + m_iSize;
+			pCur = (BYTE*)m_szBuffer + m_iUsed;
+		}
+	}
+	if constexpr ( BQUOTE )
+		*pCur++ = Q::cQuote;
+	*pCur = '\0';
+	m_iUsed = pCur - (BYTE*)m_szBuffer;
+}
+
+template<typename Q>
+void EscapedStringBuilder_T<Q>::AppendEscapedSkippingComma ( const char* sText, int iLength )
+{
+	AppendEscapedSkippingCommaT ( sText, iLength );
+}
+
+template<typename Q>
+void EscapedStringBuilder_T<Q>::AppendEscapedSkippingCommaNoQuotes ( const char* sText, int iLength )
+{
+	AppendEscapedSkippingCommaT<false> ( sText, iLength );
+}
+
 // dedicated EscBld::eFixupSpace
 template<typename Q>
 void EscapedStringBuilder_T<Q>::FixupSpacesAndAppend ( const char* sText )
@@ -385,6 +434,12 @@ void EscapedStringBuilder_T<Q>::AppendEscaped ( const char* sText, BYTE eWhat, i
 	case ( EscBld::eEscape | EscBld::eSkipComma | EscBld::eNoLimit | EscBld::eSkipQuotes ):
 		AppendEscapedSkippingCommaNoQuotes ( sText );
 		return;
+	case ( EscBld::eEscape | EscBld::eSkipComma ):
+		AppendEscapedSkippingComma ( sText, iLen );
+		return;
+	case ( EscBld::eEscape | EscBld::eSkipComma | EscBld::eSkipQuotes ):
+		AppendEscapedSkippingCommaNoQuotes ( sText, iLen );
+		return;
 	case ( EscBld::eEscape | EscBld::eNoLimit ):
 		AppendEscapedWithComma ( sText );
 		return;
@@ -450,7 +505,9 @@ void EscapedStringBuilder_T<Q>::AppendEscaped ( const char* sText, BYTE eWhat, i
 				iFinalLen += Q::EscapingSpace ( *pSrc );
 		}
 		iLen = (int)( pSrc - sText );
-		iFinalLen += iLen + 2; // 2 quotes: 1 prefix, 2 postfix.
+		iFinalLen += iLen;
+		if ( 0==(eWhat & EscBld::eSkipQuotes) )
+			iFinalLen += 2; // 2 quotes: 1 prefix, 2 postfix.
 	} else if ( eWhat & EscBld::eNoLimit )
 	{
 		eWhat &= ~EscBld::eNoLimit;
@@ -476,6 +533,10 @@ void EscapedStringBuilder_T<Q>::AppendEscaped ( const char* sText, BYTE eWhat, i
 		for ( ; iLen; --iLen )
 			Q::EscapeChar ( pCur, *sText++ );
 		*pCur++ = Q::cQuote;
+		break;
+	case EscBld::eEscape | EscBld::eSkipQuotes:
+		for ( ; iLen; --iLen )
+			Q::EscapeChar ( pCur, *sText++ );
 		break;
 	case EscBld::eAll:
 	default:

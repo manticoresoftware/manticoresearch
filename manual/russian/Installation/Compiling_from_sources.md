@@ -5,7 +5,7 @@
 ## Сборка с использованием CI Docker
 Для подготовки [официальных релизных и development пакетов](https://repo.manticoresearch.com/) мы используем Docker и специальный образ для сборки. Этот образ включает в себя необходимые инструменты и предназначен для использования с внешними sysroot, поэтому один контейнер может собирать пакеты для всех операционных систем. Вы можете собрать образ, используя [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) и [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md), или использовать образ из [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). Это самый простой способ создания бинарных файлов для любой поддерживаемой операционной системы и архитектуры. Вам также потребуется указать следующие переменные окружения при запуске контейнера:
 
-* `DISTR`: целевая платформа: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel7`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
+* `DISTR`: целевая платформа: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: архитектура: `x86_64`, `x64` (для Windows), `aarch64`, `arm64` (для Macos)
 * `SYSROOT_URL`: URL для архивов системных корней. Вы можете использовать https://repo.manticoresearch.com/repository/sysroots, если не собираете sysroot самостоятельно (инструкции можно найти [здесь](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
 * Используйте файлы CI workflow в качестве справочника, чтобы найти другие переменные окружения, которые могут вам понадобиться:

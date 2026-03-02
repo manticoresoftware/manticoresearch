@@ -216,6 +216,12 @@ The `SHOW STATUS` command gives a detailed report on various performance metrics
 
 These metrics help track performance over specific time intervals, making it easier to spot trends in query response times and find possible bottlenecks.
 
+For search timings:
+- `search_stats_ms_*` in `SHOW STATUS` is based on the same query wall-time family that is shown as `wall` in query logs.
+- `query_wall` / `avg_query_wall` are cumulative/average node counters over executed queries.
+- `dist_wall`, `dist_local`, and `dist_wait` are distributed-only dimensions and should be interpreted together, not as direct replacements for `search_stats_ms_*`.
+- Per-table timing counters (`SHOW TABLE ... STATUS`) may differ from node-level counters, especially for distributed tables.
+
 The following metrics are part of the `SHOW STATUS` output:
 - `*_avg`: The average query time for each type of query over the last 1, 5, and 15 minutes.
 - `*_min`: The shortest query time recorded for each query type.

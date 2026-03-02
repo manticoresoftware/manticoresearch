@@ -234,6 +234,12 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 		if ( bDefault )
 		{
+			if ( !m_pEmbeddingsSrc || !m_pEmbeddingsSrc->Has ( tRowID, iAttrWithModel ) )
+			{
+				sError.SetSprintf ( "Error generating embeddings for attribute '%s': missing source text in transaction", tAttr.m_sName.cstr() );
+				return false;
+			}
+
 			dResultIds[tRowID] = dTexts.size();
 			const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
 			dTexts.push_back ( { dConcat.Begin(), (size_t)dConcat.GetLength() } );
@@ -990,6 +996,14 @@ void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 
 	// delete
 	GetArray ( m_dAccumKlist, tReader );
+
+	// auto-embedding source texts
+	if ( tReader.GetVal<BYTE>() )
+	{
+		if ( !m_pEmbeddingsSrc )
+			m_pEmbeddingsSrc = std::make_unique<EmbeddingsSrc_c>(0);
+		m_pEmbeddingsSrc->Load ( tReader );
+	}
 }
 
 void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
@@ -1025,4 +1039,9 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 
 	// delete
 	SaveArray ( m_dAccumKlist, tWriter );
+
+	// auto-embedding source texts
+	tWriter.PutByte ( m_pEmbeddingsSrc!=nullptr );
+	if ( m_pEmbeddingsSrc )
+		m_pEmbeddingsSrc->Save ( tWriter );
 }

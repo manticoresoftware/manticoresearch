@@ -305,6 +305,8 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int
 	m_pStmt->m_eEngine = m_tItemOptions.m_eEngine;
 	m_pStmt->m_iBits = iBits;
 	m_pStmt->m_tAlterKNN = m_tItemOptions.ToKNN();
+	m_pStmt->m_tAlterKNNModel = m_tItemOptions.ToKNNModel();
+	m_pStmt->m_sAlterKnnFrom = m_tItemOptions.m_sFrom;
 
 	bool bOk = CheckFieldFlags ( m_pStmt->m_eAlterColType, iFieldFlags, m_pStmt->m_sAlterAttr, m_tItemOptions, m_sError );
 	m_tItemOptions.Reset();

@@ -100,8 +100,9 @@ stored_fields = title, content
 值：应存储的**全文**字段的逗号分隔列表。空值（即 `stored_fields =`）会禁用所有字段的原始值存储。
 
 注意：对于实时表，`stored_fields` 中列出的字段也应声明为 [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field)。
-
 另外请注意，您不需要在 `stored_fields` 中列出属性，因为它们的原始值无论如何都会被存储。`stored_fields` 仅适用于全文字段。
+
+注意：在分布式表设置中，文档 ID 必须在所有代理表中唯一。如果多个代理包含相同的文档 ID，检索存储字段可能会从与匹配行不同的代理返回值。
 
 另请参阅 [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size)，[docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) 以获取文档存储压缩选项。
 
@@ -1012,4 +1013,3 @@ table products {
 * [stored_only_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
 * [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 <!-- proofread -->
-

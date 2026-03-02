@@ -36,6 +36,7 @@ timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; ma
 9.0
 9.1
 9.2
+9.3
 Preparation done
 >>> Checking Filebeat 7.17 ...
 >>> Downloading Filebeat 7.17 ...
@@ -109,6 +110,9 @@ Preparation done
 >>> Checking Filebeat 9.2 ...
 >>> Downloading Filebeat 9.2 ...
 ✓ Archive for 9.2 is OK
+>>> Checking Filebeat 9.3 ...
+>>> Downloading Filebeat 9.3 ...
+✓ Archive for 9.3 is OK
 ––– input –––
 set +H && mkdir -p /tmp/filebeat_cache && echo "Preparation done"
 ––– output –––
@@ -654,6 +658,19 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.2
 ✓ Row count check for 9.2: 5 rows
 ✓ Structure check for 9.2: passed
 ✓ Filebeat version 9.2 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 9.3
+––– output –––
+>>> Testing Filebeat version: 9.3
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Testing Filebeat 9.3 with filestream input and fingerprint disabled...
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 9.3 processed logs
+✓ Row count check for 9.3: 5 rows
+✓ Structure check for 9.3: passed
+✓ Filebeat version 9.3 tested successfully
 ––– input –––
 rm -rf /tmp/fb-data-* /tmp/fb-log-*.txt /tmp/page.json /tmp/filebeat_tags.json
 ––– output –––

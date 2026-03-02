@@ -308,13 +308,13 @@ insert_res = index_api.insert(insert_req).await;
 
 > NOTE: Auto schema requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
-Manticore features an automatic table creation mechanism, which activates when a specified table in the insert query doesn't yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
+Manticore features an automatic table creation mechanism, which activates when a specified table in the insert or replace query doesn't yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
 
 <!-- example auto-schema -->
 
 By default, all text values in the `VALUES` clause are considered to be of the `text` type, except for values representing valid email addresses, which are treated as the `string` type.
 
-If you attempt to INSERT multiple rows with different, incompatible value types for the same field, auto table creation will be canceled, and an error message will be returned. However, if the different value types are compatible, the resulting field type will be the one that accommodates all the values. Some automatic data type conversions that may occur include:
+If you attempt to INSERT/REPLACE multiple rows with different, incompatible value types for the same field, auto table creation will be canceled, and an error message will be returned. However, if the different value types are compatible, the resulting field type will be the one that accommodates all the values. Some automatic data type conversions that may occur include:
 * mva -> mva64
 * uint -> bigint -> float (this may cause some precision loss)
 * string -> text

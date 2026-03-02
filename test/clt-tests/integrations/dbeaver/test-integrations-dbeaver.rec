@@ -522,4 +522,8 @@ ERROR 1064 (42000) at line 1: unknown sysvar @@isolation
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@tx_isolation"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation
++-----------------+
+| @@tx_isolation  |
++-----------------+
+| REPEATABLE-READ |
++-----------------+

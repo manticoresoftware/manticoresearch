@@ -1522,6 +1522,23 @@ shutdown_timeout = 3m # wait for up to 3 minutes
 
 调用来自VIP Manticore SQL连接的 'shutdown' 命令所需的密码的SHA1哈希值。如果没有它，[debug](../Reporting_bugs.md#DEBUG) 'shutdown' 子命令将永远不会导致服务器停止。请注意，这种简单的哈希不应被视为强保护，因为我们没有使用加盐哈希或任何现代哈希函数。它旨在作为本地网络中管理守护进程的防呆措施。  
 
+### skiplist_cache_size  
+
+<!-- example conf skiplist_cache_size -->
+此设置指定解压跳过列表的内存缓存最大大小。可选，默认为64M。  
+
+跳过列表用于加快大型文档列表的查找速度。缓存它们可以避免在查询中重复解压相同的跳过列表数据。将此选项设置为`0`以禁用缓存。  
+
+<!-- intro -->
+##### 示例：  
+
+<!-- request Example -->
+
+```ini
+skiplist_cache_size = 128M
+```
+<!-- end -->
+
 ### snippets_file_prefix  
 
 <!-- example conf snippets_file_prefix -->

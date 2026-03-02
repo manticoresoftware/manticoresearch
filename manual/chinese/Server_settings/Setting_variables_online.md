@@ -44,8 +44,11 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 * `AUTOCOMMIT = {0 | 1}` 决定数据修改语句是否应隐式地由 `BEGIN` 和 `COMMIT` 包裹。
 * `COLLATION_CONNECTION = collation_name` 选择后续查询中对字符串值进行 `ORDER BY` 或 `GROUP BY` 时使用的排序规则。已知排序规则名称列表请参阅 [Collations](../Searching/Collations.md)。
 * `MAX_THREADS_PER_QUERY = <POSITIVE_INT_VALUE>` 在运行时重新定义 [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query)。会话级变量只影响同一会话（连接）中运行的查询，即直到断开连接。值 0 表示“不限制”。如果同时设置了会话级和全局变量，会话级优先级更高。
-* `net_write_timeout = <value>`：调整写操作（即发送数据）的网络超时时间。全局值只能由 VIP 权限用户修改。
-* `optimize_by_id = {0 | 1}`：一些 `debug` 命令中使用的内部标志。
+* `NET_WRITE_TIMEOUT = <value>`
+* `NET_READ_TIMEOUT = <value>`
+* `INTERACTIVE_TIMEOUT = <value>`：为交互式 SQL 会话设置 SQL 连接超时（空闲时间）。一个常见例子是使用命令行客户端（CLI）如 `mysql` 连接到 Manticore 服务器。之前存在全局的“读取”和“写入”超时，但证明容易混淆。现在，`NET_WRITE_TIMEOUT` 和 `NET_READ_TIMEOUT` 是 `INTERACTIVE_TIMEOUT` 的别名。它们都控制同一个变量，仅与 SQL 端点相关：允许连接的最大空闲时间。这类似于 `WAIT_TIMEOUT`，但专门用于交互式会话。
+* `WAIT_TIMEOUT = <value>`：设置非交互式 SQL 会话的 SQL 连接超时（空闲时间）。一个常见示例是客户端库连接到 Manticore 服务器并维护连接池以供重复使用。这类似于 `INTERACTIVE_TIMEOUT`，但专用于非交互式会话。
+* `OPTIMIZE_BY_ID = {0 | 1}`：用于某些 `debug` 命令的内部标志。
 * `PROFILING = {0 | 1}` 在当前会话启用查询分析。默认为 0。另见 [show profile](../Node_info_and_management/Profiling/Query_profile.md)。
 * `ro = {1 | 0}` 将会话切换为只读模式或恢复为非只读模式。在 `show variables` 的输出中，该变量显示为 `session_read_only`。
 * `throttling_period = <INT_VALUE>`：当前运行查询的重新调度间隔（毫秒）。值为 0 表示禁用节流，查询将占用 CPU 核心直到完成。如果同时有其他连接的并发查询，它们将被分配到空闲核心，或挂起直到核心释放。提供负值（-1）时将节流重置为默认编译值（100ms），意味着查询每 100ms 重新调度一次，允许并发查询被执行。全局值（通过 `set global` 设置）仅从 VIP 连接设置时有效。
@@ -77,13 +80,15 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 
 	```bash
 	export MANTICORE_THREADS_EX=8
+ 	# or
 	export MANTICORE_THREADS_EX='16+8/2'
   ```
 
 	或者，通过 MySQL CLI，设置为：
   ```sql
   SET threads_ex='16';
-	SET GLOBAL threads_ex='/2';
+  -- or 
+  SET GLOBAL threads_ex='/2';
   ```
 
 	或者，作为查询参数，如：
@@ -94,10 +99,11 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 	`threads_ex` 配置遵循层级结构：首先是环境变量，然后是全局变量，最后是查询选项，允许特定设置覆盖通用设置。
 
 	</details>
-* `WAIT_TIMEOUT/net_read_timeout = <value>` 设置连接超时，可以是每个会话的，也可以是全局的。全局只能在 VIP 连接上设置。
 
 已知的全局服务器变量有：
 
+* `WAIT_TIMEOUT = <value>` 设置 SQL 连接超时时间为非交互式连接允许的最大空闲时间。您可以通过会话（当前连接）或全局配置此设置，但全局设置仅适用于 VIP 连接。
+* `INTERACTIVE_TIMEOUT = <value>` 设置 SQL 连接超时时间为交互式连接允许的最大空闲时间。与 `WAIT_TIMEOUT` 一样，此设置可以按会话或全局配置，但全局设置仅适用于 VIP 连接。
 * `ACCURATE_AGGREGATION`：设置未来查询的选项 [accurate_aggregation](../Searching/Options.md#accurate_aggregation) 的默认值。
 * `AUTO_OPTIMIZE = {1|0}` 打开/关闭 [auto_optimize](../Server_settings/Searchd.md#auto_optimize)。
 * `cluster_user = name` 设置使用 `mysqldump` / `mariadb-dump` 的用户名以[启用复制模式](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。

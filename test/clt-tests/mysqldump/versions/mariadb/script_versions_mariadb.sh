@@ -4,7 +4,7 @@ set -e
 # Check for new major.minor versions
 echo "🔍 Checking for new MariaDB major.minor versions..."
 
-LATEST_MARIADB="12.1"
+LATEST_MARIADB="12.2"
 
 if command -v curl >/dev/null 2>&1; then
     found_new=false
@@ -43,7 +43,7 @@ fi
 echo ""
 
 # MariaDB versions
-versions=("mariadb:10.5" "mariadb:10.6" "mariadb:10.7" "mariadb:10.8" "mariadb:10.9" "mariadb:10.10" "mariadb:10.11" "mariadb:11.0" "mariadb:11.1" "mariadb:11.2" "mariadb:11.3-rc" "mariadb:11.4" "mariadb:11.5" "mariadb:11.6" "mariadb:11.7" "mariadb:11.8" "mariadb:12.0" "mariadb:12.1" "mariadb:latest")
+versions=("mariadb:10.5" "mariadb:10.6" "mariadb:10.7" "mariadb:10.8" "mariadb:10.9" "mariadb:10.10" "mariadb:10.11" "mariadb:11.0" "mariadb:11.1" "mariadb:11.2" "mariadb:11.3-rc" "mariadb:11.4" "mariadb:11.5" "mariadb:11.6" "mariadb:11.7" "mariadb:11.8" "mariadb:12.0" "mariadb:12.1" "mariadb:12.2" "mariadb:latest")
 
 # Going through all the versions
 for version in "${versions[@]}"; do
@@ -58,11 +58,11 @@ for version in "${versions[@]}"; do
     sleep 5
 
     # Executing dump
-    docker exec db-test $dump_command -hmanticore -P9306 manticore t > dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
+    docker exec db-test $dump_command --skip-ssl-verify-server-cert --skip-no-autocommit -hmanticore -P9306 manticore t > dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
     docker exec manticore mysql -h0 -P9306 -e "DROP TABLE t;"
 
     # Restore dump
-    docker exec -i db-test $db_type -hmanticore -P9306 manticore < dump.sql
+    docker exec -i db-test $db_type --skip-ssl-verify-server-cert -hmanticore -P9306 manticore < dump.sql
     restore_status=$?
     
     # Clear query log before test query
@@ -70,7 +70,7 @@ for version in "${versions[@]}"; do
     
     # Execute test query (only if restore succeeded)
     if [ $restore_status -eq 0 ]; then
-        docker exec db-test $db_type -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
+        docker exec db-test $db_type --skip-ssl-verify-server-cert -hmanticore -t -P9306 -e "select * from t order by id asc limit 20;" manticore
     else
         echo "⚠️ Warning: Restore failed for $version, skipping query log check"
     fi
@@ -88,9 +88,45 @@ for version in "${versions[@]}"; do
         echo "Error: dump.sql is empty for $version"
     fi
 
+    # Test replicated table (cluster:table syntax) - Issue #3047
+    echo "Testing cluster:table with $version..."
+    
+    # Create cluster and replicated table
+    docker exec manticore mysql -h0 -P9306 -e "DELETE CLUSTER test_c;" 2>/dev/null || true
+    docker exec manticore mysql -h0 -P9306 -e "CREATE CLUSTER test_c;"
+    docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE test_repl (id BIGINT, data TEXT);"
+    docker exec manticore mysql -h0 -P9306 -e "ALTER CLUSTER test_c ADD test_repl;"
+    docker exec manticore mysql -h0 -P9306 -e "INSERT INTO test_c:test_repl (id, data) VALUES (1, 'cluster_data');"
+    
+    # Test 1: mariadb-dump WITHOUT --skip-lock-tables should fail
+    echo "  Testing WITHOUT --skip-lock-tables (should fail)..."
+    if docker exec db-test $dump_command --skip-ssl-verify-server-cert -hmanticore -P9306 -ucluster -t manticore test_c:test_repl > cluster_dump_fail.sql 2>&1; then
+        echo "  ⚠️  WARNING: mariadb-dump succeeded without --skip-lock-tables (bug may be fixed)"
+    else
+        echo "  ✅ Expected: mariadb-dump failed without --skip-lock-tables"
+    fi
+    
+    # Test 2: mariadb-dump WITH --skip-lock-tables should succeed
+    echo "  Testing WITH --skip-lock-tables (should succeed)..."
+    if docker exec db-test $dump_command --skip-ssl-verify-server-cert -hmanticore -P9306 -ucluster -t --skip-lock-tables --compact manticore test_c:test_repl > cluster_dump_ok.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect|Couldn't read status information" >&2); then
+        if grep -q "cluster_data" cluster_dump_ok.sql; then
+            echo "  ✅ Workaround successful: dump contains data with --skip-lock-tables"
+        else
+            echo "  ❌ ERROR: dump succeeded but data missing"
+        fi
+    else
+        echo "  ❌ ERROR: mariadb-dump failed even with --skip-lock-tables"
+    fi
+    
+    # Cleanup cluster test
+    docker exec manticore mysql -h0 -P9306 -e "ALTER CLUSTER test_c DROP test_repl;" 2>/dev/null || true
+    docker exec manticore mysql -h0 -P9306 -e "DELETE CLUSTER test_c;" 2>/dev/null || true
+    docker exec manticore mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_repl;" 2>/dev/null || true
+    rm -f cluster_dump_fail.sql cluster_dump_ok.sql
+
     # Stopping and deleting a container
     docker stop db-test > /dev/null
-    rm -f dump.sql
+    rm -f dump.sql 2>/dev/null || true
 done
 
 echo "All MariaDB versions tested successfully!"

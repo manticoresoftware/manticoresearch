@@ -461,10 +461,6 @@ while(0)
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define HITLESS_DOC_MASK 0x7FFFFFFF
-#define HITLESS_DOC_FLAG 0x80000000
-
-
 // duplicated in sphinxformat.cpp
 struct Slice64_t
 {
@@ -1181,6 +1177,7 @@ public:
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	bool				RewriteHeader ( CSphString & sError ) const final;
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) final;
 	void				Dealloc () final;
@@ -1250,7 +1247,7 @@ public:
 	bool				LoadSecondaryIndex ( const CSphString & sFile );
 	bool				PreallocSecondaryIndex();
 
-	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true );
+	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true ) const;
 	bool				SaveHeader ( CSphString & sError );
 
 	CSphVector<SphAttr_t> 	BuildDocList () const final;
@@ -2791,6 +2788,14 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename(SPH_EXT_SPH), sError ) )
 		return false;
 
+	if ( !tNewSchema.GetAttrsCount() )
+	{
+		sError = "table must have at least one attribute";
+		return false;
+	}
+
+	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
+
 	// generate new .SPA, .SPB files
 	CSphWriter tSPAWriter;
 	CSphWriter tSPBWriter;
@@ -2804,9 +2809,16 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	CSphString sSPBfile = GetTmpFilename ( SPH_EXT_SPB );
 	CSphString sSPHIfile = GetTmpFilename ( SPH_EXT_SPHI );
 
+	// don't open SPA file for columnar operations
 	bool bHaveNonColumnar = tNewSchema.HasNonColumnarAttrs();
-	if ( bHaveNonColumnar && !tSPAWriter.OpenFile ( sSPAfile, sError ) )
-		return false;
+	bool bNeedToCloseSPA = false;
+	if ( !bColumnar && bHaveNonColumnar )
+	{
+		if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
+			return false;
+
+		bNeedToCloseSPA = true;
+	}
 
 	bool bHadBlobs = false;
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
@@ -2816,8 +2828,9 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 		bHaveBlobs |= sphIsBlobAttr ( tNewSchema.GetAttr(i) );
 
+	// Columnar attributes don't use the blob pool, so don't open SPB file for columnar operations
 	bool bBlob = sphIsBlobAttr ( tCtx.m_eType );
-	bool bBlobsModified = bBlob && ( bAddAttr || bHaveBlobs==bHadBlobs );
+	bool bBlobsModified = bBlob && !bColumnar && ( bAddAttr || bHaveBlobs==bHadBlobs );
 	if ( bBlobsModified )
 	{
 		if ( !tSPBWriter.OpenFile ( sSPBfile, sError ) )
@@ -2826,13 +2839,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 		tSPBWriter.PutOffset(0);
 	}
 
-	if ( !tNewSchema.GetAttrsCount() )
-	{
-		sError = "table must have at least one attribute";
-		return false;
-	}
-
-	bool bColumnar = bAddAttr ? tNewSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar() : m_tSchema.GetAttr ( tCtx.m_sName.cstr() )->IsColumnar();
 	if ( bColumnar )
 		AddRemoveColumnarAttr ( bAddAttr, tCtx.m_sName, tCtx.m_eType, m_tSchema, tNewSchema, sError );
 	else
@@ -2867,7 +2873,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !AddRemoveFromKNN ( m_tSchema, tNewSchema, sError ) )
 		return false;
 
-	if ( bHaveNonColumnar )
+	if ( bNeedToCloseSPA )
 	{
 		if ( tSPAWriter.IsError() )
 		{
@@ -2880,7 +2886,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 
 	bool bHadColumnar = m_tSchema.HasColumnarAttrs();
 	bool bHaveColumnar = tNewSchema.HasColumnarAttrs();
-
 	bool bHadNonColumnar = m_tSchema.HasNonColumnarAttrs();
 
 	m_tAttr.Reset();
@@ -2914,7 +2919,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( bHaveNonColumnar && !m_tAttr.Setup ( GetFilename ( SPH_EXT_SPA ), sError, true ) )
 		return false;
 
-	if ( bBlob )
+	if ( bBlob && !bColumnar )
 	{
 		m_tBlobAttrs.Reset();
 
@@ -2956,7 +2961,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 }
 
 
-void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader )
+void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader ) const
 {
 	tBuildHeader.m_iTotalDocuments = m_tStats.m_iTotalDocuments;
 	tBuildHeader.m_iTotalBytes = m_tStats.m_iTotalBytes;
@@ -3659,7 +3664,7 @@ void CSphHitBuilder::DoclistEndList ()
 	// emit skiplist
 	// OPTIMIZE? placing it after doclist means an extra seek on searching
 	// however placing it before means some (longer) doclist data moves while indexing
-	if ( m_tWord.m_iDocs>m_iSkiplistBlockSize )
+	if ( ( m_tWord.m_iDocs & HITLESS_DOC_MASK )>m_iSkiplistBlockSize )
 	{
 		assert ( m_dSkiplist.GetLength() );
 		assert ( m_dSkiplist[0].m_iOffset==m_tWord.m_iDoclistOffset );
@@ -6333,9 +6338,10 @@ public:
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
 			m_iHint = 0;
-			if ( m_iDocs>=DOCLIST_HINT_THRESH )
+			const int iLayoutDocs = m_iDocs & HITLESS_DOC_MASK;
+			if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
 				m_iHint = m_pReader->GetByte();
-			if ( m_iDocs > m_iSkiplistBlockSize )
+			if ( iLayoutDocs>m_iSkiplistBlockSize )
 				m_pReader->UnzipInt();
 
 			m_uWordID = (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
@@ -6346,7 +6352,8 @@ public:
 			m_iDoclistOffset += m_pReader->UnzipOffset();
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
-			if ( m_iDocs > m_iSkiplistBlockSize )
+			const int iLayoutDocs = m_iDocs & HITLESS_DOC_MASK;
+			if ( iLayoutDocs>m_iSkiplistBlockSize )
 				m_pReader->UnzipOffset();
 		}
 
@@ -8034,13 +8041,10 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	fFTWithFilters = EstimateMTCost ( fFTWithFilters, iThreads );
 
 	if ( fIteratorWithFT<fFTWithFilters )
-	{
 		return true;
-	} else
-	{
-		// if has any forced indexes when should use the path with iterators even FT estimates faster
-		return dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eForce!=SecondaryIndexType_e::NONE; } );
-	}
+
+	// if has any forced indexes when should use the path with iterators even FT estimates faster
+	return dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eForce!=SecondaryIndexType_e::NONE; } );
 }
 
 
@@ -8121,10 +8125,20 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 
 std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
+	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
+	if ( tQuery.m_tKnnSettings.m_bPrefilter )
+	{
+		if ( !dFilters.GetLength() || !tCtx.m_pFilter ) 
+			tMeta.m_sWarning = "KNN option {filter=1} is set, but query has no filters; prefiltering is ignored";
+
+		if ( tCtx.m_pFilter )
+			pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
+	}
+
 	if ( !dFilters.GetLength() )
 	{
 		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, tMeta.m_sError );
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tMeta.m_sError );
 
 		return { nullptr, false };
 	}
@@ -8144,9 +8158,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	int iRemovedOptional = CalcRemovedOptionalFilters ( dFilters, dSIInfo );
 
-	// knn iterators
+	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 
@@ -8257,6 +8271,7 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_pSI			= &m_tSI;
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
+	tFlx.m_eJoinType	= tQuery.m_eJoinType;
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
@@ -8606,6 +8621,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		return false;
 
 	const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;
+	const int iLayoutDocs = tRes.m_iDocs & HITLESS_DOC_MASK;
 	tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tRes.m_iDocs & HITLESS_DOC_MASK ) : tRes.m_iDocs;
 	tWord.m_iHits = tRes.m_iHits;
 	tWord.m_bHasHitlist =
@@ -8618,9 +8634,9 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 		// read in skiplist
 		// OPTIMIZE? maybe add an option to decompress on preload instead?
-		if ( m_pSkips && tRes.m_iDocs>m_iSkiplistBlockSize )
+		if ( m_pSkips && iLayoutDocs>m_iSkiplistBlockSize )
 		{
-			int iSkips = tRes.m_iDocs/m_iSkiplistBlockSize;
+			int iSkips = tWord.m_iDocs/m_iSkiplistBlockSize;
 			const int SMALL_SKIP_THRESH = 256;
 			bool bNeedCache = iSkips > SMALL_SKIP_THRESH;
 
@@ -8824,6 +8840,8 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
 	LoadIndexSettings ( m_tSettings, rdInfo, m_uVersion );
+	if ( m_uVersion<68 && m_tSettings.m_eHitless!=SPH_HITLESS_NONE )
+		sWarning.SetSprintf ( "hitless dictionary (format version %u < 68) could be corrupted - rebuild table", m_uVersion );
 
 	CSphTokenizerSettings tTokSettings;
 
@@ -8956,6 +8974,8 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 
 	// index settings
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+	if ( m_uVersion<68 && m_tSettings.m_eHitless!=SPH_HITLESS_NONE )
+		sWarning.SetSprintf ( "hitless dictionary (format version %u < 68) could be corrupted - rebuild table", m_uVersion );
 
 	CSphTokenizerSettings tTokSettings;
 	// tokenizer stuff
@@ -11639,7 +11659,19 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	if ( !tIndexChecker.OpenFiles() )
 		return 1;
 
-	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, tIndexChecker.GetHitlessWords(), m_sLastError ) )
+	// Resolve paths relative to index directory (disk chunks store relative names in the header).
+	CSphString sHitlessToLoad = m_tSettings.m_sHitlessFiles;
+	if ( pFilenameBuilder && !sHitlessToLoad.IsEmpty() )
+	{
+		StrVec_t dHitless;
+		sphSplit ( dHitless, sHitlessToLoad.cstr(), " \t," );
+		StringBuilder_c sResolved ( ", " );
+		for ( const CSphString & sFile : dHitless )
+				sResolved << FormatPath ( sFile, pFilenameBuilder );
+
+		sHitlessToLoad = sResolved.cstr();
+	}
+	if ( !LoadHitlessWords ( sHitlessToLoad, m_pTokenizer, m_pDict, tIndexChecker.GetHitlessWords(), m_sLastError ) )
 		tReporter.Fail ( "unable to load hitless words: %s", m_sLastError.cstr() );
 
 	CSphSavedFile tStat;
@@ -11647,10 +11679,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	const CSphTokenizerSettings & tTokenizerSettings = m_pTokenizer->GetSettings ();
 	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() )
 	{
-		CSphString sSynonymsFile = tTokenizerSettings.m_sSynonymsFile;
-		if ( pFilenameBuilder )
-			sSynonymsFile = pFilenameBuilder->GetFullPath ( sSynonymsFile );
-
+		CSphString sSynonymsFile = FormatPath ( tTokenizerSettings.m_sSynonymsFile, pFilenameBuilder );
 		if ( !tStat.Collect ( sSynonymsFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open exceptions '%s': %s", sSynonymsFile.cstr(), sError.cstr() );
 	}
@@ -11670,9 +11699,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 
 		CSphString sStopFile;
 		sStopFile.SetBinary ( sNameStart, int ( pStop-sNameStart ) );
-		if ( pFilenameBuilder )
-			sStopFile = pFilenameBuilder->GetFullPath ( sStopFile );
-
+		sStopFile = FormatPath ( sStopFile, pFilenameBuilder );
 		if ( !tStat.Collect ( sStopFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open stopwords '%s': %s", sStopFile.cstr(), sError.cstr() );
 	}
@@ -11681,10 +11708,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	{
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 		{
-			CSphString sWordforms = tDictSettings.m_dWordforms[i];
-			if ( pFilenameBuilder )
-				sWordforms = pFilenameBuilder->GetFullPath ( sWordforms );
-
+			CSphString sWordforms = FormatPath ( tDictSettings.m_dWordforms[i], pFilenameBuilder );
 			if ( !tStat.Collect ( sWordforms.cstr(), &sError ) )
 				tReporter.Fail ( "unable to open wordforms '%s': %s", sWordforms.cstr(), sError.cstr() );
 		}
@@ -11880,6 +11904,8 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	if ( !SiRecreate ( tMonitor, *this, m_iDocinfo, dCurFiles, dNewFiles, sError ) )
 		return false;
 
+	const char * sJsonSIExt = sphGetExt ( SPH_EXT_SPJIDX );
+
 	ARRAY_FOREACH ( i, dCurFiles )
 	{
 		StrVec_t dFilesFrom(1);
@@ -11898,6 +11924,15 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 
 			if ( !m_tSI.Drop ( dCurFiles[i], sError ) )
 				return false;
+		}
+
+		// JSON SI rebuild might not create a file for chunks that yield no schema; skip rename/load in that case.
+		bool bJsonSI = dCurFiles[i].Ends ( sJsonSIExt ) || dNewFiles[i].Ends ( sJsonSIExt );
+		if ( bJsonSI && !sphFileExists ( dNewFiles[i].cstr() ) )
+		{
+			if ( bCurExists )
+				::unlink ( sFileOld.cstr() );
+			continue;
 		}
 
 		dFilesFrom[0] = dNewFiles[i];
@@ -13175,4 +13210,36 @@ volatile bool& sphGetbCpuStat () noexcept
 {
 	static bool bCpuStat = false;
 	return bCpuStat;
+}
+
+
+bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
+{
+	CSphString sHeader = GetFilename ( SPH_EXT_SPH );
+	if ( !sphIsReadable ( sHeader.cstr(), &sError ) )
+		return false;
+
+	CSphString sHeaderNew;
+	sHeaderNew.SetSprintf ( "%s.new", sHeader.cstr() );
+	CSphString sHeaderOld;
+	sHeaderOld.SetSprintf ( "%s.old", sHeader.cstr() );
+
+	BuildHeader_t tBuildHeader;
+	WriteHeader_t tWriteHeader;
+	PrepareHeaders ( tBuildHeader, tWriteHeader );
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderNew, sError ) )
+		return false;
+
+	StrVec_t dSrc;
+	StrVec_t dDst;
+	dSrc.Add ( sHeader );
+	dDst.Add ( sHeaderOld );
+	dSrc.Add ( sHeaderNew );
+	dDst.Add ( sHeader );
+
+	if ( !RenameWithRollback ( dSrc, dDst, sError ) )
+		return false;
+
+	::unlink ( sHeaderOld.cstr() );
+	return true;
 }

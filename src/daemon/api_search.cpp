@@ -277,6 +277,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( tKNN.m_iEf );
 		tOut.SendInt ( tKNN.m_bRescore );
 		tOut.SendFloat ( tKNN.m_fOversampling );
+		tOut.SendInt ( tKNN.m_bPrefilter );
+		tOut.SendInt ( tKNN.m_bFullscan );
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
@@ -300,6 +302,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendFloat ( i.m_fValue );
 		tOut.SendString ( i.m_sValue.cstr() );
 	}
+
+	tOut.SendString ( q.m_sExpandBlended.cstr() );
 }
 
 
@@ -1064,6 +1068,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				}
 			}
 
+			if ( uMasterVer>=28 )
+			{
+				tKNN.m_bPrefilter = !!tReq.GetInt();
+				tKNN.m_bFullscan = !!tReq.GetInt();
+			}
+
 			tKNN.m_dVec.Resize ( tReq.GetInt() );
 			for ( auto & i : tKNN.m_dVec )
 				i = tReq.GetFloat();
@@ -1096,6 +1106,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			i.m_sValue = tReq.GetString();
 		}
 	}
+
+	if ( uMasterVer>=27 )
+		tQuery.m_sExpandBlended = tReq.GetString();
 
 	/////////////////////
 	// additional checks

@@ -20,6 +20,7 @@ class CSphHTMLStripper
 {
 public:
 	explicit CSphHTMLStripper ( bool bDefaultTags );
+	CSphHTMLStripper ( bool bDefaultTags, bool bDecodeEntities );
 	bool SetIndexedAttrs ( const char* sConfig, CSphString& sError );
 	bool SetRemovedElements ( const char* sConfig, CSphString& sError );
 	bool SetZones ( const char* sZones, CSphString& sError );
@@ -38,6 +39,7 @@ private:
 	CSphVector<html_stripper::StripperTag_t> m_dTags; ///< known tags to index attrs and/or to remove contents
 	int m_dStart[MAX_CHAR_INDEX];	   ///< maps index of the first tag name char to start offset in m_dTags
 	int m_dEnd[MAX_CHAR_INDEX];		   ///< maps index of the first tag name char to end offset in m_dTags
+	const bool m_bDecodeEntities = true;
 
 	int GetCharIndex ( int iCh ) const; ///< calcs index by raw char
 	void UpdateTags();					///< sorts tags, updates internal helpers

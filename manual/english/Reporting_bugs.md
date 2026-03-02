@@ -136,7 +136,8 @@ To fix your bug, developers often need to reproduce it locally. To do this, they
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`.
 
-To to that easily we provide an upload mechanism using a Docker image. This image is built from our open-source repository at [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) and helps you easily upload data to Manticore's write-only S3 storage. Here's how you can do it:
+
+To do that easily we provide an upload mechanism using a Docker image. This image is built from our open-source repository at [github.com/manticoresoftware/s3-upload](https://github.com/manticoresoftware/s3-upload) and helps you easily upload data to Manticore's write-only S3 storage. Here's how you can do it:
 1. Navigate to the directory containing the files you want to upload and run:
    ```bash
    docker run -it --rm -v $(pwd):/upload manticoresearch/upload
@@ -236,7 +237,7 @@ For example on 64-bit Linux:
    chmod +x $HOME/minio-binaries/mc
    export PATH=$PATH:$HOME/minio-binaries/
    ```
-2. Add our s3 host (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc config host add manticore http://s3.manticoresearch.com:9000 manticore manticore`
+2. Add our s3 host (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc alias set manticore http://s3.manticoresearch.com:9000 manticore manticore`
 3. Copy your files (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc cp -r issue-1234/ manticore/write-only/issue-1234` . Make sure the folder name is unique and best if it corresponds to the issue on GitHub where you described the bug.
 
 ### DEBUG

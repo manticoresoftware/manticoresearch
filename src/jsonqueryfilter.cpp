@@ -1110,7 +1110,10 @@ bool ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphSt
 		{
 			JsonObj_c tFilter = tJson.GetObjItem ( "filter", sError, true );
 			if ( tFilter )
+			{
+				tQuery.m_tKnnSettings.m_bPrefilter = true;
 				tQuery.m_sQuery = tFilter.AsString();
+			}
 		}
 		else
 			tQuery.m_sQuery = tJson.AsString();

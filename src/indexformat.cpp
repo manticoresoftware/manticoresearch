@@ -465,7 +465,8 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, DictEntry_t & 
 		const int iDocs = UnzipIntBE ( pBuf );
 		const int iHits = UnzipIntBE ( pBuf );
 		SphOffset_t iSkiplistPos = 0;
-		if ( iDocs > m_iSkiplistBlockSize )
+		const int iLayoutDocs = iDocs & HITLESS_DOC_MASK;
+		if ( iLayoutDocs > m_iSkiplistBlockSize )
 			iSkiplistPos = UnzipOffsetBE ( pBuf );
 
 		assert ( iDeltaOffset );
@@ -747,6 +748,7 @@ bool KeywordsBlockReader_c::UnpackWord()
 		iMatch = *m_pBuf++;
 	}
 
+	assert ( iDelta>0 );
 	assert ( iMatch+iDelta<(int)sizeof(m_sWord)-1 );
 	assert ( iMatch<=(int)strlen ( (char *)m_sWord.data() ) );
 
@@ -759,9 +761,10 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
 	m_iDocs = UnzipIntBE ( m_pBuf );
 	m_iHits = UnzipIntBE ( m_pBuf );
-	m_uHint = ( m_iDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
-	m_iDoclistHint = DoclistHintUnpack ( m_iDocs, m_uHint );
-	if ( m_iDocs > m_iSkiplistBlockSize )
+	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
+	m_uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
+	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, m_uHint );
+	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
 		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
 	else
 		m_iSkiplistOffset = 0;

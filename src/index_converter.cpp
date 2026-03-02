@@ -1326,7 +1326,7 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 			iHits = tReaderDict.UnzipInt();
 			tWriterDict.ZipInt ( iDocs );
 			tWriterDict.ZipInt ( iHits );
-			if ( iDocs>=DOCLIST_HINT_THRESH )
+			if ( ( iDocs & HITLESS_DOC_MASK )>=DOCLIST_HINT_THRESH )
 			{
 				BYTE uHint = tReaderDict.GetByte();
 				tWriterDict.PutByte ( uHint );
@@ -1354,10 +1354,10 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 		}
 
 		// skiplist
-		if ( iDocs>(int)SPH_SKIPLIST_BLOCK )
+		if ( ( iDocs & HITLESS_DOC_MASK )>(int)SPH_SKIPLIST_BLOCK )
 			tReaderDict.UnzipInt();
 
-		if ( iDocs>tIndex.m_tSettings.m_iSkiplistBlockSize )
+		if ( ( iDocs & HITLESS_DOC_MASK )>tIndex.m_tSettings.m_iSkiplistBlockSize )
 			tWriterDict.ZipInt ( pOff->m_uSkiplist );
 
 		if ( ( iWords%SPH_WORDLIST_CHECKPOINT )==0 )

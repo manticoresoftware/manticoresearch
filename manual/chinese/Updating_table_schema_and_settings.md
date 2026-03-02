@@ -5,7 +5,7 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
 
@@ -20,7 +20,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `bool` - 布尔属性
 * `multi` - 多值整数属性
 * `multi64` - 多值bigint属性
-* `json` - json属性
+* `json` - JSON 属性；使用 `secondary_index='1'` 为 JSON 创建二级索引
 * `string` / `text attribute` / `string attribute` - 字符串属性
 * `text` / `text indexed stored` / `string indexed stored` - 全文索引字段，原始值存储在docstore中
 * `text indexed` / `string indexed` - 全文索引字段，仅索引（原始值不存储在docstore中）

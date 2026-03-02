@@ -13,7 +13,9 @@
 #include "knnlib.h"
 #include "exprtraits.h"
 #include "sphinxint.h"
+#include "querycontext.h"
 #include "fileio.h"
+#include "memio.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
 
@@ -66,9 +68,37 @@ void EmbeddingsSrc_c::Remove ( const CSphFixedVector<RowID_t> & dRowMap )
 
 ///////////////////////////////////////////////////////////////////////////////
 
+bool EmbeddingsSrc_c::Has ( RowID_t tRowID, int iAttr ) const
+{
+	return ( iAttr>=0 && iAttr<m_dStored.GetLength() && tRowID>=0 && tRowID<m_dStored[iAttr].GetLength() );
+}
+
 const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
 {
+	assert ( Has ( tRowID, iAttr ) );
 	return m_dStored[iAttr][tRowID];
+}
+
+void EmbeddingsSrc_c::Save ( MemoryWriter_c & tWriter ) const
+{
+	tWriter.PutDword ( m_dStored.GetLength() );
+	for ( const auto & dRows : m_dStored )
+	{
+		tWriter.PutDword ( dRows.GetLength() );
+		for ( const auto & dSrc : dRows )
+			SaveArray ( dSrc, tWriter );
+	}
+}
+
+void EmbeddingsSrc_c::Load ( MemoryReader_c & tReader )
+{
+	m_dStored.Resize ( tReader.GetDword() );
+	for ( auto & dRows : m_dStored )
+	{
+		dRows.Resize ( tReader.GetDword() );
+		for ( auto & dSrc : dRows )
+			GetArray ( dSrc, tReader );
+	}
 }
 
 
@@ -99,7 +129,56 @@ void NormalizeVec ( VecTraits_T<float> & dData )
 		i *= fNorm;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
+class KNNPrefilter_c : public knn::KNNFilter_i
+{
+public:
+			KNNPrefilter_c ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
+
+	bool	IsAllowed ( uint32_t tRowID ) const override;
+	int64_t GetFilterCount() const override	{ return m_iFilterCount; }
+
+private:
+	const CSphQueryContext &	m_tCtx;
+	const CSphRowitem *			m_pAttrPool = nullptr;
+	int							m_iStride = 0;
+	int64_t						m_iFilterCount = -1;
+	mutable CSphMatch			m_tMatch;
+};
+
+
+KNNPrefilter_c::KNNPrefilter_c ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount )
+	: m_tCtx ( tCtx )
+	, m_pAttrPool ( pAttrPool )
+	, m_iStride ( iStride )
+	, m_iFilterCount ( iFilterCount )
+{
+	m_tMatch.Reset(iDynamicSize);
+}
+
+
+bool KNNPrefilter_c::IsAllowed ( uint32_t tRowID ) const
+{
+	assert(m_tCtx.m_pFilter);
+
+	m_tMatch.m_tRowID = tRowID;
+	m_tMatch.m_pStatic = m_pAttrPool + int64_t(tRowID) * m_iStride;
+
+	m_tCtx.CalcFilter(m_tMatch);
+	bool bAllowed = m_tCtx.m_pFilter->Eval(m_tMatch);
+	m_tCtx.FreeDataFilter(m_tMatch);
+
+	return bAllowed;
+}
+
+
+std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount )
+{
+	return std::make_unique<KNNPrefilter_c> ( tCtx, pAttrPool, iStride, iDynamicSize, iFilterCount );
+}
+
+///////////////////////////////////////////////////////////////////////////////
 class Expr_KNNDist_c : public ISphExpr
 {
 public:
@@ -409,7 +488,12 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 	const auto & tKNN = tAttr.m_tKNN;
 
 	sRes << " knn_type='hnsw'";
-	sRes << " knn_dims='" << tKNN.m_iDims << "'";
+	
+	const auto & tKNNModel = tAttr.m_tKNNModel;
+	// Only output knn_dims when model_name is empty (model_name determines dimensions)
+	if ( tKNNModel.m_sModelName.empty() )
+		sRes << " knn_dims='" << tKNN.m_iDims << "'";
+	
 	sRes << " hnsw_similarity='" << HNSWSimilarity2Str ( tKNN.m_eHNSWSimilarity ) << "'";
 
 	knn::IndexSettings_t tDefault;
@@ -418,11 +502,13 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNN.m_iHNSWEFConstruction!=tDefault.m_iHNSWEFConstruction )
 		sRes << " hnsw_ef_construction='" << tKNN.m_iHNSWEFConstruction << "'";
-
-	const auto & tKNNModel = tAttr.m_tKNNModel;
 	knn::ModelSettings_t tDefaultModel;
 	if ( !tKNNModel.m_sModelName.empty() )
+	{
 		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
+		if ( !tAttr.m_sKNNFrom.IsEmpty() )
+			sRes << " FROM='" << tAttr.m_sKNNFrom.cstr() << "'";
+	}
 
 	if ( !tKNNModel.m_sCachePath.empty() )
 		sRes << " cache_path='" << tKNNModel.m_sCachePath.c_str() << "'";
@@ -635,7 +721,7 @@ bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
-std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphString & sError )
+std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, CSphString & sError )
 {
 	auto & tKNN = tQuery.m_tKnnSettings;
 	if ( tKNN.m_sAttr.IsEmpty() )
@@ -673,7 +759,7 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		NormalizeVec(dPoint);
 
 	std::string sErrorSTL;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, sErrorSTL );
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, pFilter, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
@@ -686,20 +772,31 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 }
 
 
-RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, bool & bError, CSphString & sError )
-{
-	RowIteratorsWithEstimates_t dIterators;
+RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool & bError, CSphString & sError )
+{	 
+	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+	{
+		// skip HNSW when fullscan is forced
+		if ( tQuery.m_tKnnSettings.m_bFullscan )
+			return {};
 
-	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, sError );
+		// or brute-force over filtered rows is cheaper than HNSW traversal
+		// use plain K (not oversampled) since brute-force computes exact distances
+		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tQuery.m_tKnnSettings.m_sAttr.cstr(), tQuery.m_tKnnSettings.m_iK, tQuery.m_tKnnSettings.m_iEf, pFilter->GetFilterCount() ) )
+			return {};
+	}
+
+	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pFilter, sError );
 	if ( tRes.second )
 	{
 		bError = true;
-		return dIterators;
+		return {};
 	}
 
 	if ( !tRes.first )
-		return dIterators;
+		return {};
 
+	RowIteratorsWithEstimates_t dIterators;
 	dIterators.Add ( { tRes.first, tQuery.m_tKnnSettings.GetRequestedDocs() } );
 	return dIterators;
 }

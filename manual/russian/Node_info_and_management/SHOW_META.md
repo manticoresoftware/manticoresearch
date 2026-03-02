@@ -132,9 +132,6 @@ SHOW META;
 
 <!-- end -->
 
-<!-- example show meta predicted_time -->
-Дополнительные значения, такие как `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips` и их соответствующие аналоги `dist_fetched_*`, будут доступны только в том случае, если `searchd` был настроен с [предсказанными временными затратами](../Server_settings/Searchd.md#predicted_time_costs) и запрос включал `predicted_time` в предложении `OPTION`.
-
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

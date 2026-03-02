@@ -132,9 +132,6 @@ SHOW META;
 
 <!-- end -->
 
-<!-- example show meta predicted_time -->
-额外值，如 `predicted_time`、`dist_predicted_time`、`local_fetched_docs`、`local_fetched_hits`、`local_fetched_skips` 及其对应的 `dist_fetched_*`，仅在 searchd 配置了[预测时间成本](../Server_settings/Searchd.md#predicted_time_costs)且查询在 `OPTION` 子句中包含 `predicted_time` 时可用。
-
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

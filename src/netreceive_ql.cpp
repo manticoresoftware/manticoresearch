@@ -792,12 +792,7 @@ public:
 
 	void SkipNULL() override
 	{
-		PutString(FROMS("NULL"));
-	}
-
-	void PutNULL () override
-	{
-		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
+		PutNULL();
 	}
 
 	using SqlRowBufferTraits_t::HeadBegin;

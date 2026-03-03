@@ -578,4 +578,4 @@ new_table="test_hl2"; import_path="/var/lib/manticore/test_hl/test_hl"; mysql -h
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-        Value: hitless_words = /var/lib/manticore/test_hl2/hitless_words_0.txt
+        Value: hitless_words = /var/lib/manticore/test_hl2/hitless_words_chunk0_0.txt

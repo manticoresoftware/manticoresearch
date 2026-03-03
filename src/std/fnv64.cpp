@@ -22,15 +22,18 @@ uint64_t sphFNV64 ( const void * s )
 
 uint64_t sphFNV64 ( const void * s, int iLen, uint64_t uPrev )
 {
+	constexpr uint64_t FNV_64_PRIME = 0x100000001b3ULL;
 	const BYTE * p = (const BYTE*)s;
 	uint64_t hval = uPrev;
 	for ( ; iLen>0; iLen-- )
 	{
 		// xor the bottom with the current octet
 		hval ^= (uint64_t)*p++;
+		hval *= FNV_64_PRIME;
 
+		// in current reality there is no sense to use shift vs mul (clang will recognize and make multiplication anyway)
 		// multiply by the 64 bit FNV magic prime mod 2^64
-		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
+		// hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
 	}
 	return hval;
 }
@@ -38,6 +41,7 @@ uint64_t sphFNV64 ( const void * s, int iLen, uint64_t uPrev )
 
 uint64_t sphFNV64cont ( const void * s, uint64_t uPrev )
 {
+	constexpr uint64_t FNV_64_PRIME = 0x100000001b3ULL;
 	const BYTE * p = (const BYTE*)s;
 	if ( !p )
 		return uPrev;
@@ -47,9 +51,11 @@ uint64_t sphFNV64cont ( const void * s, uint64_t uPrev )
 	{
 		// xor the bottom with the current octet
 		hval ^= (uint64_t)*p++;
+		hval *= FNV_64_PRIME;
 
+		// in current reality there is no sense to use shift vs mul (clang will recognize and make multiplication anyway)
 		// multiply by the 64 bit FNV magic prime mod 2^64
-		hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
+		// hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) + (hval << 8) + (hval << 40); // gcc optimization
 	}
 	return hval;
 }

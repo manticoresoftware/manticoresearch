@@ -14,6 +14,7 @@ DEFAULT_PORT="8080"
 IMAGE_NAME="${IMAGE_NAME:-manticore-manual-app:local}"
 CONTAINER_NAME="${CONTAINER_NAME:-manticore-manual-app}"
 HOST_PORT="${HOST_PORT:-$DEFAULT_PORT}"
+READY_TIMEOUT="${READY_TIMEOUT:-120}"
 MANUAL_SRC="$REPO_ROOT/manual"
 DOC_APP_DIR="$REPO_ROOT/misc/doc-app-dir"
 DOC_APP_REPO_URL="https://github.com/manticoresoftware/doc.git"
@@ -53,14 +54,15 @@ run_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     error "Command 'docker' is required but not found. Please install Docker and try again."
   fi
-  if docker "$@" 2>/dev/null; then
+  if docker "$@"; then
     return 0
   fi
+
   if command -v sudo >/dev/null 2>&1; then
-    echo "Docker command failed, retrying with sudo..."
+    echo "[warn] Docker command failed for current user; retrying with sudo..." >&2
     sudo docker "$@"
   else
-    error "Docker command failed."
+    error "Docker command failed and 'sudo' is not available."
   fi
 }
 
@@ -96,11 +98,21 @@ if [[ ! -f "$DOC_APP_DIR/Dockerfile" ]]; then
   error "No Dockerfile found in '$DOC_APP_DIR'; provide the doc app repo root"
 fi
 
-if [[ "$FORCE_NO_CACHE_BUILD" -eq 1 ]]; then
-  run_docker build --no-cache -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
-else
-  run_docker build -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
-fi
+build_manual_image() {
+  local extra_args=()
+  if [[ "$FORCE_NO_CACHE_BUILD" -eq 1 ]]; then
+    extra_args+=(--no-cache)
+  fi
+
+  if docker buildx version >/dev/null 2>&1; then
+    # Ensure the image is loaded into the local Docker image store.
+    run_docker buildx build --load "${extra_args[@]}" -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
+  else
+    run_docker build "${extra_args[@]}" -t "$IMAGE_NAME" --build-arg DEPLOY_TARGET=local "$DOC_APP_DIR"
+  fi
+}
+
+build_manual_image
 
 printf "Starting container '$CONTAINER_NAME' on port $HOST_PORT..."
 run_docker run --rm -d \
@@ -110,7 +122,7 @@ run_docker run --rm -d \
   "$IMAGE_NAME" >/dev/null
 
 ready=0
-for _ in {1..30}; do
+for ((i=1; i<=READY_TIMEOUT; i++)); do
   if curl -s --connect-timeout 2 --max-time 2 "http://localhost:${HOST_PORT}" >/dev/null 2>&1; then
     ready=1
     printf "\n"
@@ -127,6 +139,10 @@ fi
 
 cat <<EOF
 
+EOF
+
+if [[ "$ready" -eq 1 ]]; then
+  cat <<EOF
 Manticore Manual app is running on http://localhost:${HOST_PORT}
 
 To rerun the setup inside the container after editing docs:
@@ -136,3 +152,15 @@ To validate doc examples/links:
   docker exec ${CONTAINER_NAME} ./setup.sh -d . checkDocs
 
 EOF
+else
+  cat <<EOF
+Container '${CONTAINER_NAME}' started, but app did not become ready within ${READY_TIMEOUT}s.
+
+Check logs:
+  docker logs ${CONTAINER_NAME}
+
+If this is expected on your machine, retry with a longer wait:
+  READY_TIMEOUT=300 ./manual.sh
+
+EOF
+fi

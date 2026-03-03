@@ -5,6 +5,7 @@
 <requires>
 <force-rt/>
 <http/>
+<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>

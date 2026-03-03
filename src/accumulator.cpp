@@ -13,6 +13,7 @@
 #include "accumulator.h"
 #include "sphinxrt.h"
 #include "columnarmisc.h"
+#include "conversion.h"
 #include "memio.h"
 #include "tracer.h"
 
@@ -108,27 +109,38 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 {
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
-	dTmp.Resize ( dEmbedding.size() );
-	ARRAY_FOREACH ( iEmb, dTmp )
-		dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
-
 	if ( tAttr.IsColumnar() )
+	{
+		dTmp.Resize ( dEmbedding.size() );
+		ARRAY_FOREACH ( iEmb, dTmp )
+			dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
 		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
+	}
 	else
 	{
-		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), sError ) )
+		// blob expects raw float bytes. Explicitly empty (sentinel 2) so REBUILD EMBEDDINGS does not fill.
+		if ( dEmbedding.empty() )
+		{
+			const DWORD uSentinel = 2;
+			if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)&uSentinel, (int)sizeof(uSentinel), sError ) )
+				return false;
+		}
+		else if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dEmbedding.data(), (int)( dEmbedding.size() * sizeof(float) ), sError ) )
 			return false;
 	}
 
 	if ( tAttr.IsStored() )
 	{
 		int iId = dDocstoreRemap[iAttr];
-		tDoc.m_dFields[iId].Resize ( dEmbedding.size()*sizeof(DWORD) );
-		const BYTE * pStart = tDoc.m_dFields[iId].Begin();
-		for ( auto i : dEmbedding )
+		if ( iId>=0 )
 		{
-			*(DWORD*)pStart = sphF2DW(i);
-			pStart += sizeof(DWORD);
+			tDoc.m_dFields[iId].Resize ( dEmbedding.size()*sizeof(DWORD) );
+			const BYTE * pStart = tDoc.m_dFields[iId].Begin();
+			for ( auto i : dEmbedding )
+			{
+				*(DWORD*)pStart = sphF2DW(i);
+				pStart += sizeof(DWORD);
+			}
 		}
 	}
 
@@ -208,6 +220,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	int iRowSize = tSchema.GetRowSize();
 	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
+	dEmbeddingsForAttr.resize ( m_uAccumDocs ); // so we can assign dEmbeddingsForAttr[tRowID] when preserving explicit vectors
 	std::vector<std::string_view> dTexts;
 	DWORD uNumSkipped = 0;
 	IntVec_t dResultIds(m_uAccumDocs);
@@ -215,12 +228,19 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
 	{
 		bool bDefault;
+		bool bExplicitEmpty = false;
+		int iStoredBytes = 0;
+		const BYTE * pStoredData = nullptr;
 		if ( pColumnarIterator )
 		{
 			const BYTE * pResult = nullptr;
 			int iBytes = pColumnarIterator->Get ( tRowID, pResult );
-			assert ( iBytes==sizeof(DWORD) );
-			bDefault = *(const DWORD*)pResult;
+			pStoredData = pResult;
+			iStoredBytes = iBytes;
+			DWORD uVal = ( iBytes == (int)sizeof(DWORD) && pResult ) ? *(const DWORD*)pResult : (DWORD)-1;
+			// 1 = generate; 0/2 = explicit empty.
+			bDefault = ( uVal == 1 );
+			bExplicitEmpty = ( uVal == 0 || uVal == 2 );
 		}
 		else
 		{
@@ -228,8 +248,27 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 			SphAttr_t tBlobRowOffset = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
 			const BYTE * pBlobRow = m_dBlobs.Begin() + tBlobRowOffset;
 			ByteBlob_t tBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
-			assert ( tBlob.second==sizeof(DWORD) );
-			bDefault = *(const DWORD*)tBlob.first;
+			pStoredData = tBlob.first;
+			iStoredBytes = tBlob.second;
+			DWORD uVal = ( iStoredBytes == (int)sizeof(DWORD) && tBlob.first ) ? *(const DWORD*)tBlob.first : (DWORD)-1;
+			// 1 = generate; 0/2 = explicit empty.
+			bDefault = ( uVal == 1 );
+			bExplicitEmpty = ( uVal == 0 || uVal == 2 );
+		}
+
+		// Preserve user-provided explicit vectors (including 1-dim vectors stored in 4 bytes).
+		// Sentinel values (0/1/2) are control markers and must not be preserved as vectors.
+		int iExpectedDims = tAttrWithModel.m_pModel->GetDims();
+		bool bLooksLikeVecPayload = iStoredBytes > (int)sizeof(DWORD)
+			|| ( iStoredBytes == (int)sizeof(DWORD) && iExpectedDims == 1 && !bDefault && !bExplicitEmpty );
+		if ( !bDefault && bLooksLikeVecPayload && pStoredData )
+		{
+			int iNumFloats = iStoredBytes / (int)sizeof(float);
+			dEmbeddingsForAttr[tRowID].resize ( iNumFloats );
+			memcpy ( dEmbeddingsForAttr[tRowID].data(), pStoredData, (size_t)iStoredBytes );
+			dResultIds[tRowID] = -1;
+			uNumSkipped++;
+			continue;
 		}
 
 		if ( bDefault )
@@ -259,9 +298,9 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		return false;
 	}
 
+	// Merge model output into per-row slots; do not resize (preserves explicit-empty and user vectors from 1st pass).
 	if ( uNumSkipped )
 	{
-		dEmbeddingsForAttr.resize ( dResultIds.GetLength() );
 		ARRAY_FOREACH ( i, dResultIds )
 		{
 			int iResultId = dResultIds[i];
@@ -334,7 +373,8 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
 		bool bColumnar = tSchema.GetAttr(i).IsColumnar();
-		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, bColumnar ? dAllIterators[iColumnarAttr].first.get() : nullptr, sError ) )
+		columnar::Iterator_i * pColIt = ( bColumnar && iColumnarAttr < dAllIterators.GetLength() ) ? dAllIterators[iColumnarAttr].first.get() : nullptr;
+		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, pColIt, sError ) )
 			return false;
 
 		if ( dAttrsWithModels[i].m_pModel )
@@ -663,17 +703,47 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				iMva += iNumValues + 1;
 
 				int64_t iTmpMVA = 0;
-				if ( !tColumn.m_tKNNModel.m_sModelName.empty() )
+				// When column has embedding model: use placeholder only if user did not provide explicit vector.
+				// 1 = generate from FROM; 2 = explicitly empty (do not fill on REBUILD EMBEDDINGS).
+				if ( !tColumn.m_tKNNModel.m_sModelName.empty() && ( iNumValues == 0 || bDefault ) )
 				{
-					// store a temporary flag for later checks in the accumulator
-					assert(!iNumValues);
 					iNumValues = 1;
-					iTmpMVA = (int64_t)bDefault;
+					iTmpMVA = bDefault ? 1 : 2;
 					pMva = &iTmpMVA;
 				}
 
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
+				else if ( tColumn.m_eAttrType == SPH_ATTR_FLOAT_VECTOR )
+				{
+					// float_vector blob: sentinels (0/1/2) are raw 4-byte DWORDs; real vectors are raw float bytes
+					if ( iNumValues == 1 )
+					{
+						DWORD uVal = (DWORD)( pMva[0] & 0xFFFFFFFF );
+						if ( uVal <= 2 ) // 0/1/2 = control sentinels, not float data
+						{
+							m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)&uVal, (int)sizeof(uVal), sError );
+							break;
+						}
+					}
+					// User-provided vector: MVA has int64 (float bits in low 32) per element
+					CSphVector<BYTE> dFloats;
+					dFloats.Resize ( iNumValues * sizeof(float) );
+					float * pFloats = (float *)dFloats.Begin();
+					for ( int i = 0; i < iNumValues; i++ )
+						pFloats[i] = sphDW2F ( (DWORD)( pMva[i] & 0xFFFFFFFF ) );
+					m_pBlobWriter->SetAttr ( iBlobAttr, dFloats.Begin(), dFloats.GetLength(), sError );
+				}
+				else if ( tColumn.m_eAttrType == SPH_ATTR_UINT32SET )
+				{
+					// multi (UINT32SET): blob stores DWORDs; display path expects byte length = count * sizeof(DWORD)
+					CSphVector<BYTE> dMva32;
+					dMva32.Resize ( iNumValues * sizeof(DWORD) );
+					auto * pDst = (DWORD *)dMva32.Begin();
+					for ( int i = 0; i < iNumValues; i++ )
+						pDst[i] = (DWORD)pMva[i];
+					m_pBlobWriter->SetAttr ( iBlobAttr, dMva32.Begin(), dMva32.GetLength(), sError );
+				}
 				else
 					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
 			}

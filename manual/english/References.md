@@ -11,6 +11,7 @@
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
 * [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE REBUILD EMBEDDINGS](Updating_table_schema_and_settings.md#Rebuilding-embeddings) - Fills empty float_vector columns using the configured model and FROM source
 * [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Updates/recovers secondary indexes
 * [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
 * [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - Suspend or resume consuming from the Kafka source
@@ -312,7 +313,7 @@
 * [IN()](Functions/Arrays_and_conditions_functions.md#IN%28%29) - Returns 1 if the first argument is equal to any of the other arguments, or 0 otherwise
 * [INDEXOF()](Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29) - Iterates through all elements in the array and returns index of the first matching element
 * [INTERVAL()](Functions/Arrays_and_conditions_functions.md#INTERVAL%28%29) - Returns index of the argument that is less than the first argument
-* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - Returns number of elements in MVA
+* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - Returns number of elements in MVA or dimensions in float_vector
 * [REMAP()](Functions/Arrays_and_conditions_functions.md#REMAP%28%29) - Allows to make some exceptions of expression values depending on the condition values
 
 ##### Date and time
@@ -478,7 +479,6 @@ To be put in the `searchd {}` section of the configuration file:
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Determines whether to forcibly preopen all tables on startup
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Maximum RAM allocated for cached result sets

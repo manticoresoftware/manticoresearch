@@ -1959,16 +1959,26 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
-	case SPH_ATTR_FLOAT_VECTOR_PTR:
 	{
 		auto _ = tOut.Array ();
 		const auto * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
 			PackedShortMVA2Json ( tOut, pMVA );
-		else if ( eAttrType==SPH_ATTR_INT64SET_PTR )
-			PackedWideMVA2Json ( tOut, pMVA );
 		else
-			PackedFloatVec2Json ( tOut, pMVA );
+			PackedWideMVA2Json ( tOut, pMVA );
+	}
+	break;
+
+	case SPH_ATTR_FLOAT_VECTOR_PTR:
+	{
+		auto tFV = sphUnpackPtrAttr ( ( const BYTE * ) tMatch.GetAttr ( tLoc ) );
+		if ( sphIsExplicitlyEmptyFloatVector ( tFV.first, tFV.second ) )
+			tOut << "null";
+		else
+		{
+			auto _ = tOut.Array ();
+			PackedFloatVec2Json ( tOut, ( const BYTE * ) tMatch.GetAttr ( tLoc ) );
+		}
 	}
 	break;
 

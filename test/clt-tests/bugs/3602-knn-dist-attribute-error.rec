@@ -17,6 +17,10 @@ Create table with text field and float_vector embeddings field
 ––– input –––
 mysql -h0 -P9306 -e "create table companysearch(f text, embeddings float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');"
 ––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected EMBEDDINGS near 'embeddings float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2')'
+––– input –––
+mysql -h0 -P9306 -e "create table companysearch(f text, emb float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');"
+––– output –––
 ––– comment –––
 Insert test data
 ––– input –––
@@ -25,6 +29,6 @@ mysql -h0 -P9306 -e "insert into companysearch values(1, 'web', (0,0));"
 ––– comment –––
 Test query with KNN and MATCH - should return error, not crash
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM companysearch WHERE knn(embeddings, 5, (1,1)) AND MATCH('web')  OPTION ranker=expr('knn_dist()');"
+mysql -h0 -P9306 -e "SELECT * FROM companysearch WHERE knn(emb, 5, (1,1)) AND MATCH('web')  OPTION ranker=expr('knn_dist()');"
 ––– output –––
 ERROR 1064 (42000) at line 1: table companysearch: KNN_DIST() attribute not available in this context

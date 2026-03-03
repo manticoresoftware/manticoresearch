@@ -19,6 +19,7 @@
 #if __has_include( <charconv>)
 #include <charconv>
 #endif
+#include <type_traits>
 
 //////////////////////////////////////////////////////////////////////////
 // blob attributes
@@ -94,7 +95,17 @@ public:
 
 	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
 	{
-		int iValueSize = sizeof ( int64_t );
+		// float_vector: input is always raw float bytes (from copy or update pool); copy as-is to avoid wrong counts
+		if ( std::is_same_v<IN_T, float> )
+		{
+			m_dData.Resize ( iDataLen );
+			if ( iDataLen )
+				memcpy ( m_dData.Begin(), pData, iDataLen );
+			return true;
+		}
+
+		// IN_T is the source element type: DWORD/int64_t for MVA
+		int iValueSize = sizeof ( IN_T );
 		int iNumValues = iDataLen/iValueSize;
 		if (!iNumValues)
 		{
@@ -108,7 +119,7 @@ public:
 			auto * pUnsorted = (T*)m_dUnsorted.Begin();
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = ( iValueSize==sizeof(int64_t) ) ? (SphAttr_t)sphUnalignedRead ( *(const int64_t*)pData ) : (SphAttr_t)sphUnalignedRead ( *(const DWORD*)pData );
 				*pUnsorted++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -124,7 +135,7 @@ public:
 
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = ( iValueSize==sizeof(int64_t) ) ? (SphAttr_t)sphUnalignedRead ( *(const int64_t*)pData ) : (SphAttr_t)sphUnalignedRead ( *(const DWORD*)pData );
 				*pResult++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}

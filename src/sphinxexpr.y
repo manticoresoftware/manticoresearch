@@ -35,6 +35,7 @@
 %token <iAttrLocator>	TOK_ATTR_FLOAT
 %token <iAttrLocator>	TOK_ATTR_MVA32
 %token <iAttrLocator>	TOK_ATTR_MVA64
+%token <iAttrLocator>	TOK_ATTR_FLOAT_VECTOR
 %token <iAttrLocator>	TOK_ATTR_STRING
 %token <iAttrLocator>	TOK_ATTR_FACTORS
 %token <iFunc>			TOK_IF
@@ -138,6 +139,7 @@ attr:
 	| TOK_ATTR_JSON					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_JSON, $1 ); }
 	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
 	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
+	| TOK_ATTR_FLOAT_VECTOR		{ $$ = pParser->AddNodeAttr ( TOK_ATTR_FLOAT_VECTOR, $1 ); }
 	| TOK_ATTR_STRING				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_STRING, $1 ); }
 	| TOK_COLUMNAR_INT 				{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_INT, $1 ); }
 	| TOK_COLUMNAR_TIMESTAMP		{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_TIMESTAMP, $1 ); }

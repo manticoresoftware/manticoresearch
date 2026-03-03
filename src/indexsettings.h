@@ -402,6 +402,7 @@ struct CreateTableAttr_t
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;
+	bool					m_bKNNFromSpecified = false;  // true when user wrote FROM=... (even FROM=''); false when FROM omitted
 };
 
 struct NameValueStr_t

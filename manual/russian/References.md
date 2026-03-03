@@ -11,6 +11,7 @@
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - Выводит список полей таблицы и их типы
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Изменяет схему / настройки таблицы
 * [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Обновляет/восстанавливает вторичные индексы
+* [ALTER TABLE REBUILD EMBEDDINGS](Updating_table_schema_and_settings.md#Rebuilding-embeddings) - Заполняет пустые столбцы float_vector, используя настроенную модель и источник FROM
 * [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Обновляет/восстанавливает вторичные индексы
 * [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
 * [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - Приостанавливает или возобновляет потребление из источника Kafka
@@ -312,7 +313,7 @@
 * [IN()](Functions/Arrays_and_conditions_functions.md#IN%28%29) - Возвращает 1, если первый аргумент равен любому из остальных аргументов, или 0 в противном случае
 * [INDEXOF()](Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29) - Перебирает все элементы массива и возвращает индекс первого совпадающего элемента
 * [INTERVAL()](Functions/Arrays_and_conditions_functions.md#INTERVAL%28%29) - Возвращает индекс аргумента, который меньше первого аргумента
-* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - Возвращает количество элементов в MVA
+* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - Возвращает количество элементов в MVA или размерностей в float_vector
 * [REMAP()](Functions/Arrays_and_conditions_functions.md#REMAP%28%29) - Позволяет создавать исключения для значений выражения в зависимости от значений условия
 
 ##### Дата и время
@@ -478,7 +479,6 @@ index_converter {--config /path/to/config|--path}
   * [node_address](Server_settings/Searchd.md#node_address) - Определяет сетевой адрес узла
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное количество одновременных постоянных соединений с удаленными постоянными агентами
   * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к pid-файлу сервера Manticore
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Затраты для модели прогнозирования времени выполнения запроса
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Определяет, следует ли принудительно предварительно открывать все таблицы при запуске
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардинг для поисковых запросов к обычным и реального времени таблицам
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Максимальный объем оперативной памяти, выделенный для кэшированных наборов результатов

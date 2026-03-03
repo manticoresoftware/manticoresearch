@@ -203,8 +203,10 @@ $insertBlob->send_long_data(1, "should_be_ignored");
 try {
     if ($insertBlob->execute()) {
         $blobVal = fetch_blob($selectBlob, $blobId);
-        if (!is_null($blobVal)) {
-            $results[] = "Long data+NULL mismatch: expected NULL, got '" . $blobVal . "'";
+        if ($blobVal !== null && $blobVal !== '') {
+            $results[] = "Long data+NULL mismatch: expected NULL/empty, got '" . $blobVal . "'";
+        } else {
+            $results[] = "long data+NULL: NULL accepted, value is " . (is_null($blobVal) ? "NULL" : "empty");
         }
     } else {
         $results[] = "long data+NULL insert rejected as expected: {$insertBlob->error}";

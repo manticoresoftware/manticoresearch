@@ -34,6 +34,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * 新创建的属性值设置为0。
 * `ALTER`不适用于分布式表和无任何属性的表。
 * 不能删除`id`列。
+* 不能删除被 `float_vector` 属性用作嵌入源（在 `FROM` 中列出）的列（全文字段或字符串属性）。错误信息为：`cannot drop column 'X': used as embedding source (FROM) by float_vector attribute 'Y'`。请先删除 float_vector 列。
 * 当删除一个既是全文字段又是字符串属性的字段时，第一次`ALTER DROP`删除属性，第二次删除全文字段。
 * 添加/删除全文字段仅在[RT模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下支持。
 
@@ -315,6 +316,33 @@ ALTER TABLE table REBUILD KNN
 <!-- request Example -->
 ```sql
 ALTER TABLE rt REBUILD KNN;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## 重建嵌入
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS
+```
+
+`REBUILD EMBEDDINGS` 使用配置的嵌入模型和 `FROM` 源填充现有行中空的 `float_vector`（嵌入）列。当您添加了一个带有 `MODEL_NAME` 和 `FROM` 的新 `float_vector` 列时使用它——现有行默认获得零向量；运行 `REBUILD EMBEDDINGS` 以从源文本（例如字段或字符串属性）生成嵌入。
+
+Rows where you explicitly set the vector to `()` or `NULL` (explicitly empty) show as `NULL` and are excluded from vector search; `REBUILD EMBEDDINGS` does not fill them.
+
+仅当显式地将按行的 `float_vector` 属性设置为具有模型和 `FROM` 配置时，才会处理这些属性。不支持按列的嵌入属性。该命令以分块方式处理属性（每批最多 1000 个文档），直到未再发现空嵌入时重复执行，因此在运行期间插入的新行可以在后续轮次中被处理。
+
+其他查询和操作（例如 `SELECT`、`INSERT`、`REPLACE`）可以在 `REBUILD EMBEDDINGS` 进行时运行；索引写锁仅在每次更新批次和最终 KNN 索引重建期间持有。进度可在 `SHOW THREADS`（`Info` 列）中查看。
+
+<!-- request Example -->
+```sql
+ALTER TABLE products REBUILD EMBEDDINGS;
 ```
 
 <!-- response Example -->

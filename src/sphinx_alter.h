@@ -36,6 +36,8 @@ class CSphSchema;
 class Docstore_i;
 class DocstoreBuilder_i;
 
+bool Alter_CheckDropEmbeddingSource ( const CSphSchema & tSchema, const CSphString & sDropName, CSphString & sError );
+
 struct AttrAddRemoveCtx_t
 {
 	CSphString		m_sName;
@@ -66,4 +68,3 @@ protected:
 
 
 #endif // _sphinx_alter_
-

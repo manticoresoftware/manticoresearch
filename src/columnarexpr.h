@@ -24,6 +24,7 @@ ISphExpr * CreateExpr_ColumnarStringIn ( const CSphString & sName, ConstList_c *
 ISphExpr * CreateExpr_ColumnarStringLength ( const CSphString & sName );
 ISphExpr * CreateExpr_ColumnarMva32Length ( const CSphString & sName );
 ISphExpr * CreateExpr_ColumnarMva64Length ( const CSphString & sName );
+ISphExpr * CreateExpr_ColumnarFloatVecLength ( const CSphString & sName );
 
 ISphExpr * CreateExpr_ColumnarMva32Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc );
 ISphExpr * CreateExpr_ColumnarMva64Aggr ( ISphExpr * pExpr, ESphAggrFunc eFunc );

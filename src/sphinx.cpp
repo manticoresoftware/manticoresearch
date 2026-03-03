@@ -55,6 +55,7 @@
 #include "attrindex_merge.h"
 #include "knnmisc.h"
 #include "querycontext.h"
+#include "embeddingutils.h"
 #include "dict/infix/infix_builder.h"
 #include "skip_cache.h"
 #include "jsonsi.h"
@@ -749,7 +750,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			return false;
 		}
 
-		if ( tCol.IsIndexedKNN() )
+		if ( tCol.IsIndexedKNN() && !tUpd.m_bRebuildEmbeddings )
 		{
 			sError.SetSprintf ( "unable to update attribute '%s' that has a KNN index", sUpdAttrName.cstr() );
 			return false;
@@ -978,6 +979,27 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 			const CSphColumnInfo & tAttr = tCtx.m_tSchema.GetAttr(iCol);
 			int iLengthBytes = 0;
 			const BYTE* pData = sphGetBlobAttr ( pDocinfo, tAttr.m_tLocator, tCtx.m_pBlobPool, iLengthBytes );
+			// float_vector: if blob row was read with wrong offset, GetBlobAttr can return total blob length
+			// and we may have (v1,v2) stored as int64 pairs; first 1536 bytes are (v1_0,v2_0,v1_1,v2_1,...)
+			// so we see (val,0,val,0) when v2 is zero. Cap length and, if length was 2*dims, compact by taking every other float.
+			CSphVector<BYTE> dCompacted;
+			if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tAttr.m_tKNN.m_iDims>0 )
+			{
+				int iMaxBytes = tAttr.m_tKNN.m_iDims * (int)sizeof(float);
+				if ( iLengthBytes == 2 * iMaxBytes && pData )
+				{
+					// Data is (v1_0, v2_0, v1_1, v2_1, ...) - take every other float to get first attr only
+					dCompacted.Resize ( iMaxBytes );
+					const float * pSrc = (const float *)pData;
+					float * pDst = (float *)dCompacted.Begin();
+					for ( int i = 0; i < tAttr.m_tKNN.m_iDims; i++ )
+						pDst[i] = pSrc[2 * i];
+					pData = dCompacted.Begin();
+					iLengthBytes = iMaxBytes;
+				}
+				else if ( iLengthBytes > iMaxBytes )
+					iLengthBytes = iMaxBytes;
+			}
 			if ( !pBlobRowBuilder->SetAttr ( iBlobId, pData, iLengthBytes, sError ) )
 				return false;
 		}
@@ -1001,15 +1023,52 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 			case SPH_ATTR_INT64SET:
 			case SPH_ATTR_FLOAT_VECTOR:
 				{
-					DWORD uLength = tUpd.m_dPool[iPos++];
+					// Pool layout per record: [count_DWORD, data...] = 1 + count DWORDs total
+					DWORD uLength = tUpd.m_dPool[iPos];
+					const DWORD * pData = (const DWORD *)( tUpd.m_dPool.Begin() + iPos + 1 );
 					if ( iBlobId!=-1 )
 					{
-						pBlobRowBuilder->SetAttr ( iBlobId, (const BYTE *)(tUpd.m_dPool.Begin()+iPos), uLength*sizeof(DWORD), sError );
+						int iSchemaCol = dBlobAttrIds[iBlobId];
+						const CSphColumnInfo & tSchemaAttr = tCtx.m_tSchema.GetAttr(iSchemaCol);
+						if ( tSchemaAttr.m_eAttrType==SPH_ATTR_UINT32SET )
+						{
+							// multi (UINT32SET): blob stores DWORDs only; pool has int64 pairs (uLength = 2*count)
+							int iNumValues = uLength / 2;
+							CSphVector<BYTE> dMva32;
+							dMva32.Resize ( iNumValues * sizeof(DWORD) );
+							DWORD * pDst = (DWORD *)dMva32.Begin();
+							for ( int i = 0; i < iNumValues; i++ )
+								pDst[i] = pData[i*2]; // low 32 bits of each int64
+							pBlobRowBuilder->SetAttr ( iBlobId, dMva32.Begin(), dMva32.GetLength(), sError );
+						}
+						else if ( tSchemaAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+						{
+							// float_vector: blob stores raw float bytes. Pool format depends on source:
+							// - REBUILD EMBEDDINGS (CreateFloatVectorAttrUpdate): uLength = count, pool has count DWORDs
+							// - SphinxQL update (searchdsql): uLength = 2*count, pool has int64 pairs (float bits in low DWORD)
+							int iNumFloats;
+							bool bPoolIsDwords = false; // true = count DWORDs, false = int64 pairs
+							int iDims = tSchemaAttr.m_tKNN.m_iDims;
+							if ( iDims > 0 && uLength == (DWORD)iDims )
+							{
+								iNumFloats = uLength;
+								bPoolIsDwords = true;
+							}
+							else
+								iNumFloats = uLength / 2;
+							CSphVector<BYTE> dFloats;
+							dFloats.Resize ( iNumFloats * sizeof(float) );
+							float * pDst = (float *)dFloats.Begin();
+							for ( int i = 0; i < iNumFloats; i++ )
+								pDst[i] = sphDW2F ( bPoolIsDwords ? pData[i] : pData[i*2] );
+							pBlobRowBuilder->SetAttr ( iBlobId, dFloats.Begin(), dFloats.GetLength(), sError );
+						}
+						else
+							pBlobRowBuilder->SetAttr ( iBlobId, (const BYTE *)pData, uLength*sizeof(DWORD), sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}
-
-					iPos += uLength;
+					iPos += 1 + uLength;
 				}
 				break;
 
@@ -1256,6 +1315,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
+	bool				CollectDocsWithEmptyEmbedding ( int iAttrIdx, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iEmptyVectorDims = 0, int iMaxDocs = 0, RowID_t * pStartRowID = nullptr ) const override;
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
@@ -2078,6 +2138,39 @@ int CSphIndex::UpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphSt
 	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning );
 }
 
+AttrUpdateSharedPtr_t CreateFloatVectorAttrUpdate ( const CSphString & sAttrName, const CSphVector<DocID_t> & dDocids, const std::vector<std::vector<float>> & dEmbeddings, int iEmptyVectorDims )
+{
+	assert ( dEmbeddings.size() == (size_t)dDocids.GetLength() );
+	AttrUpdateSharedPtr_t pUpdate { new CSphAttrUpdate };
+	TypedAttribute_t & tTyped = pUpdate->m_dAttributes.Add();
+	tTyped.m_sName = sAttrName;
+	tTyped.m_eType = SPH_ATTR_FLOAT_VECTOR;
+
+	pUpdate->m_dDocids = dDocids;
+	int iRows = dDocids.GetLength();
+	pUpdate->m_dRowOffset.Resize ( iRows );
+	int iPoolOffset = 0;
+	for ( int i = 0; i < iRows; i++ )
+	{
+		pUpdate->m_dRowOffset[i] = iPoolOffset;
+		const auto & dVec = dEmbeddings[i];
+		int iCount = dVec.empty() ? iEmptyVectorDims : (int)dVec.size();
+		pUpdate->m_dPool.Add ( (DWORD)iCount );
+		if ( dVec.empty() )
+			for ( int j = 0; j < iEmptyVectorDims; j++ )
+				pUpdate->m_dPool.Add ( sphF2DW ( 0.0f ) );
+		else
+			for ( float f : dVec )
+				pUpdate->m_dPool.Add ( sphF2DW ( f ) );
+		iPoolOffset += 1 + iCount;
+	}
+
+	pUpdate->m_bIgnoreNonexistent = false;
+	pUpdate->m_bStrict = true;
+	pUpdate->m_bRebuildEmbeddings = true;
+	return pUpdate;
+}
+
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
 	TlsMsg::ResetErr(); // reset error
@@ -2770,6 +2863,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	else
 		tNewCtx.m_uFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
 
+	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 	if ( !Alter_AddRemoveFromSchema ( tNewSchema, tNewCtx, bAddAttr, sError ) )
 		return false;
@@ -2870,9 +2964,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !AddRemoveFromDocstore ( m_tSchema, tNewSchema, sError ) )
 		return false;
 
-	if ( !AddRemoveFromKNN ( m_tSchema, tNewSchema, sError ) )
-		return false;
-
 	if ( bNeedToCloseSPA )
 	{
 		if ( tSPAWriter.IsError() )
@@ -2951,6 +3042,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	m_tSchema = tNewSchema;
 	m_iMinMaxIndex = iNewMinMaxIndex;
 	m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
+
+	// Rebuild KNN index after new blob/schema are loaded so new KNN attrs (with placeholder vectors) are included.
+	if ( !AddRemoveFromKNN ( tOldSchema, m_tSchema, sError ) )
+		return false;
 
 	PrereadMapping ( GetName(), "attributes", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eAttr ), m_tAttr );
 
@@ -4695,7 +4790,18 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t
 		case SPH_ATTR_INT64SET:
 			{
 				const CSphVector<int64_t> * pMva = FetchMVA ( tDocId, i, tAttr, tMvaContainer, tSource, bForceSource );
-				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, pMva ? (const BYTE*)(pMva->Begin()) : nullptr, pMva ? pMva->GetLength()*sizeof(int64_t) : 0, sError );
+				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET && pMva && pMva->GetLength() )
+				{
+					// multi (UINT32SET): blob stores DWORDs; display path expects byte length = count * sizeof(DWORD)
+					CSphVector<BYTE> dMva32;
+					dMva32.Resize ( pMva->GetLength() * sizeof(DWORD) );
+					auto * pDst = (DWORD *)dMva32.Begin();
+					for ( int j = 0; j < pMva->GetLength(); j++ )
+						pDst[j] = (DWORD)(*pMva)[j];
+					bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, dMva32.Begin(), dMva32.GetLength(), sError );
+				}
+				else
+					bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, pMva ? (const BYTE*)(pMva->Begin()) : nullptr, pMva ? pMva->GetLength()*sizeof(int64_t) : 0, sError );
 			}
 			break;
 
@@ -7185,21 +7291,10 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 		auto dColumnarIterators = CreateAllColumnarIterators ( m_pColumnar.get(), m_tSchema );
 
-		CSphVector<PlainOrColumnar_t> dOldAttrsForKNN;
-		IntVec_t dNewAttrsForKNN;
-		int iMaxDims = 0;
-		ARRAY_FOREACH ( i, dAllAttrsForKNN )
-		{
-			const auto & tKNNAttr = dAllAttrsForKNN[i];
-			const auto & tAttr = tNewSchema.GetAttr ( tKNNAttr.second );
-			if ( tOldSchema.GetAttr ( tAttr.m_sName.cstr() ) )
-				dOldAttrsForKNN.Add ( tKNNAttr.first );
-			else
-			{
-				dNewAttrsForKNN.Add(i);
-				iMaxDims = Max ( iMaxDims, tAttr.m_tKNN.m_iDims );
-			}
-		}
+		// Use all KNN attrs (old and new) so the new attr's placeholder vectors are included in the index.
+		CSphVector<PlainOrColumnar_t> dAllAttrsForKNNPlain;
+		for ( const auto & tKNNAttr : dAllAttrsForKNN )
+			dAllAttrsForKNNPlain.Add ( tKNNAttr.first );
 
 		const CSphRowitem * pRow = GetRawAttrs();
 		int iStride = m_tSchema.GetRowSize();
@@ -7208,11 +7303,11 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 		auto pBlobs = GetRawBlobAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-			BuildTrainKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
+			BuildTrainKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dAllAttrsForKNNPlain, *pKNNBuilder );
 
 		pRow = GetRawAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-			BuildStoreKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
+			BuildStoreKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dAllAttrsForKNNPlain, *pKNNBuilder );
 
 		BuildBufferSettings_t tSettings; // use default buffer settings
 
@@ -7228,7 +7323,9 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 		return false;
 
 	m_pKNN.reset();
-	if ( !PreallocKNN() )
+	// When we just removed all KNN attrs (iNewNumKNN==0), skip PreallocKNN: schema is not updated yet
+	// and the .spknn file was just removed, so loading it would fail and warn unnecessarily.
+	if ( iNewNumKNN && !PreallocKNN() )
 	{
 		sError = m_sLastError;
 		return false;
@@ -8272,6 +8369,8 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
+	// Exclude documents with empty/invalid vector (knn_dist = FLT_MAX) so they are skipped like in RT RAM path.
+	tFlx.m_bAddKNNDistFilter = ( pMaxSorterSchema->GetAttr ( GetKnnDistAttrName() ) != nullptr );
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
@@ -11559,6 +11658,77 @@ int CSphIndex_VLN::GetFieldId ( const CSphString & sName, DocstoreDataType_e eTy
 		return -1;
 
 	return m_pDocstore->GetFieldId ( sName, eType );
+}
+
+
+bool CSphIndex_VLN::CollectDocsWithEmptyEmbedding ( int iAttrIdx, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iEmptyVectorDims, int iMaxDocs, RowID_t * pStartRowID ) const
+{
+	if ( iAttrIdx < 0 || iAttrIdx >= m_tSchema.GetAttrsCount() || dFrom.IsEmpty() || !m_iDocinfo )
+		return true;
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType != SPH_ATTR_FLOAT_VECTOR || tAttr.IsColumnar() )
+		return true;
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	const BYTE * pBlobBase = m_tBlobAttrs.GetReadPtr();
+	if ( !pBlobBase )
+		return true;
+
+	int iDims = ( iEmptyVectorDims > 0 ) ? iEmptyVectorDims : tAttr.m_tKNN.m_iDims;
+	CSphVector<ScopedTypedIterator_t> dFromColumnarIters;
+	PrepareEmbeddingColumnarIters ( m_tSchema, dFrom, m_pColumnar.get(), dFromColumnarIters );
+
+	// If FROM needs fields and docstore is unavailable, no rows can be collected.
+	if ( EmbeddingFromNeedsDocstore ( dFrom ) && !m_pDocstore )
+		return true;
+
+	RowID_t tRowIDStart = ( pStartRowID && *pStartRowID > 0 ) ? *pStartRowID : 0;
+	const bool bCap = ( iMaxDocs > 0 );
+	const int iInitialDocs = dDocids.GetLength();
+
+	for ( RowID_t tRowID = tRowIDStart; tRowID < (RowID_t)m_iDocinfo; tRowID++ )
+	{
+		// iMaxDocs caps docs added by this call, not absolute vector length.
+		if ( bCap && ( dDocids.GetLength() - iInitialDocs ) >= iMaxDocs )
+		{
+			if ( pStartRowID )
+				*pStartRowID = tRowID;
+			return true;
+		}
+
+		if ( m_tDeadRowMap.IsSet ( tRowID ) )
+			continue;
+
+		const CSphRowitem * pRow = GetDocinfoByRowID ( tRowID );
+		if ( !pRow )
+			continue;
+
+		DocID_t tDocID = sphGetDocID ( pRow );
+		SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+		const BYTE * pBlobRow = pBlobBase + tBlobOff;
+		ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+
+		// Empty to fill: ADD COLUMN (0 bytes), insert placeholder (DWORD=1), or zero vector. Explicit empty (DWORD=0/2) is excluded.
+		if ( !sphIsEmptyEmbeddingToFill ( tVecBlob.first, tVecBlob.second, iDims ) )
+			continue;
+
+		DocstoreDoc_t tDoc;
+		if ( m_pDocstore )
+			tDoc = m_pDocstore->GetDoc ( tRowID, nullptr, -1, false );
+
+		CSphString sFrom;
+		BuildEmbeddingFromText ( m_tSchema, dFrom, m_pDocstore ? &tDoc : nullptr, pBlobRow, dFromColumnarIters, tRowID, sFrom );
+		// Include rows with empty source so REBUILD can assign zero-vector and overwrite placeholder.
+		dDocids.Add ( tDocID );
+		dFromTexts.Add ( sFrom );
+	}
+	if ( pStartRowID )
+		*pStartRowID = m_iDocinfo; // chunk exhausted
+	return true;
 }
 
 

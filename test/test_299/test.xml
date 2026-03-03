@@ -8,6 +8,7 @@
 	<columnar/>
 	<force-rt/>
 	<embeddings/>
+	<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>
@@ -22,7 +23,266 @@ searchd
 
 <queries>
 <sphinxql>
-	<!-- regression for knn not loaded after daemon restart -->
+
+	<!-- ==================================  UPDATE float_vector -->
+	drop table if exists t;
+	CREATE TABLE t (f text, v float_vector, v2 float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2', v3 float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2' from='f');
+	INSERT INTO t (id,f) VALUES (1,'f');
+	select id,f,v,v2,length(v3),item(v3,0) from t;
+	update t set v=(0.1,0.2) where id=1;
+	select id,f,v,v2,length(v3),item(v3,0) from t;
+	update t set v2=(0.1,0.2) where id=1;
+	update t set v3=(0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5) where id=1;
+
+	<!-- ================================== Handling ALTER DROP COLUMN -->
+	drop table if exists t;
+	CREATE TABLE t (f text, s string, v float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2' from='f,s');
+	alter table t drop column s;
+	alter table t drop column f;
+	insert into t(id,f,s) values(1,'f','s');
+	alter table t drop column s;
+	alter table t drop column f;
+	flush ramchunk t;
+	alter table t drop column s;
+	alter table t drop column f;
+	ALTER TABLE t ADD COLUMN v2 float_vector knn_type='hnsw' from='f,s' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	insert into t(id,f,s) values(2,'f2','s2');
+	alter table t drop column s;
+	alter table t drop column f;
+	flush ramchunk t;
+	alter table t drop column s;
+	alter table t drop column f;
+	alter table t drop column v2;
+	alter table t drop column s;
+	alter table t drop column f;
+	alter table t drop column v;
+	alter table t drop column s;
+	alter table t drop column f;
+	ALTER TABLE t ADD COLUMN v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	alter table t add column f text;
+	ALTER TABLE t ADD COLUMN v float_vector knn_type='hnsw' from='' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	alter table t drop column f;
+
+	<!-- ================================== Handling NULL and () -->
+	DROP TABLE IF EXISTS t;
+	CREATE TABLE t(v float_vector);
+	INSERT INTO t VALUES (1, NULL), (2, ());
+	select * from t order by id asc;
+	ALTER TABLE t ADD COLUMN f text;
+	INSERT INTO t(id) VALUES (3);
+	ALTER TABLE t ADD COLUMN v2 float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2' from='f';
+	INSERT INTO t(id,v,v2) VALUES (4, (),());
+	INSERT INTO t(id,v,v2) VALUES (5, NULL,());
+	INSERT INTO t(id,v,v2) VALUES (6, (), NULL);
+	INSERT INTO t(id,v,v2) VALUES (7, NULL, NULL);
+	INSERT INTO t(id) VALUES (8);
+	INSERT INTO t(id,f) VALUES (9, 'f7');
+	SELECT id,f,v,length(v2),item(v2,0) FROM t order by id asc;
+	alter table t rebuild embeddings;
+	SELECT id,f,v,length(v2),item(v2,0) FROM t order by id asc;
+
+	<!-- regression ================================== https://github.com/manticoresoftware/manticoresearch/issues/4315 - Incorrect MVA value related to auto-embeddings -->
+	drop table if exists t;
+	CREATE TABLE t (f text, m multi, v float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2' from='f');
+	INSERT INTO t (id,f,m) VALUES (1,'a',(1));
+	INSERT INTO t (id,v,m) VALUES(2,(),(7,7,3,4,5,5,6,6));
+	SELECT id,f,m,length(v),item(v,0),knn_dist() FROM t where knn(v,'a');
+	INSERT INTO t (id,f,m) VALUES (3,'b',(1,2,3)),(4,'c',(999,998,997));
+	SELECT id,f,m,length(v),item(v,0),knn_dist() FROM t where knn(v,'b');
+	SELECT id,f,m,length(v),item(v,0) FROM t;
+	ALTER TABLE t ADD COLUMN m2 multi64;
+	INSERT INTO t (id,m2) VALUES (5,(999,998,997));
+	SELECT id,f,m,m2,length(v),item(v,0) FROM t;
+	ALTER TABLE t ADD COLUMN v2 float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	SELECT id,f,m,m2,length(v),item(v,0),length(v2),item(v2,0) FROM t;
+	INSERT INTO t (id,f) VALUES (6,'abc');
+	ALTER TABLE t REBUILD EMBEDDINGS;
+	SELECT id,f,m,m2,length(v),item(v,0),length(v2),item(v2,0) FROM t;
+
+	<!-- ================================== automerge vs alter race -->
+	drop table if exists t;
+	create table t (f text, v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2',
+		v15 float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2',
+		v2 float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2',
+		v3 float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2') optimize_cutoff='1';
+	insert into t(id,f) values(1,'f_1'),(2,'f_2');
+	alter table t rebuild embeddings;
+	flush ramchunk t;
+	insert into t(id,f,v,v2) values(3,'f_3', (), ());
+	replace into t(id,f,v,v2,v3) values(1,'f_1',(),(),());
+	flush ramchunk t;
+	replace into t(id,f,v,v2,v3) values(3,'f_3', (),(),());
+	alter table t rebuild embeddings;
+	replace into t(id,f) values(1,'f_1'),(2,'f_2'),(3,'f_3');
+	alter table t add column v4 float_vector knn_type='hnsw' from='' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+
+	<!-- ================================== ALTER EMBEDDINGS unknown table -->
+	ALTER TABLE unknown REBUILD EMBEDDINGS;
+
+	<!-- ================================== columnar vector + alter row-wise vector + alter rebuild -->
+	drop table if exists t;
+	create table t (f text, v float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2' from='f' engine='columnar');
+	insert into t(id,f) values(1,'f1');
+	alter table t add column v2 float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	desc t;
+	insert into t(id,f) values(2,'f2');
+	select id,f,length(v),item(v,0),length(v2),item(v2,0),knn_dist() from t where knn(v2, 'f1');
+	alter table t rebuild embeddings;
+	show warnings;
+	select id,f,length(v),item(v,0),length(v2),item(v2,0),knn_dist() from t where knn(v2, 'f1');
+
+	<!-- ================================== columnar + row-wise + full-text + empty from -->
+	drop table if exists t;
+	create table t (c string engine='columnar', r string, f text, v float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2' from='');
+	insert into t(id,c,r,f) values(1,'c1', 'r1', 'f1');
+	select id,c,r,f,length(v),item(v,0) from t;
+	flush ramchunk t;
+	insert into t(id,c,r,f) values(2,'c2', 'r2', 'f2');
+	select id,c,r,f,length(v),item(v,0) from t;
+	alter table t add column v2 float_vector knn_type='hnsw' from='f,c,r' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	select id,c,r,f,length(v),item(v,0),length(v2),item(v2,0) from t;
+	insert into t(id,c,r,f) values(3,'c3', 'r3', 'f3');
+	select id,c,r,f,length(v),item(v,0),length(v2),item(v2,0) from t;
+	select id,c,r,f,knn_dist() from t where knn(v2, 'r2');
+	alter table t rebuild embeddings;
+	select id,c,r,f,length(v),item(v,0),length(v2),item(v2,0) from t;
+	select id,c,r,f,knn_dist() from t where knn(v, 'c3');
+	select id,c,r,f,knn_dist() from t where knn(v2, 'r2');
+	alter table t add column v3 float_vector knn_type='hnsw' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+
+	<!-- ================================== columnar string attr + embeddings + alter rebuild embeddings -->
+	drop table if exists t;
+	create table t (s string engine='columnar', v float_vector knn_type='hnsw' from='s' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	insert into t(id,v) values(1,());
+	insert into t(id,s) values(2,'s2');
+	flush ramchunk t;
+	insert into t(id,v) values(3,());
+	insert into t(id,s) values(4,'s4'),(5,'s5');
+	select id, s, length(v), item(v, 0) from t;
+	alter table t add column v2 float_vector knn_type='hnsw' from='s' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	select id, s, length(v), item(v, 0), length(v2), item(v2, 0) from t;
+	insert into t(id,v2) values(6,());
+	insert into t(id,s) values(7,'s7');
+	select id, s, length(v), item(v, 0), length(v2), item(v2, 0) from t;
+	select id, s, knn_dist() from t where knn(v, 's');
+	select id, s, knn_dist() from t where knn(v2, 's2');
+	alter table t rebuild embeddings;
+	select id, s, length(v), item(v, 0), length(v2), item(v2, 0) from t;
+	select id, s, knn_dist() from t where knn(v, 's');
+	select id, s, knn_dist() from t where knn(v2, 's2');
+
+	<!-- ================================== when ALTER fails, the column should not be added to the table -->
+	drop table if exists t;
+	create table t (f text, v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	insert into t(id,f) values(1,'f_1');
+	desc t;
+	alter table t add column v2 float_vector knn_type='hnsw' from='f2' MODEL_NAME='aari1995/German_Semantic_STS_V2' hnsw_similarity='l2';
+	desc t;
+
+	<!-- ================================== the document with an empty vector should be skipped in the last select -->
+	drop table if exists t;
+	create table t (f text, v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	insert into t(id,f,v) values(1,'f_1',());
+	select id, f, length(v), item(v, 0) from t;
+	select id,f,knn_dist() from t where knn(v, 'f_1');
+	flush ramchunk t;
+	select id, f, length(v), item(v, 0) from t;
+	select id,f,knn_dist() from t where knn(v, 'f_1');
+
+	<!-- ================================== regression (issue https://github.com/manticoresoftware/manticoresearch/issues/4314): empty from was not supported -->
+	drop table if exists t;
+	create table t (f text, v float_vector knn_type='hnsw' from='' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	show create table t;
+
+
+	<!-- ================================== regression (issue https://github.com/manticoresoftware/manticoresearch/issues/4301): can't insert a vector manually to an auto-embeddings column -->
+	drop table if exists t;
+	create table t (f text, v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	insert into t(id,f) values(1,'f');
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,'f');
+	replace into t(id,f,v) values(1,'f_new',(0.5,0.5));
+	replace into t(id,f,v) values(1,'f_new',(0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5));
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,'f');
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,'f_new');
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,(0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5));
+	insert into t(id,f,v) values(1,'f_new',(0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5));
+	flush ramchunk t;
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,'f_new');
+	insert into t(id,f,v) values(3,'f3',(0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5));
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,'f3');
+	select id,f,length(v),item(v,0),knn_dist() from t where knn(v,(0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5));
+
+	<!-- ================================== long test -->
+	drop table if exists t;
+	create table t (f text, f2 text, s string, v float_vector knn_type='hnsw' from='f' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2');
+	alter table t add column v15 float_vector knn_type='hnsw' from='f2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	insert into t(id,f,f2,s) values(1,'f_1','f2_1', 's_1');
+	flush ramchunk t;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0) from t;
+	alter table t rebuild embeddings;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0) from t;
+	flush ramchunk t;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0) from t;
+	insert into t(id,f,f2,s) values(2,'f_2','f2_2', 's_2');
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0) from t;
+	alter table t add column v2 float_vector knn_type='hnsw' from='f2' MODEL_NAME='aari1995/German_Semantic_STS_V2' hnsw_similarity='l2';
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0) from t;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), knn_dist() from t where knn(v2, 'abc');
+	alter table t rebuild embeddings;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0) from t;
+	alter table t add column v3 float_vector knn_type='hnsw' from='s' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	alter table t rebuild embeddings;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	desc t;
+	show create table t;
+	flush ramchunk t;
+	insert into t(id,f,f2,s,v,v2) values(3,'f_3','f2_3', 's_3', (), ());
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	alter table t rebuild embeddings;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	replace into t(id,f,f2,s,v,v2,v3) values(1,'f_1','f_2','s_1',(),(),());
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	flush ramchunk t;
+	replace into t(id,f,f2,s,v,v2,v3) values(3,'f_3', 'f2_3', 's_3', (),(),());
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	alter table t rebuild embeddings;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	select id,f,f2,s,knn_dist() from t where knn(v, 'f_1');
+	select id,f,f2,s,knn_dist() from t where knn(v2, 'f2_2');
+	select id,f,f2,s,knn_dist() from t where knn(v3, 's_3');
+	replace into t(id,f,f2,s) values(1,'f_1','f2_1','s_1'),(2,'f_2','f2_2','s_2'),(3,'f_3','f2_3','s_3');
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	select id,f,f2,s,knn_dist() from t where knn(v, 'f_1');
+	select id,f,f2,s,knn_dist() from t where knn(v2, 'f2_2');
+	select id,f,f2,s,knn_dist() from t where knn(v3, 's_3');
+	
+	alter table t add column v4 float_vector knn_type='hnsw' from='' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' hnsw_similarity='l2';
+	insert into t(id, f, f2) values(4, 'woman', 'king');
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	alter table t rebuild embeddings;
+	select id, f, f2, s, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v3), item(v3, 0) from t;
+	select id,f,f2,s,knn_dist() from t where knn(v4, 'queen');
+	insert into t(id, f, f2) values(5, 'girl', 'president');
+	select id,f,f2,s,knn_dist() from t where knn(v4, 'queen');
+	insert into t(id, s) values(6, 'queens');
+	select id,f,f2,s,knn_dist() from t where knn(v4, 'queen');
+	flush ramchunk t;
+	show create table t;
+	alter table t drop column s;
+	show create table t;
+	alter table t drop column v3;
+	show create table t;
+	alter table t drop column s;
+	select id,f,f2,knn_dist() from t where knn(v4, 'queen');
+	select id, f, f2, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v4), item(v4, 0) from t;
+	replace into t(id,f,f2) values(1,'new','new');
+	select id, f, f2, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v4), item(v4, 0) from t;
+	replace into t(id,f,f2,v) values(1,'new','new', (0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5));
+	select id, f, f2, length(v), item(v, 0), length(v15), item(v15, 0), length(v2), item(v2, 0), length(v4), item(v4, 0) from t;
+
+	<!-- ========== Regression: knn not loaded after daemon restart ========== -->
+	drop table if exists t;
 	create table t(f text);
 	insert into t values(1, 'abc');
 	flush ramchunk t;
@@ -58,7 +318,7 @@ searchd
 	drop table t;
 
 	<!-- regression for flush ramchunk failure (columnar) -->
-	create table t(f text);
+	create table t(f text) engine='columnar';
 	insert into t values(1, 'abc');
 	alter table t add column v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2';
 	flush ramchunk t;

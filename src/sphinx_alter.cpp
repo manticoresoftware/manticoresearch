@@ -240,12 +240,21 @@ bool AddRemoveCtx_c::AddRowwiseAttr()
 		{
 			if ( pNewAttr->m_eAttrType==SPH_ATTR_FLOAT_VECTOR && pNewAttr->IsIndexedKNN() )
 			{
-				int iOldLen = dFakeKNN.GetLength();
-				dFakeKNN.Resize ( pNewAttr->m_tKNN.m_iDims );
-				if ( dFakeKNN.GetLength()>iOldLen )
-					dFakeKNN.ZeroVec();
-
-				sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr, (const BYTE*)dFakeKNN.Begin(), dFakeKNN.GetLengthBytes() );
+				int iDims = pNewAttr->m_tKNN.m_iDims;
+				if ( iDims > 0 )
+				{
+					int iOldLen = dFakeKNN.GetLength();
+					dFakeKNN.Resize ( iDims );
+					if ( dFakeKNN.GetLength()>iOldLen )
+						dFakeKNN.ZeroVec();
+					sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr, (const BYTE*)dFakeKNN.Begin(), dFakeKNN.GetLengthBytes() );
+				}
+				else
+				{
+					// Dims unknown (model not loaded yet). Add empty blob attr so REBUILD EMBEDDINGS can find and fill.
+					// Empty (0 bytes) displays as 0 elements; a 1-DWORD placeholder would display as 1 element.
+					sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr );
+				}
 			}
 			else
 				sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr );
@@ -495,6 +504,34 @@ bool IndexAlterHelper_c::Alter_AddRemoveFieldFromSchema ( bool bAdd, CSphSchema 
 		tSchema.RemoveField ( iIdx );
 		return true;
 	}
+}
+
+bool Alter_CheckDropEmbeddingSource ( const CSphSchema & tSchema, const CSphString & sDropName, CSphString & sError )
+{
+	const char * sDrop = sDropName.cstr();
+	const int iDropLen = sDropName.Length();
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
+		if ( tAttr.m_sKNNFrom.IsEmpty() )
+			continue;
+
+		bool bUsed = false;
+		sphSplitApply ( tAttr.m_sKNNFrom.cstr(), tAttr.m_sKNNFrom.Length(), " \t,", [ & ] ( const char * sToken, int iTokenLen )
+		{
+			if ( bUsed || iTokenLen!=iDropLen )
+				return;
+			bUsed = !memcmp ( sToken, sDrop, iDropLen );
+		} );
+
+		if ( bUsed )
+		{
+			sError.SetSprintf ( "cannot drop column '%s': used as embedding source (FROM) by float_vector attribute '%s'", sDropName.cstr(), tAttr.m_sName.cstr() );
+			return false;
+		}
+	}
+
+	return true;
 }
 
 

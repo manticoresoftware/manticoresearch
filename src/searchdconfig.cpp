@@ -1220,6 +1220,13 @@ static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTabl
 		}
 	}
 
+	for ( const auto & i : tCreateTable.m_dAttrs )
+		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !i.m_bKNNFromSpecified )
+		{
+			sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", i.m_tAttr.m_sName.cstr() );
+			return false;
+		}
+
 	return true;
 }
 

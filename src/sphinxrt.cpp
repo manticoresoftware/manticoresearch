@@ -46,6 +46,7 @@
 #include "jsonsi.h"
 #include "std/sys.h"
 #include "dict/infix/infix_builder.h"
+#include "embeddingutils.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -160,7 +161,11 @@ volatile int AutoOptimizeCutoff() noexcept
 
 volatile int AutoOptimizeCutoffKNN() noexcept
 {
-	static int iAutoOptimizeCutoffKNN = Max ( GetNumPhysicalCPUs() / 2, 1 );
+	int iPhysical = GetNumPhysicalCPUs();
+	// When physical count is unknown (e.g. macOS has no /proc/cpuinfo), fall back to logical/2 so we don't default to 1.
+	if ( iPhysical <= 0 )
+		iPhysical = GetNumLogicalCPUs();
+	static int iAutoOptimizeCutoffKNN = Max ( iPhysical / 2, 1 );
 	return iAutoOptimizeCutoffKNN;
 }
 
@@ -1559,6 +1564,7 @@ private:
 	void						StartRoutine();
 	void						StopRoutine();
 	void						WaitAllRoutinesFinished() const noexcept;
+	void						WaitOptimizesFinished() const noexcept;
 
 	CSphFixedVector<RowID_t>	CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock ) REQUIRES (m_tWorkers.SerialChunkAccess());
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
@@ -1669,6 +1675,7 @@ private:
 	int							GetAlterGeneration() const override;
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
+	bool						RebuildEmbeddings ( CSphString & sError, RunUnderWriteLock_fn fnRunUnderWriteLock, CSphString & sWarning ) override;
 	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
@@ -2090,11 +2097,12 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 			continue;
 
+		// With model_name: allow default/empty; if explicit vector is provided and dims are known, enforce exact size.
 		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
 		{
-			if ( !bDefault && iNumValues!=0 )
+			if ( !bDefault && iNumValues && tAttr.m_tKNN.m_iDims > 0 && iNumValues != tAttr.m_tKNN.m_iDims )
 			{
-				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
+				sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
 				return false;
 			}
 		}
@@ -2578,6 +2586,10 @@ public:
 			: m_tOwner { tOwner }
 			, m_tRowID { bBegin ? tOwner.FirstAliveRow () : tOwner.EndRow() }
 		{}
+		Iterator_c ( const RtLiveRows_c & tOwner, RowID_t tStartRow )
+			: m_tOwner { tOwner }
+			, m_tRowID { tStartRow }
+		{}
 
 		RowID_t operator*()	const { return m_tRowID; };
 		bool operator!= ( const Iterator_c & rhs ) const { return m_tRowID!=rhs.m_tRowID; }
@@ -2601,6 +2613,9 @@ public:
 	// c++11 style iteration
 	Iterator_c begin () const { return { *this, true }; }
 	Iterator_c end() const { return { *this, false }; }
+	/// Resume iteration from row tFrom (next call to NextAliveRow(tFrom) gives first live row >= tFrom).
+	Iterator_c begin_from ( RowID_t tFrom ) const { return Iterator_c ( *this, SkipDeadRows ( tFrom ) ); }
+	RowID_t GetNextAliveRow ( RowID_t tRowID ) const { return NextAliveRow ( tRowID ); }
 
 private:
 	RowID_t		m_tRowID = 0;
@@ -3108,6 +3123,19 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->CleanupDuplicates ( m_tSchema.GetRowSize() );
 	pAcc->Sort();
 	CleanupHitDuplicates ( pAcc->m_dAccum );
+
+	// Keep m_dAttrsWithModels and m_pEmbeddings in sync with current schema (e.g. after ALTER DROP/ADD COLUMN).
+	// Re-load models so FetchEmbeddings can run and replace placeholder blobs with real embeddings.
+	if ( m_dAttrsWithModels.GetLength() != m_tSchema.GetAttrsCount() )
+	{
+		CSphString sLoadError;
+		if ( !LoadEmbeddingModels ( sLoadError ) )
+		{
+			if ( pError )
+				*pError = sLoadError;
+			return false;
+		}
+	}
 
 	CSphString sError;
 	if ( !pAcc->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
@@ -5154,46 +5182,22 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
-static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
-{
-	StrVec_t dFrom;
-	sphSplit ( dFrom, sFrom.cstr(), " \t," );
-
-	for ( const auto & i : dFrom )
-	{
-		int iAttrId = tSchema.GetAttrIndex ( i.cstr() );
-		int iFieldId = tSchema.GetFieldIndex ( i.cstr() );
-
-		if ( iFieldId==-1 && iAttrId==-1 )
-		{
-			sError.SetSprintf ( "embedding source '%s' not found", i.cstr() );
-			return false;
-		}
-
-		if ( iAttrId!=-1 && tSchema.GetAttr(iAttrId).m_eAttrType!=SPH_ATTR_STRING )
-		{
-			sError.SetSprintf ( "embedding source attribute '%s' is not a string", i.cstr() );
-			return false;
-		}
-
-		tAttrWithModel.m_dFrom.Add ( { iFieldId==-1 ? iAttrId : iFieldId, iFieldId!=-1 } );
-	}
-
-	return true;
-}
-
-
 bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
 {
-	if ( m_pEmbeddings )
+	// Re-init when schema changed (e.g. ADD COLUMN) so m_dAttrsWithModels matches current attrs.
+	if ( m_pEmbeddings && m_dAttrsWithModels.GetLength() == m_tSchema.GetAttrsCount() )
 		return true;
+	m_pEmbeddings.reset();
 
 	bool bHaveModels = false;
 	for ( int i = 0 ; i < m_tSchema.GetAttrsCount(); i++ )
 		bHaveModels |= !m_tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
 
 	if ( !bHaveModels )
+	{
+		m_dAttrsWithModels.Resize ( m_tSchema.GetAttrsCount() );
 		return true;
+	}
 
 	m_dAttrsWithModels.Resize ( m_tSchema.GetAttrsCount() );
 
@@ -5202,11 +5206,12 @@ bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
 	{
 		const auto & tAttr = m_tSchema.GetAttr(i);
 		m_dAttrsWithModels[i].m_pModel = nullptr;
+		m_dAttrsWithModels[i].m_dFrom.Reset();
 
 		if ( tAttr.m_tKNNModel.m_sModelName.empty() )
 			continue;
 
-		if ( !ParseKNNFrom ( m_dAttrsWithModels[i], tAttr.m_sKNNFrom, m_tSchema, sError ) )
+		if ( !ParseEmbeddingFromSetting ( m_dAttrsWithModels[i].m_dFrom, tAttr.m_sKNNFrom, m_tSchema, sError ) )
 		{
 			m_pEmbeddings.reset();
 			return false;
@@ -7892,14 +7897,17 @@ static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 			pSorter->SetColumnar(pColumnar);
 
 		if ( tCtx.m_pFilter )
+		{
+			tCtx.m_pFilter->SetBlobStorage(pBlobs);
 			tCtx.m_pFilter->SetColumnar(pColumnar);
+		}
 
 		session::Info().m_pSessionOpaque2 = (void*)tSeg.m_pDocstore.get();
 
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
 		{
 			tMatch.m_tRowID = tRowID;
-			tMatch.m_pStatic = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+			tMatch.m_pStatic = tSeg.GetDocinfoByRowID ( tRowID );
 
 			tCtx.CalcFilter ( tMatch );
 			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
@@ -8002,7 +8010,10 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 			pSorter->SetColumnar(pColumnar);
 
 		if ( tCtx.m_pFilter )
+		{
+			tCtx.m_pFilter->SetBlobStorage ( pBlobPool );
 			tCtx.m_pFilter->SetColumnar(pColumnar);
+		}
 
 		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 		int iTag = iSeg+1;
@@ -9057,6 +9068,10 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", "AddRemoveField" );
 
+	// Prevent dropping a field that is used as embedding source (FROM) by any float_vector attr.
+	if ( !bAdd && !Alter_CheckDropEmbeddingSource ( m_tSchema, sFieldName, sError ) )
+		return false;
+
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 
@@ -9118,6 +9133,8 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 
 	// wait all secondary service tasks (merge segments, save disk chunk) to finish and release all the segments.
 	WaitRAMSegmentsUnlocked();
+	// wait for any in-progress optimize (merge) so we don't rename/modify disk chunk files while merge is writing them.
+	WaitOptimizesFinished();
 
 	// as we're in serial, here all index data exclusively belongs to us. No new commits, merges, flushes, etc. until
 	// we're finished.
@@ -9129,6 +9146,19 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	else
 		tNewCtx.m_uFlags &= ~( CSphColumnInfo::ATTR_COLUMNAR_HASHES | CSphColumnInfo::ATTR_STORED );
 
+	// DROP COLUMN must fail if the column is used as embedding source (float_vector FROM).
+	if ( !bAdd && !Alter_CheckDropEmbeddingSource ( m_tSchema, tNewCtx.m_sName, sError ) )
+		return false;
+
+	// ADD COLUMN with embedding FROM: validate that all sources exist in current schema before applying any change.
+	// Prevents adding the column and then failing in LoadEmbeddingModels (which would leave schema updated).
+	if ( bAdd && !tNewCtx.m_tKNNModel.m_sModelName.empty() && !tNewCtx.m_sKNNFrom.IsEmpty() )
+	{
+		AttrWithModel_t tDummy;
+		if ( !ParseEmbeddingFromSetting ( tDummy.m_dFrom, tNewCtx.m_sKNNFrom, m_tSchema, sError ) )
+			return false;
+	}
+
 	CSphSchema tOldSchema = m_tSchema;
 	CSphSchema tNewSchema = m_tSchema;
 	if ( !Alter_AddRemoveFromSchema ( tNewSchema, tNewCtx, bAdd, sError ) )
@@ -9136,6 +9166,29 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 
 	m_tSchema = tNewSchema;
 	m_iStride = m_tSchema.GetRowSize();
+
+	// Keep m_dAttrsWithModels and m_pEmbeddings in sync so next INSERT stores source for all embedding attrs (including the new one).
+	if ( !LoadEmbeddingModels ( sError ) )
+	{
+		m_tSchema = tOldSchema;
+		m_iStride = m_tSchema.GetRowSize();
+		CSphString sTmp;
+		LoadEmbeddingModels ( sTmp );
+		return false;
+	}
+
+	// So disk chunks write zero vectors of the right size (and AddRemoveFromKNN indexes the new attr for all docs),
+	// set KNN dims from the loaded model when adding a float_vector with model.
+	// Also set dims on tNewSchema so RAM segments get zero vectors too (AddRemoveRowwiseAttr uses tNewSchema).
+	if ( bAdd )
+	{
+		int iNewAttr = m_tSchema.GetAttrIndex ( tNewCtx.m_sName.cstr() );
+		if ( iNewAttr >= 0 && m_dAttrsWithModels.GetLength() > iNewAttr && m_dAttrsWithModels[iNewAttr].m_pModel )
+		{
+			tNewCtx.m_tKNN.m_iDims = m_dAttrsWithModels[iNewAttr].m_pModel->GetDims();
+			const_cast<CSphColumnInfo &>( tNewSchema.GetAttr ( iNewAttr ) ).m_tKNN.m_iDims = tNewCtx.m_tKNN.m_iDims;
+		}
+	}
 
 	auto tGuard = RtGuard();
 
@@ -10418,6 +10471,13 @@ void RtIndex_c::WaitAllRoutinesFinished() const noexcept
 		m_tBackgroundRoutines.Wait ( [] ( int iVal ) { return iVal==0; } );
 }
 
+void RtIndex_c::WaitOptimizesFinished() const noexcept
+{
+	// Wait for any in-progress merge so ALTER/rebuild don't touch disk chunks while they're being written.
+	if ( Threads::IsInsideCoroutine() )
+		m_tOptimizeRuns.Wait ( [] ( int i ) { return i <= 0; } );
+}
+
 bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const
 {
 	if ( bByOrder )
@@ -11356,12 +11416,16 @@ bool RtIndex_c::AlterRebuild ( AlterOp_fn && fnOp, CSphString & sError, const ch
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
+	WaitOptimizesFinished();
 
 	auto pChunks = m_tRtChunks.DiskChunks();
+	int iChunk = 0;
 	for ( auto & tChunk : *pChunks )
 	{
+		sphInfo ( "rt: table %s: %s disk chunk %d/%d", GetName(), sTrace, iChunk + 1, pChunks->GetLength() );
 		if ( !fnOp ( tChunk->CastIdx(), sError ) )
 			return false;
+		++iChunk;
 	}
 
 	RaiseAlterGeneration();
@@ -11376,6 +11440,225 @@ bool RtIndex_c::AlterSI ( CSphString & sError )
 bool RtIndex_c::AlterKNN ( CSphString & sError )
 {
 	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterKNN ( sError ); }, sError, "alter-knn" );
+}
+
+bool RtIndex_c::RebuildEmbeddings ( CSphString & sError, RunUnderWriteLock_fn fnRunUnderWriteLock, CSphString & sWarning )
+{
+	static constexpr int REBUILD_EMBED_COLLECT_CAP = 1000;
+	static constexpr int REBUILD_EMBED_BATCH = 10;
+
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", "rebuild-embeddings" );
+	WaitOptimizesFinished();
+
+	sphInfo ( "rt: table %s: REBUILD EMBEDDINGS started", GetName() );
+	myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: started", GetName() );
+	auto fnFail = [this] ()
+	{
+		myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: failed", GetName() );
+		return false;
+	};
+
+	if ( !LoadEmbeddingModels ( sError ) )
+		return fnFail();
+
+	CSphVector<int> dRebuildAttrs;
+	CSphVector<CSphString> dSkippedColumnar;
+	if ( !CollectRebuildEmbeddingAttrs ( m_tSchema, m_dAttrsWithModels, dRebuildAttrs, sError, &dSkippedColumnar ) )
+		return fnFail();
+	if ( !dSkippedColumnar.IsEmpty() )
+	{
+		StringBuilder_c sNames ( ", " );
+		for ( int i = 0; i < dSkippedColumnar.GetLength(); i++ )
+			sNames << dSkippedColumnar[i];
+		sWarning.SetSprintf ( "REBUILD EMBEDDINGS skipped columnar attribute(s): %s (use blob-stored embedding columns for REBUILD EMBEDDINGS)", sNames.cstr() );
+	}
+
+	if ( dRebuildAttrs.IsEmpty() )
+	{
+		sphInfo ( "rt: table %s: REBUILD EMBEDDINGS finished (no blob embedding attrs to rebuild)", GetName() );
+		myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: finished (no attrs)", GetName() );
+		return true;
+	}
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+	{
+		myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: finished", GetName() );
+		return true;
+	}
+
+	bool bRebuildKNN = false;
+	int iNumDiskChunks = 0;
+	int iPass = 0;
+
+	for ( ;; )
+	{
+		iPass++;
+		auto tGuard = RtGuard();
+		const int iNumRamSegs = tGuard.m_dRamSegs.GetLength();
+		iNumDiskChunks = tGuard.m_dDiskChunks.GetLength();
+		const int iNumAttrs = dRebuildAttrs.GetLength();
+		int iPassUpdated = 0;
+		int iPassDocsProcessed = 0;
+		if ( iPass > 1 )
+			sphInfo ( "rt: table %s: REBUILD EMBEDDINGS pass %d (including any new docs)", GetName(), iPass );
+		myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: 0 docs processed", GetName() );
+
+		for ( int iAttr = 0; iAttr < iNumAttrs; ++iAttr )
+			{
+				const int iAttrIdx = dRebuildAttrs[iAttr];
+				const auto & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+				const AttrWithModel_t & tAttrWithModel = m_dAttrsWithModels[iAttrIdx];
+				assert ( tAttrWithModel.m_pModel && !tAttr.IsColumnar() );
+				const int iEmptyVectorDims = tAttrWithModel.m_pModel->GetDims();
+				const auto & dFromEntries = tAttrWithModel.m_dFrom;
+				bool bNeedDocstore = EmbeddingFromNeedsDocstore ( dFromEntries );
+
+				sphInfo ( "rt: table %s: REBUILD EMBEDDINGS attribute '%s': collecting in chunks of %d docs", GetName(), tAttr.m_sName.cstr(), REBUILD_EMBED_COLLECT_CAP );
+
+				CSphVector<DocID_t> dDocids;
+				CSphVector<CSphString> dFromTexts;
+				int iRamSeg = 0;
+				RowID_t tRamResumeRowID = 0;
+				CSphVector<RowID_t> dDiskStartRowID;
+				dDiskStartRowID.Resize ( iNumDiskChunks );
+				dDiskStartRowID.ZeroVec();
+				int iTotalUpdated = 0;
+				bool bHadAnyDocs = false;
+
+				for ( ;; )
+				{
+					dDocids.Resize ( 0 );
+					dFromTexts.Resize ( 0 );
+
+					// Collect from RAM (up to REBUILD_EMBED_COLLECT_CAP).
+					for ( ; iRamSeg < iNumRamSegs && dDocids.GetLength() < REBUILD_EMBED_COLLECT_CAP; )
+					{
+						const RtSegment_t & tSeg = *tGuard.m_dRamSegs[iRamSeg];
+						SccRL_t rLock ( tSeg.m_tLock );
+						if ( bNeedDocstore && !tSeg.m_pDocstore )
+						{
+							iRamSeg++;
+							tRamResumeRowID = 0;
+							continue;
+						}
+						const BYTE * pBlobBase = tSeg.m_dBlobs.Begin();
+						DocstoreDoc_t tDoc;
+						CSphVector<ScopedTypedIterator_t> dFromColumnarIters;
+						PrepareEmbeddingColumnarIters ( m_tSchema, dFromEntries, tSeg.m_pColumnar.get(), dFromColumnarIters );
+						RtLiveRows_c liveRows ( tSeg );
+						RowID_t tLastAdded = 0;
+						for ( auto it = liveRows.begin_from ( tRamResumeRowID ); it != liveRows.end() && dDocids.GetLength() < REBUILD_EMBED_COLLECT_CAP; ++it )
+						{
+							RowID_t tRowID = *it;
+							const CSphRowitem * pRow = tSeg.GetDocinfoByRowID ( tRowID );
+							if ( !pRow )
+								continue;
+							DocID_t tDocID = sphGetDocID ( pRow );
+							SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+							const BYTE * pBlobRow = pBlobBase + tBlobOff;
+							ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+							if ( !sphIsEmptyEmbeddingToFill ( tVecBlob.first, tVecBlob.second, iEmptyVectorDims ) )
+								continue;
+							if ( tSeg.m_pDocstore )
+								tDoc = tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false );
+							CSphString sFrom;
+							BuildEmbeddingFromText ( m_tSchema, dFromEntries, tSeg.m_pDocstore ? &tDoc : nullptr, pBlobRow, dFromColumnarIters, tRowID, sFrom );
+							dDocids.Add ( tDocID );
+							dFromTexts.Add ( sFrom );
+							tLastAdded = tRowID;
+						}
+						if ( dDocids.GetLength() >= REBUILD_EMBED_COLLECT_CAP )
+						{
+							tRamResumeRowID = liveRows.GetNextAliveRow ( tLastAdded );
+							break;
+						}
+						iRamSeg++;
+						tRamResumeRowID = 0;
+					}
+
+					// Collect from disk chunks if room.
+					for ( int iChunk = 0; iChunk < iNumDiskChunks && dDocids.GetLength() < REBUILD_EMBED_COLLECT_CAP; iChunk++ )
+					{
+						int iWant = REBUILD_EMBED_COLLECT_CAP - dDocids.GetLength();
+						if ( iWant <= 0 )
+							break;
+						if ( !tGuard.m_dDiskChunks[iChunk]->CastIdx().CollectDocsWithEmptyEmbedding ( iAttrIdx, dFromEntries, dDocids, dFromTexts, sError, iEmptyVectorDims, iWant, &dDiskStartRowID[iChunk] ) )
+							return fnFail();
+					}
+
+					if ( dDocids.IsEmpty() )
+						break;
+					if ( !bHadAnyDocs )
+						sphInfo ( "rt: table %s: REBUILD EMBEDDINGS attribute '%s': docs to fill, processing in chunks of %d", GetName(), tAttr.m_sName.cstr(), REBUILD_EMBED_COLLECT_CAP );
+					bHadAnyDocs = true;
+
+					const int iBatchDocs = dDocids.GetLength();
+					for ( int i = 0; i < iBatchDocs; i += REBUILD_EMBED_BATCH )
+					{
+						const int iSize = Min ( REBUILD_EMBED_BATCH, iBatchDocs - i );
+						CSphVector<DocID_t> dDocidsBatch;
+						CSphVector<CSphString> dFromTextsBatch;
+						dDocidsBatch.Reserve ( iSize );
+						dFromTextsBatch.Reserve ( iSize );
+						for ( int j = 0; j < iSize; j++ )
+						{
+							dDocidsBatch.Add ( dDocids[i + j] );
+							dFromTextsBatch.Add ( dFromTexts[i + j] );
+						}
+						std::vector<std::vector<float>> dEmbeddings;
+						if ( !ConvertEmbeddingsChecked ( tAttrWithModel.m_pModel, tAttr.m_sName, dFromTextsBatch, dEmbeddings, sError ) )
+							return fnFail();
+						AttrUpdateSharedPtr_t pUpdate = CreateFloatVectorAttrUpdate ( tAttr.m_sName, dDocidsBatch, dEmbeddings, iEmptyVectorDims );
+						AttrUpdateInc_t tUpd ( pUpdate );
+						bool bCritical = false;
+						CSphString sWarning;
+						int iRes = 0;
+						auto fnUpdate = [&]() { iRes = CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning ); };
+						if ( fnRunUnderWriteLock )
+							fnRunUnderWriteLock ( fnUpdate );
+						else
+							fnUpdate ();
+						if ( iRes < 0 )
+							return fnFail();
+						iTotalUpdated += iRes;
+						bRebuildKNN |= ( iRes > 0 );
+						iPassDocsProcessed += iRes;
+						myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: %d done", GetName(), iPassDocsProcessed );
+					}
+				}
+
+				if ( !bHadAnyDocs )
+				{
+					sphInfo ( "rt: table %s: REBUILD EMBEDDINGS attribute '%s': 0 docs to fill, skipping", GetName(), tAttr.m_sName.cstr() );
+					continue;
+				}
+				sphInfo ( "rt: table %s: REBUILD EMBEDDINGS attribute '%s': updated %d rows", GetName(), tAttr.m_sName.cstr(), iTotalUpdated );
+				iPassUpdated += iTotalUpdated;
+			}
+
+		if ( iPassUpdated == 0 )
+			break;
+	}
+
+	if ( bRebuildKNN )
+	{
+		sphInfo ( "rt: table %s: REBUILD EMBEDDINGS: rebuilding KNN index (%d disk chunks)", GetName(), iNumDiskChunks );
+		myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: rebuilding KNN %d chunks", GetName(), iNumDiskChunks );
+		bool bAlterOk = false;
+		auto fnAlterKNN = [&]() { bAlterOk = AlterKNN ( sError ); };
+		if ( fnRunUnderWriteLock )
+			fnRunUnderWriteLock ( fnAlterKNN );
+		else
+			fnAlterKNN ();
+		if ( !bAlterOk )
+			return fnFail();
+	}
+
+	sphInfo ( "rt: table %s: REBUILD EMBEDDINGS finished", GetName() );
+	myinfo::SetTaskInfo ( "REBUILD EMBEDDINGS %s: finished", GetName() );
+	return true;
 }
 
 bool RtIndex_c::AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError )

@@ -2506,9 +2506,10 @@ When you configure a `float_vector` attribute with KNN settings, you enable vect
 - Perform KNN (k-nearest neighbor) vector searches to find similar documents
 - Build semantic search, recommendations, and AI-powered features
 - Use auto embeddings to automatically generate vectors from text
+- Use `LENGTH(float_vector_attr)` in expressions to get the vector dimension (number of components)
 
 **What you cannot do:**
-- `UPDATE` `float_vector` values (you must use `REPLACE` instead)
+- `UPDATE` `float_vector` values (unlike with KNN where you must use `REPLACE`)
 - Use float vectors in regular filters or sorting
 - Filter by `float_vector` values except through vector search operations
 
@@ -2611,7 +2612,7 @@ The `FROM` parameter controls which fields are used for embedding generation:
 - **Specific fields**: `FROM='title'` - only the title field is used
 - **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
 - **All text fields**: `FROM=''` (empty) - all `text` (full-text field) and `string` (string attribute) fields in the table are used
-- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+- **Empty vectors (NULL):** You can insert or REPLACE with `()` or `NULL` for a vector column; that value is stored as empty and shown as `NULL` in results. Documents with empty vectors are excluded from KNN search. `NULL` in INSERT is accepted so that mysqldump dumps (which write NULL for empty columns) can be restored without errors.
 
 #### Inserting data with auto embeddings
 

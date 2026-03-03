@@ -123,6 +123,8 @@
     * [• Переименование таблицы реального времени](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• Обновление FT-настроек таблицы в обычном режиме](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• Перестроение вторичного индекса](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
+    * [• Перестроение KNN индекса](Updating_table_schema_and_settings.md#Rebuilding-a-KNN-index)
+    * [• Перестроение эмбеддингов](Updating_table_schema_and_settings.md#Rebuilding-embeddings)
     * [• Изменение распределенной таблицы](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ Функции]
     * [• Математические функции](Functions/Mathematical_functions.md)

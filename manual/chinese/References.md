@@ -11,6 +11,7 @@
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - 输出表的字段列表及其类型
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - 更改表模式 / 设置
 * [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - 更新/恢复二级索引
+* [修改表 REBUILD EMBEDDINGS](Updating_table_schema_and_settings.md#Rebuilding-embeddings) - 使用配置的模型和 FROM 源填充空的 float_vector 列
 * [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - 更新/恢复二级索引
 * [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
 * [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - 挂起或恢复从 Kafka 源的消费
@@ -312,7 +313,7 @@
 * [IN()](Functions/Arrays_and_conditions_functions.md#IN%28%29) - 如果第一个参数等于其他参数中的任何一个，则返回1，否则返回0
 * [INDEXOF()](Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29) - 遍历数组中的所有元素并返回第一个匹配元素的索引
 * [INTERVAL()](Functions/Arrays_and_conditions_functions.md#INTERVAL%28%29) - 返回小于第一个参数的参数的索引
-* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - 返回MVA中的元素数量
+* [LENGTH()](Functions/Arrays_and_conditions_functions.md#LENGTH%28%29) - 返回MVA中的元素数量或float_vector中的维度数
 * [REMAP()](Functions/Arrays_and_conditions_functions.md#REMAP%28%29) - 根据条件值对表达式的值进行一些例外处理
 
 ##### 日期和时间
@@ -478,7 +479,6 @@ index_converter {--config /path/to/config|--path}
   * [node_address](Server_settings/Searchd.md#node_address) - 指定节点的网络地址
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 到远程持久代理的持久连接最大数量
   * [pid_file](Server_settings/Searchd.md#pid_file) - Manticore 服务器 pid 文件路径
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - 查询时间预测模型的成本
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - 确定是否在启动时强制预打开所有表
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 为对普通表和实时表的搜索查询启用伪分片
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - 为缓存结果集分配的最大 RAM

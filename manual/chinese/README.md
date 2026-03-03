@@ -123,6 +123,8 @@
     * [• 重命名实时表](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
     * [• 在普通模式下更新表 FT 设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• 重建二级索引](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
+    * [• 重建KNN索引](Updating_table_schema_and_settings.md#Rebuilding-a-KNN-index)
+    * [• 重建嵌入](Updating_table_schema_and_settings.md#Rebuilding-embeddings)
     * [• 更改分布式表](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
 * [≫ 函数]
     * [• 数学函数](Functions/Mathematical_functions.md)

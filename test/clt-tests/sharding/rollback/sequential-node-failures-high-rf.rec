@@ -60,6 +60,12 @@ If grep fails due to missing string or timeout, return non-zero
 timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3,4}/searchd.log); echo $?
 ––– output –––
 0
+––– comment –––
+Make sure that rebalancing started
+––– input –––
+timeout 10 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 1000 -f /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
 ––– input –––
 sleep 10; cat /var/log/manticore-{2,3,4}/searchd.log
 ––– output –––

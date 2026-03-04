@@ -7,11 +7,11 @@
 1. **监控Manticore性能**：使用Prometheus从Manticore收集指标并在Grafana仪表板中进行可视化。这种方法专注于搜索引擎本身的系统健康状况、性能监控和告警。
 2. **可视化搜索数据**：通过MySQL连接器查询并显示存储在Manticore表中的数据，类似于Kibana用于Elasticsearch数据可视化的方式。这对于分析趋势、聚合和基于索引数据的自定义可视化非常理想。
 
-目前，Grafana 10.0 到 12.4 版本经过测试并受支持。
+目前测试并支持Grafana版本10.0-12.4。
 
 ## 使用Prometheus和Grafana监控Manticore
 
-Manticore 在专用仓库 [manticoresoftware/grafana-dashboard](https://github.com/manticoresoftware/grafana-dashboard) 中提供了预构建的Grafana仪表板和Prometheus告警规则。这些资源可以与您现有的Grafana和Prometheus设置独立使用，使您能够监控Manticore的操作指标（如延迟、资源使用情况和错误），而无需运行单独的实例。
+Manticore在专用仓库 [manticoresoftware/grafana-dashboard](https://github.com/manticoresoftware/grafana-dashboard) 中提供了预构建的Grafana仪表板和Prometheus告警规则。该仓库还包含一个集成Grafana和Prometheus的一体化Docker镜像，用于快速启动。这些资源可以独立于您现有的Grafana和Prometheus设置使用，使您能够监控Manticore的操作指标（如延迟、资源使用情况和错误），而无需运行单独的实例。
 
 ![Manticore Grafana 仪表板预览](../images/dashboard-preview1.png)
 
@@ -21,13 +21,13 @@ Manticore 在专用仓库 [manticoresoftware/grafana-dashboard](https://github.c
 
 ### 快速入门（Docker镜像）
 
-对于完全预配置的设置，该仓库包含一个专为Manticore监控定制的Grafana和Prometheus一体化Docker镜像。如果您没有现有设置或想要一个快速测试环境，这非常理想：
+对于完全预配置的设置，请从仓库中运行专为Manticore监控定制的Grafana和Prometheus一体化Docker镜像。如果您没有现有设置或想要快速测试环境，这非常理想：
 
 ```bash
-docker run -e MANTICORE_TARGETS=localhost:9308 -p 3000:3000 manticoresearch/dashboard:latest
+docker run -e MANTICORE_TARGETS=localhost:9308 -p 127.0.0.1:3000:3000 manticoresearch/dashboard:latest
 ```
 
-`MANTICORE_TARGETS` 是逗号分隔的Manticore指标端点（Prometheus目标）列表。默认情况下，镜像期望作业标签为 `manticoresearch`。
+`MANTICORE_TARGETS` 是以 `host:port` 格式表示的Manticore HTTP端点的逗号分隔列表（例如：`localhost:9308,10.0.0.5:9308`）。
 
 如果您已经有运行中的Grafana和Prometheus，可以跳过Docker镜像，直接导入仪表板和告警规则，如下面所述。
 
@@ -36,7 +36,7 @@ docker run -e MANTICORE_TARGETS=localhost:9308 -p 3000:3000 manticoresearch/dash
 将Manticore仪表板添加到现有的Grafana实例中：
 
 1. 在Grafana中，导航到 **Dashboards** → **New** → **Import**。
-2. 上传 `manticore-dashboard.json` 文件（或粘贴其JSON内容）。
+2. 上传 [manticore-dashboard.json](https://raw.githubusercontent.com/manticoresoftware/grafana-dashboard/refs/heads/main/grafana/dashboards/manticore-dashboard.json) 文件（或粘贴其JSON内容）。
 3. 在提示时选择您的Prometheus数据源。
 4. 如有必要，验证并调整 `job` 仪表板变量（默认预期标签值为 `manticoresearch`）。
 

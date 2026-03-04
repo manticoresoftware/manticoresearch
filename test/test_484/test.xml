@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn embeddings cases</name>
+
+<requires>
+	<http/>
+	<knn/>
+	<embeddings/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+
+<!-- MVA value should be preserved with auto-embeddings -->
+<sphinxql>
+drop table if exists t;
+CREATE TABLE t (
+f text,
+m multi,
+v FLOAT_VECTOR
+    KNN_TYPE='hnsw'
+    HNSW_SIMILARITY='cosine'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='f'
+);
+INSERT INTO t (id, f, m) VALUES (1, 'a', (1));
+SELECT f, m FROM t;
+drop table t;
+</sphinxql>
+
+</queries>
+
+</test>

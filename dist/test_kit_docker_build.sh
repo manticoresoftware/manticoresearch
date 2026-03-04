@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source_test_dir="$script_dir/../test"
+
 git clone https://github.com/manticoresoftware/docker.git docker
 cd docker
 
@@ -176,7 +179,8 @@ docker create \
 	docker start manticore-test-kit
 
 	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
-	docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
+	docker exec manticore-test-kit mkdir -p /test
+	docker cp "$source_test_dir/." manticore-test-kit:/test
 
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \
@@ -184,7 +188,7 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash mariadb-server php-cli php-mysql php-curl php-xml && php_real="$(readlink -f /usr/bin/php || true)" && [ -n "$php_real" ] && [ -x "$php_real" ] && ln -sf "$php_real" /usr/local/bin/php-real || true && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
@@ -211,6 +215,56 @@ docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
+
+docker exec manticore-test-kit bash -c '
+cat > /usr/local/bin/start-test-mysql <<'"'"'EOF'"'"'
+#!/bin/bash
+set -euo pipefail
+
+mysql_data_dir=/var/lib/mysql
+mysql_socket=/run/mysqld/mysqld.sock
+mysql_init_sql=/run/mysqld/test-init.sql
+
+mkdir -p /run/mysqld
+chown -R mysql:mysql /run/mysqld "$mysql_data_dir"
+
+if [ ! -d "$mysql_data_dir/mysql" ]; then
+	mariadb-install-db --user=mysql --datadir="$mysql_data_dir" >/dev/null
+fi
+
+cat > "$mysql_init_sql" <<'SQL'
+CREATE DATABASE IF NOT EXISTS test;
+CREATE USER IF NOT EXISTS 'test'@'%' IDENTIFIED BY '';
+GRANT ALL PRIVILEGES ON test.* TO 'test'@'%';
+GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+chown mysql:mysql "$mysql_init_sql"
+
+mariadbd \
+	--user=mysql \
+	--datadir="$mysql_data_dir" \
+	--socket="$mysql_socket" \
+	--bind-address=0.0.0.0 \
+	--port=3306 \
+	--skip-name-resolve \
+	--init-file="$mysql_init_sql" \
+	--log-error=/tmp/mariadb.err &
+
+for _ in $(seq 1 60); do
+	if mariadb-admin --socket="$mysql_socket" ping --silent >/dev/null 2>&1; then
+		break
+	fi
+	sleep 1
+done
+
+mariadb-admin --socket="$mysql_socket" ping --silent >/dev/null
+rm -f "$mysql_init_sql"
+
+echo "MariaDB is running on port 3306 with database '"'"'test'"'"' and user '"'"'test'"'"' (no password)."
+EOF
+chmod +x /usr/local/bin/start-test-mysql
+'
 
 docker exec manticore-test-kit bash -c "rm -rf /tmp/*"
 

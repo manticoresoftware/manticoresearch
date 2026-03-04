@@ -87,7 +87,7 @@ public:
 BENCHMARK_DEFINE_F ( BM_expressions, floats )
 ( benchmark::State& st )
 {
-	ISphExprRefPtr_c pExpr ( sphExprParse ( dBench[NBENCH].m_sExpr, tSchema, sError, tExprArgs ) );
+	ISphExprRefPtr_c pExpr ( sphExprParse ( dBench[NBENCH].m_sExpr, tSchema, nullptr, nullptr, sError, tExprArgs ) );
 	for ( auto _ : st )
 	{
 		benchmark::DoNotOptimize ( pExpr->Eval ( tMatch ) );
@@ -100,7 +100,7 @@ BENCHMARK_DEFINE_F ( BM_expressions, floats )
 BENCHMARK_DEFINE_F ( BM_expressions, ints )
 ( benchmark::State& st )
 {
-	ISphExprRefPtr_c pExpr ( sphExprParse ( dBench[NBENCH].m_sExpr, tSchema, sError, tExprArgs ) );
+	ISphExprRefPtr_c pExpr ( sphExprParse ( dBench[NBENCH].m_sExpr, tSchema, nullptr, nullptr, sError, tExprArgs ) );
 //	if ( uType != SPH_ATTR_INTEGER ) {
 //		st.SkipWithError ( "attr is NOT integer" );
 //		return;

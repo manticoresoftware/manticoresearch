@@ -119,7 +119,7 @@ BENCHMARK_F( BM_parse_expr, parser ) ( benchmark::State & st )
 {
 	for ( auto _ : st )
 	{
-		ISphExprRefPtr_c pExpr ( sphExprParse ( dTests[i].first.cstr (), tSchema, sError, tExprArgs ) );
+		ISphExprRefPtr_c pExpr ( sphExprParse ( dTests[i].first.cstr (), tSchema, nullptr, nullptr, sError, tExprArgs ) );
 		iBytes += dTests[i].second;
 		if ( ++i >= dTests.GetLength() )
 			i = 0;

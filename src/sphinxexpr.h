@@ -372,7 +372,7 @@ private:
 };
 
 struct CommonFilterSettings_t;
-ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, const CSphString * pJoinIdxLeft, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation );

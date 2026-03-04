@@ -1373,9 +1373,9 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 }
 
 
-static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, const CSphString * pJoinIdx, CSphString & sError )
+static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, const CSphString * pJoinIdx, const CSphString * pJoinIdxLeft, CSphString & sError )
 {
-	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, pJoinIdx, sError, tExprArgs );
+	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, pJoinIdx, pJoinIdxLeft, sError, tExprArgs );
 	if ( pExpr && pExpr->UsesDocstore() )
 	{
 		sError.SetSprintf ( "unsupported filter on field '%s' (filters are supported only on attributes, not stored fields)", sAttrName.cstr() );
@@ -1550,7 +1550,7 @@ static void TryToCreateJoinNullFilter ( std::unique_ptr<ISphFilter> & pFilter, c
 }
 
 
-static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, CSphString & sError, CSphString & sWarning )
+static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, const CSphString * pJoinIdxLeft, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -1574,7 +1574,7 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter,
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	tExprArgs.m_eCollation = tCtx.m_eCollation;
-	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, pJoinIdx, sError );
+	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, pJoinIdx, pJoinIdxLeft, sError );
 }
 
 
@@ -1614,7 +1614,7 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
 			tExprArgs.m_eCollation = tCtx.m_eCollation;
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, sError, tExprArgs );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, nullptr, sError, tExprArgs );
 		}
 		pFilter = CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tCtx.m_eCollation, tAttr.m_eAttrType );
 	} else
@@ -2328,7 +2328,7 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 		return nullptr;
 
 	TryToCreateJoinNullFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings );
-	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, sError, sWarning );
+	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, tCtx.m_sJoinIdxLeft.Length() ? &tCtx.m_sJoinIdxLeft : nullptr, sError, sWarning );
 	TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 
 	SetFilterLocator ( pFilter, tSettings, tCtx, sAttrName );

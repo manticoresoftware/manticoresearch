@@ -2579,7 +2579,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_pAttrType = &eAttrType;
 		tExprArgs.m_eCollation = eCollation;
-		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, nullptr, sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, nullptr, nullptr, sError, tExprArgs ) };
 		if ( pExpr )
 		{
 			sError = "";

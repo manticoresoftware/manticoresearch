@@ -21,7 +21,7 @@ Manticore provides a prebuilt Grafana dashboard and Prometheus alerting rules in
 
 ### Quick Start (Docker Image)
 
-For a fully preconfigured setup, run the all-in-one Docker image from the repository with Grafana and Prometheus tailored for Manticore monitoring. This is ideal if you don't have an existing setup or want a quick test environment:
+For a fully preconfigured setup, run the all-in-one Docker image with Grafana and Prometheus tailored for Manticore monitoring. This is ideal if you don't have an existing setup or want a quick test environment:
 
 ```bash
 docker run -e MANTICORE_TARGETS=localhost:9308 -p 127.0.0.1:3000:3000 manticoresearch/dashboard:latest

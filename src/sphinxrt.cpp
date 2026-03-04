@@ -5154,8 +5154,33 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
+static void ParseKNNFromAll ( AttrWithModel_t & tAttrWithModel, const ISphSchema & tSchema )
+{
+	for ( int i=0; i < tSchema.GetFieldsCount(); ++i )
+		tAttrWithModel.m_dFrom.Add ( { i, true } );
+
+	for ( int i=0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const auto & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_eAttrType!=SPH_ATTR_STRING )
+			continue;
+
+		if ( tSchema.GetFieldIndex ( tAttr.m_sName.cstr() )!=-1 )
+			continue;
+
+		tAttrWithModel.m_dFrom.Add ( { i, false } );
+	}
+}
+
+
 static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
 {
+	if ( sFrom.IsEmpty() )
+	{
+		ParseKNNFromAll ( tAttrWithModel, tSchema );
+		return true;
+	}
+
 	StrVec_t dFrom;
 	sphSplit ( dFrom, sFrom.cstr(), " \t," );
 

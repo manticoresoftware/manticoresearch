@@ -59,16 +59,16 @@ mysql -h0 -P9306 -e "CREATE TABLE test_no_from (
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'vec'
 ––– comment –––
-Test 6: Empty FROM parameter (not allowed)
+Test 6: Empty FROM parameter (all text/string fields)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
     title TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM=''
-)" 2>&1
+)"
 ––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_empty_from': 'from' setting empty for KNN attribute 'vec'
+0
 ––– comment –––
 === INVALID MODEL CONFIGURATIONS ===
 ––– comment –––

@@ -7,11 +7,11 @@
 1. **Monitoring Manticore Performance**: Using Prometheus to collect metrics from Manticore and visualize them in Grafana dashboards. This approach focuses on system health, performance monitoring, and alerting for the search engine itself.
 2. **Visualizing Search Data**: Connecting via the MySQL connector to query and display data stored in Manticore tables, similar to how Kibana is used for Elasticsearch data visualization. This is ideal for analyzing trends, aggregations, and custom visualizations based on your indexed data.
 
-Currently, Grafana versions 10.0 through 12.4 are tested and supported.
+Currently, Grafana versions 10.0-12.4 are tested and supported.
 
 ## Monitoring Manticore with Prometheus and Grafana
 
-Manticore provides a prebuilt Grafana dashboard and Prometheus alerting rules in the dedicated repository [manticoresoftware/grafana-dashboard](https://github.com/manticoresoftware/grafana-dashboard). These resources can be used independently with your existing Grafana and Prometheus setup, allowing you to monitor Manticore's operational metrics—such as latency, resource usage, and errors—without needing to run a separate instance.
+Manticore provides a prebuilt Grafana dashboard and Prometheus alerting rules in the dedicated repository [manticoresoftware/grafana-dashboard](https://github.com/manticoresoftware/grafana-dashboard). The repository also includes an all-in-one Docker image with Grafana and Prometheus for a quick start. These resources can be used independently with your existing Grafana and Prometheus setup, allowing you to monitor Manticore's operational metrics—such as latency, resource usage, and errors—without needing to run a separate instance.
 
 ![Manticore Grafana dashboard preview](../images/dashboard-preview1.png)
 
@@ -21,13 +21,13 @@ Manticore provides a prebuilt Grafana dashboard and Prometheus alerting rules in
 
 ### Quick Start (Docker Image)
 
-For a fully preconfigured setup, the repository includes an all-in-one Docker image with Grafana and Prometheus tailored for Manticore monitoring. This is ideal if you don't have an existing setup or want a quick test environment:
+For a fully preconfigured setup, run the all-in-one Docker image from the repository with Grafana and Prometheus tailored for Manticore monitoring. This is ideal if you don't have an existing setup or want a quick test environment:
 
 ```bash
-docker run -e MANTICORE_TARGETS=localhost:9308 -p 3000:3000 manticoresearch/dashboard:latest
+docker run -e MANTICORE_TARGETS=localhost:9308 -p 127.0.0.1:3000:3000 manticoresearch/dashboard:latest
 ```
 
-`MANTICORE_TARGETS` is a comma-separated list of Manticore metrics endpoints (Prometheus targets). By default, the image expects the job label to be `manticoresearch`.
+`MANTICORE_TARGETS` is a comma-separated list of Manticore http endpoints in the `host:port` format (for example: `localhost:9308,10.0.0.5:9308`).
 
 If you already have your own Grafana and Prometheus running, you can skip the Docker image and directly import the dashboard and alert rules as described below.
 
@@ -36,7 +36,7 @@ If you already have your own Grafana and Prometheus running, you can skip the Do
 To add the Manticore dashboard to your existing Grafana instance:
 
 1. In Grafana, navigate to **Dashboards** → **New** → **Import**.
-2. Upload the `manticore-dashboard.json` file (or paste its JSON content).
+2. Upload the [manticore-dashboard.json](https://raw.githubusercontent.com/manticoresoftware/grafana-dashboard/refs/heads/main/grafana/dashboards/manticore-dashboard.json) file (or paste its JSON content).
 3. Select your Prometheus data source when prompted.
 4. Verify and adjust the `job` dashboard variable if needed (the default expected label value is `manticoresearch`).
 

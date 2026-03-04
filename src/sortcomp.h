@@ -104,7 +104,7 @@ public:
 
 #define SPH_TEST_PAIR(_aa,_bb,_idx ) \
 	if ( (_aa)!=(_bb) ) \
-		return ( (t.m_uAttrDesc >> (_idx)) & 1 ) ^ ( (_aa) > (_bb) );
+		return ( 1 - ( (t.m_uAttrDesc >> (_idx)) & 1 ) ) ^ ( (_aa) > (_bb) );
 
 
 #define SPH_TEST_KEYPART(_idx) \
@@ -138,7 +138,7 @@ public:
 		{ \
 			int iCmp = t.CmpStrings ( a, b, _idx ); \
 			if ( iCmp!=0 ) \
-				return ( ( t.m_uAttrDesc >> (_idx) ) & 1 ) ^ ( iCmp>0 ); \
+				return ( 1 - ( ( t.m_uAttrDesc >> (_idx) ) & 1 ) ) ^ ( iCmp>0 ); \
 			break; \
 		} \
 	}

@@ -180,7 +180,7 @@ FORCE_INLINE bool CompareFloat_fn<5>::IsLess ( const CSphMatch & tMatchA, SphAtt
 
 #define TEST_PAIR(_aa,_bb,_idx ) \
 	if ( (_aa)!=(_bb) ) \
-		return ( (tState.m_uAttrDesc >> (_idx)) & 1 ) ^ ( (_aa) > (_bb) );
+		return ( 1 - ( (tState.m_uAttrDesc >> (_idx)) & 1 ) ) ^ ( (_aa) > (_bb) );
 
 #define TEST_KEYPART(_idx) \
 	switch ( tState.m_eKeypart[_idx] ) \

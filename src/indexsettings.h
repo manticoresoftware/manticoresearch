@@ -399,6 +399,7 @@ struct CreateTableAttr_t
 	bool					m_bStringHash = true;
 	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
+	bool					m_bKNNFromSet = false;
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;

@@ -2,10 +2,14 @@
 set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source_test_dir="$script_dir/../test"
-
-git clone https://github.com/manticoresoftware/docker.git docker
-cd docker
+repo_root="$(cd "$script_dir/.." && pwd)"
+source_test_dir="$repo_root/test"
+deps_file="$repo_root/deps.txt"
+build_dir="$repo_root/build"
+output_img="$repo_root/manticore_test_kit.img"
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/test-kit-build.XXXXXX")"
+trap 'rm -rf "$work_dir"' EXIT
+cd "$work_dir"
 
 # We set it later when parse deps.txt
 executor_dev_path=
@@ -36,8 +40,8 @@ download_package() {
 
 		if wget -q --spider "$file_url" 2>/dev/null; then
 			echo "Package found at $file_url"
-			mkdir -p "../build"
-			wget -q -O "../build/${file_name}" "$file_url"
+			mkdir -p "$build_dir"
+			wget -q -O "$build_dir/${file_name}" "$file_url"
 
 			# For executor, we need to download the dev version and also extra package
 			if [ "$package" = 'manticore-executor' ]; then
@@ -164,10 +168,10 @@ do
 	else
 		download_package "${package}" "${version}" "${date}" "${commit}" "${arch}"
 	fi
-done < ../deps.txt
+done < "$deps_file"
 
 # we want to build the image based on specific packages, copying them from a directory coming from an artifact of a previous job
-deb_dir=$(realpath ../build/)
+deb_dir=$(realpath "$build_dir")
 
 # Use official docker image to create and tune our test kit
 docker pull manticoresearch/manticore:dev
@@ -268,7 +272,7 @@ chmod +x /usr/local/bin/start-test-mysql
 
 docker exec manticore-test-kit bash -c "rm -rf /tmp/*"
 
-echo "Exporting image to ../manticore_test_kit.img"
+echo "Exporting image to $output_img"
 
 # exporting the image, it also squashes all the layers into one
-docker export manticore-test-kit > ../manticore_test_kit.img
+docker export manticore-test-kit > "$output_img"

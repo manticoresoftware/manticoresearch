@@ -68,7 +68,6 @@ mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
     FROM=''
 )"
 ––– output –––
-0
 ––– comment –––
 === INVALID MODEL CONFIGURATIONS ===
 ––– comment –––

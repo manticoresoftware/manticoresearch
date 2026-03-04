@@ -4,6 +4,7 @@ set -e
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 source_test_dir="$repo_root/test"
+source_api_dir="$repo_root/api"
 deps_file="$repo_root/deps.txt"
 build_dir="$repo_root/build"
 output_img="$repo_root/manticore_test_kit.img"
@@ -185,6 +186,8 @@ docker create \
 	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
 	docker exec manticore-test-kit mkdir -p /test
 	docker cp "$source_test_dir/." manticore-test-kit:/test
+	docker exec manticore-test-kit mkdir -p /api
+	docker cp "$source_api_dir/." manticore-test-kit:/api
 
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \

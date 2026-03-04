@@ -803,7 +803,7 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 				if ( iUpdAttrId>=0 )
 				{
 					ExprParseArgs_t tExprArgs;
-					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, nullptr, sError, tExprArgs );
+					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, sError, tExprArgs );
 				}
 			}
 		}

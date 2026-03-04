@@ -19,6 +19,9 @@ MANUAL_SRC="$REPO_ROOT/manual"
 DOC_APP_DIR="$REPO_ROOT/misc/doc-app-dir"
 DOC_APP_REPO_URL="https://github.com/manticoresoftware/doc.git"
 FORCE_NO_CACHE_BUILD=0
+STOP_ONLY=0
+CHECK_ONLY=0
+MANUAL_POLL_INTERVAL="${MANUAL_POLL_INTERVAL:-5}"
 error() {
   printf '[error] %s\n' "$*" >&2
   exit 1
@@ -40,15 +43,29 @@ the `manual` directory of the repo as /var/manual inside the container.
 Options:
   -p, --port                Host port to expose for the application (default: 8080)
   -h, --help                Show this message
+      --stop                Stop the running container and exit
+      --check               Run doc validation (checkDocs) inside the container and exit
 
 EOF
       exit 0
+      ;;
+    --stop)
+      STOP_ONLY=1
+      shift
+      ;;
+    --check)
+      CHECK_ONLY=1
+      shift
       ;;
     *)
       error "Unknown option: $1"
       ;;
   esac
 done
+
+if [[ "$STOP_ONLY" -eq 1 && "$CHECK_ONLY" -eq 1 ]]; then
+  error "Options '--stop' and '--check' cannot be used together."
+fi
 
 run_docker() {
   if ! command -v docker >/dev/null 2>&1; then
@@ -66,37 +83,95 @@ run_docker() {
   fi
 }
 
+if [[ "$STOP_ONLY" -eq 1 ]]; then
+  if run_docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+    printf "Stopping container '%s'..." "$CONTAINER_NAME"
+    run_docker stop "$CONTAINER_NAME" >/dev/null
+    printf "Done\n"
+  else
+    printf "Container '%s' is not running.\n" "$CONTAINER_NAME"
+  fi
+  exit 0
+fi
+
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+  if run_docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+    printf "Running doc validation inside '%s'...\n" "$CONTAINER_NAME"
+    run_docker exec "$CONTAINER_NAME" ./setup.sh -d . checkDocs
+    echo "Doc validation completed."
+  else
+    error "Container '$CONTAINER_NAME' is not running; start it before using --check."
+  fi
+  exit 0
+fi
+
 if [[ ! -d "$MANUAL_SRC" ]]; then
   error "Manual directory '$MANUAL_SRC' does not exist"
 fi
 MANUAL_SRC="$(cd "$MANUAL_SRC" && pwd)"
 
-if run_docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
-  error "Container '$CONTAINER_NAME' already exists; stop/remove it before rerunning this script."
-fi
-
-if [[ ! -d "$DOC_APP_DIR/.git" ]]; then
-  if ! command -v "git" >/dev/null 2>&1; then
-    error "Command 'git' is required but not found. Please install Git and try again."
-  fi
-  rm -rf "$DOC_APP_DIR"
-  git clone "$DOC_APP_REPO_URL" "$DOC_APP_DIR"
-  FORCE_NO_CACHE_BUILD=1
+CONTAINER_RUNNING=0
+if run_docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+  CONTAINER_RUNNING=1
 else
-  if ! command -v "git" >/dev/null 2>&1; then
-    error "Command 'git' is required but not found. Please install Git and try again."
-  fi
-  CURRENT_HEAD="$(git -C "$DOC_APP_DIR" rev-parse HEAD)"
-  git -C "$DOC_APP_DIR" pull --ff-only
-  UPDATED_HEAD="$(git -C "$DOC_APP_DIR" rev-parse HEAD)"
-  if [[ "$CURRENT_HEAD" != "$UPDATED_HEAD" ]]; then
-    FORCE_NO_CACHE_BUILD=1
+  if run_docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+    error "Container '$CONTAINER_NAME' already exists but is stopped; remove it or run with --stop first."
   fi
 fi
 
-if [[ ! -f "$DOC_APP_DIR/Dockerfile" ]]; then
-  error "No Dockerfile found in '$DOC_APP_DIR'; provide the doc app repo root"
+if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
+  if [[ ! -d "$DOC_APP_DIR/.git" ]]; then
+    if ! command -v "git" >/dev/null 2>&1; then
+      error "Command 'git' is required but not found. Please install Git and try again."
+    fi
+    rm -rf "$DOC_APP_DIR"
+    git clone --depth=1 "$DOC_APP_REPO_URL" "$DOC_APP_DIR"
+    FORCE_NO_CACHE_BUILD=1
+  else
+    if ! command -v "git" >/dev/null 2>&1; then
+      error "Command 'git' is required but not found. Please install Git and try again."
+    fi
+    CURRENT_HEAD="$(git -C "$DOC_APP_DIR" rev-parse HEAD)"
+    git -C "$DOC_APP_DIR" pull --ff-only
+    UPDATED_HEAD="$(git -C "$DOC_APP_DIR" rev-parse HEAD)"
+    if [[ "$CURRENT_HEAD" != "$UPDATED_HEAD" ]]; then
+      FORCE_NO_CACHE_BUILD=1
+    fi
+  fi
+
+  if [[ ! -f "$DOC_APP_DIR/Dockerfile" ]]; then
+    error "No Dockerfile found in '$DOC_APP_DIR'; provide the doc app repo root"
+  fi
 fi
+
+manual_snapshot() {
+  LC_ALL=C find "$MANUAL_SRC" -type f -not -path '*/.git/*' -printf '%T@ %s %p\n' 2>/dev/null | LC_ALL=C sort | cksum | awk '{print $1}'
+}
+
+monitor_manual_changes() {
+  local last_snapshot
+  last_snapshot="$(manual_snapshot)"
+  printf "Watching '%s' for changes every %s seconds. Press Ctrl+C to stop.\n" "$MANUAL_SRC" "$MANUAL_POLL_INTERVAL"
+  while true; do
+    sleep "$MANUAL_POLL_INTERVAL"
+    if ! run_docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+      echo "Container '$CONTAINER_NAME' is no longer running; stopping watcher."
+      break
+    fi
+    local current_snapshot
+    current_snapshot="$(manual_snapshot)"
+    if [[ "$current_snapshot" != "$last_snapshot" ]]; then
+      printf "Detected changes in '%s'; re-running setup inside container...\n" "$MANUAL_SRC"
+      if run_docker exec "$CONTAINER_NAME" ./setup.sh >/dev/null; then
+        run_docker exec "$CONTAINER_NAME" ./setup.sh -d . checkDocs
+        echo "Setup and doc validation completed."
+      else
+        echo "[warn] Setup command failed; see output above." >&2
+      fi
+      last_snapshot="$current_snapshot"
+    fi
+  done
+}
 
 build_manual_image() {
   local extra_args=()
@@ -112,29 +187,34 @@ build_manual_image() {
   fi
 }
 
-build_manual_image
-
-printf "Starting container '$CONTAINER_NAME' on port $HOST_PORT..."
-run_docker run --rm -d \
-  --name "$CONTAINER_NAME" \
-  -p "$HOST_PORT":80 \
-  -v "$MANUAL_SRC":/var/manual \
-  "$IMAGE_NAME" >/dev/null
-
 ready=0
-for ((i=1; i<=READY_TIMEOUT; i++)); do
-  if curl -s --connect-timeout 2 --max-time 2 "http://localhost:${HOST_PORT}" >/dev/null 2>&1; then
-    ready=1
-    printf "\n"
-    break
-  fi
-  sleep 1
-  printf "."
-done
-printf "\n"
+if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
+  build_manual_image
 
-if [[ "$ready" -eq 0 ]]; then
-  echo "Warning: timed out waiting for http://localhost:${HOST_PORT} to respond."
+  printf "Starting container '$CONTAINER_NAME' on port $HOST_PORT..."
+  run_docker run --rm -d \
+    --name "$CONTAINER_NAME" \
+    -p "$HOST_PORT":80 \
+    -v "$MANUAL_SRC":/var/manual \
+    "$IMAGE_NAME" >/dev/null
+
+  for ((i=1; i<=READY_TIMEOUT; i++)); do
+    if curl -s --connect-timeout 2 --max-time 2 "http://localhost:${HOST_PORT}" >/dev/null 2>&1; then
+      ready=1
+      printf "\n"
+      break
+    fi
+    sleep 1
+    printf "."
+  done
+  printf "\n"
+
+  if [[ "$ready" -eq 0 ]]; then
+    echo "Warning: timed out waiting for http://localhost:${HOST_PORT} to respond."
+  fi
+else
+  ready=1
+  printf "Container '%s' is already running.\n" "$CONTAINER_NAME"
 fi
 
 cat <<EOF
@@ -145,11 +225,11 @@ if [[ "$ready" -eq 1 ]]; then
   cat <<EOF
 Manticore Manual app is running on http://localhost:${HOST_PORT}
 
-To rerun the setup inside the container after editing docs:
-  docker exec ${CONTAINER_NAME} ./setup.sh
-
 To validate doc examples/links:
-  docker exec ${CONTAINER_NAME} ./setup.sh -d . checkDocs
+  ./manual.sh --check
+
+To stop the container when you're done:
+  ./manual.sh --stop
 
 EOF
 else
@@ -164,3 +244,5 @@ If this is expected on your machine, retry with a longer wait:
 
 EOF
 fi
+
+monitor_manual_changes

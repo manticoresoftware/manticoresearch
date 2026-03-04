@@ -21,7 +21,7 @@ Manticore在专用仓库 [manticoresoftware/grafana-dashboard](https://github.co
 
 ### 快速入门（Docker镜像）
 
-对于完全预配置的设置，请从仓库中运行专为Manticore监控定制的Grafana和Prometheus一体化Docker镜像。如果您没有现有设置或想要快速测试环境，这非常理想：
+对于完全预配置的设置，请运行专为Manticore监控定制的包含Grafana和Prometheus的一体化Docker镜像。如果您没有现有设置或想要一个快速测试环境，这非常理想：
 
 ```bash
 docker run -e MANTICORE_TARGETS=localhost:9308 -p 127.0.0.1:3000:3000 manticoresearch/dashboard:latest

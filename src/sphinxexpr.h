@@ -349,6 +349,8 @@ struct ExprParseArgs_t
 	ESphEvalStage *		m_pEvalStage = nullptr;
 	DWORD *				m_pStoredField = nullptr;
 	bool *				m_pNeedDocIds = nullptr;
+	const CSphString *	m_pJoinIdx = nullptr;
+	const CSphString *	m_pJoinIdxLeft = nullptr;
 };
 
 struct JoinArgs_t
@@ -372,7 +374,7 @@ private:
 };
 
 struct CommonFilterSettings_t;
-ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, const CSphString * pJoinIdxLeft, CSphString & sError, ExprParseArgs_t & tArgs );
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation );

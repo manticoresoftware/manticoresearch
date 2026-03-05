@@ -100,8 +100,42 @@ mkdir -p "$log_dir"
 mkdir -p "$work_root"
 rm -f "$log_dir"/failed.slot*
 
-echo "Running ${#tests[@]} ubertests with $workers workers"
+echo "Discovered ${#tests[@]} ubertests"
 echo "Logs: $log_dir"
+
+has_requirement() {
+	local test_id="$1"
+	local req="$2"
+	local xml="$test_dir/test_${test_id}/test.xml"
+	[ -f "$xml" ] && grep -Eiq "<${req}[[:space:]]*/>" "$xml"
+}
+
+select_tests_for_mode() {
+	local selector="$1"
+	selected_tests=()
+	local id
+	for id in "${tests[@]}"; do
+		local non_rt=0
+		local non_columnar=0
+		local non_secondary=0
+		has_requirement "$id" "non-rt" && non_rt=1
+		has_requirement "$id" "non-columnar" && non_columnar=1
+		has_requirement "$id" "non-secondary" && non_secondary=1
+
+		case "$selector" in
+			col_rt)
+				if [ "$non_rt" -eq 0 ] && [ "$non_columnar" -eq 0 ]; then
+					selected_tests+=("$id")
+				fi
+				;;
+			secondary)
+				if { [ "$non_rt" -eq 1 ] || [ "$non_columnar" -eq 1 ]; } && [ "$non_secondary" -eq 0 ]; then
+					selected_tests+=("$id")
+				fi
+				;;
+		esac
+	done
+}
 
 run_worker() {
 	local slot="$1"
@@ -111,8 +145,8 @@ run_worker() {
 	local data_id="data${slot}"
 
 	local idx id log rc
-	for ((idx=slot-1; idx<${#tests[@]}; idx+=workers)); do
-		id="${tests[$idx]}"
+	for ((idx=slot-1; idx<${#selected_tests[@]}; idx+=workers)); do
+		id="${selected_tests[$idx]}"
 		log="$log_dir/test_${id}.${mode_name}.slot${slot}.log"
 		work_dir="$work_root/${mode_name}/t${id}s${slot}"
 		echo "[slot $slot][$mode_name] test_$id"
@@ -151,18 +185,34 @@ EOF
 			echo "test_$id FAILED ($mode_name, slot $slot), see $log"
 			echo "${mode_name}:$id" >> "$log_dir/failed.slot$slot"
 		elif grep -q "^SKIPPING " "$log"; then
-			echo "test_$id SKIPPED (treated as failure) ($mode_name, slot $slot), see $log"
-			echo "${mode_name}:$id" >> "$log_dir/failed.slot$slot"
+			if grep -q "explicitly non-columnar test skipped in columnar mode" "$log"; then
+				echo "test_$id SKIPPED (allowed non-columnar skip) ($mode_name, slot $slot)"
+			else
+				echo "test_$id SKIPPED (treated as failure) ($mode_name, slot $slot), see $log"
+				echo "${mode_name}:$id" >> "$log_dir/failed.slot$slot"
+			fi
 		fi
 	done
 }
 
 worker_failed=0
-for mode_spec in "columnar|--columnar" "columnar_rt|--columnar --rt"; do
+for mode_spec in \
+	"columnar_rt|--rt --ignore-weights --columnar|col_rt" \
+	"secondary||secondary"; do
 	mode_name="${mode_spec%%|*}"
-	mode="${mode_spec#*|}"
+	rest="${mode_spec#*|}"
+	mode="${rest%%|*}"
+	mode_selector="${rest#*|}"
+	select_tests_for_mode "$mode_selector"
+	if [ "${#selected_tests[@]}" -eq 0 ]; then
+		echo
+		echo "Mode: $mode"
+		echo "No tests selected for this mode."
+		continue
+	fi
 	echo
 	echo "Mode: $mode"
+	echo "Running ${#selected_tests[@]} tests with $workers workers"
 
 	pids=()
 	for slot in $(seq 1 "$workers"); do

@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 source_test_dir="$repo_root/test"
 source_api_dir="$repo_root/api"
+parallel_runner_src="$repo_root/dist/run_ubertests_parallel.sh"
 deps_file="$repo_root/deps.txt"
 build_dir="$repo_root/build"
 output_img="$repo_root/manticore_test_kit.img"
@@ -186,6 +187,8 @@ docker create \
 	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
 	docker exec manticore-test-kit mkdir -p /test
 	docker cp "$source_test_dir/." manticore-test-kit:/test
+	docker cp "$parallel_runner_src" manticore-test-kit:/test/run_ubertests_parallel.sh
+	docker exec manticore-test-kit chmod +x /test/run_ubertests_parallel.sh
 	docker exec manticore-test-kit mkdir -p /api
 	docker cp "$source_api_dir/." manticore-test-kit:/api
 	docker exec manticore-test-kit bash -c "cat > /test/localsettings.inc <<'PHP'
@@ -233,7 +236,7 @@ docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
 
 docker exec manticore-test-kit bash -c '
-cat > /usr/local/bin/start-test-mysql <<'"'"'EOF'"'"'
+cat > /usr/local/bin/start-mysql <<'"'"'EOF'"'"'
 #!/bin/bash
 set -euo pipefail
 
@@ -271,11 +274,30 @@ for _ in $(seq 1 60); do
 done
 
 mariadb-admin --socket="$mysql_socket" ping --silent >/dev/null
+
+if command -v nproc >/dev/null 2>&1; then
+	core_count="$(nproc)"
+elif command -v getconf >/dev/null 2>&1; then
+	core_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+else
+	core_count=1
+fi
+
+if ! [[ "$core_count" =~ ^[1-9][0-9]*$ ]]; then
+	core_count=1
+fi
+
+mariadb --socket="$mysql_socket" -uroot -e "CREATE DATABASE IF NOT EXISTS test"
+for i in $(seq 1 "$core_count"); do
+	mariadb --socket="$mysql_socket" -uroot -e "CREATE DATABASE IF NOT EXISTS test${i}"
+done
+
 rm -f "$mysql_init_sql"
 
-echo "MariaDB is running on port 3306 with database 'test' and root user."
+echo "MariaDB is running on port 3306 with root user; prepared databases: test and test1..test${core_count}."
 EOF
-chmod +x /usr/local/bin/start-test-mysql
+chmod +x /usr/local/bin/start-mysql
+ln -sf /usr/local/bin/start-mysql /usr/local/bin/start-test-mysql
 '
 
 docker exec manticore-test-kit bash -c "rm -rf /tmp/*"

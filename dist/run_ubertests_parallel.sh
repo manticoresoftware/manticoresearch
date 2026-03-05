@@ -84,15 +84,6 @@ if ! mysql -uroot -e "SELECT 1" >/dev/null 2>&1; then
 	exit 1
 fi
 
-for i in $(seq 1 "$workers"); do
-	db="test$i"
-	if ! mysql -uroot -Nse "SHOW DATABASES LIKE '${db}'" | grep -qx "$db"; then
-		echo "Required database '${db}' is missing." >&2
-		echo "Run /usr/local/bin/start-mysql first, or reduce -j to match prepared databases." >&2
-		exit 1
-	fi
-done
-
 mapfile -t tests < <(
 	find "$test_dir" -maxdepth 1 -type d -name 'test_[0-9]*' -printf '%f\n' \
 	| sed 's/^test_//' \
@@ -112,20 +103,19 @@ echo "Logs: $log_dir"
 
 run_worker() {
 	local slot="$1"
-	local db="test$slot"
-	local data_id
-	if [ "$slot" -eq 1 ]; then
-		data_id="data"
-	else
-		data_id="data$((slot-1))"
-	fi
 
 	local idx id log rc
 	for ((idx=slot-1; idx<${#tests[@]}; idx+=workers)); do
 		id="${tests[$idx]}"
 		log="$log_dir/test_${id}.slot${slot}.log"
+		work_dir="$log_dir/work_test_${id}.slot${slot}"
+		db="test$((idx+1))"
+		data_id="data$((idx+1))"
 		echo "[slot $slot] test_$id"
-		(
+		mysql -uroot -e "DROP DATABASE IF EXISTS \`${db}\`; CREATE DATABASE \`${db}\`;"
+		rm -rf "$work_dir"
+		mkdir -p "$work_dir"
+		if ! (
 			cd "$test_dir"
 			export CTEST_RESOURCE_GROUP_COUNT=1
 			export CTEST_RESOURCE_GROUP_0_MYSQL="id:${db},slots:1"
@@ -134,10 +124,9 @@ run_worker() {
 				--ctest --strict-verbose --no-demo \
 				-s /usr/bin/searchd -i /usr/bin/indexer \
 				-u root -p '' \
+				-tt "${work_dir}/" \
 				t "$id"
-		) >"$log" 2>&1
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
+		) >"$log" 2>&1; then
 			echo "test_$id FAILED (slot $slot), see $log"
 			echo "$id" >> "$log_dir/failed.slot$slot"
 		fi
@@ -150,8 +139,11 @@ for slot in $(seq 1 "$workers"); do
 	pids+=("$!")
 done
 
+worker_failed=0
 for pid in "${pids[@]}"; do
-	wait "$pid"
+	if ! wait "$pid"; then
+		worker_failed=1
+	fi
 done
 
 failed_ids="$log_dir/failed.ids"
@@ -161,6 +153,12 @@ if [ -s "$failed_ids" ]; then
 	echo
 	echo "Failed tests:"
 	sed 's/^/test_/' "$failed_ids"
+	exit 1
+fi
+
+if [ "$worker_failed" -ne 0 ]; then
+	echo
+	echo "One or more worker processes exited unexpectedly."
 	exit 1
 fi
 

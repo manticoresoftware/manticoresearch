@@ -1485,6 +1485,14 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		tKNN.m_bFullscan = !!tOpt.m_iValue;
 		return true;
 	}
+	else if ( sName=="early_termination" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_eTerminationPolicy = tOpt.m_iValue ? knn::HNSWTerminationPolicy_e::QUANTILE : knn::HNSWTerminationPolicy_e::NONE;
+		return true;
+	}
 	else if ( sName=="k" )
 	{
 		if ( tOpt.m_eType!=VariantType_e::BIGINT )

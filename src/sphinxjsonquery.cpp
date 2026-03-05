@@ -1268,6 +1268,11 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 	}
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
 	if ( !tJson.FetchBoolItem ( tKNN.m_bFullscan, "fullscan", sError, true ) )			return false;
+
+	JsonObj_c tEarlyTermination = tJson.GetBoolItem ( "early_termination", sError, true );
+	if ( tEarlyTermination )
+		tKNN.m_eTerminationPolicy = tEarlyTermination.BoolVal() ? knn::HNSWTerminationPolicy_e::QUANTILE : knn::HNSWTerminationPolicy_e::NONE;
+
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 	if ( tKNN.m_fOversampling < 1.0f )
 	{

@@ -14,6 +14,7 @@
 #include "exprtraits.h"
 #include "sphinxint.h"
 #include "querycontext.h"
+#include "queryprofile.h"
 #include "fileio.h"
 #include "memio.h"
 #include "sphinxjson.h"
@@ -721,10 +722,10 @@ bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 }
 
 
-std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, CSphString & sError )
+std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, CSphString & sError )
 {
 	auto & tKNN = tQuery.m_tKnnSettings;
-	if ( tKNN.m_sAttr.IsEmpty() )
+	if ( tKNN.m_bFullscan || tKNN.m_sAttr.IsEmpty() )
 		return { nullptr, false };
 
 	auto pKNNAttr = tIndexSchema.GetAttr ( tKNN.m_sAttr.cstr() );
@@ -759,12 +760,16 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		NormalizeVec(dPoint);
 
 	std::string sErrorSTL;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, pFilter, sErrorSTL );
+	bool bCollectMetrics = ( pProfile != nullptr );
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tKNN.GetRequestedDocs(), tKNN.m_iEf, pFilter, ePolicy, bCollectMetrics, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
 		return { nullptr, true };
 	}
+
+	if ( pProfile )
+		pProfile->m_iKnnDistanceComputations += pIterator->GetStats().m_iDistanceComputations;
 
 	pKnnDist->SetData ( pIterator->GetData() );
 	
@@ -772,21 +777,20 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 }
 
 
-RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, bool & bError, CSphString & sError )
-{	 
+RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
+{
+	if ( tQuery.m_tKnnSettings.m_bFullscan )
+		return {};
+
 	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 	{
-		// skip HNSW when fullscan is forced
-		if ( tQuery.m_tKnnSettings.m_bFullscan )
-			return {};
-
-		// or brute-force over filtered rows is cheaper than HNSW traversal
+		// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
 		// use plain K (not oversampled) since brute-force computes exact distances
 		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tQuery.m_tKnnSettings.m_sAttr.cstr(), tQuery.m_tKnnSettings.m_iK, tQuery.m_tKnnSettings.m_iEf, pFilter->GetFilterCount() ) )
 			return {};
 	}
 
-	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pFilter, sError );
+	auto tRes = CreateKNNIterator ( pKNN, tQuery, tIndexSchema, tSorterSchema, pFilter, ePolicy, pProfile, sError );
 	if ( tRes.second )
 	{
 		bError = true;

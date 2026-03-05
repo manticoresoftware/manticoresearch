@@ -8145,7 +8145,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	if ( !dFilters.GetLength() )
 	{
 		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tMeta.m_sError );
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
 
 		return { nullptr, false };
 	}
@@ -8167,7 +8167,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 

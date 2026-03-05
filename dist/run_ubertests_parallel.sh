@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
 	cat <<'EOF'
-Run all ubertests in parallel without ctest.
+Run all ubertests in parallel.
 
 Usage:
   run_ubertests_parallel.sh [-j WORKERS]
@@ -105,15 +105,17 @@ echo "Logs: $log_dir"
 
 run_worker() {
 	local slot="$1"
+	local mode_name="$2"
+	local mode_args="$3"
 	local db="test${slot}"
 	local data_id="data${slot}"
 
 	local idx id log rc
 	for ((idx=slot-1; idx<${#tests[@]}; idx+=workers)); do
 		id="${tests[$idx]}"
-		log="$log_dir/test_${id}.slot${slot}.log"
-		work_dir="$work_root/t${id}s${slot}"
-		echo "[slot $slot] test_$id"
+		log="$log_dir/test_${id}.${mode_name}.slot${slot}.log"
+		work_dir="$work_root/${mode_name}/t${id}s${slot}"
+		echo "[slot $slot][$mode_name] test_$id"
 		mysql -uroot -e "DROP DATABASE IF EXISTS \`${db}\`; CREATE DATABASE \`${db}\`;"
 		rm -rf "$work_dir"
 		mkdir -p "$work_dir"
@@ -137,42 +139,51 @@ EOF
 			export CTEST_RESOURCE_GROUP_COUNT=1
 			export CTEST_RESOURCE_GROUP_0_MYSQL="id:${db},slots:1"
 			export CTEST_RESOURCE_GROUP_0_DATADIR="id:${data_id},slots:1"
+			read -r -a _mode_args_array <<< "$mode_args"
 			"$php_bin" ubertest.php \
 				--ctest --strict-verbose --no-demo \
 				-s /usr/bin/searchd -i /usr/bin/indexer \
 				-u root -p '' \
 				-tt "${work_dir}/" \
+				"${_mode_args_array[@]}" \
 				t "$id"
 		) >"$log" 2>&1; then
-			echo "test_$id FAILED (slot $slot), see $log"
-			echo "$id" >> "$log_dir/failed.slot$slot"
+			echo "test_$id FAILED ($mode_name, slot $slot), see $log"
+			echo "${mode_name}:$id" >> "$log_dir/failed.slot$slot"
 		elif grep -q "^SKIPPING " "$log"; then
-			echo "test_$id SKIPPED (treated as failure), see $log"
-			echo "$id" >> "$log_dir/failed.slot$slot"
+			echo "test_$id SKIPPED (treated as failure) ($mode_name, slot $slot), see $log"
+			echo "${mode_name}:$id" >> "$log_dir/failed.slot$slot"
 		fi
 	done
 }
 
-pids=()
-for slot in $(seq 1 "$workers"); do
-	run_worker "$slot" &
-	pids+=("$!")
-done
-
 worker_failed=0
-for pid in "${pids[@]}"; do
-	if ! wait "$pid"; then
-		worker_failed=1
-	fi
+for mode_spec in "columnar|--columnar" "columnar_rt|--columnar --rt"; do
+	mode_name="${mode_spec%%|*}"
+	mode="${mode_spec#*|}"
+	echo
+	echo "Mode: $mode"
+
+	pids=()
+	for slot in $(seq 1 "$workers"); do
+		run_worker "$slot" "$mode_name" "$mode" &
+		pids+=("$!")
+	done
+
+	for pid in "${pids[@]}"; do
+		if ! wait "$pid"; then
+			worker_failed=1
+		fi
+	done
 done
 
 failed_ids="$log_dir/failed.ids"
-cat "$log_dir"/failed.slot* 2>/dev/null | sort -n > "$failed_ids" || true
+cat "$log_dir"/failed.slot* 2>/dev/null | sort -u > "$failed_ids" || true
 
 if [ -s "$failed_ids" ]; then
 	echo
-	echo "Failed tests:"
-	sed 's/^/test_/' "$failed_ids"
+	echo "Failed tests (mode:test):"
+	cat "$failed_ids"
 	exit 1
 fi
 

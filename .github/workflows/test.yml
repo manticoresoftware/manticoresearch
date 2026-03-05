@@ -434,10 +434,110 @@ jobs:
           name: manticore_test_kit.img
           path: manticore_test_kit.img
 
-  clt:
+  test_kit_mcl:
     if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
-    name: CLT
+    name: Test Kit MCL
     needs: [test_kit_docker_build, test_kit_docker_reuse, meta]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download artifact
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: manticore_test_kit.img
+          path: .
+      - name: Run ubertests in test-kit image
+        id: test_kit_ubertests
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p test-kit-ubertests/artifacts
+          docker import manticore_test_kit.img test-kit:img >/dev/null
+          docker run --name test-kit-ubertests \
+            -v "$PWD/test-kit-ubertests/artifacts:/artifacts" \
+            test-kit:img \
+            bash -lc '
+              set -euo pipefail
+              /usr/local/bin/start-mysql
+              cd /test
+              LOG_DIR=/artifacts/ubertest-logs ./run_ubertests_parallel.sh
+            '
+      - name: Collect test-kit logs
+        if: always()
+        run: |
+          mkdir -p test-kit-ubertests/artifacts
+          docker logs test-kit-ubertests > test-kit-ubertests/artifacts/container.log 2>&1 || true
+          docker cp test-kit-ubertests:/tmp/mariadb.err test-kit-ubertests/artifacts/mariadb.err || true
+          docker cp test-kit-ubertests:/test/localsettings.inc test-kit-ubertests/artifacts/localsettings.inc || true
+          docker rm -f test-kit-ubertests || true
+      - name: Prepare test report xml
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import re
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          artifacts_dir = Path("test-kit-ubertests/artifacts")
+          logs_dir = artifacts_dir / "ubertest-logs"
+          junit_file = Path("test-kit-ubertests/junit_test_kit_ubertests.xml")
+          junit_file.parent.mkdir(parents=True, exist_ok=True)
+
+          logs = sorted(logs_dir.glob("test_*.log")) if logs_dir.exists() else []
+          suite = ET.Element("testsuite", name="test-kit-ubertests", tests=str(len(logs)))
+          failures = 0
+
+          if not logs:
+              failures = 1
+              case = ET.SubElement(suite, "testcase", classname="test-kit-ubertests", name="runner")
+              fail = ET.SubElement(case, "failure", message="No ubertest logs produced")
+              fail.text = "run_ubertests_parallel.sh did not produce any test_*.log files."
+          else:
+              for log in logs:
+                  name = log.stem
+                  m = re.match(r"test_(\d+)\.([^.]+)\.slot\d+", name)
+                  test_name = f"test_{m.group(1)}" if m else name
+                  mode = m.group(2) if m else "unknown"
+                  case = ET.SubElement(suite, "testcase", classname=f"ubertest.{mode}", name=test_name)
+                  content = log.read_text(encoding="utf-8", errors="replace")
+                  failed = ("THERE WERE FAILURES!" in content) or bool(re.search(r"^SKIPPING ", content, re.MULTILINE))
+                  if failed:
+                      failures += 1
+                      fail = ET.SubElement(case, "failure", message=f"Failure in {log.name}")
+                      fail.text = "\n".join(content.splitlines()[-120:])
+
+          suite.set("failures", str(failures))
+          ET.ElementTree(suite).write(junit_file, encoding="utf-8", xml_declaration=True)
+          PY
+      - name: Upload test artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: test_kit_ubertests_results
+          path: "test-kit-ubertests/junit*.xml test-kit-ubertests/artifacts/**"
+      - name: Publish test results
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        with:
+          check_name: "Test Kit ubertests"
+          files: test-kit-ubertests/junit*.xml
+          compare_to_earlier_commit: false
+          comment_mode: failures
+      - name: Check test results
+        if: always()
+        run: |
+          if [ "${{ steps.test_kit_ubertests.outcome }}" = "failure" ]; then
+            echo "❌ Test-kit ubertests failed ❌"
+            exit 1
+          fi
+
+  clt:
+    if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_mcl.result == 'success'
+    name: CLT
+    needs: [test_kit_docker_build, test_kit_docker_reuse, test_kit_mcl, meta]
     uses: ./.github/workflows/clt_tests.yml
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

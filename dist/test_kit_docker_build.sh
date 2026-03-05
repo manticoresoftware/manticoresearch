@@ -188,6 +188,15 @@ docker create \
 	docker cp "$source_test_dir/." manticore-test-kit:/test
 	docker exec manticore-test-kit mkdir -p /api
 	docker cp "$source_api_dir/." manticore-test-kit:/api
+	docker exec manticore-test-kit bash -c "cat > /test/localsettings.inc <<'PHP'
+<?php
+\$g_site_defaults['db-host'] = 'localhost';
+\$g_site_defaults['db-user'] = 'root';
+\$g_site_defaults['db-password'] = '';
+\$g_site_defaults['db-name'] = 'test';
+\$g_site_defaults['searchd'] = '/usr/bin/searchd';
+\$g_site_defaults['indexer'] = '/usr/bin/indexer';
+PHP"
 
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \
@@ -241,10 +250,6 @@ fi
 
 cat > "$mysql_init_sql" <<'SQL'
 CREATE DATABASE IF NOT EXISTS test;
-CREATE USER IF NOT EXISTS 'test'@'%' IDENTIFIED BY '';
-GRANT ALL PRIVILEGES ON test.* TO 'test'@'%';
-GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
 SQL
 chown mysql:mysql "$mysql_init_sql"
 
@@ -268,7 +273,7 @@ done
 mariadb-admin --socket="$mysql_socket" ping --silent >/dev/null
 rm -f "$mysql_init_sql"
 
-echo "MariaDB is running on port 3306 with database '"'"'test'"'"' and user '"'"'test'"'"' (no password)."
+echo "MariaDB is running on port 3306 with database 'test' and root user."
 EOF
 chmod +x /usr/local/bin/start-test-mysql
 '

@@ -468,7 +468,7 @@ jobs:
         run: |
           mkdir -p test-kit-ubertests/artifacts
           docker logs test-kit-ubertests > test-kit-ubertests/artifacts/container.log 2>&1 || true
-          docker cp test-kit-ubertests:/tmp/mariadb.err test-kit-ubertests/artifacts/mariadb.err || true
+          docker cp test-kit-ubertests:/tmp/mysql.err test-kit-ubertests/artifacts/mysql.err || true
           docker cp test-kit-ubertests:/test/localsettings.inc test-kit-ubertests/artifacts/localsettings.inc || true
           docker rm -f test-kit-ubertests || true
       - name: Prepare test report xml

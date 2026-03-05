@@ -196,6 +196,7 @@ docker create \
 \$g_site_defaults['db-host'] = 'localhost';
 \$g_site_defaults['db-user'] = 'root';
 \$g_site_defaults['db-password'] = '';
+\$g_site_defaults['lemmatizer_base'] = '/usr/share/manticore/';
 \$g_site_defaults['searchd'] = '/usr/bin/searchd';
 \$g_site_defaults['indexer'] = '/usr/bin/indexer';
 PHP"

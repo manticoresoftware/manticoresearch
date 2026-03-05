@@ -63,6 +63,7 @@ test_dir="${TEST_DIR:-/test}"
 php_bin="${PHP_BIN:-php-real}"
 timestamp="$(date +%Y%m%d_%H%M%S)"
 log_dir="${LOG_DIR:-$test_dir/ubertest-parallel-logs-$timestamp}"
+work_root="${WORK_ROOT:-/tmp/utp_$timestamp}"
 
 if [ ! -d "$test_dir" ]; then
 	echo "Test directory not found: $test_dir" >&2
@@ -96,6 +97,7 @@ if [ "${#tests[@]}" -eq 0 ]; then
 fi
 
 mkdir -p "$log_dir"
+mkdir -p "$work_root"
 rm -f "$log_dir"/failed.slot*
 
 echo "Running ${#tests[@]} ubertests with $workers workers"
@@ -103,18 +105,33 @@ echo "Logs: $log_dir"
 
 run_worker() {
 	local slot="$1"
+	local db="test${slot}"
+	local data_id="data${slot}"
 
 	local idx id log rc
 	for ((idx=slot-1; idx<${#tests[@]}; idx+=workers)); do
 		id="${tests[$idx]}"
 		log="$log_dir/test_${id}.slot${slot}.log"
-		work_dir="$log_dir/work_test_${id}.slot${slot}"
-		db="test$((idx+1))"
-		data_id="data$((idx+1))"
+		work_dir="$work_root/t${id}s${slot}"
 		echo "[slot $slot] test_$id"
 		mysql -uroot -e "DROP DATABASE IF EXISTS \`${db}\`; CREATE DATABASE \`${db}\`;"
 		rm -rf "$work_dir"
 		mkdir -p "$work_dir"
+		cat > "$work_dir/guess.txt" <<'EOF'
+global $g_guesscached; $g_guesscached = true;
+global $g_re2; $g_re2 = true;
+global $g_icu; $g_icu = true;
+global $g_jieba; $g_jieba = true;
+global $g_odbc; $g_odbc = true;
+global $g_repli; $g_repli = true;
+global $g_ssl; $g_ssl = true;
+global $g_columnar_loaded; $g_columnar_loaded = true;
+global $g_secondary_loaded; $g_secondary_loaded = true;
+global $g_knn_loaded; $g_knn_loaded = true;
+global $g_embeddings_loaded; $g_embeddings_loaded = true;
+global $g_tzdata_loaded; $g_tzdata_loaded = true;
+global $g_zlib; $g_zlib = true;
+EOF
 		if ! (
 			cd "$test_dir"
 			export CTEST_RESOURCE_GROUP_COUNT=1
@@ -128,6 +145,9 @@ run_worker() {
 				t "$id"
 		) >"$log" 2>&1; then
 			echo "test_$id FAILED (slot $slot), see $log"
+			echo "$id" >> "$log_dir/failed.slot$slot"
+		elif grep -q "^SKIPPING " "$log"; then
+			echo "test_$id SKIPPED (treated as failure), see $log"
 			echo "$id" >> "$log_dir/failed.slot$slot"
 		fi
 	done

@@ -655,6 +655,7 @@ jobs:
       - test_windows
       - build_freebsd
       - build_aarch64
+      - test_kit_mcl
       - clt
       - meta
     if: always()
@@ -692,6 +693,7 @@ jobs:
               fi
             done
             if [[ "${{ needs.meta.outputs.run_clt }}" == "true" ]]; then
+              echo "* test_kit_mcl: ${{ needs.test_kit_mcl.result }}"
               echo "* clt: ${{ needs.clt.result }}"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
@@ -711,6 +713,11 @@ jobs:
             fi
           done
           if [[ "${{ needs.meta.outputs.run_clt }}" == "true" ]]; then
+            result="${{ needs.test_kit_mcl.result }}"
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "test_kit_mcl: $result"
+              failed=1
+            fi
             result="${{ needs.clt.result }}"
             if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
               echo "clt: $result"

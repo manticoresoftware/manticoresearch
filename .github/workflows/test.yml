@@ -535,9 +535,9 @@ jobs:
           fi
 
   clt:
-    if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success') && needs.test_kit_mcl.result == 'success'
+    if: always() && needs.meta.outputs.run_clt == 'true' && (needs.test_kit_docker_build.result == 'success' || needs.test_kit_docker_reuse.result == 'success')
     name: CLT
-    needs: [test_kit_docker_build, test_kit_docker_reuse, test_kit_mcl, meta]
+    needs: [test_kit_docker_build, test_kit_docker_reuse, meta]
     uses: ./.github/workflows/clt_tests.yml
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

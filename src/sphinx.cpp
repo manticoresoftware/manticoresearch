@@ -8133,14 +8133,8 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
-	if ( tQuery.m_tKnnSettings.m_bPrefilter )
-	{
-		if ( !dFilters.GetLength() || !tCtx.m_pFilter ) 
-			tMeta.m_sWarning = "KNN option {filter=1} is set, but query has no filters; prefiltering is ignored";
-
-		if ( tCtx.m_pFilter )
-			pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
-	}
+	if ( tQuery.m_tKnnSettings.m_bPrefilter && tCtx.m_pFilter )
+		pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
 
 	if ( !dFilters.GetLength() )
 	{

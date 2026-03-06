@@ -240,7 +240,10 @@ command -v php >/dev/null
 
 # Install Oracle MySQL client (not MariaDB mysql compatibility binary).
 install -d /usr/share/keyrings
-curl -fsSL https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 | gpg --dearmor > /usr/share/keyrings/mysql.gpg
+tmp_gpg_home="$(mktemp -d)"
+gpg --batch --homedir "$tmp_gpg_home" --keyserver hkps://keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
+gpg --batch --homedir "$tmp_gpg_home" --export B7B3B788A8D3785C | gpg --dearmor > /usr/share/keyrings/mysql.gpg
+rm -rf "$tmp_gpg_home"
 echo "deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/ubuntu/ noble mysql-8.0" > /etc/apt/sources.list.d/mysql-community.list
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-community-client

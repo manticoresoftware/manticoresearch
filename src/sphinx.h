@@ -769,6 +769,7 @@ struct CSphAttrUpdate
 	bool							m_bIgnoreNonexistent = false;	///< whether to warn about non-existen attrs, or just silently ignore them
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 	bool							m_bReusable = true;				///< whether update is standalone and never rewritten, or need deep-copy
+	bool							m_bRebuildEmbeddings = false;	///< internal: allow updating KNN-indexed float_vector during rebuild/backfill
 
 	inline int GetRowOffset (int i) const
 	{
@@ -817,6 +818,25 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 };
 
 void CommitUpdateAttributes ( int64_t * pTID, const char* szName, const CSphAttrUpdate & tUpd );
+
+enum class EmbeddingPopulate_e
+{
+	Empty,
+	AllRows
+};
+
+struct ExtUpdState_t
+{
+	CSphString					m_sAttr;
+	int							m_iAttrIdx = -1;
+	int							m_iDims = 0;
+	EmbeddingPopulate_e			m_eMode = EmbeddingPopulate_e::Empty;
+	CSphFixedVector<std::pair<int, RowID_t>>	m_dDiskChunks { 0 };
+	int							m_iUpdatedRows = 0;
+	int							m_iSkippedRows = 0;
+	int							m_iAlterGenerationAtInit = -1;
+	std::optional<bool>			m_tPreviousOptimizeStopState;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
@@ -1340,6 +1360,13 @@ public:
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
+
+	virtual bool					ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) { return true; }
+	virtual bool					InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError ) { return false; }
+	virtual bool					GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const { return false; }
+	virtual bool					ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) { return true; }
+	virtual void					FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) {}
+	virtual bool					CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const { return true; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

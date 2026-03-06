@@ -243,14 +243,20 @@ curl -fsSL -o /tmp/percona-release.deb https://repo.percona.com/apt/percona-rele
 dpkg -i /tmp/percona-release.deb
 percona-release setup ps80 -y
 apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y percona-server-server
+# Percona postinst may prompt on mysql conffiles; force non-interactive keep-old behavior.
+rm -f /usr/sbin/policy-rc.d
+export DEBIAN_FRONTEND=noninteractive
+export UCF_FORCE_CONFFOLD=1
+export UCF_FORCE_CONFOLD=1
+apt-get install -y percona-server-server -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+dpkg --force-confdef --force-confold --configure -a
+apt-get -f install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 command -v mysql >/dev/null
 
 (command -v python >/dev/null || (py3="$(command -v python3 || command -v python3.9 || true)" && [ -n "$py3" ] && ln -sf "$py3" /usr/bin/python))
 command -v python >/dev/null
 (service mysql stop 2>/dev/null || true)
 (killall mysqld mysqld_safe 2>/dev/null || true)
-rm -f /usr/sbin/policy-rc.d
 
 php_cmd="$(command -v php || true)"
 php_real="$(readlink -f "$php_cmd" || true)"

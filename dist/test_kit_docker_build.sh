@@ -258,6 +258,9 @@ command -v python >/dev/null
 (service mysql stop 2>/dev/null || true)
 (killall mysqld mysqld_safe 2>/dev/null || true)
 
+mkdir -p /etc/mysql/conf.d
+printf "[mysql]\ntable\n" >> /etc/mysql/conf.d/mysql.cnf
+
 php_cmd="$(command -v php || true)"
 php_real="$(readlink -f "$php_cmd" || true)"
 mkdir -p /usr/local/bin

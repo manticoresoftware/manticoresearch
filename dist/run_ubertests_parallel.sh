@@ -178,6 +178,7 @@ EOF
 				--ctest --strict-verbose --no-demo \
 				-s /usr/bin/searchd -i /usr/bin/indexer \
 				-u root -p '' \
+				-t "${work_dir}/" \
 				-tt "${work_dir}/" \
 				"${_mode_args_array[@]}" \
 				t "$id"

@@ -358,7 +358,7 @@ uint64_t LibcCIHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 	while ( iLen-- )
 	{
 		int iChar = tolower ( *pStr++ );
-		uAcc = sphFNV64 ( &iChar, 4, uAcc );
+		uAcc = sphFNV64_4x ( iChar, uAcc );
 	}
 
 	return uAcc;

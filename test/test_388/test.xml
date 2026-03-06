@@ -49,7 +49,7 @@ curl_setopt_array ( $con, $curl_desc );
 $results[] = curl_exec ( $con );
 $results[] = curl_exec ( $con );
 
-curl_close($con);
+@curl_close($con);
 
 ]]></custom_test>
 

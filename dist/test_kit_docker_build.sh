@@ -215,7 +215,55 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && (apt list --installed | grep manticore || true) && apt-get -y update && echo "apt list after update" && (apt list --installed | grep manticore || true) && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && echo -e "#!/bin/sh\nexit 101" | tee /usr/sbin/policy-rc.d >/dev/null && chmod +x /usr/sbin/policy-rc.d && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl git apache2-utils iproute2 bash mariadb-server unixodbc odbc-mariadb php-cli php-mysql php-curl php-xml && command -v curl >/dev/null && command -v git >/dev/null && command -v php >/dev/null && (command -v mysql >/dev/null || (command -v mariadb >/dev/null && ln -sf "$(command -v mariadb)" /usr/bin/mysql)) && command -v mysql >/dev/null && (command -v python >/dev/null || (py3="$(command -v python3 || command -v python3.9 || true)" && [ -n "$py3" ] && ln -sf "$py3" /usr/bin/python)) && command -v python >/dev/null && (service mariadb stop 2>/dev/null || true) && (service mysql stop 2>/dev/null || true) && (killall mysqld mysqld_safe mariadbd mariadb-safe 2>/dev/null || true) && rm -f /usr/sbin/policy-rc.d && php_cmd="$(command -v php || true)" && php_real="$(readlink -f "$php_cmd" || true)" && mkdir -p /usr/local/bin && [ -n "$php_real" ] && [ -x "$php_real" ] && install -m 0755 "$php_real" /usr/local/bin/php-real || true && [ -x /usr/bin/manticore-executor-dev ] && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php && apt-get clean -y'
+	'
+set -euo pipefail
+echo "apt list before update"
+(apt list --installed | grep manticore || true)
+apt-get -y update
+echo "apt list after update"
+(apt list --installed | grep manticore || true)
+apt-get -y install manticore-galera
+apt-get -y remove manticore-repo manticore
+rm -f /etc/apt/sources.list.d/manticoresearch.list
+apt-get update -y
+dpkg -i --force-confnew /build/*.deb
+printf "#!/bin/sh\nexit 101\n" > /usr/sbin/policy-rc.d
+chmod +x /usr/sbin/policy-rc.d
+apt-get install -y \
+	libxml2 libcurl4 libonig5 libzip4 librdkafka1 \
+	curl git apache2-utils iproute2 bash gnupg ca-certificates \
+	mariadb-server unixodbc odbc-mariadb \
+	php-cli php-mysql php-curl php-xml
+command -v curl >/dev/null
+command -v git >/dev/null
+command -v php >/dev/null
+
+# Install Oracle MySQL client (not MariaDB mysql compatibility binary).
+install -d /usr/share/keyrings
+curl -fsSL https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 | gpg --dearmor > /usr/share/keyrings/mysql.gpg
+echo "deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/ubuntu/ noble mysql-8.0" > /etc/apt/sources.list.d/mysql-community.list
+apt-get update -y
+DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-community-client
+command -v mysql >/dev/null
+if mysql --version | grep -qi "mariadb"; then
+	echo "ERROR: expected Oracle mysql client, but got MariaDB client" >&2
+	exit 1
+fi
+
+(command -v python >/dev/null || (py3="$(command -v python3 || command -v python3.9 || true)" && [ -n "$py3" ] && ln -sf "$py3" /usr/bin/python))
+command -v python >/dev/null
+(service mariadb stop 2>/dev/null || true)
+(service mysql stop 2>/dev/null || true)
+(killall mysqld mysqld_safe mariadbd mariadb-safe 2>/dev/null || true)
+rm -f /usr/sbin/policy-rc.d
+
+php_cmd="$(command -v php || true)"
+php_real="$(readlink -f "$php_cmd" || true)"
+mkdir -p /usr/local/bin
+[ -n "$php_real" ] && [ -x "$php_real" ] && install -m 0755 "$php_real" /usr/local/bin/php-real || true
+[ -x /usr/bin/manticore-executor-dev ] && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
+apt-get clean -y
+'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 

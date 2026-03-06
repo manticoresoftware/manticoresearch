@@ -1,0 +1,9 @@
+a:1:{i:0;a:5:{i:0;a:2:{s:8:"sphinxql";s:22:"drop table if exists t";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:168:"CREATE TABLE t (
+f text,
+m multi,
+v FLOAT_VECTOR
+    KNN_TYPE='hnsw'
+    HNSW_SIMILARITY='cosine'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='f'
+)";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:45:"INSERT INTO t (id, f, m) VALUES (1, 'a', (1))";s:14:"total_affected";i:1;}i:3;a:3:{s:8:"sphinxql";s:18:"SELECT f, m FROM t";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:1:"f";s:1:"a";s:1:"m";s:1:"1";}}}i:4;a:2:{s:8:"sphinxql";s:12:"drop table t";s:14:"total_affected";i:0;}}}

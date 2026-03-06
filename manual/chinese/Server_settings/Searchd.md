@@ -1066,57 +1066,6 @@ pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 
-
-### predicted_time_costs
-
-<!-- example conf predicted_time_costs -->
-查询时间预测模型的成本，以纳秒为单位。可选，默认为 `doc=64, hit=48, skip=2048, match=64`。
-
-<!-- intro -->
-##### 示例：
-
-<!-- request Example -->
-
-```ini
-predicted_time_costs = doc=128, hit=96, skip=4096, match=128
-```
-<!-- end -->
-
-<!-- example conf predicted_time_costs 1 -->
-基于执行时间（使用最大查询时间设置）在查询完成前终止查询是一个不错的安全网，但有一个固有的缺点：结果不确定（不稳定）。也就是说，如果您多次重复执行完全相同的（复杂）搜索查询并设置时间限制，时间限制将在不同的阶段被触发，您将得到*不同的*结果集。
-
-<!-- intro -->
-##### SQL：
-
-<!-- request SQL -->
-
-```sql
-SELECT … OPTION max_query_time
-```
-<!-- request API -->
-
-```api
-SetMaxQueryTime()
-```
-<!-- end -->
-
-有一个选项 [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time)，它允许您限制查询时间*并*获得稳定、可重复的结果。与其在评估查询时定期检查实际当前时间（这会导致不确定的结果），它使用一个简单的线性模型来预测当前运行时间：
-
-```ini
-predicted_time =
-    doc_cost * processed_documents +
-    hit_cost * processed_hits +
-    skip_cost * skiplist_jumps +
-    match_cost * found_matches
-```
-
-当 `predicted_time` 达到给定限制时，查询将提前终止。
-
-当然，这并不是实际所花时间的硬性限制（不过，它确实是处理工作量的硬性限制），而且一个简单的线性模型远非理想精确。因此，墙钟时间*可能*低于或超过目标限制。然而，误差范围是相当可接受的：例如，在我们以100毫秒为目标限制的实验中，大多数测试查询落在95到105毫秒的范围内，*所有*查询都在80到120毫秒的范围内。此外，作为一项不错的副作用，使用建模的查询时间而不是测量实际运行时间，也会减少一些gettimeofday()调用。
-
-没有两台服务器的型号和规格是完全相同的，因此`predicted_time_costs`指令允许您为上述模型配置成本。为了方便，它们是整数，以纳秒为单位计算。（max_predicted_time中的限制以毫秒计算，而需要将成本值指定为0.000128毫秒而不是128纳秒则更容易出错。）不需要一次性指定所有四个成本，未指定的将采用默认值。然而，我们强烈建议为了可读性而指定所有成本。
-
-
 ### preopen_tables
 
 <!-- example conf preopen_tables -->

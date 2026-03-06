@@ -1570,7 +1570,7 @@ bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
 			tNamedKNN.m_sFrom = i.m_sKNNFrom;
 
-			if ( !tNamedKNN.m_sModelName.empty() && tNamedKNN.m_sFrom.IsEmpty() )
+			if ( !tNamedKNN.m_sModelName.empty() && !i.m_bKNNFromSet )
 			{
 				m_sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", tNamedKNN.m_sName.cstr() );
 				return false;

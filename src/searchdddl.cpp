@@ -48,6 +48,7 @@ public:
 		CSphString		m_sAPIKey;
 		CSphString		m_sCachePath;
 		CSphString		m_sFrom;
+		bool			m_bKNNFromSet = false;
 		bool			m_bUseGPU = false;
 
 		void			Reset()	{ *this = ItemOptions_t(); }
@@ -348,6 +349,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		tAttr.m_tKNN				= tOpts.ToKNN();
 		tAttr.m_tKNNModel			= tOpts.ToKNNModel();
 		tAttr.m_sKNNFrom			= tOpts.m_sFrom;
+		tAttr.m_bKNNFromSet			= tOpts.m_bKNNFromSet;
 
 		return true;
 	}
@@ -503,7 +505,8 @@ bool DdlParser_c::AddItemOptionModelName ( const SqlNode_t & tOption )
 
 bool DdlParser_c::AddItemOptionFrom ( const SqlNode_t & tOption )
 {
-	m_tItemOptions.m_sFrom= ToStringUnescape(tOption);
+	m_tItemOptions.m_sFrom = ToStringUnescape(tOption);
+	m_tItemOptions.m_bKNNFromSet = true;
 	return true;
 }
 

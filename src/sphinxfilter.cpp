@@ -1483,7 +1483,18 @@ static bool TryToCreateSpecialFilter ( std::unique_ptr<ISphFilter> & pFilter, co
 }
 
 
-static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
+static bool IsColumnarAliasedAttr ( const ISphSchema & tLookupSchema, const CSphString & sAliasedCol )
+{
+	int iAliasedAttr = tLookupSchema.GetAttrIndex ( sAliasedCol.cstr() );
+	if ( iAliasedAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAliasedAttr = tLookupSchema.GetAttr ( iAliasedAttr );
+	return tAliasedAttr.IsColumnar() || tAliasedAttr.IsColumnarExpr();
+}
+
+
+static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema, const ISphSchema * pIndexSchema )
 {
 	if ( iAttr<0 )
 		return false;
@@ -1503,7 +1514,17 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	// we had a columnar expression in the select list that we wanted to evaluate at the final stage
 	// we replaced it with a stored expression
 	// now we want to create a columnar filter based on the original columnar attribute
-	if ( tCol.IsStoredExpr() )
+	if ( !tCol.IsStoredExpr() )
+		return false;
+
+	CSphString sAliasedCol;
+	tCol.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+	if ( IsColumnarAliasedAttr ( tSchema, sAliasedCol ) )
+		return true;
+
+	// result-set schemas can contain extra attrs shadowing base attrs by name;
+	// check index schema too to resolve original aliased columnar attribute.
+	if ( pIndexSchema && pIndexSchema!=&tSchema && IsColumnarAliasedAttr ( *pIndexSchema, sAliasedCol ) )
 		return true;
 
 	return false;
@@ -1538,7 +1559,7 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter,
 	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tFixedSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
-	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema );
+	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema, tCtx.m_pIndexSchema );
 
 	if ( iAttr>=0 && !bColumnar )
 	{

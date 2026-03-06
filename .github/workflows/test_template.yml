@@ -15,10 +15,18 @@ on:
         required: false
         type: number
         default: 999999
+      CTEST_EXCLUDE_REGEX:
+        required: false
+        type: string
+        default: ""
       UNITY_BUILD:
         required: false
         type: number
         default: 1
+      FLOAT_TOLERANCE:
+        required: false
+        type: boolean
+        default: false
       artifact_name:
         required: true
         type: string
@@ -40,6 +48,10 @@ on:
         required: false
         type: string
         default: ""
+      INSTALL_MCL_FROM_DEPS:
+        required: false
+        type: boolean
+        default: false
     outputs:
       test_outcome:
         description: Outcome of the test step (success/failure)
@@ -64,11 +76,13 @@ jobs:
         NO_BUILD: 1
         CTEST_START: ${{ inputs.CTEST_START }}
         CTEST_END: ${{ inputs.CTEST_END }}
+        CTEST_EXCLUDE_REGEX: ${{ inputs.CTEST_EXCLUDE_REGEX }}
         # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
         # CTEST_REGEX: test_234
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         LIBS_BUNDLE:
         UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
+        FLOAT_TOLERANCE: ${{ inputs.FLOAT_TOLERANCE }}
         COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository
@@ -89,6 +103,50 @@ jobs:
         with:
           name: ${{ inputs.build_artifact_name }}
           path: .
+
+      - name: Install manticore-columnar-lib from deps.txt
+        if: ${{ inputs.INSTALL_MCL_FROM_DEPS }}
+        run: |
+          set -euo pipefail
+
+          MCL_VERSION="$(awk '$1=="mcl"{print $2; exit}' deps.txt)"
+          if [[ -z "${MCL_VERSION}" ]]; then
+            echo "mcl version was not found in deps.txt"
+            exit 1
+          fi
+
+          MCL_VERSION_URL="${MCL_VERSION//+/%2B}"
+          PACKAGE_NAME="manticore-columnar-lib_${MCL_VERSION_URL}_amd64.deb"
+          REPOS=(
+            "https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-amd64"
+            "https://repo.manticoresearch.com/repository/manticoresearch_jammy_release_candidate/dists/jammy/main/binary-amd64"
+            "https://repo.manticoresearch.com/repository/manticoresearch_jammy/dists/jammy/main/binary-amd64"
+          )
+
+          PACKAGE_URL=""
+          for repo in "${REPOS[@]}"; do
+            candidate="${repo}/${PACKAGE_NAME}"
+            if curl -fsSLI "${candidate}" >/dev/null; then
+              PACKAGE_URL="${candidate}"
+              break
+            fi
+          done
+
+          if [[ -z "${PACKAGE_URL}" ]]; then
+            echo "could not find ${PACKAGE_NAME} in jammy dev/release_candidate/release repos"
+            exit 1
+          fi
+
+          echo "Installing ${PACKAGE_URL}"
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get -y remove 'manticore-repo'
+          rm /etc/apt/sources.list.d/manticoresearch.list
+          apt-get update
+          apt-get -y install wget
+          curl -fsSL https://repo.manticoresearch.com/manticore-repo.noarch.deb -o /tmp/manticore-repo.noarch.deb
+          dpkg -i /tmp/manticore-repo.noarch.deb
+          curl -fsSL "${PACKAGE_URL}" -o /tmp/manticore-columnar-lib.deb
+          dpkg -i /tmp/manticore-columnar-lib.deb
 
       - name: List files
         run: find .

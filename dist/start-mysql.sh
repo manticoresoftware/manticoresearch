@@ -5,12 +5,20 @@ mysql_data_dir=/var/lib/mysql
 mysql_socket=/run/mysqld/mysqld.sock
 mysql_init_sql=/run/mysqld/test-init.sql
 
+mysqld_bin="$(command -v mysqld || true)"
+mysql_bin="$(command -v mysql || true)"
+
+if [ -z "$mysqld_bin" ] || [ -z "$mysql_bin" ]; then
+	echo "Required MySQL binaries are missing: mysqld='$mysqld_bin' mysql='$mysql_bin'" >&2
+	exit 1
+fi
+
 mkdir -p /run/mysqld
 chown -R mysql:mysql /run/mysqld "$mysql_data_dir"
 
 if [ ! -d "$mysql_data_dir/mysql" ]; then
-	if command -v mysqld >/dev/null 2>&1; then
-		mysqld --initialize-insecure --user=mysql --datadir="$mysql_data_dir" >/dev/null
+	if "$mysqld_bin" --verbose --help 2>/dev/null | grep -q -- '--initialize-insecure'; then
+		"$mysqld_bin" --initialize-insecure --user=mysql --datadir="$mysql_data_dir" >/dev/null
 	else
 		mysql_install_db --user=mysql --datadir="$mysql_data_dir" >/dev/null
 	fi
@@ -21,7 +29,7 @@ CREATE DATABASE IF NOT EXISTS test;
 SQL
 chown mysql:mysql "$mysql_init_sql"
 
-mysqld \
+"$mysqld_bin" \
 	--user=mysql \
 	--datadir="$mysql_data_dir" \
 	--socket="$mysql_socket" \
@@ -32,13 +40,13 @@ mysqld \
 	--log-error=/tmp/mysql.err &
 
 for _ in $(seq 1 60); do
-	if mysqladmin --socket="$mysql_socket" ping --silent >/dev/null 2>&1; then
+	if "$mysql_bin" --socket="$mysql_socket" -uroot -e "SELECT 1" >/dev/null 2>&1; then
 		break
 	fi
 	sleep 1
 done
 
-mysqladmin --socket="$mysql_socket" ping --silent >/dev/null
+"$mysql_bin" --socket="$mysql_socket" -uroot -e "SELECT 1" >/dev/null
 
 if command -v nproc >/dev/null 2>&1; then
 	core_count="$(nproc)"
@@ -52,9 +60,9 @@ if ! [[ "$core_count" =~ ^[1-9][0-9]*$ ]]; then
 	core_count=1
 fi
 
-mysql --socket="$mysql_socket" -uroot -e "CREATE DATABASE IF NOT EXISTS test"
+"$mysql_bin" --socket="$mysql_socket" -uroot -e "CREATE DATABASE IF NOT EXISTS test"
 for i in $(seq 1 "$core_count"); do
-	mysql --socket="$mysql_socket" -uroot -e "CREATE DATABASE IF NOT EXISTS test${i}"
+	"$mysql_bin" --socket="$mysql_socket" -uroot -e "CREATE DATABASE IF NOT EXISTS test${i}"
 done
 
 rm -f "$mysql_init_sql"

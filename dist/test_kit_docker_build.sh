@@ -232,32 +232,24 @@ chmod +x /usr/sbin/policy-rc.d
 apt-get install -y \
 	libxml2 libcurl4 libonig5 libzip4 librdkafka1 \
 	curl git apache2-utils iproute2 bash gnupg ca-certificates \
-	mariadb-server unixodbc odbc-mariadb \
+	unixodbc odbc-mariadb \
 	php-cli php-mysql php-curl php-xml
 command -v curl >/dev/null
 command -v git >/dev/null
 command -v php >/dev/null
 
-# Install Oracle MySQL client (not MariaDB mysql compatibility binary).
-install -d /usr/share/keyrings
-tmp_gpg_home="$(mktemp -d)"
-gpg --batch --homedir "$tmp_gpg_home" --keyserver hkps://keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
-gpg --batch --homedir "$tmp_gpg_home" --export B7B3B788A8D3785C | gpg --dearmor > /usr/share/keyrings/mysql.gpg
-rm -rf "$tmp_gpg_home"
-echo "deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/ubuntu/ noble mysql-8.0" > /etc/apt/sources.list.d/mysql-community.list
+# Install Percona Server (do not change mysql client packages explicitly).
+curl -fsSL -o /tmp/percona-release.deb https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+dpkg -i /tmp/percona-release.deb
+percona-release setup ps80 -y
 apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-community-client
+DEBIAN_FRONTEND=noninteractive apt-get install -y percona-server-server
 command -v mysql >/dev/null
-if mysql --version | grep -qi "mariadb"; then
-	echo "ERROR: expected Oracle mysql client, but got MariaDB client" >&2
-	exit 1
-fi
 
 (command -v python >/dev/null || (py3="$(command -v python3 || command -v python3.9 || true)" && [ -n "$py3" ] && ln -sf "$py3" /usr/bin/python))
 command -v python >/dev/null
-(service mariadb stop 2>/dev/null || true)
 (service mysql stop 2>/dev/null || true)
-(killall mysqld mysqld_safe mariadbd mariadb-safe 2>/dev/null || true)
+(killall mysqld mysqld_safe 2>/dev/null || true)
 rm -f /usr/sbin/policy-rc.d
 
 php_cmd="$(command -v php || true)"

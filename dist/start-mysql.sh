@@ -5,11 +5,11 @@ mysql_data_dir=/var/lib/mysql
 mysql_socket=/run/mysqld/mysqld.sock
 mysql_init_sql=/run/mysqld/test-init.sql
 
-mysqld_bin="$(command -v mariadbd || true)"
+mysqld_bin="$(command -v mysqld || true)"
 mysql_bin="$(command -v mysql || true)"
 
 if [ -z "$mysqld_bin" ] || [ -z "$mysql_bin" ]; then
-	echo "Required binaries are missing: mariadbd='$mysqld_bin' mysql='$mysql_bin'" >&2
+	echo "Required binaries are missing: mysqld='$mysqld_bin' mysql='$mysql_bin'" >&2
 	exit 1
 fi
 
@@ -17,10 +17,12 @@ mkdir -p /run/mysqld
 chown -R mysql:mysql /run/mysqld "$mysql_data_dir"
 
 if [ ! -d "$mysql_data_dir/mysql" ]; then
-	if command -v mariadb-install-db >/dev/null 2>&1; then
-		mariadb-install-db --user=mysql --datadir="$mysql_data_dir" >/dev/null
+	if "$mysqld_bin" --verbose --help 2>/dev/null | grep -q -- '--initialize-insecure'; then
+		"$mysqld_bin" --initialize-insecure --user=mysql --datadir="$mysql_data_dir" >/dev/null
+	elif command -v mysql_install_db >/dev/null 2>&1; then
+		mysql_install_db --user=mysql --datadir="$mysql_data_dir" >/dev/null
 	else
-		echo "mariadb-install-db is required but not found" >&2
+		echo "Unable to initialize datadir: no supported init command found" >&2
 		exit 1
 	fi
 fi

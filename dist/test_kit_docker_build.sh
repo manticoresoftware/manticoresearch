@@ -231,7 +231,7 @@ printf "#!/bin/sh\nexit 101\n" > /usr/sbin/policy-rc.d
 chmod +x /usr/sbin/policy-rc.d
 apt-get install -y \
 	libxml2 libcurl4 libonig5 libzip4 librdkafka1 \
-	curl git apache2-utils iproute2 bash gnupg ca-certificates \
+	curl git apache2-utils iproute2 bash gnupg ca-certificates lsb-release \
 	unixodbc odbc-mariadb \
 	php-cli php-mysql php-curl php-xml
 command -v curl >/dev/null

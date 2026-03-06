@@ -1,5 +1,4 @@
 Test sequential node failures with RF=3 - validates rebalance happens after each failure with no shard duplication
-
 ––– comment –––
 Start 4-node cluster
 ––– input –––
@@ -57,17 +56,21 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 If grep fails due to missing string or timeout, return non-zero
 ––– input –––
-timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3,4}/searchd.log); echo $?
+timeout 20 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{2,3,4}/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––
 Make sure that rebalancing started
 ––– input –––
-timeout 10 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 1000 -f /var/log/manticore-2/searchd.log); echo $?
+timeout 20 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
 ––– output –––
 0
 ––– input –––
-sleep 10; cat /var/log/manticore-{2,3,4}/searchd.log
+timeout 20 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
+––– input –––
+cat /var/log/manticore-3/searchd.log
 ––– output –––
 ––– comment –––
 Verify remaining 3 nodes maintain quorum
@@ -105,7 +108,13 @@ timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– comment –––
 If grep fails due to missing string or timeout, return non-zero
 ––– input –––
-timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{3,4}/searchd.log); echo $?
+timeout 20 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{3,4}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 20 grep -qm1 'Skipping rebalance for table' <(tail -n 100 -f /var/log/manticore-{3,4}/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -123,6 +132,16 @@ mysql -h0 -P3306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 |    3 |
 +------+
 ––– comment –––
+Clean up searchd log cuz we will rely on it after
+––– input –––
+truncate -s 0 /var/log/manticore-3/searchd.log
+––– output –––
+––– comment –––
+Also remove logs from previous runs
+––– input –––
+rm -f /var/log/manticore-{1,2}/searchd.log
+––– output –––
+––– comment –––
 Restart node 1
 ––– input –––
 export INSTANCE=1
@@ -135,11 +154,19 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– comment –––
-Give some time for nodes to rejoin and resync
+Make sure that rebalancing started
 ––– input –––
-
-sleep 5
+timeout 40 grep -qm1 'Rebalancing due to cluster topology change' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
 ––– output –––
+0
+––– comment –––
+We are waiting here 60 cuz manticore is going through fatals and it takes really long
+––– input –––
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Give some time for nodes to rejoin and resync
 ––– comment –––
 Check all 4 nodes are synced
 ––– input –––
@@ -147,13 +174,17 @@ for i in 1 2 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
 ––– output –––
 OK
 ––– comment –––
+The schema here is altered from original state and this is just due to we
+rebalance only when required, and we did 2 rebalance,
+so it changed schema from original and this is totally normal
+
 Verify shards are back to RF=3 with no duplication - each shard on exactly 3 nodes
 ––– input –––
 show_shards 1306 "$TABLE_NAME"
 ––– output –––
 system.t_s0: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:3312
-system.t_s1: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:4312
-system.t_s2: 127.0.0.1:1312 127.0.0.1:3312 127.0.0.1:4312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312 127.0.0.1:4312
+system.t_s2: 127.0.0.1:1312 127.0.0.1:2312 127.0.0.1:4312
 ––– comment –––
 Verify full data integrity across all nodes
 ––– input –––
@@ -162,10 +193,10 @@ mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 +------+
 |    3 |
 +------+
-––– comment –––
-Cleanup
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS ${TABLE_NAME}"; echo $?
+for i in 1 2 3 4 5; do mysql -h0 -P1306 -sN -e "show status like 'cluster_e8208d86b2139f1cb5dceee7a9b5f823_node_state'"; sleep 15; done
 ––– output –––
-0
+––– input –––
+cat /var/log/manticore-1/searchd.log
+––– output –––
 

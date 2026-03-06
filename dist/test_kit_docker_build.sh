@@ -192,7 +192,7 @@ docker create \
 	docker exec manticore-test-kit chmod +x /test/run_ubertests_parallel.sh
 	docker exec manticore-test-kit mkdir -p /api
 	docker cp "$source_api_dir/." manticore-test-kit:/api
-	docker exec manticore-test-kit bash -c "cat > /test/localsettings.inc <<'PHP'
+docker exec manticore-test-kit bash -c "cat > /test/localsettings.inc <<'PHP'
 <?php
 \$g_site_defaults['db-host'] = 'localhost';
 \$g_site_defaults['db-user'] = 'root';
@@ -200,6 +200,13 @@ docker create \
 \$g_site_defaults['lemmatizer_base'] = '/usr/share/manticore/';
 \$g_site_defaults['searchd'] = '/usr/bin/searchd';
 \$g_site_defaults['indexer'] = '/usr/bin/indexer';
+if (file_exists('/usr/lib/x86_64-linux-gnu/odbc/libmaodbc.so')) {
+	\$g_site_defaults['odbc_driver'] = '/usr/lib/x86_64-linux-gnu/odbc/libmaodbc.so';
+} elseif (file_exists('/usr/lib64/libmaodbc.so')) {
+	\$g_site_defaults['odbc_driver'] = '/usr/lib64/libmaodbc.so';
+} else {
+	\$g_site_defaults['odbc_driver'] = 'MariaDB Unicode';
+}
 PHP"
 
 # Let's list what's in the /build/ inside the container for debug purposes
@@ -208,7 +215,7 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && (apt list --installed | grep manticore || true) && apt-get -y update && echo "apt list after update" && (apt list --installed | grep manticore || true) && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && echo -e "#!/bin/sh\nexit 101" | tee /usr/sbin/policy-rc.d >/dev/null && chmod +x /usr/sbin/policy-rc.d && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl git apache2-utils iproute2 bash mariadb-server php-cli php-mysql php-curl php-xml && command -v curl >/dev/null && command -v git >/dev/null && command -v php >/dev/null && (command -v mysql >/dev/null || (command -v mariadb >/dev/null && ln -sf "$(command -v mariadb)" /usr/bin/mysql)) && command -v mysql >/dev/null && (service mariadb stop 2>/dev/null || true) && (service mysql stop 2>/dev/null || true) && (killall mysqld mysqld_safe mariadbd mariadb-safe 2>/dev/null || true) && rm -f /usr/sbin/policy-rc.d && php_cmd="$(command -v php || true)" && php_real="$(readlink -f "$php_cmd" || true)" && mkdir -p /usr/local/bin && [ -n "$php_real" ] && [ -x "$php_real" ] && install -m 0755 "$php_real" /usr/local/bin/php-real || true && [ -x /usr/bin/manticore-executor-dev ] && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php && apt-get clean -y'
+	'echo "apt list before update" && (apt list --installed | grep manticore || true) && apt-get -y update && echo "apt list after update" && (apt list --installed | grep manticore || true) && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && echo -e "#!/bin/sh\nexit 101" | tee /usr/sbin/policy-rc.d >/dev/null && chmod +x /usr/sbin/policy-rc.d && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl git apache2-utils iproute2 bash mariadb-server unixodbc odbc-mariadb php-cli php-mysql php-curl php-xml && command -v curl >/dev/null && command -v git >/dev/null && command -v php >/dev/null && (command -v mysql >/dev/null || (command -v mariadb >/dev/null && ln -sf "$(command -v mariadb)" /usr/bin/mysql)) && command -v mysql >/dev/null && (command -v python >/dev/null || (py3="$(command -v python3 || command -v python3.9 || true)" && [ -n "$py3" ] && ln -sf "$py3" /usr/bin/python)) && command -v python >/dev/null && (service mariadb stop 2>/dev/null || true) && (service mysql stop 2>/dev/null || true) && (killall mysqld mysqld_safe mariadbd mariadb-safe 2>/dev/null || true) && rm -f /usr/sbin/policy-rc.d && php_cmd="$(command -v php || true)" && php_real="$(readlink -f "$php_cmd" || true)" && mkdir -p /usr/local/bin && [ -n "$php_real" ] && [ -x "$php_real" ] && install -m 0755 "$php_real" /usr/local/bin/php-real || true && [ -x /usr/bin/manticore-executor-dev ] && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 

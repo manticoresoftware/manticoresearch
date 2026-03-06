@@ -208,13 +208,13 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && echo -e '#!/bin/sh\nexit 101' | tee /usr/sbin/policy-rc.d >/dev/null && chmod +x /usr/sbin/policy-rc.d && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl git apache2-utils iproute2 bash mysql-server mysql-client php-cli php-mysql php-curl php-xml && php_cmd="$(command -v php || true)" && php_real="$(readlink -f "$php_cmd" || true)" && mkdir -p /usr/local/bin && [ -n "$php_real" ] && [ -x "$php_real" ] && install -m 0755 "$php_real" /usr/local/bin/php-real || true && [ -x /usr/bin/manticore-executor-dev ] && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php && apt-get clean -y'
+	'echo "apt list before update" && (apt list --installed | grep manticore || true) && apt-get -y update && echo "apt list after update" && (apt list --installed | grep manticore || true) && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && echo -e "#!/bin/sh\nexit 101" | tee /usr/sbin/policy-rc.d >/dev/null && chmod +x /usr/sbin/policy-rc.d && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl git apache2-utils iproute2 bash mysql-server mysql-client php-cli php-mysql php-curl php-xml && command -v curl >/dev/null && command -v git >/dev/null && command -v php >/dev/null && (killall mysqld mysqld_safe 2>/dev/null || true) && rm -f /usr/sbin/policy-rc.d && php_cmd="$(command -v php || true)" && php_real="$(readlink -f "$php_cmd" || true)" && mkdir -p /usr/local/bin && [ -n "$php_real" ] && [ -x "$php_real" ] && install -m 0755 "$php_real" /usr/local/bin/php-real || true && [ -x /usr/bin/manticore-executor-dev ] && ln -sf /usr/bin/manticore-executor-dev /usr/bin/php && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 # Install composer cuz we need it for buddy from the git and also development
 docker exec manticore-test-kit bash -c \
-	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
+	"set -euo pipefail; curl -sSL https://getcomposer.org/download/2.7.0/composer.phar -o /usr/bin/composer && chmod +x /usr/bin/composer"
 
 echo "Installing custom buddy from git repo with commit $buddy_commit"
 # Install custom buddy from git repo

@@ -35,7 +35,7 @@ searchd
 		(10, 'doc10', 1, (1.0, 1.1, 1.2, 1.3));
 	flush ramchunk t_filter;
 
-	select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0}) and category=1;
+	select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0,prefilter=0}) and category=1;
 	select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0,fullscan=1}) and category=1;
 	select id, category, knn_dist() dist from t_filter where knn(vec, 2, (0.3, 0.4, 0.5, 0.6), {oversampling=1.0,prefilter=1}) and category=1;
 
@@ -102,11 +102,11 @@ searchd
 		(6, 'expensive3', 100.0, (1.0, 1.1, 1.2, 1.3));
 	flush ramchunk t_price;
 
-	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0}) and price&lt;50;
+	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, prefilter=0}) and price&lt;50;
     select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, fullscan=1}) and price&lt;50;
 	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.2, 0.3, 0.4, 0.5), {oversampling=1.0, prefilter=1}) and price&lt;50;
 
-	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0}) and price=100;
+	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, prefilter=0}) and price=100;
 	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, fullscan=1}) and price=100;
 	select id, price, knn_dist() dist from t_price where knn(vec, 2, (0.48, 0.58, 0.68, 0.78), {oversampling=1.0, prefilter=1}) and price=100;
 
@@ -143,10 +143,10 @@ searchd
 		(25, 'doc25', 1, 52.0, (0.52, 0.62, 0.72, 0.82));
 	flush ramchunk t_large;
 
-	select id, category, knn_dist() dist from t_large where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and category=1;
+	select id, category, knn_dist() dist from t_large where knn(vec, 3, (0.15, 0.25, 0.35, 0.45), {prefilter=0}) and category=1;
 	select id, category, knn_dist() dist from t_large where knn(vec, 3, (0.15, 0.25, 0.35, 0.45), {prefilter=1}) and category=1;
 
-	select id, price, knn_dist() dist from t_large where knn(vec, 2, (0.25, 0.35, 0.45, 0.55)) and price&lt;30;
+	select id, price, knn_dist() dist from t_large where knn(vec, 2, (0.25, 0.35, 0.45, 0.55), {prefilter=0}) and price&lt;30;
 	select id, price, knn_dist() dist from t_large where knn(vec, 2, (0.25, 0.35, 0.45, 0.55), {prefilter=1}) and price&lt;30;
 
 	drop table t_large;

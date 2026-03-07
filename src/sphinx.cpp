@@ -43,6 +43,7 @@
 #include "sphinx_alter.h"
 #include "conversion.h"
 #include "binlog.h"
+#include "embeddingutils.h"
 #include "task_info.h"
 #include "client_task_info.h"
 #include "chunksearchctx.h"
@@ -749,7 +750,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			return false;
 		}
 
-		if ( tCol.IsIndexedKNN() )
+		if ( tCol.IsIndexedKNN() && !( tUpd.m_bRebuildEmbeddings && tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR ) )
 		{
 			sError.SetSprintf ( "unable to update attribute '%s' that has a KNN index", sUpdAttrName.cstr() );
 			return false;
@@ -1394,6 +1395,10 @@ private:
 	const BYTE *				GetRawBlobAttrs() const override { return m_tBlobAttrs.GetReadPtr(); }
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
+
+	bool				ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) final;
+	bool				CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const final;
+	bool				ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) final;
 };
 
 
@@ -2529,6 +2534,8 @@ Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphStr
 	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
 	auto & tUpd = *pUpd;
 	tUpd.m_bIgnoreNonexistent = true;
+	// Binlog-replayed updates can include internal embedding backfill payloads.
+	tUpd.m_bRebuildEmbeddings = true;
 
 	int iAttrs = (int) tReader.UnzipOffset ();
 	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
@@ -13235,5 +13242,155 @@ bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
 		return false;
 
 	::unlink ( sHeaderOld.cstr() );
+	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Embedding 
+//////////////////////////////////////////////////////////////////////////
+
+bool CSphIndex_VLN::ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError )
+{
+	assert ( iDocsToFill>0 && iDims>0 && m_tSchema.HasBlobAttrs() );
+
+	BYTE * pBlobPool = m_tBlobAttrs.GetWritePtr();
+	if ( !pBlobPool )
+		return true;
+
+	const uint64_t uPayloadPerRow = uint64_t(iDims) * sizeof(float);
+	uint64_t uNeed = uint64_t(iDocsToFill) * uPayloadPerRow;
+	if ( m_tSettings.m_tBlobUpdateSpace>0 )
+		uNeed += uint64_t(m_tSettings.m_tBlobUpdateSpace);
+
+	const uint64_t uOldSize = m_tBlobAttrs.GetLengthBytes64();
+	const uint64_t uBlobSpaceUsed = uint64_t(*(SphOffset_t*)pBlobPool);
+	const uint64_t uSpaceLeft = uOldSize>uBlobSpaceUsed ? uOldSize-uBlobSpaceUsed : 0;
+	if ( uNeed<=uSpaceLeft )
+		return true;
+
+	const uint64_t uNeedGrow = uNeed - uSpaceLeft;
+	const uint64_t uNewSize = uOldSize + uNeedGrow;
+	CSphString sWarning;
+	if ( !m_tBlobAttrs.Resize ( uNewSize, sWarning, sError ) )
+		return false;
+
+	return true;
+}
+
+bool CSphIndex_VLN::CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const
+{
+	const int iAttrIdx = tState.m_iAttrIdx;
+	const bool bAllRows = tState.m_eMode==EmbeddingPopulate_e::AllRows;
+
+	if ( iAttrIdx < 0 || iAttrIdx >= m_tSchema.GetAttrsCount() || !m_iDocinfo )
+		return true;
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType != SPH_ATTR_FLOAT_VECTOR || tAttr.IsColumnar() )
+		return true;
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	const BYTE * pBlobBase = m_tBlobAttrs.GetReadPtr();
+	if ( !pBlobBase )
+		return true;
+
+	const int iDims = tState.m_iDims;
+	assert ( tState.m_iDims==tAttr.m_tKNN.m_iDims );
+	if ( !bAllRows && iDims<=0 )
+		return true;
+
+	CSphVector<ScopedTypedIterator_t> dFromColumnarIters;
+	GetEmbeddingColumnar ( m_tSchema, dFrom, m_pColumnar.get(), dFromColumnarIters );
+
+	if ( EmbeddingFromNeedsDocstore ( dFrom ) && !m_pDocstore )
+		return true;
+
+	for ( RowID_t tRowID = tStartRowID; tRowID < (RowID_t)m_iDocinfo; tRowID++ )
+	{
+		if ( dDocids.GetLength() >= iMaxDocs )
+		{
+			tStartRowID = tRowID;
+			return true;
+		}
+
+		if ( m_tDeadRowMap.IsSet ( tRowID ) )
+			continue;
+
+		const CSphRowitem * pRow = GetDocinfoByRowID ( tRowID );
+		if ( !pRow )
+			continue;
+
+		const DocID_t tDocID = sphGetDocID ( pRow );
+		const SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+		const BYTE * pBlobRow = pBlobBase + tBlobOff;
+		ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+
+		if ( !bAllRows && !IsBlobAttrZero ( tVecBlob, iDims ) )
+			continue;
+
+		DocstoreDoc_t tDoc;
+		if ( m_pDocstore )
+			tDoc = m_pDocstore->GetDoc ( tRowID, nullptr, -1, false );
+
+		CSphString sFrom;
+		BuildEmbeddingFromText ( m_tSchema, dFrom, m_pDocstore ? &tDoc : nullptr, pBlobRow, dFromColumnarIters, tRowID, sFrom );
+		dDocids.Add ( tDocID );
+		dFromTexts.Add ( sFrom );
+	}
+
+	tStartRowID = m_iDocinfo;
+	return true;
+}
+
+bool CSphIndex_VLN::ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError )
+{
+	if ( tState.m_eMode!=EmbeddingPopulate_e::Empty || tUpd.AllApplied() || !m_iDocinfo )
+		return true;
+
+	const int iAttrIdx = m_tSchema.GetAttrIndex ( tState.m_sAttr.cstr() );
+	if ( iAttrIdx<0 )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+	{
+		sError.SetSprintf ( "attribute '%s' is not float_vector", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	const BYTE * pBlobBase = m_tBlobAttrs.GetReadPtr();
+	if ( !pBlobBase )
+		return true;
+
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
+	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
+	if ( dRowsToUpdate.IsEmpty() )
+		return true;
+
+	for ( const auto & tRow : dRowsToUpdate )
+	{
+		const CSphRowitem * pRow = GetDocinfoByRowID ( tRow.m_tRow );
+		if ( !pRow )
+			continue;
+
+		const SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+		const BYTE * pBlobRow = pBlobBase + tBlobOff;
+		ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+		if ( IsBlobAttrZero ( tVecBlob, tState.m_iDims ) )
+			continue;
+
+		tUpd.MarkUpdated ( tRow.m_iIdx );
+	}
+
 	return true;
 }

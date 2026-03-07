@@ -103,6 +103,8 @@ bool				sphIsBlobAttr ( ESphAttr eAttr );
 bool				sphIsBlobAttr ( const CSphColumnInfo & tAttr );
 
 bool				IsMvaAttr ( ESphAttr eAttr );
+bool				IsBlobAttrEmpty ( const ByteBlob_t & tAttr );
+bool				IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims );
 
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes

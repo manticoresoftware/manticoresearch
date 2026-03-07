@@ -514,10 +514,11 @@ struct KnnSearchSettings_t
 	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
 	int				m_iK = 0;				///< KNN K (-1 means auto)
 	int				m_iEf = 0;				///< KNN ef
-	bool			m_bPrefilter = false;	///< apply WHERE filters during KNN traversal
+	bool			m_bPrefilter = true;	///< apply WHERE filters during KNN traversal
 	bool			m_bFullscan = false;	///< force brute-force KNN search instead of HNSW
 	bool			m_bRescore = true;		///< KNN rescoring
 	float			m_fOversampling = 3.0f;	///< KNN oversampling
+	knn::HNSWTerminationPolicy_e m_eTerminationPolicy = knn::HNSWTerminationPolicy_e::QUANTILE;  ///< HNSW termination policy
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
 

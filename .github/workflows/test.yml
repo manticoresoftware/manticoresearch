@@ -355,6 +355,21 @@ jobs:
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
         cmake --build build --target package
 
+  test_linux_release_mcl:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    name: Linux release mode tests (MCL)
+    needs: [build_linux_release, meta]
+    uses: ./.github/workflows/test_template.yml
+    with:
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
+      build_artifact_name: release_build
+      artifact_name: release_mcl_test_results
+      results_name: "Linux release MCL test results"
+      timeout: 10
+      INSTALL_MCL_FROM_DEPS: true
+      FLOAT_TOLERANCE: true
+      CTEST_EXCLUDE_REGEX: "rt_298|rt_306|rt_481"
+
   test_linux_release:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests
@@ -458,6 +473,7 @@ jobs:
       - test_kit_docker_reuse
       - test_linux_debug
       - test_linux_release
+      - test_linux_release_mcl
       - test_windows
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
@@ -467,7 +483,7 @@ jobs:
       REPO_OWNER: ${{ github.repository_owner }}
       SOURCE_HASH: ${{ needs.meta.outputs.source_hash }}
       BRANCH_TAG: ${{ needs.meta.outputs.branch_tag }}
-      HASH_TAG_OK: ${{ needs.test_linux_debug.result == 'success' && needs.test_linux_release.result == 'success' && needs.test_windows.result == 'success' }}
+      HASH_TAG_OK: ${{ needs.test_linux_debug.result == 'success' && needs.test_linux_release.result == 'success' && needs.test_linux_release_mcl.result == 'success' && needs.test_windows.result == 'success' }}
       IMAGE_BUILD_COMMIT: ${{ github.sha }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
@@ -551,6 +567,7 @@ jobs:
       - test_linux_debug
       - build_linux_release
       - test_linux_release
+      - test_linux_release_mcl
       - build_windows
       - test_windows
       - build_freebsd
@@ -569,6 +586,7 @@ jobs:
             "test_linux_debug:${{ needs.test_linux_debug.result }}:${{ needs.test_linux_debug.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"
             "test_linux_release:${{ needs.test_linux_release.result }}:${{ needs.test_linux_release.outputs.test_outcome }}"
+            "test_linux_release_mcl:${{ needs.test_linux_release_mcl.result }}:${{ needs.test_linux_release_mcl.outputs.test_outcome }}"
             "build_windows:${{ needs.build_windows.result }}"
             "test_windows:${{ needs.test_windows.result }}:${{ needs.test_windows.outputs.test_outcome }}"
             "build_freebsd:${{ needs.build_freebsd.result }}"

@@ -181,6 +181,7 @@
     * [Filebeat](Integration/Filebeat.md)
     * [Fluent Bit](Integration/Fluentbit.md)
     * [Vector.dev](Integration/Vectordev.md)
+    * [Grafana](Integration/Grafana.md)
     * [Kibana](Integration/Kibana.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)

@@ -44,7 +44,7 @@ docker run -e MANTICORE_TARGETS=localhost:9308 -p 127.0.0.1:3000:3000 manticores
 
 将Manticore告警规则集成到现有的Prometheus设置中：
 
-1. 下载 `manticore-alerts.yml` 并将其添加到Prometheus的 `rule_files` 配置中。
+1. 下载 [manticore-alerts.yml](https://raw.githubusercontent.com/manticoresoftware/grafana-dashboard/refs/heads/main/prometheus/rules/manticore-alerts.yml) 并将其添加到您的Prometheus `rule_files` 配置中。
 2. 如果您的抓取作业名称与 `manticoresearch` 不同，请相应地更新规则中的 `{job="manticoresearch"}` 匹配器。
 3. 重新加载或重启Prometheus以应用更改。
 

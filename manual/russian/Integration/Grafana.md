@@ -44,7 +44,7 @@ docker run -e MANTICORE_TARGETS=localhost:9308 -p 127.0.0.1:3000:3000 manticores
 
 Для интеграции правил оповещений Manticore в вашу существующую систему Prometheus:
 
-1. Скачайте файл `manticore-alerts.yml` и добавьте его в конфигурацию `rule_files` вашего Prometheus.
+1. Скачайте файл [manticore-alerts.yml](https://raw.githubusercontent.com/manticoresoftware/grafana-dashboard/refs/heads/main/prometheus/rules/manticore-alerts.yml) и добавьте его в конфигурацию `rule_files` вашего Prometheus.
 2. Если имя вашего задания для сбора метрик (scrape job) отличается от `manticoresearch`, обновите селекторы `{job="manticoresearch"}` в правилах соответствующим образом.
 3. Перезагрузите или перезапустите Prometheus, чтобы применить изменения.
 

@@ -44,7 +44,7 @@ To add the Manticore dashboard to your existing Grafana instance:
 
 To integrate the Manticore alert rules into your existing Prometheus setup:
 
-1. Download `manticore-alerts.yml` and add it to your Prometheus `rule_files` configuration.
+1. Download [manticore-alerts.yml](https://raw.githubusercontent.com/manticoresoftware/grafana-dashboard/refs/heads/main/prometheus/rules/manticore-alerts.yml) and add it to your Prometheus `rule_files` configuration.
 2. If your scrape job name differs from `manticoresearch`, update the `{job="manticoresearch"}` matchers in the rules accordingly.
 3. Reload or restart Prometheus to apply the changes.
 

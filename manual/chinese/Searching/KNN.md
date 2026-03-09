@@ -403,6 +403,7 @@ POST /insert
 * `ef`: 搜索期间使用的动态列表的大小。较高的 `ef` 会导致更准确但更慢的搜索。默认值为 10。
 * `rescore`: 启用 KNN 重评分（默认启用）。在 SQL 中设置为 `0` 或在 JSON 中设置为 `false` 以禁用重评分。在使用量化向量完成 KNN 搜索（可能有过采样）后，距离将使用原始（全精度）向量重新计算，结果将重新排序以提高排名准确性。
 * `oversampling`: 设置一个因子（浮点值），在执行 KNN 搜索时乘以 `k`，导致使用量化向量检索的候选对象数量超过所需。默认应用 `oversampling=3.0`。如果启用了重评分，这些候选对象可以稍后重新评估。过采样也适用于非量化向量。由于它增加了 `k`，这会影响 HNSW 索引的工作方式，可能会导致结果准确性的小幅变化。
+* `early_termination`: 启用或禁用HNSW图遍历期间的自适应早期终止。默认启用。在SQL中设置为`0`或在JSON中设置为`false`以禁用。有关详细信息，请参阅[早期终止](#early-termination)。
 
 文档始终按其与搜索向量的距离排序。您指定的任何其他排序条件将在此主要排序条件之后应用。要获取距离，有一个内置函数称为 [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29)。
 
@@ -688,5 +689,121 @@ POST /search
 ```
 
 <!-- end -->
+
+<!-- example knn_filtering_strategies -->
+
+### 过滤策略：预过滤与后过滤
+
+当将KNN向量搜索与属性过滤结合使用时，Manticore支持两种策略，它们的区别在于过滤相对于HNSW图遍历的应用时机。
+
+* 预过滤（默认；在JSON中的`"knn"`或SQL中的`prefilter=1`）将过滤器直接传递到HNSW遍历中。在将候选对象添加到结果堆之前，会检查每个候选对象是否符合过滤条件——只有匹配的文档才会贡献到最终的`k`个结果中。这减少了浪费的距离计算，并保证恰好返回`k`个匹配文档（假设存在`k`个匹配文档）。
+
+* 后过滤（在JSON中的`"query"`或SQL中的`prefilter=0`）首先在完整数据集上运行KNN搜索，然后对结果应用过滤器。这是安全且可预测的：HNSW图的遍历不受干扰，过滤器仅影响返回给客户端的结果。缺点是图可能在最终被丢弃的候选对象上花费精力。如果过滤器匹配的文档比例很小，返回的`k`个结果可能显著少于请求的数量，因为大多数KNN候选对象未能通过过滤。
+
+内部，Manticore使用基于ACORN-1的算法进行预过滤。一种天真的预过滤方法只是跳过不匹配的节点，这可能会导致丢失连接HNSW图中其他分离部分的“桥梁”节点，从而在过滤器变得更选择性时导致召回率崩溃。ACORN-1避免了这一点：当节点未通过过滤时，其邻居仍会被添加到探索队列中。这允许遍历绕过被过滤的节点并保持图的连通性。当少于60%的总文档通过过滤时，ACORN-1探索会自动激活。
+
+**自动暴力回退：** 当启用预过滤时，Manticore 会估算在过滤后的子集上运行暴力距离扫描是否比遍历 HNSW 图更便宜。该估算将 HNSW 预计访问的节点数与通过过滤的文档数进行比较。如果过滤后的集合足够小，直接扫描会更快，Manticore 会自动切换到暴力方法，完全跳过 HNSW。这确保了即使在极端选择性下也能保持正确性和良好性能。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- prefilter (default): filter applied during HNSW traversal (ACORN-1 used automatically)
+SELECT id, knn_dist() FROM test
+WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926) )
+AND price < 100;
+
+-- postfilter: KNN runs over full dataset, filter applied to results
+SELECT id, knn_dist() FROM test
+WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { prefilter=0 } )
+AND price < 100;
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+// prefilter (default): filter is inside "knn", applied during HNSW traversal
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "filter": {
+            "range": { "price": { "lt": 100 } }
+        }
+    }
+}
+
+// postfilter: filter is in "query", applied after KNN search
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926]
+    },
+    "query": {
+        "range": { "price": { "lt": 100 } }
+    }
+}
+```
+
+<!-- end -->
+
+<!-- example knn_early_termination -->
+
+### 早期终止
+
+默认情况下，Manticore 在 HNSW 图遍历期间使用自适应早期终止算法。它不会始终探索由 `ef` 定义的完整候选集，而是监控新候选者改进结果集的速率，并在该速率持续低于阈值时提前停止。这减少了距离计算次数，而不会显著影响结果质量。
+
+早期终止默认启用，并且当 `k` 为 10 或更少时会自动禁用，因为对于如此小的结果集，该算法的开销并不值得。性能收益随着 `k` 的增大而增加——结果集越大，通过提前停止可以节省的距离计算次数越多。
+
+注意 [`oversampling`](#knn-vector-search) 会乘以 HNSW 遍历期间使用的有效 `k`，因此早期终止也受益于过采样：更高的有效 `k` 意味着更多可能跳过的候选者。
+
+要显式控制早期终止，请使用 `early_termination` 选项：
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- disable early termination
+SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=200, early_termination=0 } );
+
+-- enable early termination explicitly (default)
+SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=200, early_termination=1 } );
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+    "table": "test",
+    "knn":
+    {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "ef": 200,
+        "early_termination": false
+    }
+}
+```
+
+<!-- end -->
+
+何时禁用早期终止：
+* 当结果集的精度至关重要且无法承受超出 HNSW 已提供的任何近似值时。
+* 当使用低 `k` 值（约 30 或更少）时，早期终止提供的性能收益很小，但可能会降低精度。
 
 <!-- proofread -->

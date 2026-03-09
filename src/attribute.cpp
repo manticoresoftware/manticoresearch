@@ -61,7 +61,7 @@ class AttributePacker_i
 {
 public:
 	virtual								~AttributePacker_i(){}
-	virtual bool						SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
+	virtual bool						SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) = 0;
 	virtual const CSphVector<BYTE> &	GetData() const = 0;
 };
 
@@ -69,8 +69,9 @@ public:
 class AttributePacker_c : public AttributePacker_i
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & /*sError*/ ) override
 	{
+		assert ( eInput==BlobAttrInput_e::RAW_BYTES );
 		m_dData.Resize ( iDataLen );
 		if (iDataLen)
 			memcpy ( m_dData.Begin(), pData, iDataLen );
@@ -92,25 +93,31 @@ class AttributePacker_MVA_T : public AttributePacker_c
 public:
 	AttributePacker_MVA_T ( bool bNeedSorting = false ) : m_bNeedSorting ( bNeedSorting ) {}
 
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
+		if ( !iDataLen )
+		{
+			m_dData.Resize ( 0 );
+			return true;
+		}
+
 		int iValueSize = 0;
-		if ( !( iDataLen % (int)sizeof(int64_t) ) )
-			iValueSize = sizeof ( int64_t );
-		else if ( !( iDataLen % (int)sizeof(IN_T) ) )
-			iValueSize = sizeof ( IN_T );
-		else
+		switch ( eInput )
+		{
+		case BlobAttrInput_e::MVA_INT64:	iValueSize = sizeof ( int64_t );	break;
+		case BlobAttrInput_e::MVA_DWORD:	iValueSize = sizeof ( DWORD );		break;
+		default:
+			sError = "Invalid blob input layout for MVA/float_vector";
+			return false;
+		}
+
+		if ( iDataLen % iValueSize )
 		{
 			sError.SetSprintf ( "Invalid MVA/float_vector payload size: %d", iDataLen );
 			return false;
 		}
 
 		int iNumValues = iDataLen/iValueSize;
-		if (!iNumValues)
-		{
-			m_dData.Resize ( 0 );
-			return true;
-		}
 
 		if ( m_bNeedSorting )
 		{
@@ -118,12 +125,9 @@ public:
 			auto * pUnsorted = (T*)m_dUnsorted.Begin();
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				SphAttr_t iVal = 0;
-				if ( iValueSize==(int)sizeof(int64_t) )
-					iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
-				else
-					iVal = sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
-
+				SphAttr_t iVal = ( iValueSize==(int)sizeof(int64_t) )
+					? sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) )
+					: sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
 				*pUnsorted++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -139,12 +143,9 @@ public:
 
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				SphAttr_t iVal = 0;
-				if ( iValueSize==(int)sizeof(int64_t) )
-					iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
-				else
-					iVal = sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
-
+				SphAttr_t iVal = ( iValueSize==(int)sizeof(int64_t) )
+					? sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) )
+					: sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
 				*pResult++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -166,8 +167,9 @@ using AttributePacker_Int2FloatVec_c = AttributePacker_MVA_T<float,DWORD>;
 class AttributePacker_Json_c : public AttributePacker_c
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
+		assert ( eInput==BlobAttrInput_e::RAW_BYTES );
 		m_dData.Resize(0);
 		if ( !iDataLen )
 			return true;
@@ -188,7 +190,7 @@ public:
 class BlobRowBuilder_Base_c : public BlobRowBuilder_i
 {
 public:
-	bool	SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) override		{ return m_dAttrs[iAttr]->SetData ( pData, iDataLen, sError ); }
+	bool	SetAttr ( int iAttr, const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override		{ return m_dAttrs[iAttr]->SetData ( pData, iDataLen, eInput, sError ); }
 
 protected:
 	CSphVector<std::unique_ptr<AttributePacker_i>> m_dAttrs;

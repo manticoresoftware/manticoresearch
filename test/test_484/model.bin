@@ -1,4 +1,4 @@
-a:1:{i:0;a:5:{i:0;a:2:{s:8:"sphinxql";s:22:"drop table if exists t";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:168:"CREATE TABLE t (
+a:1:{i:0;a:10:{i:0;a:2:{s:8:"sphinxql";s:22:"drop table if exists t";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:168:"CREATE TABLE t (
 f text,
 m multi,
 v FLOAT_VECTOR
@@ -6,4 +6,12 @@ v FLOAT_VECTOR
     HNSW_SIMILARITY='cosine'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='f'
-)";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:45:"INSERT INTO t (id, f, m) VALUES (1, 'a', (1))";s:14:"total_affected";i:1;}i:3;a:3:{s:8:"sphinxql";s:18:"SELECT f, m FROM t";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:1:"f";s:1:"a";s:1:"m";s:1:"1";}}}i:4;a:2:{s:8:"sphinxql";s:12:"drop table t";s:14:"total_affected";i:0;}}}
+)";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:45:"INSERT INTO t (id, f, m) VALUES (1, 'a', (1))";s:14:"total_affected";i:1;}i:3;a:3:{s:8:"sphinxql";s:18:"SELECT f, m FROM t";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:1:"f";s:1:"a";s:1:"m";s:1:"1";}}}i:4;a:2:{s:8:"sphinxql";s:12:"drop table t";s:14:"total_affected";i:0;}i:5;a:2:{s:8:"sphinxql";s:22:"drop table if exists t";s:14:"total_affected";i:0;}i:6;a:2:{s:8:"sphinxql";s:168:"CREATE TABLE t (
+f text,
+m multi,
+v FLOAT_VECTOR
+    KNN_TYPE='hnsw'
+    HNSW_SIMILARITY='cosine'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='f'
+)";s:14:"total_affected";i:0;}i:7;a:2:{s:8:"sphinxql";s:100:"INSERT INTO t (id, f, m) VALUES (1, 'a', (6666,0,7777,0,8888,0,9999,15313,0,0,0,1,2,465464,1,54632))";s:14:"total_affected";i:1;}i:8;a:3:{s:8:"sphinxql";s:18:"SELECT f, m FROM t";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:1:"f";s:1:"a";s:1:"m";s:44:"0,1,2,6666,7777,8888,9999,15313,54632,465464";}}}i:9;a:2:{s:8:"sphinxql";s:12:"drop table t";s:14:"total_affected";i:0;}}}

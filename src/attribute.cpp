@@ -1091,6 +1091,28 @@ bool IsMvaAttr ( ESphAttr eAttr )
 	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR;
 }
 
+bool IsBlobAttrEmpty ( const ByteBlob_t & tAttr )
+{
+	return tAttr.second==0;
+}
+
+bool IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims )
+{
+	if ( IsBlobAttrEmpty ( tAttr ) )
+		return true;
+
+	if ( iDims<=0 || tAttr.second!=iDims*(int)sizeof(float) || !tAttr.first )
+		return false;
+
+	const DWORD * pVals = (const DWORD *)tAttr.first;
+	const int iVals = tAttr.second / (int)sizeof(DWORD);
+	for ( int i = 0; i < iVals; i++ )
+		if ( pVals[i]!=0 )
+			return false;
+
+	return true;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes

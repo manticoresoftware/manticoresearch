@@ -44,6 +44,8 @@
 #include "knnmisc.h"
 #include "knnlib.h"
 #include "jsonsi.h"
+#include "attr_embedding.h"
+#include "embeddingutils.h"
 #include "std/sys.h"
 #include "dict/infix/infix_builder.h"
 
@@ -1683,6 +1685,12 @@ private:
 	bool						AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError );
 	bool						AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError );
 	bool						InitExtCache ( const FilenameBuilder_i * pDstFilenameBuilder, ExtFiles_h & hExtCache, CSphString & sError ) const;
+
+	bool						ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) override;
+	bool						InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError ) override;
+	bool						GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const override;
+	bool						ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) override;
+	void						FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) override;
 };
 
 
@@ -5154,104 +5162,55 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
-static void ParseKNNFromAll ( AttrWithModel_t & tAttrWithModel, const ISphSchema & tSchema )
+static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
 {
-	for ( int i=0; i < tSchema.GetFieldsCount(); ++i )
-		tAttrWithModel.m_dFrom.Add ( { i, true } );
-
-	for ( int i=0; i < tSchema.GetAttrsCount(); ++i )
-	{
-		const auto & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_eAttrType!=SPH_ATTR_STRING )
-			continue;
-
-		if ( tSchema.GetFieldIndex ( tAttr.m_sName.cstr() )!=-1 )
-			continue;
-
-		tAttrWithModel.m_dFrom.Add ( { i, false } );
-	}
-}
-
-
-static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
-{
-	if ( sFrom.IsEmpty() )
-	{
-		ParseKNNFromAll ( tAttrWithModel, tSchema );
-		return true;
-	}
-
-	StrVec_t dFrom;
-	sphSplit ( dFrom, sFrom.cstr(), " \t," );
-
-	for ( const auto & i : dFrom )
-	{
-		int iAttrId = tSchema.GetAttrIndex ( i.cstr() );
-		int iFieldId = tSchema.GetFieldIndex ( i.cstr() );
-
-		if ( iFieldId==-1 && iAttrId==-1 )
-		{
-			sError.SetSprintf ( "embedding source '%s' not found", i.cstr() );
-			return false;
-		}
-
-		if ( iAttrId!=-1 && tSchema.GetAttr(iAttrId).m_eAttrType!=SPH_ATTR_STRING )
-		{
-			sError.SetSprintf ( "embedding source attribute '%s' is not a string", i.cstr() );
-			return false;
-		}
-
-		tAttrWithModel.m_dFrom.Add ( { iFieldId==-1 ? iAttrId : iFieldId, iFieldId!=-1 } );
-	}
-
-	return true;
-}
-
-
-bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
-{
-	if ( m_pEmbeddings )
-		return true;
+	pEmbeddings.reset();
+	dAttrsWithModels.Reset();
 
 	bool bHaveModels = false;
-	for ( int i = 0 ; i < m_tSchema.GetAttrsCount(); i++ )
-		bHaveModels |= !m_tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+	for ( int i = 0 ; i < tSchema.GetAttrsCount(); i++ )
+		bHaveModels |= !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
 
 	if ( !bHaveModels )
 		return true;
 
-	m_dAttrsWithModels.Resize ( m_tSchema.GetAttrsCount() );
-
-	m_pEmbeddings = std::make_unique<TableEmbeddings_c>();
-	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	dAttrsWithModels.Resize ( tSchema.GetAttrsCount() );
+	pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
-		const auto & tAttr = m_tSchema.GetAttr(i);
-		m_dAttrsWithModels[i].m_pModel = nullptr;
+		const auto & tAttr = tSchema.GetAttr(i);
+		dAttrsWithModels[i].m_pModel = nullptr;
 
 		if ( tAttr.m_tKNNModel.m_sModelName.empty() )
 			continue;
 
-		if ( !ParseKNNFrom ( m_dAttrsWithModels[i], tAttr.m_sKNNFrom, m_tSchema, sError ) )
-		{
-			m_pEmbeddings.reset();
+		if ( !ParseEmbeddingSources ( dAttrsWithModels[i].m_dFrom, tAttr.m_sKNNFrom, tSchema, sError ) )
 			return false;
-		}
 
-		if ( !m_pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
-		{
-			m_pEmbeddings.reset();
+		if ( !pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
 			return false;
-		}
 
-		auto pModel = m_pEmbeddings->GetModel ( tAttr.m_sName );
+		auto pModel = pEmbeddings->GetModel ( tAttr.m_sName );
 		assert(pModel);
 
-		m_dAttrsWithModels[i].m_pModel = pModel;
+		dAttrsWithModels[i].m_pModel = pModel;
 
 		// fixme! modifying the schema
 		const_cast<CSphColumnInfo&>(tAttr).m_tKNN.m_iDims = pModel->GetDims();
 	}
 
+	return true;
+}
+
+bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
+{
+	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+	if ( !PrepareEmbeddingModelsForSchema ( m_tSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
+		return false;
+
+	m_pEmbeddings = std::move ( pPreparedEmbeddings );
+	m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
 	return true;
 }
 
@@ -9124,6 +9083,8 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	QcacheClearByIndexId ( GetIndexId() );
 }
 
+static bool IsModelBackedEmbedding ( const AttrAddRemoveCtx_t & tCtx );
+
 bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
 	if ( !m_tRtChunks.DiskChunks()->IsEmpty() && !m_tSchema.GetAttrsCount() )
@@ -9159,10 +9120,32 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	if ( !Alter_AddRemoveFromSchema ( tNewSchema, tNewCtx, bAdd, sError ) )
 		return false;
 
+	auto tGuard = RtGuard();
+
+	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+
+	const bool bModelBackedEmbedding = ( bAdd && IsModelBackedEmbedding ( tNewCtx ) );
+	if ( bModelBackedEmbedding )
+	{
+		if ( !PrepareEmbeddingModelsForSchema ( tNewSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
+			return false;
+
+		const CSphColumnInfo * pAttr = tNewSchema.GetAttr ( tNewCtx.m_sName.cstr() );
+		assert ( pAttr );
+		if ( !pAttr )
+		{
+			sError.SetSprintf ( "attribute '%s' not found", tNewCtx.m_sName.cstr() );
+			return false;
+		}
+
+		tNewCtx.m_tKNN = pAttr->m_tKNN;
+		tNewCtx.m_tKNNModel = pAttr->m_tKNNModel;
+		tNewCtx.m_sKNNFrom = pAttr->m_sKNNFrom;
+	}
+
 	m_tSchema = tNewSchema;
 	m_iStride = m_tSchema.GetRowSize();
-
-	auto tGuard = RtGuard();
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
@@ -9179,6 +9162,12 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		AddRemoveRowwiseAttr ( tGuard, bAdd, tNewCtx.m_sName, tNewCtx.m_eType, tOldSchema, tNewSchema, sError );
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
+
+	if ( bModelBackedEmbedding )
+	{
+		m_pEmbeddings = std::move ( pPreparedEmbeddings );
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+	}
 
 	// fixme: we can't rollback at this point
 	AlterSave ( true );
@@ -11850,4 +11839,288 @@ bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFile
 		assert ( tDictSettings.m_dWordforms.GetLength()==pDict->GetWordformsFileInfos().GetLength() );
 	}
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Embedding 
+//////////////////////////////////////////////////////////////////////////
+
+bool RtIndex_c::ReserveEmbeddingSpace ( int64_t /*iDocsToFill*/, int iDims, CSphString & sError )
+{
+	// Reserve is a write-path preparation step, so serialize and block optimize races.
+	OptimizeGuard_c tStopOptimize ( *this );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", "reserve-embedding-space" );
+	WaitRAMSegmentsUnlocked();
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto & pChunk : *pChunks )
+	{
+		const int64_t iDocsToFill = pChunk->Cidx().GetCount();
+		if ( iDocsToFill<=0 )
+			continue;
+
+		CSphString sChunkError;
+		if ( !pChunk->CastIdx().ReserveEmbeddingSpace ( iDocsToFill, iDims, sChunkError ) )
+		{
+			sError.SetSprintf ( "failed to reserve .spb for chunk %d: %s", pChunk->Cidx().m_iChunk, sChunkError.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool RtIndex_c::InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError )
+{
+	FinishUpdateEmbeddingState ( tState );
+
+	TRACE_SCHED ( "rt", "init-update-embedding-state" );
+
+	if ( sAttr.IsEmpty() )
+	{
+		sError = "attribute for embedding update must not be empty";
+		return false;
+	}
+
+	if ( !LoadEmbeddingModels ( sError ) )
+		return false;
+
+	const int iAttrIdx = m_tSchema.GetAttrIndex ( sAttr.cstr() );
+	if ( iAttrIdx<0 )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
+	{
+		sError.SetSprintf ( "attribute '%s' is not indexed float_vector", sAttr.cstr() );
+		return false;
+	}
+
+	if ( tAttr.IsColumnar() )
+	{
+		sError.SetSprintf ( "attribute '%s' is columnar, embedding populate is supported for blob-stored float_vector only", sAttr.cstr() );
+		return false;
+	}
+
+	if ( iAttrIdx>=m_dAttrsWithModels.GetLength() || !m_dAttrsWithModels[iAttrIdx].m_pModel )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	const AttrWithModel_t & tAttrWithModel = m_dAttrsWithModels[iAttrIdx];
+
+	const int iDims = tAttrWithModel.m_pModel->GetDims();
+	if ( iDims<=0 )
+	{
+		sError.SetSprintf ( "attribute '%s' has invalid embedding dims=%d", sAttr.cstr(), iDims );
+		return false;
+	}
+
+	tState.m_tPreviousOptimizeStopState = StopOptimize();
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	// Force current RAM segments to disk so the populate loop runs against disk chunks only.
+	if ( !SaveDiskChunk ( true ) )
+	{
+		sError = m_sLastError;
+		if ( sError.IsEmpty() )
+			sError = "failed to flush RAM segments to disk before embedding populate";
+		return false;
+	}
+
+	WaitRAMSegmentsUnlocked();
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	const int iNumDiskChunks = pChunks->GetLength();
+
+	tState.m_sAttr = sAttr;
+	tState.m_iAttrIdx = iAttrIdx;
+	tState.m_iDims = iDims;
+	tState.m_eMode = eMode;
+	tState.m_dDiskChunks.Reset ( iNumDiskChunks );
+	for ( int i = 0; i < iNumDiskChunks; i++ )
+	{
+		tState.m_dDiskChunks[i] = { ( *pChunks )[i]->Cidx().m_iChunk, 0 };
+	}
+	tState.m_iUpdatedRows = 0;
+	tState.m_iSkippedRows = 0;
+	tState.m_iAlterGenerationAtInit = GetAlterGeneration();
+
+	return true;
+}
+
+bool RtIndex_c::GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const
+{
+	static constexpr int EMBEDDING_COLLECT_CAP = 1000;
+
+	pUpdate = nullptr;
+	if ( sphInterrupted() )
+	{
+		sError = "operation interrupted";
+		return false;
+	}
+
+	if ( tState.m_iAlterGenerationAtInit<0 )
+	{
+		sError = "embedding update state is not initialized";
+		return false;
+	}
+
+	if ( GetAlterGeneration()!=tState.m_iAlterGenerationAtInit )
+	{
+		sError = "table altered during embedding populate; please retry";
+		return false;
+	}
+
+	if ( tState.m_iAttrIdx<0 || tState.m_iAttrIdx>=m_tSchema.GetAttrsCount() )
+	{
+		sError = "internal error: invalid embedding attribute id";
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tState.m_iAttrIdx );
+	if ( tAttr.m_sName!=tState.m_sAttr )
+	{
+		sError = "table schema changed during embedding populate; please retry";
+		return false;
+	}
+
+	if ( tState.m_iAttrIdx>=m_dAttrsWithModels.GetLength() || !m_dAttrsWithModels[tState.m_iAttrIdx].m_pModel )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const AttrWithModel_t & tAttrWithModel = m_dAttrsWithModels[tState.m_iAttrIdx];
+
+	const int iCurrentDims = tAttrWithModel.m_pModel->GetDims();
+	if ( iCurrentDims<=0 || iCurrentDims!=tState.m_iDims )
+	{
+		sError.SetSprintf ( "embedding dims changed for attribute '%s'; please retry", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const int iNumDiskChunks = tState.m_dDiskChunks.GetLength();
+	if ( iNumDiskChunks<=0 )
+		return true;
+
+	CSphVector<DocID_t> dDocids;
+	CSphVector<CSphString> dFromTexts;
+	for ( int iChunk = 0; iChunk < iNumDiskChunks && dDocids.GetLength() < EMBEDDING_COLLECT_CAP; iChunk++ )
+	{
+		auto & tChunkState = tState.m_dDiskChunks[iChunk];
+		const int iChunkID = tChunkState.first;
+		auto pChunk = m_tRtChunks.DiskChunkByID ( iChunkID );
+		if ( !pChunk )
+		{
+			sError.SetSprintf ( "disk chunk %d is no longer available during embedding populate; please retry", iChunkID );
+			return false;
+		}
+
+		SccRL_t rLock ( pChunk->m_tLock );
+		if ( !pChunk->CastIdx().CollectDocsForEmbedding ( tState, tAttrWithModel.m_dFrom, dDocids, dFromTexts, sError, EMBEDDING_COLLECT_CAP, tChunkState.second ) )
+			return false;
+	}
+
+	if ( dDocids.IsEmpty() )
+		return true;
+
+	std::vector<std::vector<float>> dEmbeddings;
+	if ( !ConvertEmbeddings ( tAttrWithModel.m_pModel, tState.m_sAttr, dFromTexts, dEmbeddings, sError ) )
+		return false;
+
+	pUpdate = CreateFloatVectorAttrUpdate ( tState.m_sAttr, dDocids, dEmbeddings, tState.m_iDims );
+	return true;
+}
+
+bool RtIndex_c::ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError )
+{
+	if ( tState.m_eMode!=EmbeddingPopulate_e::Empty || tUpd.AllApplied() )
+		return true;
+
+	if ( tState.m_iAlterGenerationAtInit<0 )
+	{
+		sError = "embedding update state is not initialized";
+		return false;
+	}
+
+	if ( GetAlterGeneration()!=tState.m_iAlterGenerationAtInit )
+	{
+		sError = "table altered during embedding populate; please retry";
+		return false;
+	}
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	if ( tState.m_iAttrIdx<0 || tState.m_iAttrIdx>=m_tSchema.GetAttrsCount() )
+	{
+		sError = "internal error: invalid embedding attribute id";
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tState.m_iAttrIdx );
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
+	auto tGuard = RtGuard();
+
+	for ( const auto & pRamSeg : tGuard.m_dRamSegs )
+	{
+		auto dRamRows = CollectUpdatableRows ( tCtx, pRamSeg );
+		if ( dRamRows.IsEmpty() )
+			continue;
+
+		const BYTE * pBlobBase = pRamSeg->m_dBlobs.Begin();
+		for ( const auto & tRow : dRamRows )
+		{
+			const CSphRowitem * pRow = pRamSeg->GetDocinfoByRowID ( tRow.m_tRow );
+			if ( !pRow )
+				continue;
+
+			const SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+			const BYTE * pBlobRow = pBlobBase + tBlobOff;
+			ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+			if ( IsBlobAttrZero ( tVecBlob, tState.m_iDims ) )
+				continue;
+
+			tUpd.MarkUpdated ( tRow.m_iIdx );
+		}
+	}
+
+	for ( const auto & pChunk : tGuard.m_dDiskChunks )
+	{
+		if ( tUpd.AllApplied() )
+			break;
+
+		if ( !pChunk->CastIdx().ValidateUpdateEmbedding ( tState, tUpd, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+void RtIndex_c::FinishUpdateEmbeddingState ( ExtUpdState_t & tState )
+{
+	if ( tState.m_tPreviousOptimizeStopState.has_value() )
+		m_bOptimizeStop.store ( *tState.m_tPreviousOptimizeStopState, std::memory_order_relaxed );
+
+	tState.m_sAttr = "";
+	tState.m_iAttrIdx = -1;
+	tState.m_iDims = 0;
+	tState.m_eMode = EmbeddingPopulate_e::Empty;
+	tState.m_dDiskChunks.Reset ( 0 );
+	tState.m_iUpdatedRows = 0;
+	tState.m_iSkippedRows = 0;
+	tState.m_iAlterGenerationAtInit = -1;
+	tState.m_tPreviousOptimizeStopState.reset();
+}
+
+bool IsModelBackedEmbedding ( const AttrAddRemoveCtx_t & tCtx )
+{
+	return ( tCtx.m_eType==SPH_ATTR_FLOAT_VECTOR && !!( tCtx.m_uFlags & CSphColumnInfo::ATTR_INDEXED_KNN ) && !tCtx.m_tKNNModel.m_sModelName.empty() );
 }

@@ -33,6 +33,7 @@
 #include "secondarylib.h"
 #include "knnlib.h"
 #include "knnmisc.h"
+#include "attr_embedding.h"
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
@@ -10267,79 +10268,6 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 }
 
 
-static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError, bool bModify )
-{
-	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
-	sAttrToAdd.ToLower();
-
-	bool bIndexed = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED;
-	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
-	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
-
-	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
-	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
-	const bool bInt2Bigint = pHasAttr
-			&& pHasAttr->m_eAttrType==SPH_ATTR_INTEGER
-			&& pHasAttr->m_eEngine==AttrEngine_e::DEFAULT
-			&& tStmt.m_eAlterColType==SPH_ATTR_BIGINT
-			&& tStmt.m_eEngine==AttrEngine_e::DEFAULT;
-
-	if ( !bIndexed && pHasAttr )
-	{
-		if ( !bModify || !bInt2Bigint )
-		{
-			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
-			return;
-		}
-	}
-
-	if ( bModify )
-	{
-		if ( !pHasAttr )
-		{
-			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
-			return;
-		}
-		if ( !bInt2Bigint )
-		{
-			sError.SetSprintf ( "attribute '%s': only alter from rowise int to bigint supported", sAttrToAdd.cstr () );
-			return;
-		}
-	}
-
-	if ( bIndexed && bHasField )
-	{
-		sError.SetSprintf ( "'%s' field already in schema", sAttrToAdd.cstr() );
-		return;
-	}
-
-	if ( !bIndexed && bHasField && tStmt.m_eAlterColType!=SPH_ATTR_STRING )
-	{
-		sError.SetSprintf ( "cannot add attribute that shadows '%s' field", sAttrToAdd.cstr () );
-		return;
-	}
-
-	AttrAddRemoveCtx_t tCtx;
-	tCtx.m_sName = sAttrToAdd;
-	tCtx.m_eType = tStmt.m_eAlterColType;
-	tCtx.m_iBits = tStmt.m_iBits;
-	tCtx.m_uFlags = tStmt.m_uAttrFlags;
-	tCtx.m_eEngine = tStmt.m_eEngine;
-	tCtx.m_tKNN = tStmt.m_tAlterKNN;
-	tCtx.m_tKNNModel = tStmt.m_tAlterKNNModel;
-	tCtx.m_sKNNFrom = tStmt.m_sAlterKnnFrom;
-
-	if ( bIndexed || bStored )
-	{
-		pIdx->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
-		if ( bAttribute )
-			pIdx->AddRemoveAttribute ( true, tCtx, sError );
-	}
-	else
-		pIdx->AddRemoveAttribute ( true, tCtx, sError );
-}
-
-
 static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphString& sError )
 {
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
@@ -10384,10 +10312,11 @@ enum class Alter_e
 	ModifyColumn,
 	RebuildSI,
 	RebuildKNN,
+	RebuildEmbeddings,
 	ApiKey
 };
 
-static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
+static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -10395,6 +10324,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
+	StrVec_t dWarnings;
 
 	if ( eAction==Alter_e::AddColumn && tStmt.m_eAlterColType==SPH_ATTR_NONE )
 	{
@@ -10443,6 +10373,22 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		switch ( eAction )
 		{
 		case Alter_e::AddColumn:
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+
+				CSphString sAlterWarning;
+				if ( !HandleAlterAddColumn ( tStmt, pServed, sAlterWarning, sAlterError ) && sAlterError.IsEmpty() )
+					sAlterError = "ALTER ADD COLUMN failed";
+				if ( !sAlterWarning.IsEmpty() )
+					dWarnings.Add ( sAlterWarning );
+				break;
+			}
+
 		case Alter_e::ModifyColumn:
 			{
 				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
@@ -10451,7 +10397,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
 					break;
 				}
-				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, true );
 				break;
 			}
 
@@ -10475,6 +10421,23 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			WIdx_c(pServed)->AlterKNN(sAlterError);
 			break;
 
+		case Alter_e::RebuildEmbeddings:
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+
+				CSphString sAlterWarning;
+				if ( !HandleAlterRebuildEmbeddings ( tStmt.m_sAlterAttr, pServed, sAlterWarning, sAlterError ) && sAlterError.IsEmpty() )
+					sAlterError = "REBUILD EMBEDDINGS is not supported for this table";
+				if ( !sAlterWarning.IsEmpty() )
+					dWarnings.Add ( sAlterWarning );
+				break;
+			}
+
 		case Alter_e::ApiKey:
 			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
 			break;
@@ -10491,7 +10454,9 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		tOut.Error ( sReport.cstr() );
 		return;
 	}
-	tOut.Ok();
+
+	sWarning = ConcatWarnings ( dWarnings );
+	tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
 
@@ -11660,27 +11625,38 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_ALTER_ADD:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_MODIFY:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ModifyColumn );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ModifyColumn, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_DROP:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::DropColumn );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::DropColumn, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_REBUILD_SI:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_REBUILD_KNN:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_REBUILD_EMBEDDINGS:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildEmbeddings, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_EMBEDDINGS_API_KEY:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_PLAN:

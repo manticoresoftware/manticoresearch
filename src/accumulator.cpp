@@ -234,6 +234,12 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 		if ( bDefault )
 		{
+			if ( !m_pEmbeddingsSrc || !m_pEmbeddingsSrc->Has ( tRowID, iAttrWithModel ) )
+			{
+				sError.SetSprintf ( "Error generating embeddings for attribute '%s': missing source text in transaction", tAttr.m_sName.cstr() );
+				return false;
+			}
+
 			dResultIds[tRowID] = dTexts.size();
 			const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
 			dTexts.push_back ( { dConcat.Begin(), (size_t)dConcat.GetLength() } );
@@ -290,15 +296,19 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	IntVec_t dDocstoreRemap;
 	dDocstoreRemap.Resize ( dAttrsWithModels.GetLength() );
 	dDocstoreRemap.Fill(-1);
+	int iNumColumnarAttrs = 0;
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bColumnar = tAttr.IsColumnar();
+		iNumColumnarAttrs += bColumnar;
+
 		if ( !dAttrsWithModels[i].m_pModel )
 			continue;
 
-		auto & tAttr = tSchema.GetAttr(i);
 		assert ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR );
-		bRebuildColumnar |= tAttr.IsColumnar();
-		bRebuildBlobs |= !tAttr.IsColumnar();
+		bRebuildColumnar |= bColumnar;
+		bRebuildBlobs |= !bColumnar;
 		bRebuildDocstore |= tAttr.IsStored();
 
 		dDocstoreRemap[i] = m_pDocstore ? ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR ) : -1;
@@ -311,6 +321,8 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	CSphVector<ScopedTypedIterator_t> dAllIterators;
 	if ( bRebuildColumnar )
 		dAllIterators = CreateAllColumnarIterators ( pColumnar.get(), tSchema );
+	else
+		dAllIterators.Resize(iNumColumnarAttrs);
 
 	std::unique_ptr<DocstoreRT_i> pNewDocstoreBuilder;
 	if ( bRebuildDocstore )
@@ -990,6 +1002,14 @@ void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
 
 	// delete
 	GetArray ( m_dAccumKlist, tReader );
+
+	// auto-embedding source texts
+	if ( tReader.GetVal<BYTE>() )
+	{
+		if ( !m_pEmbeddingsSrc )
+			m_pEmbeddingsSrc = std::make_unique<EmbeddingsSrc_c>(0);
+		m_pEmbeddingsSrc->Load ( tReader );
+	}
 }
 
 void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
@@ -1025,4 +1045,9 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 
 	// delete
 	SaveArray ( m_dAccumKlist, tWriter );
+
+	// auto-embedding source texts
+	tWriter.PutByte ( m_pEmbeddingsSrc!=nullptr );
+	if ( m_pEmbeddingsSrc )
+		m_pEmbeddingsSrc->Save ( tWriter );
 }

@@ -92,9 +92,19 @@ class AttributePacker_MVA_T : public AttributePacker_c
 public:
 	AttributePacker_MVA_T ( bool bNeedSorting = false ) : m_bNeedSorting ( bNeedSorting ) {}
 
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	bool SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) override
 	{
-		int iValueSize = sizeof ( int64_t );
+		int iValueSize = 0;
+		if ( !( iDataLen % (int)sizeof(int64_t) ) )
+			iValueSize = sizeof ( int64_t );
+		else if ( !( iDataLen % (int)sizeof(IN_T) ) )
+			iValueSize = sizeof ( IN_T );
+		else
+		{
+			sError.SetSprintf ( "Invalid MVA/float_vector payload size: %d", iDataLen );
+			return false;
+		}
+
 		int iNumValues = iDataLen/iValueSize;
 		if (!iNumValues)
 		{
@@ -108,7 +118,12 @@ public:
 			auto * pUnsorted = (T*)m_dUnsorted.Begin();
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = 0;
+				if ( iValueSize==(int)sizeof(int64_t) )
+					iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				else
+					iVal = sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
+
 				*pUnsorted++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -124,7 +139,12 @@ public:
 
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = 0;
+				if ( iValueSize==(int)sizeof(int64_t) )
+					iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				else
+					iVal = sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
+
 				*pResult++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -1069,6 +1089,28 @@ bool sphIsBlobAttr ( const CSphColumnInfo & tAttr )
 bool IsMvaAttr ( ESphAttr eAttr )
 {
 	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR;
+}
+
+bool IsBlobAttrEmpty ( const ByteBlob_t & tAttr )
+{
+	return tAttr.second==0;
+}
+
+bool IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims )
+{
+	if ( IsBlobAttrEmpty ( tAttr ) )
+		return true;
+
+	if ( iDims<=0 || tAttr.second!=iDims*(int)sizeof(float) || !tAttr.first )
+		return false;
+
+	const DWORD * pVals = (const DWORD *)tAttr.first;
+	const int iVals = tAttr.second / (int)sizeof(DWORD);
+	for ( int i = 0; i < iVals; i++ )
+		if ( pVals[i]!=0 )
+			return false;
+
+	return true;
 }
 
 

@@ -6,6 +6,7 @@
 <requires>
 <force-rt/>
 <columnar/>
+<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>

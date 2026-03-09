@@ -1267,6 +1267,12 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return false;
 	}
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bFullscan, "fullscan", sError, true ) )			return false;
+
+	JsonObj_c tEarlyTermination = tJson.GetBoolItem ( "early_termination", sError, true );
+	if ( tEarlyTermination )
+		tKNN.m_eTerminationPolicy = tEarlyTermination.BoolVal() ? knn::HNSWTerminationPolicy_e::QUANTILE : knn::HNSWTerminationPolicy_e::NONE;
+
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 	if ( tKNN.m_fOversampling < 1.0f )
 	{
@@ -1470,8 +1476,6 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 
 	JsonObj_c tJsonQuery = tRoot.GetItem("query");
 	JsonObj_c tKNNQuery = tRoot.GetItem("knn");
-	if ( tJsonQuery && tKNNQuery )
-		return TlsMsg::Err ( "\"query\" can't be used together with \"knn\"" );
 
 	// common code used by search queries and update/delete by query
 	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )

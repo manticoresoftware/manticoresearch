@@ -151,6 +151,7 @@
 * 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [ PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) Опция [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling) для плагинов fuzzy и autocomplete.
 
 ### Исправления ошибок
+* 🪲 [Issue #4299](https://github.com/manticoresoftware/manticoresearch/issues/4299) Добавлено тестирование для Grafana версии 12.4.
 * 🪲 [ Issue #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) Добавлено тестирование версии Grafana 12.3.
 * 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [ Issue #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) Исправлен сбой, вызванный использованием `max(ft field)`.
 * 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [ PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) Исправлена ошибка при использовании пустого имени фильтра.

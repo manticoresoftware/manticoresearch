@@ -74,6 +74,8 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -107,6 +109,8 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -140,6 +144,8 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -173,6 +179,8 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}

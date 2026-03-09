@@ -190,6 +190,23 @@ $index_data_path = $locals['testdir'].$index_data_prefix;
 
 PublishLocals ( $locals, false );
 
+if ( !getenv("MANTICORE_MODULES") )
+{
+	$module_dirs = array (
+		$locals['testdir']."usr/share/manticore/modules",
+		"/usr/share/manticore/modules",
+	);
+
+	foreach ( $module_dirs as $module_dir )
+	{
+		if ( file_exists ( $module_dir."/lib_manticore_columnar.so" ) || file_exists ( $module_dir."/lib_manticore_columnar_avx2.so" ) )
+		{
+			putenv ( "MANTICORE_MODULES=".$module_dir );
+			break;
+		}
+	}
+}
+
 global $searchd_log, $query_log, $searchd_pid;
 $sd_log				= testdir($searchd_log);
 $ss_log				= scriptdir($searchd_log);

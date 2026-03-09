@@ -26,6 +26,16 @@
 
 constexpr int FAILS_THRESH = 100;
 
+static inline bool IsLegacyHitlessLayoutForCheck ( DWORD uVersion )
+{
+	return uVersion<68;
+}
+
+static inline int GetDictDocsForCheck ( int iRawDocs, bool bLegacyLayout )
+{
+	return bLegacyLayout ? iRawDocs : ( iRawDocs & HITLESS_DOC_MASK );
+}
+
 class DebugCheckError_c final : public DebugCheckError_i
 {
 public:
@@ -761,6 +771,7 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 	const int iWordPerCP = SPH_WORDLIST_CHECKPOINT;
 	const bool bWordDict = m_tIndex.GetDictionary()->GetSettings().m_bWordDict;
+	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
 
 	CSphVector<CSphWordlistCheckpoint> dCheckpoints;
 	dCheckpoints.Reserve ( m_tWordlist.m_iDictCheckpoints );
@@ -804,6 +815,8 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 		SphWordID_t uNewWordid = 0;
 		SphOffset_t iNewDoclistOffset = 0;
+		int iRawDocs = 0;
+		int iLayoutDocs = 0;
 		int iDocs = 0;
 		int iHits = 0;
 		bool bHitless = false;
@@ -835,13 +848,15 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 			}
 
 			iNewDoclistOffset = tDictReader.UnzipOffset();
-			iDocs = tDictReader.UnzipInt();
+			iRawDocs = tDictReader.UnzipInt();
+			iLayoutDocs = GetDictDocsForCheck ( iRawDocs, bLegacySkiplistLayout );
+			iDocs = iRawDocs;
 			iHits = tDictReader.UnzipInt();
 			int iHint = 0;
-			if ( iDocs>=DOCLIST_HINT_THRESH )
+			if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
 				iHint = tDictReader.GetByte();
 
-			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
+			iHint = DoclistHintUnpack ( iLayoutDocs, (BYTE)iHint );
 
 			if ( m_tIndex.GetSettings().m_eHitless==SPH_HITLESS_SOME && ( iDocs & HITLESS_DOC_FLAG )!=0 )
 			{
@@ -870,7 +885,9 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 			// finish reading the entire entry
 			uNewWordid = uWordid + iDeltaWord;
 			iNewDoclistOffset = iDoclistOffset + tDictReader.UnzipOffset();
-			iDocs = tDictReader.UnzipInt();
+			iRawDocs = tDictReader.UnzipInt();
+			iLayoutDocs = GetDictDocsForCheck ( iRawDocs, bLegacySkiplistLayout );
+			iDocs = iRawDocs;
 			iHits = tDictReader.UnzipInt();
 			bHitless = ( m_dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
 			if ( bHitless )
@@ -889,8 +906,9 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 
 		assert ( tIndexSettings.m_iSkiplistBlockSize>0 );
 
-		// skiplist
-		if ( iDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		// Stream consumption depends on docs count in dictionary layout.
+		// Logical hitless masking must not affect optional field parsing.
+		if ( iLayoutDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
 			int iSkipsOffset = tDictReader.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
@@ -971,6 +989,7 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 {
 	const CSphIndexSettings & tIndexSettings = m_tIndex.GetSettings();
+	const bool bLegacySkiplistLayout = IsLegacyHitlessLayoutForCheck ( m_uVersion );
 
 	if ( !fnCbWordid )
 		m_tReporter.Msg ( "checking data..." );
@@ -984,6 +1003,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 
 	SphWordID_t uWordid = 0;
 	int64_t iDoclistOffset = 0;
+	int iRawDictDocs = 0;
+	int iLayoutDictDocs = 0;
 	int iDictDocs, iDictHits;
 	bool bHitless = false;
 
@@ -1043,9 +1064,11 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			}
 
 			iDoclistOffset = m_tDictReader.UnzipOffset();
-			iDictDocs = m_tDictReader.UnzipInt();
+			iRawDictDocs = m_tDictReader.UnzipInt();
+			iLayoutDictDocs = GetDictDocsForCheck ( iRawDictDocs, bLegacySkiplistLayout );
+			iDictDocs = iRawDictDocs;
 			iDictHits = m_tDictReader.UnzipInt();
-			if ( iDictDocs>=DOCLIST_HINT_THRESH )
+			if ( iLayoutDictDocs>=DOCLIST_HINT_THRESH )
 				m_tDictReader.GetByte();
 
 			if ( tIndexSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
@@ -1060,7 +1083,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			uWordid = uWordid + iDeltaWord;
 			bHitless = ( m_dHitlessWords.BinarySearch ( uWordid )!=NULL );
 			iDoclistOffset = iDoclistOffset + m_tDictReader.UnzipOffset();
-			iDictDocs = m_tDictReader.UnzipInt();
+			iRawDictDocs = m_tDictReader.UnzipInt();
+			iLayoutDictDocs = GetDictDocsForCheck ( iRawDictDocs, bLegacySkiplistLayout );
+			iDictDocs = iRawDictDocs;
 			if ( bHitless )
 				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
 			iDictHits = m_tDictReader.UnzipInt();
@@ -1068,7 +1093,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		}
 
 		int64_t iSkipsOffset = 0;
-		if ( iDictDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		// Stream consumption depends on docs count in dictionary layout.
+		// Logical hitless masking must not affect optional field parsing.
+		if ( iLayoutDictDocs>tIndexSettings.m_iSkiplistBlockSize )
 		{
 			if ( m_uVersion<=57 )
 				iSkipsOffset = (int)m_tDictReader.UnzipInt();

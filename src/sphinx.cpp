@@ -43,6 +43,7 @@
 #include "sphinx_alter.h"
 #include "conversion.h"
 #include "binlog.h"
+#include "embeddingutils.h"
 #include "task_info.h"
 #include "client_task_info.h"
 #include "chunksearchctx.h"
@@ -461,10 +462,6 @@ while(0)
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define HITLESS_DOC_MASK 0x7FFFFFFF
-#define HITLESS_DOC_FLAG 0x80000000
-
-
 // duplicated in sphinxformat.cpp
 struct Slice64_t
 {
@@ -753,7 +750,7 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 			return false;
 		}
 
-		if ( tCol.IsIndexedKNN() )
+		if ( tCol.IsIndexedKNN() && !( tUpd.m_bRebuildEmbeddings && tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tUpdAttr.m_eType==SPH_ATTR_FLOAT_VECTOR ) )
 		{
 			sError.SetSprintf ( "unable to update attribute '%s' that has a KNN index", sUpdAttrName.cstr() );
 			return false;
@@ -1398,6 +1395,10 @@ private:
 	const BYTE *				GetRawBlobAttrs() const override { return m_tBlobAttrs.GetReadPtr(); }
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
+
+	bool				ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) final;
+	bool				CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const final;
+	bool				ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) final;
 };
 
 
@@ -1826,15 +1827,8 @@ void SelectParser_t::AddOption ( YYSTYPE * pOpt, YYSTYPE * pVal )
 	{
 		if ( IsTokenEqual ( pVal, "kbuffer" ) )
 			m_pQuery->m_bSortKbuffer = true;
-	} else if ( IsTokenEqual ( pOpt, "max_predicted_time" ) )
-	{
-		char szNumber[256];
-		int iLen = pVal->m_iEnd-pVal->m_iStart;
-		assert ( iLen < (int)sizeof(szNumber) );
-		strncpy ( szNumber, m_pStart+pVal->m_iStart, iLen );
-		int64_t iMaxPredicted = strtoull ( szNumber, NULL, 10 );
-		m_pQuery->m_iMaxPredictedMsec = int(iMaxPredicted > INT_MAX ? INT_MAX : iMaxPredicted );
 	}
+	// removed predicted time parser
 }
 
 bool ParseSelectList ( CSphString & sError, CSphQuery & tQuery )
@@ -2540,6 +2534,8 @@ Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphStr
 	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
 	auto & tUpd = *pUpd;
 	tUpd.m_bIgnoreNonexistent = true;
+	// Binlog-replayed updates can include internal embedding backfill payloads.
+	tUpd.m_bRebuildEmbeddings = true;
 
 	int iAttrs = (int) tReader.UnzipOffset ();
 	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
@@ -3675,7 +3671,7 @@ void CSphHitBuilder::DoclistEndList ()
 	// emit skiplist
 	// OPTIMIZE? placing it after doclist means an extra seek on searching
 	// however placing it before means some (longer) doclist data moves while indexing
-	if ( m_tWord.m_iDocs>m_iSkiplistBlockSize )
+	if ( ( m_tWord.m_iDocs & HITLESS_DOC_MASK )>m_iSkiplistBlockSize )
 	{
 		assert ( m_dSkiplist.GetLength() );
 		assert ( m_dSkiplist[0].m_iOffset==m_tWord.m_iDoclistOffset );
@@ -6349,9 +6345,10 @@ public:
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
 			m_iHint = 0;
-			if ( m_iDocs>=DOCLIST_HINT_THRESH )
+			const int iLayoutDocs = m_iDocs & HITLESS_DOC_MASK;
+			if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
 				m_iHint = m_pReader->GetByte();
-			if ( m_iDocs > m_iSkiplistBlockSize )
+			if ( iLayoutDocs>m_iSkiplistBlockSize )
 				m_pReader->UnzipInt();
 
 			m_uWordID = (SphWordID_t) sphCRC32 ( GetWord() ); // set wordID for indexing
@@ -6362,7 +6359,8 @@ public:
 			m_iDoclistOffset += m_pReader->UnzipOffset();
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
-			if ( m_iDocs > m_iSkiplistBlockSize )
+			const int iLayoutDocs = m_iDocs & HITLESS_DOC_MASK;
+			if ( iLayoutDocs>m_iSkiplistBlockSize )
 				m_pReader->UnzipOffset();
 		}
 
@@ -8050,13 +8048,10 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	fFTWithFilters = EstimateMTCost ( fFTWithFilters, iThreads );
 
 	if ( fIteratorWithFT<fFTWithFilters )
-	{
 		return true;
-	} else
-	{
-		// if has any forced indexes when should use the path with iterators even FT estimates faster
-		return dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eForce!=SecondaryIndexType_e::NONE; } );
-	}
+
+	// if has any forced indexes when should use the path with iterators even FT estimates faster
+	return dSIInfo.any_of ( []( const auto & tInfo ){ return tInfo.m_eForce!=SecondaryIndexType_e::NONE; } );
 }
 
 
@@ -8137,10 +8132,14 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 
 std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
+	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
+	if ( tQuery.m_tKnnSettings.m_bPrefilter && tCtx.m_pFilter )
+		pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
+
 	if ( !dFilters.GetLength() )
 	{
 		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, tMeta.m_sError );
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
 
 		return { nullptr, false };
 	}
@@ -8160,9 +8159,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	int iRemovedOptional = CalcRemovedOptionalFilters ( dFilters, dSIInfo );
 
-	// knn iterators
+	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 
@@ -8319,10 +8318,6 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		tMeta.m_sError = "need attributes to run fullscan";
 		return false;
 	}
-
-	// we count documents only (before filters)
-	if ( tQuery.m_iMaxPredictedMsec )
-		tMeta.m_bHasPrediction = true;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 		tMeta.m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
@@ -8627,6 +8622,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		return false;
 
 	const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;
+	const int iLayoutDocs = tRes.m_iDocs & HITLESS_DOC_MASK;
 	tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tRes.m_iDocs & HITLESS_DOC_MASK ) : tRes.m_iDocs;
 	tWord.m_iHits = tRes.m_iHits;
 	tWord.m_bHasHitlist =
@@ -8639,9 +8635,9 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 		// read in skiplist
 		// OPTIMIZE? maybe add an option to decompress on preload instead?
-		if ( m_pSkips && tRes.m_iDocs>m_iSkiplistBlockSize )
+		if ( m_pSkips && iLayoutDocs>m_iSkiplistBlockSize )
 		{
-			int iSkips = tRes.m_iDocs/m_iSkiplistBlockSize;
+			int iSkips = tWord.m_iDocs/m_iSkiplistBlockSize;
 			const int SMALL_SKIP_THRESH = 256;
 			bool bNeedCache = iSkips > SMALL_SKIP_THRESH;
 
@@ -8845,6 +8841,8 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 	m_tStats.m_iTotalBytes = rdInfo.GetOffset ();
 
 	LoadIndexSettings ( m_tSettings, rdInfo, m_uVersion );
+	if ( m_uVersion<68 && m_tSettings.m_eHitless!=SPH_HITLESS_NONE )
+		sWarning.SetSprintf ( "hitless dictionary (format version %u < 68) could be corrupted - rebuild table", m_uVersion );
 
 	CSphTokenizerSettings tTokSettings;
 
@@ -8977,6 +8975,8 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 
 	// index settings
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+	if ( m_uVersion<68 && m_tSettings.m_eHitless!=SPH_HITLESS_NONE )
+		sWarning.SetSprintf ( "hitless dictionary (format version %u < 68) could be corrupted - rebuild table", m_uVersion );
 
 	CSphTokenizerSettings tTokSettings;
 	// tokenizer stuff
@@ -10820,11 +10820,6 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			if ( !iJob )
 				tThMeta.MergeWordStats ( tChunkMeta );
 
-			tThMeta.m_bHasPrediction |= tChunkMeta.m_bHasPrediction;
-
-			if ( tThMeta.m_bHasPrediction )
-				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
-
 			if ( iJob < iJobs-1 && sph::TimeExceeded ( tmMaxTimer ) )
 				Interrupt ( "query time exceeded max_query_time" );
 
@@ -11350,14 +11345,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
 	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
-	// setup prediction constrain
-	CSphQueryStats tQueryStats;
-	bool bCollectPredictionCounters = ( tQuery.m_iMaxPredictedMsec>0 );
-	int64_t iNanoBudget = (int64_t)( tQuery.m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
-	tQueryStats.m_pNanoBudget = &iNanoBudget;
-	if ( bCollectPredictionCounters )
-		tTermSetup.m_pStats = &tQueryStats;
-
 	if ( HasForceHints ( tQuery.m_dIndexHints ) )
 		tCtx.m_bSkipQCache = true;
 
@@ -11536,15 +11523,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tMeta.m_iQueryTime += (int)( tmWall/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
-	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << tQueryStats.m_iFetchedDocs << ", " << tQueryStats.m_iFetchedHits << ", " << tQueryStats.m_iSkips << ", " << dSorters[0]->GetTotalCount();
+	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << dSorters[0]->GetTotalCount();
 
 	SwitchProfile ( pProfile, eOldState );
-
-	if ( bCollectPredictionCounters )
-	{
-		tMeta.m_tStats.Add ( tQueryStats );
-		tMeta.m_bHasPrediction = true;
-	}
 
 	return true;
 }
@@ -11679,7 +11660,19 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	if ( !tIndexChecker.OpenFiles() )
 		return 1;
 
-	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, tIndexChecker.GetHitlessWords(), m_sLastError ) )
+	// Resolve paths relative to index directory (disk chunks store relative names in the header).
+	CSphString sHitlessToLoad = m_tSettings.m_sHitlessFiles;
+	if ( pFilenameBuilder && !sHitlessToLoad.IsEmpty() )
+	{
+		StrVec_t dHitless;
+		sphSplit ( dHitless, sHitlessToLoad.cstr(), " \t," );
+		StringBuilder_c sResolved ( ", " );
+		for ( const CSphString & sFile : dHitless )
+				sResolved << FormatPath ( sFile, pFilenameBuilder );
+
+		sHitlessToLoad = sResolved.cstr();
+	}
+	if ( !LoadHitlessWords ( sHitlessToLoad, m_pTokenizer, m_pDict, tIndexChecker.GetHitlessWords(), m_sLastError ) )
 		tReporter.Fail ( "unable to load hitless words: %s", m_sLastError.cstr() );
 
 	CSphSavedFile tStat;
@@ -11687,10 +11680,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	const CSphTokenizerSettings & tTokenizerSettings = m_pTokenizer->GetSettings ();
 	if ( !tTokenizerSettings.m_sSynonymsFile.IsEmpty() )
 	{
-		CSphString sSynonymsFile = tTokenizerSettings.m_sSynonymsFile;
-		if ( pFilenameBuilder )
-			sSynonymsFile = pFilenameBuilder->GetFullPath ( sSynonymsFile );
-
+		CSphString sSynonymsFile = FormatPath ( tTokenizerSettings.m_sSynonymsFile, pFilenameBuilder );
 		if ( !tStat.Collect ( sSynonymsFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open exceptions '%s': %s", sSynonymsFile.cstr(), sError.cstr() );
 	}
@@ -11710,9 +11700,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 
 		CSphString sStopFile;
 		sStopFile.SetBinary ( sNameStart, int ( pStop-sNameStart ) );
-		if ( pFilenameBuilder )
-			sStopFile = pFilenameBuilder->GetFullPath ( sStopFile );
-
+		sStopFile = FormatPath ( sStopFile, pFilenameBuilder );
 		if ( !tStat.Collect ( sStopFile.cstr(), &sError ) )
 			tReporter.Fail ( "unable to open stopwords '%s': %s", sStopFile.cstr(), sError.cstr() );
 	}
@@ -11721,10 +11709,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 	{
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 		{
-			CSphString sWordforms = tDictSettings.m_dWordforms[i];
-			if ( pFilenameBuilder )
-				sWordforms = pFilenameBuilder->GetFullPath ( sWordforms );
-
+			CSphString sWordforms = FormatPath ( tDictSettings.m_dWordforms[i], pFilenameBuilder );
 			if ( !tStat.Collect ( sWordforms.cstr(), &sError ) )
 				tReporter.Fail ( "unable to open wordforms '%s': %s", sWordforms.cstr(), sError.cstr() );
 		}
@@ -13257,5 +13242,155 @@ bool CSphIndex_VLN::RewriteHeader ( CSphString & sError ) const
 		return false;
 
 	::unlink ( sHeaderOld.cstr() );
+	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Embedding 
+//////////////////////////////////////////////////////////////////////////
+
+bool CSphIndex_VLN::ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError )
+{
+	assert ( iDocsToFill>0 && iDims>0 && m_tSchema.HasBlobAttrs() );
+
+	BYTE * pBlobPool = m_tBlobAttrs.GetWritePtr();
+	if ( !pBlobPool )
+		return true;
+
+	const uint64_t uPayloadPerRow = uint64_t(iDims) * sizeof(float);
+	uint64_t uNeed = uint64_t(iDocsToFill) * uPayloadPerRow;
+	if ( m_tSettings.m_tBlobUpdateSpace>0 )
+		uNeed += uint64_t(m_tSettings.m_tBlobUpdateSpace);
+
+	const uint64_t uOldSize = m_tBlobAttrs.GetLengthBytes64();
+	const uint64_t uBlobSpaceUsed = uint64_t(*(SphOffset_t*)pBlobPool);
+	const uint64_t uSpaceLeft = uOldSize>uBlobSpaceUsed ? uOldSize-uBlobSpaceUsed : 0;
+	if ( uNeed<=uSpaceLeft )
+		return true;
+
+	const uint64_t uNeedGrow = uNeed - uSpaceLeft;
+	const uint64_t uNewSize = uOldSize + uNeedGrow;
+	CSphString sWarning;
+	if ( !m_tBlobAttrs.Resize ( uNewSize, sWarning, sError ) )
+		return false;
+
+	return true;
+}
+
+bool CSphIndex_VLN::CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const
+{
+	const int iAttrIdx = tState.m_iAttrIdx;
+	const bool bAllRows = tState.m_eMode==EmbeddingPopulate_e::AllRows;
+
+	if ( iAttrIdx < 0 || iAttrIdx >= m_tSchema.GetAttrsCount() || !m_iDocinfo )
+		return true;
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType != SPH_ATTR_FLOAT_VECTOR || tAttr.IsColumnar() )
+		return true;
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	const BYTE * pBlobBase = m_tBlobAttrs.GetReadPtr();
+	if ( !pBlobBase )
+		return true;
+
+	const int iDims = tState.m_iDims;
+	assert ( tState.m_iDims==tAttr.m_tKNN.m_iDims );
+	if ( !bAllRows && iDims<=0 )
+		return true;
+
+	CSphVector<ScopedTypedIterator_t> dFromColumnarIters;
+	GetEmbeddingColumnar ( m_tSchema, dFrom, m_pColumnar.get(), dFromColumnarIters );
+
+	if ( EmbeddingFromNeedsDocstore ( dFrom ) && !m_pDocstore )
+		return true;
+
+	for ( RowID_t tRowID = tStartRowID; tRowID < (RowID_t)m_iDocinfo; tRowID++ )
+	{
+		if ( dDocids.GetLength() >= iMaxDocs )
+		{
+			tStartRowID = tRowID;
+			return true;
+		}
+
+		if ( m_tDeadRowMap.IsSet ( tRowID ) )
+			continue;
+
+		const CSphRowitem * pRow = GetDocinfoByRowID ( tRowID );
+		if ( !pRow )
+			continue;
+
+		const DocID_t tDocID = sphGetDocID ( pRow );
+		const SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+		const BYTE * pBlobRow = pBlobBase + tBlobOff;
+		ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+
+		if ( !bAllRows && !IsBlobAttrZero ( tVecBlob, iDims ) )
+			continue;
+
+		DocstoreDoc_t tDoc;
+		if ( m_pDocstore )
+			tDoc = m_pDocstore->GetDoc ( tRowID, nullptr, -1, false );
+
+		CSphString sFrom;
+		BuildEmbeddingFromText ( m_tSchema, dFrom, m_pDocstore ? &tDoc : nullptr, pBlobRow, dFromColumnarIters, tRowID, sFrom );
+		dDocids.Add ( tDocID );
+		dFromTexts.Add ( sFrom );
+	}
+
+	tStartRowID = m_iDocinfo;
+	return true;
+}
+
+bool CSphIndex_VLN::ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError )
+{
+	if ( tState.m_eMode!=EmbeddingPopulate_e::Empty || tUpd.AllApplied() || !m_iDocinfo )
+		return true;
+
+	const int iAttrIdx = m_tSchema.GetAttrIndex ( tState.m_sAttr.cstr() );
+	if ( iAttrIdx<0 )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR )
+	{
+		sError.SetSprintf ( "attribute '%s' is not float_vector", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	const BYTE * pBlobBase = m_tBlobAttrs.GetReadPtr();
+	if ( !pBlobBase )
+		return true;
+
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
+	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
+	if ( dRowsToUpdate.IsEmpty() )
+		return true;
+
+	for ( const auto & tRow : dRowsToUpdate )
+	{
+		const CSphRowitem * pRow = GetDocinfoByRowID ( tRow.m_tRow );
+		if ( !pRow )
+			continue;
+
+		const SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+		const BYTE * pBlobRow = pBlobBase + tBlobOff;
+		ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+		if ( IsBlobAttrZero ( tVecBlob, tState.m_iDims ) )
+			continue;
+
+		tUpd.MarkUpdated ( tRow.m_iIdx );
+	}
+
 	return true;
 }

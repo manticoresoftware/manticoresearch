@@ -151,6 +151,7 @@
 * 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [ PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling)选项用于模糊和自动补全插件。
 
 ### 错误修复
+* 🪲 [ Issue #4299](https://github.com/manticoresoftware/manticoresearch/issues/4299) 为Grafana版本12.4添加了测试。
 * 🪲 [问题 #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) 为Grafana版本12.3添加了测试。
 * 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [问题 #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) 修复了使用`max(ft field)`导致的崩溃问题。
 * 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) 修复了使用空过滤器名称时的错误。

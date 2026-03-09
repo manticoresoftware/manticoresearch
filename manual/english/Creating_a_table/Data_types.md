@@ -2653,6 +2653,42 @@ INSERT INTO products VALUES
 
 <!-- end -->
 
+<!-- example alter_embedding_column -->
+#### Method 3: Add an embedding column after bulk loading
+
+If initial ingestion speed matters more than immediate vector search, you can first load the table without an embedding column and add the model-backed `float_vector` column later.
+
+This approach is useful when you want bulk inserts to finish as quickly as possible and are willing to run embedding generation afterward as a separate, potentially long-running `ALTER` operation.
+
+How it works:
+- Create the table with the source `text` fields and `string` attributes only
+- Insert or import all data
+- Add the embedding column later with `ALTER TABLE ... ADD COLUMN`
+
+When you add a `float_vector` column with `MODEL_NAME` and `FROM`, Manticore generates embeddings for existing rows during the `ALTER`. If you later need to regenerate them, use `ALTER TABLE ... REBUILD EMBEDDINGS column_name`.
+
+Limitations:
+- This method works only for local RT tables. It is not available for tables that are part of a replication cluster, because clustered tables do not support `ALTER`.
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+For more details, see [Updating table schema](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).
+
+<!-- end -->
+
 <!-- example for creating float_vector --> 
 ### Using Float Vectors without KNN (Storage Only)
 

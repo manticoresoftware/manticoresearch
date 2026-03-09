@@ -5,7 +5,7 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP|FLOAT_VECTOR [KNN options]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
 
@@ -26,12 +26,16 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `text indexed` / `string indexed` - 全文索引字段，仅索引（原始值不存储在docstore中）
 * `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不将原始值存储在docstore中）
 * `text stored` / `string stored` - 值仅存储在docstore中，不进行全文索引，也不是字符串属性
+* `float_vector` - 向量属性。您可以使用与 [`CREATE TABLE`](Creating_a_table/Data_types.md#Float-vector) 中相同的 KNN 和 auto-embedding 选项
 * 为任何属性（json除外）添加`engine='columnar'`将使其存储在[列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中
 
 #### 重要注意事项：
 * ❗建议在`ALTER`表之前**备份表文件**，以防突然断电或其他类似问题导致数据损坏。
 * 添加列时无法查询表。
-* 新创建的属性值设置为0。
+* 新创建的标量属性默认设置为 `0`。
+* 新增的 `float_vector` 列如果没有 `MODEL_NAME`，则初始化为零向量。
+* 如果添加带有 `MODEL_NAME` 和 `FROM` 的 `float_vector` 列，`ALTER TABLE ... ADD COLUMN` 期间现有行会自动嵌入。
+* 指定 `MODEL_NAME` 时，`FROM` 是必需的。使用 `FROM=''` 从所有 `text` 字段和 `string` 属性中嵌入。
 * `ALTER`不适用于分布式表和无任何属性的表。
 * 不能删除`id`列。
 * 当删除一个既是全文字段又是字符串属性的字段时，第一次`ALTER DROP`删除属性，第二次删除全文字段。
@@ -324,6 +328,36 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
+## 重建嵌入
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS column_name
+```
+
+此命令重新生成一个目标 `float_vector` 列的嵌入，该列配置了 `MODEL_NAME` 和 `FROM`。
+
+在需要为现有嵌入列重新生成向量时使用此功能，例如在使用 `ALTER TABLE ... ADD COLUMN` 后稍后添加该列并希望重新处理行，或希望强制为所有行重新生成向量时。
+
+重要行为：
+* 列名是必填项。该命令一次仅重建一个嵌入列。
+* 为该列中的所有行重新生成嵌入，而不仅仅是向量为零的行。
+* 目标列必须是带有嵌入模型配置的索引 `float_vector`。
+* 允许 `FROM=''`，表示“使用所有 `text` 字段和 `string` 属性”。
+
+<!-- request Example -->
+```sql
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products REBUILD EMBEDDINGS embedding;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
 ## 在RT模式下更新属性API密钥（用于嵌入生成）
 
 <!-- example api_key -->
@@ -360,4 +394,3 @@ ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remot
 
 <!-- end -->
 <!-- proofread -->
-

@@ -2653,6 +2653,42 @@ INSERT INTO products VALUES
 
 <!-- end -->
 
+<!-- example alter_embedding_column -->
+#### 方法 3：在批量加载后添加嵌入列
+
+如果初始摄入速度比即时向量搜索更重要，你可以首先加载没有嵌入列的表，然后稍后添加基于模型的 `float_vector` 列。
+
+这种方法在希望批量插入操作尽可能快速完成，并且愿意随后运行嵌入生成作为独立的、可能耗时较长的 `ALTER` 操作时非常有用。
+
+工作原理：
+- 仅创建包含源 `text` 字段和 `string` 属性的表
+- 插入或导入所有数据
+- 后续使用 `ALTER TABLE ... ADD COLUMN` 添加嵌入列
+
+当你使用 `MODEL_NAME` 和 `FROM` 添加 `float_vector` 列时，Manticore 会在 `ALTER` 过程中为现有行生成嵌入。如果之后需要重新生成它们，请使用 `ALTER TABLE ... REBUILD EMBEDDINGS column_name`。
+
+限制：
+- 此方法仅适用于本地 RT 表。对于属于复制集群的表不可用，因为集群表不支持 `ALTER`。
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+有关详细信息，请参见 [更新表结构](../Updating_table_schema_and_settings.md#Rebuilding-embeddings)。
+
+<!-- end -->
+
 <!-- example for creating float_vector --> 
 ### 不使用 KNN 的浮点向量（仅存储）
 

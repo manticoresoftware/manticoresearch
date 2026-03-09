@@ -2653,6 +2653,42 @@ INSERT INTO products VALUES
 
 <!-- end -->
 
+<!-- example alter_embedding_column -->
+#### Способ 3: Добавление столбца эмбеддингов после массовой загрузки
+
+Если скорость первоначальной загрузки важнее, чем немедленный векторный поиск, вы можете сначала загрузить таблицу без столбца эмбеддингов и добавить столбец `float_vector` с поддержкой модели позже.
+
+Этот подход полезен, когда вы хотите, чтобы массовые вставки завершались как можно быстрее, и готовы запустить генерацию эмбеддингов позже в виде отдельной, потенциально длительной операции `ALTER`.
+
+Как это работает:
+- Создайте таблицу только с исходными полями `text` и атрибутами `string`
+- Вставьте или импортируйте все данные
+- Добавьте столбец с эмбеддингами позже с помощью `ALTER TABLE ... ADD COLUMN`
+
+Когда вы добавляете столбец `float_vector` с `MODEL_NAME` и `FROM`, Manticore генерирует эмбеддинги для существующих строк во время выполнения `ALTER`. Если позже вам потребуется перегенерировать их, используйте `ALTER TABLE ... REBUILD EMBEDDINGS column_name`.
+
+Ограничения:
+- Этот метод работает только для локальных RT-таблиц. Он недоступен для таблиц, входящих в репликационный кластер, потому что кластеризованные таблицы не поддерживают `ALTER`.
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+Для получения дополнительных сведений см. [Обновление схемы таблицы](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).
+
+<!-- end -->
+
 <!-- example for creating float_vector --> 
 ### Использование векторов типа float без KNN (Только хранение)
 

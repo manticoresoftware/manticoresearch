@@ -296,15 +296,19 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	IntVec_t dDocstoreRemap;
 	dDocstoreRemap.Resize ( dAttrsWithModels.GetLength() );
 	dDocstoreRemap.Fill(-1);
+	int iNumColumnarAttrs = 0;
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
+		auto & tAttr = tSchema.GetAttr(i);
+		bool bColumnar = tAttr.IsColumnar();
+		iNumColumnarAttrs += bColumnar;
+
 		if ( !dAttrsWithModels[i].m_pModel )
 			continue;
 
-		auto & tAttr = tSchema.GetAttr(i);
 		assert ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR );
-		bRebuildColumnar |= tAttr.IsColumnar();
-		bRebuildBlobs |= !tAttr.IsColumnar();
+		bRebuildColumnar |= bColumnar;
+		bRebuildBlobs |= !bColumnar;
 		bRebuildDocstore |= tAttr.IsStored();
 
 		dDocstoreRemap[i] = m_pDocstore ? ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR ) : -1;
@@ -317,6 +321,8 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	CSphVector<ScopedTypedIterator_t> dAllIterators;
 	if ( bRebuildColumnar )
 		dAllIterators = CreateAllColumnarIterators ( pColumnar.get(), tSchema );
+	else
+		dAllIterators.Resize(iNumColumnarAttrs);
 
 	std::unique_ptr<DocstoreRT_i> pNewDocstoreBuilder;
 	if ( bRebuildDocstore )

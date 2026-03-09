@@ -403,6 +403,7 @@ The parameters are:
 * `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search. The default is 10.
 * `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
+* `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](#early-termination) for details.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -688,5 +689,121 @@ POST /search
 ```
 
 <!-- end -->
+
+<!-- example knn_filtering_strategies -->
+
+### Filtering strategies: prefilter vs. postfilter
+
+When combining KNN vector search with attribute filters, Manticore supports two strategies that differ in when the filter is applied relative to HNSW graph traversal.
+
+* Prefiltering (default; filter in `"knn"` (JSON) or `prefilter=1` (SQL)) passes the filter into the HNSW traversal itself. Each candidate is checked against the filter before being added to the result heap - only matching documents contribute to the final `k` results. This reduces wasted distance computations and guarantees that exactly `k` matching documents are returned (assuming `k` matching documents exist).
+
+* Postfiltering (filter in `"query"` (JSON) or `prefilter=0` (SQL)) runs the KNN search first over the full dataset, then applies the filter to the results. This is safe and predictable: the HNSW graph is traversed without interference, and the filter only affects which results are returned to the client. The downside is that the graph may spend effort on candidates that will ultimately be discarded. With a tight filter that matches only a small fraction of documents, the returned `k` results may be significantly fewer than requested, because most KNN candidates fail the filter.
+
+Internally, Manticore uses an ACORN-1-based algorithm for prefiltering. A naive prefilter would simply skip non-matching nodes, which risks losing "bridge" nodes that connect otherwise-separated parts of the HNSW graph, causing recall to collapse as the filter becomes more selective. ACORN-1 avoids this: when a node fails the filter, its neighbors are still added to the exploration queue. This allows the traversal to route around filtered-out nodes and maintain graph connectivity. ACORN-1 exploration is activated automatically when fewer than 60% of the total documents pass the filter.
+
+**Automatic brute-force fallback:** When prefiltering is enabled, Manticore estimates whether it is cheaper to run a brute-force distance scan over the filtered subset than to traverse the HNSW graph. The estimate compares the expected number of nodes visited by HNSW against the number of documents that pass the filter. If the filtered set is small enough that scanning it directly is faster, Manticore automatically switches to brute-force, skipping HNSW entirely. This ensures correctness and good performance even under extreme selectivity.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- prefilter (default): filter applied during HNSW traversal (ACORN-1 used automatically)
+SELECT id, knn_dist() FROM test
+WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926) )
+AND price < 100;
+
+-- postfilter: KNN runs over full dataset, filter applied to results
+SELECT id, knn_dist() FROM test
+WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { prefilter=0 } )
+AND price < 100;
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+// prefilter (default): filter is inside "knn", applied during HNSW traversal
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "filter": {
+            "range": { "price": { "lt": 100 } }
+        }
+    }
+}
+
+// postfilter: filter is in "query", applied after KNN search
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926]
+    },
+    "query": {
+        "range": { "price": { "lt": 100 } }
+    }
+}
+```
+
+<!-- end -->
+
+<!-- example knn_early_termination -->
+
+### Early termination
+
+By default, Manticore uses an adaptive early termination algorithm during HNSW graph traversal. Instead of always exploring the full candidate set defined by `ef`, it monitors the rate at which new candidates improve the result set and stops early when that rate consistently falls below a threshold. This reduces the number of distance computations without significantly affecting result quality.
+
+Early termination is enabled by default and is automatically disabled when `k` is 10 or fewer, since the overhead of the algorithm is not worthwhile for such small result sets. The performance benefit scales with `k` — the larger the result set, the more distance computations can be saved by stopping early.
+
+Note that [`oversampling`](#knn-vector-search) multiplies the effective `k` used during HNSW traversal, so early termination also benefits from oversampling: a higher effective `k` means more candidates to potentially skip.
+
+To explicitly control early termination, use the `early_termination` option:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- disable early termination
+SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=200, early_termination=0 } );
+
+-- enable early termination explicitly (default)
+SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=200, early_termination=1 } );
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+    "table": "test",
+    "knn":
+    {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "ef": 200,
+        "early_termination": false
+    }
+}
+```
+
+<!-- end -->
+
+When to disable early termination:
+* When result set precision is critical and you cannot afford any approximation beyond what HNSW already provides.
+* When using low `k` values (around 30 or fewer), where early termination provides little performance benefit but may reduce precision.
 
 <!-- proofread -->

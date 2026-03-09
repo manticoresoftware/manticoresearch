@@ -85,6 +85,7 @@ public:
 
 	int				m_iMaxMatches = 0;
 	int				m_iPseudoShards = 1;
+	int64_t			m_iKnnDistanceComputations = 0;
 															/// create empty and stopped profile
 					QueryProfile_c();
 	virtual 		~QueryProfile_c() {}

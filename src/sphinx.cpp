@@ -8126,19 +8126,13 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
-	if ( tQuery.m_tKnnSettings.m_bPrefilter )
-	{
-		if ( !dFilters.GetLength() || !tCtx.m_pFilter ) 
-			tMeta.m_sWarning = "KNN option {filter=1} is set, but query has no filters; prefiltering is ignored";
-
-		if ( tCtx.m_pFilter )
-			pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
-	}
+	if ( tQuery.m_tKnnSettings.m_bPrefilter && tCtx.m_pFilter )
+		pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
 
 	if ( !dFilters.GetLength() )
 	{
 		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tMeta.m_sError );
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
 
 		return { nullptr, false };
 	}
@@ -8160,7 +8154,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 

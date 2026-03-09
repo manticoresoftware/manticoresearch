@@ -403,6 +403,7 @@ The parameters are:
 * `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search. The default is 10.
 * `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
+* `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](#early-termination) for details.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -688,5 +689,55 @@ POST /search
 ```
 
 <!-- end -->
+
+<!-- example knn_early_termination -->
+
+### Early termination
+
+By default, Manticore uses an adaptive early termination algorithm during HNSW graph traversal. Instead of always exploring the full candidate set defined by `ef`, it monitors the rate at which new candidates improve the result set and stops early when that rate consistently falls below a threshold. This reduces the number of distance computations without significantly affecting result quality.
+
+Early termination is enabled by default and is automatically disabled when `k` is 10 or fewer, since the overhead of the algorithm is not worthwhile for such small result sets. The performance benefit scales with `k` — the larger the result set, the more distance computations can be saved by stopping early.
+
+Note that [`oversampling`](#knn-vector-search) multiplies the effective `k` used during HNSW traversal, so early termination also benefits from oversampling: a higher effective `k` means more candidates to potentially skip.
+
+To explicitly control early termination, use the `early_termination` option:
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+-- disable early termination
+SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=200, early_termination=0 } );
+
+-- enable early termination explicitly (default)
+SELECT id, knn_dist() FROM test WHERE knn ( image_vector, (0.286569,-0.031816,0.066684,0.032926), { ef=200, early_termination=1 } );
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+    "table": "test",
+    "knn":
+    {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "ef": 200,
+        "early_termination": false
+    }
+}
+```
+
+<!-- end -->
+
+When to disable early termination:
+* When result set precision is critical and you cannot afford any approximation beyond what HNSW already provides.
+* When using low `k` values (around 30 or fewer), where early termination provides little performance benefit but may reduce precision.
 
 <!-- proofread -->

@@ -764,7 +764,7 @@ By default, Manticore uses an adaptive early termination algorithm during HNSW g
 
 Early termination is enabled by default and is automatically disabled when `k` is 10 or fewer, since the overhead of the algorithm is not worthwhile for such small result sets. The performance benefit scales with `k` — the larger the result set, the more distance computations can be saved by stopping early.
 
-Note that [`oversampling`](#knn-vector-search) multiplies the effective `k` used during HNSW traversal, so early termination also benefits from oversampling: a higher effective `k` means more candidates to potentially skip.
+Note that oversampling multiplies the effective `k` used during HNSW traversal, so early termination also benefits from oversampling: a higher effective `k` means more candidates to potentially skip.
 
 To explicitly control early termination, use the `early_termination` option:
 

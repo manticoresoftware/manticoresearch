@@ -141,6 +141,7 @@ public:
 
 	/// commit pending changes
 	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) = 0;
+	virtual bool PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) { return true; }
 
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;

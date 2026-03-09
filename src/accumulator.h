@@ -161,12 +161,17 @@ public:
 
 	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 	bool			IsReplace () const { return m_bReplace; }
+	bool			IsPreparedForCommit () const noexcept { return m_bPreparedForCommit; }
+	void			MarkPreparedForCommit () noexcept { m_bPreparedForCommit = true; }
+	void			ResetPreparedForCommit () noexcept { m_bPreparedForCommit = false; }
 
 	[[nodiscard]] bool IsClusterCommand () const noexcept;
+	[[nodiscard]] bool IsRtTrxCommand () const noexcept;
 	[[nodiscard]] bool IsUpdateCommand ( ) const noexcept;
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
+	bool								m_bPreparedForCommit = false;
 
 	ISphRtDictWraperRefPtr_c			m_pDictRt;
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
@@ -187,7 +192,7 @@ private:
 	void			SetupDocstore();
 
 	bool			RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphVector<int64_t> & dTmp, CSphString & sError );
-	bool			GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, columnar::Iterator_i * pColumnarIterator, CSphString & sError );
+	bool			GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError );
 
 	// defined in sphinxrt.cpp
 	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>&, CSphString& );

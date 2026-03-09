@@ -1314,10 +1314,24 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 }
 
 
+static bool PrepareAccForSave ( RtAccum_t & tAcc )
+{
+	RtIndex_i * pIndex = tAcc.GetIndex();
+	if ( !pIndex || !tAcc.IsRtTrxCommand() || !tAcc.m_uAccumDocs )
+		return true;
+
+	CSphString sError;
+	return ( pIndex->PreCommit ( &tAcc, sError ) || TlsMsg::Err ( "%s", sError.cstr() ) );
+}
+
+
 // single point there all commands passed these might be replicated, even if no cluster
 static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
 {
 	TRACE_CORO ( "sph", "HandleCmdReplicateImpl" );
+
+	if ( !PrepareAccForSave ( tAcc ) )
+		return false;
 
 	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 

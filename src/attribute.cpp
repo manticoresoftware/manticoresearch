@@ -69,9 +69,14 @@ public:
 class AttributePacker_c : public AttributePacker_i
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & /*sError*/ ) override
+	AttributePacker_c () = default;
+
+	explicit AttributePacker_c ( BlobAttrInput_e eExpectedInput )
+		: m_eExpectedInput ( eExpectedInput ) {}
+
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
-		assert ( eInput==BlobAttrInput_e::RAW_BYTES );
+		assert ( eInput==m_eExpectedInput );
 		m_dData.Resize ( iDataLen );
 		if (iDataLen)
 			memcpy ( m_dData.Begin(), pData, iDataLen );
@@ -84,6 +89,7 @@ public:
 	}
 
 protected:
+	const BlobAttrInput_e m_eExpectedInput = BlobAttrInput_e::RAW_BYTES;
 	CSphVector<BYTE>	m_dData;
 };
 
@@ -228,8 +234,11 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
-		case SPH_ATTR_INT64SET:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(BlobAttrInput_e::MVA_INT64) );
 			break;
 
 		case SPH_ATTR_UINT32SET:
@@ -370,8 +379,11 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_JSON:			// json doesn't go to a separate packer because we work with pre-parsed json in this case
-		case SPH_ATTR_INT64SET:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(BlobAttrInput_e::MVA_INT64) );
 			break;
 
 		case SPH_ATTR_UINT32SET:
@@ -455,7 +467,13 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 		if ( !dAttrsUpdated.BitGet(i) )
 		{
-			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			BlobAttrInput_e eExpectedInput = BlobAttrInput_e::RAW_BYTES;
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+				eExpectedInput = BlobAttrInput_e::MVA_DWORD;
+			else if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				eExpectedInput = BlobAttrInput_e::MVA_INT64;
+
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(eExpectedInput) );
 			continue;
 		}
 

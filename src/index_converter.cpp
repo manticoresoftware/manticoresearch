@@ -892,7 +892,7 @@ CSphRowitem * AttrConverter_t::NextRow()
 				iLen = sphUnpackStr ( m_tIndex.m_tString.GetReadPtr() + uOff, &pStr );
 
 			assert ( m_pBlob );
-			m_pBlob->SetAttr( iBlobAttr++, (const BYTE*)pStr, iLen, m_sError );
+			m_pBlob->SetAttr( iBlobAttr++, (const BYTE*)pStr, iLen, BlobAttrInput_e::RAW_BYTES, m_sError );
 
 		} else if ( tColumnSrc.m_eAttrType==SPH_ATTR_UINT32SET || tColumnSrc.m_eAttrType==SPH_ATTR_INT64SET )
 		{
@@ -929,7 +929,7 @@ CSphRowitem * AttrConverter_t::NextRow()
 				iValues /= 2;
 			}
 
-			m_pBlob->SetAttr ( iBlobAttr++, (const BYTE*)pMva, iValues*sizeof(int64_t), m_sError );
+			m_pBlob->SetAttr ( iBlobAttr++, (const BYTE*)pMva, iValues*sizeof(int64_t), BlobAttrInput_e::MVA_INT64, m_sError );
 		} else
 		{
 			SphAttr_t tValue = sphGetRowAttr ( pAttrs, tColumnSrc.m_tLocator );

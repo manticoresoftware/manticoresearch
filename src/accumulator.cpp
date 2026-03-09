@@ -100,7 +100,14 @@ static bool RepackBlob ( const CSphColumnInfo & tAttr, const CSphColumnInfo & tB
 	SphAttr_t tBlobRowOffset = sphGetRowAttr ( pRow, tBlobLoc.m_tLocator );
 	const BYTE * pBlobRow = pBlobPool + tBlobRowOffset;
 	ByteBlob_t tBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
-	return pBlobWriter->SetAttr ( iBlobAttr, tBlob.first, tBlob.second, sError );
+
+	BlobAttrInput_e eInput = BlobAttrInput_e::RAW_BYTES;
+	if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+		eInput = BlobAttrInput_e::MVA_DWORD;
+	else if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
+		eInput = BlobAttrInput_e::MVA_INT64;
+
+	return pBlobWriter->SetAttr ( iBlobAttr, tBlob.first, tBlob.second, eInput, sError );
 }
 
 
@@ -116,7 +123,7 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
 	else
 	{
-		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), sError ) )
+		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), BlobAttrInput_e::MVA_INT64, sError ) )
 			return false;
 	}
 
@@ -654,7 +661,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, dStr.first, dStr.second );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, dStr.first, dStr.second, sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, dStr.first, dStr.second, BlobAttrInput_e::RAW_BYTES, sError );
 			}
 			break;
 
@@ -681,7 +688,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				if ( tColumn.IsColumnar() )
 					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), BlobAttrInput_e::MVA_INT64, sError );
 			}
 			break;
 

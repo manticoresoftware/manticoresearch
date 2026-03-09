@@ -39,6 +39,23 @@ SELECT f, m FROM t;
 drop table t;
 </sphinxql>
 
+<!-- Even-sized MVA payload should not be reinterpreted as int64 pairs during embeddings rebuild -->
+<sphinxql>
+drop table if exists t;
+CREATE TABLE t (
+f text,
+m multi,
+v FLOAT_VECTOR
+    KNN_TYPE='hnsw'
+    HNSW_SIMILARITY='cosine'
+    MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
+    FROM='f'
+);
+INSERT INTO t (id, f, m) VALUES (1, 'a', (6666,0,7777,0,8888,0,9999,15313,0,0,0,1,2,465464,1,54632));
+SELECT f, m FROM t;
+drop table t;
+</sphinxql>
+
 </queries>
 
 </test>

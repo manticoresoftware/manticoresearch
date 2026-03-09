@@ -979,7 +979,13 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 			const CSphColumnInfo & tAttr = tCtx.m_tSchema.GetAttr(iCol);
 			int iLengthBytes = 0;
 			const BYTE* pData = sphGetBlobAttr ( pDocinfo, tAttr.m_tLocator, tCtx.m_pBlobPool, iLengthBytes );
-			if ( !pBlobRowBuilder->SetAttr ( iBlobId, pData, iLengthBytes, sError ) )
+			BlobAttrInput_e eInput = BlobAttrInput_e::RAW_BYTES;
+			if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+				eInput = BlobAttrInput_e::MVA_DWORD;
+			else if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
+				eInput = BlobAttrInput_e::MVA_INT64;
+
+			if ( !pBlobRowBuilder->SetAttr ( iBlobId, pData, iLengthBytes, eInput, sError ) )
 				return false;
 		}
 
@@ -1005,7 +1011,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 					DWORD uLength = tUpd.m_dPool[iPos++];
 					if ( iBlobId!=-1 )
 					{
-						pBlobRowBuilder->SetAttr ( iBlobId, (const BYTE *)(tUpd.m_dPool.Begin()+iPos), uLength*sizeof(DWORD), sError );
+						pBlobRowBuilder->SetAttr ( iBlobId, (const BYTE *)(tUpd.m_dPool.Begin()+iPos), uLength*sizeof(DWORD), BlobAttrInput_e::MVA_INT64, sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}
@@ -1020,8 +1026,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 					DWORD uLength = tUpd.m_dPool[iPos++];
 					if ( iBlobId!=-1 )
 					{
-
-						pBlobRowBuilder->SetAttr ( iBlobId, uLength?&tUpd.m_dBlobs[uOffset]:nullptr, uLength, sError );
+						pBlobRowBuilder->SetAttr ( iBlobId, uLength?&tUpd.m_dBlobs[uOffset]:nullptr, uLength, BlobAttrInput_e::RAW_BYTES, sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}
@@ -4702,7 +4707,7 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t
 		case SPH_ATTR_INT64SET:
 			{
 				const CSphVector<int64_t> * pMva = FetchMVA ( tDocId, i, tAttr, tMvaContainer, tSource, bForceSource );
-				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, pMva ? (const BYTE*)(pMva->Begin()) : nullptr, pMva ? pMva->GetLength()*sizeof(int64_t) : 0, sError );
+				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, pMva ? (const BYTE*)(pMva->Begin()) : nullptr, pMva ? pMva->GetLength()*sizeof(int64_t) : 0, BlobAttrInput_e::MVA_INT64, sError );
 			}
 			break;
 
@@ -4710,7 +4715,7 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t
 		case SPH_ATTR_JSON:
 			{
 				const CSphString & sStrAttr = tSource.GetStrAttr(i);
-				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, (const BYTE*)sStrAttr.cstr(), sStrAttr.Length(), sError );
+				bOk = tBlobRowBuilder.SetAttr ( iBlobAttr++, (const BYTE*)sStrAttr.cstr(), sStrAttr.Length(), BlobAttrInput_e::RAW_BYTES, sError );
 				if ( !bOk )
 					bFatal = tAttr.m_eAttrType==SPH_ATTR_JSON && g_bJsonStrict;
 			}

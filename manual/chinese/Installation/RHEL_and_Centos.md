@@ -1,65 +1,65 @@
-# 在 RedHat 和 CentOS 上安装 Manticore 软件包
+# Установка пакетов Manticore на RedHat и CentOS
 
-### 支持的发行版：
+### Поддерживаемые версии:
 
 * CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
 * CentOS 9, RHEL 9, AlmaLinux 9
-* AlmaLinux 10, 其他基于 RHEL 10 的发行版
+* AlmaLinux 10, другие дистрибутивы на базе RHEL 10
 
-### YUM 软件仓库
+### Репозиторий YUM
 
-在 RedHat/CentOS 上安装 Manticore 最简单的方法是使用我们的 YUM 软件仓库：
+Самый простой способ установить Manticore на RedHat/CentOS — использовать наш репозиторий YUM:
 
-安装软件仓库：
+Установите репозиторий:
 ```bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
-然后安装 Manticore Search：
+Затем установите Manticore Search:
 ```bash
 sudo yum install manticore manticore-extra
 ```
 
-如果您正在从旧版本升级到 Manticore 6，建议先移除旧的软件包，以避免因更新的软件包结构导致的冲突：
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
 
 ```bash
 sudo yum remove manticore*
 ```
 
-这不会移除您的数据和配置文件。
+Это не удалит ваши данные и файл конфигурации.
 
-###### 开发版软件包
-如果您偏好使用“Nightly”（开发）版本，请执行：
+###### Пакеты для разработки
+Если вы предпочитаете версии "Nightly" (разработческие), выполните:
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
 sudo yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera manticore-galera-debuginfo manticore-language-packs manticore-load
 ```
 
-### 独立的 RPM 软件包
-要从 Manticore 软件仓库下载独立的 RPM 文件，请按照 https://manticoresearch.com/install/ 上的说明操作。
+### Отдельные RPM-пакеты
+Чтобы скачать отдельные RPM-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
 
-### 您可能需要的更多软件包
-#### 对于索引器
-如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部源创建表，您需要确保已安装相应的客户端库，以便您想要使用的索引源可用。下面这行命令将一次性安装所有库；您可以原样使用它，或者缩减它只安装您需要的库（对于仅 MySQL 源 - 仅 `mysql-libs` 应该就足够了，并且 unixODBC 不是必需的）。
+### Дополнительные пакеты, которые могут понадобиться
+#### Для индексатора
+Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, необходимо убедиться, что установлены соответствующие клиентские библиотеки для обеспечения поддержки нужных вам источников индексации. В строке ниже они устанавливаются все сразу; вы можете использовать её как есть или сократить установку, оставив только необходимые библиотеки (для MySQL-источников достаточно только `mysql-libs`, unixODBC не обязателен).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
 
-在 CentOS Stream 8 中，您可能需要运行：
+В CentOS Stream 8 вам может понадобиться выполнить:
 
 ```
 dnf install mariadb-connector-c
 ```
 
-如果您在尝试从 MySQL 构建普通表时遇到错误 `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`。
+если при сборке plain-таблицы из MySQL вы получаете ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`.
 
-#### 乌克兰语词形还原器
-该词形还原器需要 Python 3.9+。**请确保您已安装它，并且它是使用 `--enable-shared` 配置的。**
+#### Украинский лемматизатор
+Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и сконфигурирован с опцией `--enable-shared`.**
 
-以下是在 Centos 8 中安装 Python 3.9 和乌克兰语词形还原器的方法：
+Вот как установить Python 3.9 и украинский лемматизатор в Centos 8:
 
 ```bash
 # install Manticore Search and UK lemmatizer from YUM repository

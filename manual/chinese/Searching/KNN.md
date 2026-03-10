@@ -756,8 +756,6 @@ POST /search
 
 <!-- end -->
 
-<!-- example knn_early_termination -->
-
 ### 早期终止
 
 默认情况下，Manticore 在 HNSW 图遍历期间使用自适应早期终止算法。它不会始终探索由 `ef` 定义的完整候选集，而是监控新候选者改进结果集的速率，并在该速率持续低于阈值时提前停止。这减少了距离计算次数，而不会显著影响结果质量。
@@ -766,6 +764,7 @@ POST /search
 
 请注意，过采样会乘以 HNSW 遍历期间使用的有效 `k`，因此早期终止也受益于过采样：更高的有效 `k` 意味着可能跳过的候选项更多。
 
+<!-- example knn_early_termination -->
 要显式控制早期终止，请使用 `early_termination` 选项：
 
 <!-- intro -->

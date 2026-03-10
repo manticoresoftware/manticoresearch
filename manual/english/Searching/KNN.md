@@ -756,8 +756,6 @@ POST /search
 
 <!-- end -->
 
-<!-- example knn_early_termination -->
-
 ### Early termination
 
 By default, Manticore uses an adaptive early termination algorithm during HNSW graph traversal. Instead of always exploring the full candidate set defined by `ef`, it monitors the rate at which new candidates improve the result set and stops early when that rate consistently falls below a threshold. This reduces the number of distance computations without significantly affecting result quality.
@@ -766,6 +764,7 @@ Early termination is enabled by default and is automatically disabled when `k` i
 
 Note that oversampling multiplies the effective `k` used during HNSW traversal, so early termination also benefits from oversampling: a higher effective `k` means more candidates to potentially skip.
 
+<!-- example knn_early_termination -->
 To explicitly control early termination, use the `early_termination` option:
 
 <!-- intro -->

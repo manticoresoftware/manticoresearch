@@ -145,13 +145,13 @@ if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
 fi
 
 manual_snapshot() {
-  LC_ALL=C find "$MANUAL_SRC" -type f -not -path '*/.git/*' -printf '%T@ %s %p\n' 2>/dev/null | LC_ALL=C sort | cksum | awk '{print $1}'
+  git diff | cksum | awk '{print $1}'
 }
 
 monitor_manual_changes() {
   local last_snapshot
   last_snapshot="$(manual_snapshot)"
-  printf "Watching '%s' for changes every %s seconds. Press Ctrl+C to stop.\n" "$MANUAL_SRC" "$MANUAL_POLL_INTERVAL"
+  printf "Watching '%s' for changes every %s seconds. Press Ctrl+C to stop watching.\n" "$MANUAL_SRC" "$MANUAL_POLL_INTERVAL"
   while true; do
     sleep "$MANUAL_POLL_INTERVAL"
     if ! run_docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
@@ -214,7 +214,7 @@ if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
   fi
 else
   ready=1
-  printf "Container '%s' is already running.\n" "$CONTAINER_NAME"
+  printf "Container '%s' is already running.\nUse --stop to stop it.\n" "$CONTAINER_NAME"
 fi
 
 cat <<EOF
@@ -246,3 +246,4 @@ EOF
 fi
 
 monitor_manual_changes
+echo 123

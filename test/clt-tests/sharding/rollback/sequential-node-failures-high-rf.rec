@@ -156,13 +156,11 @@ export INSTANCE=2
 ––– comment –––
 Make sure that rebalancing started
 ––– input –––
-timeout 40 grep -qm1 'Rebalancing due to cluster topology change' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
+timeout 20 grep -qm1 'Rebalancing due to cluster topology change' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
 ––– output –––
 0
-––– comment –––
-We are waiting here 60 cuz manticore is going through fatals and it takes really long
 ––– input –––
-timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
+timeout 20 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -194,9 +192,12 @@ mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 |    3 |
 +------+
 ––– input –––
-for i in 1 2 3 4 5; do mysql -h0 -P1306 -sN -e "show status like 'cluster_e8208d86b2139f1cb5dceee7a9b5f823_node_state'"; sleep 15; done
+for i in 1 2 3 4 5; do mysql -h0 -P1306 -sN -e "show status like 'cluster_e8208d86b2139f1cb5dceee7a9b5f823_node_state'"; sleep 5; done
 ––– output –––
 ––– input –––
-cat /var/log/manticore-1/searchd.log
+for i in 1 2 3 4 5; do mysql -h0 -P2306 -sN -e "show status like 'cluster_e8208d86b2139f1cb5dceee7a9b5f823_node_state'"; sleep 5; done
+––– output –––
+––– input –––
+cat /var/log/manticore-{1,2,3,4}/searchd.log
 ––– output –––
 

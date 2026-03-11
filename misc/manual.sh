@@ -246,4 +246,3 @@ EOF
 fi
 
 monitor_manual_changes
-echo 123

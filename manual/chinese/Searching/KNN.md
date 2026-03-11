@@ -186,7 +186,13 @@ table products_all {
 
 <!-- example inserting_embeddings -->
 
-使用自动嵌入时，**在 INSERT 语句中不要指定向量字段**。嵌入将根据 `FROM` 参数中指定的文本字段自动生成。
+使用自动嵌入时，您可以：
+
+- 省略向量字段，让 Manticore 从 `FROM` 中列出的字段生成嵌入
+- 为某一行显式提供自己的向量
+- 提供 `()` 以跳过生成并存储全零向量
+
+如果您之后运行 `ALTER TABLE ... REBUILD EMBEDDINGS`，当前通过 `()` 包含零向量的行也会被重新生成。
 
 <!-- intro -->
 ##### SQL:
@@ -200,6 +206,12 @@ INSERT INTO products (title) VALUES
 ('banana fruit sweet yellow');
 ```
 
+插入用户提供的向量
+```sql
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+```
+
 插入多个字段 - 如果FROM='title,description'，则两者都用于嵌入
 ```sql
 INSERT INTO products_openai (title, description) VALUES
@@ -207,7 +219,7 @@ INSERT INTO products_openai (title, description) VALUES
 ('laptop', 'portable computer for work and gaming');
 ```
 
-插入空向量（文档从向量搜索中排除）
+插入空向量（不自动生成；存储零向量）
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());

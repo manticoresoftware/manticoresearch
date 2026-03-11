@@ -186,7 +186,13 @@ table products_all {
 
 <!-- example inserting_embeddings -->
 
-When using auto embeddings, **do not specify the vector field** in your INSERT statement. The embeddings are generated automatically from the text fields specified in the `FROM` parameter.
+When using auto embeddings, you can:
+
+- Omit the vector field and let Manticore generate embeddings from the fields listed in `FROM`
+- Provide your own vector explicitly for a row
+- Provide `()` to skip generation and store an all-zero vector
+
+If you later run `ALTER TABLE ... REBUILD EMBEDDINGS`, rows that currently contain zero vectors from `()` are regenerated too.
 
 <!-- intro -->
 ##### SQL:
@@ -200,6 +206,12 @@ INSERT INTO products (title) VALUES
 ('banana fruit sweet yellow');
 ```
 
+Insert a user-provided vector
+```sql
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+```
+
 Insert multiple fields - both used for embedding if FROM='title,description'
 ```sql
 INSERT INTO products_openai (title, description) VALUES
@@ -207,7 +219,7 @@ INSERT INTO products_openai (title, description) VALUES
 ('laptop', 'portable computer for work and gaming');
 ```
 
-Insert empty vector (document excluded from vector search)
+Insert empty vector (no auto generation; stores a zero vector)
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());

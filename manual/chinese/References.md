@@ -478,7 +478,6 @@ index_converter {--config /path/to/config|--path}
   * [node_address](Server_settings/Searchd.md#node_address) - 指定节点的网络地址
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 到远程持久代理的持久连接最大数量
   * [pid_file](Server_settings/Searchd.md#pid_file) - Manticore 服务器 pid 文件路径
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - 查询时间预测模型的成本
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - 确定是否在启动时强制预打开所有表
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 为对普通表和实时表的搜索查询启用伪分片
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - 为缓存结果集分配的最大 RAM

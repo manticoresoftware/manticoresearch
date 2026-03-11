@@ -186,7 +186,13 @@ table products_all {
 
 <!-- example inserting_embeddings -->
 
-При использовании автоэмбеддингов **не указывайте векторное поле** в вашем операторе INSERT. Эмбеддинги генерируются автоматически из текстовых полей, указанных в параметре `FROM`.
+При использовании автоматических эмбеддингов вы можете:
+
+- Пропустить поле вектора и позволить Manticore сгенерировать эмбеддинги из полей, перечисленных в `FROM`
+- Явно предоставить собственный вектор для строки
+- Указать `()`, чтобы пропустить генерацию и сохранить вектор, состоящий из нулей
+
+Если позже вы запустите `ALTER TABLE ... REBUILD EMBEDDINGS`, строки, которые в данный момент содержат нулевые векторы из `()`, также будут перегенерированы.
 
 <!-- intro -->
 ##### SQL:
@@ -200,6 +206,12 @@ INSERT INTO products (title) VALUES
 ('banana fruit sweet yellow');
 ```
 
+Вставка пользовательского вектора
+```sql
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+```
+
 Вставка нескольких полей - оба используются для эмбеддинга, если FROM='title,description'
 ```sql
 INSERT INTO products_openai (title, description) VALUES
@@ -207,7 +219,7 @@ INSERT INTO products_openai (title, description) VALUES
 ('laptop', 'portable computer for work and gaming');
 ```
 
-Вставка пустого вектора (документ исключен из векторного поиска)
+Вставка пустого вектора (без автоматической генерации; сохраняется нулевой вектор)
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());

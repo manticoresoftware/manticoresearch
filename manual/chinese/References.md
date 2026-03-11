@@ -2,7 +2,7 @@
 
 ### SQL 命令
 ##### 模式管理
-* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - 创建新表
+* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_tablde.md#CREATE-TABLE-command:) - 创建新表
 * [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - 使用另一张表作为模板创建表
 * [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - 复制表
 * [CREATE SOURCE](Integration/Kafka.md#Source) - 创建 Kafka 消费者源

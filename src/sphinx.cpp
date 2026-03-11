@@ -1203,7 +1203,7 @@ public:
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
 	template <class QWORD>
-	static bool			MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, VecTraits_T<std::unique_ptr<CSphFixedVector<RowID_t>>> dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress );
+	static bool			MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const VecTraits_T<CSphFixedVector<RowID_t>> & dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress );
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
 	static bool			DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings );
 	std::unique_ptr<ISphFilter>		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
@@ -6716,7 +6716,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 }
 
 template <typename QWORD>
-bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, VecTraits_T<std::unique_ptr<CSphFixedVector<RowID_t>>> dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
+bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const VecTraits_T<CSphFixedVector<RowID_t>> & dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {
 	auto& tMonitor = tProgress.GetMergeCb();
 	assert ( dIndexes.GetLength()==dRowMaps.GetLength() );
@@ -6826,7 +6826,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, V
 			const int iSrc = dSame[0];
 			auto * pSrc = dSources[iSrc].get();
 			QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader );
-			tMerger.TransferData<QWORD> ( pSrc->m_tQword, pSrc->m_tReader.m_uWordID, pSrc->m_tReader.GetWord(), pSrc->m_pIndex, *dRowMaps[iSrc], tMonitor );
+			tMerger.TransferData<QWORD> ( pSrc->m_tQword, pSrc->m_tReader.m_uWordID, pSrc->m_tReader.GetWord(), pSrc->m_pIndex, dRowMaps[iSrc], tMonitor );
 		} else
 		{
 			bool bBaseHasHitlist = dSources[dSame[0]]->m_tReader.m_bHasHitlist;
@@ -6857,7 +6857,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, V
 			for ( int i = 0; i < dSame.GetLength(); ++i )
 			{
 				auto * pSrc = dSources[dSame[i]].get();
-				const auto & dRowMap = *dRowMaps[dSame[i]];
+				const auto & dRowMap = dRowMaps[dSame[i]];
 				while ( QwordIteration::NextDocument ( pSrc->m_tQword, pSrc->m_pIndex, dRowMap ) )
 				{
 					if ( tMonitor.NeedStop () || !sError.IsEmpty () )
@@ -7180,27 +7180,27 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 		}
 	}
 
-	CSphVector<std::unique_ptr<CSphFixedVector<RowID_t>>> dRowMaps;
+	RawVector_T<CSphFixedVector<RowID_t>> dRowMaps;
+	dRowMaps.Reserve_static  ( iIndexes );
 	CSphVector<DWORD> dAliveCounts;
-	dRowMaps.Reserve ( iIndexes );
 	dAliveCounts.Resize ( iIndexes );
 
 	int64_t iTotalDocs = 0;
 	for ( int i = 0; i < iIndexes; ++i )
 	{
 		const CSphIndex_VLN * pIndex = dIndexes[i];
-		dRowMaps.Add ( std::make_unique<CSphFixedVector<RowID_t>> ( pIndex->m_iDocinfo ) );
-		dRowMaps[i]->Fill ( INVALID_ROWID );
+		dRowMaps.Emplace_back ( pIndex->m_iDocinfo );
+		dRowMaps[i].Fill ( INVALID_ROWID );
 
 		int64_t iPrevDocs = iTotalDocs;
 		tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pIndex->m_iChunk );
 
-		for ( RowID_t uRow = 0; uRow < dRowMaps[i]->GetULength(); ++uRow )
+		for ( RowID_t uRow = 0; uRow < dRowMaps[i].GetULength(); ++uRow )
 		{
 			if ( pIndex->m_tDeadRowMap.IsSet(uRow) )
 				continue;
 
-			(*dRowMaps[i])[uRow] = (RowID_t)iTotalDocs++;
+			dRowMaps[i][uRow] = (RowID_t)iTotalDocs++;
 		}
 
 		tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pIndex->m_iChunk );
@@ -7229,11 +7229,11 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 			return false;
 
 		for ( int i = 0; i < iIndexes; ++i )
-			if ( !tAttrMerger.AnalyzeAttributes ( *dIndexes[i], *dRowMaps[i], dAliveCounts[i] ) )
+			if ( !tAttrMerger.AnalyzeAttributes ( *dIndexes[i], dRowMaps[i], dAliveCounts[i] ) )
 				return false;
 
 		for ( int i = 0; i < iIndexes; ++i )
-			if ( !tAttrMerger.CopyAttributes ( *dIndexes[i], *dRowMaps[i], dAliveCounts[i] ) )
+			if ( !tAttrMerger.CopyAttributes ( *dIndexes[i], dRowMaps[i], dAliveCounts[i] ) )
 				return false;
 
 		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )

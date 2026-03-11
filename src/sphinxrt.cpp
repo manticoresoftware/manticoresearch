@@ -10722,15 +10722,24 @@ int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 		return bKNN ? MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN : MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
 }
 
-struct PendingMerge_t : MergeGuardMulti_c
+struct MergeBuildState_t
 {
-	std::shared_ptr<Coro::Waitable_T<std::optional<MergeBuildResult_t>>> m_pWaitable;
-	CSphVector<ConstDiskChunkRefPtr_t> m_dChunks;
-	int64_t m_tmStart { 0 };
+	Coro::Waitable_T<bool> m_tReady { false };
+	MergeBuildResult_t m_tResult;
+};
+
+using MergeBuildStatePtr_t = std::shared_ptr<MergeBuildState_t>;
+
+struct PendingMerge_t
+{
+	MergeGuardMulti_c m_tOptimizeGuard;
+	MergeBuildStatePtr_t m_pBuildState;
+	CSphVector<ConstDiskChunkRefPtr_t> m_dSourceChunks;
+	int64_t m_tmScheduledAt { 0 };
 
 	PendingMerge_t() = default;
 	PendingMerge_t ( const VecTraits_T<ConstDiskChunkRefPtr_t> & dChunks )
-		: MergeGuardMulti_c ( dChunks )
+		: m_tOptimizeGuard ( dChunks )
 	{}
 };
 
@@ -10767,7 +10776,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 				// add chunks from all pending jobs to skip list to prevent duplicate selection
 				for ( const auto & tPendingJob : dPending )
 				{
-					for ( const auto & pChunk : tPendingJob.m_dChunks )
+					for ( const auto & pChunk : tPendingJob.m_dSourceChunks )
 					{
 						int iChunkId = pChunk->Cidx().m_iChunk;
 						dSkipIds.Add ( iChunkId );
@@ -10804,16 +10813,17 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 				RTDLOG << "Optimize: schedule merge chunks " << dChosenChunks.GetLength();
 
-				auto pWaitable = std::make_shared<Coro::Waitable_T<std::optional<MergeBuildResult_t>>>(std::nullopt);
+				auto pBuildState = std::make_shared<MergeBuildState_t>();
 				PendingMerge_t tJob ( dChosenChunks );
-				tJob.m_dChunks = dChosenChunks;
-				tJob.m_pWaitable = pWaitable;
-				tJob.m_tmStart = sphMicroTimer();
+				tJob.m_dSourceChunks = dChosenChunks;
+				tJob.m_pBuildState = pBuildState;
+				tJob.m_tmScheduledAt = sphMicroTimer();
 
-				auto fnMerge = [this, dChunks = dChosenChunks, pWaitable, sActionName] () mutable
+				auto fnMerge = [this, dChunks = dChosenChunks, pBuildState, sActionName] () mutable
 				{
 					auto pThdDesc = PublishSystemInfo ( "OPTIMIZE merge" );
-					pWaitable->SetValueAndNotifyOne ( std::make_optional ( BuildMergedChunkN ( sActionName, dChunks ) ) );
+					pBuildState->m_tResult = BuildMergedChunkN ( sActionName, dChunks );
+					pBuildState->m_tReady.SetValueAndNotifyOne ( true );
 				};
 				Threads::StartJob ( std::move ( fnMerge ), m_tWorkers.MergeWorker() );
 
@@ -10828,25 +10838,26 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 		PendingMerge_t tJob = std::move ( dPending.First() );
 		dPending.Remove ( 0 );
 
-		auto tBuilt = tJob.m_pWaitable->Wait ( [] ( const auto& opt ) { return opt.has_value(); } ).value();
+		tJob.m_pBuildState->m_tReady.Wait ( [] ( bool bReady ) { return bReady; } );
+		auto & tBuilt = tJob.m_pBuildState->m_tResult;
 
 		CSphString sLog;
 		bool bCanRun = MergeCanRun();
-		int64_t tmBuild = sphMicroTimer() - tJob.m_tmStart;
+		int64_t tmBuild = sphMicroTimer() - tJob.m_tmScheduledAt;
 		if ( !tBuilt.m_pMerged || tBuilt.m_pMonitor->NeedStop() )
 		{
-			CleanupFailedMerge ( tJob.m_dChunks, tBuilt );
+			CleanupFailedMerge ( tJob.m_dSourceChunks, tBuilt );
 			bWork = false;
 			continue;
 		}
 		int64_t tmFinalizeStart = sphMicroTimer();
-		bool bFinalize = FinalizeMergedChunkN ( sActionName, tJob.m_dChunks, tBuilt, &iAffected, &sLog );
+		bool bFinalize = FinalizeMergedChunkN ( sActionName, tJob.m_dSourceChunks, tBuilt, &iAffected, &sLog );
 		int64_t tmFinalize = sphMicroTimer() - tmFinalizeStart;
 		bWork &= bFinalize && bCanRun;
 
 		if ( bFinalize && bCanRun )
 		{
-			auto tmPass = sphMicroTimer() - tJob.m_tmStart;
+			auto tmPass = sphMicroTimer() - tJob.m_tmScheduledAt;
 			LogInfo ( "rt: table %s: merged chunks %s in %t (build %t: attrs %t, words %t, finalize %t; publish %t, progressive mode). Remaining chunk count: %d",
 				GetName(), sLog.cstr(), tmPass, tmBuild, tBuilt.m_tTimings.m_tmAttrs, tBuilt.m_tTimings.m_tmWords, tBuilt.m_tTimings.m_tmFinalize, tmFinalize, m_tRtChunks.GetDiskChunksCount() );
 		}
@@ -10857,9 +10868,10 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 	for ( auto & tJob : dPending )
 	{
 		// wait for the job to complete
-		auto tBuilt = tJob.m_pWaitable->Wait ( [] ( const auto& opt ) { return opt.has_value(); } ).value();
+		tJob.m_pBuildState->m_tReady.Wait ( [] ( bool bReady ) { return bReady; } );
+		auto & tBuilt = tJob.m_pBuildState->m_tResult;
 
-		CleanupFailedMerge ( tJob.m_dChunks, tBuilt );
+		CleanupFailedMerge ( tJob.m_dSourceChunks, tBuilt );
 	}
 	dPending.Reset();
 

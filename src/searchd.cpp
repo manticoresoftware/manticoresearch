@@ -152,10 +152,10 @@ CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
 static CSphString		g_sBuddyPath;
-static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
+static bool				g_bTelemetry = env_bool ( "MANTICORE_TELEMETRY" ).value_or ( true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
-static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static bool				g_bNoChangeCwd = env_exists ( "MANTICORE_NO_CHANGE_CWD" );
 static bool				g_bCwdChanged = false;
 static CSphString		g_sKbnVersion;
 static bool				g_bAttrAutoconvStrict = false;
@@ -167,7 +167,7 @@ ThreadRole HandlerThread; // thread which serves clients
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
-static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
+static const bool		LOG_LEVEL_SHUTDOWN = env_exists ("MANTICORE_TRACK_DAEMON_SHUTDOWN"); // verbose logging when daemon shutdown, ruled by this env variable
 static CSphString		g_sConfigPath; // for resolve paths to absolute
 static CSphString		g_sExePath;
 
@@ -13747,7 +13747,7 @@ void CheckSignals () REQUIRES ( MainThread )
 #endif
 }
 
-static bool g_bLoadInfo = val_from_env ( "MANTICORE_TRACE_LOAD", false );
+static bool g_bLoadInfo = env_exists ( "MANTICORE_TRACE_LOAD" );
 
 
 void TickHead () REQUIRES ( MainThread )
@@ -15054,7 +15054,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// init before workpool, as last checks binlog
 	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );
 	sphRTInit ( hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR ),
-		hSearchd.GetBool ( "binlog_common", val_from_env ( "MANTICORE_BINLOG_COMMON", false ) ),
+		hSearchd.GetBool ( "binlog_common", env_exists ( "MANTICORE_BINLOG_COMMON" ) ),
 		hConf("common") ? hConf["common"]("common") : nullptr );
 	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();

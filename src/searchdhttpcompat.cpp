@@ -33,7 +33,7 @@ static std::vector<CSphString> g_dKbnTablesNames { ".kibana_task_manager", ".apm
 static nljson::json_pointer g_tConfigTables ( "/dashboards/tables" );
 static nljson::json_pointer g_tMode ( "/dashboards/mode" );
 
-static bool LOG_LEVEL_COMPAT = val_from_env ( "MANTICORE_LOG_ES_COMPAT", false ); // verbose logging compat events, ruled by this env variable
+static const bool LOG_LEVEL_COMPAT = env_exists ( "MANTICORE_LOG_ES_COMPAT" ); // verbose logging compat events, ruled by this env variable
 #define LOG_COMPONENT_COMPATINFO ""
 #define COMPATINFO LOGINFO ( COMPAT, COMPATINFO )
 

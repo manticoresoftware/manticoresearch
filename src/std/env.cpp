@@ -23,38 +23,54 @@
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
-bool val_from_env ( const char* szEnvName, bool bDefault )
+[[nodiscard]] bool env_exists ( const char* szEnvName ) noexcept
 {
-	if ( getenv ( szEnvName ) )
-		return true;
-	return bDefault;
+	return getenv ( szEnvName )!=nullptr;
 }
 
-int val_from_env ( const char* szEnvName, int iDefault )
+[[nodiscard]] std::optional<bool> env_bool ( const char* szEnvName ) noexcept
 {
-	int iRes = iDefault;
 	const char* szEnv = getenv ( szEnvName );
-	if ( szEnv )
-	{
-		char* szEnd = nullptr;
-		iRes = strtol ( szEnv, &szEnd, 10 );
-		if ( *szEnd != '\0' )
-			sphWarning ( "%s expects to be numeric. %s provided, failed to parse as numeric since %s", szEnvName, szEnv, szEnd );
-	}
+	if (!szEnv)
+		return std::nullopt;
+
+	const auto sEnv = FromSz ( szEnv );
+
+	if ( StrEqN (sEnv,FROMS("true")) || StrEqN (sEnv,FROMS("yes")) || StrEqN (sEnv,FROMS("1")) )
+		return true;
+
+	if ( StrEqN (sEnv,FROMS("false")) || StrEqN (sEnv,FROMS("no")) || StrEqN (sEnv,FROMS("0")) )
+		return false;
+
+	sphWarning ( "%s expects to be boolean (true, false, yes, no, 1, or 0). %s provided, failed to parse as boolean", szEnvName, szEnv );
+	return std::nullopt;
+}
+
+[[nodiscard]] std::optional<long> env_long ( const char* szEnvName ) noexcept
+{
+	const char* szEnv = getenv ( szEnvName );
+	if (!szEnv)
+		return std::nullopt;
+
+	char* szEnd = nullptr;
+	auto iRes = ::strtol ( szEnv, &szEnd, 10 );
+	if ( *szEnd != '\0' )
+		sphWarning ( "%s expects to be numeric. %s provided, failed to parse as numeric since %s", szEnvName, szEnv, szEnd );
+
 	return iRes;
 }
 
-DWORD dwval_from_env ( const char* szEnvName, DWORD uDefault )
+[[nodiscard]] std::optional<unsigned long> env_ulong ( const char* szEnvName ) noexcept
 {
-	DWORD uRes = uDefault;
 	const char* szEnv = getenv ( szEnvName );
-	if ( szEnv )
-	{
-		char* szEnd = nullptr;
-		uRes = strtoul ( szEnv, &szEnd, 10 );
-		if ( *szEnd != '\0' )
-			sphWarning ( "%s expects to be numeric. %s provided, failed to parse as numeric since %s", szEnvName, szEnv, szEnd );
-	}
+	if (!szEnv)
+		return std::nullopt;
+
+	char* szEnd = nullptr;
+	auto uRes = ::strtoul ( szEnv, &szEnd, 10 );
+	if ( *szEnd != '\0' )
+		sphWarning ( "%s expects to be numeric. %s provided, failed to parse as numeric since %s", szEnvName, szEnv, szEnd );
+
 	return uRes;
 }
 

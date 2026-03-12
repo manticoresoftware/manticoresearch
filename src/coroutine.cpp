@@ -33,7 +33,7 @@ bool StackMockingAllowed()
 		return false;
 	}
 #endif
-	return !val_from_env ( "NO_STACK_CALCULATION", false );
+	return !env_exists ( "NO_STACK_CALCULATION" );
 }
 
 

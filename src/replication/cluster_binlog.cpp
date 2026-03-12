@@ -17,8 +17,8 @@
 
 #include "cluster_binlog.h"
 
-static bool g_bRplBinlogEnabled = ( val_from_env ( "MANTICORE_REPLICATION_BINLOG", 1 )!=0 );
-static bool LOG_LEVEL_RPLOG = val_from_env ( "MANTICORE_RPL_BINLOG", false ); // verbose logging for cluster binlog, ruled by this env variable
+static bool g_bRplBinlogEnabled = env_bool ( "MANTICORE_REPLICATION_BINLOG" ).value_or ( true );
+static bool LOG_LEVEL_RPLOG = env_exists ( "MANTICORE_RPL_BINLOG" ); // verbose logging for cluster binlog, ruled by this env variable
 
 struct ClusterTid_t
 {

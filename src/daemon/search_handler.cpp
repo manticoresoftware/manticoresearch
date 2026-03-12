@@ -22,7 +22,7 @@
 
 #include "std/string.h"
 
-static bool LOG_LEVEL_LOCAL_SEARCH = val_from_env ( "MANTICORE_LOG_LOCAL_SEARCH", false ); // verbose logging local search events, ruled by this env variable
+static const bool LOG_LEVEL_LOCAL_SEARCH = env_exists ( "MANTICORE_LOG_LOCAL_SEARCH" ); // verbose logging local search events, ruled by this env variable
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
 

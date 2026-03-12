@@ -62,7 +62,7 @@ static int g_iTask = 0;
 static const int g_iBuddyLoopSleep = 15;
 
 static const int g_iRestartMax = 3;
-static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
+static const int g_iStartMaxTimeout = env_long ( "MANTICORE_BUDDY_TIMEOUT" ).value_or ( 3 ); // max start timeout 3 sec
 
 static int g_iBuddyVersion = 3;
 static bool g_bBuddyVersion = false;

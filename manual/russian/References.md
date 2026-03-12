@@ -2,7 +2,7 @@
 
 ### SQL команды
 ##### Управление схемой
-* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Создает новую таблицу
+* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_tablde.md#CREATE-TABLE-command:) - Создает новую таблицу
 * [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Создает таблицу, используя другую как шаблон
 * [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Копирует таблицу
 * [CREATE SOURCE](Integration/Kafka.md#Source) - Создает источник потребителя Kafka

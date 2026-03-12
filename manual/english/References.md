@@ -2,7 +2,7 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Creates new table
+* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_tablde.md#CREATE-TABLE-command:) - Creates new table
 * [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Creates table using another one as a template
 * [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Copies a table
 * [CREATE SOURCE](Integration/Kafka.md#Source) - Create Kafka consumer source

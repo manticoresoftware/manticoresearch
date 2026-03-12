@@ -970,6 +970,7 @@ table products {
 
 ### Специфические настройки обработки естественного языка
 Поддерживаются следующие настройки. Все они описаны в разделе [НЛП и токенизация](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md).
+* [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)

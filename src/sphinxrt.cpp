@@ -5671,7 +5671,7 @@ void RtIndex_c::PostSetup()
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
-	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && m_tSettings.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( m_tSettings.m_eBigramIndex ) )
 	{
 		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( m_tSettings.m_sBigramWords.cstr() ), m_tSettings.m_sBigramWords.Length() );
 
@@ -5684,7 +5684,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_eBigramDelimiter, m_tSettings.m_sBigramWords, m_sLastError );
 
 	// hitless
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
@@ -10774,7 +10774,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
-	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( tSettings.m_tIndex.m_eBigramIndex ) )
 	{
 		pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( tSettings.m_tIndex.m_sBigramWords.cstr() ), tSettings.m_tIndex.m_sBigramWords.Length() );
 
@@ -10913,7 +10913,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_eBigramDelimiter, m_tSettings.m_sBigramWords, m_sLastError );
 
 	AlterSave ( false );
 	RaiseAlterGeneration();
@@ -10977,6 +10977,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( &tSettings.m_eHitless, sizeof(tSettings.m_eHitless), uHash );
 	uHash = sphFNV64 ( tSettings.m_sHitlessFiles.cstr(), tSettings.m_sHitlessFiles.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_eBigramIndex, sizeof(tSettings.m_eBigramIndex), uHash );
+	uHash = sphFNV64 ( &tSettings.m_eBigramDelimiter, sizeof(tSettings.m_eBigramDelimiter), uHash );
 	uHash = sphFNV64 ( tSettings.m_sBigramWords.cstr(), tSettings.m_sBigramWords.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_uAotFilterMask, sizeof(tSettings.m_uAotFilterMask), uHash );
 	uHash = sphFNV64 ( &tSettings.m_ePreprocessor, sizeof(tSettings.m_ePreprocessor), uHash );

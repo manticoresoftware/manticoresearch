@@ -134,6 +134,7 @@
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
 * [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
+* [bigram_delimiter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)

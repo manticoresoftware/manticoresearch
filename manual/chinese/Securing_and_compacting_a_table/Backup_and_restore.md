@@ -133,8 +133,8 @@ Manticore versions:
 
 | 参数 | 描述 |
 |-|-|
-| `--backup-dir=path` | 这是备份目录的路径，备份将存储在该目录中。目录必须已存在。此参数为必需且无默认值。每次备份运行时，manticore-backup 会在指定目录中创建一个带时间戳的子目录（`backup-[datetime]`），并将所有必需的表复制到该目录。因此，`--backup-dir` 是所有备份的容器，安全地多次运行该脚本。|
-| `--restore[=backup]` | 从`--backup-dir`恢复。仅使用--restore会列出可用备份。`--restore=backup`将从`<--backup-dir>/backup`恢复。|
+| `--backup-dir=path` | 备份目录路径，备份将在此处存储。该目录必须已经存在。此参数是必需的且没有默认值。每次运行备份时，`manticore-backup` 将在提供的目录中创建一个带有时间戳的子目录（`backup-[datetime]`），并将所有需要的表复制到其中。因此，`--backup-dir` 是所有备份的容器，并且可以安全地多次运行脚本。支持 S3 URL 格式 `s3://bucket/prefix` — 详情请参阅 [S3 存储支持](../Securing_and_compacting_a_table/Backup_and_restore.md#S3-storage-support)。|
+| `--restore[=backup]` | 从 `--backup-dir` 恢复。仅 `--restore` 列出可用的备份。`--restore=backup` 将从 `<--backup-dir>/backup` 恢复。适用于本地路径和 S3 URL。|
 | `--force` | 在恢复时跳过版本检查，并优雅地恢复备份。|
 | `--disable-telemetry` | 如果您想禁用向 Manticore 发送匿名指标，请使用此标志。您也可以使用环境变量 TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Manticore 配置文件路径。可选。如果未提供，则使用操作系统的默认配置。用于确定与 Manticore 守护进程通信的主机和端口。`manticore-backup` 工具支持[动态配置](../Server_settings/Scripted_configuration.md)文件。如果配置分散在多个文件中，可多次指定`--config`选项。|
@@ -143,6 +143,65 @@ Manticore versions:
 | `--unlock` | 在极少数情况下，当出现异常时，表可能被锁定。使用此参数解锁它们。|
 | `--version` | 显示当前版本。|
 | `--help` | 显示此帮助信息。|
+
+
+## S3 存储支持
+
+`manticore-backup` 支持直接将备份存储到/从 S3 兼容存储中，包括 AWS S3、MinIO、Wasabi、Cloudflare R2 等。只需将 `s3://bucket/prefix` URL 作为 `--backup-dir` 传递。
+
+### 配置
+
+在运行 `manticore-backup` 之前设置以下环境变量：
+
+| 变量 | 必需 | 描述 |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | 是 | AWS 访问密钥（或 `AWS_ACCESS_KEY`） |
+| `AWS_SECRET_ACCESS_KEY` | 是 | AWS 密钥（或 `AWS_SECRET_KEY`） |
+| `AWS_REGION` | 否 | AWS 区域（默认：`us-east-1`） |
+| `AWS_ENDPOINT_URL` | 否 | 自定义 S3 兼容端点 — **仅服务器 URL，不包含桶名**（例如，`http://localhost:9000`） |
+| `AWS_S3_ENCRYPTION` | 否 | 启用 SSE-S3 服务器端加密（默认：对于 AWS S3 为 `1`；对于 MinIO、R2 或其他自定义端点设为 `0`）|
+
+> ⚠️ `AWS_ENDPOINT_URL` 不应包含桶名。桶名将从 `s3://bucket/prefix` 参数中获取。在端点 URL 中包含桶名会导致每次请求中桶名被重复，并导致错误。
+>
+> ```
+> # 错误 — 桶 "mybucket" 在 URL 路径中重复
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com/mybucket
+>
+> # 正确 — 端点仅为服务器地址
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com
+> ```
+
+### 使用示例
+
+```bash
+# Backup to AWS S3 (SSE-S3 encryption enabled by default)
+export AWS_ACCESS_KEY_ID=your_key
+export AWS_SECRET_ACCESS_KEY=your_secret
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Restore from S3
+manticore-backup --restore --backup-dir=s3://my-bucket/backups
+manticore-backup --restore=backup-20221004171839 --backup-dir=s3://my-bucket/backups
+
+# Use with MinIO (disable encryption)
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ENDPOINT_URL=http://localhost:9000
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Use with Cloudflare R2
+export AWS_ACCESS_KEY_ID=your_r2_access_key
+export AWS_SECRET_ACCESS_KEY=your_r2_secret_key
+export AWS_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+export AWS_REGION=auto
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+```
+
+### 所需的 S3 权限
+
+备份需要 `s3:PutObject`，恢复需要 `s3:GetObject`，列出可用的恢复点需要 `s3:ListBucket`。
 
 ## BACKUP SQL 命令参考
 

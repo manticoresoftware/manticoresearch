@@ -8915,7 +8915,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 
 	// post-load stuff.. for now, bigrams
 	CSphIndexSettings & s = m_tSettings;
-	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && s.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( s.m_eBigramIndex ) )
 	{
 		BYTE * pTok;
 		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( s.m_sBigramWords.cstr() ), s.m_sBigramWords.Length() );
@@ -9072,7 +9072,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 
 	// post-load stuff.. for now, bigrams
 	CSphIndexSettings & s = m_tSettings;
-	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && s.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( s.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( s.m_eBigramIndex ) )
 	{
 		BYTE * pTok;
 		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( s.m_sBigramWords.cstr() ), s.m_sBigramWords.Length() );
@@ -10652,7 +10652,8 @@ static void TagExcluded ( XQNode_t * pNode, bool bNot )
 static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
 {
 	assert ( tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
-	assert ( tSettings.m_eBigramIndex==SPH_BIGRAM_ALL || tSettings.m_dBigramWords.GetLength() );
+	assert ( tSettings.m_eBigramDelimiter!=BigramDelimiter_e::BOTH );
+	assert ( !BigramNeedsFreq ( tSettings.m_eBigramIndex ) || tSettings.m_dBigramWords.GetLength() );
 
 	if ( pNode->GetOp()!=SPH_QUERY_PHRASE )
 	{
@@ -10661,6 +10662,7 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 		return;
 	}
 
+	const bool bConcat = ( tSettings.m_eBigramDelimiter==BigramDelimiter_e::NONE );
 	CSphBitvec bmRemove;
 	bmRemove.Init ( pNode->dWords().GetLength() );
 
@@ -10670,27 +10672,39 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 		bool bBigram = false;
 		switch ( tSettings.m_eBigramIndex )
 		{
-			case SPH_BIGRAM_NONE:
-				break;
-			case SPH_BIGRAM_ALL:
-				bBigram = true;
-				break;
-			case SPH_BIGRAM_FIRSTFREQ:
-				bBigram = tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i).m_sWord )!=nullptr;
-				break;
-			case SPH_BIGRAM_BOTHFREQ:
-				bBigram =
-					tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i).m_sWord )!=nullptr
-					&& tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i+1).m_sWord )!=nullptr;
-				break;
+		case SPH_BIGRAM_ALL:
+			bBigram = true;
+			break;
+
+		case SPH_BIGRAM_FIRSTFREQ:
+			bBigram = tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i).m_sWord )!=nullptr;
+			break;
+
+		case SPH_BIGRAM_BOTHFREQ:
+			bBigram = tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i).m_sWord )!=nullptr
+				&& tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i+1).m_sWord )!=nullptr;
+			break;
+
+		case SPH_BIGRAM_SECONDNUMERIC:
+		case SPH_BIGRAM_SECONDHASDIGIT:
+			bBigram = BigramIsSecondDigit ( tSettings.m_eBigramIndex, (const BYTE *)pNode->dWord(i+1).m_sWord.cstr(), pNode->dWord(i+1).m_sWord.Length() );
+			break;
+
+		case SPH_BIGRAM_NONE:
+			break;
 		}
 		if ( !bBigram )
+			continue;
+		if ( pNode->dWord(i).m_sWord.Length() + pNode->dWord(i+1).m_sWord.Length() + ( bConcat ? 0 : 1 ) > SPH_MAX_WORD_LEN )
 			continue;
 
 		// replace the pair with a bigram keyword
 		// FIXME!!! set phrase weight for this "word" here
-		pNode->WithWords ( [i] (auto& dWords) {
-			dWords[i].m_sWord.SetSprintf ( "%s%c%s", dWords[i].m_sWord.cstr(), MAGIC_WORD_BIGRAM, dWords[i+1].m_sWord.cstr() );
+		pNode->WithWords ( [i,bConcat] (auto& dWords) {
+			if ( bConcat )
+				dWords[i].m_sWord.SetSprintf ( "%s%s", dWords[i].m_sWord.cstr(), dWords[i+1].m_sWord.cstr() );
+			else
+				dWords[i].m_sWord.SetSprintf ( "%s%c%s", dWords[i].m_sWord.cstr(), MAGIC_WORD_BIGRAM, dWords[i+1].m_sWord.cstr() );
 		});
 
 
@@ -10724,7 +10738,7 @@ bool sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 	( *ppNode )->Check ( true );
 	TransformNear ( ppNode );
 	( *ppNode )->Check ( true );
-	if ( tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE )
+	if ( tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_eBigramDelimiter!=BigramDelimiter_e::BOTH )
 		TransformBigrams ( *ppNode, tSettings );
 	TagExcluded ( *ppNode, false );
 	( *ppNode )->Check ( true );

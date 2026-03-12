@@ -1053,7 +1053,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 
 		// bigram filter
-		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_sBigramWords, sError );
+		Tokenizer::AddBigramFilterTo ( pTokenizer, tSettings.m_eBigramIndex, tSettings.m_eBigramDelimiter, tSettings.m_sBigramWords, sError );
 		if ( !sError.IsEmpty() )
 			sphDie ( "table '%s': %s", szIndexName, sError.cstr() );
 

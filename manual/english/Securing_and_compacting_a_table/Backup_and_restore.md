@@ -201,31 +201,7 @@ manticore-backup --backup-dir=s3://my-bucket/backups
 
 ### Required S3 permissions
 
-For **backup** (write operations):
-- `s3:PutObject` — upload files to S3
-
-For **restore** (read operations):
-- `s3:GetObject` — download files from S3
-
-The tool uses a `manifest.json` file to track all files in a backup, so restore works without `s3:ListBucket` permission. Backups created with older versions that lack a manifest file will require `s3:ListBucket` for restore.
-
-**Minimal IAM policy example:**
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject"
-      ],
-      "Resource": "arn:aws:s3:::my-bucket/*"
-    }
-  ]
-}
-```
+The backup requires `s3:PutObject`, restore requires `s3:GetObject`, and listing available restore points requires `s3:ListBucket`.
 
 ## BACKUP SQL command reference
 

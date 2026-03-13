@@ -2295,6 +2295,7 @@ struct BulkDoc_t
 {
 	CSphString m_sAction;
 	CSphString m_sIndex;
+	CSphString m_sCluster;
 	DocID_t m_tDocid { 0 };
 	Str_t m_tDocLine;
 };
@@ -3036,7 +3037,11 @@ static bool ParseMetaLine ( const char * sLine, BulkDoc_t & tDoc, CSphString & s
 		return false;
 
 	tDoc.m_sIndex = tIndex.StrVal();
-	
+
+	JsonObj_c tCluster = tAction.GetItem ( "_cluster" );
+	if ( tCluster && tCluster.IsStr() )
+		tDoc.m_sCluster = tCluster.StrVal();
+
 	JsonObj_c tId = tAction.GetItem ( "_id" );
 	if ( tId )
 	{
@@ -3135,8 +3140,9 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 		return false;
 	}
 
-	// _bulk could have cluster:index format
-	SqlParser_SplitClusterIndex ( tStmt.m_sIndex, &tStmt.m_sCluster );
+	// _bulk could have either cluster:index format or _cluster property
+	if ( tStmt.m_sCluster.IsEmpty() )
+		SqlParser_SplitClusterIndex ( tStmt.m_sIndex, &tStmt.m_sCluster );
 
 	return true;
 }
@@ -3378,6 +3384,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			SqlStmt_t tStmt;
 			tStmt.m_tQuery.m_sIndexes = tDoc.m_sIndex;
 			tStmt.m_sIndex = tDoc.m_sIndex;
+			tStmt.m_sCluster = tDoc.m_sCluster;
 			tStmt.m_sStmt = tDoc.m_tDocLine.first;
 
 			bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc.m_sAction, tStmt, tDoc.m_tDocid, m_sError );

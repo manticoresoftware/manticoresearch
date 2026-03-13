@@ -1,0 +1,86 @@
+Test Buddy master takeover - cluster survives node failure with RF=2
+––– comment –––
+Start 3-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create table with RF=2 (each shard has 2 copies for HA) - auto-sharding creates cluster c
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:${TABLE_NAME} (id bigint, value string) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:1312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:1312 127.0.0.1:2312
+––– comment –––
+Kill master node (node 1) - Buddy will detect and handle failover
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 killed"
+––– output –––
+Node 1 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Verify remaining 2 nodes are still synced (RF=2 maintained)
+––– input –––
+for i in 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify that shards was rebalanced
+––– input –––
+show_shards 2306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:2312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+Restart killed node (node 1)
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Give some time for node to rejoin and resync
+––– input –––
+sleep 2
+––– output –––
+––– comment –––
+Check that cluster is synced
+––– input –––
+for i in 1 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+At this point we should not rebalance old table on new node addition
+––– input –––
+show_shards 2306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:2312 127.0.0.1:3312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+

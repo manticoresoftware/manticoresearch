@@ -379,7 +379,12 @@ include ( SetBuildType )
 diag ( installed )
 if (NOT installed) # GNUInstallDirs wasn't yet included...
 	include ( GNUInstallDirs )
-	SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}" ) # will be used also in the app
+	# FreeBSD uses /var/db instead of /var/lib for data directories
+	if (DISTR AND DISTR MATCHES "^freebsd")
+		SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/db/manticore" ) # will be used also in the app
+	else ()
+		SET ( LOCALDATADIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}" ) # will be used also in the app
+	endif ()
 	if (WIN32)
 		set ( CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc" )
 		SET ( FULL_SHARE_DIR "${CMAKE_INSTALL_FULL_DATADIR}" )
@@ -400,7 +405,12 @@ if (NOT installed) # GNUInstallDirs wasn't yet included...
 		SET ( CMAKE_INSTALL_FULL_LOCALLIBDIR "${CMAKE_INSTALL_FULL_LIBDIR}" )
 		install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT common )
 		install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
-		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT common )
+		# FreeBSD uses /var/db instead of /var/lib for data directories
+		if (DISTR AND DISTR MATCHES "^freebsd")
+			install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/db/manticore COMPONENT common )
+		else ()
+			install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT common )
+		endif ()
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT searchd )
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT searchd )
 		if (WITH_ICU AND WITH_ICU_FORCE_STATIC)

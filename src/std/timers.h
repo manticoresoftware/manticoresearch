@@ -20,7 +20,7 @@ int64_t sphMicroTimer();
 
 /// monotonic microsecond precision timestamp
 /// value of CLOCK_MONOTONIC source
-int64_t MonoMicroTimer();
+uint64_t MonoMicroTimer();
 
 /// return cpu time, in microseconds. CLOCK_THREAD_CPUTIME_ID, or CLOCK_PROCESS_CPUTIME_ID or fall to sphMicroTimer().
 /// defined in searchd.cpp since depends from g_bCpuStats

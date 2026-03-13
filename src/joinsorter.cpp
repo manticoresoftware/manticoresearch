@@ -1196,8 +1196,8 @@ void JoinSorter_c::RepackJsonFieldAsStr ( const CSphMatch & tSrcMatch, const CSp
 	CSphString sResult = FormatJsonAsSortStr ( pVal, eJson );
 	int iStrLen = sResult.Length();
 	BYTE * pData = nullptr;
-	SphAttr_t uValue = (SphAttr_t) sphPackPtrAttr ( iStrLen+1, &pData );
-	memcpy ( pData, sResult.cstr(), iStrLen+1 );
+	SphAttr_t uValue = (SphAttr_t) sphPackPtrAttr ( iStrLen, &pData );
+	memcpy ( pData, sResult.cstr(), iStrLen );
 
 	m_tMatch.SetAttr ( tLocDst, uValue );
 }

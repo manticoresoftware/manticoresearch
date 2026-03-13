@@ -1313,7 +1313,7 @@ function RunCurl ( $curl_desc, &$rows )
 	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
 
-	curl_close($con);
+	@curl_close($con);
 
 	return $http_code;
 }

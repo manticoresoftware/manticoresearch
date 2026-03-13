@@ -881,7 +881,30 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 	assert(pKNNDistRescore);
 
 	MatchSortRescore_fn tRescore ( pKNNDistRescore->m_tLocator );
-	sphSort ( dMatches.Begin(), dMatches.GetLength(), tRescore, MatchSortAccessor_t() );
+	CSphVector<int> dOrder;
+	dOrder.Resize ( iCopied );
+	for ( int i = 0; i < iCopied; i++ )
+		dOrder[i] = i;
+
+	std::stable_sort ( dOrder.Begin(), dOrder.Begin() + iCopied, [&dMatches, &tRescore] ( int iA, int iB )
+	{
+		return tRescore.IsLess ( &dMatches[iA], &dMatches[iB] );
+	} );
+
+	// dDst[old_pos] = new_pos
+	CSphVector<int> dDst;
+	dDst.Resize ( iCopied );
+	for ( int i = 0; i < iCopied; i++ )
+		dDst[dOrder[i]] = i;
+
+	// Apply permutation in place using swaps.
+	for ( int i = 0; i < iCopied; i++ )
+		while ( dDst[i]!=i )
+		{
+			int iDst = dDst[i];
+			Swap ( dMatches[i], dMatches[iDst] );
+			::Swap ( dDst[i], dDst[iDst] );
+		}
 
 	// copy rescored dist to old dist
 	for ( auto & tMatch : dMatches )

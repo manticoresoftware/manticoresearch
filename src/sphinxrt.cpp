@@ -12090,6 +12090,7 @@ bool RtIndex_c::ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpda
 		if ( dRamRows.IsEmpty() )
 			continue;
 
+		SccRL_t rLock ( pRamSeg->m_tLock );
 		const BYTE * pBlobBase = pRamSeg->m_dBlobs.Begin();
 		for ( const auto & tRow : dRamRows )
 		{

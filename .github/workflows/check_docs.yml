@@ -3,11 +3,16 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
-  workflow_run:
-    workflows: 
-      - 📖 Trigger doc check
-    types:
-      - completed
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Repository to check out for docs validation
+        required: true
+        type: string
+      ref:
+        description: Ref to check out for docs validation
+        required: true
+        type: string
 
 jobs:
   translate_docs:
@@ -22,21 +27,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Download an artifact with PR repo name
-        if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-          name: pr_repo
-          path: .
       - name: Check origin repository
         id: repo-check
         run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            PR_REPO=$(cat ./pr_repo.txt)
-            repo=$(head -n 1 <<< "$PR_REPO")
-            ref=$(tail -n 1 <<< "$PR_REPO")
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            repo="${{ inputs.repo }}"
+            ref="${{ inputs.ref }}"
           else
             repo="${{ github.repository }}"
             ref="${{ github.head_ref }}"
@@ -110,12 +106,12 @@ jobs:
       - name: Check origin repository
         id: repo-check
         run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            repo="${{ needs.translate_docs.outputs.repo }}"
-            ref="${{ needs.translate_docs.outputs.ref }}"
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
             repo="${{ github.event.pull_request.head.repo.full_name }}"
             ref="${{ github.head_ref }}"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            repo="${{ inputs.repo }}"
+            ref="${{ inputs.ref }}"
           else
             repo="${{ github.repository }}"
             ref="${{ github.head_ref || github.ref_name }}"

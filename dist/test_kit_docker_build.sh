@@ -86,6 +86,11 @@ do
 		break
 	fi
 
+	if [[ "$line" =~ ^galera[[:space:]] ]]; then
+		echo "Skipping galera: no need to handle it explicitly"
+		continue
+	fi
+
     if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)(-?[a-zA-Z0-9]+)?$ ]]; then
         # Format: <package> <version>+<date>-<commit>[-<optional_suffix>]
         package="${BASH_REMATCH[1]}"

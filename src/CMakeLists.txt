@@ -313,11 +313,13 @@ if (SPLIT_SYMBOLS)
 	split_dbg ( index_converter )
 endif ()
 
-INSTALL ( TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT searchd )
+# These targets remain in their split components, but bundle builds stage the
+# same payload into the bundle component too via install_component_and_bundle().
+install_component_and_bundle ( searchd TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
 if (NOT STATIC_BINARY)
-	INSTALL ( TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT tools )
-	INSTALL ( TARGETS index_converter RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT converter )
-	INSTALL ( FILES sphinxudf.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manticore COMPONENT devel )
+	install_component_and_bundle ( tools TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
+	install_component_and_bundle ( converter TARGETS index_converter RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
+	install_component_and_bundle ( devel FILES sphinxudf.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manticore )
 endif ()
 
 # install windows runtime libraries - for final targets, and also for immediate testing
@@ -326,13 +328,14 @@ if (WIN32)
 	include ( InstallRequiredSystemLibraries )
 	addruntime ( "${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}" common )
 	getruntime ( libs common )
-	install ( PROGRAMS ${libs} DESTINATION bin COMPONENT common )
+	# Windows bundle archives need the same redistributables as the split packages.
+	install_component_and_bundle ( common PROGRAMS ${libs} DESTINATION bin )
 	unset ( libs )
 	getruntime ( libs daemon )
-	install ( PROGRAMS ${libs} DESTINATION bin COMPONENT searchd )
+	install_component_and_bundle ( searchd PROGRAMS ${libs} DESTINATION bin )
 	unset ( libs )
 	getruntime ( libs indexer )
-	install ( PROGRAMS ${libs} DESTINATION bin COMPONENT tools )
+	install_component_and_bundle ( tools PROGRAMS ${libs} DESTINATION bin )
 	if (BUILD_TESTING)
 #		getruntime ( libs indexer ) # is just set above
 		getruntime ( libs common )

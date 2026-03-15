@@ -185,6 +185,16 @@ function ( win_install Package suffix )
 	win_install_c ( ${Package} ${Package} ${suffix} )
 endfunction ()
 
+# When PACK_BUNDLE=1, install the same content to both the given component and the "bundle" component
+# Usage: install_component_and_bundle(component_name <install args without COMPONENT>)
+# Example: install_component_and_bundle(searchd TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+macro ( install_component_and_bundle _comp )
+	install ( ${ARGN} COMPONENT ${_comp} )
+	if ( PACK_BUNDLE )
+		install ( ${ARGN} COMPONENT bundle )
+	endif ()
+endmacro ()
+
 function ( dl_package_comp Package Component NAME )
 	string ( TOUPPER "${Package}" PACKAGE )
 	if (NOT WITH_${PACKAGE} OR NOT (HAVE_DLOPEN OR WIN32))

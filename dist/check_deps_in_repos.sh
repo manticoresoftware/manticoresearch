@@ -58,6 +58,7 @@ declare -a urls=(
 SKIP_CHECKS=(
   "executor:windows-x64.html"
   "tzdata:macos.html"
+  "galera:windows-x64.html"
 )
 
 should_skip() {
@@ -109,6 +110,7 @@ while IFS=" " read -r package version_string date hash suffix || [ -n "$package"
     mcl) real_name="manticore-columnar-lib" ;;
     tzdata) real_name="manticore-tzdata" ;;
     executor) real_name="manticore-executor" ;;
+    galera) real_name="manticore-galera" ;;
     *) real_name="$package" ;;
   esac
 
@@ -130,6 +132,9 @@ while IFS=" " read -r package version_string date hash suffix || [ -n "$package"
 
   if [ "$version_format" = "plus" ]; then
     search_pattern="${real_name}[-_]${version_escaped}(\\+|%2B)[0-9]+[-.]${search_substring}([-.]dev)?([-._a-z0-9]+)?\\.(deb|rpm|tar\\.gz|zip)"
+  elif [ -z "$search_substring" ]; then
+    # Simple version only (e.g. galera 3.37): match _3.37_amd64.deb, -3.37-1.el8.x86_64.rpm, -3.37-Darwin-osx11.6-arm64.tar.gz
+    search_pattern="${real_name}[-_]${version_escaped}([-_][-a-zA-Z0-9._]+)?\\.(deb|rpm|tar\\.gz|zip)"
   else
     search_pattern="${real_name}[-_]${version_escaped}[-_][0-9]+[-.]${search_substring}([-.]dev)?([-._a-z0-9]+)?\\.(deb|rpm|tar\\.gz|zip)"
   fi

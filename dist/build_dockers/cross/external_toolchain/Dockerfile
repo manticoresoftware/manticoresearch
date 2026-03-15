@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     software-properties-common \
     rpm \
+    cpio \
     elfutils \
     nsis \
     zip \
@@ -65,7 +66,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64 --push -t manticoresearch/external_toolchain:vcpkg331_20250114 .
+# docker buildx build --platform linux/amd64 --push -t manticoresearch/external_toolchain:vcpkg331_20260310 .
 
 # deprecated:
 # on amd:

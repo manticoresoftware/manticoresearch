@@ -1,8 +1,9 @@
-name: 📖 Trigger doc check
-run-name: 📖 Trigger doc check ${{ github.sha }}
+name: 📖 Route doc check
+run-name: 📖 Route doc check ${{ github.sha }}
 
 # We use this intermediate workflow to workaround the issue with repo secrets unavailable for PR-s from external repos
-# The `check_docs` workflow use this one for its `workflow_run` event which let it run without errors
+# Trusted contributors can run the docs check directly through `workflow_call`.
+# External PRs still need an out-of-band trigger because repository secrets are unavailable there.
 on:
   pull_request:
     paths:
@@ -12,24 +13,74 @@ on:
       - manticore-*
 
 jobs:
-  trigger_doc_check:
+  check_permissions:
     runs-on: ubuntu-24.04
+    outputs:
+      can_run_inline: ${{ steps.permission-check.outputs.can_run_inline }}
     defaults:
       run:
         shell: bash
     steps:
-      - name: Save PR repo
-        env:
-          PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          PR_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          echo $PR_REPO > pr_repo.txt
-          echo $PR_REF >> pr_repo.txt
-      - name: Upload PR repo name
-        uses: actions/upload-artifact@v4
+      - name: Check whether docs check can run inline
+        id: permission-check
+        uses: actions/github-script@v7
         with:
-          name: pr_repo
-          path: ./pr_repo.txt
-      - name: Trigger doc check
-        run: |
-          echo "Doc check triggered"
+          script: |
+            const headRepo = context.payload.pull_request.head.repo.full_name;
+            const baseRepo = context.repo.owner + '/' + context.repo.repo;
+            const actor = context.actor;
+
+            if (headRepo !== baseRepo) {
+              core.info(`PR head repository ${headRepo} differs from base repository ${baseRepo}; using workflow_run fallback.`);
+              core.setOutput('can_run_inline', 'false');
+              return;
+            }
+
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: actor,
+              });
+              const allowedPermissions = new Set(['admin', 'write', 'maintain']);
+              const canRunInline = allowedPermissions.has(data.permission);
+
+              core.info(`Actor ${actor} has ${data.permission} permission on ${baseRepo}.`);
+              core.setOutput('can_run_inline', String(canRunInline));
+            } catch (error) {
+              core.warning(`Failed to resolve permission for ${actor}: ${error.message}`);
+              core.setOutput('can_run_inline', 'false');
+            }
+
+  check_docs_inline:
+    needs: check_permissions
+    if: needs.check_permissions.outputs.can_run_inline == 'true'
+    uses: ./.github/workflows/check_docs.yml
+    secrets: inherit
+
+  trigger_doc_check:
+    needs: check_permissions
+    if: needs.check_permissions.outputs.can_run_inline != 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Dispatch docs check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'check_docs.yml',
+              ref: context.payload.pull_request.base.ref,
+              inputs: {
+                repo: context.payload.pull_request.head.repo.full_name,
+                ref: context.payload.pull_request.head.ref,
+              },
+            });
+
+            core.info(`Dispatched check_docs.yml for ${context.payload.pull_request.head.repo.full_name}@${context.payload.pull_request.head.ref}.`);

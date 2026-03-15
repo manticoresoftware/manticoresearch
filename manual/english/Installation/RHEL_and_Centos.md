@@ -34,7 +34,7 @@ If you prefer "Nightly" (development) versions do:
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --enablerepo manticore-dev install manticore
+sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
 ```
 
 ### Standalone RPM packages
@@ -86,4 +86,3 @@ pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
-

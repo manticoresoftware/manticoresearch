@@ -73,8 +73,4 @@ apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
 dpkg -l | grep ^rc | awk '/^rc/ && /manticore/ { print $2 }'
 ––– output –––
 manticore
-manticore-common
 manticore-repo
-manticore-server
-manticore-server-core
-manticore-tools

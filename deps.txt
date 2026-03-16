@@ -9,4 +9,3 @@ galera 3.37
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.
 You can find proper values for each dep on https://repo.manticoresearch.com
-You can find proper values for each dep on https://repo.manticoresearch.com

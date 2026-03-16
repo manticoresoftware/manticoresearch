@@ -16,7 +16,7 @@ lemmatizer_base = /usr/share/manticore/
 progressive_merge
 ------------------
 
-The progressive_merge is a configuration directive that, when enabled, merges real-time table disk chunks from smaller to larger ones. This approach speeds up the merging process and reduces read/write amplification. By default, this setting is enabled. If disabled, the chunks are merged in the order they were created.
+The progressive_merge is a configuration directive that, when enabled, merges real-time table disk chunks from smaller to larger ones. This approach speeds up the merging process and reduces read/write amplification. This setting is always enabled, and left in configuration only for backward compatibility.
 
 json_autoconv_keynames
 ------------------------

@@ -135,6 +135,7 @@ bool				sphIsDataPtrAttr ( ESphAttr eAttrType );
 
 // just repack (matter of optimizing)
 BYTE *				sphCopyPackedAttr ( const BYTE * pData );
+BYTE *				sphCopyPackedTdigestAttr ( const BYTE * pData );
 
 //////////////////////////////////////////////////////////////////////////
 // misc attribute-related
@@ -160,6 +161,7 @@ FORCE_INLINE DocID_t sphGetDocID ( const CSphRowitem * pData )
 }
 
 void				sphDeallocatePacked ( const BYTE* pBlob );
+void				sphDeallocatePackedTdigest ( const BYTE * pBlob );
 
 const char * AttrType2Str ( ESphAttr eAttrType );
 

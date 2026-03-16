@@ -38,7 +38,10 @@ void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVec
 	{
 		assert ( bDynamic );
 		iBits = ROWITEMPTR_BITS;
-		m_dDataPtrAttrs.Add ( dUsed.GetLength() );
+		DataPtrAttr_t tDesc;
+		tDesc.m_iRowitem = dUsed.GetLength();
+		tDesc.m_eType = tCol.m_eAttrType;
+		m_dDataPtrAttrs.Add ( tDesc );
 	}
 
 	tLoc.m_iBitCount = iBits;
@@ -122,24 +125,35 @@ void CSphSchemaHelper::CopyPtrs ( CSphMatch& tDst, const CSphMatch& rhs ) const
 	CopyPtrsSpecial ( tDst, rhs, m_dDataPtrAttrs );
 }
 
-CSphVector<int> CSphSchemaHelper::SubsetPtrs ( CSphVector<int>& dDiscarded ) const
+CSphVector<DataPtrAttr_t> CSphSchemaHelper::SubsetPtrs ( CSphVector<int>& dDiscarded ) const
 {
-	CSphVector<int> dFiltered;
+	CSphVector<DataPtrAttr_t> dFiltered;
 	dDiscarded.Uniq();
-	for ( int iPtr : m_dDataPtrAttrs )
-		if ( !dDiscarded.BinarySearch ( iPtr ) )
-			dFiltered.Add ( iPtr );
-	dFiltered.Uniq();
+	for ( const auto & tPtr : m_dDataPtrAttrs )
+		if ( !dDiscarded.BinarySearch ( tPtr.m_iRowitem ) )
+			dFiltered.Add ( tPtr );
 	return dFiltered;
 }
 
 
-void CSphSchemaHelper::MovePtrsSpecial ( CSphMatch& tDst, CSphMatch& tSrc, const VecTraits_T<int>& dSpecials )
+bool CSphSchemaHelper::DescribePtrRow ( int iRowitem, DataPtrAttr_t & tDesc ) const
+{
+	for ( const auto & tPtr : m_dDataPtrAttrs )
+		if ( tPtr.m_iRowitem==iRowitem )
+		{
+			tDesc = tPtr;
+			return true;
+		}
+	return false;
+}
+
+
+void CSphSchemaHelper::MovePtrsSpecial ( CSphMatch& tDst, CSphMatch& tSrc, const VecTraits_T<DataPtrAttr_t>& dSpecials )
 {
 	auto pSrc = tSrc.m_pDynamic;
 	assert ( pSrc || dSpecials.IsEmpty() );
-	for ( auto i : dSpecials ) {
-		memcpy ( tDst.m_pDynamic + i, pSrc + i, sizeof ( BYTE* ) );
-		*(BYTE**)( pSrc + i ) = nullptr;
+	for ( const auto & tDesc : dSpecials ) {
+		memcpy ( tDst.m_pDynamic + tDesc.m_iRowitem, pSrc + tDesc.m_iRowitem, sizeof ( BYTE* ) );
+		*(BYTE**)( pSrc + tDesc.m_iRowitem ) = nullptr;
 	}
 }

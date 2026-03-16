@@ -174,7 +174,10 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 		if ( sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
 		{
 			auto pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
-			sphDeallocatePacked(pData);
+			if ( pAttr->m_eAttrType==SPH_ATTR_TDIGEST_PTR )
+				sphDeallocatePackedTdigest ( pData );
+			else
+				sphDeallocatePacked(pData);
 		}
 	}
 }
@@ -206,7 +209,8 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		SPH_ATTR_TOKENCOUNT,
 		SPH_ATTR_DOUBLE,
 		SPH_ATTR_UINT64,
-		SPH_ATTR_STRINGPTR
+		SPH_ATTR_STRINGPTR,
+		SPH_ATTR_TDIGEST_PTR
 	};
 
 	for ( const auto & i : tScroll.m_dAttrs )

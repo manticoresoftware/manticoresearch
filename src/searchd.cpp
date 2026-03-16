@@ -1259,13 +1259,14 @@ public:
 			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) not found in result set", m_sCol.cstr() );
 
 		ESphAttr t = pCol->m_eAttrType;
-		if ( t!=SPH_ATTR_INTEGER && t!=SPH_ATTR_BIGINT && t!=SPH_ATTR_TOKENCOUNT && t!=SPH_ATTR_STRINGPTR && t!=SPH_ATTR_STRING )
+		if ( t!=SPH_ATTR_INTEGER && t!=SPH_ATTR_BIGINT && t!=SPH_ATTR_TOKENCOUNT
+			&& t!=SPH_ATTR_STRINGPTR && t!=SPH_ATTR_TDIGEST_PTR && t!=SPH_ATTR_STRING )
 			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) must be of INTEGER, BIGINT, or STRINGPTR type", m_sCol.cstr() );
 
 		// we need to initialize the "last seen" value with a key that
 		// is guaranteed to be different from the 1st match that we will scan
 		// hence (val-1) for scalars, and NULL for strings
-		SphAttr_t iLastValue = ( t==SPH_ATTR_STRING || t==SPH_ATTR_STRINGPTR )
+		SphAttr_t iLastValue = ( t==SPH_ATTR_STRING || t==SPH_ATTR_STRINGPTR || t==SPH_ATTR_TDIGEST_PTR )
 			? 0
 			: ( dSubMatches.First().GetAttr ( pCol->m_tLocator ) - 1 );
 
@@ -1277,7 +1278,7 @@ public:
 			if ( iCur==iLastValue )
 				continue;
 
-			if ( iCur && iLastValue && t==SPH_ATTR_STRINGPTR )
+			if ( iCur && iLastValue && ( t==SPH_ATTR_STRINGPTR || t==SPH_ATTR_TDIGEST_PTR ) )
 			{
 				auto a = sphUnpackPtrAttr ((const BYTE *) iCur );
 				auto b = sphUnpackPtrAttr ((const BYTE *) iLastValue );
@@ -1462,6 +1463,7 @@ public:
 			break;
 
 		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:
 			break;
 
 		case SPH_ATTR_TIMESTAMP:
@@ -4502,7 +4504,7 @@ bool AttributeConverter_c::String2JsonPack ( char * pStr, CSphVector<BYTE> & dBu
 
 bool AttributeConverter_c::CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
 {
-	if ( tCol.m_eAttrType!=SPH_ATTR_STRING && tCol.m_eAttrType!=SPH_ATTR_STRINGPTR )
+	if ( tCol.m_eAttrType!=SPH_ATTR_STRING && tCol.m_eAttrType!=SPH_ATTR_STRINGPTR && tCol.m_eAttrType!=SPH_ATTR_TDIGEST_PTR )
 		return true;
 
 	if ( tVal.m_sVal.Length() > 0x3FFFFF )
@@ -4642,7 +4644,8 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 	CSphAttrLocator tLoc = tCol.m_tLocator;
 	tLoc.m_bDynamic = true;
 
-	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
+	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR
+		|| tCol.m_eAttrType==SPH_ATTR_TDIGEST_PTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
 
 	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
@@ -7714,6 +7717,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			switch ( eAttrType )
 			{
 				case SPH_ATTR_STRINGPTR:
+				case SPH_ATTR_TDIGEST_PTR:
 					pExpr->StringEval ( tMatch, &pStr );
 					dRows.PutString ( (const char *)pStr );
 					SafeDelete ( pStr );
@@ -7826,6 +7830,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 		break;
 
 		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:
 		{
 			auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 			auto dString = sphUnpackPtrAttr ( pString );
@@ -9456,6 +9461,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			switch ( dColumn.m_eType )
 			{
 			case SPH_ATTR_STRINGPTR:
+			case SPH_ATTR_TDIGEST_PTR:
 				{
 					const BYTE* pStr = nullptr;
 					int iLen = pExpr->StringEval ( tMatch, &pStr );

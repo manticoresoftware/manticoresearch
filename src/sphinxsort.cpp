@@ -713,6 +713,7 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 			dRows.PutArray ( sphGetBlobAttr ( tMatch, tLoc, pBlobPool ) );
 			break;
 		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:
 			{
 				const BYTE* pStr = nullptr;
 				if ( dAttr.m_eStage == SPH_EVAL_POSTLIMIT )

@@ -63,7 +63,8 @@ enum ESphAttr
 	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
 	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
 	SPH_ATTR_STORED_FIELD,
-	SPH_ATTR_FLOAT_VECTOR_PTR			// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_FLOAT_VECTOR_PTR,			// in-memory version of FLOAT_VECTOR
+	SPH_ATTR_TDIGEST_PTR				// in-memory TDigest state (runtime or serialized)
 };
 
 /// column evaluation stage

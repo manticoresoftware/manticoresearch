@@ -119,6 +119,7 @@ static void RemapResult ( AggrResult_t & dResult )
 	int iAttrsCount = tSchema.GetAttrsCount();
 	CSphVector<int> dMapFrom(iAttrsCount);
 	CSphVector<int> dRowItems(iAttrsCount);
+	CSphVector<DataPtrAttr_t> dExtraPtrRows;
 	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
 	for ( auto & tRes : dResult.m_dResults )
@@ -141,7 +142,7 @@ static void RemapResult ( AggrResult_t & dResult )
 		}
 
 		// inverse dRowItems - we'll free only those NOT enumerated yet
-		dRowItems = dSchema.SubsetPtrs ( dRowItems );
+		dExtraPtrRows = dSchema.SubsetPtrs ( dRowItems );
 		for ( auto& tMatch : tRes.m_dMatches )
 		{
 			// create new and shiny (and properly sized) match
@@ -175,7 +176,7 @@ static void RemapResult ( AggrResult_t & dResult )
 			}
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tNewMatch );
-			CSphSchemaHelper::FreeDataSpecial ( tNewMatch, dRowItems );
+			CSphSchemaHelper::FreeDataSpecial ( tNewMatch, dExtraPtrRows );
 		}
 	}
 }

@@ -2180,6 +2180,7 @@ static RtTypedAttr_t g_dTypeNames[] =
 	{ SPH_ATTR_JSON,		"json" },
 	{ SPH_ATTR_STRING,		"string" },
 	{ SPH_ATTR_STRINGPTR,	"string" },
+	{ SPH_ATTR_TDIGEST_PTR,	"tdigest" },
 	{ SPH_ATTR_TIMESTAMP,	"timestamp" },
 	{ SPH_ATTR_FLOAT_VECTOR, "float_vector" }
 };

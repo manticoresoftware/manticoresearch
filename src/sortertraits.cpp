@@ -298,14 +298,21 @@ void MatchCloner_c::CommitPtrs()
 	if ( m_bPtrRowsCommited )
 		m_dMyPtrRows.Resize(0);
 
+	CSphVector<int> dOwnedRows;
 	for ( const CSphAttrLocator &tLoc : m_dAttrsPtr )
-		m_dMyPtrRows.Add ( tLoc.m_iBitOffset / SIZE_OF_ROW );
+	{
+		int iRowitem = tLoc.m_iBitOffset / SIZE_OF_ROW;
+		dOwnedRows.Add ( iRowitem );
+		DataPtrAttr_t tDesc;
+		bool bFound = m_pSchema->DescribePtrRow ( iRowitem, tDesc );
+		assert ( bFound );
+		if ( bFound )
+			m_dMyPtrRows.Add ( tDesc );
+	}
 
-	m_dOtherPtrRows = m_pSchema->SubsetPtrs ( m_dMyPtrRows );
+	m_dOtherPtrRows = m_pSchema->SubsetPtrs ( dOwnedRows );
 
 #ifndef NDEBUG
-	// sanitize check
-	m_dMyPtrRows = m_pSchema->SubsetPtrs ( m_dOtherPtrRows );
 	assert ( m_dMyPtrRows.GetLength ()==m_dAttrsPtr.GetLength () );
 #endif
 	m_bPtrRowsCommited = true;

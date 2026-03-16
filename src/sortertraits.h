@@ -118,8 +118,8 @@ private:
 	CSphFixedVector<CSphRowitem>	m_dRowBuf { 0 };
 	CSphVector<CSphAttrLocator>		m_dAttrsGrp; // locators for grouping attrs (@groupby, @count, @distinct, etc.)
 	CSphVector<CSphAttrLocator>		m_dAttrsPtr; // locators for group_concat attrs
-	CSphVector<int>					m_dMyPtrRows; // rowids matching m_dAttrsPtr. i.e. grpconcat ptr result I own
-	CSphVector<int>					m_dOtherPtrRows; // rest rowids NOT matching m_dAttrsPtr. i.e. other ptr results
+	CSphVector<DataPtrAttr_t>		m_dMyPtrRows; // descriptors for grpconcat ptr results I own
+	CSphVector<DataPtrAttr_t>		m_dOtherPtrRows; // descriptors for other data ptr results
 	const CSphSchemaHelper *		m_pSchema = nullptr;
 	bool							m_bPtrRowsCommited = false; // readiness of m_dMyPtrRows and m_dOtherPtrRows
 };

@@ -659,7 +659,8 @@ static const char * UdfReturnType ( ESphAttr eType )
 	{
 		case SPH_ATTR_INTEGER:		return "INT";
 		case SPH_ATTR_FLOAT:		return "FLOAT";
-		case SPH_ATTR_STRINGPTR:	return "STRING";
+		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:	return "STRING";
 		case SPH_ATTR_BIGINT:		return "BIGINT";
 		default:					assert ( 0 && "unknown UDF return type" ); return "???";
 	}

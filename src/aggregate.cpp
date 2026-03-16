@@ -64,7 +64,7 @@ static void StoreTDigestBlob ( const TDigest_c & tDigest, const CSphMatch & tDst
 {
 	ByteBlob_t dPrev = tDst.FetchAttrData ( tLoc, nullptr );
 	if ( dPrev.first )
-		sphDeallocatePacked ( sphPackedBlob ( dPrev ) );
+		sphDeallocatePackedTdigest ( sphPackedBlob ( dPrev ) );
 
 	CSphVector<TDigestCentroid_t> dCentroids;
 	tDigest.Export ( dCentroids );
@@ -286,7 +286,7 @@ TDigestRuntimeState_t * AggrTDigestBase_c::EnsureRuntime ( CSphMatch & tMatch ) 
 	auto tAlloc = sphTDigestRuntimeAllocate ( m_fCompression );
 		tAlloc.m_pState->m_tDigest = std::move ( tTemp );
 
-	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	sphDeallocatePackedTdigest ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, (SphAttr_t)tAlloc.m_pPacked );
 	return tAlloc.m_pState;
 }
@@ -327,7 +327,7 @@ void AggrTDigestBase_c::SerializeRuntime ( CSphMatch & tMatch ) const
 	FlushPending ( *pRuntime );
 	TDigest_c tDigest = std::move ( pRuntime->m_tDigest );
 	sphDestroyTDigestRuntimeBlob ( dBlob );
-	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	sphDeallocatePackedTdigest ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, 0 );
 	StoreTDigestBlob ( tDigest, tMatch, m_tLocator );
 }
@@ -339,7 +339,7 @@ void AggrTDigestBase_c::DropRuntime ( CSphMatch & tMatch ) const
 		return;
 
 	sphDestroyTDigestRuntimeBlob ( dBlob );
-	sphDeallocatePacked ( sphPackedBlob ( dBlob ) );
+	sphDeallocatePackedTdigest ( sphPackedBlob ( dBlob ) );
 	tMatch.SetAttr ( m_tLocator, 0 );
 }
 

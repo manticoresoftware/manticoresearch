@@ -1274,7 +1274,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		sError.SetSprintf ( "invalid attrs count %d, id=%d, version=%d, index '%s'", tSchema.GetAttrsCount(), ( pColId ? 1 : 0 ), ( pColVer ? 1 : 0 ), sIndexName );
 		return false;
 	}
-	if ( pColId->m_eAttrType!=SPH_ATTR_STRINGPTR )
+	if ( pColId->m_eAttrType!=SPH_ATTR_STRINGPTR && pColId->m_eAttrType!=SPH_ATTR_TDIGEST_PTR )
 	{
 		sError.SetSprintf ( "invalid attr type '%s', index '%s'", AttrType2Str ( pColVer->m_eAttrType ), sIndexName );
 		return false;

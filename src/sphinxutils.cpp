@@ -1110,7 +1110,7 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "rlp_max_batch_size",		KEY_REMOVED, NULL },
 	{ "rlp_max_batch_docs",		KEY_REMOVED, NULL },
 	{ "plugin_dir",				0, NULL },
-	{ "progressive_merge",		0, NULL },
+	{ "progressive_merge",		KEY_REMOVED, NULL },
 	{ NULL,						0, NULL }
 };
 

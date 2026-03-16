@@ -486,6 +486,7 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 

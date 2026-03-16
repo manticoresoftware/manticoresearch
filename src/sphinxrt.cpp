@@ -154,6 +154,12 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
+volatile int &MergeChunksPerJob() noexcept
+{
+	static int iMergeChunksPerJob = 2;
+	return iMergeChunksPerJob;
+}
+
 volatile int AutoOptimizeCutoff() noexcept
 {
 	static int iAutoOptimizeCutoff = GetNumLogicalCPUs() * 2;

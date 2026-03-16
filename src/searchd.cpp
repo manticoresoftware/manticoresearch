@@ -51,6 +51,7 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
+#include "daemon/notifier.h"
 
 // services
 #include "taskping.h"
@@ -102,7 +103,8 @@ int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec, ql interactive clients
 int						g_iClientQlWaitTimeoutS	= 28800;	// sec, ql non-interactive clients
 static int				g_iMaxConnection	= 0; // unlimited
-static bool				g_bWatchdog			= true;
+static std::optional<bool>	g_tWatchdog;
+static bool				g_bSystemd			= false; // if we can send messages to systemd - assume, we're managed by systemd.
 static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
@@ -222,6 +224,8 @@ static ExpMeter_c							g_tSecStat15m { 12*15 }; // once a 15 minutes
 int64_t g_iNextExpMeterTimestamp = sphMicroTimer() + g_iExpMeterPeriod;
 
 static CSphString							g_sClusterUser { "cluster" }; // user with this name will see cluster:table in show tables
+static std::optional<uint64_t>				g_tWatchdogTimeout;
+int64_t g_iNextSystemdWatchdogTick = -1;
 
 /// command names
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
@@ -296,6 +300,8 @@ static CSphString GetNamedPipeName ( int iPid )
 /////////////////////////////////////////////////////////////////////////////
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
+	sd::stopping();
+
 	// force even long time searches to shut
 	SHUTINFO << "Trigger g_bInterruptNow ...";
 	sphInterruptNow ();
@@ -13341,10 +13347,12 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainThread )
 {
 	assert ( !g_bSeamlessRotate );
+	sd::reloading();
 	ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
 
 	for ( auto& dDeferredIndex :  dDeferredIndexes )
 	{
+		sd::reloading();
 		const CSphString& sDeferredIndex = dDeferredIndex.first;
 		ServedIndexRefPtr_c& pDeferredIndex = dDeferredIndex.second;
 		assert ( pDeferredIndex );
@@ -13396,6 +13404,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 	g_bInRotate = false;
 	RotateGlobalIdf ();
 	sphInfo ( "rotating finished" );
+	sd::ready();
 }
 
 
@@ -13769,8 +13778,9 @@ void TickHead () REQUIRES ( MainThread )
 	int tmSleep = 500;
 #endif
 	sphSleepMsec ( tmSleep );
+	const auto sphMicroNow = sphMicroTimer();
 
-	if ( sphMicroTimer() > g_iNextExpMeterTimestamp )
+	if ( sphMicroNow > g_iNextExpMeterTimestamp )
 	{
 		g_iNextExpMeterTimestamp += g_iExpMeterPeriod;
 		auto tSample = GlobalWorkPool()->Tasks();
@@ -13787,6 +13797,13 @@ void TickHead () REQUIRES ( MainThread )
 		g_tStat15m.Tick ( tSample.iPri + tSample.iSec + tCurrent);
 		if ( g_bLoadInfo )
 			sphInfo("Sample: %d, %d, %d; Load average: %0.2f, %0.2f, %0.2f, sec: %0.2f, %0.2f, %0.2f, pri: %0.2f, %0.2f, %0.2f", tCurrent, tSample.iSec, tSample.iPri, g_tStat1m.Value(), g_tStat5m.Value(), g_tStat15m.Value(), g_tSecStat1m.Value(), g_tSecStat5m.Value(), g_tSecStat15m.Value(), g_tPriStat1m.Value(), g_tPriStat5m.Value(), g_tPriStat15m.Value());
+	}
+
+	// notify systemd watchdog, if necessary
+	if ( g_tWatchdogTimeout.has_value() && sphMicroNow > g_iNextSystemdWatchdogTick )
+	{
+		g_iNextSystemdWatchdogTick = sphMicroNow + g_tWatchdogTimeout.value()/2;
+		sd::keep_alive();
 	}
 }
 
@@ -14349,6 +14366,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t& dWarnings, CSphString& sError )
 {
+	sd::statusf("preloading index %s", szIndexName);
 	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
@@ -14477,7 +14495,7 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 			fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
-// if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
+// if data_dir changes cwd then paths at sections searchd and common should be fixed from relative into absolute
 void FixPathAbsolute ( CSphString & sPath )
 {
 	if ( !g_bCwdChanged )
@@ -14794,7 +14812,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
 		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
-		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
+		OPT1 ( "--test" )			{ bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
@@ -14941,8 +14959,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	g_sConfigPath = sphGetCwd();
 	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
 
-	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
-
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
 
@@ -14954,10 +14970,19 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	bool bVisualLoad = true;
 	bool bWatched = false;
+	g_bSystemd = 1==sd::status("Starting...");
+	sphInfo ( "Systemd assistance: %s", g_bSystemd?"yes":"no" );
+
 #if !_WIN32
 	// Let us start watchdog right now, on foreground first.
+
+	if ( g_bOptNoDetach || bTestMode )
+		g_tWatchdog = false;
+	else
+		g_tWatchdog = hSearchdpre.OptBool ( "watchdog" );
+
 	int iDevNull = open ( "/dev/null", O_RDWR );
-	if ( g_bWatchdog && !g_bOptNoDetach )
+	if ( g_tWatchdog.value_or ( !g_bSystemd ) )
 	{
 		bWatched = true;
 		if ( !g_bOptNoLock )
@@ -15049,6 +15074,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 #endif
 
+	sd::mainpid(getpid());
 	LogTimeZoneStartup(sTZWarning);
 
 	// init before workpool, as last checks binlog
@@ -15288,6 +15314,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				hIndexes.Add ( RWIdx_c ( tIt.second ), tIt.first );
 		}
 
+		sd::status("Replaying binlogs...");
 		Binlog::Replay ( hIndexes, DumpMemStat );
 	} );
 
@@ -15377,6 +15404,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );
+	sd::ready();
 
 	// disable startup logging to stdout
 	if ( !g_bOptNoDetach )
@@ -15384,6 +15412,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( g_bOptQuiet )
 		g_eLogLevel = eQuietRestoreLevel;
+
+	g_tWatchdogTimeout = sd::WatchdogTimeout();
+	if (g_tWatchdogTimeout.has_value())
+		g_iNextSystemdWatchdogTick = sphMicroTimer() + g_tWatchdogTimeout.value()/2;
 
 	while (true)
 	{

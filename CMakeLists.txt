@@ -678,6 +678,27 @@ set ( CPACK_BUILD_SOURCE_DIRS "${CMAKE_SOURCE_DIR};${CMAKE_BINARY_DIR}" )
 # Bundle package name: when PACK_BUNDLE=1 the bundle package is named "manticore" (not "manticore-bundle").
 # All components are still built (server, tools, common, etc.); CommonDeb/CommonRpm append "bundle" instead of "meta" so the "manticore" package is the bundle.
 if (PACK_BUNDLE AND NOT WIN32)
+	set ( _bundle_deb_provides
+		"manticore-common (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-server-core (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-server (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-tools (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-dev (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-converter (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-extra (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-icudata-65l (= ${CPACK_PACKAGE_VERSION})"
+		"manticore-language-packs"
+	)
+	if ( EXISTS "${BUNDLE_DEPS_EXTRACT_DIR}/.bundle_provides.deb" )
+		file ( STRINGS "${BUNDLE_DEPS_EXTRACT_DIR}/.bundle_provides.deb" _bundle_deb_provide_lines )
+		if ( _bundle_deb_provide_lines )
+			list ( APPEND _bundle_deb_provides ${_bundle_deb_provide_lines} )
+		endif ()
+	endif ()
+	list ( REMOVE_DUPLICATES _bundle_deb_provides )
+	list ( JOIN _bundle_deb_provides ", " _bundle_deb_provides_joined )
+	set ( CPACK_DEBIAN_BUNDLE_PACKAGE_PROVIDES "${_bundle_deb_provides_joined}" )
+	message ( STATUS "PACK_BUNDLE: DEB bundle provides: ${_bundle_deb_provides_joined}" )
 	set ( CPACK_DEBIAN_BUNDLE_PACKAGE_NAME "manticore" )
 	set ( CPACK_RPM_BUNDLE_PACKAGE_NAME "manticore" )
 	if ( APPLE )

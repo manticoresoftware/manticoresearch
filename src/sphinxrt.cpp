@@ -10064,6 +10064,42 @@ bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckA
 	return false;
 }
 
+class MergeGuardMulti_c
+{
+	CSphVector<ConstDiskChunkRefPtr_t> m_dUsedChunks;
+
+	void SetOptimize() const noexcept
+	{
+		for ( const auto & pChunk : m_dUsedChunks )
+			if ( pChunk )
+				pChunk->m_bOptimizing.store ( true, std::memory_order_relaxed );
+	}
+
+public:
+	MergeGuardMulti_c () = default;
+	explicit MergeGuardMulti_c ( const VecTraits_T<ConstDiskChunkRefPtr_t> & dChunks )
+	{
+		m_dUsedChunks.Reserve ( dChunks.GetLength() );
+		for ( const auto & pChunk : dChunks )
+			m_dUsedChunks.Add ( pChunk );
+
+		SetOptimize();
+	}
+
+	void Add ( const ConstDiskChunkRefPtr_t & pChunk ) noexcept
+	{
+		m_dUsedChunks.Add ( pChunk );
+		SetOptimize();
+	}
+
+	virtual ~MergeGuardMulti_c()
+	{
+		for ( const auto & pChunk : m_dUsedChunks )
+			if ( pChunk )
+				pChunk->m_bOptimizing.store ( false, std::memory_order_relaxed );
+	}
+};
+
 bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::CompressOneChunk" );
@@ -10079,8 +10115,8 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 
 	sphLogDebug ( "compress %d (%d kb)", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ) );
 
-	pVictim->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizing = AtScopeExit ( [pVictim] { pVictim->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	MergeGuardMulti_c tOptimizingGuard;
+	tOptimizingGuard.Add (pVictim);
 
 	// merge data to disk ( data is constant during that phase )
 	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
@@ -10224,8 +10260,8 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	CSphIndex& tVictim = pVictim->CastIdx(); // non-const need to invoke 'merge'
 	sphLogDebug ( "split %d (%d kb) with %s", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ), szUvarFilter );
 
-	pVictim->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizing = AtScopeExit ( [pVictim] { pVictim->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	MergeGuardMulti_c tOptimizingGuard;
+	tOptimizingGuard.Add (pVictim);
 
 	const UservarIntSet_c pUservar = Uservars ( szUvarFilter );
 	assert ( pUservar ); // detailed check already performed in splitOneChunkFast
@@ -10355,10 +10391,9 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		return false;
 	}
 
-	pA->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizingA = AtScopeExit ( [pA] { pA->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
-	pB->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizingB = AtScopeExit ( [pB] { pB->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	MergeGuardMulti_c tOptimizingGuard;
+	tOptimizingGuard.Add (pA);
+	tOptimizingGuard.Add (pB);
 
 	sphLogDebug ( "common merge - merging %d (%d kb) with %d (%d kb)",
 			iAID,

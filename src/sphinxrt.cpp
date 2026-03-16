@@ -154,6 +154,12 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 	return iAutoOptimizeCutoffMultiplier;
 }
 
+volatile int &ParallelChunkMergesLimit() noexcept
+{
+	static int iParallelChunkMerges = 1;
+	return iParallelChunkMerges;
+}
+
 volatile int &MergeChunksPerJob() noexcept
 {
 	static int iMergeChunksPerJob = 2;

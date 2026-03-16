@@ -1728,7 +1728,6 @@ class CSphImplicitGroupSorter final : public MatchSorter_c, ISphNoncopyable, pro
 public:
 	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
 		: BaseGroupSorter_c ( tSettings )
-		, m_bSlimTdigest ( tSettings.m_bSlimTdigest )
 	{
 		assert ( !DISTINCT || tSettings.m_pDistinctFetcher );
 		assert ( !pComp );
@@ -1880,7 +1879,6 @@ protected:
 	bool		m_bMerge = false;
 
 	UNIQ		 m_tUniq;
-	const bool	m_bSlimTdigest;
 
 private:
 	CSphVector<SphAttr_t> m_dDistinctKeys;
@@ -1890,21 +1888,6 @@ private:
 	void	AddCount ( const CSphMatch & tEntry )				{ m_tData.AddCounterAttr ( m_tLocCount, tEntry ); }
 	void	UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true, bool bMerge = false ) { AggrUpdate ( m_tData, tEntry, bGrouped, bMerge ); }
 	void	SetupAggregates ( const CSphMatch & tEntry )		{ AggrSetup ( m_tData, tEntry, m_bMerge ); }
-	void	InitSlimData ( const CSphMatch & tEntry )
-	{
-		if ( !m_pSchema )
-			return;
-
-		int iDynamic = m_pSchema->GetDynamicSize();
-		m_tData.Reset ( iDynamic );
-		if ( iDynamic && m_tData.m_pDynamic )
-			memset ( m_tData.m_pDynamic, 0, iDynamic * sizeof ( CSphRowitem ) );
-		m_tData.m_pStatic = nullptr;
-		m_tData.m_tRowID = tEntry.m_tRowID;
-		m_tData.m_iTag = tEntry.m_iTag;
-		m_tData.m_iWeight = 0;
-	}
-
 	// submit actual distinct value in all cases
 	template <bool GROUPED = true>
 	void UpdateDistinct ( const CSphMatch & tEntry )
@@ -1962,10 +1945,7 @@ private:
 			return false;
 
 		// add first
-		if ( m_bSlimTdigest )
-			InitSlimData ( tEntry );
-		else
-			m_pSchema->CloneMatch ( m_tData, tEntry );
+		m_pSchema->CloneMatch ( m_tData, tEntry );
 
 		// first-time aggregate setup
 		if constexpr ( HAS_AGGREGATES )

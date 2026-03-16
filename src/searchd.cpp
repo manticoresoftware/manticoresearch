@@ -14971,7 +14971,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool bVisualLoad = true;
 	bool bWatched = false;
 	g_bSystemd = 1==sd::status("Starting...");
-	sphInfo ( "Systemd assistance: %s", g_bSystemd?"yes":"no" );
+	if ( g_bSystemd )
+		sphInfo ( "Systemd assistance: yes" );
 
 #if !_WIN32
 	// Let us start watchdog right now, on foreground first.

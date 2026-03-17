@@ -16,7 +16,7 @@ lemmatizer_base = /usr/share/manticore/
 progressive_merge
 ------------------
 
-progressive_merge 是一个配置指令，启用后，会将实时表的磁盘块从小到大合并。这种方式加快了合并过程，减少了读写放大。默认情况下，此设置是启用的。如果禁用，块将按创建顺序合并。
+progressive_merge 是一个配置指令，启用后会将实时表的磁盘块从较小的合并到较大的块中。这种方法加快了合并过程并减少了读写放大。此设置始终启用，仅保留配置中以保持向后兼容性。
 
 json_autoconv_keynames
 ------------------------

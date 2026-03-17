@@ -10680,7 +10680,8 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 	RTDLOG << "Optimize checked with " << tTask;
 
-	if ( OptimizesRunning() > 0 )
+	const int iParallelMerges = Max ( 1, ParallelChunkMergesLimit() );
+	if ( OptimizesRunning() >= iParallelMerges )
 	{
 		RTDLOG << "Escape optimize as " << OptimizesRunning() << " tasks is already running";
 		sphLogDebug ( "Escape optimize as %d tasks is already running", OptimizesRunning() );

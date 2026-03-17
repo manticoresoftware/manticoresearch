@@ -1371,6 +1371,8 @@ struct ExternalFilesCacheEntry_t
 	CSphString	m_sJieba;
 };
 
+struct RtMergeTimings_t;
+
 using ExtFiles_h = OpenHashTable_T<uint64_t, ExternalFilesCacheEntry_t, IdentityHash_fn>;
 
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
@@ -1404,7 +1406,8 @@ public:
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
 	bool				CompressOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				DedupOneChunk ( int iChunk, int* pAffected = nullptr );
-	bool				MergeTwoChunks ( int iA, int iB, int* pAffected, CSphString* sLog = nullptr );
+	bool				MergeTwoChunks ( int iA, int iB, int* pAffected, StringBuilder_c* sLog = nullptr );
+	bool				MergeNChunks ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, int* pAffected, StringBuilder_c* sLog, RtMergeTimings_t & tTimings );
 	bool				MergeCanRun () const;
 	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAffected = nullptr );
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int* pAffected = nullptr );
@@ -1417,7 +1420,7 @@ public:
 
 	// helpers
 	ConstDiskChunkRefPtr_t	ChangeDiskChunk (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunk, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
-	ConstDiskChunkRefPtr_t	MergeDiskChunksN ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress & tProgress, MergeTimings_t * pTimings );
+	ConstDiskChunkRefPtr_t	MergeDiskChunksN ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress & tProgress, RtMergeTimings_t & tTimings );
 	ConstDiskChunkRefPtr_t MergeChunkPrealloc ( const CSphIndex & tChunkA, const char * szParentAction );
 
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -9851,12 +9854,18 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeChunkPrealloc ( const CSphIndex & tChunk,
 	return pChunk;
 }
 
-ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress, MergeTimings_t * pTimings )
+struct RtMergeTimings_t : MergeTimings_t
+{
+	int64_t m_tmBuild = 0;
+	int64_t m_tmPublish = 0;
+};
+
+ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress, RtMergeTimings_t& tTimings )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::MergeDiskChunksN" );
 	CSphString sError;
 
-	if ( !dChunks.GetLength() )
+	if ( dChunks.IsEmpty() )
 		return {};
 
 	CSphFixedVector<const CSphIndex*> dIndexes ( dChunks.GetLength() );
@@ -9864,7 +9873,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction,
 		dIndexes[i] = &dChunks[i]->Cidx();
 
 	ConstDiskChunkRefPtr_t pChunk;
-	if ( !sphMergeN ( dIndexes, tProgress, sError, pTimings ) )
+	if ( !sphMergeN ( dIndexes, tProgress, sError, &tTimings ) )
 	{
 		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
 			sError = "interrupted because of shutdown";
@@ -10411,7 +10420,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	return true;
 }
 
-bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString* sLog )
+bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, StringBuilder_c* sLog )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::MergeTwoChunks" );
 
@@ -10441,30 +10450,36 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 			iBID,
 			(int)( GetChunkSize ( pB->Cidx() ) / 1024 ) );
 
-	// merge data to disk ( data is constant during that phase )
-	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
-	CSphIndexProgress tProgress ( &tMonitor );
-
 	CSphFixedVector<ConstDiskChunkRefPtr_t> dChunks ( 2 );
 	dChunks[0] = pA;
 	dChunks[1] = pB;
 
-	MergeTimings_t tTimings;
-	// get 1-st chunk - one which doesn't match filter the filter
-//	auto pMerged = MergeDiskChunks ( "common merge", pA, pB, tProgress, { nullptr, 0 } );
-	auto pMerged = MergeDiskChunksN ( szActionName, dChunks, tProgress, &tTimings );
+	RtMergeTimings_t tFoo;
+	return MergeNChunks ( szActionName, dChunks, pAffected, sLog, tFoo );
+}
 
+bool RtIndex_c::MergeNChunks ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, int* pAffected, StringBuilder_c* pLog, RtMergeTimings_t& tTimings )
+{
+	// merge data to disk ( data is constant during that phase )
+	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
+	CSphIndexProgress tProgress ( &tMonitor );
 
-	auto tFinallyStopCollectingUpdates = AtScopeExit ( [pA, pB] {
-		pA->CastIdx().ResetPostponedUpdates();
-		pB->CastIdx().ResetPostponedUpdates();
+	const auto tmBuild = sphMicroTimer();
+	auto pMerged = MergeDiskChunksN ( szParentAction, dChunks, tProgress, tTimings );
+	tTimings.m_tmBuild = sphMicroTimer() - tmBuild;
+
+	// finalize
+	auto fnFinalize = AtScopeExit ( [&tTimings, tmFinalize = sphMicroTimer()] {tTimings.m_tmPublish = sphMicroTimer()-tmFinalize;});
+	auto tFinallyStopCollectingUpdates = AtScopeExit ( [&dChunks] {
+		for ( const auto & pChunk : dChunks )
+			pChunk->CastIdx().ResetPostponedUpdates();
 	} );
 
 	// check forced exit after long operation (that is - after merge)
 	if ( !pMerged || tMonitor.NeedStop() )
 		return false;
 
-	if ( !RenameOptimizedChunk ( pMerged, "common merge" ) )
+	if ( !RenameOptimizedChunk ( pMerged, szParentAction ) )
 		return false;
 
 	CSphIndex& tMerged = pMerged->CastIdx(); // const breakage is ok since we don't yet published the index
@@ -10476,8 +10491,8 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 	END_CORO ("wait" );
 
 	// reset kill hook explicitly to override default order of destruction
-	SetKillHookFor ( nullptr, iAID );
-	SetKillHookFor ( nullptr, iBID );
+	for ( const auto & pChunk : dChunks )
+		SetKillHookFor ( nullptr, pChunk->Cidx().m_iChunk );
 
 	// apply collected kill-list before including chunks to the set
 	// as we are in serial worker, that is safe here; no new kills may arrive.
@@ -10486,29 +10501,39 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		iKilled = tMerged.KillMulti ( tMonitor.GetKilled() );
 
 	// and also apply collected updates
-	CSphVector<ConstDiskChunkRefPtr_t> tUpdated;
-	tUpdated.Add ( pA );
-	tUpdated.Add ( pB );
-	auto dUpdates = GatherUpdates::FromChunksOrSegments ( tUpdated );
+	auto dUpdates = GatherUpdates::FromChunksOrSegments ( dChunks );
 	if ( !dUpdates.IsEmpty() )
 	{
 		tMerged.UpdateAttributesOffline ( dUpdates );
 		dUpdates.Reset();
 	}
 
-	if ( !PublishMergedChunks ( "optimize", [iAID, iBID, pMerged] ( int iChunk, DiskChunkVec_c& tRes ) {
-			 if ( iChunk == iBID )
-				 tRes.Add ( pMerged );
-			 return ( iChunk == iAID || iChunk == iBID );
-		 } ) )
+	auto fnFilter = [&dChunks, pMerged] ( int iChunk, DiskChunkVec_c& tRes ) {
+		if ( iChunk==dChunks.Last()->Cidx().m_iChunk )
+			tRes.Add ( pMerged );
+		return dChunks.any_of ( [iChunk] ( const auto & tChunk ) { return tChunk->Cidx().m_iChunk==iChunk; } );
+	};
+
+	if ( !PublishMergedChunks ( szParentAction, fnFilter ) )
 		return false;
 
-	sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d", pA->Cidx().GetFilebase(), pB->Cidx().GetFilebase(), tMerged.GetFilebase(), iKilled );
-	if ( sLog )
-		sLog->SetSprintf ("%s and %s to %s", pA->Cidx ().GetFilebase(), pB->Cidx ().GetFilebase (), tMerged.GetFilebase ());
+	if ( pLog )
+	{
+		auto& sLog = *pLog;
+		{
+			ScopedComma_c comma {sLog, ", "};
+			dChunks.for_each ( [&sLog] (const auto& tChunk) { sLog << tChunk->Cidx().GetFilebase();} );
+		}
+		sLog << " to " << tMerged.GetFilebase();
+		sphLogDebug ( "optimized %s chunks to %s, killed=%d", sLog.cstr(), tMerged.GetFilebase(), iKilled );
+	} else
+	{
+		sphLogDebug ( "optimized %d chunks to %s, killed=%d", dChunks.GetLength(), tMerged.GetFilebase(), iKilled );
+	}
 
-	pA->m_bFinallyUnlink = true;
-	pB->m_bFinallyUnlink = true;
+
+	for ( const auto & pChunk : dChunks )
+		pChunk->m_bFinallyUnlink = true;
 	pMerged->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
@@ -10711,7 +10736,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 		RTDLOG << "Optimize: merge chunks " << chA.m_iId << " and " << chB.m_iId;
 
-		CSphString sLog;
+		StringBuilder_c sLog;
 		bWork &= MergeTwoChunks ( chA.m_iId, chB.m_iId, &iAffected, &sLog );
 
 		auto tmPass = sphMicroTimer() - tmStart;

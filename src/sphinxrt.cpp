@@ -9676,25 +9676,21 @@ struct ChunkAndSize_t
 	int64_t m_iSize;
 };
 
-static ChunkAndSize_t GetNextSmallestChunkByID ( const DiskChunkVec_c& dDiskChunks, VecTraits_T<int> dExcludeIDs )
+static CSphVector<ChunkAndSize_t> GetSmallestChunksByID ( const DiskChunkVec_c& dDiskChunks )
 {
-	int iRes = -1;
-	int64_t iLastSize = INT64_MAX;
+	CSphVector<ChunkAndSize_t> dResult;
+	dResult.Reserve ( dDiskChunks.GetLength() );
 	for ( const auto& pDiskChunk : dDiskChunks )
 	{
 		if ( pDiskChunk->m_bOptimizing.load(std::memory_order_relaxed) )
 			continue;
 		const CSphIndex& dDiskChunk = pDiskChunk->Cidx();
-		if ( dExcludeIDs.any_of ( [id = dDiskChunk.m_iChunk] ( int iVal ) { return iVal==id; } ) )
-			continue;
-		int64_t iSize = GetChunkSize ( dDiskChunk );
-		if ( iSize < iLastSize )
-		{
-			iLastSize = iSize;
-			iRes = dDiskChunk.m_iChunk;
-		}
+		const int iChunk = dDiskChunk.m_iChunk;
+		const int64_t iSize = GetChunkSize ( dDiskChunk );
+		dResult.Add ( { iChunk, iSize } );
 	}
-	return { iRes, iLastSize };
+	dResult.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iSize < b.m_iSize; } ) );
+	return dResult;
 }
 
 static int GetNumOfOptimizingNow ( const DiskChunkVec_c& dDiskChunks )
@@ -10708,43 +10704,52 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 		iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	const int iMergeChunksPerJob = Max ( 2, MergeChunksPerJob() );
-	const char * szActionName = "progressive merge";
+	const char * szActionName = "progressive optimize";
 
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )
 	{
 		auto pChunks = m_tRtChunks.DiskChunks();
-		if ( ( pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks ) ) <= iCutoff )
+		const int iFinallyRemainigChunks = pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks );
+		if ( iFinallyRemainigChunks <= iCutoff )
 			break;
 
+		const int iJobSize = Min ( iMergeChunksPerJob, iFinallyRemainigChunks - iCutoff + 1 );
+
 		CSphVector<ConstDiskChunkRefPtr_t> dChosenChunks;
-		IntVec_t dSkipIds;
-		dChosenChunks.Reserve ( iMergeChunksPerJob );
-		dSkipIds.Reserve ( iMergeChunksPerJob );
+		dChosenChunks.Reserve ( iJobSize );
 
-		while ( dChosenChunks.GetLength() < iMergeChunksPerJob )
+		auto dSmallest = GetSmallestChunksByID ( *pChunks );
+		if ( dSmallest.IsEmpty() )
+			break;
+
+		ARRAY_FOREACH ( i, dSmallest )
+		if ( !dSmallest[i].m_iSize )
 		{
-			auto tNext = GetNextSmallestChunkByID ( *pChunks, dSkipIds );
-			if ( tNext.m_iId < 0 )
-				break;
+			RTDLOG << "Optimize: drop chunk " << dSmallest[i].m_iId;
+			DropDiskChunk ( dSmallest[i].m_iId, &iAffected );
+			dSmallest.RemoveFast ( i-- );
+		}
 
-			if ( !tNext.m_iSize )
-			{
-				RTDLOG << "Optimize: drop chunk " << tNext.m_iId;
-				DropDiskChunk ( tNext.m_iId, &iAffected );
-				dSkipIds.Add ( tNext.m_iId );
-				continue;
-			}
+		// need to resort because of RemoveFast() above
+		dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iSize < b.m_iSize; } ) );
 
+		if (dSmallest.GetLength()>iJobSize)
+			dSmallest.Resize ( iJobSize );
+
+		// we need to make sure that A is the oldest one
+		// indexes go from oldest to newest so A must-go before B (A is always older than B)
+		// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
+		dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iId < b.m_iId; } ) );
+
+		for ( const auto& tNext : dSmallest ) {
 			auto pChunk = m_tRtChunks.DiskChunkByID ( tNext.m_iId );
 			if ( !pChunk )
 			{
 				bWork = false;
 				break;
 			}
-
 			dChosenChunks.Add ( pChunk );
-			dSkipIds.Add ( tNext.m_iId );
 		}
 
 		if ( !bWork || dChosenChunks.GetLength()<2 )
@@ -10756,17 +10761,12 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 		MergeGuardMulti_c tGuard { dChosenChunks };
 
-		// we need to make sure that A is the oldest one
-		// indexes go from oldest to newest so A must-go before B (A is always older than B)
-		// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
-		dChosenChunks.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a->Cidx().m_iChunk < b->Cidx().m_iChunk; } ) );
-
 		StringBuilder_c sLog;
 		RtMergeTimings_t tTimings;
 		bWork &= MergeNChunks ( szActionName, dChosenChunks, &iAffected, &sLog, tTimings );
 
 		auto tmPass = sphMicroTimer() - tmStart;
-		LogInfo ( "rt: table %s: merged chunks %s in %t (build %t: attrs %t, words %t, finalize %t; publish %t, progressive mode). Remaining chunk count: %d",
+		LogInfo ( "rt: table %s: merged chunks %s in %t (build %t: attrs %t, words %t, finalize %t; publish %t). Remaining chunk count: %d",
 			GetName(), sLog.cstr(), tmPass, tTimings.m_tmBuild, tTimings.m_tmAttrs, tTimings.m_tmWords, tTimings.m_tmFinalize, tTimings.m_tmPublish, m_tRtChunks.GetDiskChunksCount() );
 	}
 

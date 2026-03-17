@@ -1407,6 +1407,7 @@ public:
 	int					ProgressiveOptimize ( int iCutoff );
 	int					CommonOptimize ( OptimizeTask_t tTask );
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
+	void				DropDiskChunks ( IntVec_t& dChunks, int* pAffected=nullptr ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool				CompressOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				DedupOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				MergeTwoChunks ( int iA, int iB, int* pAffected, StringBuilder_c* sLog = nullptr );
@@ -9807,6 +9808,32 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 		++*pAffected;
 }
 
+void RtIndex_c::DropDiskChunks ( IntVec_t& dChunks, int* pAffected ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+{
+	if ( dChunks.IsEmpty() )
+		return;
+
+	dChunks.Uniq();
+
+	RTDLOG << "Optimize: drop chunks (" << dChunks.GetLength() << ")";
+	TRACE_SCHED ( "rt", "RtIndex_c::DropDiskChunks" );
+	sphLogDebug( "rt optimize: table %s: drop disk chunks (%d)", GetName(), dChunks.GetLength() );
+
+	{
+		auto tChangeset = RtWriter();
+		tChangeset.InitDiskChunks ( RtWriter_c::empty );
+		auto pChunks = m_tRtChunks.RtData().m_pChunks;
+		for ( auto& pChunk : *pChunks )
+			if ( dChunks.BinarySearch ( pChunk->Cidx().m_iChunk ) )
+				pChunk->m_bFinallyUnlink = true;
+			else
+				tChangeset.m_pNewDiskChunks->Add ( pChunk );
+	}
+	SaveMeta();
+	if ( pAffected )
+		*pAffected+=dChunks.GetLength();
+}
+
 // perform merge, preload result, rename to final chunk and return preallocated result scheduled to dispose
 ConstDiskChunkRefPtr_t RtIndex_c::ChangeDiskChunk ( const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunk, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters )
 {
@@ -10731,41 +10758,52 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 		CSphVector<ConstDiskChunkRefPtr_t> dChosenChunks;
 		dChosenChunks.Reserve ( iJobSize );
 
-		auto dSmallest = GetSmallestChunksByID ( *pChunks );
-		if ( dSmallest.IsEmpty() )
-			break;
-
-		ARRAY_FOREACH ( i, dSmallest )
-		if ( !dSmallest[i].m_iSize )
+		CSphVector<ChunkAndSize_t> dSmallest;
+		dSmallest.Reserve ( pChunks->GetLength() );
 		{
-			RTDLOG << "Optimize: drop chunk " << dSmallest[i].m_iId;
-			DropDiskChunk ( dSmallest[i].m_iId, &iAffected );
-			dSmallest.RemoveFast ( i-- );
-		}
-
-		// need to resort because of RemoveFast() above
-		dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iSize < b.m_iSize; } ) );
-
-		if (dSmallest.GetLength()>iJobSize)
-			dSmallest.Resize ( iJobSize );
-
-		// we need to make sure that A is the oldest one
-		// indexes go from oldest to newest so A must-go before B (A is always older than B)
-		// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
-		dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iId < b.m_iId; } ) );
-
-		for ( const auto& tNext : dSmallest ) {
-			auto pChunk = m_tRtChunks.DiskChunkByID ( tNext.m_iId );
-			if ( !pChunk )
-			{
-				bWork = false;
+			ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+			dSmallest = GetSmallestChunksByID ( *pChunks );
+			if ( dSmallest.IsEmpty() )
 				break;
-			}
-			dChosenChunks.Add ( pChunk );
-		}
 
-		if ( !bWork || dChosenChunks.GetLength()<2 )
-			break;
+			IntVec_t dEmptyChunks;
+			ARRAY_FOREACH ( i, dSmallest )
+			if ( !dSmallest[i].m_iSize )
+			{
+				dEmptyChunks.Add (dSmallest[i].m_iId);
+				dSmallest.RemoveFast ( i-- );
+			}
+
+			// need to resort because of RemoveFast() above
+			dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iSize < b.m_iSize; } ) );
+
+			if (dSmallest.GetLength()>iJobSize)
+				dSmallest.Resize ( iJobSize );
+
+			// we need to make sure that A is the oldest one
+			// indexes go from oldest to newest so A must-go before B (A is always older than B)
+			// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
+			dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iId < b.m_iId; } ) );
+
+			for ( const auto& tNext : dSmallest ) {
+				auto pChunk = m_tRtChunks.DiskChunkByID ( tNext.m_iId );
+				if ( !pChunk )
+				{
+					bWork = false;
+					break;
+				}
+				dChosenChunks.Add ( pChunk );
+			}
+
+			if ( !bWork || dChosenChunks.GetLength()<2 )
+				break;
+
+			// mark them 'optimizing' from serial worker, so no concurrency with another optimizing jobs possible.
+			for ( const auto & pChunk : dChosenChunks )
+				pChunk->m_bOptimizing.store ( true, std::memory_order_relaxed );
+
+			DropDiskChunks ( dEmptyChunks, &iAffected );
+		} // serial fiber scope
 
 		RTDLOG << "Optimize: merge chunks " << dChosenChunks.GetLength();
 

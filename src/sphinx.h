@@ -1139,12 +1139,12 @@ struct UpdateContext_t
 	DWORD				m_uUpdateMask {0};
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
-
+	StrVec_t			m_dDisabledSI;
 
 	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
 
 	void PrepareListOfUpdatedAttributes ( CSphString& sError );
-	bool HandleJsonWarnings ( int iUpdated, CSphString& sWarning, CSphString& sError ) const;
+	bool HandleWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError );
 	CSphRowitem* GetDocinfo ( RowID_t tRowID ) const;
 };
 

@@ -100,6 +100,29 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 
 bool ReplicationResolveUser ( const SqlStmt_t & tStmt, const CSphString & sSessionUser, CSphString & sRplUser, CSphString & sError );
 
+static CSphString GetCallPermTarget ( const SqlStmt_t & tStmt )
+{
+	CSphString sProc { tStmt.m_sCallProc };
+	sProc.ToUpper();
+
+	int iIndexArg = -1;
+	if ( sProc=="PQ" )
+		iIndexArg = 0;
+	else if ( sProc=="SUGGEST" || sProc=="QSUGGEST" || sProc=="SNIPPETS" || sProc=="KEYWORDS" || sProc=="AUTOCOMPLETE" )
+		iIndexArg = 1;
+
+	if ( iIndexArg<0 || iIndexArg>=tStmt.m_dInsertValues.GetLength() )
+		return "";
+
+	const auto & tIndexArg = tStmt.m_dInsertValues[iIndexArg];
+	if ( tIndexArg.m_iType!=SqlInsert_t::QUOTED_STRING )
+		return "";
+
+	CSphString sIndex { tIndexArg.m_sVal };
+	SqlParser_SplitClusterIndex ( sIndex, nullptr );
+	return sIndex;
+}
+
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	if ( !IsAuthEnabled() )
@@ -116,7 +139,6 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_PARSE_ERROR: return true;
 
 	case STMT_SELECT:
-	case STMT_CALL:
 	case STMT_DESCRIBE:
 	case STMT_SHOW_CREATE_TABLE:
 	case STMT_SHOW_INDEX_STATUS:
@@ -127,6 +149,12 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_EXPLAIN:
 	case STMT_SHOW_TABLE_INDEXES:
 		return CheckPerms ( sUser, AuthAction_e::READ, ( tStmt.m_sIndex.IsEmpty() ? tStmt.m_tQuery.m_sIndexes : tStmt.m_sIndex ), false, sError );
+
+	case STMT_CALL:
+	{
+		auto sTarget = GetCallPermTarget ( tStmt );
+		return CheckPerms ( sUser, AuthAction_e::READ, sTarget, false, sError );
+	}
 
 	// special read actions without index
 	case STMT_SHOW_WARNINGS:

@@ -1050,12 +1050,29 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 }
 
 
-bool UpdateContext_t::HandleJsonWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError ) const
+bool UpdateContext_t::HandleWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError )
 {
-	if ( !m_iJsonWarnings )
+	if ( !m_iJsonWarnings && m_dDisabledSI.IsEmpty() )
 		return true;
 
-	sWarning.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", m_iJsonWarnings );
+	CSphString sWarningSI;
+	if ( !m_dDisabledSI.IsEmpty() )
+	{
+		m_dDisabledSI.Uniq();
+		sWarningSI.SetSprintf ( "secondary index disabled for attribute(s) '%s' after attribute update; run ALTER TABLE REBUILD SECONDARY", Vec2Str ( m_dDisabledSI ).cstr() );
+	}
+
+	CSphString sWarnJson;
+	if ( m_iJsonWarnings )
+		sWarnJson.SetSprintf ( "%d attribute(s) can not be updated (not found or incompatible types)", m_iJsonWarnings );
+
+	if ( !sWarningSI.IsEmpty() && !sWarnJson.IsEmpty() )
+		sWarning.SetSprintf ( "%s; %s", sWarnJson.cstr(), sWarningSI.cstr() );
+	else if ( !sWarningSI.IsEmpty() )
+		sWarning = sWarningSI;
+	else
+		sWarning = sWarnJson;
+
 	if ( !iUpdated )
 		sError = sWarning;
 
@@ -2614,13 +2631,14 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 			if ( tAttr.m_iSchemaAttr!=-1 )
 			{
 				const CSphColumnInfo & tIdxAttr = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr );
-				m_tSI.ColumnUpdated ( tIdxAttr.m_sName );
+				if ( m_tSI.ColumnUpdated ( tIdxAttr.m_sName ) )
+					tCtx.m_dDisabledSI.Add ( tIdxAttr.m_sName );
 			}
 		}
 	}
 
 	iUpdated = tUpd.m_uAffected - iUpdated;
-	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
+	if ( !tCtx.HandleWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
 	return iUpdated;

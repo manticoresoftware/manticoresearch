@@ -1611,7 +1611,7 @@ private:
 	bool						AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
-	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_c & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
@@ -8742,12 +8742,11 @@ void RtSegment_t::MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const U
 	});
 }
 
-bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::Update_DiskChunks" );
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 	bool bCritical = false;
-	CSphString sWarning;
 
 	bool bEnabled = m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 	bool bNeedWait = !bEnabled;
@@ -8778,8 +8777,6 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 
 		// FIXME! need to handle critical failures here (chunk is unusable at this point)
 		assert ( !bCritical );
-
-		// FIXME! maybe emit a warning to client as well?
 		if ( iRes<0 )
 			return false;
 
@@ -8872,14 +8869,15 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 			break;
 	}
 
-	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError ) ) // fixme!
+	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError, sWarning ) ) // fixme!
 		sphWarn ( "INTERNAL ERROR: table %s update failure: %s", GetName(), sError.cstr() );
 
 	// bump the counter, binlog the update!
 	CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
 	iUpdated = tUpd.m_uAffected - iUpdated;
-	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
+
+	if ( !tCtx.HandleWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
 	// all done

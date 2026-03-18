@@ -23,6 +23,7 @@ class FilenameBuilder_i;
 struct CSphMultiformContainer;
 struct CSphEmbeddedFiles;
 enum ESphBigram : BYTE;
+enum class BigramDelimiter_e : BYTE;
 
 /////////////////////////////////////////////////////////////////////////////
 /// TOKENIZERS
@@ -260,7 +261,7 @@ TokenizerRefPtr_c		Create ( const CSphTokenizerSettings & tSettings, const CSphE
 void AddToMultiformFilterTo ( TokenizerRefPtr_c& pTokenizer, const CSphMultiformContainer* pContainer );
 
 /// add bigram filter upon given tokenizer
-void AddBigramFilterTo ( TokenizerRefPtr_c& pTokenizer, ESphBigram eBigramIndex, const CSphString& sBigramWords, CSphString& sError );
+void AddBigramFilterTo ( TokenizerRefPtr_c& pTokenizer, ESphBigram eBigramIndex, BigramDelimiter_e eBigramDelimiter, const CSphString& sBigramWords, CSphString& sError );
 
 /// create a plugin filter
 /// sSspec is a library, name, and options specification string, eg "myplugins.dll:myfilter1:arg1=123"

@@ -823,7 +823,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::RETRY_DELAY:					tQuery.m_iRetryDelay = (int)iValue; break;
 	case Option_e::IGNORE_NONEXISTENT_COLUMNS:	tQuery.m_bIgnoreNonexistent = iValue!=0; break;
 	case Option_e::AGENT_QUERY_TIMEOUT:			tQuery.m_iAgentQueryTimeoutMs = (int)iValue; break;
-	case Option_e::MAX_PREDICTED_TIME:			tQuery.m_iMaxPredictedMsec = int ( iValue > INT_MAX ? INT_MAX : iValue ); break;
+	case Option_e::MAX_PREDICTED_TIME:			break;
 	case Option_e::BOOLEAN_SIMPLIFY:			tQuery.m_bSimplify = iValue!=0; break;
 	case Option_e::GLOBAL_IDF:					tQuery.m_bGlobalIDF = iValue!=0; break;
 	case Option_e::LOCAL_DF: 					tQuery.m_bLocalDF = iValue!=0; break;
@@ -1470,6 +1470,30 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 			return false;
 
 		tKNN.m_bRescore = !!tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="prefilter" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bPrefilter = !!tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="fullscan" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bFullscan = !!tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="early_termination" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_eTerminationPolicy = tOpt.m_iValue ? knn::HNSWTerminationPolicy_e::QUANTILE : knn::HNSWTerminationPolicy_e::NONE;
 		return true;
 	}
 	else if ( sName=="k" )

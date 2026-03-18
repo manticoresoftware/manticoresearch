@@ -187,191 +187,135 @@ void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSp
 	ClusterNodeState_c::BuildReply ( tOut, tRequest );
 }
 
-static const WORD g_uClusterNodeVer = 2;
-
-template<bool WITH_SERVER_ID, bool WITH_USER>
-struct ClusterNodeVerReply_T
+struct ClusterNodeVerReply_t
 {
 	WORD m_uVerCommandCluster = 0;
 	WORD m_uVerCommandReplicate = 0;
 	int m_iServerId = 0;
+	int64_t m_iClusterEpoch = 0;
 	CSphString m_sUser;
 
 	void Save ( ISphOutputBuffer & tOut ) const
 	{
-		tOut.SendWord ( g_uClusterNodeVer );
 		tOut.SendWord ( m_uVerCommandCluster );
 		tOut.SendWord ( m_uVerCommandReplicate );
-		if_const ( WITH_SERVER_ID )
-			tOut.SendInt ( m_iServerId );
-		if_const ( WITH_USER )
-			tOut.SendString ( m_sUser.cstr() );
+		tOut.SendInt ( m_iServerId );
+		tOut.SendUint64 ( m_iClusterEpoch );
+		tOut.SendString ( m_sUser.cstr() );		
 	}
 
 	void Load ( InputBuffer_c & tIn )
 	{
-		WORD uVer = tIn.GetWord();
-		if ( uVer<1 )
+		m_uVerCommandCluster = tIn.GetWord();
+		if ( m_uVerCommandCluster!=VER_COMMAND_CLUSTER )
 			return;
 
-		m_uVerCommandCluster = tIn.GetWord();
 		m_uVerCommandReplicate = tIn.GetWord();
-		if_const ( WITH_SERVER_ID )
-			m_iServerId = tIn.GetInt();
-		if_const ( WITH_USER )
-			m_sUser = tIn.GetString();
+		m_iServerId = tIn.GetInt();
+		m_iClusterEpoch = (int64_t)tIn.GetUint64();
+		m_sUser = tIn.GetString();
 	}
 };
 
-template<bool WITH_SERVER_ID, bool WITH_USER>
-void operator<< ( ISphOutputBuffer & tOut, const ClusterNodeVerReply_T<WITH_SERVER_ID,WITH_USER> & tReq )
+void operator<< ( ISphOutputBuffer & tOut, const ClusterNodeVerReply_t & tReq )
 {
 	tReq.Save ( tOut );
 }
 
-template<bool WITH_SERVER_ID, bool WITH_USER>
-void operator>> ( InputBuffer_c & tIn, ClusterNodeVerReply_T<WITH_SERVER_ID,WITH_USER> & tReq )
+void operator>> ( InputBuffer_c & tIn, ClusterNodeVerReply_t & tReq )
 {
 	tReq.Load ( tIn );
 }
 
-using ClusterNodeVerReply_t = ClusterNodeVerReply_T<false,false>;
-using ClusterNodeVerIdReply_t = ClusterNodeVerReply_T<true,true>;
-
-// API command to remote node to get node versions
-using ClusterNodeVer_c = ClusterCommand_T<E_CLUSTER::GET_NODE_VER, ClusterNodeVerReply_t, ClusterNodeVerReply_t>;
-
 // API command to remote node to get node versions and id
-using ClusterNodeVerId_c = ClusterCommand_T<E_CLUSTER::GET_NODE_VER_ID, ClusterRequest_t, ClusterNodeVerIdReply_t>;
+using ClusterNodeVerId_c = ClusterCommand_T<E_CLUSTER::GET_NODE_VER_ID, ClusterRequest_t, ClusterNodeVerReply_t>;
 
-void ReceiveClusterGetVer ( bool bServerid, ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
+void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
 {
-	if ( !bServerid )
+	ClusterRequest_t tReq;
+	ClusterNodeVerId_c::ParseRequest ( tBuf, tReq );
+	if ( tReq.m_sCluster.IsEmpty() )
 	{
-		ClusterNodeVerReply_t tReply;
-		tReply.m_uVerCommandCluster = VER_COMMAND_CLUSTER;
-		tReply.m_uVerCommandReplicate = GetVerCommandReplicate();
-		ClusterNodeVer_c::BuildReply ( tOut, tReply );
-	} else
-	{
-		ClusterRequest_t tReq;
-		ClusterNodeVerId_c::ParseRequest ( tBuf, tReq );
-		if ( tReq.m_sCluster.IsEmpty() )
-		{
-			TlsMsg::Err ( "cluster is required for GET_NODE_VER_ID" );
-			return;
-		}
-
-		ClusterNodeVerIdReply_t tReply;
-		tReply.m_uVerCommandCluster = VER_COMMAND_CLUSTER;
-		tReply.m_uVerCommandReplicate = GetVerCommandReplicate();
-		tReply.m_iServerId = GetUidShortServerId();
-		if ( !ClusterGetDonorMeta ( tReq.m_sCluster, tReply.m_sUser ) )
-			return;
-		ClusterNodeVerId_c::BuildReply ( tOut, tReply );
+		TlsMsg::Err ( "cluster is required for GET_NODE_VER_ID" );
+		return;
 	}
+		
+	ClusterNodeVerReply_t tReply;
+	tReply.m_uVerCommandCluster = VER_COMMAND_CLUSTER;
+	tReply.m_uVerCommandReplicate = GetVerCommandReplicate();
+	tReply.m_iServerId = GetUidShortServerId();
+	tReply.m_iClusterEpoch = ClusterGetRemoteEpoch ( tReq.m_sCluster );
+	
+	if ( !ClusterGetDonorMeta ( tReq.m_sCluster, tReply.m_sUser ) )
+		return;
+		
+	ClusterNodeVerId_c::BuildReply ( tOut, tReply );
 }
 
-static bool CheckRemoteVersions ( const ClusterDesc_t & tDesc, const AgentConn_t * pAgent );
-static bool CheckRemoteVersionsId ( const ClusterDesc_t & tDesc, const AgentConn_t * pAgent, CSphString & sUser );
+static bool CheckNodeVersions ( const ClusterDesc_t & tDesc, const ClusterNodeVerReply_t  & tVer, CSphString & sUser );
 
-bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, bool bWithServerId, CSphString & sUser )
+bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int64_t * pEpoch )
 {
-	ClusterNodeVer_c::REQUEST_T tReqVer;
 	ClusterNodeVerId_c::REQUEST_T tReqId;
 	tReqId.m_sCluster = tDesc.m_sName;
 
-	VecRefPtrs_t<AgentConn_t*> dAgents;
-	if ( !bWithServerId )
-	{
-		dAgents = ClusterNodeVer_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqVer );
-	} else
-	{
-		dAgents = ClusterNodeVerId_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqId );
-	}
+	auto dAgents = ClusterNodeVerId_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqId );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
 
-	ClusterNodeVer_c tReplyVer;
-	ClusterNodeVerId_c tReplyId;
-	if ( !bWithServerId )
-		PerformRemoteTasksWrap ( dAgents, tReplyVer, tReplyVer, false );
-	else
-		PerformRemoteTasksWrap ( dAgents, tReplyId, tReplyId, false );
+	if ( pEpoch )
+		*pEpoch = 0;
+
+	ClusterNodeVerId_c tReply;
+	PerformRemoteTasksWrap ( dAgents, tReply, tReply, false );
 
 	int iSuccess = 0;
 	CSphString sDonorUser;
 
 	for ( const AgentConn_t * pAgent : dAgents )
 	{
+		if ( !pAgent->m_bSuccess )
+			continue;
+
+		ClusterNodeVerReply_t tVer = ClusterNodeVerId_c::GetRes ( *pAgent );
+
 		// failure if:
 		// - fetched but versions are wrong either VER_COMMAND_CLUSTER or VER_COMMAND_REPLICATE
-		// - get remote node error reply with the wrong version message
 		// - server_id on this node is the same as on any other node
-		if ( pAgent->m_bSuccess )
-		{
-			CSphString sGotUser;
-			if ( ( !bWithServerId && !CheckRemoteVersions ( tDesc, pAgent ) ) || ( bWithServerId && !CheckRemoteVersionsId ( tDesc, pAgent, sGotUser ) ) )
-				return false;
+		CSphString sGotUser;
+		if ( !CheckNodeVersions ( tDesc, tVer, sGotUser ) )
+			return false;
 
-			if ( bWithServerId )
-			{
-				iSuccess++;
-				if ( iSuccess==1 )
-					sDonorUser = sGotUser;
-				else if ( sDonorUser!=sGotUser )
-				{
-					TlsMsg::Err ( "inconsistent cluster user from remotes for '%s'", tDesc.m_sName.cstr() );
-					return false;
-				}
-			}
-
-		} else if ( pAgent->m_sFailure.Begins ( "remote error: client version is" ) )
+		if ( tVer.m_iServerId==GetUidShortServerId() )
 		{
-			TlsMsg::ResetErr();
-			TlsMsg::Err ( pAgent->m_sFailure );
+			TlsMsg::Err ( "server_id conflict, duplicate server_id:%d detected in the cluster '%s'. Please set a unique server_id at the config.", tVer.m_iServerId, tDesc.m_sName.cstr() );
 			return false;
 		}
+
+		iSuccess++;
+		if ( iSuccess==1 )
+			sDonorUser = sGotUser;
+		else if ( sDonorUser!=sGotUser )
+		{
+			TlsMsg::Err ( "inconsistent cluster user from remotes for '%s'", tDesc.m_sName.cstr() );
+			return false;
+		}
+
+		if ( pEpoch )
+			*pEpoch = tVer.m_iClusterEpoch;
 	}
 
-	if ( bWithServerId && !iSuccess )
-		return TlsMsg::Err ( "cluster '%s', failed to fetch donor user from any node", tDesc.m_sName.cstr() );
-
-	if ( bWithServerId )
-		sUser = sDonorUser;
+	sUser = sDonorUser;
 
 	return true;
 }
 
-template<typename T>
-bool CheckNodeVersions ( const ClusterDesc_t & tDesc, const T & tVer )
+bool CheckNodeVersions ( const ClusterDesc_t & tDesc, const ClusterNodeVerReply_t  & tVer, CSphString & sUser )
 {
 	if ( tVer.m_uVerCommandCluster!=VER_COMMAND_CLUSTER || tVer.m_uVerCommandReplicate!=GetVerCommandReplicate() )
 	{
 		TlsMsg::Err ( "versions mismatch, node removed from the cluster '%s': %d(%d), replication: %d(%d)", tDesc.m_sName.cstr(), (int)tVer.m_uVerCommandCluster, (int)VER_COMMAND_CLUSTER, (int)tVer.m_uVerCommandReplicate, (int)GetVerCommandReplicate() );
-		return false;
-	} else
-	{
-		return true;
-	}
-}
-
-bool CheckRemoteVersions ( const ClusterDesc_t & tDesc, const AgentConn_t * pAgent )
-{
-	ClusterNodeVerReply_t tVer = ClusterNodeVer_c::GetRes ( *pAgent );
-	return CheckNodeVersions ( tDesc, tVer );
-}
-
-bool CheckRemoteVersionsId ( const ClusterDesc_t & tDesc, const AgentConn_t * pAgent, CSphString & sUser )
-{
-	ClusterNodeVerIdReply_t tVer = ClusterNodeVerId_c::GetRes ( *pAgent );
-	if ( !CheckNodeVersions ( tDesc, tVer ) )
-		return false;
-
-	if ( tVer.m_iServerId==GetUidShortServerId() )
-	{
-		TlsMsg::Err ( "server_id conflict, duplicate server_id:%d detected in the cluster '%s'. Please set a unique server_id at the config.", tVer.m_iServerId, tDesc.m_sName.cstr() );
 		return false;
 	} else
 	{

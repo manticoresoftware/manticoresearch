@@ -50,8 +50,8 @@ public:
 	int m_iThrottlingPeriodMS = -1;
 	int m_iDistThreads = 0;
 	int m_iDesiredStack = -1;
-	int m_iTimeoutS = -1;
-	int m_iWTimeoutS = -1;
+	int m_iTimeoutS = -1;		// interactive timeout
+	int m_iWaitTimeoutS = -1;	// non-interactive (wait) timeout
 	int64_t m_iMaxStackSize = Threads::GetMaxCoroStackSize();
 	bool m_bSqlQuoteShowCreate = false;
 	bool m_bQueryDisableLog = false;
@@ -122,8 +122,8 @@ public:
 	void SetTimeoutS ( int iTimeoutS ) { m_iTimeoutS = iTimeoutS; }
 	int GetTimeoutS() const { return m_iTimeoutS;}
 
-	void SetWTimeoutS ( int iTimeoutS ) { m_iWTimeoutS = iTimeoutS; }
-	int GetWTimeoutS() const { return m_iWTimeoutS; }
+	void SetWaitTimeoutS ( int iTimeoutS ) { m_iWaitTimeoutS = iTimeoutS; }
+	int GetWaitTimeoutS() const { return m_iWaitTimeoutS;}
 
 	void SetSqlQuoteShowCreate ( bool bSqlQuoreShowCreate ) { m_bSqlQuoteShowCreate = bSqlQuoreShowCreate; }
 	int GetSqlQuoteShowCreate() const { return m_bSqlQuoteShowCreate; }
@@ -206,8 +206,8 @@ namespace session {
 	inline void SetTimeoutS ( int iTimeoutS ) {  ClientTaskInfo_t::Info().SetTimeoutS ( iTimeoutS ); }
 	inline int GetTimeoutS() { return ClientTaskInfo_t::Info().GetTimeoutS(); }
 
-	inline void SetWTimeoutS ( int iTimeoutS ) {  ClientTaskInfo_t::Info().SetWTimeoutS ( iTimeoutS ); }
-	inline int GetWTimeoutS() { return ClientTaskInfo_t::Info().GetWTimeoutS(); }
+	inline void SetWaitTimeoutS ( int iTimeoutS ) {  ClientTaskInfo_t::Info().SetWaitTimeoutS ( iTimeoutS ); }
+	inline int GetWaitTimeoutS() { return ClientTaskInfo_t::Info().GetWaitTimeoutS(); }
 
 	inline void SetCollation ( ESphCollation eCollation ) {  ClientTaskInfo_t::Info().SetCollation ( eCollation ); }
 	inline ESphCollation GetCollation() { return ClientTaskInfo_t::Info().GetCollation(); }

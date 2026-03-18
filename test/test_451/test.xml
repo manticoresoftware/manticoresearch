@@ -180,6 +180,11 @@ select * from dist_stored12 where gid=22;
 select * from dist_stored21 where gid=22;
 </sphinxql>
 
+<!-- filter on stored_field is forbiden and produce the error reply (no crash of daemon) -->
+<sphinxql>
+select * from test5 where title='test';
+</sphinxql>
+
 </queries>
 
 </test>

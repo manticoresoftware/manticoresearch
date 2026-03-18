@@ -25,6 +25,7 @@
 #include "client_task_info.h"
 #include "knnlib.h"
 #include "secondarylib.h"
+#include "embeddingutils.h"
 
 #if !_WIN32
 	#include <glob.h>
@@ -65,9 +66,31 @@ static const char * BigramName ( ESphBigram eType )
 	case SPH_BIGRAM_BOTHFREQ:
 		return "both_freq";
 
+	case SPH_BIGRAM_SECONDNUMERIC:
+		return "second_numeric";
+
+	case SPH_BIGRAM_SECONDHASDIGIT:
+		return "second_has_digit";
+
 	case SPH_BIGRAM_NONE:
 	default:
 		return "none";
+	}
+}
+
+static const char * BigramDelimiterName ( BigramDelimiter_e eType )
+{
+	switch ( eType )
+	{
+	case BigramDelimiter_e::NONE:
+		return "none";
+
+	case BigramDelimiter_e::BOTH:
+		return "both";
+
+	case BigramDelimiter_e::DELIMITED:
+	default:
+		return "true";
 	}
 }
 
@@ -1123,9 +1146,31 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 			m_eBigramIndex = SPH_BIGRAM_FIRSTFREQ;
 		else if ( s=="both_freq" )
 			m_eBigramIndex = SPH_BIGRAM_BOTHFREQ;
+		else if ( s=="second_numeric" )
+			m_eBigramIndex = SPH_BIGRAM_SECONDNUMERIC;
+		else if ( s=="second_has_digit" )
+			m_eBigramIndex = SPH_BIGRAM_SECONDHASDIGIT;
 		else
 		{
-			sError.SetSprintf ( "unknown bigram_index=%s (must be all, first_freq, or both_freq)", s.cstr() );
+			sError.SetSprintf ( "unknown bigram_index=%s (must be all, first_freq, both_freq, second_numeric, or second_has_digit)", s.cstr() );
+			return false;
+		}
+	}
+
+	m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
+	if ( hIndex("bigram_delimiter") )
+	{
+		CSphString s = hIndex["bigram_delimiter"].strval();
+		s.ToLower();
+		if ( s=="true" )
+			m_eBigramDelimiter = BigramDelimiter_e::DELIMITED;
+		else if ( s=="none" )
+			m_eBigramDelimiter = BigramDelimiter_e::NONE;
+		else if ( s=="both" )
+			m_eBigramDelimiter = BigramDelimiter_e::BOTH;
+		else
+		{
+			sError.SetSprintf ( "unknown bigram_delimiter=%s (must be true, none, or both)", s.cstr() );
 			return false;
 		}
 	}
@@ -1133,7 +1178,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	m_sBigramWords = hIndex.GetStr ( "bigram_freq_words" );
 	m_sBigramWords.Trim();
 
-	bool bEmptyOk = m_eBigramIndex==SPH_BIGRAM_NONE || m_eBigramIndex==SPH_BIGRAM_ALL;
+	bool bEmptyOk = !BigramNeedsFreq ( m_eBigramIndex );
 	if ( bEmptyOk!=m_sBigramWords.IsEmpty() )
 	{
 		sError.SetSprintf ( "bigram_index=%s, bigram_freq_words must%s be empty", hIndex["bigram_index"].cstr(),
@@ -1192,6 +1237,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "stopword_step",			m_iStopwordStep,		m_iStopwordStep!=1 );
 	tOut.Add ( "overshort_step",		m_iOvershortStep,		m_iOvershortStep!=1 );
 	tOut.Add ( "bigram_index",			BigramName(m_eBigramIndex), m_eBigramIndex!=SPH_BIGRAM_NONE );
+	tOut.Add ( "bigram_delimiter",		BigramDelimiterName(m_eBigramDelimiter), m_eBigramDelimiter!=BigramDelimiter_e::DEFAULT );
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
@@ -1570,11 +1616,8 @@ bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
 			tNamedKNN.m_sFrom = i.m_sKNNFrom;
 
-			if ( !tNamedKNN.m_sModelName.empty() && tNamedKNN.m_sFrom.IsEmpty() )
-			{
-				m_sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", tNamedKNN.m_sName.cstr() );
+			if ( !ValidateSettingModel ( i, m_sError ) )
 				return false;
-			}
 		}
 
 	if ( !dKNNAttrs.GetLength() )
@@ -3124,6 +3167,7 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_iOvershortStep = (int)Int ( tNode.ChildByName ( "overshort_step" ), 1 );
 	tSettings.m_iEmbeddedLimit = (int)Int ( tNode.ChildByName ( "embedded_limit" ) );
 	tSettings.m_eBigramIndex = (ESphBigram)Int ( tNode.ChildByName ( "bigram_index" ), SPH_BIGRAM_NONE );
+	tSettings.m_eBigramDelimiter = (BigramDelimiter_e)Int ( tNode.ChildByName ( "bigram_delimiter" ), (DWORD)BigramDelimiter_e::DEFAULT );
 	tSettings.m_sBigramWords = String ( tNode.ChildByName ( "bigram_words" ) );
 	tSettings.m_bIndexFieldLens = Bool ( tNode.ChildByName ( "index_field_lens" ) );
 	tSettings.m_ePreprocessor = (Preprocessor_e)Int ( tNode.ChildByName ( "icu" ), (DWORD)Preprocessor_e::NONE  );
@@ -3164,6 +3208,10 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 	tSettings.m_iEmbeddedLimit = (int)tReader.GetDword();
 
 	tSettings.m_eBigramIndex = (ESphBigram)tReader.GetByte();
+	if ( uVersion>=69 )
+		tSettings.m_eBigramDelimiter = (BigramDelimiter_e)tReader.GetByte();
+	else
+		tSettings.m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
 	tSettings.m_sBigramWords = tReader.GetString();
 
 	tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
@@ -3211,6 +3259,7 @@ void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings
 	tWriter.PutDword ( tSettings.m_iOvershortStep );
 	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
 	tWriter.PutByte ( tSettings.m_eBigramIndex );
+	tWriter.PutByte ( (BYTE)tSettings.m_eBigramDelimiter );
 	tWriter.PutString ( tSettings.m_sBigramWords );
 	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
 	tWriter.PutByte ( tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
@@ -3245,6 +3294,7 @@ void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSetting
 	tOut.NamedValNonDefault ( "overshort_step", tSettings.m_iOvershortStep, 1 );
 	tOut.NamedValNonDefault ( "embedded_limit", tSettings.m_iEmbeddedLimit );
 	tOut.NamedValNonDefault ( "bigram_index", tSettings.m_eBigramIndex, SPH_BIGRAM_NONE );
+	tOut.NamedValNonDefault ( "bigram_delimiter", (DWORD)tSettings.m_eBigramDelimiter, (DWORD)BigramDelimiter_e::DEFAULT );
 	tOut.NamedStringNonEmpty ( "bigram_words", tSettings.m_sBigramWords );
 	tOut.NamedValNonDefault ( "index_field_lens", tSettings.m_bIndexFieldLens, false );
 	tOut.NamedValNonDefault ( "icu", (DWORD)tSettings.m_ePreprocessor, (DWORD)Preprocessor_e::NONE );
@@ -3488,4 +3538,47 @@ bool IndexSettingsContainer_c::CopyListFiles ( const ExtFiles_t & tExt, const CS
 	sFilesOpt << StripPath ( sDstFile ).cstr();
 
 	return true;
+}
+
+bool BigramNeedsFreq ( ESphBigram eMode ) noexcept
+{
+	return eMode==SPH_BIGRAM_FIRSTFREQ || eMode==SPH_BIGRAM_BOTHFREQ;
+}
+
+bool BigramHasDigit ( const BYTE * pWord, int iLen ) noexcept
+{
+	assert ( iLen>=0 );
+	for ( int i=0; i<iLen; ++i )
+		if ( pWord[i]>='0' && pWord[i]<='9' )
+			return true;
+
+	return false;
+}
+
+bool BigramIsDigitsOnly ( const BYTE * pWord, int iLen ) noexcept
+{
+	assert ( iLen>=0 );
+	if ( !iLen )
+		return false;
+
+	for ( int i=0; i<iLen; ++i )
+		if ( pWord[i]<'0' || pWord[i]>'9' )
+			return false;
+
+	return true;
+}
+
+bool BigramIsSecondDigit ( ESphBigram eMode, const BYTE * pSecond, int iLen ) noexcept
+{
+	switch ( eMode )
+	{
+	case SPH_BIGRAM_SECONDNUMERIC:
+		return BigramIsDigitsOnly ( pSecond, iLen );
+
+	case SPH_BIGRAM_SECONDHASDIGIT:
+		return BigramHasDigit ( pSecond, iLen );
+
+	default:
+		return false;
+	}
 }

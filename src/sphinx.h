@@ -514,8 +514,11 @@ struct KnnSearchSettings_t
 	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
 	int				m_iK = 0;				///< KNN K (-1 means auto)
 	int				m_iEf = 0;				///< KNN ef
+	bool			m_bPrefilter = true;	///< apply WHERE filters during KNN traversal
+	bool			m_bFullscan = false;	///< force brute-force KNN search instead of HNSW
 	bool			m_bRescore = true;		///< KNN rescoring
 	float			m_fOversampling = 3.0f;	///< KNN oversampling
+	knn::HNSWTerminationPolicy_e m_eTerminationPolicy = knn::HNSWTerminationPolicy_e::QUANTILE;  ///< HNSW termination policy
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
 
@@ -606,7 +609,6 @@ struct CSphQuery
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
 	DWORD			m_uMaxQueryMsec = 0;	///< max local index search time, in milliseconds (default is 0; means no limit)
-	int				m_iMaxPredictedMsec = 0; ///< max predicted (!) search time limit, in milliseconds (0 means no limit)
 	CSphString		m_sComment;				///< comment to pass verbatim in the log file
 
 	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
@@ -668,7 +670,6 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 /// some low-level query stats
 struct CSphQueryStats
 {
-	int64_t *	m_pNanoBudget = nullptr;///< pointer to max_predicted_time budget (counted in nanosec)
 	DWORD		m_iFetchedDocs = 0;		///< processed documents
 	DWORD		m_iFetchedHits = 0;		///< processed hits (aka positions)
 	DWORD		m_iSkips = 0;			///< number of Skip() calls
@@ -719,14 +720,11 @@ public:
 	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)
 	CSphIOStats				m_tAgentIOStats;		///< agent IO stats (for distributed searches)
 
-	int64_t					m_iPredictedTime = 0;		///< local predicted time
-	int64_t					m_iAgentPredictedTime = 0;	///< distributed predicted time
 	DWORD					m_iAgentFetchedDocs = 0;	///< distributed fetched docs
 	DWORD					m_iAgentFetchedHits = 0;	///< distributed fetched hits
 	DWORD					m_iAgentFetchedSkips = 0;	///< distributed fetched skips
 
 	CSphQueryStats 			m_tStats;					///< query prediction counters
-	bool					m_bHasPrediction = false;	///< is prediction counters set?
 
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
@@ -772,6 +770,7 @@ struct CSphAttrUpdate
 	bool							m_bIgnoreNonexistent = false;	///< whether to warn about non-existen attrs, or just silently ignore them
 	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 	bool							m_bReusable = true;				///< whether update is standalone and never rewritten, or need deep-copy
+	bool							m_bRebuildEmbeddings = false;	///< internal: allow updating KNN-indexed float_vector during rebuild/backfill
 
 	inline int GetRowOffset (int i) const
 	{
@@ -820,6 +819,25 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 };
 
 void CommitUpdateAttributes ( int64_t * pTID, const char* szName, const CSphAttrUpdate & tUpd );
+
+enum class EmbeddingPopulate_e
+{
+	Empty,
+	AllRows
+};
+
+struct ExtUpdState_t
+{
+	CSphString					m_sAttr;
+	int							m_iAttrIdx = -1;
+	int							m_iDims = 0;
+	EmbeddingPopulate_e			m_eMode = EmbeddingPopulate_e::Empty;
+	CSphFixedVector<std::pair<int, RowID_t>>	m_dDiskChunks { 0 };
+	int							m_iUpdatedRows = 0;
+	int							m_iSkippedRows = 0;
+	int							m_iAlterGenerationAtInit = -1;
+	std::optional<bool>			m_tPreviousOptimizeStopState;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 // FULLTEXT INDICES
@@ -1121,12 +1139,12 @@ struct UpdateContext_t
 	DWORD				m_uUpdateMask {0};
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
-
+	StrVec_t			m_dDisabledSI;
 
 	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
 
 	void PrepareListOfUpdatedAttributes ( CSphString& sError );
-	bool HandleJsonWarnings ( int iUpdated, CSphString& sWarning, CSphString& sError ) const;
+	bool HandleWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError );
 	CSphRowitem* GetDocinfo ( RowID_t tRowID ) const;
 };
 
@@ -1343,6 +1361,13 @@ public:
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
 	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
+
+	virtual bool					ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) { return true; }
+	virtual bool					InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError ) { return false; }
+	virtual bool					GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const { return false; }
+	virtual bool					ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) { return true; }
+	virtual void					FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) {}
+	virtual bool					CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const { return true; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

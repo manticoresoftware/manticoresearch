@@ -1110,10 +1110,22 @@ bool ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphSt
 		{
 			JsonObj_c tFilter = tJson.GetObjItem ( "filter", sError, true );
 			if ( tFilter )
+			{
+				if ( tQuery.m_dFilters.GetLength() )
+				{
+					sError = "filters cannot be used in both \"query\" and \"knn\" at the same time";
+					return false;
+				}
+				
+				tQuery.m_tKnnSettings.m_bPrefilter = true;
 				tQuery.m_sQuery = tFilter.AsString();
+			}
 		}
 		else
+		{
+			tQuery.m_tKnnSettings.m_bPrefilter = false;
 			tQuery.m_sQuery = tJson.AsString();
+		}
 	}
 
 	// because of the way sphinxql parsing was implemented

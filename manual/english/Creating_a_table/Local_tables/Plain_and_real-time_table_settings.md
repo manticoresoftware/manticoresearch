@@ -970,6 +970,7 @@ table products {
 
 ### Natural language processing specific settings
 The following settings are supported. They are all described in section [NLP and tokenization](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md).
+* [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)

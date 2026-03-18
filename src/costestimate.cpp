@@ -11,14 +11,140 @@
 
 #include "costestimate.h"
 
+#include <math.h>
+#include <algorithm>
+
 #include "sphinxint.h"
 #include "sphinxsort.h"
 #include "columnarfilter.h"
 #include "secondaryindex.h"
 #include "geodist.h"
-#include <math.h>
+#include "histogram.h"
 #include "std/sys.h"
 
+
+int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx )
+{
+	if ( !tCtx.m_pHistograms )
+		return tCtx.m_iTotalDocs;
+
+	Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tSettings.m_sAttrName );
+	if ( !pHistogram || pHistogram->IsOutdated() )
+		return tCtx.m_iTotalDocs;
+
+	HistogramRset_t tEstimate;
+	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
+		return tCtx.m_iTotalDocs;
+
+	return tEstimate.m_iTotal;
+}
+
+
+class FilterSelectivityEstimator_c
+{
+public:
+				FilterSelectivityEstimator_c ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> * pFilterTree, const CreateFilterContext_t & tCtx );
+
+	int64_t		Estimate() const;
+
+private:
+	const VecTraits_T<CSphFilterSettings> &	m_dFilters;
+	const VecTraits_T<FilterTreeItem_t> *	m_pFilterTree = nullptr;
+	const CreateFilterContext_t &			m_tCtx;
+	const int64_t							m_iTotalDocs = 0;
+
+	int64_t		ClampEstimate ( int64_t iValue ) const	{ return std::clamp ( iValue, (int64_t)0, m_iTotalDocs ); }
+	int64_t		EstimateLeaf ( int iFilterItem ) const;
+	int64_t		EstimateImplicitAnd () const;
+	int64_t		EstimateNode ( int iNode ) const;
+};
+
+
+FilterSelectivityEstimator_c::FilterSelectivityEstimator_c ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> * pFilterTree, const CreateFilterContext_t & tCtx )
+	: m_dFilters ( dFilters )
+	, m_pFilterTree ( pFilterTree )
+	, m_tCtx ( tCtx )
+	, m_iTotalDocs ( Max ( int64_t(0), tCtx.m_iTotalDocs ) )
+{}
+
+
+int64_t FilterSelectivityEstimator_c::Estimate () const
+{
+	if ( !m_iTotalDocs )
+		return 0;
+
+	if ( !m_pFilterTree || !m_pFilterTree->GetLength() )
+		return EstimateImplicitAnd();
+
+	return EstimateNode ( m_pFilterTree->GetLength()-1 );
+}
+
+
+int64_t FilterSelectivityEstimator_c::EstimateLeaf ( int iFilterItem ) const
+{
+	if ( iFilterItem<0 || iFilterItem>=m_dFilters.GetLength() )
+		return m_iTotalDocs;
+
+	return ClampEstimate ( EstimateFilterSelectivity ( m_dFilters[iFilterItem], m_tCtx ) );
+}
+
+
+int64_t FilterSelectivityEstimator_c::EstimateImplicitAnd () const
+{
+	double fEst = m_iTotalDocs;
+	double fTotal = m_iTotalDocs;
+
+	for ( const auto & tFilter : m_dFilters )
+	{
+		int64_t iSel = ClampEstimate ( EstimateFilterSelectivity ( tFilter, m_tCtx ) );
+		fEst = fEst*iSel/fTotal;
+	}
+
+	return ClampEstimate ( (int64_t)round(fEst) );
+}
+
+
+int64_t FilterSelectivityEstimator_c::EstimateNode ( int iNode ) const
+{
+	assert(m_pFilterTree);
+
+	if ( iNode<0 || iNode>=m_pFilterTree->GetLength() )
+		return m_iTotalDocs;
+
+	const auto & tNode = (*m_pFilterTree)[iNode];
+	if ( tNode.m_iFilterItem!=-1 )
+		return EstimateLeaf ( tNode.m_iFilterItem );
+
+	int64_t iLeft = EstimateNode ( tNode.m_iLeft );
+	int64_t iRight = EstimateNode ( tNode.m_iRight );
+
+	double fTotal = m_iTotalDocs;
+	if ( tNode.m_bOr )
+	{
+		double fEst = (double)iLeft + (double)iRight - ((double)iLeft*(double)iRight) / fTotal;
+		return ClampEstimate ( (int64_t)fEst );
+	}
+
+	double fEst = ((double)iLeft * (double)iRight) / fTotal;
+	return ClampEstimate ( (int64_t)round(fEst) );
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int64_t EstimateFilterSelectivity ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> * pFilterTree, const CreateFilterContext_t & tCtx )
+{
+	if ( tCtx.m_iTotalDocs<=0 )
+		return 0;
+
+	if ( !dFilters.GetLength() )
+		return tCtx.m_iTotalDocs;
+
+	FilterSelectivityEstimator_c tEstimator ( dFilters, pFilterTree, tCtx );
+	return tEstimator.Estimate();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 
 static float EstimateMTCost ( float fCost, int iThreads, float fKPerf, float fBPerf )
 {

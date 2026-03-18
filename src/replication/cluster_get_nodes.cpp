@@ -306,6 +306,12 @@ bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int
 			*pEpoch = tVer.m_iClusterEpoch;
 	}
 
+	if ( !iSuccess )
+	{
+		TlsMsg::ResetErr();
+		return TlsMsg::Err ( "cluster '%s', failed to fetch donor user from any node", tDesc.m_sName.cstr() );
+	}
+
 	sUser = sDonorUser;
 
 	return true;

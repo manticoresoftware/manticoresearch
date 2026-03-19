@@ -678,6 +678,7 @@ struct CSphQuery
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
 
 	bool						HasKnn() const				{ return !m_dKnnSettings.IsEmpty(); }
+	bool						HasMultipleKnn() const		{ return m_dKnnSettings.GetLength() > 1; }
 	KnnSearchSettings_t &		SingleKnnSettings()			{ return m_dKnnSettings[0]; }
 	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
 };

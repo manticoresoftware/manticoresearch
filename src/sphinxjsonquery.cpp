@@ -1593,6 +1593,12 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		return false;
 	}
 
+	if ( tQuery.HasMultipleKnn() && !tQuery.m_bHybridSearch )
+	{
+		sError = "multiple KNN clauses require hybrid fusion (set fusion_method='rrf')";
+		return false;
+	}
+
 	if ( !tRoot.FetchBoolItem ( tPJQuery.m_bProfile, "profile", sError, true ) )
 		return false;
 

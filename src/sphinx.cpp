@@ -1923,6 +1923,9 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitl
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
 		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
 
+	if ( tQuery.HasMultipleKnn() && !tQuery.m_bHybridSearch )
+		LOC_ERROR ( "multiple KNN clauses require hybrid fusion (set fusion_method='rrf')" );
+
 	#undef LOC_ERROR
 }
 

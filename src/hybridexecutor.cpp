@@ -439,6 +439,8 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 	EvalDependentExprs ( dExprs, tNewMatch );
 
 	pSorter->Push ( tNewMatch );
+	pDstSchema->FreeDataPtrs ( tNewMatch );
+	tNewMatch.ResetDynamic();
 }
 
 

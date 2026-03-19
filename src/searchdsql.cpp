@@ -1481,7 +1481,7 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 }
 
 
-static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t & tKNN, CSphQuery & tQuery )
+static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t & tKNN )
 {
 	CSphString sName = tOpt.m_sKey;
 	sName.ToLower();
@@ -1581,7 +1581,7 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, int iK, const SqlNode_t & tV
 
 	if ( pOpts )
 		for ( auto & i : *pOpts )
-			if ( !ParseKNNOption ( i, tKNN, *m_pQuery ) )
+			if ( !ParseKNNOption ( i, tKNN ) )
 			{
 				CSphString sError;
 				sError.SetSprintf ( "Unable to parse KNN option '%s'", i.m_sKey.cstr() );
@@ -1641,7 +1641,7 @@ bool SqlParser_c::SetHybridMatch ( const SqlNode_t & tText, const CSphVector<CSp
 
 	if ( pOpts )
 		for ( auto & i : *pOpts )
-			if ( !ParseKNNOption ( i, tKNN, *m_pQuery ) )
+			if ( !ParseKNNOption ( i, tKNN ) )
 			{
 				CSphString sError;
 				sError.SetSprintf ( "Unable to parse KNN option '%s'", i.m_sKey.cstr() );

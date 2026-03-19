@@ -372,6 +372,17 @@ searchd
 }
 </query>
 
+<!-- KNN array: two KNN searches without text and fusion (error) -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+	]
+}
+</query>
+
 <!-- KNN array with named entries + fusion_weights (explicit aliases) -->
 <query endpoint="json/search">
 {

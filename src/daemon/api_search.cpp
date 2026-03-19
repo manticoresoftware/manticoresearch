@@ -269,10 +269,11 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( (int)i.m_eTypeCast2 );
 	}
 
-	const auto & tKNN = q.m_tKnnSettings;
-	tOut.SendString ( tKNN.m_sAttr.cstr() );
-	if ( !tKNN.m_sAttr.IsEmpty() )
+	// serialize all KNN entries with aliases (v29+)
+	tOut.SendInt ( q.m_dKnnSettings.GetLength() );
+	for ( const auto & tKNN : q.m_dKnnSettings )
 	{
+		tOut.SendString ( tKNN.m_sAttr.cstr() );
 		tOut.SendInt ( tKNN.m_iK );
 		tOut.SendInt ( tKNN.m_iEf );
 		tOut.SendInt ( tKNN.m_bRescore );
@@ -282,10 +283,24 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
-
 		tOut.SendByte ( !!tKNN.m_sEmbStr );
 		if ( tKNN.m_sEmbStr )
 			tOut.SendString ( tKNN.m_sEmbStr->cstr() );
+		tOut.SendString ( tKNN.m_sAlias.cstr() );
+	}
+
+	tOut.SendInt ( q.m_bHybridSearch );
+	if ( q.m_bHybridSearch )
+	{
+		tOut.SendInt ( q.m_tHybridSettings.m_iRankConstant );
+		tOut.SendInt ( q.m_tHybridSettings.m_iWindowSize );
+		tOut.SendString ( q.m_tHybridSettings.m_sMatchAlias.cstr() );
+		tOut.SendInt ( q.m_tHybridSettings.m_dNamedWeights.GetLength() );
+		for ( const auto & tW : q.m_tHybridSettings.m_dNamedWeights )
+		{
+			tOut.SendString ( tW.m_sName.cstr() );
+			tOut.SendFloat ( tW.m_fWeight );
+		}
 	}
 
 	tOut.SendInt ( (int)q.m_eJiebaMode );
@@ -1039,12 +1054,14 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		}
 	}
 
-	if ( uMasterVer>=22 )
+	if ( uMasterVer>=22 && uMasterVer<29 )
 	{
-		auto & tKNN = tQuery.m_tKnnSettings;
-		tKNN.m_sAttr = tReq.GetString();
-		if ( !tKNN.m_sAttr.IsEmpty() )
+		// old format: single KNN entry identified by empty-string sentinel
+		CSphString sAttr = tReq.GetString();
+		if ( !sAttr.IsEmpty() )
 		{
+			auto & tKNN = tQuery.m_dKnnSettings.Add();
+			tKNN.m_sAttr = sAttr;
 			tKNN.m_iK = tReq.GetInt();
 			if ( tKNN.m_iK <= 0 )
 			{
@@ -1083,6 +1100,64 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				bool bHasEmb = !!tReq.GetByte();
 				if ( bHasEmb )
 					tKNN.m_sEmbStr = tReq.GetString();
+			}
+		}
+	}
+
+	if ( uMasterVer>=29 )
+	{
+		int iNumKnn = tReq.GetInt();
+		for ( int i = 0; i < iNumKnn; i++ )
+		{
+			auto & tKNN = tQuery.m_dKnnSettings.Add();
+			tKNN.m_sAttr = tReq.GetString();
+			tKNN.m_iK = tReq.GetInt();
+			if ( tKNN.m_iK <= 0 )
+			{
+				SendErrorReply ( tOut, "k parameter must be positive" );
+				return false;
+			}
+
+			tKNN.m_iEf = tReq.GetInt();
+			if ( tKNN.m_iEf < 0 )
+			{
+				SendErrorReply ( tOut, "ef parameter must be non-negative" );
+				return false;
+			}
+
+			tKNN.m_bRescore = !!tReq.GetInt();
+			tKNN.m_fOversampling = tReq.GetFloat();
+			if ( tKNN.m_fOversampling < 1.0f )
+			{
+				SendErrorReply ( tOut, "oversampling parameter must be >= 1.0" );
+				return false;
+			}
+
+			tKNN.m_bPrefilter = !!tReq.GetInt();
+			tKNN.m_bFullscan = !!tReq.GetInt();
+			tKNN.m_dVec.Resize ( tReq.GetInt() );
+			for ( auto & j : tKNN.m_dVec )
+				j = tReq.GetFloat();
+
+			bool bHasEmb = !!tReq.GetByte();
+			if ( bHasEmb )
+				tKNN.m_sEmbStr = tReq.GetString();
+
+			tKNN.m_sAlias = tReq.GetString();
+		}
+
+		tQuery.m_bHybridSearch = !!tReq.GetInt();
+		if ( tQuery.m_bHybridSearch )
+		{
+			tQuery.m_tHybridSettings.m_iRankConstant = tReq.GetInt();
+			tQuery.m_tHybridSettings.m_iWindowSize = tReq.GetInt();
+			tQuery.m_tHybridSettings.m_sMatchAlias = tReq.GetString();
+			int iNumWeights = tReq.GetInt();
+			tQuery.m_tHybridSettings.m_dNamedWeights.Resize(iNumWeights);
+			for ( auto & tW : tQuery.m_tHybridSettings.m_dNamedWeights )
+			{
+				tW.m_sName = tReq.GetString();
+				tW.m_fWeight = tReq.GetFloat();
 			}
 		}
 	}

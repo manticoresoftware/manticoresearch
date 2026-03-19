@@ -111,10 +111,9 @@ bool IsKnnDist ( const CSphString & sExpr )
 
 void SetupKNNLimit ( CSphQuery & tQuery )
 {
-	auto & tKNN = tQuery.m_tKnnSettings;
-
-	if ( tKNN.m_iK < 0 )
-		tKNN.m_iK = tQuery.m_iLimit;
+	for ( auto & tKNN : tQuery.m_dKnnSettings )
+		if ( tKNN.m_iK < 0 )
+			tKNN.m_iK = tQuery.m_iLimit;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -724,7 +723,10 @@ bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * p
 
 std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, CSphString & sError )
 {
-	auto & tKNN = tQuery.m_tKnnSettings;
+	if ( !tQuery.HasKnn() )
+		return { nullptr, false };
+
+	auto & tKNN = tQuery.SingleKnnSettings();
 	if ( tKNN.m_bFullscan || tKNN.m_sAttr.IsEmpty() )
 		return { nullptr, false };
 
@@ -779,14 +781,18 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 
 RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError )
 {
-	if ( tQuery.m_tKnnSettings.m_bFullscan )
+	if ( !tQuery.HasKnn() )
 		return {};
 
-	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+	const auto & tKNN = tQuery.SingleKnnSettings();
+	if ( tKNN.m_bFullscan )
+		return {};
+
+	if ( !tKNN.m_sAttr.IsEmpty() )
 	{
 		// skip HNSW if brute-force over filtered rows is cheaper than HNSW traversal
 		// use plain K (not oversampled) since brute-force computes exact distances
-		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tQuery.m_tKnnSettings.m_sAttr.cstr(), tQuery.m_tKnnSettings.m_iK, tQuery.m_tKnnSettings.m_iEf, pFilter->GetFilterCount() ) )
+		if ( pKNN && pFilter && pKNN->ShouldUseFullscan ( tKNN.m_sAttr.cstr(), tKNN.m_iK, tKNN.m_iEf, pFilter->GetFilterCount() ) )
 			return {};
 	}
 
@@ -801,7 +807,7 @@ RowIteratorsWithEstimates_t CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQu
 		return {};
 
 	RowIteratorsWithEstimates_t dIterators;
-	dIterators.Add ( { tRes.first, tQuery.m_tKnnSettings.GetRequestedDocs() } );
+	dIterators.Add ( { tRes.first, tKNN.GetRequestedDocs() } );
 	return dIterators;
 }
 

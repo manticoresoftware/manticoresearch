@@ -1,0 +1,476 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>hybrid KNN+text search with RRF fusion</name>
+
+<skip_indexer/>
+
+<requires>
+<knn/>
+<http/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+
+	<!-- Insert test data: docs designed so KNN and text results partially overlap -->
+	<!-- Docs 1-3: close vectors + matching text (appear in both phases) -->
+	insert into t (id, title, vec) values (1, 'machine learning basics', (0.1, 0.1, 0.1, 0.1));
+	insert into t (id, title, vec) values (2, 'deep learning for machine vision', (0.15, 0.12, 0.08, 0.11));
+	insert into t (id, title, vec) values (3, 'machine learning algorithms', (0.2, 0.15, 0.12, 0.09));
+
+	<!-- Docs 4-6: close vectors + non-matching text (KNN phase only) -->
+	insert into t (id, title, vec) values (4, 'cooking recipes italian', (0.11, 0.09, 0.13, 0.1));
+	insert into t (id, title, vec) values (5, 'travel guide europe', (0.18, 0.11, 0.1, 0.12));
+	insert into t (id, title, vec) values (6, 'sports news football', (0.22, 0.14, 0.09, 0.08));
+
+	<!-- Docs 7-9: far vectors + matching text (text phase only) -->
+	insert into t (id, title, vec) values (7, 'machine learning in production', (5.0, 5.0, 5.0, 5.0));
+	insert into t (id, title, vec) values (8, 'advanced machine learning', (6.0, 6.0, 6.0, 6.0));
+	insert into t (id, title, vec) values (9, 'machine learning overview', (7.0, 7.0, 7.0, 7.0));
+
+	<!-- Doc 10: neither close vector nor matching text -->
+	insert into t (id, title, vec) values (10, 'random unrelated document', (10.0, 10.0, 10.0, 10.0));
+	flush ramchunk t;
+
+	select id, knn_dist(), weight() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf';
+	select id, knn_dist(), weight() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by weight() desc, id asc option fusion_method='rrf';
+	select id, knn_dist(), weight() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by knn_dist() desc option fusion_method='rrf';
+	select id, knn_dist(), weight(),hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf';
+	select id, knn_dist(), weight(),hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() asc option fusion_method='rrf';
+
+	select id, knn_dist() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1));
+
+	select id, weight(), knn_dist(), hybrid_score() from t where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf', rank_constant=10;
+	select id, weight(), knn_dist(), hybrid_score() from t where match('machine learning') and knn(vec, (0.1, 0.1, 0.1, 0.1)) limit 3 option fusion_method='rrf', rank_constant=10;
+
+	<!-- Matching and non-matching text queries -->
+	select id, weight(), knn_dist(), hybrid_score() from t where match('machine') and knn(vec, (0.1, 0.1, 0.1, 0.1)) limit 100 option fusion_method='rrf';
+	select id, weight(), knn_dist(), hybrid_score() from t where match('xyznonexistent') and knn(vec, (0.1, 0.1, 0.1, 0.1)) limit 100 option fusion_method='rrf';
+
+	drop table t;
+
+	<!-- Tests with attribute filters -->
+	create table t2 (title text, category int, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+	insert into t2 (id, title, category, vec) values (1, 'machine learning basics', 1, (0.1, 0.1, 0.1, 0.1));
+	insert into t2 (id, title, category, vec) values (2, 'deep learning for machine vision', 1, (0.15, 0.12, 0.08, 0.11));
+	insert into t2 (id, title, category, vec) values (3, 'machine learning algorithms', 2, (0.2, 0.15, 0.12, 0.09));
+	insert into t2 (id, title, category, vec) values (4, 'cooking recipes italian', 2, (0.11, 0.09, 0.13, 0.1));
+	insert into t2 (id, title, category, vec) values (5, 'travel guide europe', 1, (0.18, 0.11, 0.1, 0.12));
+	insert into t2 (id, title, category, vec) values (6, 'sports news football', 2, (0.22, 0.14, 0.09, 0.08));
+	insert into t2 (id, title, category, vec) values (7, 'machine learning in production', 1, (5.0, 5.0, 5.0, 5.0));
+	insert into t2 (id, title, category, vec) values (8, 'advanced machine learning', 2, (6.0, 6.0, 6.0, 6.0));
+	insert into t2 (id, title, category, vec) values (9, 'machine learning overview', 1, (7.0, 7.0, 7.0, 7.0));
+	insert into t2 (id, title, category, vec) values (10, 'random unrelated document', 2, (10.0, 10.0, 10.0, 10.0));
+	flush ramchunk t2;
+
+	select id, category, hybrid_score() from t2 where match('machine learning') and knn(vec, (0.1, 0.1, 0.1, 0.1)) and category=1 option fusion_method='rrf';
+	select id, category, hybrid_score() from t2 where match('machine learning') and knn(vec, (0.1, 0.1, 0.1, 0.1)) and category=2 option fusion_method='rrf';
+	select id, category, hybrid_score() from t2 where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) and category>=2 option fusion_method='rrf';
+
+	<!-- Simplified syntax (should return an error because no embeddings) -->
+	select id, category from t2 where hybrid_match('machine learning', vec);
+	select id, category, hybrid_score() from t2 where hybrid_match('machine learning', vec);
+	select id, category from t2 where hybrid_match('machine learning');
+	select id, category from t2 where hybrid_match('machine learning',{k=5}) option rank_constant=10;
+
+	drop table t2;
+
+	<!-- Query-level OPTION syntax -->
+	create table t3 (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+	insert into t3 (id, title, vec) values (1, 'machine learning basics', (0.1, 0.1, 0.1, 0.1));
+	insert into t3 (id, title, vec) values (2, 'deep learning for machine vision', (0.15, 0.12, 0.08, 0.11));
+	insert into t3 (id, title, vec) values (3, 'machine learning algorithms', (0.2, 0.15, 0.12, 0.09));
+	insert into t3 (id, title, vec) values (4, 'cooking recipes italian', (0.11, 0.09, 0.13, 0.1));
+	insert into t3 (id, title, vec) values (5, 'travel guide europe', (0.18, 0.11, 0.1, 0.12));
+	insert into t3 (id, title, vec) values (6, 'machine learning in production', (5.0, 5.0, 5.0, 5.0));
+	insert into t3 (id, title, vec) values (7, 'advanced machine learning', (6.0, 6.0, 6.0, 6.0));
+	flush ramchunk t3;
+
+	select id, hybrid_score() from t3 where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf';
+	select id, hybrid_score() from t3 where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf', rank_constant=10;
+	select id, hybrid_score() from t3 where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf', window_size=20;
+	select id from t3 where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='invalid';
+
+	drop table t3;
+
+	<!-- Multiple KNN searches in one query -->
+	create table t4 (title text, vec1 float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2', vec2 float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+	insert into t4 (id, title, vec1, vec2) values (1, 'machine learning basics', (0.1, 0.1, 0.1, 0.1), (1.0, 0.0, 0.0, 0.0));
+	insert into t4 (id, title, vec1, vec2) values (2, 'deep learning for machine vision', (0.15, 0.12, 0.08, 0.11), (0.0, 1.0, 0.0, 0.0));
+	insert into t4 (id, title, vec1, vec2) values (3, 'machine learning algorithms', (0.2, 0.15, 0.12, 0.09), (0.0, 0.0, 1.0, 0.0));
+	insert into t4 (id, title, vec1, vec2) values (4, 'cooking recipes italian', (0.11, 0.09, 0.13, 0.1), (0.0, 0.0, 0.0, 1.0));
+	insert into t4 (id, title, vec1, vec2) values (5, 'travel guide europe', (5.0, 5.0, 5.0, 5.0), (0.5, 0.5, 0.5, 0.5));
+	insert into t4 (id, title, vec1, vec2) values (6, 'machine learning production', (6.0, 6.0, 6.0, 6.0), (0.9, 0.1, 0.0, 0.0));
+	flush ramchunk t4;
+
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf';
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf', rank_constant=10;
+	select id, hybrid_score() from t4 where knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf';
+
+	<!-- WHERE-item aliases + fusion_weights -->
+	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(text=0.7, dense1=0.2, dense2=0.1);
+
+	<!-- Error: no default aliases in SQL -->
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(query=0.7, dense1=0.2, dense2=0.1);
+
+	<!-- Error: explicit AS 'text' but fusion_weights uses 'query' -->
+	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(query=0.7, dense1=0.2, dense2=0.1);
+
+	<!-- Error: implicit alias (no AS on match, refers to attr name for KNN) -->
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) option fusion_method='rrf', fusion_weights=(vec1=0.2, vec2=0.1);
+
+	<!-- Partial weights with explicit aliases (only specify some, rest default to 1.0) -->
+	select id, hybrid_score() from t4 where match('machine learning') as text and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) as dense1 and knn(vec2, 5, (1.0, 0.0, 0.0, 0.0)) as dense2 option fusion_method='rrf', fusion_weights=(text=2.0);
+
+	<!-- Unknown alias in fusion_weights (should error) -->
+	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf', fusion_weights=(nonexistent=0.5);
+
+	drop table t4;
+</sphinxql>
+</queries>
+
+<httpqueries>
+
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE t (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2')</query>
+
+<query endpoint="json/insert">{"index":"t","id":1,"doc":{"title":"machine learning basics","vec":[0.1,0.1,0.1,0.1]}}</query>
+<query endpoint="json/insert">{"index":"t","id":2,"doc":{"title":"deep learning for machine vision","vec":[0.15,0.12,0.08,0.11]}}</query>
+<query endpoint="json/insert">{"index":"t","id":3,"doc":{"title":"machine learning algorithms","vec":[0.2,0.15,0.12,0.09]}}</query>
+<query endpoint="json/insert">{"index":"t","id":4,"doc":{"title":"cooking recipes italian","vec":[0.11,0.09,0.13,0.1]}}</query>
+<query endpoint="json/insert">{"index":"t","id":5,"doc":{"title":"travel guide europe","vec":[0.18,0.11,0.1,0.12]}}</query>
+<query endpoint="json/insert">{"index":"t","id":6,"doc":{"title":"sports news football","vec":[0.22,0.14,0.09,0.08]}}</query>
+<query endpoint="json/insert">{"index":"t","id":7,"doc":{"title":"machine learning in production","vec":[5.0,5.0,5.0,5.0]}}</query>
+<query endpoint="json/insert">{"index":"t","id":8,"doc":{"title":"advanced machine learning","vec":[6.0,6.0,6.0,6.0]}}</query>
+<query endpoint="json/insert">{"index":"t","id":9,"doc":{"title":"machine learning overview","vec":[7.0,7.0,7.0,7.0]}}</query>
+<query endpoint="json/insert">{"index":"t","id":10,"doc":{"title":"random unrelated document","vec":[10.0,10.0,10.0,10.0]}}</query>
+
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK t</query>
+
+<!-- hybrid RRF -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- backward compat (no fusion_method) -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } }
+}
+</query>
+
+<!-- hybrid with custom rank_constant -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "rank_constant": 10 }
+}
+</query>
+
+<!-- invalid fusion_method -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "invalid" }
+}
+</query>
+
+<!-- hybrid without k (should use default) -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1]
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid without field (should error, no auto-embeddings) -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"query_vector": [0.1, 0.1, 0.1, 0.1]
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid using text (should error, no auto-embeddings) -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"query": "machine learning"
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid using text (should error, no auto-embeddings) -->
+<query endpoint="json/search">
+{
+	"index": "t",
+	"knn": {
+		"field": "vec",
+		"query": "machine learning"
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<query endpoint="sql?mode=raw" method="post">DROP TABLE t</query>
+
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE t2 (title text, category int, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2')</query>
+
+<query endpoint="json/insert">{"index":"t2","id":1,"doc":{"title":"machine learning basics","category":1,"vec":[0.1,0.1,0.1,0.1]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":2,"doc":{"title":"deep learning for machine vision","category":1,"vec":[0.15,0.12,0.08,0.11]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":3,"doc":{"title":"machine learning algorithms","category":2,"vec":[0.2,0.15,0.12,0.09]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":4,"doc":{"title":"cooking recipes italian","category":2,"vec":[0.11,0.09,0.13,0.1]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":5,"doc":{"title":"travel guide europe","category":1,"vec":[0.18,0.11,0.1,0.12]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":6,"doc":{"title":"sports news football","category":2,"vec":[0.22,0.14,0.09,0.08]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":7,"doc":{"title":"machine learning in production","category":1,"vec":[5.0,5.0,5.0,5.0]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":8,"doc":{"title":"advanced machine learning","category":2,"vec":[6.0,6.0,6.0,6.0]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":9,"doc":{"title":"machine learning overview","category":1,"vec":[7.0,7.0,7.0,7.0]}}</query>
+<query endpoint="json/insert">{"index":"t2","id":10,"doc":{"title":"random unrelated document","category":2,"vec":[10.0,10.0,10.0,10.0]}}</query>
+
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK t2</query>
+
+<!-- hybrid with attribute filter -->
+<query endpoint="json/search">
+{
+	"index": "t2",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": {
+		"bool": {
+			"must": [
+				{ "match": { "title": "machine learning" } },
+				{ "equals": { "category": 1 } }
+			]
+		}
+	},
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"index": "t2",
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": {
+		"bool": {
+			"must": [
+				{ "match": { "title": "machine learning" } },
+				{ "equals": { "category": 2 } }
+			]
+		}
+	},
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<query endpoint="sql?mode=raw" method="post">DROP TABLE t2</query>
+
+<!-- Multiple KNN (array) in JSON -->
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE t4 (title text, vec1 float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2', vec2 float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2')</query>
+
+<query endpoint="json/insert">{"index":"t4","id":1,"doc":{"title":"machine learning basics","vec1":[0.1,0.1,0.1,0.1],"vec2":[1.0,0.0,0.0,0.0]}}</query>
+<query endpoint="json/insert">{"index":"t4","id":2,"doc":{"title":"deep learning for machine vision","vec1":[0.15,0.12,0.08,0.11],"vec2":[0.0,1.0,0.0,0.0]}}</query>
+<query endpoint="json/insert">{"index":"t4","id":3,"doc":{"title":"machine learning algorithms","vec1":[0.2,0.15,0.12,0.09],"vec2":[0.0,0.0,1.0,0.0]}}</query>
+<query endpoint="json/insert">{"index":"t4","id":4,"doc":{"title":"cooking recipes italian","vec1":[0.11,0.09,0.13,0.1],"vec2":[0.0,0.0,0.0,1.0]}}</query>
+<query endpoint="json/insert">{"index":"t4","id":5,"doc":{"title":"travel guide europe","vec1":[5.0,5.0,5.0,5.0],"vec2":[0.5,0.5,0.5,0.5]}}</query>
+<query endpoint="json/insert">{"index":"t4","id":6,"doc":{"title":"machine learning production","vec1":[6.0,6.0,6.0,6.0],"vec2":[0.9,0.1,0.0,0.0]}}</query>
+
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK t4</query>
+
+<!-- KNN array: two KNN searches + text, fused via RRF -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- KNN array: two KNN searches + text with rank_constant -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "rank_constant": 10 }
+}
+</query>
+
+<!-- KNN array: two KNN searches without text (KNN-only fusion) -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+	],
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- KNN array with named entries + fusion_weights (explicit aliases) -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5, "name": "dense1" },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5, "name": "dense2" }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "fusion_weights": { "dense1": 0.2, "dense2": 0.1 } }
+}
+</query>
+
+<!-- 'query' is the fixed text alias in JSON, works in fusion_weights -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5, "name": "dense1" },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5, "name": "dense2" }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "fusion_weights": { "query": 0.7, "dense1": 0.2, "dense2": 0.1 } }
+}
+</query>
+
+<!-- Error: KNN alias 'query' collides with fixed fulltext alias in JSON -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5, "name": "query" },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5, "name": "dense2" }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "fusion_weights": { "query": 0.7, "dense2": 0.1 } }
+}
+</query>
+
+<!-- Error: implicit aliases (field names without explicit "name") -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "fusion_weights": { "vec1": 0.2, "vec2": 0.1 } }
+}
+</query>
+
+<!-- fusion_weights with unknown alias (should error) -->
+<query endpoint="json/search">
+{
+	"index": "t4",
+	"knn": [
+		{ "field": "vec1", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 },
+		{ "field": "vec2", "query_vector": [1.0, 0.0, 0.0, 0.0], "k": 5 }
+	],
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "fusion_weights": { "nonexistent": 0.5 } }
+}
+</query>
+
+<query endpoint="sql?mode=raw" method="post">DROP TABLE t4</query>
+
+<!-- Tests for "hybrid" JSON syntax -->
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE t5 (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2')</query>
+<query endpoint="json/insert">{"index":"t5","id":1,"doc":{"title":"test","vec":[0.1,0.1,0.1,0.1]}}</query>
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK t5</query>
+
+<!-- "hybrid" syntax on table without embeddings (should error) -->
+<query endpoint="json/search">
+{
+	"index": "t5",
+	"hybrid": { "query": "machine learning" }
+}
+</query>
+
+<!-- "hybrid" with explicit field on table without embeddings (should error) -->
+<query endpoint="json/search">
+{
+	"index": "t5",
+	"hybrid": { "query": "machine learning", "field": "vec" }
+}
+</query>
+
+<!-- "hybrid" and "knn" together (should error) -->
+<query endpoint="json/search">
+{
+	"index": "t5",
+	"hybrid": { "query": "machine learning" },
+	"knn": { "field": "vec", "query_vector": [0.1, 0.1, 0.1, 0.1], "k": 5 }
+}
+</query>
+
+<query endpoint="sql?mode=raw" method="post">DROP TABLE t5</query>
+
+</httpqueries>
+
+</test>

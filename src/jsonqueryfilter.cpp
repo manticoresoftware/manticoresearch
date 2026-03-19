@@ -1117,13 +1117,17 @@ bool ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphSt
 					return false;
 				}
 				
-				tQuery.m_tKnnSettings.m_bPrefilter = true;
+				for ( auto & tKNN : tQuery.m_dKnnSettings )
+					tKNN.m_bPrefilter = true;
+
 				tQuery.m_sQuery = tFilter.AsString();
 			}
 		}
 		else
 		{
-			tQuery.m_tKnnSettings.m_bPrefilter = false;
+			for ( auto & tKNN : tQuery.m_dKnnSettings )
+				tKNN.m_bPrefilter = false;
+
 			tQuery.m_sQuery = tJson.AsString();
 		}
 	}

@@ -1176,7 +1176,7 @@ table products {
 ### bigram_index
 
 ```ini
-bigram_index = {none|all|first_freq|both_freq}
+bigram_index = {none|all|first_freq|both_freq|second_numeric|second_has_digit}
 ```
 
 <!-- example bigram_index -->
@@ -1189,10 +1189,16 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 * `all`, index every single word pair
 * `first_freq`, only index word pairs where the *first* word is in a list of frequent words (see [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). For example, with `bigram_freq_words = the, in, i, a`, indexing "alone in the dark" text will result in "in the" and "the dark" pairs being stored as bigrams, because they begin with a frequent keyword (either "in" or "the" respectively), but "alone in" would **not** be indexed, because "in" is a *second* word in that pair.
 * `both_freq`, only index word pairs where both words are frequent. Continuing with the same example, in this mode indexing "alone in the dark" would only store "in the" (the very worst of them all from searching perspective) as a bigram, but none of the other word pairs.
+* `second_numeric`, only index word pairs where the *second* token is ASCII digits only. For example, `xt 806` matches, but `xt rt9600` and `xt v2` do not.
+* `second_has_digit`, only index word pairs where the *second* token contains at least one ASCII digit. For example, `xt 806`, `xt rt9600`, and `xt v2` match, but `xt abc` does not.
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
 
 It's important to note that `bigram_index` works only at the tokenization level and doesn't account for transformations like `morphology`, `wordforms` or `stopwords`. This means the tokens it creates are very straightforward, which makes searching phrases more exact and strict. While this can improve the accuracy of phrase matching, it also makes the system less able to recognize different forms of words or variations in how words appear.
+
+The digit-aware modes use ASCII digits only (`0-9`). They do not treat `+`, `-`, or Unicode digits as numeric. The checks also use the token text produced by the current tokenizer path, without any extra punctuation normalization.
+
+Use [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter) to control whether eligible bigrams are stored as the internal delimited token, as a glued token such as `iphone17`, or as both forms.
 
 <!-- request SQL -->
 
@@ -1289,6 +1295,124 @@ table products {
 ```
 <!-- end -->
 
+### bigram_delimiter
+
+```ini
+bigram_delimiter = {true|none|both}
+```
+
+<!-- example bigram_delimiter -->
+Bigram token storage mode. Optional, default is `true`.
+
+`bigram_delimiter` controls which token form is stored for eligible bigrams selected by [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index):
+
+* `true`, store only the internal delimited bigram token. This is the current default behavior.
+* `none`, store only the glued token form, such as `iphone17`.
+* `both`, store both the internal delimited form and the glued form.
+
+Search behavior depends on the selected mode:
+
+* with `true`, phrase optimization rewrites eligible phrase pairs to the internal delimited token
+* with `none`, phrase optimization rewrites eligible phrase pairs to the glued token, for example `"iphone 17"` becomes `iphone17`
+* with `both`, phrase optimization is skipped and phrase queries stay ordinary phrase queries, while glued-token searches can still match because the glued form is stored too
+
+`bigram_delimiter` only changes the stored token shape. It does not decide which pairs are eligible; that is still controlled by [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'bigram_index' => 'all',
+            'bigram_delimiter' => 'none'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  bigram_index = all
+  bigram_delimiter = none
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
 ### bigram_freq_words
 
 ```ini
@@ -1298,9 +1422,18 @@ bigram_freq_words = the, a, you, i
 <!-- example bigram_freq_words -->
 A list of keywords considered "frequent" when indexing bigrams. Optional, default is empty.
 
-Some of the bigram indexing modes (see [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) require to define a list of frequent keywords. These are **not** to be confused with stop words. Stop words are completely eliminated when both indexing and searching. Frequent keywords are only used by bigrams to determine whether to index a current word pair or not.
+Some of the bigram indexing modes (see [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) require a list of frequent keywords. These are **not** to be confused with stop words. Stop words are completely eliminated when both indexing and searching. Frequent keywords are only used by bigrams to determine whether to index a current word pair or not.
 
 `bigram_freq_words` lets you define a list of such keywords.
+
+This option is required only for `first_freq` and `both_freq`.
+
+It must stay empty for:
+
+* `none`
+* `all`
+* `second_numeric`
+* `second_has_digit`
 
 <!-- request SQL -->
 
@@ -2500,4 +2633,3 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
-

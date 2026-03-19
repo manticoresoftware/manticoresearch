@@ -48,58 +48,51 @@ knn::TextToEmbeddings_i * TableEmbeddings_c::GetModel ( const CSphString & sAttr
 
 EmbeddingsSrc_c::EmbeddingsSrc_c ( int iAttrs )
 {
-	m_dStored.Resize(iAttrs);
+	m_dRows.Resize(iAttrs);
 }
 
 
-void EmbeddingsSrc_c::Add ( int iAttr, CSphVector<char> & dSrc )
+void EmbeddingsSrc_c::Add ( int iAttr, CSphVector<char> & dSrc, bool bDefault )
 {
-	auto & tNew = m_dStored[iAttr].Add();
-	tNew.SwapData(dSrc);
+	auto & tNew = m_dRows[iAttr].Add();
+	tNew.m_dSrc.SwapData ( dSrc );
+	tNew.m_bDefault = bDefault;
 }
 
 
-void EmbeddingsSrc_c::Remove ( const CSphFixedVector<RowID_t> & dRowMap )
+void EmbeddingsSrc_c::SwapRows ( RowID_t tDstID, RowID_t tSrcID )
 {
-	for ( auto & i : m_dStored  )
-		for ( auto tRowID : dRowMap )
-			if ( tRowID==INVALID_ROWID )
-				i.Remove(tRowID);
+	assert ( tDstID!=INVALID_ROWID );
+	assert ( tSrcID!=INVALID_ROWID );
+
+	ARRAY_FOREACH ( iAttr, m_dRows )
+		m_dRows[iAttr][tDstID].SwapData ( m_dRows[iAttr][tSrcID] );
+}
+
+
+void EmbeddingsSrc_c::DropTail ( RowID_t tTailID )
+{
+	ARRAY_FOREACH ( iAttr, m_dRows )
+		m_dRows[iAttr].Resize ( tTailID );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 bool EmbeddingsSrc_c::Has ( RowID_t tRowID, int iAttr ) const
 {
-	return ( iAttr>=0 && iAttr<m_dStored.GetLength() && tRowID>=0 && tRowID<m_dStored[iAttr].GetLength() );
+	return ( iAttr>=0 && iAttr<m_dRows.GetLength() && tRowID>=0 && tRowID<m_dRows[iAttr].GetLength() );
+}
+
+bool EmbeddingsSrc_c::IsDefault ( RowID_t tRowID, int iAttr ) const
+{
+	assert ( Has ( tRowID, iAttr ) );
+	return m_dRows[iAttr][tRowID].m_bDefault;
 }
 
 const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
 {
 	assert ( Has ( tRowID, iAttr ) );
-	return m_dStored[iAttr][tRowID];
-}
-
-void EmbeddingsSrc_c::Save ( MemoryWriter_c & tWriter ) const
-{
-	tWriter.PutDword ( m_dStored.GetLength() );
-	for ( const auto & dRows : m_dStored )
-	{
-		tWriter.PutDword ( dRows.GetLength() );
-		for ( const auto & dSrc : dRows )
-			SaveArray ( dSrc, tWriter );
-	}
-}
-
-void EmbeddingsSrc_c::Load ( MemoryReader_c & tReader )
-{
-	m_dStored.Resize ( tReader.GetDword() );
-	for ( auto & dRows : m_dStored )
-	{
-		dRows.Resize ( tReader.GetDword() );
-		for ( auto & dSrc : dRows )
-			GetArray ( dSrc, tReader );
-	}
+	return m_dRows[iAttr][tRowID].m_dSrc;
 }
 
 
@@ -930,4 +923,10 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 		return pSorter;
 
 	return new RescoreSorter_c(pSorter);
+}
+
+void EmbeddingsSrc_c::Row_t::SwapData ( Row_t & rhs )
+{
+	m_dSrc.SwapData ( rhs.m_dSrc );
+	std::swap ( m_bDefault, rhs.m_bDefault );
 }

@@ -342,8 +342,11 @@ ALTER TABLE table REBUILD EMBEDDINGS column_name
 重要行为：
 * 列名是必填项。该命令一次仅重建一个嵌入列。
 * 为该列中的所有行重新生成嵌入，而不仅仅是向量为零的行。
+* 它还会覆盖那些手动插入向量的行，以及使用 `()` 跳过生成并存储零向量的行。
 * 目标列必须是带有嵌入模型配置的索引 `float_vector`。
 * 允许 `FROM=''`，表示“使用所有 `text` 字段和 `string` 属性”。
+
+Manticore 不会持久化该列中当前向量是自动生成、由用户显式提供，还是从 `()` 创建的。如果你运行 `REBUILD EMBEDDINGS`，存储的值将从配置的 `FROM` 源为该列中的每一行重新生成，包括当前值为全零向量的行。
 
 <!-- request Example -->
 ```sql

@@ -192,6 +192,50 @@ ALTER TABLE t REBUILD SECONDARY;
 SHOW TABLE t INDEXES;
 DROP TABLE t;
 
+create table t ( title text, tag integer );
+insert into t values (1,'first',1);
+insert into t values (2,'second',2);
+flush ramchunk t;
+
+select id from t where tag=1 /*+ SecondaryIndex(tag) */; show meta;
+
+update t set tag=3 where id=1;
+show warnings;
+
+select id from t where tag=3 /*+ SecondaryIndex(tag) */;
+show warnings;
+select id from t where tag=3 /*+ SecondaryIndex(tag) */; show meta;
+
+alter table t rebuild secondary;
+select id from t where tag=3 /*+ SecondaryIndex(tag) */; show meta;
+
+drop table t;
+
+create table t ( j json secondary_index='1' );
+insert into t values (1,'{ "price": 10.0, "factor": 1, "addresses": { "a1": { "id": "id_of_address_a1", "name": "name_of_address_a1" }, "a2": { "id":   "id_of_address_a1", "name": "name_of_address_a2" } }, "tags": { "1": "data_of_tag_1" }, "arr":["val0","val1"], "int_arr":[1,2,3], "str":"str1" }');
+flush ramchunk t;
+
+select id, j.factor from t where j['factor']=1; show meta;
+select id, j.price from t where j['str']='str1'; show meta;
+
+update t set j.factor=2 where id=1;
+show warnings;
+
+<!-- SI disabled for JSON.field affected by update -->
+select id, j.factor from t where j['factor']=2 /*+ SecondaryIndex(j['factor']) */;
+show warnings;
+select id, j.factor from t where j['factor']=2 /*+ SecondaryIndex(j['factor']) */; show meta;
+select id, j.factor from t where j['factor']=1; show meta;
+<!-- SI disabled for all JSON.fields -->
+select id, j.price from t where j['str']='str1'; show meta;
+
+<!-- SI enabled after rebuild for all JSON.fields -->
+alter table t rebuild secondary;
+select id, j.factor from t where j['factor']=2 /*+ SecondaryIndex(j['factor']) */; show meta;
+select id, j.price from t where j['str']='str1'; show meta;
+
+drop table t;
+
 </sphinxql></queries>
 
 </test>

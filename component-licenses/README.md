@@ -753,3 +753,20 @@ source files are utilized during the compilation process and become part of the
 Manticore Search binaries.
 
 License: [MIT License](https://opensource.org/license/mit)
+
+## Language packs (morphology and Jieba dictionaries)
+
+When the bundle package or [manticore-language-packs](https://github.com/manticoresoftware/manticoresearch-language-packs) is installed, the following language-related data files are placed under `share/manticore/` (e.g. `/usr/share/manticore/`). They are used by the daemon for morphology options such as `lemmatize_de`, `lemmatize_en`, `lemmatize_ru` and `jieba_chinese`.
+
+### Morphology dictionaries (de, en, ru)
+
+- **Source:** The `.pak` dictionary files are generated from the [AOT (RML) project](https://github.com/sokirko74/aot) (linguistic tools for Russian and German texts; lexicons and grammars). The archives `de.pak.tgz`, `en.pak.tgz`, `ru.pak.tgz` are built from that source and distributed from `https://repo.manticoresearch.com/repository/morphology/`; they are unpacked into `share/manticore/de/`, `share/manticore/en/`, `share/manticore/ru/` (same layout as the [manticore-language-packs](https://github.com/manticoresoftware/manticoresearch-language-packs) package).
+- **Copyright:** AOT was written by Alexey Sokirko, Igor Nozhov, Lev Gershenzon, Andrey Putrin and others. The project started in Moscow (Dialing Company; Russian and English). The German part was created at Berlin-Brandenburg Academy of Sciences and Humanities (DWDS project). See [AOT readme](https://github.com/sokirko74/aot/blob/master/readme) and [www.aot.ru](https://www.aot.ru).
+- **License:** The AOT project states it is distributed under the [GNU Lesser General Public License v2.1 (LGPL-2.1)](https://github.com/sokirko74/aot/blob/master/copying) (see the file `copying` and the readme in the repository). For the scope of that license (e.g. whether it applies to the lexicon/grammar data in Dicts/ as well as the code), refer to the [AOT repository](https://github.com/sokirko74/aot).
+
+### Jieba dictionary files
+
+- **Source:** Dictionary files under `share/manticore/jieba/` are taken from:
+  - [cppjieba](https://github.com/manticoresoftware/cppjieba) master dict files: `hmm_model.utf8`, `idf.utf8`, `stop_words.utf8`, `user.dict.utf8` (from `cppjieba/master/dict/`).
+  - [jieba](https://github.com/manticoresoftware/jieba) extra dict: `dict.txt.big` from `extra_dict/`, installed as `jieba.dict.utf8`.
+- **Copyright / license:** Same as cppjieba (MIT License; see cppjieba section above). The jieba extra dictionary is from the manticoresoftware/jieba repository (fork of the jieba project); for that repository’s license, see its LICENSE file.

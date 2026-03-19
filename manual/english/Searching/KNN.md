@@ -186,7 +186,13 @@ table products_all {
 
 <!-- example inserting_embeddings -->
 
-When using auto embeddings, **do not specify the vector field** in your INSERT statement. The embeddings are generated automatically from the text fields specified in the `FROM` parameter.
+When using auto embeddings, you can:
+
+- Omit the vector field and let Manticore generate embeddings from the fields listed in `FROM`
+- Provide your own vector explicitly for a row
+- Provide `()` to skip generation and store an all-zero vector
+
+If you later run `ALTER TABLE ... REBUILD EMBEDDINGS`, rows that currently contain zero vectors from `()` are regenerated too.
 
 <!-- intro -->
 ##### SQL:
@@ -200,6 +206,12 @@ INSERT INTO products (title) VALUES
 ('banana fruit sweet yellow');
 ```
 
+Insert a user-provided vector
+```sql
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+```
+
 Insert multiple fields - both used for embedding if FROM='title,description'
 ```sql
 INSERT INTO products_openai (title, description) VALUES
@@ -207,7 +219,7 @@ INSERT INTO products_openai (title, description) VALUES
 ('laptop', 'portable computer for work and gaming');
 ```
 
-Insert empty vector (document excluded from vector search)
+Insert empty vector (no auto generation; stores a zero vector)
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());
@@ -403,7 +415,7 @@ The parameters are:
 * `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search. The default is 10.
 * `rescore`: Enables KNN rescoring (enabled by default). Set to `0` in SQL or `false` in JSON to disable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
 * `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. `oversampling=3.0` is applied by default. These candidates can be re-evaluated later if rescoring is enabled. Oversampling also works with non-quantized vectors. Since it increases `k`, which affects how the HNSW index works, it may cause a small change in result accuracy.
-* `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](#early-termination) for details.
+* `early_termination`: Enables or disables adaptive early termination during HNSW graph traversal. Enabled by default. Set to `0` in SQL or `false` in JSON to disable. See [Early termination](../Searching/KNN.md#Early-termination) for details.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 

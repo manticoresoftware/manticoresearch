@@ -1373,6 +1373,7 @@ public:
 	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
+	bool				PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	bool				CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError );
 	void				ForceRamFlush ( const char * szReason ) final;
@@ -1610,7 +1611,7 @@ private:
 	bool						AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
-	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_c & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
@@ -2100,7 +2101,7 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 
 		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
 		{
-			if ( !bDefault && iNumValues!=0 )
+			if ( !bDefault && iNumValues && iNumValues!=tAttr.m_tKNN.m_iDims )
 			{
 				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
 				return false;
@@ -3085,6 +3086,13 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 	dHits.Resize ( iDst );
 }
 
+static void PreCommitAcc ( RtAccum_t & tAcc, int iRowSize )
+{
+	tAcc.CleanupDuplicates ( iRowSize );
+	tAcc.Sort();
+	CleanupHitDuplicates ( tAcc.m_dAccum );
+}
+
 bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 {
 	TRACE_CONN ( "conn", "RtIndex_c::Commit" );
@@ -3113,18 +3121,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	// phase 0, build a new segment
 	// accum and segment are thread local; so no locking needed yet
 	// segment might be NULL if we're only killing rows this txn
-	pAcc->CleanupDuplicates ( m_tSchema.GetRowSize() );
-	pAcc->Sort();
-	CleanupHitDuplicates ( pAcc->m_dAccum );
-
-	CSphString sError;
-	if ( !pAcc->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
-	{
-		if ( pError )
-			*pError = sError;
-
-		return false;
-	}
+	if ( !pAcc->IsPreparedForCommit() )
+		PreCommitAcc ( *pAcc, m_tSchema.GetRowSize() );
 
 	CSphString sCreateError;
 	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords, sCreateError ) };
@@ -3149,6 +3147,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->m_dAccumKlist.Uniq (false);
 
 	// now on to the stuff that needs locking and recovery
+	CSphString sError;
 	int iKilled = 0;
 	if ( !CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes, iKilled, sError ) )
 	{
@@ -3166,6 +3165,20 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	// reset accumulated warnings
 	CSphString sWarning;
 	pAcc->GrabLastWarning ( sWarning );
+	return true;
+}
+
+bool RtIndex_c::PreCommit ( RtAccum_t * pAccExt, CSphString & sError )
+{
+	if ( !pAccExt || ( !pAccExt->m_uAccumDocs && pAccExt->m_dAccumKlist.IsEmpty() ) )
+		return true;
+
+	PreCommitAcc ( *pAccExt, m_tSchema.GetRowSize() );
+
+	if ( !pAccExt->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
+		return false;
+
+	pAccExt->MarkPreparedForCommit();
 	return true;
 }
 
@@ -3610,6 +3623,7 @@ bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString 
 		return false;
 
 	// !COMMIT should handle case when uDoc what inserted in current txn here
+	pAcc->ResetPreparedForCommit();
 	pAcc->m_dAccumKlist.Append ( dDocs );
 
 	return true;
@@ -5657,7 +5671,7 @@ void RtIndex_c::PostSetup()
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
-	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && m_tSettings.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( m_tSettings.m_eBigramIndex ) )
 	{
 		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( m_tSettings.m_sBigramWords.cstr() ), m_tSettings.m_sBigramWords.Length() );
 
@@ -5670,7 +5684,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_eBigramDelimiter, m_tSettings.m_sBigramWords, m_sLastError );
 
 	// hitless
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
@@ -8739,12 +8753,11 @@ void RtSegment_t::MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const U
 	});
 }
 
-bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::Update_DiskChunks" );
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 	bool bCritical = false;
-	CSphString sWarning;
 
 	bool bEnabled = m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 	bool bNeedWait = !bEnabled;
@@ -8775,8 +8788,6 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 
 		// FIXME! need to handle critical failures here (chunk is unusable at this point)
 		assert ( !bCritical );
-
-		// FIXME! maybe emit a warning to client as well?
 		if ( iRes<0 )
 			return false;
 
@@ -8869,14 +8880,15 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 			break;
 	}
 
-	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError ) ) // fixme!
+	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError, sWarning ) ) // fixme!
 		sphWarn ( "INTERNAL ERROR: table %s update failure: %s", GetName(), sError.cstr() );
 
 	// bump the counter, binlog the update!
 	CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
 	iUpdated = tUpd.m_uAffected - iUpdated;
-	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
+
+	if ( !tCtx.HandleWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
 	// all done
@@ -10771,7 +10783,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
-	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( tSettings.m_tIndex.m_eBigramIndex ) )
 	{
 		pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( tSettings.m_tIndex.m_sBigramWords.cstr() ), tSettings.m_tIndex.m_sBigramWords.Length() );
 
@@ -10910,7 +10922,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_eBigramDelimiter, m_tSettings.m_sBigramWords, m_sLastError );
 
 	AlterSave ( false );
 	RaiseAlterGeneration();
@@ -10974,6 +10986,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( &tSettings.m_eHitless, sizeof(tSettings.m_eHitless), uHash );
 	uHash = sphFNV64 ( tSettings.m_sHitlessFiles.cstr(), tSettings.m_sHitlessFiles.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_eBigramIndex, sizeof(tSettings.m_eBigramIndex), uHash );
+	uHash = sphFNV64 ( &tSettings.m_eBigramDelimiter, sizeof(tSettings.m_eBigramDelimiter), uHash );
 	uHash = sphFNV64 ( tSettings.m_sBigramWords.cstr(), tSettings.m_sBigramWords.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_uAotFilterMask, sizeof(tSettings.m_uAotFilterMask), uHash );
 	uHash = sphFNV64 ( &tSettings.m_ePreprocessor, sizeof(tSettings.m_ePreprocessor), uHash );
@@ -12086,6 +12099,7 @@ bool RtIndex_c::ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpda
 		if ( dRamRows.IsEmpty() )
 			continue;
 
+		SccRL_t rLock ( pRamSeg->m_tLock );
 		const BYTE * pBlobBase = pRamSeg->m_dBlobs.Begin();
 		for ( const auto & tRow : dRamRows )
 		{

@@ -9,11 +9,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Script is supposed to be in ./misc, so we treat its parent as the repo root.
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+ENV_FILE="$REPO_ROOT/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  set +u
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set -u
+  set +a
+fi
+
 DEFAULT_PORT="8080"
 
 IMAGE_NAME="${IMAGE_NAME:-manticore-manual-app:local}"
 CONTAINER_NAME="${CONTAINER_NAME:-manticore-manual-app}"
-HOST_PORT="${HOST_PORT:-$DEFAULT_PORT}"
+HOST_PORT="${HOST_PORT:-${PORT:-$DEFAULT_PORT}}"
 READY_TIMEOUT="${READY_TIMEOUT:-120}"
 MANUAL_SRC="$REPO_ROOT/manual"
 DOC_APP_DIR="$REPO_ROOT/misc/doc-app-dir"
@@ -22,10 +33,24 @@ FORCE_NO_CACHE_BUILD=0
 STOP_ONLY=0
 CHECK_ONLY=0
 MANUAL_POLL_INTERVAL="${MANUAL_POLL_INTERVAL:-5}"
+USE_GITHUB_AUTH=0
+GITHUB_AUTH_HEADER=""
+
 error() {
   printf '[error] %s\n' "$*" >&2
   exit 1
 }
+
+if [[ -n "${GITHUB_USER:-}" || -n "${GITHUB_TOKEN:-}" ]]; then
+  if [[ -z "${GITHUB_USER:-}" || -z "${GITHUB_TOKEN:-}" ]]; then
+    error "GITHUB_USER and GITHUB_TOKEN must both be set when using authenticated Git access."
+  fi
+  if ! command -v base64 >/dev/null 2>&1; then
+    error "Command 'base64' is required when using GITHUB_USER/TOKEN but was not found."
+  fi
+  USE_GITHUB_AUTH=1
+  GITHUB_AUTH_HEADER="Authorization: Basic $(printf '%s:%s' "$GITHUB_USER" "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,6 +108,18 @@ run_docker() {
   fi
 }
 
+git_with_auth() {
+  if [[ "$USE_GITHUB_AUTH" -eq 1 ]]; then
+    if GIT_TERMINAL_PROMPT=0 git -c http.extraheader="$GITHUB_AUTH_HEADER" "$@"; then
+      return 0
+    fi
+    printf "[error] GitHub authentication failed. Check GITHUB_USER/GITHUB_TOKEN in your environment or .env file.\n" >&2
+    return 1
+  else
+    git "$@"
+  fi
+}
+
 if [[ "$STOP_ONLY" -eq 1 ]]; then
   if run_docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
     printf "Stopping container '%s'..." "$CONTAINER_NAME"
@@ -125,14 +162,14 @@ if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
       error "Command 'git' is required but not found. Please install Git and try again."
     fi
     rm -rf "$DOC_APP_DIR"
-    git clone --depth=1 "$DOC_APP_REPO_URL" "$DOC_APP_DIR"
+    git_with_auth clone --depth=1 "$DOC_APP_REPO_URL" "$DOC_APP_DIR"
     FORCE_NO_CACHE_BUILD=1
   else
     if ! command -v "git" >/dev/null 2>&1; then
       error "Command 'git' is required but not found. Please install Git and try again."
     fi
     CURRENT_HEAD="$(git -C "$DOC_APP_DIR" rev-parse HEAD)"
-    git -C "$DOC_APP_DIR" pull --ff-only
+    git_with_auth -C "$DOC_APP_DIR" pull --ff-only
     UPDATED_HEAD="$(git -C "$DOC_APP_DIR" rev-parse HEAD)"
     if [[ "$CURRENT_HEAD" != "$UPDATED_HEAD" ]]; then
       FORCE_NO_CACHE_BUILD=1
@@ -145,13 +182,13 @@ if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
 fi
 
 manual_snapshot() {
-  LC_ALL=C find "$MANUAL_SRC" -type f -not -path '*/.git/*' -printf '%T@ %s %p\n' 2>/dev/null | LC_ALL=C sort | cksum | awk '{print $1}'
+  git diff | cksum | awk '{print $1}'
 }
 
 monitor_manual_changes() {
   local last_snapshot
   last_snapshot="$(manual_snapshot)"
-  printf "Watching '%s' for changes every %s seconds. Press Ctrl+C to stop.\n" "$MANUAL_SRC" "$MANUAL_POLL_INTERVAL"
+  printf "Watching '%s' for changes every %s seconds. Press Ctrl+C to stop watching.\n" "$MANUAL_SRC" "$MANUAL_POLL_INTERVAL"
   while true; do
     sleep "$MANUAL_POLL_INTERVAL"
     if ! run_docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
@@ -214,7 +251,7 @@ if [[ "$CONTAINER_RUNNING" -eq 0 ]]; then
   fi
 else
   ready=1
-  printf "Container '%s' is already running.\n" "$CONTAINER_NAME"
+  printf "Container '%s' is already running.\nUse --stop to stop it.\n" "$CONTAINER_NAME"
 fi
 
 cat <<EOF

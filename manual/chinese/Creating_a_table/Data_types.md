@@ -2611,11 +2611,16 @@ CREATE TABLE products_all_fields (
 - **特定字段**：`FROM='title'` - 仅使用标题字段
 - **多个字段**：`FROM='title,description'` - 将标题和描述字段连接并使用
 - **所有文本字段**：`FROM=''`（空）- 表中的所有 `text`（全文字段）和 `string`（字符串属性）字段用于嵌入生成
-- **空向量**：仍然可以使用 `()` 插入空向量以排除文档从向量搜索
+- **手动覆盖**：即使配置了 `MODEL_NAME`，你仍然可以在 `INSERT`/`REPLACE` 中提供自己的向量
+- **空向量**：你可以插入 `()` 以跳过该行的嵌入生成；Manticore 会存储一个全零向量，其维度与模型相同
 
 #### 使用自动嵌入插入数据
 
-使用自动嵌入时，**不要在 INSERT 语句中指定向量字段**。嵌入会自动从指定的文本字段生成：
+使用自动嵌入时，你有三种插入模式：
+
+- 省略向量列，让 Manticore 从 `FROM` 中列出的字段生成嵌入
+- 显式提供自己的向量以覆盖该行的自动生成
+- 提供 `()` 以跳过生成并存储一个全零向量
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2623,10 +2628,16 @@ INSERT INTO products (title, description) VALUES
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
 
--- Insert with empty vector (excluded from vector search)
+-- Insert with a user-provided vector - no auto generation for this row
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+
+-- Insert with empty vector - no auto generation, stores a zero vector
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+
+`()` 在你希望保留某行但不立即生成嵌入时很有用。内部存储为零填充向量，因此应将其视为“尚未生成有意义的嵌入”，而不是语义向量。如果你之后运行 `ALTER TABLE ... REBUILD EMBEDDINGS`，该行也会被重建；`REBUILD EMBEDDINGS` 不会跳过仅因为当前向量全为零的行。
 <!-- end -->
 
 <!-- example manual -->
@@ -2666,6 +2677,8 @@ INSERT INTO products VALUES
 - 后续使用 `ALTER TABLE ... ADD COLUMN` 添加嵌入列
 
 当你使用 `MODEL_NAME` 和 `FROM` 添加 `float_vector` 列时，Manticore 会在 `ALTER` 过程中为现有行生成嵌入。如果之后需要重新生成它们，请使用 `ALTER TABLE ... REBUILD EMBEDDINGS column_name`。
+
+请注意 `REBUILD EMBEDDINGS`：它会为每一行重新生成目标列。这包括当前向量是手动插入的行，以及使用 `()` 存储零向量的行。在数据提交后，Manticore 不会保留存储的向量是自动生成的、由用户提供的还是从 `()` 创建的，并且 `REBUILD EMBEDDINGS` 不会将零向量视为特殊的“跳过此行”标记。
 
 限制：
 - 此方法仅适用于本地 RT 表。对于属于复制集群的表不可用，因为集群表不支持 `ALTER`。

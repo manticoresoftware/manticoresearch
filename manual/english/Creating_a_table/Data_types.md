@@ -2611,11 +2611,16 @@ The `FROM` parameter controls which fields are used for embedding generation:
 - **Specific fields**: `FROM='title'` - only the title field is used
 - **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
 - **All text fields**: `FROM=''` (empty) - all `text` (full-text field) and `string` (string attribute) fields in the table are used
-- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+- **Manual override**: Even when `MODEL_NAME` is configured, you can still provide your own vector in `INSERT`/`REPLACE`
+- **Empty vectors**: You can insert `()` to skip embedding generation for that row; Manticore stores an all-zero vector with the model's dimension
 
 #### Inserting data with auto embeddings
 
-When using auto embeddings, **do not specify the vector field** in your INSERT statements. The embeddings are automatically generated from the specified text fields:
+When using auto embeddings, you have three insert modes:
+
+- Omit the vector column and let Manticore generate the embedding from the fields listed in `FROM`
+- Provide your own vector explicitly to override auto generation for that row
+- Provide `()` to skip generation and store an all-zero vector instead
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2623,10 +2628,16 @@ INSERT INTO products (title, description) VALUES
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
 
--- Insert with empty vector (excluded from vector search)
+-- Insert with a user-provided vector - no auto generation for this row
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+
+-- Insert with empty vector - no auto generation, stores a zero vector
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+
+`()` is useful when you want to keep a row without generating an embedding immediately. Internally, the value is stored as a zero-filled vector, so it should be treated as "no meaningful embedding yet" rather than as a semantic vector. If you later run `ALTER TABLE ... REBUILD EMBEDDINGS`, that row is rebuilt too; `REBUILD EMBEDDINGS` does not skip rows just because their current vector is all zeros.
 <!-- end -->
 
 <!-- example manual -->
@@ -2666,6 +2677,8 @@ How it works:
 - Add the embedding column later with `ALTER TABLE ... ADD COLUMN`
 
 When you add a `float_vector` column with `MODEL_NAME` and `FROM`, Manticore generates embeddings for existing rows during the `ALTER`. If you later need to regenerate them, use `ALTER TABLE ... REBUILD EMBEDDINGS column_name`.
+
+Be careful with `REBUILD EMBEDDINGS`: it regenerates the target column for every row. This includes rows where the current vector was inserted manually and rows where `()` was used to store a zero vector. After the data is committed, Manticore does not retain whether a stored vector was generated automatically, provided by the user, or created from `()`, and `REBUILD EMBEDDINGS` does not treat zero vectors as a special "skip this row" marker.
 
 Limitations:
 - This method works only for local RT tables. It is not available for tables that are part of a replication cluster, because clustered tables do not support `ALTER`.

@@ -342,8 +342,11 @@ Use it when you want to rebuild vectors for an existing embedding column, for ex
 Important behavior:
 * The column name is mandatory. The command rebuilds one embedding column at a time.
 * It regenerates embeddings for all rows in that column, not only rows with zero vectors.
+* It also overwrites rows whose vectors were inserted manually, and rows where `()` was used to skip generation and store a zero vector.
 * The target column must be an indexed `float_vector` with an embedding model configured.
 * `FROM=''` is allowed and means "use all `text` fields and `string` attributes".
+
+Manticore does not persist whether the current vector in that column was generated automatically, provided explicitly by the user, or created from `()`. If you run `REBUILD EMBEDDINGS`, the stored values are regenerated from the configured `FROM` source for every row in the column, including rows whose current value is an all-zero vector.
 
 <!-- request Example -->
 ```sql

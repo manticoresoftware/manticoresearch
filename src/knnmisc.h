@@ -17,8 +17,6 @@
 #include "secondaryindex.h"
 
 class CSphQueryContext;
-class MemoryWriter_c;
-class MemoryReader_c;
 class QueryProfile_c;
 
 class TableEmbeddings_c
@@ -34,17 +32,24 @@ private:
 class EmbeddingsSrc_c
 {
 public:
+	struct Row_t
+	{
+		CSphVector<char>	m_dSrc;
+		bool				m_bDefault = false;
+		void SwapData ( Row_t & rhs );
+	};
+
 			EmbeddingsSrc_c ( int iAttrs );
 
-	void	Add ( int iAttr, CSphVector<char> & dSrc );
-	void	Remove ( const CSphFixedVector<RowID_t> & dRowMap );
+	void	Add ( int iAttr, CSphVector<char> & dSrc, bool bDefault );
+	void	SwapRows ( RowID_t tDstID, RowID_t tSrcID );
+	void	DropTail ( RowID_t tTailID );
 	const VecTraits_T<char> Get ( RowID_t tRowID, int iAttr ) const;
 	bool	Has ( RowID_t tRowID, int iAttr ) const;
-	void	Save ( MemoryWriter_c & tWriter ) const;
-	void	Load ( MemoryReader_c & tReader );
+	bool	IsDefault ( RowID_t tRowID, int iAttr ) const;
 
 private:
-	CSphVector<CSphVector<CSphVector<char>>> m_dStored;
+	CSphVector<CSphVector<Row_t>> m_dRows;
 };
 
 bool							IsKnnDist ( const CSphString & sExpr );

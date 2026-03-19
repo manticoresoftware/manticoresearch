@@ -859,8 +859,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
 	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
 	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
-	case Option_e::RANK_CONSTANT:				tQuery.m_tHybridSettings.m_iRankConstant = (int)iValue; break;
-	case Option_e::WINDOW_SIZE:					tQuery.m_tHybridSettings.m_iWindowSize = (int)iValue; break;
+	case Option_e::RANK_CONSTANT:
+		if ( iValue < 0 )
+			return FAILED ( "rank_constant must be non-negative" );
+		tQuery.m_tHybridSettings.m_iRankConstant = (int)iValue;
+		break;
+	case Option_e::WINDOW_SIZE:
+		if ( iValue < 0 )
+			return FAILED ( "window_size must be non-negative" );
+		tQuery.m_tHybridSettings.m_iWindowSize = (int)iValue;
+		break;
 
 	default:
 		return AddOption_e::NOT_FOUND;

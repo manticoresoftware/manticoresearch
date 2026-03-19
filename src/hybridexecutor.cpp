@@ -29,10 +29,10 @@ struct SubQueryResult_t
 
 struct RRFEntry_t
 {
-	DocID_t					m_tDocID = 0;
-	float					m_fScore = 0.0f;
-	int						m_iTextMatchIdx = -1;		// index into text result set (set 0), or -1 if not present
-	CSphVector<int>			m_dKnnMatchIdx;				// per-KNN-set match index (-1 if not present in that set)
+	DocID_t			m_tDocID = 0;
+	float			m_fScore = 0.0f;
+	int				m_iTextMatchIdx = -1;	// index into text result set (set 0), or -1 if not present
+	CSphVector<int>	m_dKnnMatchIdx;			// per-KNN-set match index (-1 if not present in that set)
 };
 
 

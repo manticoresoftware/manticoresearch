@@ -1150,7 +1150,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		if ( tQuery.m_bHybridSearch )
 		{
 			tQuery.m_tHybridSettings.m_iRankConstant = tReq.GetInt();
+			if ( tQuery.m_tHybridSettings.m_iRankConstant < 0 )
+			{
+				SendErrorReply ( tOut, "rank_constant must be non-negative" );
+				return false;
+			}
 			tQuery.m_tHybridSettings.m_iWindowSize = tReq.GetInt();
+			if ( tQuery.m_tHybridSettings.m_iWindowSize < 0 )
+			{
+				SendErrorReply ( tOut, "window_size must be non-negative" );
+				return false;
+			}
 			tQuery.m_tHybridSettings.m_sMatchAlias = tReq.GetString();
 			int iNumWeights = tReq.GetInt();
 			tQuery.m_tHybridSettings.m_dNamedWeights.Resize(iNumWeights);

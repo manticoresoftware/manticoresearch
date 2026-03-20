@@ -15405,6 +15405,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );
+	sd::status("healthy");
 	sd::ready();
 
 	// disable startup logging to stdout

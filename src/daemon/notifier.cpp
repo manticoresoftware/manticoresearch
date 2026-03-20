@@ -59,6 +59,7 @@ class SocketWrapper_c
 			return -E2BIG;
 
 		struct sockaddr_un tAddress;
+		tAddress.sun_family = AF_UNIX;
 		::memcpy(tAddress.sun_path, sSocket.first, sSocket.second);
 
 		// Support for abstract socket

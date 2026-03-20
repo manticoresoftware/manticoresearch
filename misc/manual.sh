@@ -121,12 +121,18 @@ git_with_auth() {
 }
 
 if [[ "$STOP_ONLY" -eq 1 ]]; then
-  if run_docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+  if run_docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
     printf "Stopping container '%s'..." "$CONTAINER_NAME"
     run_docker stop "$CONTAINER_NAME" >/dev/null
     printf "Done\n"
+  fi
+
+  if run_docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+    printf "Removing container '%s'..." "$CONTAINER_NAME"
+    run_docker rm -f "$CONTAINER_NAME" >/dev/null
+    printf "Done\n"
   else
-    printf "Container '%s' is not running.\n" "$CONTAINER_NAME"
+    printf "Container '%s' does not exist.\n" "$CONTAINER_NAME"
   fi
   exit 0
 fi

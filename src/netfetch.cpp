@@ -129,7 +129,11 @@ static bool InitDynamicCurl()
 		(void**)&sph_curl_slist_free_all,
 	};
 
-	static CSphDynamicLibrary dLib ( CURL_LIB );
+	const char * szCurlLib = getenv ( "MANTICORE_CURL_LIB" );
+	static const bool bHasOverride = szCurlLib && *szCurlLib;
+	static CSphDynamicLibrary dLib ( bHasOverride ? szCurlLib : CURL_LIB );
+	if ( bHasOverride )
+		dLib.CSphDynamicLibraryAlternative ( CURL_LIB );
 	return dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void** ) );
 }
 

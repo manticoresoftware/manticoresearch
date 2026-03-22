@@ -1575,6 +1575,19 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 			return false;
 
+		// legacy: parse "filter" nested inside the "knn" object (deprecated, pre-prefilter syntax)
+		if ( tKNNQuery && tKNNQuery.HasItem("filter") )
+		{
+			if ( tQuery.m_bHybridSearch )
+			{
+				sError = "\"filter\" inside \"knn\" is not supported in hybrid search; move filters to the \"query\" object";
+				return false;
+			}
+
+			if ( !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
+				return false;
+		}
+
 	}
 
 	if ( !ParseJoin ( tRoot, tQuery, sError, tPJQuery.m_sWarning ) )

@@ -231,6 +231,25 @@ select avg(a) from t facet a
 
 有关选项的更多详细信息，请参阅 [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)。
 
+### 融合方法
+字符串。启用 [混合搜索](../Searching/Hybrid_search.md) 结果融合。目前唯一支持的值是 `'rrf'`（倒数排名融合）。当设置时，`MATCH(...)` 和 `KNN(...)` 作为独立的子查询运行，其结果通过排名进行融合。
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
+### 融合权重
+命名浮点数列表。用于 [混合搜索](../Searching/Hybrid_search.md) RRF 评分的每个子查询权重。需要 `fusion_method='
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AS text
+  AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) AS dense
+OPTION fusion_method='rrf', fusion_weights=(text=0.7, dense=0.3);
+```
+
 ### field_weights
 命名整数列表（按字段的用户权重用于排序）。
 
@@ -320,6 +339,15 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 ```
 <!-- end -->
 
+### ra
+Integer. Default is 60. Smoothing constant for [hybrid search](../Searching/Hybrid_search.md) RRF ranking. Each document's score from a sub-query is `weight / (rank_constant + rank)`, where `rank` is its 1-based position in that sub-query's results. A lower value (e.g. 10) makes top positions count much more than lower ones; a higher value (e.g. 100) flattens the difference between positions. Requires `fusion_method='rrf'`.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', rank_constant=10;
+```
+
 ### ranker
 从以下选项中选择：
 * `proximity_bm25`
@@ -352,6 +380,23 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 * `pq` - 优先队列，默认设置
 * `kbuffer` - 为已预先排序的数据（例如按id排序的表数据）提供更快的排序
 两种情况下结果集相同；选择其中一个选项可能会简单地提高（或降低）性能。
+
+### window_size
+Integer. Default is 0 (auto). Controls how many results each sub-query (text and every KNN) retrieves before [hybrid search](../Searching/Hybrid_search.md) RRF fusion. A larger window feeds more candidates into fusion, improving recall at the cost of performance. Requires `fusion_method='rrf'`.
+
+When set to 0 (auto), the window is computed as the **maximum** of:
+- the largest KNN requested-docs count across all KNN sub-queries (which is `k * oversampling` when rescoring is enabled, or just `k` otherwise), and
+- the query's `LIMIT`.
+
+For example, with `LIMIT 20` and `knn(vec, 10, ...)` (default oversampling 3.0, rescoring on), auto window = max(10*3, 20) = 30. Both the text sub-query and KNN sub-query will each retrieve up to 30 results before fusion.
+
+When set explicitly, that value overrides the automatic calculation and is used as the limit for all sub-queries.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', window_size=50;
+```
 
 ### threads
 限制当前查询处理使用的最大线程数。默认值 - 无限制（查询可以占用全局定义的[threads](../Server_settings/Searchd.md#threads)中的所有线程）。

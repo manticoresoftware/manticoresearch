@@ -7,6 +7,7 @@
 
 <requires>
 <knn/>
+<knn_float_tolerance/>
 <embeddings/>
 <http/>
 <force-rt/>

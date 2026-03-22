@@ -2584,7 +2584,7 @@ class SphinxConfig
 			
 			// Check if query contains "knn" (case insensitive) to determine if we should round floats
 			$has_knn = (stripos($query, 'knn') !== false);
-			$round_knn = $has_knn && !$g_disable_float_tolerance;
+			$round_knn = ($has_knn && !$g_disable_float_tolerance) || $this->Requires("knn_float_tolerance");
 			
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
@@ -3377,7 +3377,7 @@ class SphinxConfig
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
 		$has_knn = HasKnnInQuery($set1) || HasKnnInQuery($set2);
-		$round_knn = $has_knn && !$g_disable_float_tolerance;
+		$round_knn = ($has_knn && !$g_disable_float_tolerance) || $this->Requires("knn_float_tolerance");
 
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );

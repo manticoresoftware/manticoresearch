@@ -1067,23 +1067,14 @@ static bool ConstructFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSph
 	if ( sName.IsEmpty() )
 		return false;
 
-	bool bKNN = sName=="knn";
-	if ( sName!="query" && !bKNN )
+	if ( sName!="query" )
 	{
-		sError.SetSprintf ( R"("query" or "knn" expected, got %s)", sName.cstr() );
+		sError.SetSprintf ( R"("query" expected, got %s)", sName.cstr() );
 		return false;
 	}
 
-	JsonObj_c tKNNFilter;
-	if ( bKNN )
-	{
-		tKNNFilter = tJson.GetObjItem ( "filter", sError, true );
-		if ( !tKNNFilter )
-			return true;
-	}
-
 	FilterTreeConstructor_c tTreeConstructor ( tQuery, sError, sWarning );
-	return tTreeConstructor.Parse ( bKNN ? tKNNFilter : tJson );
+	return tTreeConstructor.Parse ( tJson );
 }
 
 
@@ -1106,30 +1097,7 @@ bool ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphSt
 
 	if ( !bFullscan )
 	{
-		if ( CSphString ( tJson.Name() )=="knn" )
-		{
-			JsonObj_c tFilter = tJson.GetObjItem ( "filter", sError, true );
-			if ( tFilter )
-			{
-				if ( tQuery.m_dFilters.GetLength() )
-				{
-					sError = "filters cannot be used in both \"query\" and \"knn\" at the same time";
-					return false;
-				}
-				
-				for ( auto & tKNN : tQuery.m_dKnnSettings )
-					tKNN.m_bPrefilter = true;
-
-				tQuery.m_sQuery = tFilter.AsString();
-			}
-		}
-		else
-		{
-			for ( auto & tKNN : tQuery.m_dKnnSettings )
-				tKNN.m_bPrefilter = false;
-
-			tQuery.m_sQuery = tJson.AsString();
-		}
+		tQuery.m_sQuery = tJson.AsString();
 	}
 
 	// because of the way sphinxql parsing was implemented

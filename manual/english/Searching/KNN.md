@@ -657,17 +657,17 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5,
-		"filter":
+		"k": 5
+	},
+	"query":
+	{
+		"bool":
 		{
-			"bool":
-			{
-				"must":
-				[
-					{ "match": {"_all":"white"} },
-			        { "range": { "id": { "lt": 10 } } }
-				]
-			}
+			"must":
+			[
+				{ "match": {"_all":"white"} },
+				{ "range": { "id": { "lt": 10 } } }
+			]
 		}
 	}
 }
@@ -708,9 +708,9 @@ POST /search
 
 When combining KNN vector search with attribute filters, Manticore supports two strategies that differ in when the filter is applied relative to HNSW graph traversal.
 
-* Prefiltering (default; filter in `"knn"` (JSON) or `prefilter=1` (SQL)) passes the filter into the HNSW traversal itself. Each candidate is checked against the filter before being added to the result heap - only matching documents contribute to the final `k` results. This reduces wasted distance computations and guarantees that exactly `k` matching documents are returned (assuming `k` matching documents exist).
+* Prefiltering (default; `prefilter=1` (SQL) or `"prefilter": true` (JSON, default)) passes the filter into the HNSW traversal itself. Each candidate is checked against the filter before being added to the result heap - only matching documents contribute to the final `k` results. This reduces wasted distance computations and guarantees that exactly `k` matching documents are returned (assuming `k` matching documents exist).
 
-* Postfiltering (filter in `"query"` (JSON) or `prefilter=0` (SQL)) runs the KNN search first over the full dataset, then applies the filter to the results. This is safe and predictable: the HNSW graph is traversed without interference, and the filter only affects which results are returned to the client. The downside is that the graph may spend effort on candidates that will ultimately be discarded. With a tight filter that matches only a small fraction of documents, the returned `k` results may be significantly fewer than requested, because most KNN candidates fail the filter.
+* Postfiltering (`prefilter=0` (SQL) or `"prefilter": false` (JSON)) runs the KNN search first over the full dataset, then applies the filter to the results. This is safe and predictable: the HNSW graph is traversed without interference, and the filter only affects which results are returned to the client. The downside is that the graph may spend effort on candidates that will ultimately be discarded. With a tight filter that matches only a small fraction of documents, the returned `k` results may be significantly fewer than requested, because most KNN candidates fail the filter.
 
 Internally, Manticore uses an ACORN-1-based algorithm for prefiltering. A naive prefilter would simply skip non-matching nodes, which risks losing "bridge" nodes that connect otherwise-separated parts of the HNSW graph, causing recall to collapse as the filter becomes more selective. ACORN-1 avoids this: when a node fails the filter, its neighbors are still added to the exploration queue. This allows the traversal to route around filtered-out nodes and maintain graph connectivity. ACORN-1 exploration is activated automatically when fewer than 60% of the total documents pass the filter.
 
@@ -739,26 +739,27 @@ AND price < 100;
 <!-- request JSON -->
 
 ```json
-// prefilter (default): filter is inside "knn", applied during HNSW traversal
-POST /search
-{
-    "table": "test",
-    "knn": {
-        "field": "image_vector",
-        "query": [0.286569,-0.031816,0.066684,0.032926],
-        "filter": {
-            "range": { "price": { "lt": 100 } }
-        }
-    }
-}
-
-// postfilter: filter is in "query", applied after KNN search
+// prefilter (default): filter applied during HNSW traversal
 POST /search
 {
     "table": "test",
     "knn": {
         "field": "image_vector",
         "query": [0.286569,-0.031816,0.066684,0.032926]
+    },
+    "query": {
+        "range": { "price": { "lt": 100 } }
+    }
+}
+
+// postfilter: filter applied after KNN search
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "prefilter": false
     },
     "query": {
         "range": { "price": { "lt": 100 } }

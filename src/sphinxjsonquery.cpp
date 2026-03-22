@@ -1269,6 +1269,7 @@ static bool ParseSingleKNN ( const JsonObj_c & tJson, KnnSearchSettings_t & tKNN
 	}
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
 	if ( !tJson.FetchBoolItem ( tKNN.m_bFullscan, "fullscan", sError, true ) )			return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bPrefilter, "prefilter", sError, true ) )		return false;
 
 	JsonObj_c tEarlyTermination = tJson.GetBoolItem ( "early_termination", sError, true );
 	if ( tEarlyTermination )
@@ -1574,8 +1575,6 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 			return false;
 
-		if ( tKNNQuery && !tKNNQuery.IsArray() && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
-			return false;
 	}
 
 	if ( !ParseJoin ( tRoot, tQuery, sError, tPJQuery.m_sWarning ) )

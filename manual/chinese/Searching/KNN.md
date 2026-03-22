@@ -657,17 +657,17 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5,
-		"filter":
+		"k": 5
+	},
+	"query":
+	{
+		"bool":
 		{
-			"bool":
-			{
-				"must":
-				[
-					{ "match": {"_all":"white"} },
-			        { "range": { "id": { "lt": 10 } } }
-				]
-			}
+			"must":
+			[
+				{ "match": {"_all":"white"} },
+				{ "range": { "id": { "lt": 10 } } }
+			]
 		}
 	}
 }
@@ -708,9 +708,9 @@ POST /search
 
 当将KNN向量搜索与属性过滤结合使用时，Manticore支持两种策略，它们的区别在于过滤相对于HNSW图遍历的应用时机。
 
-* 预过滤（默认；在`"knn"`（JSON）或`prefilter=1`（SQL）中过滤）将过滤器传递到HNSW遍历本身。在将候选对象添加到结果堆之前，会检查每个候选对象是否符合过滤器——只有匹配的文档才会贡献到最终的`k`个结果中。这减少了浪费的距离计算，并保证恰好返回`k`个匹配文档（假设存在`k`个匹配文档）。
+* 预过滤（默认；`prefilter=1`（SQL）或`"prefilter": true`（JSON，默认））将过滤器传递到HNSW遍历本身。在将候选对象添加到结果堆之前，会检查每个候选对象是否符合过滤器——只有匹配的文档会贡献到最终的`k`个结果中。这减少了浪费的距离计算，并保证恰好返回`k`个匹配文档（假设存在`k`个匹配文档）。
 
-* 后过滤（在`"query"`（JSON）或`prefilter=0`（SQL）中过滤）首先在完整数据集上运行KNN搜索，然后对结果应用过滤器。这是安全且可预测的：HNSW图的遍历不受干扰，过滤器仅影响返回给客户端的结果。缺点是图可能在最终被丢弃的候选对象上花费精力。如果过滤器匹配的文档比例很小，返回的`k`个结果可能显著少于请求的数量，因为大多数KNN候选对象未能通过过滤器。
+* 后过滤（`prefilter=0`（SQL）或`"prefilter": false`（JSON））首先在完整数据集上运行KNN搜索，然后对结果应用过滤器。这是安全且可预测的：HNSW图的遍历不会受到干扰，过滤器仅影响返回给客户端的结果。缺点是图可能会在最终被丢弃的候选对象上花费精力。如果过滤器仅匹配一小部分文档，返回的`k`个结果可能显著少于请求的数量，因为大多数KNN候选对象未能通过过滤器。
 
 内部，Manticore使用基于ACORN-1的算法进行预过滤。一个天真的预过滤器只会跳过不匹配的节点，这可能会导致连接HNSW图中其他分离部分的“桥梁”节点丢失，从而在过滤器变得更加选择性时导致召回率崩溃。ACORN-1避免了这一点：当节点未通过过滤器时，其邻居仍会被添加到探索队列中。这允许遍历绕过被过滤的节点并保持图的连通性。当少于60%的文档通过过滤器时，ACORN-1探索会自动激活。
 
@@ -739,26 +739,27 @@ AND price < 100;
 <!-- request JSON -->
 
 ```json
-// prefilter (default): filter is inside "knn", applied during HNSW traversal
-POST /search
-{
-    "table": "test",
-    "knn": {
-        "field": "image_vector",
-        "query": [0.286569,-0.031816,0.066684,0.032926],
-        "filter": {
-            "range": { "price": { "lt": 100 } }
-        }
-    }
-}
-
-// postfilter: filter is in "query", applied after KNN search
+// prefilter (default): filter applied during HNSW traversal
 POST /search
 {
     "table": "test",
     "knn": {
         "field": "image_vector",
         "query": [0.286569,-0.031816,0.066684,0.032926]
+    },
+    "query": {
+        "range": { "price": { "lt": 100 } }
+    }
+}
+
+// postfilter: filter applied after KNN search
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "prefilter": false
     },
     "query": {
         "range": { "price": { "lt": 100 } }

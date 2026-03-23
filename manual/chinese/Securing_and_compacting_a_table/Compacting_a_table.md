@@ -111,4 +111,3 @@ ALTER CLUSTER mycluster ADD myindex;
 在优化过程中，可以在任何节点上正常使用搜索操作。
 
 <!-- proofread -->
-

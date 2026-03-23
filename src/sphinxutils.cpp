@@ -1094,6 +1094,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
 	{ "attr_autoconv_strict",	0, NULL },
+	{ "parallel_chunk_merges",	0, nullptr },
+	{ "merge_chunks_per_job",	0, nullptr },
 	{ NULL,						0, NULL }
 };
 
@@ -1110,7 +1112,7 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "rlp_max_batch_size",		KEY_REMOVED, NULL },
 	{ "rlp_max_batch_docs",		KEY_REMOVED, NULL },
 	{ "plugin_dir",				0, NULL },
-	{ "progressive_merge",		0, NULL },
+	{ "progressive_merge",		KEY_REMOVED, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -466,6 +466,7 @@ index_converter {--config /path/to/config|--path}
   * [log](Server_settings/Searchd.md#log) - Manticore 服务器日志文件路径
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - 限制每批查询的数量
   * [max_connections](Server_settings/Searchd.md#max_connections) - 最大活动连接数
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - 每个 OPTIMIZE 任务合并的 RT 磁盘块数量
   * [max_filters](Server_settings/Searchd.md#max_filters) - 每个查询允许的最大过滤器数量
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - 每个过滤器允许的最大值数量
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - 服务器允许打开的最大文件数
@@ -478,6 +479,7 @@ index_converter {--config /path/to/config|--path}
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - 客户端请求的网络超时
   * [node_address](Server_settings/Searchd.md#node_address) - 指定节点的网络地址
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 到远程持久代理的持久连接最大数量
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - 在 OPTIMIZE 期间可以并行运行的 RT 磁盘块合并数量
   * [pid_file](Server_settings/Searchd.md#pid_file) - Manticore 服务器 pid 文件路径
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - 确定是否在启动时强制预打开所有表
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - 为对普通表和实时表的搜索查询启用伪分片
@@ -610,7 +612,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 当前在Manticore SQL语法中保留的关键字的完整字母顺序列表（因此不能用作标识符）。
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## 旧版本Manticore文档

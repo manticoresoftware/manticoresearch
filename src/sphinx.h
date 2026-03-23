@@ -521,11 +521,27 @@ struct KnnSearchSettings_t
 	knn::HNSWTerminationPolicy_e m_eTerminationPolicy = knn::HNSWTerminationPolicy_e::QUANTILE;  ///< HNSW termination policy
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
+	CSphString		m_sAlias;				///< user-assigned alias for fusion_weights referencing
 
 	int64_t			GetRequestedDocs() const;
 };
 
-/// search query. Pure struct, no member functions
+
+struct NamedWeight_t
+{
+	CSphString	m_sName;
+	float		m_fWeight = 1.0f;
+};
+
+struct HybridSearchSettings_t
+{
+	int			m_iRankConstant = 60;			///< RRF rank constant (k parameter)
+	int			m_iWindowSize = 0;				///< how many results each sub-query retrieves before fusion (0 = auto)
+	CSphString	m_sMatchAlias;					///< alias for MATCH() in fusion_weights (SQL: MATCH(...) AS alias)
+	CSphVector<NamedWeight_t> m_dNamedWeights;	///< alias to weight from fusion_weights option
+};
+
+/// search query
 struct CSphQuery
 {
 	CSphString		m_sIndexes {"*"};	///< indexes to search
@@ -546,7 +562,9 @@ struct CSphQuery
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
-	KnnSearchSettings_t m_tKnnSettings;
+	CSphVector<KnnSearchSettings_t> m_dKnnSettings;
+	HybridSearchSettings_t m_tHybridSettings;
+	bool			m_bHybridSearch = false;			///< true when fusion_method is set AND both text+KNN are present
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
@@ -658,6 +676,11 @@ struct CSphQuery
 	CSphVector<int64_t>		m_dIntSubkeys;
 	Dispatcher::Template_t	m_tMainDispatcher;
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
+
+	bool						HasKnn() const				{ return !m_dKnnSettings.IsEmpty(); }
+	bool						HasMultipleKnn() const		{ return m_dKnnSettings.GetLength() > 1; }
+	KnnSearchSettings_t &		SingleKnnSettings()			{ return m_dKnnSettings[0]; }
+	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
 };
 
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );

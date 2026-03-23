@@ -13,6 +13,7 @@
 #include "search_handler.h"
 
 #include "sphinxdefs.h"
+#include "hybridexecutor.h"
 #include "joinsorter.h"
 #include "pseudosharding.h"
 #include "api_search.h"
@@ -1110,7 +1111,13 @@ void SearchHandler_c::RunLocalSearches()
 				LOCSEARCHINFO << "RunLocalSearches index:" << pIndex->GetName();
 
 				dNAggrResults.First().m_tIOStats.Start ();
-				if ( m_bMultiQueue )
+				if ( m_dNQueries.First().m_bHybridSearch )
+				{
+					const CSphIndex * pJoinedIndex = dJoinedIndexes[0].m_dIndexes.GetLength() ? dJoinedIndexes[0].m_dIndexes[0] : nullptr;
+					auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, m_dNQueries.First().m_iMaxMatches, m_dPSInfo[iLocal].m_bForceSingleThread, &tCtx.m_tHook );
+					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries.First(), tQueueSettings, dNResults[0], dSorters, tMultiArgs );
+				}
+				else if ( m_bMultiQueue )
 					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
 				else
 					bResult = pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );

@@ -49,10 +49,11 @@ searchd
 		"k": 2,
 		"field": "vec",
 		"query": [0.3, 0.4, 0.5, 0.6],
-		"oversampling": 1.0,
-		"filter": {
-			"bool": { "must": [ { "equals": { "category": 1 } } ] }
-		}
+		"oversampling": 1.0
+	},
+	"query":
+	{
+		"bool": { "must": [ { "equals": { "category": 1 } } ] }
 	}
 }
 </query>
@@ -66,10 +67,11 @@ searchd
 		"field": "vec",
 		"query": [0.3, 0.4, 0.5, 0.6],
 		"oversampling": 1.0,
-		"fullscan": true,
-		"filter": {
-			"bool": { "must": [ { "equals": { "category": 1 } } ] }
-		}
+		"fullscan": true
+	},
+	"query":
+	{
+		"bool": { "must": [ { "equals": { "category": 1 } } ] }
 	}
 }
 </query>
@@ -82,7 +84,8 @@ searchd
 		"k": 2,
 		"field": "vec",
 		"query": [0.3, 0.4, 0.5, 0.6],
-		"oversampling": 1.0
+		"oversampling": 1.0,
+		"prefilter": false
 	},
 	"query":
 	{

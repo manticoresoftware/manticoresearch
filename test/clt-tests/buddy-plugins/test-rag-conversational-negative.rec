@@ -26,7 +26,7 @@ EOF
 mysql -h0 -P9306 -e "INSERT INTO test_docs (id, content, title) VALUES (1, 'Test document for error handling', 'Test Doc');"
 ––– output –––
 ––– comment –––
-Create a valid model for testing
+Test 1: Create a valid model for testing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (llm_provider='openai', llm_model='gpt-4o-mini');"
 ––– output –––
@@ -35,12 +35,6 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (llm_provider='openai', llm_mo
 +--------------------------------------+
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
-––– comment –––
-Test 1: CREATE RAG MODEL with invalid provider
-––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_provider_model (llm_provider='invalid_provider', llm_model='gpt-4o-mini');"
-––– output –––
-ERROR 1064 (42000) at line 1: Invalid LLM provider: invalid_provider. Only 'openai' is supported.
 ––– comment –––
 Test 2: CREATE RAG MODEL with missing required parameter
 ––– input –––

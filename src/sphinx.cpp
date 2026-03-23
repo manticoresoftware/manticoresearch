@@ -1940,6 +1940,9 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitl
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
 		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
 
+	if ( tQuery.HasMultipleKnn() && !tQuery.m_bHybridSearch )
+		LOC_ERROR ( "multiple KNN clauses require hybrid fusion (set fusion_method='rrf')" );
+
 	#undef LOC_ERROR
 }
 
@@ -2148,7 +2151,7 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & 
 	if ( !tQuery.m_sQuery.IsEmpty() )
 		return false;
 
-	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+	if ( tQuery.HasKnn() )
 		return false;
 
 	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
@@ -3315,7 +3318,7 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		if ( bFulltext )
 			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
-		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+		if ( tQuery.HasKnn() )
 			iThreadCap = 1;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
@@ -8111,7 +8114,7 @@ static void RemoveOptionalFilters ( const CSphVector<CSphFilterSettings> & dFilt
 bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
 {
 	StrVec_t dWarnings;
-	bool bKNN = !tQuery.m_tKnnSettings.m_sAttr.IsEmpty();
+	bool bKNN = tQuery.HasKnn();
 	float fBestCost = FLT_MAX;
 
 	if ( bKNN )
@@ -8119,7 +8122,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
-		int iRequestedKNNDocs = Min ( tQuery.m_tKnnSettings.GetRequestedDocs(), m_iDocinfo );
+		int iRequestedKNNDocs = Min ( tQuery.SingleKnnSettings().GetRequestedDocs(), m_iDocinfo );
 		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 	}
@@ -8156,13 +8159,13 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
-	if ( tQuery.m_tKnnSettings.m_bPrefilter && tCtx.m_pFilter )
+	if ( tQuery.HasKnn() && tQuery.SingleKnnSettings().m_bPrefilter && tCtx.m_pFilter )
 		pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
 
 	if ( !dFilters.GetLength() )
 	{
-		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
+		if ( tQuery.HasKnn() )
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.SingleKnnSettings().m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
 
 		return { nullptr, false };
 	}
@@ -8184,7 +8187,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.HasKnn() ? tQuery.SingleKnnSettings().m_eTerminationPolicy : knn::HNSWTerminationPolicy_e::QUANTILE, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 

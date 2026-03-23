@@ -8179,62 +8179,73 @@ ConstRtData FilterReaderChunks ( ConstRtData tOrigin, const VecTraits_T<int64_t>
 
 const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSphQuery & tUpdatedQuery, const ISphSchema & tMatchSchema, CSphString & sError ) const
 {
-	auto & tKNN = tQuery.m_tKnnSettings;
-	if ( !m_pEmbeddings && tKNN.m_sEmbStr )
+	// check if any KNN entry needs auto-embeddings
+	bool bNeedsEmb = tQuery.m_dKnnSettings.any_of ( [] ( const auto & t ) { return !!t.m_sEmbStr; } );
+	if ( !m_pEmbeddings && bNeedsEmb )
 	{
 		sError = "Embeddings generation string specified, but embeddings are not loaded";
 		return nullptr;
 	}
 
-	if ( !m_pEmbeddings || tKNN.m_sAttr.IsEmpty() || !tKNN.m_sEmbStr )
+	if ( !m_pEmbeddings || !bNeedsEmb )
 		return &tQuery;
-
-	auto pAttr = m_tSchema.GetAttr ( tKNN.m_sAttr.cstr() );
-	if ( !pAttr )
-	{
-		sError.SetSprintf ( "KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
-		return nullptr;
-	}
-
-	knn::TextToEmbeddings_i * pModel = m_pEmbeddings->GetModel ( tKNN.m_sAttr );
-	if ( !pModel )
-	{
-		sError.SetSprintf ( "No model loaded for auto embeddings attribute '%s'", tKNN.m_sAttr.cstr() );
-		return nullptr;
-	}
 
 	tUpdatedQuery = tQuery;
 
-	std::vector<std::vector<float>> dEmbeddings;
-	std::vector<std::string_view> dTexts;
-	dTexts.push_back( tKNN.m_sEmbStr->cstr() );
-
-	std::string sConvertError;
-	if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )
+	for ( auto & tKNN : tUpdatedQuery.m_dKnnSettings )
 	{
-		sError.SetSprintf ( "Error generating embeddings for attribute '%s' : %s", tKNN.m_sAttr.cstr(), sConvertError.c_str() );
-		return nullptr;
+		if ( !tKNN.m_sEmbStr || tKNN.m_sAttr.IsEmpty() )
+			continue;
+
+		auto pAttr = m_tSchema.GetAttr ( tKNN.m_sAttr.cstr() );
+		if ( !pAttr )
+		{
+			sError.SetSprintf ( "KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
+			return nullptr;
+		}
+
+		knn::TextToEmbeddings_i * pModel = m_pEmbeddings->GetModel ( tKNN.m_sAttr );
+		if ( !pModel )
+		{
+			sError.SetSprintf ( "No model loaded for auto embeddings attribute '%s'", tKNN.m_sAttr.cstr() );
+			return nullptr;
+		}
+
+		std::vector<std::vector<float>> dEmbeddings;
+		std::vector<std::string_view> dTexts;
+		dTexts.push_back( tKNN.m_sEmbStr->cstr() );
+
+		std::string sConvertError;
+		if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )
+		{
+			sError.SetSprintf ( "Error generating embeddings for attribute '%s' : %s", tKNN.m_sAttr.cstr(), sConvertError.c_str() );
+			return nullptr;
+		}
+
+		if ( dEmbeddings.size()!=1 )
+		{
+			sError.SetSprintf ( "Error generating embeddings for attribute '%s'", tKNN.m_sAttr.cstr() );
+			return nullptr;
+		}
+
+		int iEmbDim = dEmbeddings[0].size();
+		if ( iEmbDim!=pAttr->m_tKNN.m_iDims )
+		{
+			sError.SetSprintf ( "Auto generated embedding dimension mismatch: expected %d, got %d", pAttr->m_tKNN.m_iDims, iEmbDim );
+			return nullptr;
+		}
+
+		tKNN.m_dVec.Resize(iEmbDim);
+		memcpy ( tKNN.m_dVec.Begin(), dEmbeddings[0].data(), iEmbDim*sizeof(float) );
 	}
 
-	if ( dEmbeddings.size()!=1 )
+	// update expressions that depend on KNN vec (use first KNN entry's vec for backward compat)
+	if ( tUpdatedQuery.HasKnn() )
 	{
-		sError.SetSprintf ( "Error generating embeddings for attribute '%s'", tKNN.m_sAttr.cstr() );
-		return nullptr;
+		for ( int i = 0; i < tMatchSchema.GetAttrsCount(); i++ )
+			if ( tMatchSchema.GetAttr(i).m_pExpr )
+				tMatchSchema.GetAttr(i).m_pExpr->Command ( SPH_EXPR_SET_KNN_VEC, &tUpdatedQuery.SingleKnnSettings().m_dVec );
 	}
-
-	int iEmbDim = dEmbeddings[0].size();
-	if ( iEmbDim!=pAttr->m_tKNN.m_iDims )
-	{
-		sError.SetSprintf ( "Auto generated embedding dimension mismatch: expected %d, got %d", pAttr->m_tKNN.m_iDims, iEmbDim );
-		return nullptr;
-	}
-
-	tUpdatedQuery.m_tKnnSettings.m_dVec.Resize(iEmbDim);
-	memcpy ( tUpdatedQuery.m_tKnnSettings.m_dVec.Begin(), dEmbeddings[0].data(), iEmbDim*sizeof(float) );
-
-	for ( int i = 0; i < tMatchSchema.GetAttrsCount(); i++ )
-		if ( tMatchSchema.GetAttr(i).m_pExpr )
-			tMatchSchema.GetAttr(i).m_pExpr->Command ( SPH_EXPR_SET_KNN_VEC, &tUpdatedQuery.m_tKnnSettings.m_dVec );
 
 	return &tUpdatedQuery;
 }
@@ -9745,7 +9756,7 @@ int64_t RtIndex_c::GetCount() const
 	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
 		return { 0, 1 };
 
-	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_tKnnSettings.m_sAttr.IsEmpty(); } );	 
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return tQuery.HasKnn(); } );	 
 
 	auto tGuard = RtGuard();
 	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();

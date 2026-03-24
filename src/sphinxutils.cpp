@@ -895,6 +895,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "regexp_filter",			KEY_LIST, NULL },
 	{ "bigram_freq_words",		0, NULL },
 	{ "bigram_index",			0, NULL },
+	{ "bigram_delimiter",		0, NULL },
 	{ "index_field_lengths",	0, NULL },
 	{ "divide_remote_ranges",	KEY_HIDDEN, NULL },
 	{ "stopwords_unstemmed",	0, NULL },

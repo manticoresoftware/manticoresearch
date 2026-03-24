@@ -54,7 +54,7 @@ struct Passage_t
 
 struct SnippetQuerySettings_t;
 struct SnippetLimits_t;
-class SnippetsDocIndex_c;
+class SnippetsDocIndex_i;
 
 struct PassageContext_t
 {
@@ -65,7 +65,7 @@ struct PassageContext_t
 
 							PassageContext_t();
 
-	CSphVector<Passage_t>	SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords ) const;
+	CSphVector<Passage_t>	SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_i & tContainer, DWORD uFoundWords ) const;
 };
 
 

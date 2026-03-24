@@ -3,7 +3,7 @@
 # Each file with rule must be named asd build_*.cmake (that is used to find them).
 # Name of the distr must be in comment in the first line. The name
 # must not be too long, since could be reffered not only from GUI menu,
-# but also from command line, like -DDISTR=rhel7, etc. and so,
+# but also from command line, like -DDISTR=rhel10, etc. and so,
 # defs like -DDISTR="my super-puper os" is not so good in the case.
 
 # It gives possibility to add more choices without touching the rest of files.

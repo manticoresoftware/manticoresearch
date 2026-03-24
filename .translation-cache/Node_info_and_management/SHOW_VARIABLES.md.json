@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339823
+    },
+    "__meta": {
+        "source_text": "# SHOW VARIABLES\n\n```sql\nSHOW [{GLOBAL | SESSION}] VARIABLES LIKE 'pattern'\n```\n\nIt returns the current values of a few server-wide variables. Also, support for `GLOBAL` and `SESSION` clauses was added.\n\n```sql\nmysql> SHOW GLOBAL VARIABLES;\n+--------------------------+-----------+\n| Variable_name            | Value     |\n+--------------------------+-----------+\n| autocommit               | 1         |\n| collation_connection     | libc_ci   |\n| query_log_format         | sphinxql  |\n| log_level                | info      |\n| max_allowed_packet       | 134217728 |\n| character_set_client     | utf8      |\n| character_set_connection | utf8      |\n| grouping_in_utc          | 0         |\n| last_insert_id           | 123, 200  |\n+--------------------------+-----------+\n9 rows in set (0.00 sec)\n```\n\n```sql\nmysql> show variables like '%log%';\n+------------------+----------+\n| Variable_name    | Value    |\n+------------------+----------+\n| query_log_format | sphinxql |\n| log_level        | info     |\n+------------------+----------+\n2 rows in set (0.00 sec)\n```\n\n```sql\nmysql> show session variables like 'autocommit';\n+---------------+-------+\n| Variable_name | Value |\n+---------------+-------+\n| autocommit    | 0     |\n+---------------+-------+\n1 row in set (0.00 sec)\n```\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "c8726edde6474ad6a45f54559a3e9ca9"
     }
 }

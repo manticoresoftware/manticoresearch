@@ -18,6 +18,7 @@
 #include <iostream>
 
 using nljson = nlohmann::json;
+using nlohmann::literals::json_literals::operator""_json;
 #include "http/log_management.h"
 
 static RwLock_t g_tLockKbnTable;

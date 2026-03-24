@@ -122,12 +122,18 @@ Variable_name: threads_ex_effective
 Variable_name: cluster_user
         Value: cluster
 *************************** 20. row ***************************
+Variable_name: wait_timeout
+        Value: 28800
+*************************** 21. row ***************************
+Variable_name: interactive_timeout
+        Value: 900
+*************************** 22. row ***************************
 Variable_name: thread_stack
         Value: 1048576
-*************************** 21. row ***************************
+*************************** 23. row ***************************
 Variable_name: threads_ex
         Value:
-*************************** 22. row ***************************
+*************************** 24. row ***************************
 Variable_name: user
         Value: root
 ––– input –––
@@ -172,13 +178,10 @@ mysql -h0 -P9306 -e "SELECT DATABASE()"
 | Manticore  |
 +------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT VERSION()"
+mysql -h0 -P9306 -e "SELECT VERSION()\G;"
 ––– output –––
-+-----------------------------------------------------------------------------------------------------------------------------------------------+
-| version()                                                                                                                                     |
-+-----------------------------------------------------------------------------------------------------------------------------------------------+
-| %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION}) |
-+-----------------------------------------------------------------------------------------------------------------------------------------------+
+*************************** 1. row ***************************
+%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION})
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@character_set_results"
 ––– output –––
@@ -225,7 +228,7 @@ mysql -h0 -P9306 -e "SELECT @@interactive_timeout"
 +-----------------------+
 | @@interactive_timeout |
 +-----------------------+
-| 28800                 |
+|                   900 |
 +-----------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@license"
@@ -286,7 +289,7 @@ mysql -h0 -P9306 -e "SELECT @@wait_timeout"
 +----------------+
 | @@wait_timeout |
 +----------------+
-| 28800          |
+|          28800 |
 +----------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@GLOBAL.character_set_server"
@@ -525,4 +528,8 @@ ERROR 1064 (42000) at line 1: unknown sysvar @@isolation
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@tx_isolation"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation
++-----------------+
+| @@tx_isolation  |
++-----------------+
+| REPEATABLE-READ |
++-----------------+

@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.7.5
+      - uses: manticoresoftware/clt@0.7.8
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/mariadb/
@@ -45,7 +45,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.7.5
+      - uses: manticoresoftware/clt@0.7.8
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/mysql/
@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.7.5
+      - uses: manticoresoftware/clt@0.7.8
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/

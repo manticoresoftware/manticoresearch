@@ -3,6 +3,7 @@
 Поиск является основной функцией Manticore Search. Вы можете:
 * Выполнять [полнотекстовый поиск](../Searching/Full_text_matching/Basic_usage.md#MATCH) и реализовывать [подсветку](../Searching/Highlighting.md) результатов поиска
 * Выполнять [поиск k ближайших соседей](../Searching/KNN.md)
+* Выполнять [гибридный поиск](../Searching/Hybrid_search.md), сочетающий полнотекстовый и векторный KNN-поиск
 * Применять [неполнтекстовые фильтры](../Searching/Filters.md)
 * Использовать [выражения](../Searching/Expressions.md) для фильтрации
 * Использовать различные [опции поиска](../Searching/Options.md)

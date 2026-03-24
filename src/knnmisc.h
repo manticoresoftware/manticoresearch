@@ -16,6 +16,9 @@
 #include "indexsettings.h"
 #include "secondaryindex.h"
 
+class CSphQueryContext;
+class QueryProfile_c;
+
 class TableEmbeddings_c
 {
 public:
@@ -29,19 +32,30 @@ private:
 class EmbeddingsSrc_c
 {
 public:
+	struct Row_t
+	{
+		CSphVector<char>	m_dSrc;
+		bool				m_bDefault = false;
+		void SwapData ( Row_t & rhs );
+	};
+
 			EmbeddingsSrc_c ( int iAttrs );
 
-	void	Add ( int iAttr, CSphVector<char> & dSrc );
-	void	Remove ( const CSphFixedVector<RowID_t> & dRowMap );
+	void	Add ( int iAttr, CSphVector<char> & dSrc, bool bDefault );
+	void	SwapRows ( RowID_t tDstID, RowID_t tSrcID );
+	void	DropTail ( RowID_t tTailID );
 	const VecTraits_T<char> Get ( RowID_t tRowID, int iAttr ) const;
+	bool	Has ( RowID_t tRowID, int iAttr ) const;
+	bool	IsDefault ( RowID_t tRowID, int iAttr ) const;
 
 private:
-	CSphVector<CSphVector<CSphVector<char>>> m_dStored;
+	CSphVector<CSphVector<Row_t>> m_dRows;
 };
 
 bool							IsKnnDist ( const CSphString & sExpr );
 const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
+void							SetupKNNLimit ( CSphQuery & tQuery );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
@@ -59,7 +73,8 @@ bool							Str2Quantization ( const CSphString & sQuantization, knn::Quantizatio
 std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, const CSphString & sTmpFilename, CSphString & sError );
 void							BuildTrainKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );
 bool							BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );
-std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphString & sError );
-RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, bool & bError, CSphString & sError );
+std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, CSphString & sError );
+RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
+std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
 ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings );

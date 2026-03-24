@@ -86,6 +86,11 @@ do
 		break
 	fi
 
+	if [[ "$line" =~ ^galera[[:space:]] ]]; then
+		echo "Skipping galera: no need to handle it explicitly"
+		continue
+	fi
+
     if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)(-?[a-zA-Z0-9]+)?$ ]]; then
         # Format: <package> <version>+<date>-<commit>[-<optional_suffix>]
         package="${BASH_REMATCH[1]}"
@@ -184,7 +189,7 @@ docker exec manticore-test-kit bash -c \
 
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo manticore && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && rm -f /build/manticore_*.deb && dpkg -i --force-confnew /build/*.deb && apt-get install -y libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
 
 docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
@@ -211,6 +216,8 @@ docker exec manticore-test-kit bash -c "cat /etc/manticoresearch/manticore.conf"
 
 docker exec manticore-test-kit bash -c \
     "md5sum /etc/manticoresearch/manticore.conf | awk '{print \$1}' > /manticore.conf.md5"
+
+docker exec manticore-test-kit bash -c "rm -rf /tmp/*"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

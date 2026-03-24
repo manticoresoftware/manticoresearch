@@ -81,6 +81,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
 		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
+		attr_embedding.cpp embeddingutils.cpp hybridexecutor.cpp
 		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
 
 if (WIN32)
@@ -159,7 +160,7 @@ set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		chunksearchctx.h indexfilebase.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
 		costestimate.h docidlookup.h tracer.h attrindex_merge.h columnarmisc.h distinct.h hyperloglog.h pseudosharding.h datetime.h
 		grouper.h exprdatetime.h geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h match_impl.h std/string_impl.h
-		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h sortergroup.h
+		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h attr_embedding.h embeddingutils.h hybridexecutor.h sortergroup.h
 		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h jieba.h cjkpreprocessor.h sorterscroll.h )
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
@@ -186,24 +187,6 @@ MY_BISON ( SQLExtraParser sphinxql_extra sphinxql_extra.cpp SEARCHD )
 source_group ( "Grammar sources" FILES ${LMANTICORE_BISON} ${SEARCHD_BISON} )
 
 # add the extra targets in the case we want on-the-fly lex compiler
-find_package ( FLEX QUIET )
-set ( FLEX_DIR "${MANTICORE_BINARY_DIR}/config" )
-function ( MY_FLEX LexerName LexerSrc Dependency TargetFlex )
-	if (NOT FLEX_FOUND)
-		if (EXISTS "${FLEX_DIR}/flex${LexerSrc}.c")
-			infomsg ( "Will use pre-built ${FLEX_DIR}/flex${LexerSrc}.c for lexer ${LexerName}" )
-			return ()
-		else ()
-			message ( FATAL_ERROR "No pre-compiled lexer file flex${LexerSrc}.c for ${LexerSrc}.l exists, and Flex not found. Can't continue" )
-		endif ()
-	endif ()
-
-	LIST ( APPEND ${TargetFlex}_FLEX "${LexerSrc}.l" )
-	set ( ${TargetFlex}_FLEX ${${TargetFlex}_FLEX} PARENT_SCOPE )
-	FLEX_TARGET ( ${LexerName} "${CMAKE_CURRENT_SOURCE_DIR}/${LexerSrc}.l" "${FLEX_DIR}/flex${LexerSrc}.c" )
-	set_property ( SOURCE ${Dependency} APPEND PROPERTY OBJECT_DEPENDS ${FLEX_${LexerName}_OUTPUTS} )
-endfunction ()
-
 MY_FLEX ( Jsonlex sphinxjson sphinxjson.cpp LMANTICORE )
 MY_FLEX ( Exprlex sphinxexpr sphinxexpr.cpp LMANTICORE )
 MY_FLEX ( SQLlex sphinxql searchdsql.cpp SEARCHD )
@@ -232,7 +215,8 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
-target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra nlohmann_json::nlohmann_json )
+add_subdirectory ( sqlchecks )
+target_link_libraries ( lsearchd PUBLIC sqlchecks digest_sha1 lextra nlohmann_json::nlohmann_json )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
 if (WIN32)
 target_link_libraries ( lsearchd PRIVATE iphlpapi WS2_32 wsock32 )
@@ -329,11 +313,13 @@ if (SPLIT_SYMBOLS)
 	split_dbg ( index_converter )
 endif ()
 
-INSTALL ( TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT searchd )
+# These targets remain in their split components, but bundle builds stage the
+# same payload into the bundle component too via install_component_and_bundle().
+install_component_and_bundle ( searchd TARGETS searchd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
 if (NOT STATIC_BINARY)
-	INSTALL ( TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT tools )
-	INSTALL ( TARGETS index_converter RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT converter )
-	INSTALL ( FILES sphinxudf.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manticore COMPONENT devel )
+	install_component_and_bundle ( tools TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
+	install_component_and_bundle ( converter TARGETS index_converter RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
+	install_component_and_bundle ( devel FILES sphinxudf.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/manticore )
 endif ()
 
 # install windows runtime libraries - for final targets, and also for immediate testing
@@ -342,13 +328,14 @@ if (WIN32)
 	include ( InstallRequiredSystemLibraries )
 	addruntime ( "${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}" common )
 	getruntime ( libs common )
-	install ( PROGRAMS ${libs} DESTINATION bin COMPONENT common )
+	# Windows bundle archives need the same redistributables as the split packages.
+	install_component_and_bundle ( common PROGRAMS ${libs} DESTINATION bin )
 	unset ( libs )
 	getruntime ( libs daemon )
-	install ( PROGRAMS ${libs} DESTINATION bin COMPONENT searchd )
+	install_component_and_bundle ( searchd PROGRAMS ${libs} DESTINATION bin )
 	unset ( libs )
 	getruntime ( libs indexer )
-	install ( PROGRAMS ${libs} DESTINATION bin COMPONENT tools )
+	install_component_and_bundle ( tools PROGRAMS ${libs} DESTINATION bin )
 	if (BUILD_TESTING)
 #		getruntime ( libs indexer ) # is just set above
 		getruntime ( libs common )

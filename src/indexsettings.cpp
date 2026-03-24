@@ -25,6 +25,7 @@
 #include "client_task_info.h"
 #include "knnlib.h"
 #include "secondarylib.h"
+#include "embeddingutils.h"
 
 #if !_WIN32
 	#include <glob.h>
@@ -65,9 +66,31 @@ static const char * BigramName ( ESphBigram eType )
 	case SPH_BIGRAM_BOTHFREQ:
 		return "both_freq";
 
+	case SPH_BIGRAM_SECONDNUMERIC:
+		return "second_numeric";
+
+	case SPH_BIGRAM_SECONDHASDIGIT:
+		return "second_has_digit";
+
 	case SPH_BIGRAM_NONE:
 	default:
 		return "none";
+	}
+}
+
+static const char * BigramDelimiterName ( BigramDelimiter_e eType )
+{
+	switch ( eType )
+	{
+	case BigramDelimiter_e::NONE:
+		return "none";
+
+	case BigramDelimiter_e::BOTH:
+		return "both";
+
+	case BigramDelimiter_e::DELIMITED:
+	default:
+		return "true";
 	}
 }
 
@@ -114,7 +137,7 @@ SettingsFormatterState_t::SettingsFormatterState_t ( StringBuilder_c & tBuf )
 class SettingsFormatter_c
 {
 public:
-				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false, bool bEscapeValues = false );
+				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false, bool bEscapeValues = false, ExtFilesFormat_e eExt = ExtFilesFormat_e::FILE );
 
 	template <typename T>
 	void		Add ( const char * szKey, T tVal, bool bCond );
@@ -133,10 +156,13 @@ private:
 	CSphString			m_sSeparator;
 	bool				m_bIgnoreCond = false;
 	bool				m_bEscapeValues = false;
+
+public:
+	const ExtFilesFormat_e m_eExt = ExtFilesFormat_e::FILE;
 };
 
 
-SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond, bool bEscapeValues )
+SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond, bool bEscapeValues, ExtFilesFormat_e eExt )
 	: m_tState			( tState )
 	, m_sPrefix			( szPrefix )
 	, m_sEq				( szEq )
@@ -144,6 +170,7 @@ SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, co
 	, m_sSeparator		( szSeparator )
 	, m_bIgnoreCond		( bIgnoreCond )
 	, m_bEscapeValues	( bEscapeValues )
+	, m_eExt ( eExt )
 {}
 
 using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
@@ -254,7 +281,7 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
-static CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
+CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
 	if ( !pFilenameBuilder || sFile.IsEmpty() || IsPathAbsolute ( sFile ) )
 		return sFile;
@@ -417,6 +444,8 @@ bool CSphTokenizerSettings::Load ( const FilenameBuilder_i* pFilenameBuilder, co
 	return true;
 }
 
+static void FormatFileContent ( const CSphString & sFile, FilenameBuilder_i * pFilenameBuilder, bool bSplitLine, StringBuilder_c & sRes );
+static void FormatFileContent ( const VecTraits_T<CSphString> & dFiles, FilenameBuilder_i * pFilenameBuilder, bool bSplitLine, StringBuilder_c & sRes );
 
 void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
@@ -433,8 +462,16 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 	tOut.Add ( "blend_chars",		m_sBlendChars,	!m_sBlendChars.IsEmpty() );
 	tOut.Add ( "blend_mode",		m_sBlendMode,	!m_sBlendMode.IsEmpty() );
 
-	CSphString sSynonymsFile = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
-	tOut.Add ( "exceptions",		sSynonymsFile,	!sSynonymsFile.IsEmpty() );
+	if ( tOut.m_eExt==ExtFilesFormat_e::FILE )
+	{
+		CSphString sSynonymsFile = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
+		tOut.Add ( "exceptions",		sSynonymsFile,	!sSynonymsFile.IsEmpty() );
+	} else
+	{
+		StringBuilder_c sSynonymsContent ( "; " );
+		FormatFileContent ( m_sSynonymsFile, pFilenameBuilder, false, sSynonymsContent );
+		tOut.Add ( "exceptions_list", sSynonymsContent.cstr(), !sSynonymsContent.IsEmpty() );
+	}
 }
 
 
@@ -599,14 +636,27 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 	tOut.Add ( "min_stemming_len",		m_iMinStemmingLen,	m_iMinStemmingLen>1 );
 	tOut.Add ( "stopwords_unstemmed",	1,					m_bStopwordsUnstemmed );
 
-	CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
-	tOut.Add ( "stopwords",				sStopwordsFile,		!sStopwordsFile.IsEmpty() );
+	if ( tOut.m_eExt==ExtFilesFormat_e::FILE )
+	{
+		CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
+		tOut.Add ( "stopwords", sStopwordsFile, !sStopwordsFile.IsEmpty() );
 
-	StringBuilder_c sAllWordforms(" ");
-	for ( const auto & i : m_dWordforms )
-		sAllWordforms << FormatPath ( i, pFilenameBuilder );
+		StringBuilder_c sAllWordforms(" ");
+		for ( const auto & i : m_dWordforms )
+			sAllWordforms << FormatPath ( i, pFilenameBuilder );
 
-	tOut.Add ( "wordforms",	sAllWordforms.cstr(), !sAllWordforms.IsEmpty() );
+		tOut.Add ( "wordforms",	sAllWordforms.cstr(), !sAllWordforms.IsEmpty() );
+
+	} else
+	{
+		StringBuilder_c sStopwordsContent ( "; " );
+		FormatFileContent ( m_sStopwords, pFilenameBuilder, true, sStopwordsContent );
+		tOut.Add ( "stopwords_list", sStopwordsContent.cstr(), !sStopwordsContent.IsEmpty() );
+
+		StringBuilder_c sWordformContent ( "; " );
+		FormatFileContent ( m_dWordforms, pFilenameBuilder, false, sWordformContent );
+		tOut.Add ( "wordforms_list",	sWordformContent.cstr(), !sWordformContent.IsEmpty() );
+	}
 }
 
 
@@ -1096,9 +1146,31 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 			m_eBigramIndex = SPH_BIGRAM_FIRSTFREQ;
 		else if ( s=="both_freq" )
 			m_eBigramIndex = SPH_BIGRAM_BOTHFREQ;
+		else if ( s=="second_numeric" )
+			m_eBigramIndex = SPH_BIGRAM_SECONDNUMERIC;
+		else if ( s=="second_has_digit" )
+			m_eBigramIndex = SPH_BIGRAM_SECONDHASDIGIT;
 		else
 		{
-			sError.SetSprintf ( "unknown bigram_index=%s (must be all, first_freq, or both_freq)", s.cstr() );
+			sError.SetSprintf ( "unknown bigram_index=%s (must be all, first_freq, both_freq, second_numeric, or second_has_digit)", s.cstr() );
+			return false;
+		}
+	}
+
+	m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
+	if ( hIndex("bigram_delimiter") )
+	{
+		CSphString s = hIndex["bigram_delimiter"].strval();
+		s.ToLower();
+		if ( s=="true" )
+			m_eBigramDelimiter = BigramDelimiter_e::DELIMITED;
+		else if ( s=="none" )
+			m_eBigramDelimiter = BigramDelimiter_e::NONE;
+		else if ( s=="both" )
+			m_eBigramDelimiter = BigramDelimiter_e::BOTH;
+		else
+		{
+			sError.SetSprintf ( "unknown bigram_delimiter=%s (must be true, none, or both)", s.cstr() );
 			return false;
 		}
 	}
@@ -1106,7 +1178,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	m_sBigramWords = hIndex.GetStr ( "bigram_freq_words" );
 	m_sBigramWords.Trim();
 
-	bool bEmptyOk = m_eBigramIndex==SPH_BIGRAM_NONE || m_eBigramIndex==SPH_BIGRAM_ALL;
+	bool bEmptyOk = !BigramNeedsFreq ( m_eBigramIndex );
 	if ( bEmptyOk!=m_sBigramWords.IsEmpty() )
 	{
 		sError.SetSprintf ( "bigram_index=%s, bigram_freq_words must%s be empty", hIndex["bigram_index"].cstr(),
@@ -1165,6 +1237,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "stopword_step",			m_iStopwordStep,		m_iStopwordStep!=1 );
 	tOut.Add ( "overshort_step",		m_iOvershortStep,		m_iOvershortStep!=1 );
 	tOut.Add ( "bigram_index",			BigramName(m_eBigramIndex), m_eBigramIndex!=SPH_BIGRAM_NONE );
+	tOut.Add ( "bigram_delimiter",		BigramDelimiterName(m_eBigramDelimiter), m_eBigramDelimiter!=BigramDelimiter_e::DEFAULT );
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
@@ -1175,8 +1248,17 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 		tOut.Add ( "hitless_words",		"all",					true );
 	} else if ( m_eHitless==SPH_HITLESS_SOME )
 	{
-		CSphString sHitlessFiles = FormatPath ( m_sHitlessFiles, pFilenameBuilder );
-		tOut.Add ( "hitless_words",		sHitlessFiles,			true );
+		if ( tOut.m_eExt==ExtFilesFormat_e::FILE )
+		{
+			CSphString sHitlessFiles = FormatPath ( m_sHitlessFiles, pFilenameBuilder );
+			tOut.Add ( "hitless_words", sHitlessFiles, true );
+
+		} else
+		{
+			StringBuilder_c sHitlessContent ( "; " );
+			FormatFileContent ( m_sHitlessFiles, pFilenameBuilder, true, sHitlessContent );
+			tOut.Add ( "hitless_words_list", sHitlessContent.cstr(), true );
+		}
 	}
 
 	AddEngineSettings ( m_eEngine, tOut );
@@ -1248,6 +1330,7 @@ struct ExtFiles_t
 	StrVec_t	m_dFiles;
 	bool		m_bFilesSet = false;	// was this option set?
 	bool		m_bExtCopy = false;		// copy external files to table's folder?
+	CSphString	m_sListVals;			// values set from _list option
 };
 
 class IndexSettingsContainer_c : public IndexSettingsContainer_i
@@ -1260,6 +1343,7 @@ public:
 	bool			Add ( const char * szName, const CSphString & sValue ) override;
 	bool			Add ( const CSphString & sName, const CSphString & sValue ) override;
 	CSphString		Get ( const CSphString & sName ) const override;
+	CSphString		GetList ( const CSphString & sName ) const override;
 	bool			Contains ( const char * szName ) const override;
 	void			RemoveKeys ( const CSphString & sName ) override;
 	bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) override;
@@ -1292,6 +1376,8 @@ private:
 	StrVec_t 		GetFiles();
 	bool			CopyExternalFiles ( const ExtFiles_t & tExt, const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile );
 	bool			CopyExternalFile ( const CSphString & sSrcFile, const CSphString & sDestPath, const char * sKeyName, int iSuffix, StringBuilder_c & sFilesOpt, int & iFile );
+	CSphString		GetExternalName ( const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile );
+	bool			CopyListFiles ( const ExtFiles_t & tExt, const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile, StringBuilder_c & sFilesOpt );
 };
 
 IndexSettingsContainer_i * CreateIndexSettingsContainer ()
@@ -1351,6 +1437,15 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		return true;
 	}
 
+	if ( sName=="stopwords_list" )
+	{
+		m_tStopword.m_dFiles.Reset();
+		m_tStopword.m_bExtCopy = bExtCopy;
+		m_tStopword.m_bFilesSet = true;
+		m_tStopword.m_sListVals = sValue;
+		return true;
+	}
+
 	if ( sName=="exceptions" )
 	{
 		// new value replaces previous
@@ -1374,6 +1469,15 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		return true;
 	}
 
+	if ( sName=="exceptions_list" )
+	{
+		m_tException.m_dFiles.Reset();
+		m_tException.m_bExtCopy = bExtCopy;
+		m_tException.m_bFilesSet = true;
+		m_tException.m_sListVals = sValue;
+		return true;
+	}
+
 	if ( sName=="wordforms" )
 	{
 		// multiple wordworms are ok - no need to reset
@@ -1383,6 +1487,14 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		// will add string option after copy
 		SplitArg ( sValue, m_tWordform.m_dFiles );
 
+		return true;
+	}
+
+	if ( sName=="wordforms_list" )
+	{
+		m_tWordform.m_bExtCopy = bExtCopy;
+		m_tWordform.m_bFilesSet = true;
+		m_tWordform.m_sListVals = sValue;
 		return true;
 	}
 
@@ -1396,6 +1508,15 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		SplitArg ( sValue, m_tHitless.m_dFiles );
 
 		// will add string option after copy
+		return true;
+	}
+
+	if ( sName=="hitless_words_list" )
+	{
+		m_tHitless.m_dFiles.Reset();
+		m_tHitless.m_bExtCopy = bExtCopy;
+		m_tHitless.m_bFilesSet = true;
+		m_tHitless.m_sListVals = sValue;
 		return true;
 	}
 
@@ -1495,11 +1616,8 @@ bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
 			tNamedKNN.m_sFrom = i.m_sKNNFrom;
 
-			if ( !tNamedKNN.m_sModelName.empty() && tNamedKNN.m_sFrom.IsEmpty() )
-			{
-				m_sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", tNamedKNN.m_sName.cstr() );
+			if ( !ValidateSettingModel ( i, m_sError ) )
 				return false;
-			}
 		}
 
 	if ( !dKNNAttrs.GetLength() )
@@ -1610,6 +1728,22 @@ CSphString IndexSettingsContainer_c::Get ( const CSphString & sName ) const
 		return "";
 
 	return m_hCfg[sName].strval();
+}
+
+CSphString IndexSettingsContainer_c::GetList ( const CSphString & sName ) const
+{
+	if ( !Contains ( sName.cstr() ) )
+		return "";
+
+	CSphVariant * pVal = m_hCfg ( sName.cstr() );
+	if ( !pVal || !pVal->m_pNext )
+		return m_hCfg[sName].strval();
+
+	StringBuilder_c sList ( " " );
+	for ( ; pVal; pVal = pVal->m_pNext )
+		sList << pVal->cstr();
+
+	return (CSphString)sList;
 }
 
 
@@ -1726,6 +1860,9 @@ bool IndexSettingsContainer_c::CopyExternalFiles ( const CSphString & sIndexPath
 
 	if ( m_tWordform.m_bFilesSet )
 	{
+		if ( !m_tWordform.m_sListVals.IsEmpty() )
+			return CopyExternalFiles ( m_tWordform, sIndexPath, "wordforms", iSuffix, iFile );
+
 		int iFile = 0;
 		ExtFiles_t tFiles;
 		tFiles.m_bFilesSet = true;
@@ -1746,7 +1883,7 @@ bool IndexSettingsContainer_c::CopyExternalFiles ( const CSphString & sIndexPath
 	return true;
 }
 
-bool IndexSettingsContainer_c::CopyExternalFile ( const CSphString & sSrcFile, const CSphString & sDestPath, const char * sKeyName, int iSuffix, StringBuilder_c & sFilesOpt, int & iFile )
+CSphString IndexSettingsContainer_c::GetExternalName ( const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile )
 {
 	CSphString sDstFile;
 	do
@@ -1756,6 +1893,12 @@ bool IndexSettingsContainer_c::CopyExternalFile ( const CSphString & sSrcFile, c
 
 	} while ( sphIsReadable ( sDstFile.cstr() ) );
 
+	return sDstFile;
+}
+
+bool IndexSettingsContainer_c::CopyExternalFile ( const CSphString & sSrcFile, const CSphString & sDestPath, const char * sKeyName, int iSuffix, StringBuilder_c & sFilesOpt, int & iFile )
+{
+	CSphString sDstFile = GetExternalName ( sDestPath, sKeyName, iSuffix, iFile );
 	if ( !CopyFile ( sSrcFile, sDstFile, m_sError ) )
 		return false;
 
@@ -1771,7 +1914,12 @@ bool IndexSettingsContainer_c::CopyExternalFiles ( const ExtFiles_t & tExt, cons
 
 	StringBuilder_c sFilesOpt ( " "  );
 
-	if ( tExt.m_bExtCopy )
+	if ( !tExt.m_sListVals.IsEmpty() )
+	{
+		if ( !CopyListFiles ( tExt, sDestPath, sKeyName, iSuffix, iFile, sFilesOpt ) )
+			return false;
+
+	} else if ( tExt.m_bExtCopy )
 	{
 		for ( const auto & sSrcFile : tExt.m_dFiles )
 		{
@@ -2062,10 +2210,11 @@ void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * 
 }
 
 
-static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
+static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder, ExtFilesFormat_e eExt )
 {
 	SettingsFormatterState_t tState(tBuf);
-	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " ", false, true );
+	// all ext files should be in the _list format by default
+	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " ", false, true, eExt );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
@@ -2280,6 +2429,7 @@ static bool IsDDLToken ( const CSphString & sTok )
 		"INTEGER",
 		"INT",
 		"IF",
+		"KNN",
 		"JOIN",
 		"JSON",
 		"KILLLIST_TARGET",
@@ -2361,7 +2511,7 @@ static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const 
 }
 
 
-CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
+CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
 {
 	assert ( pIndex );
 
@@ -2419,7 +2569,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	if ( g_fnCreateFilenameBuilder )
 		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
 
-	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get() );
+	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get(), eExt );
 
 	if ( tBuf.GetLength() )
 		sRes << " " << tBuf.cstr();
@@ -3017,6 +3167,7 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_iOvershortStep = (int)Int ( tNode.ChildByName ( "overshort_step" ), 1 );
 	tSettings.m_iEmbeddedLimit = (int)Int ( tNode.ChildByName ( "embedded_limit" ) );
 	tSettings.m_eBigramIndex = (ESphBigram)Int ( tNode.ChildByName ( "bigram_index" ), SPH_BIGRAM_NONE );
+	tSettings.m_eBigramDelimiter = (BigramDelimiter_e)Int ( tNode.ChildByName ( "bigram_delimiter" ), (DWORD)BigramDelimiter_e::DEFAULT );
 	tSettings.m_sBigramWords = String ( tNode.ChildByName ( "bigram_words" ) );
 	tSettings.m_bIndexFieldLens = Bool ( tNode.ChildByName ( "index_field_lens" ) );
 	tSettings.m_ePreprocessor = (Preprocessor_e)Int ( tNode.ChildByName ( "icu" ), (DWORD)Preprocessor_e::NONE  );
@@ -3057,6 +3208,10 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 	tSettings.m_iEmbeddedLimit = (int)tReader.GetDword();
 
 	tSettings.m_eBigramIndex = (ESphBigram)tReader.GetByte();
+	if ( uVersion>=69 )
+		tSettings.m_eBigramDelimiter = (BigramDelimiter_e)tReader.GetByte();
+	else
+		tSettings.m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
 	tSettings.m_sBigramWords = tReader.GetString();
 
 	tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
@@ -3104,6 +3259,7 @@ void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings
 	tWriter.PutDword ( tSettings.m_iOvershortStep );
 	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
 	tWriter.PutByte ( tSettings.m_eBigramIndex );
+	tWriter.PutByte ( (BYTE)tSettings.m_eBigramDelimiter );
 	tWriter.PutString ( tSettings.m_sBigramWords );
 	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
 	tWriter.PutByte ( tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
@@ -3138,6 +3294,7 @@ void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSetting
 	tOut.NamedValNonDefault ( "overshort_step", tSettings.m_iOvershortStep, 1 );
 	tOut.NamedValNonDefault ( "embedded_limit", tSettings.m_iEmbeddedLimit );
 	tOut.NamedValNonDefault ( "bigram_index", tSettings.m_eBigramIndex, SPH_BIGRAM_NONE );
+	tOut.NamedValNonDefault ( "bigram_delimiter", (DWORD)tSettings.m_eBigramDelimiter, (DWORD)BigramDelimiter_e::DEFAULT );
 	tOut.NamedStringNonEmpty ( "bigram_words", tSettings.m_sBigramWords );
 	tOut.NamedValNonDefault ( "index_field_lens", tSettings.m_bIndexFieldLens, false );
 	tOut.NamedValNonDefault ( "icu", (DWORD)tSettings.m_ePreprocessor, (DWORD)Preprocessor_e::NONE );
@@ -3200,4 +3357,228 @@ void SetDefaultAttrEngine ( AttrEngine_e eEngine )
 AttrEngine_e GetDefaultAttrEngine()
 {
 	return g_eAttrEngine;
+}
+
+static void ParseListVals ( const CSphString & sVal, StringBuilder_c & sRes, CSphString & sError )
+{
+	if ( sVal.IsEmpty() )
+		return;
+	
+	// fix sVal in place to unescape
+	char * pWrite = const_cast<char*>( sVal.cstr() );
+	const char * pRead = sVal.cstr();
+	const char * pEnd = pRead + sVal.Length();
+	
+	while ( pRead<pEnd )
+	{
+		while ( pRead<pEnd && sphIsSpace ( *pRead ) )
+			pRead++;
+		
+		if ( pRead>=pEnd )
+			break;
+
+		const char * pEntryStart = pWrite;
+		
+		while ( pRead<pEnd )
+		{
+			// escape sequence
+			if ( *pRead=='\\' && ( pRead+1 )<pEnd )
+			{
+				char cNext = *( pRead+1 );
+				if ( cNext==';' )
+				{
+					// unescape \; to ;
+					pRead++;
+					*pWrite++ = *pRead++;
+
+				} else
+				{
+					*pWrite++ = *pRead++;
+					*pWrite++ = *pRead++;
+				}
+				continue;
+			}
+			
+			// check for ; separator
+			if ( *pRead==';' )
+			{
+				pRead++;
+				break;
+			}
+			
+			*pWrite++ = *pRead++;
+		}
+		
+		if ( pWrite>pEntryStart )
+		{
+			Str_t sEntry { pEntryStart, ( pWrite - pEntryStart ) };
+			sRes << sEntry;
+		}
+	}
+}
+
+static void ProcessLine ( CSphVector<char> & dLine, bool bSplitLine, StringBuilder_c & sRes )
+{
+	if ( dLine.IsEmpty() )
+		return;
+
+	if ( bSplitLine )
+	{
+		const char * pLine = dLine.Begin();
+		const char * pLineEnd = pLine + dLine.GetLength();
+					
+		while ( pLine<pLineEnd )
+		{
+			while ( pLine<pLineEnd && sphIsSpace ( *pLine ) )
+				pLine++;
+						
+			if ( pLine>=pLineEnd )
+				break;
+						
+			// new token
+			const char * pTokenStart = pLine;
+			while ( pLine < pLineEnd && !sphIsSpace ( *pLine ) )
+				pLine++;
+						
+			Str_t sToken { pTokenStart, pLine - pTokenStart };
+			if ( !IsEmpty ( sToken ) )
+				sRes << sToken;
+		}
+	}
+	else
+	{
+		sRes << Str_t { dLine.Begin(), dLine.GetLength() };
+	}
+				
+	dLine.Resize ( 0 );
+}
+
+static void ParseFileContent ( CSphAutoreader & tReader, bool bSplitLine, StringBuilder_c & sRes )
+{
+	const int iReadBlock = 4 * 1024;
+	CSphVector<char> dLine ( iReadBlock + 2 );
+	dLine.Resize ( 0 );
+	
+	while ( true )
+	{
+		const BYTE * pData = nullptr;
+		int iGot = tReader.GetBytesZerocopy ( &pData, iReadBlock );
+		if ( iGot<=0 )
+			break;
+		
+		const BYTE * s = pData;
+		const BYTE * pEnd = pData + iGot;
+		
+		while ( s<pEnd )
+		{
+			if ( *s=='\n' || *s=='\r' )
+			{
+				ProcessLine ( dLine, bSplitLine, sRes );
+				
+				// skip newline
+				s++;
+				while ( s<pEnd && ( *s=='\n' || *s=='\r' ) )
+					s++;
+
+				continue;
+			}
+			
+			// accumulate chars for whole line and escape separator chars
+			if ( *s == ';' )
+				dLine.Add ( '\\' );
+			dLine.Add ( *s );
+			s++;
+		}
+	}
+	
+	// tail line
+	ProcessLine ( dLine, bSplitLine, sRes );
+}
+
+void FormatFileContent ( const CSphString & sFile, FilenameBuilder_i * pFilenameBuilder, bool bSplitLine, StringBuilder_c & sRes )
+{
+	CSphString sFilePath = FormatPath ( sFile, pFilenameBuilder );
+	if ( sFilePath.IsEmpty() )
+		return;
+	
+	CSphString sError;
+	CSphAutoreader tRd;
+	if ( !tRd.Open ( sFilePath, sError ) )
+		return;
+	
+	ParseFileContent ( tRd, bSplitLine, sRes );
+}
+
+void FormatFileContent ( const VecTraits_T<CSphString> & dFiles, FilenameBuilder_i * pFilenameBuilder, bool bSplitLine, StringBuilder_c & sRes )
+{
+	for ( const auto & sFile : dFiles )
+		FormatFileContent ( sFile, pFilenameBuilder, bSplitLine, sRes );
+}
+
+bool IndexSettingsContainer_c::CopyListFiles ( const ExtFiles_t & tExt, const CSphString & sDestPath, const char * sKeyName, int iSuffix, int & iFile, StringBuilder_c & sFilesOpt )
+{
+	assert ( tExt.m_bFilesSet && !tExt.m_sListVals.IsEmpty() );
+
+	// _list values
+	StringBuilder_c sContent ( "\n" );
+	ParseListVals ( tExt.m_sListVals, sContent, m_sError );
+
+	CSphString sDstFile = GetExternalName ( sDestPath, sKeyName, iSuffix, iFile );
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sDstFile, m_sError ) )
+		return false;
+
+	tWriter.PutBytes ( sContent.cstr(), sContent.GetLength() );
+	tWriter.CloseFile();
+
+	if ( tWriter.IsError() )
+		return false;
+
+	m_dCleanupFiles.Add ( sDstFile );
+	sFilesOpt << StripPath ( sDstFile ).cstr();
+
+	return true;
+}
+
+bool BigramNeedsFreq ( ESphBigram eMode ) noexcept
+{
+	return eMode==SPH_BIGRAM_FIRSTFREQ || eMode==SPH_BIGRAM_BOTHFREQ;
+}
+
+bool BigramHasDigit ( const BYTE * pWord, int iLen ) noexcept
+{
+	assert ( iLen>=0 );
+	for ( int i=0; i<iLen; ++i )
+		if ( pWord[i]>='0' && pWord[i]<='9' )
+			return true;
+
+	return false;
+}
+
+bool BigramIsDigitsOnly ( const BYTE * pWord, int iLen ) noexcept
+{
+	assert ( iLen>=0 );
+	if ( !iLen )
+		return false;
+
+	for ( int i=0; i<iLen; ++i )
+		if ( pWord[i]<'0' || pWord[i]>'9' )
+			return false;
+
+	return true;
+}
+
+bool BigramIsSecondDigit ( ESphBigram eMode, const BYTE * pSecond, int iLen ) noexcept
+{
+	switch ( eMode )
+	{
+	case SPH_BIGRAM_SECONDNUMERIC:
+		return BigramIsDigitsOnly ( pSecond, iLen );
+
+	case SPH_BIGRAM_SECONDHASDIGIT:
+		return BigramHasDigit ( pSecond, iLen );
+
+	default:
+		return false;
+	}
 }

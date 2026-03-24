@@ -18,5 +18,10 @@
         "is_code_or_comment": false,
         "model": "deepseek/deepseek-v3.2",
         "updated_at": 1766374192
+    },
+    "__meta": {
+        "source_text": "# SHOW QUERIES\n\n<!-- example SHOW QUERIES -->\n```sql\nSHOW QUERIES\n```\n\n> NOTE: `SHOW QUERIES` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.\n\n`SHOW QUERIES` returns information about all currently running queries. The output is a table with the following structure:\n\n- `id`: Query ID that can be used in [KILL](../Node_info_and_management/KILL.md) to terminate the query\n- `query`: Query statement or a portion of it\n- `time`: Time taken on command execution or how long ago the query was performed (in this case, the value will include `ago`)\n- `protocol`: [Connection protocol](../Server_settings/Searchd.md#listen), with possible values being `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication`, or a combination (e.g., `http,ssl` or `compressed,mysql`)\n- `host`: Client's `ip:port`\n\n\n<!-- request SQL -->\n```sql\nmysql> SHOW QUERIES;\n```\n\n<!-- response SQL -->\n```\n+------+--------------+---------+----------+-----------------+\n| id   | query        | time    | protocol | host            |\n+------+--------------+---------+----------+-----------------+\n|  111 | select       | 5ms ago | http     | 127.0.0.1:58986 |\n|   96 | SHOW QUERIES | 255us   | mysql    | 127.0.0.1:33616 |\n+------+--------------+---------+----------+-----------------+\n2 rows in set (0.61 sec)\n```\n\n<!-- end -->\n\nRefer to [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) if you'd like to gain insight from the perspective of the threads themselves.\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "a3e7f7279f24786980d3503629f1b2ed"
     }
 }

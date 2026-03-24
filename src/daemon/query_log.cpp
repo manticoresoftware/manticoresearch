@@ -666,12 +666,12 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 
 	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
 	// In distributed/multi-source queries, wall and real may differ.
-	int64_t tmQueryTimeUs = tMeta.GetQueryTimeUs();
-	int64_t tmRealTimeUs = tMeta.GetRealQueryTimeUs();
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac<6> ( tmRealTimeUs ) << " wall " << FixedFrac<6> ( tmQueryTimeUs );
+	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
 
 	if ( tMeta.m_iMultiplier > 1 )
 		tBuf << " x" << tMeta.m_iMultiplier;
@@ -796,12 +796,12 @@ void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType )
 
 	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
 	// In distributed/multi-source queries, wall and real may differ.
-	int64_t tmQueryTimeUs = tMeta.GetQueryTimeUs();
-	int64_t tmRealTimeUs = tMeta.GetRealQueryTimeUs();
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac<6> ( tmRealTimeUs ) << " wall " << FixedFrac<6> ( tmQueryTimeUs );
+	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
 
 	if ( tMeta.m_iMultiplier > 1 )
 		tBuf << " x" << tMeta.m_iMultiplier;

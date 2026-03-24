@@ -727,8 +727,30 @@ struct ExpansionStats_t
 class CSphQueryResultMeta
 {
 public:
-	int						m_iQueryTime = 0;		///< query wall-time metric, milliseconds; in distributed/multi-source queries it can differ from m_iRealQueryTime
-	int						m_iRealQueryTime = 0;	///< elapsed wall-clock time from start to finish of the query, milliseconds
+	int64_t					GetQueryTimeUs () const noexcept { return ClampTimeUs ( m_tmQueryTimeUs ); }
+	int64_t					GetRealQueryTimeUs () const noexcept { return ClampTimeUs ( m_tmRealQueryTimeUs ); }
+	int						GetQueryTimeMs () const noexcept { return ToMs ( GetQueryTimeUs() ); }
+	int						GetRealQueryTimeMs () const noexcept { return ToMs ( GetRealQueryTimeUs() ); }
+
+	void					SetQueryTimeUs ( int64_t tmUs ) noexcept { m_tmQueryTimeUs = ClampTimeUs ( tmUs ); }
+	void					SetRealQueryTimeUs ( int64_t tmUs ) noexcept { m_tmRealQueryTimeUs = ClampTimeUs ( tmUs ); }
+	void					AddQueryTimeUs ( int64_t tmUs ) noexcept { SetQueryTimeUs ( GetQueryTimeUs() + ClampTimeUs ( tmUs ) ); }
+	void					AddRealQueryTimeUs ( int64_t tmUs ) noexcept { SetRealQueryTimeUs ( GetRealQueryTimeUs() + ClampTimeUs ( tmUs ) ); }
+
+	void					SetQueryTimeMs ( int iMs ) noexcept { SetQueryTimeUs ( ToUs ( iMs ) ); }
+	void					SetRealQueryTimeMs ( int iMs ) noexcept { SetRealQueryTimeUs ( ToUs ( iMs ) ); }
+	void					AddQueryTimeMs ( int iMs ) noexcept { AddQueryTimeUs ( ToUs ( iMs ) ); }
+	void					AddRealQueryTimeMs ( int iMs ) noexcept { AddRealQueryTimeUs ( ToUs ( iMs ) ); }
+
+private:
+	static int64_t			ClampTimeUs ( int64_t tmUs ) noexcept { return tmUs<0 ? 0 : tmUs; }
+	static int64_t			ToUs ( int iMs ) noexcept { return iMs<=0 ? 0 : (int64_t)iMs * 1000; }
+	static int				ToMs ( int64_t tmUs ) noexcept { return tmUs<=0 ? 0 : (int)( tmUs / 1000 ); }
+
+	int64_t					m_tmQueryTimeUs = 0;	///< canonical query wall-time metric, microseconds
+	int64_t					m_tmRealQueryTimeUs = 0; ///< canonical elapsed wall-clock time from start to finish of the query, microseconds
+
+public:
 	int64_t					m_iCpuTime = 0;			///< user time, microseconds
 	int						m_iMultiplier = 1;		///< multi-query multiplier, -1 to indicate error
 

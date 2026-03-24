@@ -2986,7 +2986,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
 	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
 
-	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
+	dStatus.MatchTupletf ( "time", "%.3F", tMeta.GetQueryTimeMs() );
 
 	if ( tMeta.m_iMultiplier>1 )
 		dStatus.MatchTupletf ( "multiplier", "%d", tMeta.m_iMultiplier );
@@ -7725,8 +7725,8 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 
 	StringBuilder_c sMeta;
 	// since we have us precision, printing 0 will output '0us', which is not necessary true.
-	if ( tMeta.m_iQueryTime > 0 )
-		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, (int64_t)tMeta.m_iQueryTime * 1000 );
+	if ( tMeta.GetQueryTimeUs() > 0 )
+		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, tMeta.GetQueryTimeUs() );
 	else
 		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
 	return (CSphString)sMeta;
@@ -8414,7 +8414,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			// fix up overall query time
 			for ( auto& tResult : tHandler.m_dAggrResults )
 			{
-				tLastMeta.m_iQueryTime += tResult.m_iQueryTime;
+				tLastMeta.AddQueryTimeUs ( tResult.GetQueryTimeUs() );
 				tLastMeta.m_iCpuTime += tResult.m_iCpuTime;
 				tLastMeta.m_iAgentCpuTime += tResult.m_iAgentCpuTime;
 			}
@@ -8451,7 +8451,9 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 				bMoreResultsFollow = false;
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
-			gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tRes.m_iQueryTime * 1000 );
+			
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tRes.GetQueryTimeUs() );
 			break;
 		}
 		case STMT_SHOW_WARNINGS:
@@ -11374,7 +11376,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
 				auto uMatches = SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
-				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tLast.m_iQueryTime * 1000 );
+
+				if ( !session::GetBuddy() )
+					gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tLast.GetQueryTimeUs() );
 			}
 
 			// save meta for SHOW META (profile is saved elsewhere)

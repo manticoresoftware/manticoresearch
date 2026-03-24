@@ -541,7 +541,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
 		tRes.m_bTotalMatchesApprox = !!tReq.GetInt();
-		tRes.m_iQueryTime = tReq.GetInt ();
+		tRes.SetQueryTimeMs ( tReq.GetInt() );
 
 		// agents always send IO/CPU stats to master
 		BYTE uStatMask = tReq.GetByte();
@@ -1541,7 +1541,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	if ( bAgentMode && uMasterVer>=19 )
 		tOut.SendInt ( tRes.m_bTotalMatchesApprox ? 1 : 0 );
 
-	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
+	tOut.SendInt ( tRes.GetQueryTimeMs() );
 
 	if ( iVer>=0x11A && bAgentMode )
 	{

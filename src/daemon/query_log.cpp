@@ -156,8 +156,8 @@ static void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta 
 #endif
 
 	// querytime sec
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 	tBuf.Appendf ( " %d.%03d sec", iRealTime / 1000, iRealTime % 1000 );
 	tBuf.Appendf ( " %d.%03d sec", iQueryTime / 1000, iQueryTime % 1000 );
 
@@ -666,12 +666,12 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 
 	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
 	// In distributed/multi-source queries, wall and real may differ.
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	int64_t tmQueryTimeUs = tMeta.GetQueryTimeUs();
+	int64_t tmRealTimeUs = tMeta.GetRealQueryTimeUs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
+	tBuf << " real " << FixedFrac<6> ( tmRealTimeUs ) << " wall " << FixedFrac<6> ( tmQueryTimeUs );
 
 	if ( tMeta.m_iMultiplier > 1 )
 		tBuf << " x" << tMeta.m_iMultiplier;
@@ -741,7 +741,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 
 void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
-	if ( g_iQueryLogMinMs > 0 && tMeta.m_iQueryTime < g_iQueryLogMinMs )
+	if ( g_iQueryLogMinMs > 0 && tMeta.GetQueryTimeMs() < g_iQueryLogMinMs )
 		return;
 	// should not log query from buddy in the info but only in debug and more verbose
 	bool bNoLogQuery = ((q.m_uDebugFlags & QUERY_DEBUG_NO_LOG) == QUERY_DEBUG_NO_LOG);
@@ -796,12 +796,12 @@ void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType )
 
 	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
 	// In distributed/multi-source queries, wall and real may differ.
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	int64_t tmQueryTimeUs = tMeta.GetQueryTimeUs();
+	int64_t tmRealTimeUs = tMeta.GetRealQueryTimeUs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
+	tBuf << " real " << FixedFrac<6> ( tmRealTimeUs ) << " wall " << FixedFrac<6> ( tmQueryTimeUs );
 
 	if ( tMeta.m_iMultiplier > 1 )
 		tBuf << " x" << tMeta.m_iMultiplier;

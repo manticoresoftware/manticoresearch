@@ -5849,7 +5849,13 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 			if ( HasDocs(pDocL) )
 				m_pRight->HintRowID ( pDocL->m_tRowID );
 
-			bRightEmpty = !WarmupDocs ( pDocR, pHitR, m_pRight.get() );
+			if ( !WarmupDocs ( pDocR, pHitR, m_pRight.get() ) )
+			{
+				if ( TimeExceeded() )
+					break;
+
+				bRightEmpty = true;
+			}
 		}
 
 		RowID_t tNotRowID = ( bRightEmpty ? INVALID_ROWID : pDocR->m_tRowID );

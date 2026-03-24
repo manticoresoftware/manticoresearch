@@ -17,7 +17,7 @@ SHOW TABLE table_name STATUS
 * **percolate**: `index_type`，`stored_queries`，`ram_bytes`，`disk_bytes`，`max_stack_need`，`average_stack_base`，`
   desired_thread_stack`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
 * **plain**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包括 `field_tokens_*` 和 `total_tokens` 集合，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
-* **rt**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包括 `field_tokens_*` 和 `total_tokens` 集合，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`ram_chunk`，`ram_chunk_segments_count`，`disk_chunks`，`mem_limit`，`mem_limit_rate`，`ram_bytes_retired`，`optimizing`，`locked`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
+* **rt**: `index_type`，`indexed_documents`，`indexed_bytes`，可能包含 `field_tokens_*` 和 `total_tokens`，`ram_bytes`，`disk_bytes`，`disk_mapped`，`disk_mapped_cached`，`disk_mapped_doclists`，`disk_mapped_cached_doclists`，`disk_mapped_hitlists`，`disk_mapped_cached_hitlists`，`killed_documents`，`killed_rate`，`ram_chunk`，`ram_chunk_segments_count`，`disk_chunks`，`kill_dictionary_dirty_chunks`，`mem_limit`，`mem_limit_rate`，`ram_bytes_retired`，`optimizing`，`locked`，`tid`，`tid_saved`，`query_time_1min`，`query_time_5min`，`query_time_15min`，`query_time_total`，`exact_query_time_1min`，`exact_query_time_5min`，`exact_query_time_15min`，`exact_query_time_total`，`found_rows_1min`，`found_rows_5min`，`found_rows_15min`，`found_rows_total`。
 
 以下是这些值的含义：
 
@@ -37,6 +37,7 @@ SHOW TABLE table_name STATUS
 * `ram_chunk`：实时或 percolate 表的 RAM 块大小。
 * `ram_chunk_segments_count`：RAM 块内部由多个段组成，通常不超过 32 个。本行显示当前段数。
 * `disk_chunks`：实时表中的磁盘块数量。
+* `kill_dictionary_dirty_chunks`: 具有待处理 kill-stats 重建（缺少或脏的 `.spks`）的磁盘块数量。
 * `mem_limit`：表的 `rt_mem_limit` 实际值。
 * `mem_limit_rate`：RAM 块被刷写成磁盘块的比例，例如，若 `rt_mem_limit` 为 128M，且比例为 50%，当 RAM 块超过 64M 时将保存一个新的磁盘块。
 * `ram_bytes_retired`：表示 RAM 块内的垃圾大小（如已删除或替换但未永久移除的文档）。
@@ -83,6 +84,7 @@ mysql> SHOW TABLE statistic STATUS;
 | ram_chunk                     | 86865484                                                                 |
 | ram_chunk_segments_count      | 24                                                                       |
 | disk_chunks                   | 1                                                                        |
+| kill_dictionary_dirty_chunks  | 0                                                                        |
 | mem_limit                     | 134217728                                                                |
 | mem_limit_rate                | 95.00%                                                                   |
 | ram_bytes_retired             | 0                                                                        |
@@ -740,4 +742,3 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 ```
 
 <!-- end -->
-

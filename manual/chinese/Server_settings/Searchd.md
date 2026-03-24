@@ -669,6 +669,47 @@ kibana_version_string = 1.2.3
 ```
 <!-- end -->
 
+### kill_dictionary
+
+<!-- example conf kill_dictionary -->
+控制 RT 磁盘块的 kill 字典。启用后，Manticore 会从 docstore 重建每个被杀文档的词统计信息，并在查询时减去它们，因此 `docs`/`hits` 和排名权重会反映被杀行。在 `idle` 模式下默认启用。
+
+模式：
+- `0`：禁用，查询使用原始块字典统计。
+- `realtime`：启用，kill 操作会立即应用（逐个 kill 重新分词）。
+- `flush`：启用，但 kill 操作的更新会延迟到下一次 flush/merge 重建统计信息时。
+- `idle`：启用，但 kill 操作的更新会延迟到写入流空闲时（请参见 `kill_dictionary_idle_timeout`）。
+
+关于 `flush` 模式的说明：
+- 统计信息在每次磁盘块 flush 后变为准确，而不是每次 REPLACE/DELETE 后。
+- 写入延迟比 `realtime` 更平滑，但 flush 可能需要更长时间，因为 kill 统计信息在 flush 期间同步应用。
+- 通过量可能与 `realtime` 相似，或略差，具体取决于 flush 频率和数据集。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Example -->
+
+```ini
+kill_dictionary = flush
+```
+<!-- end -->
+
+### kill_dictionary_idle_timeout
+
+<!-- example conf kill_dictionary_idle_timeout -->
+当 `kill_dictionary=idle` 时，重建 kill 字典统计的空闲超时。如果有待处理的 kill 操作且在这么长时间内没有写入，Manticore 会重建 kill 统计并持久化 `.spks`。设置为 `-1` 以禁用空闲重建。接受秒或 `ms/s/m/h/d` 后缀。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Example -->
+
+```ini
+kill_dictionary_idle_timeout = 15s
+```
+<!-- end -->
+
 ### listen
 
 <!-- example conf listen -->
@@ -1730,4 +1771,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

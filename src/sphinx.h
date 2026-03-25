@@ -1039,6 +1039,7 @@ struct CSphIndexStatus
 	double			m_fSaveRateLimit {0.0};	 // not used for plain. Part of m_iMemLimit to be achieved before flushing
 	int 			m_iLockCount = 0;		// not used for plain. N of active locks (i.e. - if N>0, saving is prohibited)
 	int 			m_iOptimizesCount = 0;	// not used for plain. N of currently run optimizes.
+	int 			m_iKillDictDirtyChunks = 0; // not used for plain. N of disk chunks pending kill-stats rebuild.
 };
 
 
@@ -1352,6 +1353,8 @@ public:
 	virtual bool				AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD, CSphString & sError ) = 0;
 
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {}
+	virtual void				FlushKillStats ( bool bWaitComplete ) const {}
+	virtual bool				HasKillStatsDirty() const { return false; }
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) const {}
@@ -1376,6 +1379,7 @@ public:
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
 	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
+	virtual void				SetSkipLock ( bool bSkipLock ) {}
 
 	/// rewrite index header on disk using current in-memory settings
 	virtual bool				RewriteHeader ( CSphString & sError ) const { return false; }

@@ -17,7 +17,7 @@ SHOW TABLE table_name STATUS
 * **percolate**: `index_type`, `stored_queries`, `ram_bytes`, `disk_bytes`, `max_stack_need`, `average_stack_base`, `
   desired_thread_stack`, `tid`, `tid_saved`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
 * **plain**: `index_type`, `indexed_documents`, `indexed_bytes`, возможно набор `field_tokens_*` и `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
-* **rt**: `index_type`, `indexed_documents`, `indexed_bytes`, возможно набор `field_tokens_*` и `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `ram_chunk`, `ram_chunk_segments_count`, `disk_chunks`, `mem_limit`, `mem_limit_rate`, `ram_bytes_retired`, `optimizing`, `locked`, `tid`, `tid_saved`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
+* **rt**: `index_type`, `indexed_documents`, `indexed_bytes`, may be set of `field_tokens_*` and `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `ram_chunk`, `ram_chunk_segments_count`, `disk_chunks`, `kill_dictionary_dirty_chunks`, `mem_limit`, `mem_limit_rate`, `ram_bytes_retired`, `optimizing`, `locked`, `tid`, `tid_saved`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
 
 Вот что означают эти значения:
 
@@ -37,6 +37,7 @@ SHOW TABLE table_name STATUS
 * `ram_chunk`: размер оперативной памяти, занятой сегментом таблицы реального времени или перколяторной таблицы.
 * `ram_chunk_segments_count`: сегмент оперативной памяти внутренне состоит из сегментов, обычно не более 32. Эта строка показывает их текущее количество.
 * `disk_chunks`: количество дисковых сегментов в таблице реального времени.
+* `kill_dictionary_dirty_chunks`: количество дисковых сегментов с ожидающими перестроениями статистики удалений (отсутствующие или "грязные" `.spks`).
 * `mem_limit`: фактическое значение `rt_mem_limit` для таблицы.
 * `mem_limit_rate`: отношение, при котором сегмент оперативной памяти будет сброшен как дисковый сегмент, например, если `rt_mem_limit` составляет 128M и отношение 50%, новый дисковый сегмент будет сохранен при превышении сегментом оперативной памяти 64M.
 * `ram_bytes_retired`: представляет размер мусора в сегментах оперативной памяти (например, удаленные или заменённые документы, еще не окончательно удалённые).
@@ -83,6 +84,7 @@ mysql> SHOW TABLE statistic STATUS;
 | ram_chunk                     | 86865484                                                                 |
 | ram_chunk_segments_count      | 24                                                                       |
 | disk_chunks                   | 1                                                                        |
+| kill_dictionary_dirty_chunks  | 0                                                                        |
 | mem_limit                     | 134217728                                                                |
 | mem_limit_rate                | 95.00%                                                                   |
 | ram_bytes_retired             | 0                                                                        |
@@ -740,4 +742,3 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 ```
 
 <!-- end -->
-

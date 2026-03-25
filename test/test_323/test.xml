@@ -152,9 +152,9 @@ select * from rt;
 
 select * from test1 where MATCH('test') AND gid &gt; 22 OR gid &lt; 12;
 select * from test1 where ( gid &gt; 12 AND pid &lt; 1012 ) OR id &gt; 10;
-select * from dist where MATCH('test');
-select * from dist where MATCH('test') AND gid &gt; 22 OR gid &lt; 12;
-select * from dist where ( gid &gt; 12 AND pid &lt; 1012 ) OR id &gt; 60;
+select * from dist where MATCH('test') order by id asc;
+select * from dist where MATCH('test') AND gid &gt; 22 OR gid &lt; 12 order by id asc;
+select * from dist where ( gid &gt; 12 AND pid &lt; 1012 ) OR id &gt; 60 order by id asc;
 
 select * from dist where MATCH('test') AND gid &lt; 12;
 select * from dist where gid &lt; 12 AND MATCH('test');

@@ -115,6 +115,8 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 * `EXPANSION_MERGE_THRESHOLD_HITS`：动态更改配置项 [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) 的值。
 * `GROUPING_IN_UTC = {0 | 1}` 设置为 1 时，时间分组函数（day(), month(), year(), yearmonth(), yearmonthday()）将以 UTC 计算。更多细节请阅读 [grouping_in_utc](../Server_settings/Searchd.md) 配置参数文档。
 * `IOSTATS = {0 | 1}` 启用或禁用在查询日志中报告的 I/O 操作（属性除外）。
+* `KILL_DICTIONARY = {0 | realtime | flush | idle}` 在运行时控制 RT 磁盘块的 [kill_dictionary](../Server_settings/Searchd.md#kill_dictionary)。
+* `KILL_DICTIONARY_IDLE_TIMEOUT = <time>` 在运行时更改 [kill_dictionary_idle_timeout](../Server_settings/Searchd.md#kill_dictionary_idle_timeout)。接受与配置相同的时长语法：纯数字秒数，或 `ms/s/m/h/d` 后缀。
 * `LOG_DEBUG_FILTER = <string value>` 过滤冗余日志信息。若设置此值，所有级别高于 INFO 的日志（如 `DEBUG`, `DEBUGV` 等）将与该字符串比较，仅当日志内容以该字符串开头时才输出。
 * `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` 更改当前日志详细级别。
 * `MAINTENANCE = {0 | 1}` 设为 1 时，将服务器置于维护模式。仅具有 VIP 连接的客户端可以执行查询。所有新的非 VIP 连接将被拒绝。现有连接则保持不变。
@@ -150,4 +152,3 @@ Query OK, 0 rows affected (0.01 sec)
 
 要使用户变量保持持久性，请确保启用了 [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state)。
 <!-- proofread -->
-

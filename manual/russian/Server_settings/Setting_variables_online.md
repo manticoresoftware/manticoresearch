@@ -115,6 +115,8 @@ Manticore Search поддерживает переменные сервера н
 * `EXPANSION_MERGE_THRESHOLD_HITS`: Изменяет значение настройки конфига [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) на лету.  
 * `GROUPING_IN_UTC = {0 | 1}` При установке в 1 вызывает расчет функций группировки по времени (day(), month(), year(), yearmonth(), yearmonthday()) в UTC. Подробнее о параметре [grouping_in_utc](../Server_settings/Searchd.md).  
 * `IOSTATS = {0 | 1}` Включает или выключает отчеты об операциях ввода-вывода (кроме атрибутов) в журнале запросов.  
+* `KILL_DICTIONARY = {0 | realtime | flush | idle}` Контролирует [kill_dictionary](../Server_settings/Searchd.md#kill_dictionary) для RT-дисковых чанков в режиме выполнения.
+* `KILL_DICTIONARY_IDLE_TIMEOUT = <время>` Изменяет [kill_dictionary_idle_timeout](../Server_settings/Searchd.md#kill_dictionary_idle_timeout) в режиме выполнения. Принимает тот же синтаксис времени, как и в конфигурации: просто число в секундах или суффиксы `ms/s/m/h/d`.
 * `LOG_DEBUG_FILTER = <string value>` Фильтрует избыточные сообщения журнала. Если установлено значение, тогда все логи с уровнем > INFO (например, `DEBUG`, `DEBUGV` и т.д.) будут сравниваться со строкой, и выводиться только в случае, если начинаются с данного значения.  
 * `LOG_LEVEL = {info | debug | replication | debugv | debugvv}` Изменяет текущий уровень подробности журнала.  
 * `MAINTENANCE = {0 | 1}` При установке в 1 переводит сервер в режим обслуживания. В этом режиме запросы могут выполнять только клиенты с VIP-соединениями. Все новые не-VIP соединения отклоняются. Существующие соединения сохраняются.  
@@ -150,4 +152,3 @@ Query OK, 0 rows affected (0.01 sec)
 
 Чтобы сделать пользовательские переменные постоянными, убедитесь, что [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) включен.  
 <!-- proofread -->
-

@@ -3913,7 +3913,15 @@ const ExtDoc_t * ExtMaybe_c::GetDocsChunk()
 			break;
 
 		if ( !bRightEmpty )
-			bRightEmpty = !WarmupDocs ( pDocR, m_pRight.get() );
+		{
+			if ( !WarmupDocs ( pDocR, m_pRight.get() ) )
+			{
+				if ( TimeExceeded() )
+					break;
+
+				bRightEmpty = true;
+			}
+		}
 
 		if ( !bRightEmpty )
 		{
@@ -3968,7 +3976,8 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
 		if ( !WarmupDocs ( pDocL, m_pLeft.get() ) )
 			break;
 
-		WarmupDocs ( pDocR, m_pRight.get() );
+		if ( !WarmupDocs ( pDocR, m_pRight.get() ) && TimeExceeded() )
+			break;
 
 		// if there's nothing to filter against, simply copy leftovers
 		if ( !HasDocs(pDocR) )
@@ -6034,6 +6043,13 @@ bool NodeCacheContainer_c::WarmupCache ( ExtNode_i * pChild, int iQwords )
 
 	m_iAtomPos = pChild->GetAtomPos();
 	const ExtDoc_t * pChunk = pChild->GetDocsChunk();
+	if ( !pChunk && pChild->TimeExceeded() )
+	{
+		Invalidate ();
+		pChild->Reset ( *m_pSetup );
+		m_pSetup = NULL;
+		return false;
+	}
 
 	while ( pChunk )
 	{
@@ -6067,6 +6083,13 @@ bool NodeCacheContainer_c::WarmupCache ( ExtNode_i * pChild, int iQwords )
 			return false;
 		}
 		pChunk = pChild->GetDocsChunk();
+		if ( !pChunk && pChild->TimeExceeded() )
+		{
+			Invalidate ();
+			pChild->Reset ( *m_pSetup );
+			m_pSetup = NULL;
+			return false;
+		}
 	}
 
 	m_dDocs.Add().m_tRowID = INVALID_ROWID;

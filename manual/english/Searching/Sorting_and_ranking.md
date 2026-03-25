@@ -1026,7 +1026,7 @@ SELECT ... OPTION ranker=sph04;
 | ----------------------- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
 | max_lcs                 | query     | int   | maximum possible LCS value for the current query                                                                   |
 | bm25                    | document  | int   | quick estimate of BM25(1.2, 0)                                                                                     |
-| bm25a(k1, b)            | document  | int   | precise BM25() value with configurable K1, B constants and syntax support                                         |
+| bm25a(k1, b[, avgdl])   | document  | int   | precise BM25() value with configurable K1, B constants and optional average document length override               |
 | bm25f(k1, b, {field=weight, ...}) | document | int   | precise BM25F() value with extra configurable field weights                                                       |
 | field_mask              | document  | int   | bit mask of matched fields                                                                                         |
 | query_word_count        | document  | int   | number of unique inclusive keywords in a query                                                                     |
@@ -1141,4 +1141,3 @@ Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we a
 IDF flags can be mixed; `plain` and `normalized` are mutually exclusive;`tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.
 
 <!-- proofread -->
-

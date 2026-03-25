@@ -909,8 +909,8 @@ public:
 			m_fWeightedAvgDocLen = 0.0f;
 			ARRAY_FOREACH ( i, m_dWeights )
 				m_fWeightedAvgDocLen += m_tRankerState.m_pFieldLens[i] * m_dWeights[i];
+			m_fWeightedAvgDocLen /= m_tRankerState.m_iTotalDocuments;
 		}
-		m_fWeightedAvgDocLen /= m_tRankerState.m_iTotalDocuments;
 	}
 
 	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & bDisable ) final

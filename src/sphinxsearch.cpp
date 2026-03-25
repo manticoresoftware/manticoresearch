@@ -22,8 +22,6 @@
 #include "client_task_info.h"
 
 #include <math.h>
-
-
 bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1<b; }
 bool operator == ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1==b; }
 bool operator < ( RowID_t a, const SkiplistEntry_t & b )	{ return a<b.m_tBaseRowIDPlus1; }
@@ -2216,6 +2214,7 @@ public:
 	const CSphSchema *	m_pSchema = nullptr;
 	CSphAttrLocator		m_tFieldLensLoc;
 	float				m_fAvgDocLen = 0.0f;
+	float				m_fParamAvgDocLen = 0.0f;
 	const int64_t *		m_pFieldLens = nullptr;
 	int64_t				m_iTotalDocuments = 0;
 	float				m_fParamK1 = 1.2f;
@@ -2422,6 +2421,7 @@ public:
 		}
 
 		// compute BM25A (one value per document)
+		const float fAvgDocLen = m_fParamAvgDocLen>0.0f ? m_fParamAvgDocLen : m_fAvgDocLen;
 		m_fDocBM25A = 0.0f;
 		for ( int iWord=1; iWord<=m_iMaxQpos; iWord++ )
 		{
@@ -2432,11 +2432,11 @@ public:
 			float idf = m_dIDF[iWord];
 #if defined( __aarch64__ )
 			// direct calculation produces on arm64 different result, so provide explicitly 3 steps
-			const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / m_fAvgDocLen );
+			const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / fAvgDocLen );
 			const float sum = tf / ( tf + paramK1 ) * idf;
 			m_fDocBM25A += sum;
 #else
-			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
+			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/fAvgDocLen)) * idf;
 #endif
 		}
 		m_fDocBM25A += 0.5f; // map to [0..1] range
@@ -2784,17 +2784,19 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
 	float					m_fK1;
 	float					m_fB;
+	float					m_fAvgDocLen;
 	CSphFixedVector<int>			m_dWeights { 0 };			///< per field weights
 	CSphFixedVector<float>			m_dAvgDocFieldLens { 0 };	///< per field avg lengths
 	mutable CSphFixedVector<int>	m_dFieldLens { 0 };		///< per field lengths
 	int					m_iWeightMax;			///< the largest field weight
 
-	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, float k1, float b, ISphExpr * pFieldWeights )
+	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, float k1, float b, float fAvgDocLen, ISphExpr * pFieldWeights )
 	{
 		// bind k1, b
 		m_pState = pState;
 		m_fK1 = k1;
 		m_fB = b;
+		m_fAvgDocLen = fAvgDocLen;
 
 		m_dWeights.Reset ( pState->m_iFields );
 		m_dAvgDocFieldLens.Reset ( pState->m_iFields );
@@ -2826,7 +2828,12 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 
 		// compute avg length per field
 		m_dAvgDocFieldLens.Fill ( 0.0f );
-		if ( m_pState->m_pFieldLens && m_pState->m_iTotalDocuments )
+		if ( m_fAvgDocLen>0.0f )
+		{
+			float fPerFieldAvg = m_fAvgDocLen / Max ( m_pState->m_iFields, 1 );
+			for ( int i=0; i<m_pState->m_iFields; i++ )
+				m_dAvgDocFieldLens[i] = fPerFieldAvg;
+		} else if ( m_pState->m_pFieldLens && m_pState->m_iTotalDocuments )
 			for ( int i=0; i<m_pState->m_iFields; i++ )
 				m_dAvgDocFieldLens[i] = m_pState->m_pFieldLens[i] / m_pState->m_iTotalDocuments; // FIXME? Total of documents with non empty field value is actually needed here
 	}
@@ -2882,6 +2889,7 @@ private:
 		: m_pState ( rhs.m_pState )
 		, m_fK1 ( rhs.m_fK1 )
 		, m_fB ( rhs.m_fB )
+		, m_fAvgDocLen ( rhs.m_fAvgDocLen )
 		, m_dWeights ( rhs.m_dWeights.GetLength() )
 		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens.GetLength() )
 		, m_dFieldLens ( rhs.m_dFieldLens.GetLength() )
@@ -3207,8 +3215,10 @@ public:
 					CSphMatch tDummy;
 					m_pState->m_fParamK1 = pLeft->GetArg(0)->Eval ( tDummy );
 					m_pState->m_fParamB = pLeft->GetArg(1)->Eval ( tDummy );
+					m_pState->m_fParamAvgDocLen = ( pLeft->GetNumArgs()>=3 ) ? pLeft->GetArg(2)->Eval ( tDummy ) : 0.0f;
 					m_pState->m_fParamK1 = Max ( m_pState->m_fParamK1, 0.001f );
 					m_pState->m_fParamB = Min ( Max ( m_pState->m_fParamB, 0.0f ), 1.0f );
+					m_pState->m_fParamAvgDocLen = Max ( m_pState->m_fParamAvgDocLen, 0.0f );
 					return new Expr_FloatPtr_c ( &m_pState->m_fDocBM25A );
 				}
 			case XRANK_BM25F:
@@ -3219,7 +3229,7 @@ public:
 					float fB = pLeft->GetArg(1)->Eval ( tDummy );
 					fK1 = Max ( fK1, 0.001f );
 					fB = Min ( Max ( fB, 0.0f ), 1.0f );
-					return new Expr_BM25F_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, fK1, fB, pLeft->GetArg(2) );
+					return new Expr_BM25F_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, fK1, fB, 0.0f, pLeft->GetNumArgs()>=3 ? pLeft->GetArg(2) : nullptr );
 				}
 
 			case XRANK_SUM:					return new Expr_Sum_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, pLeft );
@@ -3351,7 +3361,8 @@ public:
 
 			case XRANK_BM25A:
 				if ( !CheckArgtypes ( dArgs, "BM25A", "c:ss", bAllConst, sError ) )
-					return SPH_ATTR_NONE;
+					if ( !CheckArgtypes ( dArgs, "BM25A", "c:sss", bAllConst, sError ) )
+						return SPH_ATTR_NONE;
 				return SPH_ATTR_FLOAT;
 
 			case XRANK_BM25F:
@@ -3471,6 +3482,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	}
 
 	m_fAvgDocLen = 0.0f;
+	m_fParamAvgDocLen = 0.0f;
 	m_pFieldLens = pRanker->GetIndex()->GetFieldLens();
 	if ( m_pFieldLens )
 		for ( int i=0; i<iFields; i++ )

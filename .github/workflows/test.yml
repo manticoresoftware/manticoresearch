@@ -459,7 +459,7 @@ jobs:
       VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
-      docker_image: test-kit:img
+      docker_image: ghcr.io/${{ github.repository_owner }}/manticoresearch:test-kit-${{ needs.meta.outputs.branch_tag }}
       artifact_name: manticore_test_kit.img
       repository: ${{ github.repository }}
       ref: ${{ github.sha }}

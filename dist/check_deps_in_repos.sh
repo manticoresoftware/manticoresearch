@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Parse command line arguments
 REPO_TYPE="dev"  # Default value
@@ -22,12 +22,39 @@ done
 SCRIPT_DIR="$(dirname "$0")"
 REPO_ROOT="$(realpath "$SCRIPT_DIR/..")"
 TEMP_DIR=$(mktemp -d)
+ARTIFACT_DIR="$REPO_ROOT/check_deps_debug_artifact"
+PRESERVE_DEBUG=0
 
 echo "Current directory: $(pwd)"
 echo "Script location: $SCRIPT_DIR"
 echo "Expected repository root: $REPO_ROOT"
 echo "Temporary directory: $TEMP_DIR"
 echo "Using repository type: $REPO_TYPE"
+
+cleanup() {
+  if [ "$PRESERVE_DEBUG" -eq 0 ] && [ -d "$TEMP_DIR" ]; then
+    rm -rf "$TEMP_DIR"
+  fi
+}
+
+trap cleanup EXIT
+
+prepare_debug_bundle() {
+  local reason="$1"
+  PRESERVE_DEBUG=1
+  rm -rf "$ARTIFACT_DIR"
+  mkdir -p "$ARTIFACT_DIR"
+  cp -R "$TEMP_DIR"/. "$ARTIFACT_DIR"/
+  {
+    echo "reason=$reason"
+    echo "repo_type=$REPO_TYPE"
+    echo "cwd=$(pwd)"
+    echo "script_dir=$SCRIPT_DIR"
+    echo "repo_root=$REPO_ROOT"
+    echo "temp_dir=$TEMP_DIR"
+    echo "artifact_dir=$ARTIFACT_DIR"
+  } > "$ARTIFACT_DIR/context.txt"
+}
 
 # List of HTML pages to download
 declare -a urls=(
@@ -73,21 +100,57 @@ should_skip() {
 }
 
 # Download HTML files into TEMP_DIR
+mkdir -p "$TEMP_DIR/wget_logs"
 pids=()
 for pair in "${urls[@]}"; do
   name="${pair%% *}"
   url="${pair#* }"
   echo "Starting download for $name..."
-  wget -q -O "$TEMP_DIR/$name" "$url" &
+  wget --server-response --output-file="$TEMP_DIR/wget_logs/${name}.log" -O "$TEMP_DIR/$name" "$url" >/dev/null 2>&1 &
   pids+=($!)
 done
 
 # Wait for all download processes to complete
 echo "Waiting for all downloads to complete..."
 for pid in "${pids[@]}"; do
-  wait $pid || { echo "Error: One of the downloads failed"; exit 1; }
+  if ! wait "$pid"; then
+    echo "Error: One of the downloads failed"
+    prepare_debug_bundle "download_failed"
+    echo "Debug artifact prepared in $ARTIFACT_DIR"
+    exit 1
+  fi
 done
 echo "All HTML pages were successfully downloaded to $TEMP_DIR."
+
+download_summary="$TEMP_DIR/download_summary.txt"
+printf "repo\tbytes\tstatus\tcontent_type\tpackage_links\ttitle\n" > "$download_summary"
+
+invalid_downloads=()
+for html_file in "$TEMP_DIR"/*.html; do
+  repo_name="$(basename "$html_file")"
+  log_file="$TEMP_DIR/wget_logs/${repo_name}.log"
+  size_bytes=$(wc -c < "$html_file" | tr -d ' ')
+  status_code=$( (grep -Eo 'HTTP/[0-9.]+ [0-9]+' "$log_file" || true) | tail -1 | awk '{print $2}' )
+  content_type=$( (grep -i '^  Content-Type:' "$log_file" || true) | tail -1 | sed 's/^  Content-Type: //; s/\r$//' )
+  package_links=$( (grep -Eio '\.(deb|rpm|tar\.gz|zip)(\"|<|$)' "$html_file" || true) | wc -l | tr -d ' ' )
+  title=$( { tr '\n' ' ' < "$html_file" | sed -n 's:.*<title>\(.*\)</title>.*:\1:Ip' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//'; } || true )
+
+  printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "$repo_name" "${size_bytes:-0}" "${status_code:-unknown}" "${content_type:-unknown}" "${package_links:-0}" "${title:-n/a}" \
+    >> "$download_summary"
+
+  if [ "${size_bytes:-0}" -eq 0 ] || [ "${package_links:-0}" -eq 0 ]; then
+    invalid_downloads+=("$repo_name|size=${size_bytes:-0}|status=${status_code:-unknown}|content_type=${content_type:-unknown}|links=${package_links:-0}|title=${title:-n/a}")
+  fi
+done
+
+if [ ${#invalid_downloads[@]} -gt 0 ]; then
+  echo "Warning: Some downloaded pages do not look like package indexes."
+  for entry in "${invalid_downloads[@]}"; do
+    IFS='|' read -r repo_name size_info status_info content_type_info links_info title_info <<< "$entry"
+    echo "  - $repo_name ($size_info, $status_info, $content_type_info, $links_info, $title_info)"
+  done
+fi
 
 # Read deps.txt file
 DEPS_FILE="$REPO_ROOT/deps.txt"
@@ -97,6 +160,14 @@ if [ ! -f "$DEPS_FILE" ]; then
 fi
 
 missing_packages=()
+declare -A repo_issue_details=()
+
+if [ ${#invalid_downloads[@]} -gt 0 ]; then
+  for entry in "${invalid_downloads[@]}"; do
+    IFS='|' read -r repo_name size_info status_info content_type_info links_info title_info <<< "$entry"
+    repo_issue_details["$repo_name"]="$size_info, $status_info, $content_type_info, $links_info, $title_info"
+  done
+fi
 
 while IFS=" " read -r package version_string date hash suffix || [ -n "$package" ]; do
   [[ -z "$package" ]] && continue
@@ -155,7 +226,12 @@ while IFS=" " read -r package version_string date hash suffix || [ -n "$package"
   if [ ${#missing_in[@]} -gt 0 ]; then
     echo "❌ Package $package (real name: $real_name) is missing in:"
     for repo in "${missing_in[@]}"; do
-      echo "  - $repo"
+      extra_info="${repo_issue_details[$repo]:-}"
+      if [ -n "$extra_info" ]; then
+        echo "  - $repo [$extra_info]"
+      else
+        echo "  - $repo"
+      fi
     done
     missing_packages+=("$package $version $search_substring")
   else
@@ -170,10 +246,11 @@ if [ ${#missing_packages[@]} -gt 0 ]; then
   for m in "${missing_packages[@]}"; do
     echo "  - $m"
   done
-  rm -rf "$TEMP_DIR"
+  prepare_debug_bundle "packages_missing_or_unparseable_pages"
+  cp "$download_summary" "$ARTIFACT_DIR/download_summary.txt"
+  echo "Debug artifact prepared in $ARTIFACT_DIR"
   exit 1
 else
   echo ""
   echo "🎉 All packages listed in deps.txt were successfully found!"
-  rm -rf "$TEMP_DIR"
 fi

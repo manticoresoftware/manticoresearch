@@ -185,6 +185,13 @@ jobs:
       - name: Run dependency check script
         run: |
           bash dist/check_deps_in_repos.sh --target ${{ needs.pack.outputs.target }}
+      - name: Upload dependency check debug artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check_deps_debug
+          path: check_deps_debug_artifact
+          if-no-files-found: ignore
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages

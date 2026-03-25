@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     software-properties-common \
     rpm \
+    cpio \
     elfutils \
     nsis \
     zip \

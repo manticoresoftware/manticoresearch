@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339814
+    },
+    "__meta": {
+        "source_text": "# DROP FUNCTION\n\n```sql\nDROP FUNCTION udf_name\n```\n\n`DROP FUNCTION` statement uninstalls a user-defined function [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) with the specified name. Upon successful removal, the function will no longer be available for use in subsequent queries. However, ongoing concurrent queries will not be affected, and if necessary, the library unloading will be delayed until those queries are completed. Example:\n\n```sql\nmysql> DROP FUNCTION avgmva;\nQuery OK, 0 rows affected (0.00 sec)\n```\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "1abf62ed870494aaf530c923c042aff8"
     }
 }

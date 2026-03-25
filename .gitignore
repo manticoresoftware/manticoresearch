@@ -11,6 +11,7 @@
 /*.sdf
 /*.opensdf
 /.hg
+**/*.bak
 
 # cmake local presets
 /CMakeUserPresets.json
@@ -63,10 +64,13 @@
 /test/clt-tests/**/*.rep
 /test/clt-tests/**/*.deb
 /clt
+/agents.md
 /test/clt-tests/*repo.noarch.deb.*
 /test/clt-tests/**/*.cmp
 /test/.cache/
 /test/examples.txt
+/test/node_prepared_stmt/node_modules
+/test/sqlx_prepared_stmt/target
 
 # /test/ql/
 /test/ql/data/*.log
@@ -85,6 +89,8 @@
 /test/clt-tests/*repo.noarch.deb.*
 /src/perfetto/perfetto.cc
 /src/perfetto/perfetto.h
+/.codex
+/tmp
 
 # dist
 /dist/docker

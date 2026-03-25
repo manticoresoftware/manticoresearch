@@ -79,7 +79,7 @@ jobs:
         shell: bash
     timeout-minutes: 30
     container:
-      image: manticoresearch/external_toolchain:vcpkg331_20250114
+      image: manticoresearch/external_toolchain:vcpkg331_20260310
       env:
         CACHEB: "../cache"
         DIAGNOSTIC: 1

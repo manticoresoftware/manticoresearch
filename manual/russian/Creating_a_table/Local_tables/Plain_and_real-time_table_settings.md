@@ -100,8 +100,9 @@ stored_fields = title, content
 Значение: Список **полнотекстовых** полей, разделённых запятыми, для которых следует хранить исходные значения. Пустое значение (т.е. `stored_fields =` ) отключает хранение исходных значений для всех полей.
 
 Примечание: В случае таблицы реального времени, поля, перечисленные в `stored_fields`, также должны быть объявлены как [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
-
 Также обратите внимание, что вам не нужно перечислять атрибуты в `stored_fields`, поскольку их исходные значения и так сохраняются. `stored_fields` может использоваться только для полнотекстовых полей.
+
+Примечание: В конфигурации распределённой таблицы идентификаторы документов должны быть уникальны во всех таблицах агентов. Если несколько агентов содержат одинаковый идентификатор документа, получение сохранённых полей может вернуть значения от другого агента, отличного от совпавшей строки.
 
 См. также [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) для опций сжатия хранилища документов.
 
@@ -969,6 +970,7 @@ table products {
 
 ### Специфические настройки обработки естественного языка
 Поддерживаются следующие настройки. Все они описаны в разделе [НЛП и токенизация](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md).
+* [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
@@ -1012,4 +1014,3 @@ table products {
 * [stored_only_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
 * [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 <!-- proofread -->
-

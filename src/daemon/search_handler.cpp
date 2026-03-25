@@ -13,6 +13,7 @@
 #include "search_handler.h"
 
 #include "sphinxdefs.h"
+#include "hybridexecutor.h"
 #include "joinsorter.h"
 #include "pseudosharding.h"
 #include "api_search.h"
@@ -203,7 +204,8 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.GetLength()-tQuery.m_iOffset ), 0 );
 	// actualy tRes.m_iCount=0 since delete/update produces no matches
 
-	tRes.m_iQueryTime += (int)(tmLocal/1000);
+	tRes.AddQueryTimeUs ( tmLocal );
+	tRes.SetRealQueryTimeUs ( tmLocal );
 	tRes.m_iCpuTime += tmCPU;
 
 	if ( !tRes.m_iSuccesses )
@@ -411,18 +413,6 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, CSphVector<Joined
 	return CreateSingleSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook, szParent );
 }
 
-static int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
-{
-	assert ( tMeta.m_bHasPrediction );
-
-	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
-		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
-		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
-		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
-
-	return iNanoResult/1000000;
-}
-
 struct LocalSearchRef_t
 {
 	ExprHook_c&	m_tHook;
@@ -466,14 +456,6 @@ struct LocalSearchRef_t
 			// warnings
 			if ( !tChild.m_sWarning.IsEmpty ())
 				tResult.m_sWarning = tChild.m_sWarning;
-
-			// prediction counters
-			tResult.m_bHasPrediction |= tChild.m_bHasPrediction;
-			if ( tChild.m_bHasPrediction )
-			{
-				tResult.m_tStats.Add ( tChild.m_tStats );
-				tResult.m_iPredictedTime = CalcPredictedTimeMsec ( tResult );
-			}
 
 			// profiling
 			if ( tChild.m_pProfile )
@@ -917,7 +899,7 @@ CSphVector<JoinedIndexes_t> SearchHandler_c::GetRlockedJoinedIndexes ( const CSp
 }
 
 
-bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes )
+bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, int64_t tmLocalCallUs, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes )
 {
 	auto & dNFailuresSet = tCtx.m_dFailuresSet;
 	auto & dNAggrResults = tCtx.m_dAggrResults;
@@ -930,15 +912,15 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 	ISphMatchSorter * pSorter = dSorters[iQuery];
 
 	AggrResult_t & tNRes = dNAggrResults[iQuery];
-	int iQTimeForStats = tNRes.m_iQueryTime;
+	int64_t tmQTimeForStatsUs = tNRes.GetQueryTimeUs();
 	auto pDocstore = m_bMultiQueue ? tMqRes.m_pDocstore : dNResults[iQuery].m_pDocstore;
 
 	// multi-queue only returned one result set meta, so we need to replicate it
 	if ( m_bMultiQueue )
 	{
 		// these times will be overridden below, but let's be clean
-		iQTimeForStats = tMqMeta.m_iQueryTime / iNumQueries;
-		tNRes.m_iQueryTime += iQTimeForStats;
+		tmQTimeForStatsUs = tMqMeta.GetQueryTimeUs() / Max ( iNumQueries, 1 );
+		tNRes.AddQueryTimeUs ( tmQTimeForStatsUs );
 		tNRes.MergeWordStats ( tMqMeta );
 		tNRes.m_iMultiplier = iNumQueries;
 		tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iNumQueries;
@@ -955,10 +937,16 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 	++tNRes.m_iSuccesses;
 	tNRes.m_iCpuTime = iCpuTime;
 	tNRes.m_iTotalMatches += pSorter->GetTotalCount();
-	tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
 
 	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_iSuccesses = 1;
-	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = iQTimeForStats * 1000; // FIME!!! change time in meta into miscroseconds
+	// Facet/multi-queue optimization runs one shared local search for multiple logical queries.
+	// Per-table stats must use the exact shared wall time divided by the logical-query count,
+	// otherwise integer-ms division collapses xN groups to zero, while using the full shared
+	// call time overcounts every logical FACET result.
+	if ( m_bMultiQueue )
+		m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = Max<int64_t> ( tmLocalCallUs / Max ( iNumQueries, 1 ), 0 );
+	else
+		m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = tmQTimeForStatsUs;
 	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_uFoundRows = pSorter->GetTotalCount();
 
 	// extract matches from sorter
@@ -1096,6 +1084,7 @@ void SearchHandler_c::RunLocalSearches()
 			CSphQueryResultMeta tMqMeta;
 			CSphQueryResult tMqRes;
 			tMqRes.m_pMeta = &tMqMeta;
+			int64_t tmLocalCallUs = 0;
 
 			{	// scope for r-locking the index
 				RIdx_c pIndex { pServed };
@@ -1131,10 +1120,18 @@ void SearchHandler_c::RunLocalSearches()
 				LOCSEARCHINFO << "RunLocalSearches index:" << pIndex->GetName();
 
 				dNAggrResults.First().m_tIOStats.Start ();
-				if ( m_bMultiQueue )
+				tmLocalCallUs = -sphMicroTimer();
+				if ( m_dNQueries.First().m_bHybridSearch )
+				{
+					const CSphIndex * pJoinedIndex = dJoinedIndexes[0].m_dIndexes.GetLength() ? dJoinedIndexes[0].m_dIndexes[0] : nullptr;
+					auto tQueueSettings = MakeQueueSettings ( pIndex, pJoinedIndex, dJoinedIndexes[0].m_szParent, m_dNQueries.First().m_iMaxMatches, m_dPSInfo[iLocal].m_bForceSingleThread, &tCtx.m_tHook );
+					bResult = ExecuteHybridSearch ( pIndex, m_dNQueries.First(), tQueueSettings, dNResults[0], dSorters, tMultiArgs );
+				}
+				else if ( m_bMultiQueue )
 					bResult = pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
 				else
 					bResult = pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
+				tmLocalCallUs += sphMicroTimer();
 				dNAggrResults.First ().m_tIOStats.Stop ();
 			}
 
@@ -1152,7 +1149,7 @@ void SearchHandler_c::RunLocalSearches()
 					if ( !pSorter )
 						continue;
 
-					if ( SubmitSuccess ( dSorters, tGlobalSorters, tCtx, iCpuTime, i, iLocal, tMqMeta, tMqRes ) )
+					if ( SubmitSuccess ( dSorters, tGlobalSorters, tCtx, iCpuTime, i, iLocal, tmLocalCallUs, tMqMeta, tMqRes ) )
 						iTotalSuccesses.fetch_add ( 1, std::memory_order_relaxed );
 				}
 			} else
@@ -1179,20 +1176,8 @@ void SearchHandler_c::RunLocalSearches()
 
 	tGlobalSorters.MergeResults(m_dNAggrResults);
 
-	// update our wall time for every result set
+	// Query time is already accumulated from query metadata; adding tmLocal again causes double accounting
 	tmLocal = sphMicroTimer ()-tmLocal;
-	for ( int iQuery = 0; iQuery<iQueries; ++iQuery )
-		m_dNAggrResults[iQuery].m_iQueryTime += (int) ( tmLocal / 1000 );
-
-	auto iTotalSuccessesInt = iTotalSuccesses.load ( std::memory_order_relaxed );
-
-	for ( auto iLocal = 0; iLocal<iNumLocals; ++iLocal )
-		for ( int iQuery = 0; iQuery<iQueries; ++iQuery )
-		{
-			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery];
-			if ( tStat.m_iSuccesses )
-				tStat.m_tmQueryTime = tmLocal / iTotalSuccessesInt;
-		}
 }
 
 // check expressions into a query to make sure that it's ready for multi query optimization
@@ -1553,19 +1538,89 @@ void SearchHandler_c::UniqLocals ( VecTraits_T<LocalIndex_t> & dLocals )
 }
 
 
-void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
+static void ApplyClampedTimeDelta ( uint64_t & tmQueryTime, int64_t tmDeltaPart )
+{
+	if ( tmDeltaPart>=0 )
+	{
+		tmQueryTime += (uint64_t)tmDeltaPart;
+		return;
+	}
+
+	uint64_t uDelta = (uint64_t)( -( tmDeltaPart + 1 ) ) + 1;
+	tmQueryTime = ( tmQueryTime>=uDelta ) ? ( tmQueryTime-uDelta ) : 0;
+}
+
+
+static void DistributePerIndexOverhead ( CSphVector<DistrServedByAgent_t> & dDistrServedByAgent, CSphVector<StatsPerQuery_t> & dQueryIndexStats, int64_t tmDelta, int iTotalSuccesses )
+{
+	if ( !iTotalSuccesses )
+		return;
+
+	int64_t nDistrDivider = iTotalSuccesses;
+	if ( nDistrDivider )
+	{
+		for ( auto & tDistrStat : dDistrServedByAgent )
+		{
+			for ( auto & tStat : tDistrStat.m_dStats )
+			{
+				auto tmDeltaWallAgent = tmDelta * tStat.m_iSuccesses / nDistrDivider;
+				ApplyClampedTimeDelta ( tStat.m_tmQueryTime, tmDeltaWallAgent );
+			}
+		}
+	}
+
+	int64_t nLocalDivider = iTotalSuccesses;
+	if ( nLocalDivider )
+	{
+		ARRAY_FOREACH ( iLocal, dQueryIndexStats )
+		{
+			auto & dQueryIndexStat = dQueryIndexStats[iLocal];
+			for ( int iQuery = 0; iQuery < dQueryIndexStat.m_dStats.GetLength(); ++iQuery )
+			{
+				QueryStat_t & tStat = dQueryIndexStat.m_dStats[iQuery];
+				// do not need to check tStat.m_iSuccesses>0 here
+				// if m_iSuccesses is 0 - the added time is 0
+				int64_t tmDeltaWallLocal = tmDelta * tStat.m_iSuccesses / nLocalDivider;
+				ApplyClampedTimeDelta ( tStat.m_tmQueryTime, tmDeltaWallLocal );
+			}
+		}
+	}
+}
+
+
+void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
 	// in multi-queue case (1 actual call per N queries), just divide overall query time evenly
 	// otherwise (N calls per N queries), divide common query time overheads evenly
 	const int iQueries = m_dNQueries.GetLength();
+
 	if ( m_bMultiQueue )
 	{
+		auto tmPerQueryUs = Max<int64_t> ( tmSubset / iQueries, 0 );
 		for ( auto & dResult : m_dNAggrResults )
 		{
-			dResult.m_iQueryTime = (int)( tmSubset/1000/iQueries );
-			dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
+			dResult.SetQueryTimeUs ( tmPerQueryUs );
+			dResult.SetRealQueryTimeUs ( tmPerQueryUs );
 			dResult.m_iCpuTime = tmCpu/iQueries;
 		}
+
+		int iTotalSuccesses = 0;
+		for ( const auto & dResult : m_dNAggrResults )
+			iTotalSuccesses += dResult.m_iSuccesses;
+
+		if ( !iTotalSuccesses )
+			return;
+
+		int64_t tmAccountedWall = 0;
+		for ( const auto & tDistrStat : dDistrServedByAgent )
+			for ( const auto & tStat : tDistrStat.m_dStats )
+				tmAccountedWall += tStat.m_tmQueryTime;
+
+		for ( const auto & dQueryIndexStat : m_dQueryIndexStats )
+			for ( const auto & tStat : dQueryIndexStat.m_dStats )
+				tmAccountedWall += tStat.m_tmQueryTime;
+
+		DistributePerIndexOverhead ( dDistrServedByAgent, m_dQueryIndexStats, tmSubset - tmAccountedWall, iTotalSuccesses );
 		return;
 	}
 
@@ -1573,7 +1628,7 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 	int64_t tmAccountedCpu = 0;
 	for ( const auto & dResult : m_dNAggrResults )
 	{
-		tmAccountedWall += dResult.m_iQueryTime*1000;
+		tmAccountedWall += dResult.GetQueryTimeUs();
 		assert ( ( dResult.m_iCpuTime==0 && dResult.m_iAgentCpuTime==0 ) ||	// all work was done in this thread
 			( dResult.m_iCpuTime>0 && dResult.m_iAgentCpuTime==0 ) ||		// children threads work
 			( dResult.m_iAgentCpuTime>0 && dResult.m_iCpuTime==0 ) );		// agents work
@@ -1587,8 +1642,10 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 
 	for ( auto & dResult : m_dNAggrResults )
 	{
-		dResult.m_iQueryTime += (int)(tmDeltaWall/1000);
-		dResult.m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
+		auto tmDetailedUs = Max<int64_t> ( dResult.GetQueryTimeUs() + tmDeltaWall, 0 );
+		auto tmRealUs = Max<int64_t> ( tmSubset / iQueries, 0 );
+		dResult.SetQueryTimeUs ( tmDetailedUs );
+		dResult.SetRealQueryTimeUs ( tmRealUs );
 		dResult.m_iCpuTime = tmCpu/iQueries;
 		if ( bExternalWork )
 			dResult.m_iCpuTime += tmAccountedCpu;
@@ -1610,33 +1667,7 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 
 	// distribute overhead \  tmDelta proportionally to all tables
 	// if table has 0 successes - it gets 0 overhead as (tmDelta * 0 / Divider = 0)
-	int64_t nDistrDivider = iTotalSuccesses;
-	if ( nDistrDivider )
-	{
-		for ( auto &tDistrStat : dDistrServedByAgent )
-		{
-			for ( QueryStat_t& tStat : tDistrStat.m_dStats )
-			{
-				auto tmDeltaWallAgent = tmDelta * tStat.m_iSuccesses / nDistrDivider;
-				tStat.m_tmQueryTime += tmDeltaWallAgent;
-			}
-		}
-	}
-
-	int64_t nLocalDivider = iTotalSuccesses;
-	if ( nLocalDivider )
-	{
-		for ( auto &dQueryIndexStat : m_dQueryIndexStats )
-		{
-			for ( QueryStat_t& tStat : dQueryIndexStat.m_dStats )
-			{
-				// do not need to check tStat.m_iSuccesses>0 here
-				// if m_iSuccesses is 0 - the added time is 0
-				int64_t tmDeltaWallLocal = tmDelta * tStat.m_iSuccesses / nLocalDivider;
-				tStat.m_tmQueryTime += tmDeltaWallLocal;
-			}
-		}
-	}
+	DistributePerIndexOverhead ( dDistrServedByAgent, m_dQueryIndexStats, tmDelta, iTotalSuccesses );
 }
 
 
@@ -1838,7 +1869,8 @@ static void CheckExpansion ( CSphQueryResultMeta & tMeta )
 	if ( tMeta.m_tExpansionStats.m_iMerged>=tMeta.m_tExpansionStats.m_iTerms )
 		return;
 
-	if ( tMeta.m_iQueryTime<100 || ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs ) )
+	int iQueryTimeMs = tMeta.GetQueryTimeMs();
+	if ( iQueryTimeMs<100 || ( g_iQueryLogMinMs>0 && iQueryTimeMs<g_iQueryLogMinMs ) )
 		return;
 
 	int iTotal = tMeta.m_tExpansionStats.m_iMerged + tMeta.m_tExpansionStats.m_iTerms;
@@ -2106,18 +2138,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
 					tRes.m_bTotalMatchesApprox |= tRemoteResult.m_bTotalMatchesApprox;
-					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
+					tRes.AddQueryTimeUs ( tRemoteResult.GetQueryTimeUs() );
 					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 					tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
-					tRes.m_iAgentPredictedTime += tRemoteResult.m_iPredictedTime;
 					tRes.m_iAgentFetchedDocs += tRemoteResult.m_iAgentFetchedDocs;
 					tRes.m_iAgentFetchedHits += tRemoteResult.m_iAgentFetchedHits;
 					tRes.m_iAgentFetchedSkips += tRemoteResult.m_iAgentFetchedSkips;
-					tRes.m_bHasPrediction |= ( m_dNQueries[iRes].m_iMaxPredictedMsec>0 );
 
 					if ( pDistr )
 					{
-						pDistr->m_dStats[iRes].m_tmQueryTime += tRemoteResult.m_iQueryTime * 1000; // FIME!!! change time in meta into miscroseconds
+						pDistr->m_dStats[iRes].m_tmQueryTime += tRemoteResult.GetQueryTimeUs();
 						pDistr->m_dStats[iRes].m_uFoundRows += tRemoteResult.m_iTotalMatches;
 						++pDistr->m_dStats[iRes].m_iSuccesses;
 					}

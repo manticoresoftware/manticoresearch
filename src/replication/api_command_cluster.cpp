@@ -108,9 +108,9 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 {
 	auto eClusterCmd = (E_CLUSTER)tBuf.GetWord();
 
-	bool bNodeVer = ( eClusterCmd==E_CLUSTER::GET_NODE_VER || eClusterCmd==E_CLUSTER::GET_NODE_VER_ID );
+	bool bNodeVer = ( eClusterCmd==E_CLUSTER::GET_NODE_VER_ID );
 
-	// GET_NODE_VER should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
+	// GET_NODE_VER_ID should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
 	if ( !bNodeVer && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
 		return;
 
@@ -156,12 +156,8 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveClusterGetState ( tOut, tBuf, sCluster );
 		break;
 
-	case E_CLUSTER::GET_NODE_VER:
-		ReceiveClusterGetVer ( false, tOut );
-		break;
-
 	case E_CLUSTER::GET_NODE_VER_ID:
-		ReceiveClusterGetVer ( true, tOut );
+		ReceiveClusterGetVer ( tOut, tBuf );
 		break;
 
 	case E_CLUSTER::UPDATE_SST_PROGRESS:

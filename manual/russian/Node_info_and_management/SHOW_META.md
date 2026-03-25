@@ -132,15 +132,12 @@ SHOW META;
 
 <!-- end -->
 
-<!-- example show meta predicted_time -->
-Дополнительные значения, такие как `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips` и их соответствующие аналоги `dist_fetched_*`, будут доступны только в том случае, если `searchd` был настроен с [предсказанными временными затратами](../Server_settings/Searchd.md#predicted_time_costs) и запрос включал `predicted_time` в предложении `OPTION`.
-
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100;
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5;
 
 SHOW META;
 ```
@@ -167,10 +164,6 @@ mysql> show meta;
 | total_found         | 266385 |
 | total_relation      | eq     |
 | time                | 0.012  |
-| local_fetched_docs  | 307212 |
-| local_fetched_hits  | 407390 |
-| local_fetched_skips | 24     |
-| predicted_time      | 56     |
 | keyword[0]          | one    |
 | docs[0]             | 224387 |
 | hits[0]             | 310327 |

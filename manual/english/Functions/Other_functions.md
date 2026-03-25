@@ -14,9 +14,19 @@ mysql> select CONNECTION_ID();
 1 row in set (0.00 sec)
 ```
 
+### HYBRID_SCORE()
+
+Returns the [hybrid search](../Searching/Hybrid_search.md) RRF fusion score. Only available in hybrid queries (those using `OPTION fusion_method='rrf'`). Results are sorted by `hybrid_score() DESC` by default.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
 ### KNN_DIST()
 
-Returns [KNN vector search](../Searching/KNN.md) distance.
+Returns [KNN vector search](../Searching/KNN.md) distance. In [hybrid search](../Searching/Hybrid_search.md) queries with multiple KNN sub-queries, returns the minimum distance across all of them.
 
 ```sql
 mysql> select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) ) and match('white') and id < 10;

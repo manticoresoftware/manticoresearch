@@ -168,6 +168,7 @@ enum SqlStmt_e : BYTE
 	STMT_SHOW_SCROLL,
 	STMT_SHOW_TABLE_INDEXES,
 	STMT_ALTER_REBUILD_KNN,
+	STMT_ALTER_REBUILD_EMBEDDINGS,
 	STMT_LOCK_TABLES,
 	STMT_UNLOCK_TABLES,
 
@@ -189,7 +190,7 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "alter_embeddings_api_key", "alter_embeddings_api_url", "alter_embeddings_api_timeout", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", 
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", "alter_rebuild_embeddings", "lock_tables", "unlock_tables",
 	};
 	return dNames[eStmt];
 }
@@ -305,6 +306,9 @@ public:
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
 	knn::IndexSettings_t	m_tAlterKNN;
+	knn::ModelSettings_t	m_tAlterKNNModel;
+	CSphString				m_sAlterKnnFrom;
+	bool					m_bAlterKnnFromSet = false;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;
@@ -339,6 +343,7 @@ public:
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	bool					m_bForce = false;
+	bool					m_bFormatOutWordsFile = false;
 
 	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;
 

@@ -1273,11 +1273,19 @@ bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 }
 
 
-void SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+bool SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
 {
+	bool bUpdated = false;
 	for ( auto & i : m_dIndexes )
+	{
 		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+		{
 			i.m_pIndex->ColumnUpdated ( sAttr.cstr() );
+			bUpdated = true;
+		}
+	}
+
+	return bUpdated;
 }
 
 

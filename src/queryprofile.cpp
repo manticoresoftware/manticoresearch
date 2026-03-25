@@ -38,6 +38,7 @@ void QueryProfile_c::Start ( ESphQueryState eNew )
 	m_tmStamp = sphMicroTimer();
 	m_iPseudoShards = 1;
 	m_iMaxMatches = 0;
+	m_iKnnDistanceComputations = 0;
 }
 
 
@@ -49,6 +50,7 @@ void QueryProfile_c::AddMetric ( const QueryProfile_c & tData )
 		m_dSwitches[i] += tData.m_dSwitches[i];
 		m_tmTotal[i] += tData.m_tmTotal[i];
 	}
+	m_iKnnDistanceComputations += tData.m_iKnnDistanceComputations;
 }
 
 

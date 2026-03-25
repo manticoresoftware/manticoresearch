@@ -547,24 +547,13 @@ void TemplateDictTraits_c::LoadStopwords ( const char * sFiles, FilenameBuilder_
 	dStop.Uniq();
 
 	// store IDs
-	if ( dStop.GetLength() )
-	{
-		m_dStopwordContainer.Reset ( dStop.GetLength() );
-		ARRAY_FOREACH ( i, dStop )
-			m_dStopwordContainer[i] = dStop[i];
-
-		m_iStopwords = m_dStopwordContainer.GetLength();
-		m_pStopwords = m_dStopwordContainer.Begin();
-	}
+	LoadStopwords ( dStop );
 }
 
 
 void TemplateDictTraits_c::LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords )
 {
-	m_dStopwordContainer.Reset ( dStopwords.GetLength() );
-	ARRAY_FOREACH ( i, dStopwords )
-		m_dStopwordContainer[i] = dStopwords[i];
-
+	m_dStopwordContainer.CopyFrom ( dStopwords );
 	m_iStopwords = m_dStopwordContainer.GetLength();
 	m_pStopwords = m_dStopwordContainer.Begin();
 }

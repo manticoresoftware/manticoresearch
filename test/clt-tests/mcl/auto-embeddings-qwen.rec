@@ -1,0 +1,50 @@
+Test auto-embeddings with Qwen model
+
+––– comment –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
+––– comment –––
+Create table with QWEN model
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_qwen (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='Qwen/Qwen3-Embedding-0.6B' FROM='title')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify table structure shows auto-embedding configuration
+––– input –––
+mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_qwen"
+––– output –––
+*************************** 1. row ***************************
+       Table: test_qwen
+Create Table: CREATE TABLE test_qwen (
+id bigint,
+title text,
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='Qwen/Qwen3-Embedding-0.6B' FROM='title'
+)
+––– comment –––
+Insert test data with auto-generated embeddings
+––– input –––
+mysql -h0 -P9306 -e "insert into test_qwen(id, title) values(1, 'book'),(2, 'bread');"; echo $?
+––– output –––
+0
+––– comment –––
+Verify data was inserted and embeddings were generated
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as total_records FROM test_qwen"
+––– output –––
++---------------+
+| total_records |
++---------------+
+|             2 |
++---------------+
+––– comment –––
+Test KNN search
+––– input –––
+mysql -h0 -P9306 -e "select id, title, knn_dist() from test_qwen where knn(vec, 3, 'loaf')"
+––– output –––
++------+-------+------------+
+| id   | title | knn_dist() |
++------+-------+------------+
+|    2 | bread | #!/0\.3[0-9]*/!# |
+|    1 | book  | #!/0\.[45][0-9]*/!# |
++------+-------+------------+

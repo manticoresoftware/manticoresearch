@@ -6043,13 +6043,6 @@ bool NodeCacheContainer_c::WarmupCache ( ExtNode_i * pChild, int iQwords )
 
 	m_iAtomPos = pChild->GetAtomPos();
 	const ExtDoc_t * pChunk = pChild->GetDocsChunk();
-	if ( !pChunk && pChild->TimeExceeded() )
-	{
-		Invalidate ();
-		pChild->Reset ( *m_pSetup );
-		m_pSetup = NULL;
-		return false;
-	}
 
 	while ( pChunk )
 	{
@@ -6083,13 +6076,6 @@ bool NodeCacheContainer_c::WarmupCache ( ExtNode_i * pChild, int iQwords )
 			return false;
 		}
 		pChunk = pChild->GetDocsChunk();
-		if ( !pChunk && pChild->TimeExceeded() )
-		{
-			Invalidate ();
-			pChild->Reset ( *m_pSetup );
-			m_pSetup = NULL;
-			return false;
-		}
 	}
 
 	m_dDocs.Add().m_tRowID = INVALID_ROWID;

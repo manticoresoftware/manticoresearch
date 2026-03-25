@@ -34,6 +34,8 @@ jobs:
   check_branch:
     name: Check branch existence
     runs-on: ubuntu-22.04
+    needs: [pack, check_deps]
+    if: needs.pack.outputs.should_continue == 'true'
     outputs:
       columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
     steps:

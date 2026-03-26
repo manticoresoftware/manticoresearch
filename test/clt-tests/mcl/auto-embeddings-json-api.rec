@@ -120,7 +120,7 @@ curl -s -X POST http://localhost:9308/search -d "{\"index\":\"test_json_columnar
 ––– comment –––
 Create table without auto-embeddings configuration
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE no_auto_embed (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2') engine='columnar'"
+mysql -h0 -P9306 -e "CREATE TABLE no_auto_embed (title TEXT, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2') engine='columnar'"
 ––– output –––
 ––– comment –––
 Insert document into table without auto-embeddings (must provide vector manually)

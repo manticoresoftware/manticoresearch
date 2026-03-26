@@ -47,7 +47,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_not_specified" 2>&1
 Create Table: CREATE TABLE test_api_url_not_specified (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
 )
 ––– comment –––
 API_URL Specified as Empty String
@@ -69,7 +69,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_empty" 2>&1
 Create Table: CREATE TABLE test_api_url_empty (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
 )
 ––– comment –––
 API_URL with Invalid Format
@@ -174,7 +174,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_default_endpoint" 2>&1
 Create Table: CREATE TABLE test_api_url_default_endpoint (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='https://api.openai.com/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='https://api.openai.com/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 Test data insertion
@@ -202,7 +202,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_custom_endpoint" 2>&1
 Create Table: CREATE TABLE test_api_url_custom_endpoint (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 Test data insertion with custom API_URL (mock server should receive request)

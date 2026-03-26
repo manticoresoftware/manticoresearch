@@ -62,7 +62,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_add_api_url" 2>&1
 Create Table: CREATE TABLE test_alter_add_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 Change API_URL (Previously Specified)
@@ -92,7 +92,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_change_api_url" 2>&1
 Create Table: CREATE TABLE test_alter_change_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8081/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8081/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 Remove API_URL (Set to Empty)
@@ -121,12 +121,12 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_remove_api_url" 2>&1
 Create Table: CREATE TABLE test_alter_remove_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
 )
 ––– comment –––
 ALTER API_URL with Invalid URL
 
-Test: ALTER TABLE ... MODIFY COLUMN embedding API_URL='not-a-url'
+Test: ALTER TABLE ... MODIFY COLUMN embedding API_URL='not-a-url' api_timeout='10'
 Expected: ALTER fails during validation (validation makes a real API request which requires a valid URL)
 Note: API key validation happens during ALTER, so invalid URLs are caught immediately
 ––– comment –––
@@ -144,7 +144,7 @@ ERROR 1064 (42000) at line 1: table test_alter_invalid_url: Failed to send reque
 ––– comment –––
 ALTER API_URL with Inaccessible URL
 
-Test: ALTER TABLE ... MODIFY COLUMN embedding API_URL='http://192.0.2.0:8080/v1/embeddings'
+Test: ALTER TABLE ... MODIFY COLUMN embedding API_URL='http://192.0.2.0:8080/v1/embeddings' api_timeout='10'
 Expected: ALTER fails during validation with connection error
 ––– comment –––
 First create table with valid API_URL
@@ -203,7 +203,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_add_api_timeout" 2>&1
 Create Table: CREATE TABLE test_alter_add_api_timeout (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='30'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='30'
 )
 ––– comment –––
 Change API_TIMEOUT (Previously Specified)
@@ -232,7 +232,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_change_api_timeout" 2>&1
 Create Table: CREATE TABLE test_alter_change_api_timeout (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='60'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='60'
 )
 ––– comment –––
 Remove API_TIMEOUT (Set to 0)
@@ -261,7 +261,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_remove_api_timeout" 2>&1
 Create Table: CREATE TABLE test_alter_remove_api_timeout (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
 )
 ––– comment –––
 ALTER API_TIMEOUT with Negative Value

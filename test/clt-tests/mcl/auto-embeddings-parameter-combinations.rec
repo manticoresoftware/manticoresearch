@@ -75,7 +75,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_all_params" 2>&1
 Create Table: CREATE TABLE test_all_params (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
 )
 ––– comment –––
 API_URL + API_TIMEOUT (No API_KEY)

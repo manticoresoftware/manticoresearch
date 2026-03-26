@@ -54,7 +54,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_not_specified" 2>&1
 Create Table: CREATE TABLE test_api_timeout_not_specified (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
 ) 
 ––– comment –––
 API_TIMEOUT = 0
@@ -75,7 +75,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_zero" 2>&1
 Create Table: CREATE TABLE test_api_timeout_zero (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
 ) 
 ––– comment –––
 API_TIMEOUT Negative
@@ -127,7 +127,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_small" 2>&1
 Create Table: CREATE TABLE test_api_timeout_small (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='1'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='1'
 )
 ––– comment –––
 API_TIMEOUT Normal Value (30 seconds)
@@ -148,7 +148,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_normal" 2>&1
 Create Table: CREATE TABLE test_api_timeout_normal (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
 )
 ––– comment –––
 Test data insertion
@@ -176,7 +176,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_timeout_large" 2>&1
 Create Table: CREATE TABLE test_api_timeout_large (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='3600'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='3600'
 )
 ––– comment –––
 API_TIMEOUT Exceeded Scenario

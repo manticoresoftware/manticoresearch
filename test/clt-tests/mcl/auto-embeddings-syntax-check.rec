@@ -33,7 +33,7 @@ id bigint,
 title text,
 content text,
 description text,
-embedding float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title, content'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title, content'
 )
 ––– comment –––
 Test data insertion with auto-generated vectors

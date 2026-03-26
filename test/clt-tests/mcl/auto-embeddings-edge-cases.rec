@@ -197,7 +197,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_auto_dims"
 Create Table: CREATE TABLE test_auto_dims (
 id bigint,
 content_text text,
-vec float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content_text'
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content_text'
 ) engine='columnar'
 ––– comment –––
 Create table for REPLACE operations testing

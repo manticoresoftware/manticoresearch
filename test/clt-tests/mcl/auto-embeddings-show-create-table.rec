@@ -28,8 +28,8 @@ Mock server started on port 8080 (PID: #!/[0-9]+/!#)
 ––– comment –––
 With api_url Specified
 
-Test: SHOW CREATE TABLE for table created with API_URL='http://localhost:8080/v1/embeddings'
-Expected: Output includes api_url='http://localhost:8080/v1/embeddings'
+Test: SHOW CREATE TABLE for table created with API_URL='http://localhost:8080/v1/embeddings' api_timeout='10'
+Expected: Output includes api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table with api_url
@@ -47,7 +47,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_url" 2>&1
 Create Table: CREATE TABLE test_show_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 With api_url Not Specified
@@ -71,7 +71,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_no_api_url" 2>&1
 Create Table: CREATE TABLE test_show_no_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title'
 )
 ––– comment –––
 With api_timeout Specified (Non-Default)
@@ -95,7 +95,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_timeout" 2>&1
 Create Table: CREATE TABLE test_show_api_timeout (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
 )
 ––– comment –––
 With api_timeout Not Specified (Default)
@@ -118,7 +118,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_no_api_timeout" 2>&1
 Create Table: CREATE TABLE test_show_no_api_timeout (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 With api_timeout = 0 (Default)
@@ -141,7 +141,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_timeout_zero" 2>&1
 Create Table: CREATE TABLE test_show_api_timeout_zero (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 With from Specified
@@ -164,7 +164,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_from" 2>&1
 Create Table: CREATE TABLE test_show_from (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 api_key Should NOT Appear (Security)
@@ -189,7 +189,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_api_key_security" 2>&1
 Create Table: CREATE TABLE test_show_api_key_security (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
 )
 ––– comment –––
 All Parameters Together
@@ -213,5 +213,5 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_all_params" 2>&1
 Create Table: CREATE TABLE test_show_all_params (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' knn_dims='1536' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_url='http://localhost:8080/v1/embeddings' api_timeout='30'
 )

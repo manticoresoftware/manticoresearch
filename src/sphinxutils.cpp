@@ -895,6 +895,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "regexp_filter",			KEY_LIST, NULL },
 	{ "bigram_freq_words",		0, NULL },
 	{ "bigram_index",			0, NULL },
+	{ "bigram_delimiter",		0, NULL },
 	{ "index_field_lengths",	0, NULL },
 	{ "divide_remote_ranges",	KEY_HIDDEN, NULL },
 	{ "stopwords_unstemmed",	0, NULL },
@@ -1093,6 +1094,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "secondary_index_block_cache", 0, nullptr },
 	{ "expansion_phrase_warning",	0, NULL },
 	{ "attr_autoconv_strict",	0, NULL },
+	{ "parallel_chunk_merges",	0, nullptr },
+	{ "merge_chunks_per_job",	0, nullptr },
 	{ NULL,						0, NULL }
 };
 

@@ -64,6 +64,7 @@ struct ReplicationCommand_t
 	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
+	int64_t					m_iClusterEpoch = 0;
 
 	// add
 	std::unique_ptr<StoredQuery_i> m_pStored;

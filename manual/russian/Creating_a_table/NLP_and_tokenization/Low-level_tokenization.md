@@ -1176,7 +1176,7 @@ table products {
 ### bigram_index
 
 ```ini
-bigram_index = {none|all|first_freq|both_freq}
+bigram_index = {none|all|first_freq|both_freq|second_numeric|second_has_digit}
 ```
 
 <!-- example bigram_index -->
@@ -1189,10 +1189,16 @@ bigram_index = {none|all|first_freq|both_freq}
 * `all` — индексировать каждую пару слов
 * `first_freq` — индексировать только пары слов, где *первое* слово находится в списке частотных слов (см. [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). Например, с `bigram_freq_words = the, in, i, a` при индексации текста "alone in the dark" будут сохранены пары "in the" и "the dark" как биграммы, потому что они начинаются с частого слова ("in" или "the"), а "alone in" не будет индексирована, так как "in" — второе слово в паре.
 * `both_freq` — индексировать только пары слов, где оба слова частотные. Продолжая тот же пример, в этом режиме при индексации "alone in the dark" будет сохранена только пара "in the" (самая плохая для поиска), остальные пары не будут индексированы.
+* `second_numeric`, индексировать только те пары слов, где *второй* токен состоит только из ASCII-цифр. Например, `xt 806` соответствует, а `xt rt9600` и `xt v2` — нет.
+* `second_has_digit`, индексировать только те пары слов, где *второй* токен содержит хотя бы одну ASCII-цифру. Например, `xt 806`, `xt rt9600` и `xt v2` соответствуют, а `xt abc` — нет.
 
 Для большинства случаев лучший режим — `both_freq`, но всё зависит от ваших задач.
 
 Важно отметить, что `bigram_index` работает только на уровне токенизации и не учитывает преобразования как `morphology`, `wordforms` или `stopwords`. Это означает, что создаваемые токены очень простые, что делает поиск фраз более точным и строгим. Хотя это может повысить точность фразового совпадения, система становится менее способной распознавать различные формы слов или вариации их появления.
+
+Режимы, учитывающие цифры, используют только ASCII-цифры (`0-9`). Они не рассматривают `+`, `-` или цифры Юникода как числовые. Проверки также используют текст токена, полученный текущим путем токенизатора, без какой-либо дополнительной нормализации пунктуации.
+
+Используйте [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter), чтобы управлять тем, сохраняются ли подходящие биграммы как внутренний токен с разделителем, как склеенный токен (например, `iphone17`) или в обеих формах.
 
 <!-- request SQL -->
 
@@ -1289,6 +1295,124 @@ table products {
 ```
 <!-- end -->
 
+### bigram_delimiter
+
+```ini
+bigram_delimiter = {true|none|both}
+```
+
+<!-- example bigram_delimiter -->
+Режим хранения токенов биграмм. Необязательный, по умолчанию `true`.
+
+`bigram_delimiter` управляет тем, какая форма токена сохраняется для подходящих биграмм, выбранных с помощью [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index):
+
+* `true`, сохранять только внутренний разделённый токен биграммы. Это текущее поведение по умолчанию.
+* `none`, сохранять только склеенную форму токена, например `iphone17`.
+* `both`, сохранять как внутреннюю разделённую форму, так и склеенную форму.
+
+Поведение поиска зависит от выбранного режима:
+
+* при `true`, оптимизация фраз переписывает подходящие пары слов во внутренний разделённый токен
+* при `none`, оптимизация фраз переписывает подходящие пары слов в склеенный токен, например `"iphone 17"` становится `iphone17`
+* при `both`, оптимизация фраз пропускается, и фразовые запросы остаются обычными фразовыми запросами, в то время как поиск по склеенным токенам всё ещё может находить совпадения, потому что склеенная форма также сохраняется
+
+`bigram_delimiter` изменяет только форму сохраняемого токена. Он не определяет, какие пары подходят; это по-прежнему контролируется параметром [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'bigram_index' => 'all',
+            'bigram_delimiter' => 'none'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  bigram_index = all
+  bigram_delimiter = none
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
 ### bigram_freq_words
 
 ```ini
@@ -1298,9 +1422,18 @@ bigram_freq_words = the, a, you, i
 <!-- example bigram_freq_words -->
 Список ключевых слов, считаемых "частотными" при индексировании биграмм. Необязательно, по умолчанию пусто.
 
-Некоторые режимы индексирования биграмм (см. [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) требуют определения списка частых ключевых слов. Их **не** следует путать со стоп-словами. Стоп-слова полностью исключаются как при индексировании, так и при поиске. Частые ключевые слова используются биграммами только для определения необходимости индексировать текущую пару слов или нет.
+Некоторые режимы индексации биграмм (см. [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) требуют списка частотных ключевых слов. Их **не следует** путать со стоп-словами. Стоп-слова полностью исключаются как при индексации, так и при поиске. Частотные ключевые слова используются биграммами только для определения, индексировать ли текущую пару слов или нет.
 
 `bigram_freq_words` позволяет определить такой список ключевых слов.
+
+Эта опция требуется только для `first_freq` и `both_freq`.
+
+Она должна оставаться пустой для:
+
+* `none`
+* `all`
+* `second_numeric`
+* `second_has_digit`
 
 <!-- request SQL -->
 
@@ -2500,4 +2633,3 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
-

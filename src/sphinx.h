@@ -521,11 +521,27 @@ struct KnnSearchSettings_t
 	knn::HNSWTerminationPolicy_e m_eTerminationPolicy = knn::HNSWTerminationPolicy_e::QUANTILE;  ///< HNSW termination policy
 	CSphVector<float> m_dVec;				///< KNN anchor vector
 	std::optional<CSphString> m_sEmbStr;	///< string to generate embeddings from
+	CSphString		m_sAlias;				///< user-assigned alias for fusion_weights referencing
 
 	int64_t			GetRequestedDocs() const;
 };
 
-/// search query. Pure struct, no member functions
+
+struct NamedWeight_t
+{
+	CSphString	m_sName;
+	float		m_fWeight = 1.0f;
+};
+
+struct HybridSearchSettings_t
+{
+	int			m_iRankConstant = 60;			///< RRF rank constant (k parameter)
+	int			m_iWindowSize = 0;				///< how many results each sub-query retrieves before fusion (0 = auto)
+	CSphString	m_sMatchAlias;					///< alias for MATCH() in fusion_weights (SQL: MATCH(...) AS alias)
+	CSphVector<NamedWeight_t> m_dNamedWeights;	///< alias to weight from fusion_weights option
+};
+
+/// search query
 struct CSphQuery
 {
 	CSphString		m_sIndexes {"*"};	///< indexes to search
@@ -546,7 +562,9 @@ struct CSphQuery
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
-	KnnSearchSettings_t m_tKnnSettings;
+	CSphVector<KnnSearchSettings_t> m_dKnnSettings;
+	HybridSearchSettings_t m_tHybridSettings;
+	bool			m_bHybridSearch = false;			///< true when fusion_method is set AND both text+KNN are present
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
@@ -658,6 +676,11 @@ struct CSphQuery
 	CSphVector<int64_t>		m_dIntSubkeys;
 	Dispatcher::Template_t	m_tMainDispatcher;
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
+
+	bool						HasKnn() const				{ return !m_dKnnSettings.IsEmpty(); }
+	bool						HasMultipleKnn() const		{ return m_dKnnSettings.GetLength() > 1; }
+	KnnSearchSettings_t &		SingleKnnSettings()			{ return m_dKnnSettings[0]; }
+	const KnnSearchSettings_t &	SingleKnnSettings() const	{ return m_dKnnSettings[0]; }
 };
 
 void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
@@ -704,8 +727,30 @@ struct ExpansionStats_t
 class CSphQueryResultMeta
 {
 public:
-	int						m_iQueryTime = 0;		///< query wall-time metric, milliseconds; in distributed/multi-source queries it can differ from m_iRealQueryTime
-	int						m_iRealQueryTime = 0;	///< elapsed wall-clock time from start to finish of the query, milliseconds
+	int64_t					GetQueryTimeUs () const noexcept { return ClampTimeUs ( m_tmQueryTimeUs ); }
+	int64_t					GetRealQueryTimeUs () const noexcept { return ClampTimeUs ( m_tmRealQueryTimeUs ); }
+	int						GetQueryTimeMs () const noexcept { return ToMs ( GetQueryTimeUs() ); }
+	int						GetRealQueryTimeMs () const noexcept { return ToMs ( GetRealQueryTimeUs() ); }
+
+	void					SetQueryTimeUs ( int64_t tmUs ) noexcept { m_tmQueryTimeUs = ClampTimeUs ( tmUs ); }
+	void					SetRealQueryTimeUs ( int64_t tmUs ) noexcept { m_tmRealQueryTimeUs = ClampTimeUs ( tmUs ); }
+	void					AddQueryTimeUs ( int64_t tmUs ) noexcept { SetQueryTimeUs ( GetQueryTimeUs() + ClampTimeUs ( tmUs ) ); }
+	void					AddRealQueryTimeUs ( int64_t tmUs ) noexcept { SetRealQueryTimeUs ( GetRealQueryTimeUs() + ClampTimeUs ( tmUs ) ); }
+
+	void					SetQueryTimeMs ( int iMs ) noexcept { SetQueryTimeUs ( ToUs ( iMs ) ); }
+	void					SetRealQueryTimeMs ( int iMs ) noexcept { SetRealQueryTimeUs ( ToUs ( iMs ) ); }
+	void					AddQueryTimeMs ( int iMs ) noexcept { AddQueryTimeUs ( ToUs ( iMs ) ); }
+	void					AddRealQueryTimeMs ( int iMs ) noexcept { AddRealQueryTimeUs ( ToUs ( iMs ) ); }
+
+private:
+	static int64_t			ClampTimeUs ( int64_t tmUs ) noexcept { return tmUs<0 ? 0 : tmUs; }
+	static int64_t			ToUs ( int iMs ) noexcept { return iMs<=0 ? 0 : (int64_t)iMs * 1000; }
+	static int				ToMs ( int64_t tmUs ) noexcept { return tmUs<=0 ? 0 : (int)( tmUs / 1000 ); }
+
+	int64_t					m_tmQueryTimeUs = 0;	///< canonical query wall-time metric, microseconds
+	int64_t					m_tmRealQueryTimeUs = 0; ///< canonical elapsed wall-clock time from start to finish of the query, microseconds
+
+public:
 	int64_t					m_iCpuTime = 0;			///< user time, microseconds
 	int						m_iMultiplier = 1;		///< multi-query multiplier, -1 to indicate error
 
@@ -1139,12 +1184,12 @@ struct UpdateContext_t
 	DWORD				m_uUpdateMask {0};
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
-
+	StrVec_t			m_dDisabledSI;
 
 	UpdateContext_t ( AttrUpdateInc_t & tUpd, const ISphSchema & tSchema );
 
 	void PrepareListOfUpdatedAttributes ( CSphString& sError );
-	bool HandleJsonWarnings ( int iUpdated, CSphString& sWarning, CSphString& sError ) const;
+	bool HandleWarnings ( int iUpdated, CSphString & sWarning, CSphString & sError );
 	CSphRowitem* GetDocinfo ( RowID_t tRowID ) const;
 };
 

@@ -107,6 +107,55 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 <!-- end -->
 
+### parallel_chunk_merges
+
+<!-- example conf parallel_chunk_merges -->
+此设置控制服务器在 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 期间允许并行运行的磁盘块合并任务数量，适用于实时表。
+
+这仅影响磁盘块合并（压缩），不影响查询并行性。
+
+将其设置为 `1` 以禁用并行块合并（合并任务将逐个运行）。较高的值可能会在具有快速存储的系统上加快压缩速度，但会增加并发磁盘 I/O。
+
+默认值为 `max(1, min(2, threads/2))`。
+
+可以在运行时使用 `SET GLOBAL parallel_chunk_merges = N` 更改此值，并通过 `SHOW VARIABLES` 查看。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Disable -->
+```ini
+parallel_chunk_merges = 1
+```
+
+<!-- request Increase -->
+```ini
+parallel_chunk_merges = 4
+```
+
+<!-- end -->
+
+### merge_chunks_per_job
+
+<!-- example conf merge_chunks_per_job -->
+此设置控制在单个 OPTIMIZE 任务中合并多少个 RT 磁盘块（N 路合并）。如果可用块少于此数量，任务将合并它能合并的块（最少 2 个）。
+
+较低的值允许更多任务并行调度；较高的值减少任务数量但增加每次合并的规模。
+
+默认值为 `2`。
+
+可以在运行时使用 `SET GLOBAL merge_chunks_per_job = N` 更改此值，并通过 `SHOW VARIABLES` 查看。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Increase -->
+```ini
+merge_chunks_per_job = 4
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->
@@ -1730,4 +1779,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

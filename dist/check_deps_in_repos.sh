@@ -106,7 +106,7 @@ for pair in "${urls[@]}"; do
   name="${pair%% *}"
   url="${pair#* }"
   echo "Starting download for $name..."
-  wget --server-response --output-file="$TEMP_DIR/wget_logs/${name}.log" -O "$TEMP_DIR/$name" "$url" >/dev/null 2>&1 &
+  wget -c --tries=10 --retry-connrefused --waitretry=5 --timeout=60 --server-response --output-file="$TEMP_DIR/wget_logs/${name}.log" -O "$TEMP_DIR/$name" "$url" >/dev/null 2>&1 &
   pids+=($!)
 done
 

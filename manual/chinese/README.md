@@ -117,6 +117,7 @@
     * [• 排序规则](Searching/Collations.md)
     * [• 基于成本的优化器](Searching/Cost_based_optimizer.md)
     * [• K 最近邻向量搜索](Searching/KNN.md)
+    * [• 混合搜索](Searching/Hybrid_search.md)
 * [• 更新表结构和设置](Updating_table_schema_and_settings.md)
     * [• 在 RT 模式下更新表结构](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• 在 RT 模式下更新表 FT 设置](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)

@@ -8767,7 +8767,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	{
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tMeta.m_pProfile, tArgs.m_bModifySorterSchemas );
 
-		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+		tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 		return true;
 	}
@@ -8896,7 +8896,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.get();
 
-	tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+	tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 	return true;
@@ -11816,7 +11816,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
-		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+		tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 		return true;
 	}
@@ -11948,7 +11948,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
-	tMeta.m_iQueryTime += (int)( tmWall/1000 );
+	tMeta.AddQueryTimeUs ( tmWall );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << dSorters[0]->GetTotalCount();

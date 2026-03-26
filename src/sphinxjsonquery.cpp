@@ -2836,7 +2836,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 
 	tOut.ObjectBlock();
 
-	tOut.Sprintf (R"("took":%d,"timed_out":false)", tRes.m_iQueryTime);
+	tOut.Sprintf (R"("took":%d,"timed_out":false)", tRes.GetQueryTimeMs() );
 	if ( !tRes.m_sWarning.IsEmpty() )
 	{
 		tOut.StartBlock ( nullptr, R"("warning":{"reason":)", "}" );

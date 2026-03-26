@@ -8300,7 +8300,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )
 	{
-		tMeta.m_iQueryTime = 0;
+		tMeta.SetQueryTimeUs ( 0 );
 		return false;
 	}
 
@@ -8309,7 +8309,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	MEMORY ( MEM_RT_QUERY );
 
 	// start counting
-	tMeta.m_iQueryTime = 0;
+	tMeta.SetQueryTimeUs ( 0 );
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer();
 	QueryProfile_c * pProfiler = tMeta.m_pProfile;
@@ -8476,7 +8476,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 			tSSTransform.Transform ( i, tGuard );
 
 		tResult.m_pDocstore = m_tSchema.HasStoredFields () || m_tSchema.HasStoredAttrs() ? this : nullptr;
-		tMeta.m_iQueryTime = 0;
+		tMeta.SetQueryTimeUs ( 0 );
 		return true;
 	}
 
@@ -8519,7 +8519,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		tSSTransform.Transform ( i, tGuard );
 
 	tResult.m_pDocstore = m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ? this : nullptr;
-	tMeta.m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
+	tMeta.SetQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	return true;
 }

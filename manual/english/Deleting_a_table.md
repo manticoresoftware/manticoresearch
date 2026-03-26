@@ -6,7 +6,7 @@ Deleting a table is performed in 2 steps internally:
 1. Table is cleared (similar to [TRUNCATE](Emptying_a_table.md))
 2. All table files are removed from the table folder. All the external table files that were used by the table (such as wordforms, extensions or stopwords) are also deleted. Note that these external files are copied to the table folder when `CREATE TABLE` is used, so the original files specified in `CREATE TABLE` will not be deleted.
 
-Deleting a table is possible only when the server is running in the RT mode. It is possible to delete RT tables, PQ tables and distributed tables.
+Deleting a table is possible when the server is running in the RT mode. It is possible to delete RT tables, PQ tables and distributed tables.
 
 <!-- intro -->
 ##### SQL:

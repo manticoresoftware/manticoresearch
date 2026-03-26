@@ -191,6 +191,7 @@
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)
     * [≫ UDF 和插件](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+        * [UDF](Extensions/UDFs_and_Plugins/UDF.md)
         * [列出插件](Extensions/UDFs_and_Plugins/Listing_plugins.md)
         * [≫ UDF](Extensions/UDFs_and_Plugins/UDF.md)
             * [创建函数](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)

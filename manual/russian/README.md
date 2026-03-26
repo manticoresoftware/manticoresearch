@@ -191,6 +191,7 @@
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)
     * [≫ UDF и плагины](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+        * [UDF](Extensions/UDFs_and_Plugins/UDF.md)
         * [Список плагинов](Extensions/UDFs_and_Plugins/Listing_plugins.md)
         * [≫ UDF]
             * [Создание функции](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)

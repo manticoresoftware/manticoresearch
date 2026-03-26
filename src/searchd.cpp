@@ -8853,12 +8853,14 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 	if ( sName == "parallel_chunk_merges" )
 	{
 		g_iParallelChunkMerges = Max ( 1, iSetValue );
+		sphInfo ( "set global parallel_chunk_merges=%d", g_iParallelChunkMerges );
 		return true;
 	}
 
 	if ( sName == "merge_chunks_per_job" )
 	{
 		g_iMergeChunksPerJob = Max ( 2, iSetValue );
+		sphInfo ( "set global merge_chunks_per_job=%d", g_iMergeChunksPerJob );
 		return true;
 	}
 

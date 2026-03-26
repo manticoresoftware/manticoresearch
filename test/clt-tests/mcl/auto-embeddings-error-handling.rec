@@ -257,6 +257,7 @@ mysql -h0 -P9306 -e "SHOW CREATE TABLE test_full_columnar\G" | grep -E "(vec.*fl
 ––– output –––
 Full columnar:
 vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content' api_timeout='10'
+) engine='columnar'
 ––– comment –––
 Test 19: Non-existent field
 ––– input –––

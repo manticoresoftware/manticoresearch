@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>keep-alive state with HTTP</name>
+
+<skip_indexer/>
+<requires>
+    <http/>
+    <force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+$con = curl_init();
+$curl_desc = CurlDesc ( "cli_json" );
+$curl_desc[CURLOPT_POSTFIELDS] = "select connid from @@system.sessions";
+
+$results[] = 'HTTP default';
+curl_setopt_array ( $con, $curl_desc );
+$results[] = curl_exec ( $con );
+$results[] = curl_exec ( $con );
+
+$results[] = 'HTTP 1.0';
+$curl_desc[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_0;
+curl_setopt_array ( $con, $curl_desc );
+$results[] = curl_exec ( $con );
+$results[] = curl_exec ( $con );
+
+$results[] = 'HTTP 1.0 with keep-alive';
+$curl_desc[CURLOPT_HTTPHEADER] = ["connection: keep-alive"];
+curl_setopt_array ( $con, $curl_desc );
+$results[] = curl_exec ( $con );
+$results[] = curl_exec ( $con );
+
+$results[] = 'HTTP 1.1 with close';
+$curl_desc[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
+$curl_desc[CURLOPT_HTTPHEADER] = ["connection: close"];
+curl_setopt_array ( $con, $curl_desc );
+$results[] = curl_exec ( $con );
+$results[] = curl_exec ( $con );
+
+curl_close($con);
+
+]]></custom_test>
+
+</test>

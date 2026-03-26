@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -52,6 +52,7 @@ public:
 	{
 		return false;
 	}
+	bool TokenIsBlendedHead () const noexcept final { return m_bBlendedHead; }
 
 	bool IsQueryTok() const noexcept final
 	{
@@ -84,6 +85,7 @@ protected:
 	bool m_bHasBlend = false;
 	const BYTE* m_pBlendStart = nullptr;
 	const BYTE* m_pBlendEnd = nullptr;
+	bool m_bBlendedHead = false;
 
 	ESphTokenizerClone m_eMode { SPH_CLONE_INDEX };
 };

@@ -1,13 +1,13 @@
-# 在复制集群中添加和移除表
+# 添加和从复制集群中移除一个表
 
 <!-- example adding and removing a table from a replication cluster 1 -->
-`ALTER CLUSTER <cluster_name> ADD <table_name>[, <table_name>]` 将一个或多个现有的本地表添加到集群中。接收 ALTER 查询的节点会将表发送到集群中的其他节点。集群中其他节点上所有同名的本地表都会被新的表替换。
+`ALTER CLUSTER <cluster_name> ADD <table_name>[, <table_name>]` 将一个或多个现有的本地表添加到集群中。接收ALTER查询的节点将表发送到集群中的其他节点。集群中其他节点上具有相同名称的所有本地表将被新表替换。
 
-一旦表被复制，就可以在任何节点上执行写操作，但表名必须加上集群名前缀，如 `INSERT INTO <clusterName>:<table_name>`。
+一旦表被复制，可以在任何节点上执行写入语句，但表名必须以集群名称前缀，例如 `INSERT INTO <clusterName>:<table_name>`。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -39,7 +39,7 @@ $response = $client->cluster()->alter($params);
 
 
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -53,7 +53,7 @@ utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -67,7 +67,7 @@ await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -81,7 +81,7 @@ res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
 ```
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -90,7 +90,7 @@ utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -99,7 +99,7 @@ utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -110,13 +110,13 @@ utils_api.sql("ALTER CLUSTER click_query ADD clicks_daily_index", Some(true)).aw
 <!-- end -->
 
 <!-- example adding and removing a table from a replication cluster 2 -->
-`ALTER CLUSTER <cluster_name> DROP <table_name>[, <table_name>]` 忘记一个或多个现有表，这意味着它不会删除节点上的表文件，而只是使它们成为非活动的、非复制的表。
+`ALTER CLUSTER <cluster_name> DROP <table_name>[, <table_name>]` 忘记一个或多个现有的表，这意味着它不会删除节点上的表文件，而是使它们变为无效，未复制的表。
 
-一旦表从集群中移除，它就变成了 `local` 表，写操作必须只使用表名，如 `INSERT INTO <table_name>`，不带集群前缀。
+一旦从集群中移除一个表，它就成为`本地`表，写入语句必须仅使用表名，例如 `INSERT INTO <table_name>`，而不需要集群前缀。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -146,7 +146,7 @@ $params = [
 $response = $client->cluster->alter($params);
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -160,7 +160,7 @@ utilsApi.sql('ALTER CLUSTER posts DROP weekly_index')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -174,7 +174,7 @@ await utilsApi.sql('ALTER CLUSTER posts DROP weekly_index')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -188,7 +188,7 @@ res = await utilsApi.sql('ALTER CLUSTER posts DROP weekly_index');
 ```
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -197,7 +197,7 @@ utilsApi.sql("ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -206,7 +206,7 @@ utilsApi.Sql("ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 

@@ -1,68 +1,68 @@
-# UDFs and Plugins
+# UDF и плагины
 
-Manticore can be extended with user-defined functions, or UDFs for short, like this:
+Manticore можно расширять с помощью пользовательских функций, или сокращенно UDF, например так:
 
 ```sql
 SELECT id, attr1, myudf (attr2, attr3+attr4) ...
 ```
 
-You can dynamically load and unload UDFs into `searchd` without having to restart the server, and use them in expressions when searching, ranking, etc. A quick summary of the UDF features is as follows:
+Вы можете динамически загружать и выгружать UDF в `searchd` без необходимости перезапуска сервера и использовать их в выражениях при поиске, ранжировании и т.д. Краткое описание возможностей UDF:
 
-* UDFs can take integer (both 32-bit and 64-bit), float, string, MVA, or `PACKEDFACTORS()` arguments.
-* UDFs can return integer, float, string, or MVA values (MULTI, MULTI64, FLOAT_VECTOR).
-* UDFs can check the argument number, types, and names during the query setup phase, and raise errors.
+* UDF могут принимать целочисленные (32-битные и 64-битные), вещественные, строковые аргументы, аргументы типа MVA или `PACKEDFACTORS()`.
+* UDF могут возвращать целочисленные, вещественные, строковые значения или значения MVA (MULTI, MULTI64, FLOAT_VECTOR).
+* UDF могут проверять количество, типы и имена аргументов на этапе настройки запроса и вызывать ошибки.
 
-We do not yet support aggregation functions. In other words, your UDFs will be called for just a single document at a time and are expected to return some value for that document. Writing a function that can compute an aggregate value like AVG() over the entire group of documents that share the same GROUP BY key is not yet possible. However, you can use UDFs within the built-in aggregate functions: that is, even though MYCUSTOMAVG() is not supported yet, AVG(MYCUSTOMFUNC()) should work just fine!
+Мы пока не поддерживаем агрегатные функции. Другими словами, ваши UDF будут вызываться только для одного документа за раз и должны возвращать некоторое значение для этого документа. Написание функции, которая может вычислять агрегированное значение, такое как AVG(), для всей группы документов, имеющих одинаковый ключ GROUP BY, пока невозможно. Однако вы можете использовать UDF внутри встроенных агрегатных функций: то есть, даже если MYCUSTOMAVG() еще не поддерживается, AVG(MYCUSTOMFUNC()) должно работать нормально!
 
-## MVA Return Types
+## Типы возвращаемых значений MVA
 
-UDFs can also return Multi-Value Attributes (MVA) in addition to scalar values. The supported MVA return types are:
+UDF также могут возвращать многозначные атрибуты (MVA) в дополнение к скалярным значениям. Поддерживаемые типы возвращаемых значений MVA:
 
-* **MULTI**: Arrays of 32-bit unsigned integers
-* **MULTI64**: Arrays of 64-bit signed integers  
-* **FLOAT_VECTOR**: Arrays of floating-point numbers
+* **MULTI**: Массивы 32-битных целых чисел без знака
+* **MULTI64**: Массивы 64-битных целых чисел со знаком
+* **FLOAT_VECTOR**: Массивы чисел с плавающей запятой
 
-MVA UDFs are created using the same `CREATE FUNCTION` syntax with the appropriate return type, and can be used in SELECT statements just like scalar UDFs.
+UDF, возвращающие MVA, создаются с использованием того же синтаксиса `CREATE FUNCTION` с соответствующим типом возвращаемого значения и могут использоваться в операторах SELECT так же, как и скалярные UDF.
 
-UDFs offer a wide range of applications, such as:
+UDF предлагают широкий спектр применений, таких как:
 
-* incorporating custom mathematical or string functions;
-* accessing databases or files from within Manticore;
-* creating complex ranking functions.
+* включение пользовательских математических или строковых функций;
+* доступ к базам данных или файлам изнутри Manticore;
+* создание сложных функций ранжирования.
 
-## Plugins
+## Плагины
 
-Plugins offer additional opportunities to expand search functionality. They can currently be used to compute custom rankings and tokenize documents and queries.
+Плагины предоставляют дополнительные возможности для расширения функциональности поиска. В настоящее время их можно использовать для вычисления пользовательских рангов и токенизации документов и запросов.
 
-Here's the complete list of plugin types:
+Вот полный список типов плагинов:
 
-* UDF plugins (essentially UDFs, but since they're plugged in, they're also referred to as 'UDF plugins')
-* ranker plugins
-* indexing-time token filter plugins
-* query-time token filter plugins
+* Плагины UDF (по сути, UDF, но поскольку они подключаются, их также называют 'плагинами UDF')
+* Плагины ранжирования
+* Плагины фильтров токенов во время индексации
+* Плагины фильтров токенов во время выполнения запроса
 
-This section covers the general process of writing and managing plugins; specifics related to creating different types of plugins are discussed in their respective subsections.
+В этом разделе рассматривается общий процесс написания и управления плагинами; специфика, связанная с созданием различных типов плагинов, обсуждается в соответствующих подразделах.
 
-So, how do you write and use a plugin? Here's a quick four-step guide:
+Итак, как написать и использовать плагин? Вот краткое руководство из четырех шагов:
 
-* create a dynamic library (either .so or .dll), most likely using C or C++;
-* load the plugin into searchd with [CREATE PLUGIN](../../Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md);
-* use the plugin with plugin-specific calls (usually through specific OPTIONS).
-* unload or reload a plugin with [DROP PLUGIN](../../Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md) and [RELOAD PLUGINS](../../Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md), respectively.
+* создайте динамическую библиотеку (либо .so, либо .dll), скорее всего, используя C или C++;
+* загрузите плагин в searchd с помощью [CREATE PLUGIN](../../Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md);
+* используйте плагин с помощью специфичных для плагина вызовов (обычно через определенные OPTIONS).
+* выгрузите или перезагрузите плагин с помощью [DROP PLUGIN](../../Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md) и [RELOAD PLUGINS](../../Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) соответственно.
 
-Note that while UDFs are first-class plugins, they are installed using a separate [CREATE FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) statement. This allows for a neat specification of the return type, without sacrificing backward compatibility or changing the syntax.
+Обратите внимание, что хотя UDF являются полноценными плагинами, они устанавливаются с помощью отдельного оператора [CREATE FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md). Это позволяет аккуратно указать тип возвращаемого значения, не жертвуя обратной совместимостью и не меняя синтаксис.
 
-Dynamic plugins are supported in threads and thread_pool workers. Multiple plugins (and/or UDFs) can be contained in a single library file. You may choose to either group all project-specific plugins in one large library or create a separate library for each UDF and plugin; it's up to you.
+Динамические плагины поддерживаются в потоках и воркерах thread_pool. Несколько плагинов (и/или UDF) могут содержаться в одном файле библиотеки. Вы можете либо сгруппировать все плагины, специфичные для проекта, в одной большой библиотеке, либо создать отдельную библиотеку для каждой UDF и плагина; это на ваше усмотрение.
 
-As with UDFs, you should include the `src/sphinxudf.h` header file. At the very least, you'll need the `SPH_UDF_VERSION` constant to implement an appropriate version function. Depending on the specific plugin type, you may or may not need to link your plugin with `src/sphinxudf.c`. However, all functions implemented in `sphinxudf.c` are related to unpacking the `PACKEDFACTORS()` blob, and no plugin types have access to that data. So currently, linking with just the header should suffice. (In fact, if you copy over the UDF version number, you won't even need the header file for some plugin types.)
+Как и в случае с UDF, вы должны включить заголовочный файл `src/sphinxudf.h`. Как минимум, вам понадобится константа `SPH_UDF_VERSION` для реализации соответствующей функции версии. В зависимости от конкретного типа плагина, вам может понадобиться или не понадобиться связывать ваш плагин с `src/sphinxudf.c`. Однако все функции, реализованные в `sphinxudf.c`, связаны с распаковкой бинарного объекта `PACKEDFACTORS()`, и ни один тип плагинов не имеет доступа к этим данным. Поэтому в настоящее время должно быть достаточно связывания только с заголовочным файлом. (Фактически, если вы скопируете номер версии UDF, вам даже не понадобится заголовочный файл для некоторых типов плагинов.)
 
-Formally, plugins are simply sets of C functions that adhere to a specific naming pattern. You're typically required to define one key function for the primary task, but you can also define additional functions. For instance, to implement a ranker called "myrank", you must define a `myrank_finalize()` function that returns the rank value. However, you can also define `myrank_init()`, `myrank_update()`, and `myrank_deinit()` functions. Specific sets of well-known suffixes and call arguments differ based on the plugin type, but _init() and _deinit() are generic, and every plugin has them. Hint: for a quick reference on known suffixes and their argument types, refer to `sphinxplugin.h`, where the call prototypes are defined at the beginning of the file.
+Формально плагины — это просто наборы функций на языке C, которые соответствуют определенному шаблону именования. Обычно требуется определить одну ключевую функцию для основной задачи, но можно также определить дополнительные функции. Например, чтобы реализовать ранжировщик с именем "myrank", вы должны определить функцию `myrank_finalize()`, которая возвращает значение ранга. Однако вы также можете определить функции `myrank_init()`, `myrank_update()` и `myrank_deinit()`. Конкретные наборы известных суффиксов и аргументов вызова различаются в зависимости от типа плагина, но _init() и _deinit() являются общими, и они есть у каждого плагина. Подсказка: для быстрой справки по известным суффиксам и их типам аргументов обратитесь к `sphinxplugin.h`, где прототипы вызовов определены в начале файла.
 
-Even though the public interface is defined in pure C, our plugins essentially follow an *object-oriented model*. Indeed, every `_init()` function receives a `void ** userdata` out-parameter, and the pointer value stored at `(*userdata)` is then passed as the first argument to all other plugin functions. So you can think of a plugin as a *class* that gets instantiated every time an object of that class is needed to handle a request: the `userdata` pointer serves as the `this` pointer; the functions act as methods, and the `_init()` and `_deinit()` functions work as constructor and destructor, respectively.
+Несмотря на то, что публичный интерфейс определен на чистом C, наши плагины по сути следуют *объектно-ориентированной модели*. Действительно, каждая функция `_init()` получает выходной параметр `void ** userdata`, и значение указателя, сохраненное в `(*userdata)`, затем передается в качестве первого аргумента всем другим функциям плагина. Таким образом, вы можете думать о плагине как о *классе*, который создается каждый раз, когда требуется объект этого класса для обработки запроса: указатель `userdata` служит указателем `this`; функции действуют как методы, а функции `_init()` и `_deinit()` работают как конструктор и деструктор соответственно.
 
-This minor OOP-in-C complication arises because plugins run in a multi-threaded environment, and some need to maintain state. You can't store that state in a global variable in your plugin, so we pass around a userdata parameter, which naturally leads to the OOP model. If your plugin is simple and stateless, the interface allows you to omit `_init()`, `_deinit()`, and any other functions.
+Эта небольшая сложность ООП на C возникает потому, что плагины работают в многопоточной среде, и некоторым необходимо сохранять состояние. Вы не можете хранить это состояние в глобальной переменной в вашем плагине, поэтому мы передаем параметр userdata, что естественным образом приводит к ООП-модели. Если ваш плагин простой и не имеет состояния, интерфейс позволяет опустить `_init()`, `_deinit()` и любые другие функции.
 
-To summarize, here's the simplest complete ranker plugin in just three lines of C code:
+Подводя итог, вот самый простой полный плагин ранжирования всего в трех строках кода на C:
 
 ```c
 // gcc -fPIC -shared -o myrank.so myrank.c
@@ -71,7 +71,7 @@ int myrank_ver() { return SPH_UDF_VERSION; }
 int myrank_finalize(void *u, int w) { return 123; }
 ```
 
-Here's how to use the simple ranker plugin:
+Вот как использовать простой плагин ранжирования:
 
 ```sql
 mysql> CREATE PLUGIN myrank TYPE 'ranker' SONAME 'myrank.dll';

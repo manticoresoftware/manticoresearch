@@ -1,9 +1,9 @@
 # Docker 日志
 
-当您使用 [官方 Manticore docker 镜像](https://hub.docker.com/r/manticoresearch/manticore/) 时，服务器日志会发送到 `/dev/stdout`，可以通过主机查看：
+当您使用[官方 Manticore docker 镜像](https://hub.docker.com/r/manticoresearch/manticore/)时，服务器日志会发送到 `/dev/stdout`，可以从主机查看：
 
 ```bash
-docker logs manticore
+CODE_BLOCK_0  
 ```
 查询日志可以通过传递变量 `QUERY_LOG_TO_STDOUT=true` 重定向到 Docker 日志。
 

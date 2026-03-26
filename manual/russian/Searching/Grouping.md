@@ -1,15 +1,15 @@
 # Группировка результатов поиска
 
 <!-- example general -->
-Группировка результатов поиска часто полезна для получения количества совпадений по группам или других агрегатов. Например, это удобно для создания графика, иллюстрирующего количество совпадающих блог-постов по месяцам, или для группировки результатов веб-поиска по сайту, или сообщений на форуме по автору и т.д.
+Группировка результатов поиска часто полезна для получения количества совпадений по группам или других агрегаций. Например, она полезна для создания графика, иллюстрирующего количество соответствующих постов в блоге за месяц, или для группировки результатов веб-поиска по сайту или постов на форуме по автору и т.д.
 
 Manticore поддерживает группировку результатов поиска по одному или нескольким столбцам и вычисляемым выражениям. Результаты могут:
 
-* Быть отсортированы внутри группы
+* Сортироваться внутри группы
 * Возвращать более одной строки на группу
-* Иметь отфильтрованные группы
-* Иметь отсортированные группы
-* Быть агрегированы с помощью [функций агрегации](../Searching/Grouping.md#Aggregation-functions)
+* Иметь фильтрацию групп
+* Иметь сортировку групп
+* Агрегироваться с использованием [агрегационных функций](../Searching/Grouping.md#Aggregation-functions)
 
 <!-- intro -->
 Общий синтаксис:
@@ -29,7 +29,7 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 <!-- request JSON -->
-Формат JSON-запроса в настоящее время поддерживает базовую группировку, которая может получать агрегированные значения и их count(*).
+Формат JSON-запроса в настоящее время поддерживает базовую группировку, которая может извлекать агрегированные значения и их count(*).
 
 ```json
 {
@@ -47,18 +47,18 @@ where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
 Стандартный вывод запроса возвращает набор результатов без группировки, который можно скрыть с помощью `limit` (или `size`).
-Агрегация требует установки `size` для размера набора результатов группы.
+Для агрегации требуется установить `size` для размера результирующего набора группы.
 
 <!-- end -->
 
 <!-- example group1 -->
 ### Просто группировка
-Группировка довольно проста — просто добавьте "GROUP BY smth" в конец вашего запроса `SELECT`. Что-то может быть:
+Группировка довольно проста - просто добавьте "GROUP BY что-то" в конец вашего `SELECT` запроса. Этим "что-то" может быть:
 
-* Любым не полнотекстовым полем из таблицы: integer, float, string, MVA (мульти-значение атрибута)
+* Любое не полнотекстовое поле из таблицы: целочисленное, с плавающей точкой, строковое, MVA (многозначный атрибут)
 * Или, если вы использовали псевдоним в списке `SELECT`, вы также можете группировать по нему
 
-Вы можете опустить любые [функции агрегации](../Searching/Grouping.md#Aggregation-functions) в списке `SELECT`, и это всё равно будет работать:
+Вы можете опустить любые [агрегационные функции](../Searching/Grouping.md#Aggregation-functions) в списке `SELECT`, и это все равно будет работать:
 
 <!-- intro -->
 ##### Пример:
@@ -81,12 +81,12 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- end -->
 <!-- example group2 -->
-В большинстве случаев, однако, вы захотите получить некоторые агрегированные данные для каждой группы, например:
+Однако в большинстве случаев вы захотите получить некоторые агрегированные данные для каждой группы, такие как:
 
 * `COUNT(*)`, чтобы просто получить количество элементов в каждой группе
-* или `AVG(field)`, чтобы вычислить среднее значение поля внутри группы
+* или `AVG(field)`, чтобы вычислить среднее значение поля в группе
 
-Для HTTP JSON-запросов использование одного `aggs` bucket с `limit=0` на уровне основного запроса работает аналогично SQL-запросу с `GROUP BY` и `COUNT(*)`, обеспечивая эквивалентное поведение и производительность.
+Для HTTP JSON-запросов использование одного блока `aggs` с `limit=0` на основном уровне запроса работает аналогично SQL-запросу с `GROUP BY` и `COUNT(*)`, обеспечивая эквивалентное поведение и производительность.
 
 <!-- intro -->
 ##### Пример:
@@ -502,7 +502,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example sort1 -->
 ##### Сортировка групп
-По умолчанию группы не сортируются, и следующим шагом обычно является их упорядочивание по чему-то, например, по полю, по которому вы группируете:
+По умолчанию группы не сортируются, и следующее, что вы обычно хотите сделать, - это упорядочить их по какому-либо признаку, например, по полю, по которому вы группируете:
 
 <!-- intro -->
 ##### Пример:
@@ -525,10 +525,10 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 ```
 <!-- end -->
 <!-- example sort2 -->
-Или вы можете сортировать по агрегату:
+В качестве альтернативы, вы можете сортировать по агрегации:
 
-* по `count(*)`, чтобы сначала отображать группы с наибольшим количеством элементов
-* по `avg(rental_rate)`, чтобы показывать фильмы с наивысшим рейтингом первыми. Обратите внимание, что в примере это сделано через псевдоним: `avg(rental_rate)` сначала сопоставляется с `avg` в списке `SELECT`, а затем мы просто делаем `ORDER BY avg`
+* по `count(*)`, чтобы отображать группы с наибольшим количеством элементов первыми
+* по `avg(rental_rate)`, чтобы показать фильмы с наивысшим рейтингом первыми. Обратите внимание, что в примере это делается через псевдоним: `avg(rental_rate)` сначала отображается на `avg` в списке `SELECT`, а затем мы просто делаем `ORDER BY avg`
 
 
 <!-- intro -->
@@ -571,7 +571,7 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 
 <!-- example group3 -->
 ##### GROUP BY по нескольким полям одновременно
-В некоторых случаях вы можете захотеть группировать не только по одному полю, но и по нескольким сразу, например, по категории фильма и году:
+В некоторых случаях вы можете захотеть группировать не по одному полю, а по нескольким полям одновременно, например, по категории фильма и году:
 
 <!-- intro -->
 ##### Пример:
@@ -688,7 +688,7 @@ POST /search -d '
 
 <!-- example group4 -->
 ##### Дайте мне N строк
-Иногда полезно видеть не только один элемент на группу, а несколько. Это легко достигается с помощью `GROUP N BY`. Например, в следующем случае мы получаем два фильма для каждого года, а не только один, как вернул бы простой `GROUP BY release_year`.
+Иногда полезно видеть не один элемент на группу, а несколько. Это легко достигается с помощью `GROUP N BY`. Например, в следующем случае мы получаем два фильма для каждого года, а не один, который вернул бы простой `GROUP BY release_year`.
 
 <!-- intro -->
 ##### Пример:
@@ -714,7 +714,7 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 
 <!-- example group5 -->
 ##### Сортировка внутри группы
-Еще одно важное требование аналитики — сортировать элементы внутри группы. Для этого используйте конструкцию `WITHIN GROUP ORDER BY ... {ASC|DESC}`. Например, получим фильм с наивысшим рейтингом для каждого года. Обратите внимание, что это работает параллельно с обычным `ORDER BY`:
+Еще одно важное требование аналитики - сортировка элементов внутри группы. Для этого используйте предложение `WITHIN GROUP ORDER BY ... {ASC|DESC}`. Например, давайте получим фильм с наивысшим рейтингом для каждого года. Обратите внимание, что это работает параллельно с простым `ORDER BY`:
 
 * `WITHIN GROUP ORDER BY` сортирует результаты **внутри группы**
 * в то время как просто `GROUP BY` **сортирует сами группы**
@@ -745,7 +745,7 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 
 <!-- example group6 -->
 ##### Фильтрация групп
-`HAVING expression` — полезное выражение для фильтрации групп. В то время как `WHERE` применяется до группировки, `HAVING` работает с группами. Например, оставим только те годы, когда средний рейтинг аренды фильмов за этот год был выше 3. Мы получаем только четыре года:
+`HAVING expression` - это полезное предложение для фильтрации групп. В то время как `WHERE` применяется до группировки, `HAVING` работает с группами. Например, давайте оставим только те годы, когда средняя арендная ставка фильмов за этот год была выше 3. Мы получаем только четыре года:
 
 <!-- intro -->
 ##### Пример:
@@ -767,15 +767,15 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
-Обратите внимание, что `HAVING` не влияет на `total_found` в [метаинформации поискового запроса](../Node_info_and_management/SHOW_META.md#SHOW-META).
+**Примечание:** Значение `total_found` в [метаинформации поискового запроса](../Node_info_and_management/SHOW_META.md#SHOW-META) отражает количество групп, соответствующих условию `HAVING`. Это обеспечивает правильную пагинацию при использовании предложений `HAVING` с `GROUP BY`.
 
 <!-- example group7 -->
 ##### GROUPBY()
-Есть функция `GROUPBY()`, которая возвращает ключ текущей группы. Она полезна во многих случаях, особенно когда вы [GROUP BY по MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) или по [JSON значению](../Searching/Grouping.md#Grouping-by-a-JSON-node).
+Есть функция `GROUPBY()`, которая возвращает ключ текущей группы. Это полезно во многих случаях, особенно когда вы [GROUP BY по MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) или по [значению JSON](../Searching/Grouping.md#Grouping-by-a-JSON-node).
 
-Её также можно использовать в `HAVING`, например, чтобы оставить только годы 2000 и 2002.
+Её также можно использовать в `HAVING`, например, чтобы оставить только года 2000 и 2002.
 
-Обратите внимание, что `GROUPBY()` не рекомендуется использовать, когда вы GROUP BY по нескольким полям одновременно. Она всё равно будет работать, но поскольку ключ группы в этом случае является составным из значений полей, он может не отображаться так, как вы ожидаете.
+Обратите внимание, что `GROUPBY()` не рекомендуется использовать при группировке по нескольким полям одновременно. Она всё равно будет работать, но так как ключ группы в этом случае является составным из значений полей, он может отображаться не так, как вы ожидаете.
 
 <!-- intro -->
 ##### Пример:
@@ -795,8 +795,8 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 ```
 <!-- end -->
 <!-- example mva -->
-##### Группировка по MVA (мультизначным атрибутам)
-Manticore поддерживает группировку по [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). Чтобы показать, как это работает, давайте создадим таблицу "shoes" с MVA "sizes" и вставим в неё несколько документов:
+##### Группировка по MVA (многозначным атрибутам)
+Manticore поддерживает группировку по [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29). Чтобы показать, как это работает, создадим таблицу "shoes" с MVA "sizes" и вставим туда несколько документов:
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
@@ -812,7 +812,7 @@ SELECT * FROM shoes;
 | 1657851069130080267 | 42,43    | reebook |
 +---------------------+----------+---------+
 ```
-Если теперь мы сделаем GROUP BY по "sizes", он обработает все наши мультизначные атрибуты и вернёт агрегацию для каждого, в данном случае просто количество:
+Если теперь сделать GROUP BY "sizes", то будет обработан весь наш многозначный атрибут и возвращена агрегация по каждому значению, в данном случае просто количество:
 
 <!-- intro -->
 ##### Пример:
@@ -1494,17 +1494,17 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-## Aggregation functions
-Besides `COUNT(*)`, which returns the number of elements in each group, you can use various other aggregation functions:
+## Агрегационные функции
+Помимо `COUNT(*)`, которая возвращает количество элементов в каждой группе, вы можете использовать различные другие агрегационные функции:
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
-While `COUNT(*)` returns the number of all elements in the group, `COUNT(DISTINCT field)` returns the number of unique values of the field in the group, which may be completely different from the total count. For instance, you can have 100 elements in the group, but all with the same value for a certain field. `COUNT(DISTINCT field)` helps to determine that. To demonstrate this, let's create a table "students" with the student's name, age, and major:
+В то время как `COUNT(*)` возвращает количество всех элементов в группе, `COUNT(DISTINCT field)` возвращает количество уникальных значений поля в группе, что может существенно отличаться от общего количества. Например, в группе может быть 100 элементов, но у всех одинаковое значение для определённого поля. `COUNT(DISTINCT field)` помогает это определить. Чтобы продемонстрировать это, создадим таблицу "students" с именем студента, возрастом и специальностью:
 ```sql
 CREATE TABLE students(name text, age int, major string);
 INSERT INTO students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
 ```
 
-so we have:
+так что у нас есть:
 
 ```sql
 MySQL [(none)]> SELECT * from students;
@@ -1519,24 +1519,24 @@ MySQL [(none)]> SELECT * from students;
 +---------------------+------+----------+---------+
 ```
 
-In the example, you can see that if we GROUP BY major and display both `COUNT(*)` and `COUNT(DISTINCT age)`, it becomes clear that there are two students who chose the major "cs" with two unique ages, but for the major "arts", there are also two students, yet only one unique age.
+В примере видно, что если мы сгруппируем по major и отобразим как `COUNT(*)`, так и `COUNT(DISTINCT age)`, становится ясно, что есть два студента, выбравшие специальность "cs" с двумя уникальными возрастами, а для специальности "arts" также два студента, но всего один уникальный возраст.
 
-There can be at most one `COUNT(DISTINCT)` per query.
+В запросе может быть не более одной `COUNT(DISTINCT)`.
 
-** By default, counts are approximate **
+** По умолчанию подсчёты являются приближенными **
 
-Actually, some of them are exact, while others are approximate. More on that below.
+На самом деле, некоторые из них точные, а некоторые приближённые. Подробнее об этом ниже.
 
-Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain table. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
+Manticore поддерживает два алгоритма для вычисления количества уникальных значений. Один — устаревший алгоритм, который использует много памяти и обычно медленнее. Он собирает пары `{group; value}`, сортирует их и периодически удаляет дубликаты. Преимуществом этого подхода является гарантированная точность подсчётов в простой таблице. Его можно включить, установив опцию [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) в `0`.
 
-The other algorithm (enabled by default) loads counts into a hash table and returns its size. If the hash table becomes too large, its contents are moved into a `HyperLogLog`. This is where the counts become approximate since `HyperLogLog` is a probabilistic algorithm. The advantage is that the maximum memory usage per group is fixed and depends on the accuracy of the `HyperLogLog`. The overall memory usage also depends on the [max_matches](../Searching/Options.md#max_matches) setting, which reflects the number of groups.
+Другой алгоритм (включён по умолчанию) загружает подсчёты в хеш-таблицу и возвращает её размер. Если хеш-таблица становится слишком большой, содержимое переносится в `HyperLogLog`. Здесь подсчёты становятся приближенными, так как `HyperLogLog` — вероятностный алгоритм. Преимущества заключаются в том, что максимальное использование памяти на группу фиксировано и зависит от точности `HyperLogLog`. Общее использование памяти также зависит от настройки [max_matches](../Searching/Options.md#max_matches), отражающей количество групп.
 
-The [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option sets the threshold below which counts are guaranteed to be exact. The `HyperLogLog` accuracy setting and the threshold for the "hash table to HyperLogLog" conversion are derived from this setting. It's important to use this option with caution because doubling it will double the maximum memory required for count calculations. The maximum memory usage can be roughly estimated using this formula: `64 * max_matches * distinct_precision_threshold`. Note that this is the worst-case scenario, and in most cases, count calculations will use significantly less RAM.
+Опция [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) задаёт порог, ниже которого подсчёты гарантированно точные. Настройка точности `HyperLogLog` и порог для конверсии из хеш-таблицы в `HyperLogLog` выводятся из этой настройки. Важно использовать эту опцию с осторожностью, так как её удвоение удваивает максимальное количество памяти, необходимой для вычисления подсчётов. Максимальное использование памяти можно примерно оценить по формуле: `64 * max_matches * distinct_precision_threshold`. Обратите внимание, что это худший сценарий, и в большинстве случаев вычисления используют значительно меньше оперативной памяти.
 
-**`COUNT(DISTINCT)` against a distributed table or a real-time table consisting of multiple disk chunks may return inaccurate results**, but the result should be accurate for a distributed table consisting of local plain or real-time tables with the same schema (identical set/order of fields, but may have different tokenization settings).
+**`COUNT(DISTINCT)` для распределённой таблицы или таблицы реального времени, состоящей из нескольких дисковых чанков, может возвращать неточные результаты**, но результат должен быть точным для распределённой таблицы, состоящей из локальных обычных или RT таблиц с одинаковой схемой (идентичный набор/порядок полей, но с возможными разными настройками токенизации).
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1557,12 +1557,12 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-Often, you want to better understand the contents of each group. You can use [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) for that, but it would return additional rows you might not want in the output. `GROUP_CONCAT()` enriches your grouping by concatenating values of a specific field in the group. Let's take the previous example and improve it by displaying all the ages in each group.
+Часто вы хотите лучше понять содержимое каждой группы. Для этого можно использовать [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows), но он вернёт дополнительные строки, которые могут быть нежелательными в выводе. `GROUP_CONCAT()` расширяет вашу группировку, объединяя значения определённого поля в группе. Возьмём предыдущий пример и улучшим его, показывая все возраста в каждой группе.
 
-`GROUP_CONCAT(field)` returns the list as comma-separated values.
+`GROUP_CONCAT(field)` возвращает список значений, разделённых запятыми.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1581,10 +1581,10 @@ SELECT major, count(*), count(distinct age), group_concat(age) FROM students GRO
 <!-- end -->
 <!-- example sum -->
 ##### SUM(), MIN(), MAX(), AVG()
-Of course, you can also obtain the sum, average, minimum, and maximum values within a group.
+Разумеется, вы также можете получить сумму, среднее, минимальное и максимальное значение в группе.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql
@@ -1605,18 +1605,18 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 <!-- end -->
 
 <!-- example accuracy -->
-## Grouping accuracy
+## Точность группировки
 
-Grouping is done in fixed memory, which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If `max_matches` allows for storage of all found groups, the results will be 100% accurate. However, if the value of `max_matches` is lower, the results will be less accurate.
+Группировка выполняется в фиксированной памяти, которая зависит от настройки [max_matches](../Searching/Options.md#max_matches). Если `max_matches` позволяет хранить все найденные группы, результаты будут на 100% точными. Если же значение `max_matches` меньше, точность результатов ухудшается.
 
-When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT table with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
+При параллельной обработке всё становится сложнее. Если включён `pseudo_sharding` и/или используется RT таблица с несколькими дисковыми чанками, каждый чанк или псевдо-шард получает набор результатов размером не более `max_matches`. Это может привести к неточностям в агрегатах и подсчётах групп при объединении результатов из разных потоков. Чтобы исправить это, можно либо увеличить значение `max_matches`, либо отключить параллельную обработку.
 
-Manticore will try to increase `max_matches` up to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) if it detects that groupby may return inaccurate results. Detection is based on the number of unique values of the groupby attribute, which is retrieved from secondary indexes (if present).
+Manticore попытается увеличить `max_matches` до значения [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold), если обнаружит, что группировка может вернуть неточные результаты. Определение основывается на количестве уникальных значений группирующего атрибута, получаемом из вторичных индексов (если они есть).
 
-To ensure accurate aggregates and/or group counts when using RT tables or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
+Для обеспечения точных агрегатов и/или подсчётов групп при использовании RT таблиц или `pseudo_sharding` можно включить `accurate_aggregation`. Это попытается увеличить `max_matches` до порога, а если порог недостаточно высок, Manticore отключит параллельную обработку для запроса.
 
 <!-- intro -->
-##### Example:
+##### Пример:
 
 <!-- request SQL -->
 ```sql

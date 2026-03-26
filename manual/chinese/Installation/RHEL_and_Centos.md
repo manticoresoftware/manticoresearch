@@ -1,89 +1,88 @@
-# 在 RedHat 和 CentOS 上安装 Manticore 软件包
+# Установка пакетов Manticore на RedHat и CentOS
 
-### 支持的版本：
+### Поддерживаемые версии:
 
-* CentOS 8，RHEL 8，Oracle Linux 8，CentOS Stream 8
+* CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
-* CentOS 9，RHEL 9，AlmaLinux 9
-* AlmaLinux 10，其他基于 RHEL 10 的发行版
+* CentOS 9, RHEL 9, AlmaLinux 9
+* AlmaLinux 10, другие дистрибутивы на базе RHEL 10
 
-### YUM 仓库
+### Репозиторий YUM
 
-在 RedHat/CentOS 上安装 Manticore 最简单的方法是使用我们的 YUM 仓库：
+Самый простой способ установить Manticore на RedHat/CentOS — использовать наш репозиторий YUM:
 
-安装仓库：
+Установите репозиторий:
 ```bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
-然后安装 Manticore Search：
+Затем установите Manticore Search:
 ```bash
 sudo yum install manticore manticore-extra
 ```
 
-如果您是从旧版本升级到 Manticore 6，建议先删除旧的软件包，以避免因软件包结构更新而导致的冲突：
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
 
 ```bash
 sudo yum remove manticore*
 ```
 
-这不会删除您的数据和配置文件。
+Это не удалит ваши данные и файл конфигурации.
 
-###### 开发包
-如果您更喜欢“Nightly”（开发）版本，请执行：
+###### Пакеты для разработки
+Если вы предпочитаете версии "Nightly" (разработческие), выполните:
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera manticore-galera-debuginfo manticore-language-packs manticore-load
+sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
 ```
 
-### 独立 RPM 软件包
-要从 Manticore 仓库下载独立的 RPM 文件，请按照 https://manticoresearch.com/install/ 上的说明操作。
+### Отдельные RPM-пакеты
+Чтобы скачать отдельные RPM-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
 
-### 您可能需要的更多软件包
-#### 用于 indexer
-如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部源创建表，您需要确保已安装相应的客户端库，以便能够使用您想要的索引源。下面的命令将一次性安装所有这些库；您可以按需使用，也可以只安装您需要的库（仅针对 mysql 源 - 只需 `mysql-libs` 即可，unixODBC 并非必需）。
+### Дополнительные пакеты, которые могут понадобиться
+#### Для индексатора
+Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, необходимо убедиться, что установлены соответствующие клиентские библиотеки для обеспечения поддержки нужных вам источников индексации. В строке ниже они устанавливаются все сразу; вы можете использовать её как есть или сократить установку, оставив только необходимые библиотеки (для MySQL-источников достаточно только `mysql-libs`, unixODBC не обязателен).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
 
-在 CentOS Stream 8 中，如果尝试从 MySQL 构建普通表时出现错误 `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`，您可能需要运行：
+В CentOS Stream 8 вам может понадобиться выполнить:
 
 ```
 dnf install mariadb-connector-c
 ```
 
-#### 乌克兰语词形还原器
+если при сборке plain-таблицы из MySQL вы получаете ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`.
 
-词形还原器需要 Python 3.9 及以上版本。**请确保已安装并且配置时启用了 `--enable-shared`。**
-以下是在 Centos 8 中安装 Python 3.9 和乌克兰语词形还原器的方法：
+#### Украинский лемматизатор
+Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и сконфигурирован с опцией `--enable-shared`.**
 
-# install Manticore Search and UK lemmatizer from YUM repository
+Вот как установить Python 3.9 и украинский лемматизатор в Centos 8:
 
 ```bash
+# install Manticore Search and UK lemmatizer from YUM repository
 yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 yum -y install manticore manticore-lemmatizer-uk
-# install packages needed for building Python
 
+# install packages needed for building Python
 yum groupinstall "Development Tools" -y
 yum install openssl-devel libffi-devel bzip2-devel wget -y
-# download, build and install Python 3.9
 
+# download, build and install Python 3.9
 cd ~
 wget https://www.python.org/ftp/python/3.9.2/Python-3.9.2.tgz
 tar xvf Python-3.9.2.tgz
 cd Python-3.9*/
 ./configure --enable-optimizations --enable-shared
 make -j8 altinstall
+
 # update linker cache
-
 ldconfig
-# install pymorphy2 and UK dictionary
 
+# install pymorphy2 and UK dictionary
 pip3.9 install pymorphy2[fast]
-pip3.9 install pymorphy2-dicts-uk
 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
-

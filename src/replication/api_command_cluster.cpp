@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "common.h"
 #include "searchdha.h"
 #include "cluster_commands.h"
+#include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterRequest_t& tReq )
@@ -107,9 +108,9 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 {
 	auto eClusterCmd = (E_CLUSTER)tBuf.GetWord();
 
-	bool bNodeVer = ( eClusterCmd==E_CLUSTER::GET_NODE_VER || eClusterCmd==E_CLUSTER::GET_NODE_VER_ID );
+	bool bNodeVer = ( eClusterCmd==E_CLUSTER::GET_NODE_VER_ID );
 
-	// GET_NODE_VER should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
+	// GET_NODE_VER_ID should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
 	if ( !bNodeVer && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
 		return;
 
@@ -155,16 +156,16 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveClusterGetState ( tOut, tBuf, sCluster );
 		break;
 
-	case E_CLUSTER::GET_NODE_VER:
-		ReceiveClusterGetVer ( false, tOut );
-		break;
-
 	case E_CLUSTER::GET_NODE_VER_ID:
-		ReceiveClusterGetVer ( true, tOut );
+		ReceiveClusterGetVer ( tOut, tBuf );
 		break;
 
 	case E_CLUSTER::UPDATE_SST_PROGRESS:
 		ReceiveSstProgress ( tOut, tBuf, sCluster );
+		break;
+
+	case E_CLUSTER::RECV_STATE_CLEANUP:
+		ReceiveClusterRecvStateCleanup ( tOut, tBuf, sCluster );
 		break;
 
 	default:

@@ -3,9 +3,8 @@ Start Manticore Search daemon with buddy support
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Create test tables with sample data
-Wait for daemon initialization before creating tables
 ––– input –––
-sleep 3; mysql -h0 -P9306 -e "CREATE TABLE articles(title text, content text); INSERT INTO articles VALUES(1,'test','content');"
+mysql -h0 -P9306 -e "CREATE TABLE articles(title text, content text); INSERT INTO articles VALUES(1,'test','content');"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE products(name text, price float); INSERT INTO products VALUES(1,'laptop',999.99);"

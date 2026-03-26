@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -632,6 +632,7 @@ struct BuddyReply_t
 	CSphString m_sType;
 	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
+	CSphString m_sContentType;
 };
 
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
@@ -671,6 +672,9 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 		return false;
 
 	if ( !tParsed.m_tRoot.FetchIntItem ( tParsed.m_iReplyHttpCode, "error_code", sError, false ) )
+		return false;
+
+	if ( !tParsed.m_tRoot.FetchStrItem ( tParsed.m_sContentType, "content_type", sError, true ) )
 		return false;
 
 	return true;
@@ -726,10 +730,14 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 	// total_found => m_iTotalMatches
 	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
 
-	// time => m_iQueryTime \ m_iRealQueryTime
+	// time => query/real time stored canonically in microseconds
 	float fTime = 0.0f;
 	if ( ConvertValue ( "time", tSrcMeta, fTime ) )
-		tLastMeta.m_iRealQueryTime = tLastMeta.m_iQueryTime = (int)( fTime * 1000.0f );
+	{
+		int iTimeMs = (int)( fTime * 1000.0f );
+		tLastMeta.SetQueryTimeMs ( iTimeMs );
+		tLastMeta.SetRealQueryTimeMs ( iTimeMs );
+	}
 
 	// total_relation => m_bTotalMatchesApprox
 	CSphString sRel;
@@ -761,9 +769,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 	bool bHttpEndpoint = true;
-	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL )
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI || tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI_JSON )
 	{
-		bHttpEndpoint = false;
+		bHttpEndpoint = ( tRes.m_eEndpoint!=EHTTP_ENDPOINT::SQL );
 
 		// sql parser put \0 at error position at the reference string
 		// should use raw_query for buddy request
@@ -824,7 +832,11 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
-	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
+
+	HttpReplyTrait_t tReplyBuf { eHttpStatus, sDump };
+	tReplyBuf.m_bSendHeaders = bNeedHttpResponse;
+	tReplyBuf.m_sContentType = tReplyParsed.m_sContentType.cstr();
+	ReplyBuf ( tReplyBuf, dResult );
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );

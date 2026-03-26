@@ -77,21 +77,143 @@ mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM knn_test WHERE knn(vector, 5, 1)
 |    4 | 1.75999987 |
 +------+------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM knn_test WHERE knn(vector, 5, 1);"
+mysql -h0 -P9306 -e "SELECT * FROM knn_test WHERE knn(vector, 5, 1)\G"
 ––– output –––
-+------+----------+----------+------+---------------+------------------+--------------+-------------+------------------+---------------+---------------+----------------------------------------------------+---------------------------------------+------------+
-| id   | model    | color    | sold | date_added    | storage_capacity | release_year | price       | discounted_price | product_codes | values        | additional_info                                    | vector                                | @knn_dist  |
-+------+----------+----------+------+---------------+------------------+--------------+-------------+------------------+---------------+---------------+----------------------------------------------------+---------------------------------------+------------+
-|    5 | Model_5  | Color_5  |    1 | 1671157942660 |              128 |         2021 | 1173.290039 |       977.330017 | [27,12,37]    | [988,87,21]   | {"features":["Feature_1","Feature_2","Feature_3"]} | 0.300000,0.400000,0.500000,0.600000   | 0.16000001 |
-|    2 | Model_2  | Color_2  |    1 | 1689374130160 |              128 |         2020 |  663.700012 |       767.989990 | [12,39,30]    | [226,305,123] | {"features":["Feature_1","Feature_2","Feature_3"]} | 0.286569,-0.031816,0.066684,0.032926  | 0.27772635 |
-|    9 | Model_9  | Color_9  |    1 | 1631567882541 |              128 |         2022 |  499.989990 |       399.989990 | [11,22,33]    | [111,222,333] | {"features":["Feature_1","Feature_2","Feature_3"]} | -0.100000,0.300000,-0.500000,0.700000 | 0.78000003 |
-|    3 | Model_3  | Color_3  |    0 | 1640782021529 |              512 |         2020 |  676.460022 |       847.080017 | [62,13,4]     | [707,601,608] | {"features":["Feature_1","Feature_2","Feature_3"]} | -0.500000,0.700000,-0.100000,0.200000 | 0.81000006 |
-|    7 | Model_7  | Color_7  |    1 | 1648765432160 |               64 |         2019 |  299.989990 |       199.990005 | [77,88,99]    | [99,888,555]  | {"features":["Feature_1","Feature_2","Feature_3"]} | 0.500000,-0.300000,0.900000,-0.100000 |   1.020000 |
-|    6 | Model_6  | Color_6  |    0 | 1609876342571 |              256 |         2021 |  755.989990 |       665.489990 | [5,15,25]     | [15,100,500]  | {"features":["Feature_1","Feature_2","Feature_3"]} | -0.200000,0.400000,-0.600000,0.800000 |   1.100000 |
-|   10 | Model_10 | Color_10 |    0 | 1678956543120 |              512 |         2022 | 1299.989990 |      1099.989990 | [9,8,7]       | [555,444,333] | {"features":["Feature_1","Feature_2","Feature_3"]} | 0.900000,0.100000,0.800000,-0.200000  |   1.260000 |
-|    8 | Model_8  | Color_8  |    0 | 1654876543130 |              256 |         2019 |  800.989990 |       699.989990 | [22,33,44]    | [66,333,999]  | {"features":["Feature_1","Feature_2","Feature_3"]} | 0.800000,0.600000,0.200000,-0.400000  |   1.300000 |
-|    4 | Model_4  | Color_4  |    0 | 1615319697581 |              128 |         2020 |  424.230011 |       883.900024 | [98,96,89]    | [166,252,510] | {"features":["Feature_1","Feature_2","Feature_3"]} | 0.700000,-0.800000,0.100000,-0.200000 | 1.75999987 |
-+------+----------+----------+------+---------------+------------------+--------------+-------------+------------------+---------------+---------------+----------------------------------------------------+---------------------------------------+------------+
+*************************** 1. row ***************************
+              id: 5
+           model: Model_5
+           color: Color_5
+            sold: 1
+      date_added: 1671157942660
+storage_capacity: 128
+    release_year: 2021
+           price: 1173.290039
+discounted_price: 977.330017
+   product_codes: [27,12,37]
+          values: [988,87,21]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: 0.300000,0.400000,0.500000,0.600000
+       @knn_dist: 0.16000001
+*************************** 2. row ***************************
+              id: 2
+           model: Model_2
+           color: Color_2
+            sold: 1
+      date_added: 1689374130160
+storage_capacity: 128
+    release_year: 2020
+           price: 663.700012
+discounted_price: 767.989990
+   product_codes: [12,39,30]
+          values: [226,305,123]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: 0.286569,-0.031816,0.066684,0.032926
+       @knn_dist: 0.27772635
+*************************** 3. row ***************************
+              id: 9
+           model: Model_9
+           color: Color_9
+            sold: 1
+      date_added: 1631567882541
+storage_capacity: 128
+    release_year: 2022
+           price: 499.989990
+discounted_price: 399.989990
+   product_codes: [11,22,33]
+          values: [111,222,333]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: -0.100000,0.300000,-0.500000,0.700000
+       @knn_dist: 0.78000003
+*************************** 4. row ***************************
+              id: 3
+           model: Model_3
+           color: Color_3
+            sold: 0
+      date_added: 1640782021529
+storage_capacity: 512
+    release_year: 2020
+           price: 676.460022
+discounted_price: 847.080017
+   product_codes: [62,13,4]
+          values: [707,601,608]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: -0.500000,0.700000,-0.100000,0.200000
+       @knn_dist: 0.81000006
+*************************** 5. row ***************************
+              id: 7
+           model: Model_7
+           color: Color_7
+            sold: 1
+      date_added: 1648765432160
+storage_capacity: 64
+    release_year: 2019
+           price: 299.989990
+discounted_price: 199.990005
+   product_codes: [77,88,99]
+          values: [99,888,555]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: 0.500000,-0.300000,0.900000,-0.100000
+       @knn_dist: 1.020000
+*************************** 6. row ***************************
+              id: 6
+           model: Model_6
+           color: Color_6
+            sold: 0
+      date_added: 1609876342571
+storage_capacity: 256
+    release_year: 2021
+           price: 755.989990
+discounted_price: 665.489990
+   product_codes: [5,15,25]
+          values: [15,100,500]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: -0.200000,0.400000,-0.600000,0.800000
+       @knn_dist: 1.100000
+*************************** 7. row ***************************
+              id: 10
+           model: Model_10
+           color: Color_10
+            sold: 0
+      date_added: 1678956543120
+storage_capacity: 512
+    release_year: 2022
+           price: 1299.989990
+discounted_price: 1099.989990
+   product_codes: [9,8,7]
+          values: [555,444,333]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: 0.900000,0.100000,0.800000,-0.200000
+       @knn_dist: 1.260000
+*************************** 8. row ***************************
+              id: 8
+           model: Model_8
+           color: Color_8
+            sold: 0
+      date_added: 1654876543130
+storage_capacity: 256
+    release_year: 2019
+           price: 800.989990
+discounted_price: 699.989990
+   product_codes: [22,33,44]
+          values: [66,333,999]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: 0.800000,0.600000,0.200000,-0.400000
+       @knn_dist: 1.300000
+*************************** 9. row ***************************
+              id: 4
+           model: Model_4
+           color: Color_4
+            sold: 0
+      date_added: 1615319697581
+storage_capacity: 128
+    release_year: 2020
+           price: 424.230011
+discounted_price: 883.900024
+   product_codes: [98,96,89]
+          values: [166,252,510]
+ additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
+          vector: 0.700000,-0.800000,0.100000,-0.200000
+       @knn_dist: 1.75999987
 ––– input –––
 mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 5, 1);"
 ––– output –––

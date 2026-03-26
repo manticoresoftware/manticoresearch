@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1165,6 +1165,11 @@ bool ReadTableLock_c::UnlockRead() noexcept
 
 	--m_uReads;
 	return true;
+}
+
+[[nodiscard]] DWORD ReadTableLock_c::GetReads() const noexcept
+{
+	return m_uReads;
 }
 
 ScopedWriteTable_c::ScopedWriteTable_c ( ReadTableLock_c& tTableLock )

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -29,11 +29,12 @@ class TextSource_i
 public:
 	virtual						~TextSource_i() {}
 
-	virtual bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, CSphString & sError ) = 0;
+	virtual bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool bFilterCJK, CSphString & sError ) = 0;
 	virtual VecTraits_T<BYTE>	GetText ( int iField ) const = 0;
 	virtual int					GetNumFields() const = 0;
 	virtual const char *		GetFieldName ( int iField ) const = 0;
 	virtual bool				TextFromIndex() const = 0;
+	virtual const VecTraits_T<int> & GetSpaces ( int iField ) const = 0;
 };
 
 

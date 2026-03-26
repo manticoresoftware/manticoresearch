@@ -695,9 +695,28 @@ curl 0:9308/cli_json -d 'desc test'
 
 <!-- end -->
 
-### Keep-alive
+### Persistent connections
 
-HTTP keep-alive is supported for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for the `/cli` endpoint. This feature enables stateful interactions via the HTTP JSON interface, provided the client also supports keep-alive. For example, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can run a `SHOW META` command after a `SELECT` query, and it will behave similarly to interactions with Manticore through a MySQL client.
+A persistent connection means the client keeps the TCP connection open and sends multiple queries over it, instead of opening a new connection for each query. This avoids repeated name resolution and connection setup, and it allows the daemon to keep per-connection state, such as meta information and query profiles.
 
-<!-- proofread -->
+With HTTP/1.0, add `Connection: keep-alive` to request a persistent connection.
 
+With HTTP/1.1, connections are persistent by default. Send `Connection: close` on the final request to explicitly end the session.
+
+### HTTP state
+
+On a persistent connection, the daemon keeps some state that later queries can use. This state is preserved for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for `/cli`. This enables stateful interactions over HTTP JSON. For example, when you use [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json), you can run `SHOW META` after a `SELECT` on the same connection, similar to using a MySQL client.
+
+To run multiple queries using sphinxql via one connection with `curl`, you need to chain your commands with the
+`--next` key:
+
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }'))" --next localhost:9312/cli_json -d 'show meta'
+```
+
+Notice, however, that this will NOT work:
+```
+curl -s localhost:9312/cli_json -d "CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); show meta"
+```
+
+This is because Manticore treats a semicolon-separated SQL batch as a [multi-query](../Searching/Multi-queries.md), which has its own behavior and limitations.

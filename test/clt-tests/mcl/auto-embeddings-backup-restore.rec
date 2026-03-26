@@ -39,19 +39,28 @@ mysql -h0 -P9306 -e "SELECT id FROM test_backup WHERE KNN(vec, 2, 'artificial in
 +------+
 |    1 |
 |    3 |
+|    2 |
 +------+
 ––– comment –––
 Verify KNN returns semantically closest documents (distances confirm ranking)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT id, title, content, KNN_DIST() as distance FROM test_backup WHERE KNN(vec, 3, 'artificial intelligence') ORDER BY distance"
+mysql -h0 -P9306 -E -e "SELECT id, title, content, KNN_DIST() as distance FROM test_backup WHERE KNN(vec, 3, 'artificial intelligence') ORDER BY distance"
 ––– output –––
-+------+------------------+------------------+------------+
-| id   | title            | content          | distance   |
-+------+------------------+------------------+------------+
-|    1 | machine learning | neural networks  | 0.851733#!/[0-9]{0,3}/!# |
-|    3 | computer vision  | image processing | 1.130702#!/[0-9]{0,3}/!# |
-|    2 | deep learning    | transformers     | 1.311729#!/[0-9]{0,3}/!# |
-+------+------------------+------------------+------------+
+*************************** 1. row ***************************
+      id: 1
+   title: machine learning
+ content: neural networks
+distance: 0.851733#!/[0-9]{0,5}/!#
+*************************** 2. row ***************************
+      id: 3
+   title: computer vision
+ content: image processing
+distance: 1.13070#!/[0-9]{0,5}/!#
+*************************** 3. row ***************************
+      id: 2
+   title: deep learning
+ content: transformers
+distance: 1.3117#!/[0-9]{0,5}/!#
 ––– comment –––
 Check manticore-backup is available
 ––– input –––
@@ -198,6 +207,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_backup WHERE KNN(vec, 2, 'artificial in
 +------+
 |    1 |
 |    3 |
+|    2 |
 +------+
 ––– comment –––
 Test ALTER TABLE after restore
@@ -260,7 +270,7 @@ mysql -h0 -P9306 -e "FLUSH RAMCHUNK test_copy; OPTIMIZE TABLE test_copy OPTION s
 ––– output –––
 0
 ––– comment –––
-Verify k parameter works for disk chunks (returns top-2 as expected)
+Verify k parameter works for disk chunks (oversampling returns more than k)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id FROM test_copy WHERE KNN(vec, 2, 'artificial intelligence')"
 ––– output –––
@@ -269,4 +279,6 @@ mysql -h0 -P9306 -e "SELECT id FROM test_copy WHERE KNN(vec, 2, 'artificial inte
 +------+
 |    1 |
 |    3 |
+|    2 |
+|    4 |
 +------+

@@ -100,6 +100,7 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_JOIN
+%token	TOK_HYBRID_MATCH
 %token	TOK_KILL
 %token	TOK_KNN
 %token	TOK_LEFT
@@ -666,18 +667,25 @@ where_clause:
 	;
 
 where_expr:
-	where_item
+	where_items
 	| filter_expr
-	| where_item TOK_AND filter_expr
-	| where_item TOK_AND where_item
-	| where_item TOK_AND filter_expr TOK_AND where_item
-	| where_item TOK_AND where_item TOK_AND filter_expr
-	| filter_expr TOK_AND where_item TOK_AND where_item
-    | filter_expr TOK_AND where_item
-	| filter_expr TOK_AND where_item TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
+	| where_items TOK_AND filter_expr
+	| filter_expr TOK_AND where_items
+	| filter_expr TOK_AND where_items TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
+	| where_items TOK_AND filter_expr TOK_AND where_items
+	;
+
+where_items:
+	where_item
+	| where_items TOK_AND where_item
 	;
 
 where_item:
+	where_item_core
+	| where_item_core TOK_AS identcol		{ pParser->AliasLastWhereItem($3); }
+	;
+
+where_item_core:
 	TOK_MATCH '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->SetMatch($3) )
@@ -699,6 +707,7 @@ where_item:
 				YYERROR;
 		}
 	| knn_item
+	| hybrid_match_item
 	;
 
 knn_item:
@@ -707,9 +716,19 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, nullptr, false ) )
 				YYERROR;
 		}
+	| TOK_KNN '(' ident ',' '(' const_list ')' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $6, nullptr, false ) )
+				YYERROR;
+		}
 	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->SetKNN ( $3, $5, $7, nullptr, true ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, nullptr, true ) )
 				YYERROR;
 		}
 	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
@@ -717,9 +736,42 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, &( pParser->GetNamedVec ( $12.GetValueInt() ) ), false ) )
 				YYERROR;
 		}
+	| TOK_KNN '(' ident ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $6, &( pParser->GetNamedVec ( $10.GetValueInt() ) ), false ) )
+				YYERROR;
+		}
 	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
 		{
 			if ( !pParser->SetKNN ( $3, $5, $7, &( pParser->GetNamedVec ( $10.GetValueInt() ) ), true ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, &( pParser->GetNamedVec ( $8.GetValueInt() ) ), true ) )
+				YYERROR;
+		}
+	;
+
+hybrid_match_item:
+	TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ',' ident ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, $5, nullptr ) )
+				YYERROR;
+		}
+	| TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ',' ident ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, $5, &( pParser->GetNamedVec ( $8.GetValueInt() ) ) ) )
+				YYERROR;
+		}
+	| TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, nullptr ) )
+				YYERROR;
+		}
+	| TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) )
 				YYERROR;
 		}
 	;
@@ -762,6 +814,7 @@ filter_expr:
 	filter_item							{ pParser->SetOp ( $$ ); }
 	| filter_expr TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $3 ); }
 	| filter_expr TOK_OR filter_expr	{ pParser->FilterOr ( $$, $1, $3 ); }
+	| TOK_NOT filter_expr				{ pParser->FilterNot ( $$, $2 ); }
 	| '(' filter_expr ')'				{ pParser->FilterGroup ( $$, $2 ); }
 	;
 
@@ -1087,6 +1140,7 @@ expr_ident:
 	| TOK_BIGINT '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_FACET '(' ')'
 	| ident TOK_SUBKEY '(' ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_IDENT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 mva_aggr:
@@ -1356,6 +1410,13 @@ named_const:
 		{
 			$$ = $1;
 			$$.SetValueFloat ( $3.GetValueFloat() );
+		}
+	| identcol '=' TOK_QUOTED_STRING
+		{
+			$$ = $1;
+			$$.m_iType = (int)VariantType_e::STRING;
+			$$.m_iValues = $3.m_iStart;
+			$$.m_iParsedOp = $3.m_iEnd;
 		}
 	;
 

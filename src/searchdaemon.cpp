@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1283,6 +1283,11 @@ void ServedIndex_c::LockRead() const noexcept
 [[nodiscard]] bool ServedIndex_c::UnlockRead() const noexcept
 {
 	return m_tTableLock.UnlockRead();
+}
+
+[[nodiscard]] DWORD ServedIndex_c::GetReadLocks() const noexcept
+{
+	return m_tTableLock.GetReads();
 }
 
 [[nodiscard]] Threads::Coro::ReadTableLock_c& ServedIndex_c::Locker() const noexcept

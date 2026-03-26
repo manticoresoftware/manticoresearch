@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -355,6 +355,7 @@ public:
 	void WaitRead() noexcept;
 	void FinishWrite() noexcept;
 	[[nodiscard]] bool UnlockRead() noexcept;
+	[[nodiscard]] DWORD GetReads() const noexcept;
 };
 
 class ScopedWriteTable_c final

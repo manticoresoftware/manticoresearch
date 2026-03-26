@@ -12,6 +12,7 @@ The included items are:
 * `total_found`:
   - The estimated total number of matches for the query in the index. If you need the exact number of matches, use `SELECT COUNT(*)` instead of relying on this value.
   - For queries with `GROUP BY`, `total_found` represents the number of groups instead of individual matches.
+  - When using `HAVING` with `GROUP BY`, `total_found` reflects the number of groups **after** the `HAVING` filter is applied. This enables proper pagination with `HAVING` clauses.
   - For [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) queries, `total_found` still represents the number of groups, regardless of the value of `N`.
 * `total_relation`: Indicates whether the `total_found` value is exact or an estimate.
   - If Manticore cannot determine the precise `total_found` value, this field will display `total_relation: gte`, meaning the actual number of matches is **Greater Than or Equal** to the reported `total_found`.
@@ -131,15 +132,12 @@ SHOW META;
 
 <!-- end -->
 
-<!-- example show meta predicted_time -->
-Additional values, such as `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips`, and their respective `dist_fetched_*` counterparts, will only be available if `searchd` was configured with [predicted time costs](../Server_settings/Searchd.md#predicted_time_costs) and the query included `predicted_time` in the `OPTION` clause.
-
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100;
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5;
 
 SHOW META;
 ```
@@ -166,10 +164,6 @@ mysql> show meta;
 | total_found         | 266385 |
 | total_relation      | eq     |
 | time                | 0.012  |
-| local_fetched_docs  | 307212 |
-| local_fetched_hits  | 407390 |
-| local_fetched_skips | 24     |
-| predicted_time      | 56     |
 | keyword[0]          | one    |
 | docs[0]             | 224387 |
 | hits[0]             | 310327 |

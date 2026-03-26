@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -135,7 +135,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 26
+	VER_COMMAND_SEARCH_MASTER = 29
 };
 
 
@@ -154,9 +154,9 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x10B,
+	VER_COMMAND_CLUSTER		= 0x10D,
 	VER_COMMAND_GETFIELD	= 0x100,
-	VER_COMMAND_SUGGEST		= 0x101,
+	VER_COMMAND_SUGGEST		= 0x102,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -491,6 +491,17 @@ public:
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
+	WORD			GetLSBWord ()
+	{
+#if USE_LITTLE_ENDIAN
+		return GetT<WORD> ();
+#else
+		BYTE dB[2];
+		GetBytes(dB,2);
+		return dB[0] + ( dB[1]<<8 );
+#endif
+	}
+
 	DWORD			GetLSBDword ()
 	{
 #if USE_LITTLE_ENDIAN
@@ -499,6 +510,17 @@ public:
 		BYTE dB[4];
 		GetBytes(dB,4);
 		return dB[0] + ( dB[1]<<8 ) + ( dB[2]<<16 ) + ( dB[3]<<24 );
+#endif
+	}
+
+	uint64_t		GetLSBUint64 ()
+	{
+#if USE_LITTLE_ENDIAN
+		return GetT<uint64_t> ();
+#else
+		BYTE dB[8];
+		GetBytes(dB,8);
+		return (uint64_t)dB[0] + ( (uint64_t)dB[1]<<8 ) + ( (uint64_t)dB[2]<<16 ) + ( (uint64_t)dB[3]<<24 ) + ( (uint64_t)dB[4]<<32 ) + ( (uint64_t)dB[5]<<40 ) + ( (uint64_t)dB[6]<<48 ) + ( (uint64_t)dB[7]<<56 );
 #endif
 	}
 
@@ -741,6 +763,7 @@ public:
 
 	void LockRead() const noexcept;
 	[[nodiscard]] bool UnlockRead() const noexcept;
+	[[nodiscard]] DWORD GetReadLocks() const noexcept;
 	[[nodiscard]] Threads::Coro::ReadTableLock_c& Locker() const noexcept;
 };
 
@@ -1263,7 +1286,7 @@ class SearchFailuresLog_c;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails );
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails, CSphString * pWarning = nullptr );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 
 enum class EHTTP_STATUS : BYTE
@@ -1390,7 +1413,20 @@ void LogToConsole(const char* szKind, const char* szMsg) noexcept;
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
 EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;
-void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml );
+
+struct HttpReplyTrait_t
+{
+	EHTTP_STATUS m_eCode = EHTTP_STATUS::_503;
+	Str_t m_sBody;
+	bool m_bHtml = false;
+	bool m_bHeadReply = false;
+	const char * m_sContentType = nullptr;
+	bool m_bSendHeaders = true;
+};
+
+void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+void ReplyBuf ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData );
+
 void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply );
 void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 
@@ -1409,6 +1445,7 @@ enum MysqlColumnType_e
 	MYSQL_COL_FLOAT		= 4,
 	MYSQL_COL_DOUBLE	= 5,
 	MYSQL_COL_LONGLONG	= 8,
+	MYSQL_TYPE_VAR_STRING = 253,
 	MYSQL_COL_STRING	= 254,
 	MYSQL_COL_UINT64	= 508
 };
@@ -1456,7 +1493,7 @@ inline constexpr MysqlColumnType_e ESphAttr2MysqlColumnStreamed ( ESphAttr eAttr
 class RowBuffer_i : public ISphNoncopyable
 {
 public:
-	virtual ~RowBuffer_i() {}
+	virtual ~RowBuffer_i() = default;
 
 	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
 	virtual void PutDoubleAsString ( double fVal, const char * szFormat=nullptr ) = 0;
@@ -1475,6 +1512,12 @@ public:
 	virtual void PutNumAsString ( uint64_t uVal ) = 0;
 	virtual void PutNumAsString ( int iVal ) = 0;
 	virtual void PutNumAsString ( DWORD uVal ) = 0;
+	virtual void PutFloat ( float fVal ) = 0;
+	virtual void PutDouble ( double fVal ) = 0;
+	virtual void PutInt ( int iVal ) = 0;
+	virtual void PutInt64 ( int64_t iVal ) = 0;
+	virtual void PutDWORD ( DWORD uVal ) = 0;
+	virtual void PutUint64 ( uint64_t uVal ) = 0;
 
 	// pack raw array (i.e. packed length, then blob)
 	virtual void PutArray ( const ByteBlob_t&, bool bSendEmpty = false ) = 0;
@@ -1485,6 +1528,8 @@ public:
 	virtual void PutMicrosec ( int64_t iUsec ) = 0;
 
 	virtual void PutNULL() = 0;
+
+	virtual void SkipNULL() {}
 
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
@@ -1507,6 +1552,11 @@ public:
 
 	// add the next column. The EOF after the full set will be fired automatically
 	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING ) = 0;
+
+	virtual void HeadColumnRaw ( const char * sName, ESphAttr uType )
+	{
+		HeadColumn ( sName, ESphAttr2MysqlColumn ( uType ) );
+	};
 
 	virtual void Add ( BYTE uVal ) = 0;
 
@@ -1643,8 +1693,11 @@ public:
 		return HeadEnd();
 	}
 
+	virtual void DataStart ( const BYTE* ) {}
+
 	bool DataRow ( const VecTraits_T<CSphString>& dRow )
 	{
+		DataStart (nullptr);
 		for ( const auto& dValue : dRow )
 			PutString ( dValue );
 		return Commit();

@@ -1,6 +1,6 @@
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-mysql -P9306 -v -h0 -e "create table t(f text); insert into t values(1, 'abc'); select * from t;"
+mysql -P9306 -v -h0 -E -e "create table t(f text); insert into t values(1, 'abc'); select * from t;"
 ––– output –––
 --------------
 create table t(f text)
@@ -11,13 +11,11 @@ insert into t values(1, 'abc')
 --------------
 select * from t
 --------------
-+------+------+
-| id   | f    |
-+------+------+
-|    1 | abc  |
-+------+------+
+*************************** 1. row ***************************
+id: 1
+ f: abc
 ––– input –––
-mysql -P9306 -v -h0 -e "alter table t add column v1 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='COSINE'; insert into t(id,v1) values(2, (0.2,0.2,0.2)); select * from t;"
+mysql -P9306 -v -h0 -E -e "alter table t add column v1 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='COSINE'; insert into t(id,v1) values(2, (0.2,0.2,0.2)); select * from t;"
 ––– output –––
 --------------
 alter table t add column v1 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='COSINE'
@@ -28,14 +26,16 @@ insert into t(id,v1) values(2, (0.2,0.2,0.2))
 --------------
 select * from t
 --------------
-+------+------+----------------------------------+
-| id   | f    | v1                               |
-+------+------+----------------------------------+
-|    2 |      | 0.57735032,0.57735032,0.57735032 |
-|    1 | abc  | 0.000000,0.000000,0.000000       |
-+------+------+----------------------------------+
+*************************** 1. row ***************************
+id: 2
+ f: 
+v1: 0.57735032,0.57735032,0.57735032
+*************************** 2. row ***************************
+id: 1
+ f: abc
+v1: 0.000000,0.000000,0.000000
 ––– input –––
-mysql -P9306 -v -h0 -e "flush ramchunk t; select * from t;"
+mysql -P9306 -v -h0 -E -e "flush ramchunk t; select * from t;"
 ––– output –––
 --------------
 flush ramchunk t
@@ -43,14 +43,16 @@ flush ramchunk t
 --------------
 select * from t
 --------------
-+------+------+----------------------------------+
-| id   | f    | v1                               |
-+------+------+----------------------------------+
-|    1 | abc  | 0.000000,0.000000,0.000000       |
-|    2 |      | 0.57735032,0.57735032,0.57735032 |
-+------+------+----------------------------------+
+*************************** 1. row ***************************
+id: 1
+ f: abc
+v1: 0.000000,0.000000,0.000000
+*************************** 2. row ***************************
+id: 2
+ f: 
+v1: 0.57735032,0.57735032,0.57735032
 ––– input –––
-mysql -P9306 -v -h0 -e "alter table t add column v2 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='L2'; insert into t(id,v2) values(3,(1,1,1)); flush ramchunk t; select * from t"
+mysql -P9306 -v -h0 -E -e "alter table t add column v2 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='L2'; insert into t(id,v2) values(3,(1,1,1)); flush ramchunk t; select * from t"
 ––– output –––
 --------------
 alter table t add column v2 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='L2'
@@ -64,13 +66,21 @@ flush ramchunk t
 --------------
 select * from t
 --------------
-+------+------+----------------------------------+----------------------------+
-| id   | f    | v1                               | v2                         |
-+------+------+----------------------------------+----------------------------+
-|    1 | abc  | 0.000000,0.000000,0.000000       | 0.000000,0.000000,0.000000 |
-|    3 |      |                                  | 1.000000,1.000000,1.000000 |
-|    2 |      | 0.57735032,0.57735032,0.57735032 | 0.000000,0.000000,0.000000 |
-+------+------+----------------------------------+----------------------------+
+*************************** 1. row ***************************
+id: 1
+ f: abc
+v1: 0.000000,0.000000,0.000000
+v2: 0.000000,0.000000,0.000000
+*************************** 2. row ***************************
+id: 3
+ f: 
+v1: 
+v2: 1.000000,1.000000,1.000000
+*************************** 3. row ***************************
+id: 2
+ f: 
+v1: 0.57735032,0.57735032,0.57735032
+v2: 0.000000,0.000000,0.000000
 ––– input –––
 stdbuf -oL searchd --stopwait > /dev/null
 ––– output –––
@@ -79,25 +89,39 @@ rm -fr /var/lib/manticore/t/*.spknn
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-mysql -P9306 -h0 -v -e "select * from t where knn(v2, 10, (0.5,0.5,0.5))"
+mysql -P9306 -h0 -v -E -e "select * from t where knn(v2, 10, (0.5,0.5,0.5))"
 ––– output –––
 --------------
 select * from t where knn(v2, 10, (0.5,0.5,0.5))
 --------------
 ERROR 1064 (42000) at line 1: table t: KNN index not loaded
 ––– input –––
-mysql -P9306 -h0 -v -e "alter table t rebuild knn; select * from t where knn(v2, 10, (0.5,0.5,0.5))"
+mysql -P9306 -h0 -v -E -e "alter table t rebuild knn; select *, knn_dist() dist from t where knn(v2, 10, (0.5,0.5,0.5)) order by dist asc, id asc"
 ––– output –––
 --------------
 alter table t rebuild knn
 --------------
 --------------
-select * from t where knn(v2, 10, (0.5,0.5,0.5))
+select *, knn_dist() dist from t where knn(v2, 10, (0.5,0.5,0.5)) order by dist asc, id asc
 --------------
-+------+------+----------------------------------+----------------------------+-----------+
-| id   | f    | v1                               | v2                         | @knn_dist |
-+------+------+----------------------------------+----------------------------+-----------+
-|    1 | abc  | 0.000000,0.000000,0.000000       | 0.000000,0.000000,0.000000 |  0.750000 |
-|    2 |      | 0.57735032,0.57735032,0.57735032 | 0.000000,0.000000,0.000000 |  0.750000 |
-|    3 |      |                                  | 1.000000,1.000000,1.000000 |  0.750000 |
-+------+------+----------------------------------+----------------------------+-----------+
+*************************** 1. row ***************************
+       id: 3
+        f: 
+       v1: 
+       v2: 1.000000,1.000000,1.000000
+@knn_dist: 0.750000
+     dist: 0.750000
+*************************** 2. row ***************************
+       id: 2
+        f: 
+       v1: 0.57735032,0.57735032,0.57735032
+       v2: 0.000000,0.000000,0.000000
+@knn_dist: 0.750000
+     dist: 0.750000
+*************************** 3. row ***************************
+       id: 1
+        f: abc
+       v1: 0.000000,0.000000,0.000000
+       v2: 0.000000,0.000000,0.000000
+@knn_dist: 0.750000
+     dist: 0.750000

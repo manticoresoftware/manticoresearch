@@ -13,9 +13,8 @@ Start Manticore Search daemon with buddy support and debug logging
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
 Create test table with text fields for search testing
-Wait for daemon initialization before creating table
 ––– input –––
-sleep 5; mysql -h0 -P9306 -e "CREATE TABLE test (id BIGINT, a TEXT, b TEXT);"
+mysql -h0 -P9306 -e "CREATE TABLE test (id BIGINT, a TEXT, b TEXT);"
 ––– output –––
 ––– comment –––
 Insert test data for fulltext search
@@ -54,10 +53,16 @@ mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key
 ––– output –––
 ERROR 1064 (42000) at line 1: unknown option 'key1'
 ––– comment –––
+Wait for all 5 request data entries to be written to log
+––– input –––
+timeout 5 bash -c 'while [ $(grep -c "request data" /var/log/manticore/searchd.log 2>/dev/null || echo 0) -lt 5 ]; do sleep 0.01; done' && echo "All 5 requests logged"
+––– output –––
+All 5 requests logged
+––– comment –––
 Verify that all unknown option errors are logged with detailed request data
 Check debug log for 'request data' entries containing error information
 ––– input –––
-sleep 0.2; cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
+cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
 ––– output –––
 request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
 request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}

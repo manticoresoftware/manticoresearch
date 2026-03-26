@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -70,7 +70,7 @@ static constexpr CmdNotice_t dCommands[(BYTE) Cmd_e::INVALID_CMD] {
 			"Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar" },
 	{ NO_WIN, "debug wait <cluster> [like 'xx'] [option timeout=3]", "wait <cluster> ready, but no more than 3 secs." },
 	{ NO_WIN, "debug wait <cluster> status <N> [like 'xx'] [option timeout=13]", "wait <cluster> commit achieve <N>, but no more than 13 secs" },
-	{ NONE, "debug meta", "Show max_matches/pseudo_shards. Needs set profiling=1" },
+	{ NONE, "debug meta", "Show profiling debug metrics (max_matches, pseudo_shards, KNN counters). Needs set profiling=1" },
 	{ NONE, "debug trace OFF|'path/to/file' [<N>]", "trace flow to file until N bytes written, or 'trace OFF'" },
 	{ NONE, "debug curl <URL>", "request given url via libcurl" },
 	{ NONE, "debug pause <ID> on|off", "switch named breakpoint [dev only]" },
@@ -243,6 +243,7 @@ void HandleMysqlDebugMeta ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t &
 	VectorLike tLike ( tCmd.sOpt ( "like" ) );
 	tLike.MatchTupletf ( "pseudo_shards", "%d", tProfile.m_iPseudoShards );
 	tLike.MatchTupletf ( "max_matches", "%d", tProfile.m_iMaxMatches );
+	tLike.MatchTupletf ( "knn_distance_computations", "%l", tProfile.m_iKnnDistanceComputations );
 	tOut.DataTable(tLike);
 }
 

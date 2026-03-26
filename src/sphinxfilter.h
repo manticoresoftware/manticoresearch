@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -86,6 +86,7 @@ struct CreateFilterContext_t
 	const SIContainer_c *		m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
 	CSphString					m_sJoinIdx;
+	JoinType_e					m_eJoinType = JoinType_e::NONE;
 	bool						m_bAddKNNDistFilter = false;
 };
 
@@ -330,6 +331,5 @@ RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter,
 
 bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
 bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError );
-int64_t	EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx );
 
 #endif // _sphinxfilter_

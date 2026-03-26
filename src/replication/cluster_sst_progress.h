@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -75,7 +75,7 @@ public:
 
 const char * SstGetStageName ( SstStage_e eStage );
 
-SstProgress_i * CreateProgress();
+CSphRefcountedPtr<SstProgress_i> CreateProgress();
 
 struct SyncSrc_t;
 void PrepareSendStage ( const SyncSrc_t & tSigSrc, const VecTraits_T<AgentConn_t*> & dNodes, SstProgress_i & tProgress );

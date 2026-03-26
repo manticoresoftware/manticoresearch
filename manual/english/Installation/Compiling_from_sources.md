@@ -5,7 +5,7 @@ Compiling Manticore Search from sources enables custom build configurations, suc
 ## Building using CI Docker
 To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
 
-* `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel7`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
+* `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: the architecture: `x86_64`, `x64` (for Windows), `aarch64`, `arm64` (for Macos)
 * `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
 * Use the CI workflow files as a reference to find the other environment variables you might need to use:
@@ -41,13 +41,12 @@ docker run -it --rm \
 -e PACK_GALERA=0 \
 -e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:vcpkg331_20250114 bash
+manticoresearch/external_toolchain:vcpkg331_20260310 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 cmake --build .
 # or if you want to build packages:
 # cmake --build . --target package
@@ -78,13 +77,12 @@ docker run -it --rm \
 -e PACK_GALERA=0 \
 -e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:vcpkg331_20250114 bash
+manticoresearch/external_toolchain:vcpkg331_20260310 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
 # The CPackSourceConfig.cmake file is now generated in the build directory
 cpack -G RPM --config ./CPackSourceConfig.cmake
 ```
@@ -295,8 +293,7 @@ cmake .
 cmake --build . --clean-first --config RelWithDebInfo
 ```
 
-If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you
-have to run cmake again, pointing to the source folder and configuring the options.
+If by any reason it doesn't work, you can delete file `CMakeCache.txt` located in the build folder. After this step you have to run cmake again, pointing to the source folder and configuring the options.
 
 If it also doesn't help, just wipe out your build folder and begin from scratch.
 
@@ -379,4 +376,3 @@ Configured with these definitions: -DDISTR_BUILD=rhel8 -DUSE_SYSLOG=1 -DWITH_GAL
 -DFULL_SHARE_DIR=/usr/share/manticore
 ```
 <!-- proofread -->
-

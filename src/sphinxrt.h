@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -105,6 +105,18 @@ struct CSphReconfigureSetup
 };
 
 /// RAM based updateable backend interface
+class RtIndex_i;
+
+struct AttachArgs_t
+{
+	RtIndex_i *	m_pSrcIndex = nullptr;
+	bool		m_bTruncate = false;
+	bool		m_bConfigless = false;
+	bool		m_bFatal = false;
+
+	AttachArgs_t ( RtIndex_i * pSrcIndex ) : m_pSrcIndex ( pSrcIndex ) {}
+};
+
 class RtIndex_i : public CSphIndexStub
 {
 public:
@@ -129,6 +141,7 @@ public:
 
 	/// commit pending changes
 	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) = 0;
+	virtual bool PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) { return true; }
 
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
@@ -148,7 +161,7 @@ public:
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
 	/// attach all the content of the RT index (flush ramchunk then disk chunks) to the current index
-	virtual bool AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
+	virtual bool AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) { return true; }
 
 	/// truncate index (that is, kill all data)
 	enum Truncate_e : bool { TRUNCATE, DROP };

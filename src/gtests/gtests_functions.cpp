@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -2097,6 +2097,35 @@ TEST ( functions, histogram )
 		pHist->EstimateRsetSize ( tFilter, tRes );
 		ASSERT_EQ( tRes.m_iTotal, 20 );
 	}
+}
+
+TEST ( functions, histogram_expression )
+{
+	CSphColumnInfo tCol;
+	CSphSchema tSchema;
+	tCol.m_sName = "price";
+	tCol.m_eAttrType = SPH_ATTR_FLOAT;
+	tSchema.AddAttr ( tCol, false );
+
+	auto * pRow = new CSphRowitem[tSchema.GetRowSize ()];
+
+	CSphMatch tMatch;
+	tMatch.m_tRowID = 1;
+	tMatch.m_pStatic = pRow;
+
+	CSphString sError;
+	ExprParseArgs_t tExprArgs;
+	ISphExprRefPtr_c pExpr ( sphExprParse ( "histogram(price*100, {hist_interval=1})", tSchema, nullptr, sError, tExprArgs ) );
+	ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr();
+
+	sphSetRowAttr ( pRow, tSchema.GetAttr(0).m_tLocator, sphF2DW ( 0.5f ) );
+	EXPECT_EQ ( 50, pExpr->IntEval ( tMatch ) );
+
+	tMatch.m_tRowID = 2;
+	sphSetRowAttr ( pRow, tSchema.GetAttr(0).m_tLocator, sphF2DW ( 0.75f ) );
+	EXPECT_EQ ( 75, pExpr->IntEval ( tMatch ) );
+
+	SafeDeleteArray ( pRow );
 }
 
 TEST ( functions, field_mask )

@@ -19,6 +19,8 @@ The stopwords setting is optional and by default empty. It allows you to specify
 
 The stop word file format is simple plain text with UTF-8 encoding. The file data will be tokenized with respect to the [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
 
+When [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) indexing is active, stopwords composed of characters falling under [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) are themselves tokenized into N-grams. Thus, each individual N-gram becomes a separate stopword. For example, with `ngram_len=1` and suitable `ngram_chars`, the stopword `test` will be interpreted as `t`, `e`, `s`, `t` as four distinct stopwords.
+
 Stop word files can be created manually or semi-automatically. The [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the table, sorted by the keyword frequency. Top keywords from that dictionary can usually be used as stop words. See [--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
 
 
@@ -358,6 +360,97 @@ table products {
   rt_attr_uint = price
 }
 ```
+<!-- end -->
+
+## stopwords_list
+
+```ini
+stopwords_list = 'value1; value2; ...'
+```
+
+<!-- example stopwords_list -->
+The `stopwords_list` setting allows you to specify stop words directly in the `CREATE TABLE` statement. It is supported in [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29) only.
+
+The values must be separated by semicolons (`;`). If you need to use a semicolon as a literal character, it must be escaped with a backslash (`\;`).
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) stopwords_list = 'a; the'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) stopwords_list = 'a; the'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'stopwords_list' => 'a; the'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords_list = \'a; the\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords_list = 'a; the'", Some(true)).await;
+```
+
 <!-- end -->
 
 ## stopword_step

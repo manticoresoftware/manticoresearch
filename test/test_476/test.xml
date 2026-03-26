@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>attr_autoconv_strict mode disabled (backward compatibility)</name>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+    <searchd_settings/>
+    attr_autoconv_strict = 0
+}
+
+index test_non_strict
+{
+    type = rt
+    path = <data_path/>/test_non_strict
+    rt_field = title
+    rt_attr_uint = attr_int
+    rt_attr_bigint = attr_bigint
+}
+  </config>
+
+<queries><sphinxql>
+
+<!-- valid -->
+INSERT INTO test_non_strict (id, title, attr_int, attr_bigint) VALUES (1, 'test', 123, 456789);
+
+<!-- invalid cases -->
+INSERT INTO test_non_strict (id, title, attr_int) VALUES (2, 'test', '');
+INSERT INTO test_non_strict (id, title, attr_int) VALUES (3, 'test', 'a');
+
+<!-- string with tail converts -->
+INSERT INTO test_non_strict (id, title, attr_int) VALUES (4, 'test', '123abc');
+
+<!-- multiple invalid or tail string -->
+INSERT INTO test_non_strict (id, title, attr_int) VALUES (22, 'test1', 'bad'), (23, 'test2', ''), (24, 'test3', '123xyz');
+
+<!-- bigint cases -->
+INSERT INTO test_non_strict (id, title, attr_bigint) VALUES (32, 'test', '');
+INSERT INTO test_non_strict (id, title, attr_bigint) VALUES (33, 'test', 'a');
+INSERT INTO test_non_strict (id, title, attr_bigint) VALUES (34, 'test', '123abc');
+
+SELECT * FROM test_non_strict ORDER BY id asc;
+
+</sphinxql></queries>
+
+</test>
+

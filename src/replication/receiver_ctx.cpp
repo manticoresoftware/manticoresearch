@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -116,6 +116,8 @@ bool ReceiverCtx_c::PQAdd ( ReplicationCommand_t* pCmd, ByteBlob_t tReq )
 	return true;
 }
 
+static void LoadClusterEpoch ( ByteBlob_t tReq, int64_t & iClusterEpoch );
+
 // callback for Galera to parse replicated commands
 bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 {
@@ -161,12 +163,14 @@ bool ReceiverCtx_c::ApplyWriteset ( ByteBlob_t tData, bool bIsolated )
 			break;
 
 		case ReplCmd_e::CLUSTER_ALTER_ADD:
+			LoadClusterEpoch ( tReq, pCmd->m_iClusterEpoch );
 			pCmd->m_bCheckIndex = false;
-			RPL_TNX << "pq-cluster-alter-add, table '" << pCmd->m_sIndex.cstr() << "'";
+			RPL_TNX << "pq-cluster-alter-add, table '" << pCmd->m_sIndex.cstr() << "', epoch " << pCmd->m_iClusterEpoch;
 			break;
 
 		case ReplCmd_e::CLUSTER_ALTER_DROP:
-			RPL_TNX << "pq-cluster-alter-drop, table '" << pCmd->m_sIndex.cstr() << "'";
+			LoadClusterEpoch ( tReq, pCmd->m_iClusterEpoch );
+			RPL_TNX << "pq-cluster-alter-drop, table '" << pCmd->m_sIndex.cstr() << "', epoch " << pCmd->m_iClusterEpoch;
 			break;
 
 		case ReplCmd_e::RT_TRX:
@@ -241,4 +245,10 @@ bool ReceiverCtx_c::Commit ( const void* pHndTrx, uint32_t uFlags, const Wsrep::
 
 	sphLogDebugRpl ( "seq " INT64_FMT ", committed %d, isolated %d", (int64_t) pMeta->m_tGtid.m_iSeqNo, (int) bOk, (int) bIsolated );
 	return bOk;
+}
+
+void LoadClusterEpoch ( ByteBlob_t tReq, int64_t & iClusterEpoch )
+{
+	MemoryReader_c tReader ( tReq );
+	iClusterEpoch = (int64_t)tReader.GetVal<uint64_t>();
 }

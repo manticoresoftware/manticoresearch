@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -35,7 +35,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 67;				///< added jieba
+const DWORD		INDEX_FORMAT_VERSION		= 69;				///< hitless dict layout versioning
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -1023,6 +1023,7 @@ struct SuggestWord_t
 	int m_iDistance;
 	int m_iDocs;
 	DWORD m_iNameHash;
+	int m_iFoundDocs = 0;  // matched document count for search_mode option
 };
 
 struct SuggestArgs_t
@@ -1039,6 +1040,9 @@ struct SuggestArgs_t
 	bool			m_bNonCharAllowed	{ false };
 	bool			m_bSentence			{ false };
 	bool			m_bForceBigrams		{ false };	// force bigrams even for words >= 6 characters
+
+	enum class SearchMode_e { NONE, PHRASE, WORDS };
+	SearchMode_e	m_eSearch			{ SearchMode_e::NONE };	// optional search mode
 };
 
 struct SuggestResultSet_t

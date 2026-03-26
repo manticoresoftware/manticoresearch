@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -97,7 +97,8 @@ std::unique_ptr<columnar::Builder_i> CreateColumnarBuilder ( const ISphSchema & 
 		if ( eAttrType==common::AttrType_e::STRING && tAttr.HasStringHashes() )
 			fnStringCalcHash = LibcCIHash_fn::Hash;
 
-		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash } );
+		const int MIN_KNN_PACK_DIMS = 128;
+		tColumnarSchema.push_back ( { tAttr.m_sName.cstr(), eAttrType, fnStringCalcHash, tAttr.m_tKNN.m_iDims>=MIN_KNN_PACK_DIMS } );
 	}
 
 	if ( tColumnarSchema.empty() )

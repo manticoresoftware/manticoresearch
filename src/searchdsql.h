@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -107,6 +107,7 @@ enum SqlStmt_e : BYTE
 	STMT_CREATE_TABLE,
 	STMT_CREATE_TABLE_LIKE,
 	STMT_DROP_TABLE,
+	STMT_DROP_CACHE,
 	STMT_SHOW_CREATE_TABLE,
 	STMT_UPDATE,
 	STMT_CREATE_FUNCTION,
@@ -165,6 +166,7 @@ enum SqlStmt_e : BYTE
 	STMT_SHOW_SCROLL,
 	STMT_SHOW_TABLE_INDEXES,
 	STMT_ALTER_REBUILD_KNN,
+	STMT_ALTER_REBUILD_EMBEDDINGS,
 	STMT_LOCK_TABLES,
 	STMT_UNLOCK_TABLES,
 
@@ -177,7 +179,7 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	{
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
+	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "drop_cache", "show_create_table", "update", "create_func",
 	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
 	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
@@ -186,7 +188,7 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "alter_embeddings_api_key", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", 
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", "alter_rebuild_embeddings", "lock_tables", "unlock_tables",
 	};
 	return dNames[eStmt];
 }
@@ -302,6 +304,9 @@ public:
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
 	knn::IndexSettings_t	m_tAlterKNN;
+	knn::ModelSettings_t	m_tAlterKNNModel;
+	CSphString				m_sAlterKnnFrom;
+	bool					m_bAlterKnnFromSet = false;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;
@@ -336,6 +341,7 @@ public:
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
 	bool					m_bForce = false;
+	bool					m_bFormatOutWordsFile = false;
 
 	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;
 

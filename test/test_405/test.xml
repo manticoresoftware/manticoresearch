@@ -85,6 +85,47 @@ drop table test4;
 
 </sphinxql>
 
+<sphinxql>
+<!-- regression ALTER TABLE bigram settings only affects newly inserted documents -->
+create table test5 ( title text ) dict='keywords' bigram_index='all';
+insert into test5 values (1, 'xt 806');
+
+alter table test5 bigram_delimiter='none';
+show create table test5;
+
+insert into test5 values (2, 'xt 806');
+select * from test5 where match('xt806') order by id asc;
+
+alter table test5 bigram_index='second_numeric';
+show create table test5;
+
+insert into test5 values (3, 'xt 806');
+insert into test5 values (4, 'xt rt9600');
+insert into test5 values (5, 'xt v2');
+select * from test5 where match('xt806') order by id asc;
+select * from test5 where match('xtrt9600') order by id asc;
+select * from test5 where match('xtv2') order by id asc;
+
+alter table test5 bigram_index='second_has_digit';
+show create table test5;
+
+insert into test5 values (6, 'xt 806');
+insert into test5 values (7, 'xt rt9600');
+insert into test5 values (8, 'xt v2');
+insert into test5 values (9, 'xt abc');
+select * from test5 where match('xt806') order by id asc;
+select * from test5 where match('xtrt9600') order by id asc;
+select * from test5 where match('xtv2') order by id asc;
+select * from test5 where match('xtabc') order by id asc;
+
+alter table test5 bigram_freq_words='the, a';
+
+alter table test5 bigram_index='first_freq' bigram_freq_words='the, a';
+show create table test5;
+
+drop table test5;
+</sphinxql>
+
 
 </queries>
 

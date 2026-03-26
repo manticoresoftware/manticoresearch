@@ -47,7 +47,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_api_url_not_specified" 2>&1
 Create Table: CREATE TABLE test_api_url_not_specified (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' FROM='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='10'
 )
 ––– comment –––
 API_URL Specified as Empty String

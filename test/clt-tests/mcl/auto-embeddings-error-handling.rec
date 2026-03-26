@@ -8,7 +8,7 @@ Test 1: KNN_DIMS cannot be used with MODEL_NAME (auto-dims conflict)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_dims (
     title TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title'
 )" 2>&1

@@ -121,7 +121,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_remove_api_url" 2>&1
 Create Table: CREATE TABLE test_alter_remove_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='10'
 )
 ––– comment –––
 ALTER API_URL with Invalid URL
@@ -261,7 +261,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_alter_remove_api_timeout" 2>&1
 Create Table: CREATE TABLE test_alter_remove_api_timeout (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='10'
 )
 ––– comment –––
 ALTER API_TIMEOUT with Negative Value

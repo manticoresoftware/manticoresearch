@@ -71,7 +71,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_show_no_api_url" 2>&1
 Create Table: CREATE TABLE test_show_no_api_url (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' api_timeout='10'
 )
 ––– comment –––
 With api_timeout Specified (Non-Default)

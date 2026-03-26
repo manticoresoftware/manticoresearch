@@ -95,7 +95,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_valid_api_key" 2>&1
 Create Table: CREATE TABLE test_valid_api_key (
 id bigint,
 title text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002' from='title' api_timeout='10'
 )
 ––– comment –––
 Test data insertion with valid API key

@@ -19,7 +19,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_qwen"
 Create Table: CREATE TABLE test_qwen (
 id bigint,
 title text,
-vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='Qwen/Qwen3-Embedding-0.6B' FROM='title'
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='Qwen/Qwen3-Embedding-0.6B' FROM='title' api_timeout='10'
 )
 ––– comment –––
 Insert test data with auto-generated embeddings

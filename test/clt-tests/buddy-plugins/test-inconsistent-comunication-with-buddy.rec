@@ -536,7 +536,7 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | j
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -584,7 +584,7 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION" | jq '.[0].dat
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -632,7 +632,7 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VER
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -680,7 +680,7 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION" | jq 
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",

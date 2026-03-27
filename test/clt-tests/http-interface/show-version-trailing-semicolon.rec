@@ -9,7 +9,7 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'|grep -
 | Columnar   | columnar %{VERSION} #!/\s*/!#|
 | Secondary  | secondary %{VERSION} #!/\s*/!#|
 | Knn        | knn %{VERSION} #!/\s*/!#|
-| Embeddings | embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)\s*/!#|
+| Embeddings | embeddings %{VERSION} #!/\s*/!#|
 | Buddy      | buddy %{VERSION} #!/\s*/!#|
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo

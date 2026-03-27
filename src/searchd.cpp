@@ -7472,15 +7472,19 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
 		const char * sReqIndex = dIndexNames[iIdx].cstr();
+		int64_t tmStartReq = sphMicroTimer();
+		int iSuccessesReq = 0;
+		int iUpdatedReq = 0;
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
 			int64_t tmStartIdx = sphMicroTimer();
 			int iUpdatedIdx = 0;
 
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pLocked );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
 
 			iUpdated += iUpdatedIdx;
+			iUpdatedReq += iUpdatedIdx;
 			pLocked->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 
 		} else if ( dDistributed[iIdx] )
@@ -7495,9 +7499,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
 
 				iUpdated += iUpdatedIdx;
+				iUpdatedReq += iUpdatedIdx;
 				if ( pServed )
 					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 			}
@@ -7515,9 +7520,15 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			// validation happens on remote side; errors will be returned via dFails
 			if ( !dAgents.IsEmpty() )
 			{
+				int iUpdatedRemote = 0;
+				int iWarnsRemote = 0;
 				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails, &sWarning );
-				iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdatedRemote, iWarnsRemote, dFails, &sWarning );
+				int iSuccessesRemote = PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				iSuccessesReq += iSuccessesRemote;
+				iUpdated += iUpdatedRemote;
+				iUpdatedReq += iUpdatedRemote;
+				iWarns += iWarnsRemote;
 
 				// collect errors from failed agents
 				for ( const AgentConn_t * pAgent : dAgents )
@@ -7536,6 +7547,14 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 						dFails.Submit ( pAgent->m_tDesc.m_sIndexes, sReqIndex, sError );
 					}
 			}
+		}
+
+		iSuccesses += iSuccessesReq;
+		if ( dDistributed[iIdx] && iSuccessesReq )
+		{
+			auto pDist = GetDistr ( sReqIndex );
+			if ( pDist )
+				pDist->m_tStats.AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedReq, tmStartReq );
 		}
 	}
 

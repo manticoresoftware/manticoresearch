@@ -1131,6 +1131,18 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		}
 	}
 
+	if ( bOk )
+	{
+		ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		{
+			const auto & tMeta = tHandler.m_dAggrResults[i];
+			auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
+		}
+	}
+
 	return bOk;
 }
 

@@ -116,7 +116,7 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 将其设置为 `1` 以禁用并行块合并（合并任务将逐个运行）。较高的值可能会在具有快速存储的系统上加快压缩速度，但会增加并发磁盘 I/O。
 
-默认值为 `max(1, min(2, threads/2))`。
+默认情况下，Manticore 使用 [threads](../Server_settings/Searchd.md#threads) 设置的值进行此计算；如果未配置 `threads`，则默认为逻辑 CPU 的数量。`parallel_chunk_merges` 的默认值为 `1`，当 `threads` 为 `1`、`2` 或 `3` 时，以及 `2` 当 `threads` 为 `4` 或更高时（即 `max(1, min(2, threads/2))` 使用整数除法）。
 
 可以在运行时使用 `SET GLOBAL parallel_chunk_merges = N` 更改此值，并通过 `SHOW VARIABLES` 查看。
 

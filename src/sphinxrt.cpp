@@ -138,8 +138,6 @@ static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUER
 // GLOBALS
 //////////////////////////////////////////////////////////////////////////
 
-// optimize mode for disk chunks merge fixme! retire?
-static bool g_bProgressiveMerge = true;
 
 //////////////////////////////////////////////////////////////////////////
 volatile bool &RTChangesAllowed () noexcept
@@ -1403,7 +1401,6 @@ public:
 	int					GetNumOfLocks() const noexcept final;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
-	int					ClassicOptimize ();
 	int					ProgressiveOptimize ( int iCutoff );
 	int					CommonOptimize ( OptimizeTask_t tTask );
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
@@ -10718,23 +10715,12 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	if ( m_tSaving.IsInterrupted() )
 		LogWarning ( "rt: table %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", GetName(), iChunks, iDiskChunks, tmPass );
 	else if ( iChunks > 0 )
-		LogInfo ( "rt: table %s: optimized %s chunk(s) %d ( left %d ) in %.3t", GetName(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
+		LogInfo ( "rt: table %s: optimized progressive chunk(s) %d ( left %d ) in %.3t", GetName(),  iChunks, iDiskChunks, tmPass );
 }
 
 bool RtIndex_c::MergeCanRun() const
 {
 	return !m_tSaving.IsInterrupted() && !m_bOptimizeStop.load(std::memory_order_relaxed);
-}
-
-int RtIndex_c::ClassicOptimize ()
-{
-	TRACE_SCHED ( "rt", "RtIndex_c::ClassicOptimize" );
-	RTDLOG << "Start ClassicOptimize()";
-	int iAffected = 0;
-	bool bWork = true;
-	while ( bWork && m_tRtChunks.GetDiskChunksCount() >= 2 )
-		bWork &= MergeCanRun() && MergeTwoChunks ( ChunkIDByChunkIdx ( 0 ), ChunkIDByChunkIdx ( 1 ), &iAffected );
-	return iAffected;
 }
 
 int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
@@ -10848,7 +10834,6 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 int RtIndex_c::CommonOptimize ( OptimizeTask_t tTask )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::CommonOptimize" );
-	bool bProgressive = g_bProgressiveMerge;
 	int iChunks = 0;
 
 	switch ( tTask.m_eVerb ) // process all 'single' manual commands
@@ -10859,12 +10844,11 @@ int RtIndex_c::CommonOptimize ( OptimizeTask_t tTask )
 	case OptimizeTask_t::eDedup: DedupOneChunk ( tTask.m_iFrom, &iChunks ); return iChunks;
 	case OptimizeTask_t::eSplit: SplitOneChunk ( tTask.m_iFrom, tTask.m_sUvarFilter.cstr(), &iChunks ); return iChunks;
 	case OptimizeTask_t::eAutoOptimize:
-		bProgressive = true;
 	default:
 		break;
 	}
 
-	return bProgressive ? ProgressiveOptimize( tTask.m_iCutoff ) : ClassicOptimize();
+	return ProgressiveOptimize( tTask.m_iCutoff );
 }
 
 void RtIndex_c::CheckStartAutoOptimize()
@@ -11362,8 +11346,6 @@ void sphRTInit ( CSphString sBinlogPath, bool bCommonBinlog, const CSphConfigSec
 {
 	Binlog::Init ( std::move ( sBinlogPath ) );
 	Binlog::SetCommon ( bCommonBinlog );
-	if ( pCommon )
-		g_bProgressiveMerge = pCommon->GetBool ( "progressive_merge", true );
 }
 
 

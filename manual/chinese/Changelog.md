@@ -2,6 +2,17 @@
 
 ## 开发版本
 
+* ⚠️ [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #123](https://github.com/manticoresoftware/columnar/pull/123) 重大变更：将MCL更新至13.0.0，为自动嵌入模型添加了`API_URL`和`API_TIMEOUT`。Manticore 25.0.0需要MCL 13.0.0，与旧版MCL版本不兼容；请同时升级守护进程和MCL，降级仅在同时恢复匹配的旧版MCL版本时才安全。
+* 🆕 [v24.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.4.0) [ PR #4091](https://github.com/manticoresoftware/manticoresearch/pull/4091) 通过添加N路磁盘块合并和并行`OPTIMIZE`任务改进RT表压缩，减少合并许多磁盘块所需的时间，并暴露新的`merge_chunks_per_job`和`parallel_chunk_merges`设置。
+* 🆕 [v24.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.3.0) [ PR #133](https://github.com/manticoresoftware/manticoresearch-backup/pull/133) 将Manticore Backup更新至1.10.0，添加对S3兼容的备份和恢复支持，包括AWS S3、MinIO、Wasabi和Cloudflare R2。
+* 🪲 [v24.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.3) [ Issue #4375](https://github.com/manticoresoftware/manticoresearch/issues/4375) 修复了当`max_query_time`中断使用`NOTNEAR`、`MAYBE`或否定操作符的查询时出现的误报全文匹配问题，因此超时搜索不再返回实际上不满足查询的行。
+* 🪲 [v24.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.2) [ Issue #4398](https://github.com/manticoresoftware/manticoresearch/issues/4398) 修复了查询时间统计，使查询日志、全局计数器和每个表的`SHOW STATUS`时间保持一致，Buddy的内部请求不再扭曲面向用户的守护进程统计信息。
+* 🪲 [v24.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.1) [ PR #653](https://github.com/manticoresoftware/manticoresearch-buddy/pull/653) 将Buddy更新至3.44.1，修复了对空请求负载的默认处理不正确的问题。
+* 🆕 [v24.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.0) [ Issue #2079](https://github.com/manticoresoftware/manticoresearch/issues/2079) 添加了混合搜索（Reciprocal Rank Fusion，`fusion_method='rrf'`），允许SQL和JSON查询结合全文和KNN结果，使用`hybrid_score()`进行排序，并支持在单个融合结果集中进行多个KNN子查询。
+* 🪲 [v24.1.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.3) [ PR #4396](https://github.com/manticoresoftware/manticoresearch/pull/4396) 修复了macOS上手动启动`searchd`的问题，Buddy支持的SQL命令不再因加载旧系统`libcurl`而失败；运行时查找现在会自动优先使用Homebrew curl，`MANTICORE_CURL_LIB`仍可作为显式覆盖。
+* 🪲 [v24.1.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.2) [ PR #4394](https://github.com/manticoresoftware/manticoresearch/pull/4394) 修复了macOS打包构建的问题，Buddy支持的SQL命令不再因`searchd`链接到不兼容的`libcurl`而失败；该包现在优先使用Homebrew curl，并支持`MANTICORE_CURL_LIB`运行时覆盖。
+* 🪲 [v24.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.1) [ Issue #4388](https://github.com/manticoresoftware/manticoresearch/issues/4388) 修复了集群中事务包含重复文档ID时的复制问题，因此副本不会再丢失行，而供体正确删除重复项。
+* 🆕 [v24.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.0) [ PR #141](https://github.com/manticoresoftware/columnar/pull/141) 将MCL更新至12.4.1，添加对GGUF量化本地嵌入模型、T5编码器模型和通过令牌认证下载的门控Hugging Face模型的支持。
 * 🪲 [v24.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.1) [ Issue #4354](https://github.com/manticoresoftware/manticoresearch/issues/4354) 修复了当更改的属性必须同时禁用其二级索引时的 `UPDATE` 处理，防止出现错误警告和不一致的二级索引状态。
 * ⚠️ [v24.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.0) [ Issue #4343](https://github.com/manticoresoftware/manticoresearch/issues/4343) 突破性变更：升级了内部复制协议版本，并添加了集群纪元跟踪功能，使离线节点在恢复时能够检测到集群表成员资格的变化，并使用 SST 而不是在 IST 恢复期间失败。混合版本的复制集群在此变更后不兼容；请一起升级集群节点，降级仅在集群中使用新复制协议之前是安全的。
 * 🆕 [v23.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.2.0) [ PR #4372](https://github.com/manticoresoftware/manticoresearch-buddy/pull/648) 将 Buddy 更新到 3.44.0，为涉及多个表的查询添加模糊搜索支持。
@@ -2719,4 +2730,3 @@ Manticore Search 使用 cmake 构建，编译所需的最低 gcc 版本是 4.7.2
 
 ## 版本 2.3.3，2017 年 7 月 6 日
 * Manticore 品牌
-

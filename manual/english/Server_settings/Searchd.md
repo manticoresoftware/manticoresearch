@@ -116,7 +116,7 @@ This affects only disk chunk merging (compaction), not query parallelism.
 
 Set it to `1` to disable parallel chunk merging (merge jobs will run one-by-one). Higher values may speed up compaction on systems with fast storage, but will increase concurrent disk I/O.
 
-Default is `max(1, min(2, threads/2))`.
+By default, Manticore uses the value of the [threads](../Server_settings/Searchd.md#threads) setting for this calculation; if `threads` is not configured, it defaults to the number of logical CPUs. The resulting default for `parallel_chunk_merges` is `1` when `threads` is `1`, `2`, or `3`, and `2` when `threads` is `4` or higher (that is, `max(1, min(2, threads/2))` using integer division).
 
 This value can be changed at runtime using `SET GLOBAL parallel_chunk_merges = N` and inspected via `SHOW VARIABLES`.
 

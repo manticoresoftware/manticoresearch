@@ -10336,7 +10336,9 @@ enum class Alter_e
 	RebuildSI,
 	RebuildKNN,
 	RebuildEmbeddings,
-	ApiKey
+	ApiKey,
+	ApiUrl,
+	ApiTimeout
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction, CSphString & sWarning )
@@ -10463,6 +10465,18 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 		case Alter_e::ApiKey:
 			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiUrl:
+			WIdx_c(pServed)->AlterApiUrl ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiTimeout:
+			{
+				int iTimeout = 0;
+				if ( ValidateEmbeddingsAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
+					WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
 			break;
 		}
 
@@ -11682,6 +11696,16 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_ALTER_EMBEDDINGS_API_KEY:
 		m_tLastMeta.m_sWarning = "";
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_URL:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiUrl, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_TIMEOUT:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_PLAN:

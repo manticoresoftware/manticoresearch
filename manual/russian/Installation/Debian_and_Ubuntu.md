@@ -32,7 +32,7 @@ sudo apt update
 
 Затем установите Manticore Search:
 ```
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
@@ -143,4 +143,3 @@ sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
 sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
-

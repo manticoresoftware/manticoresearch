@@ -10,9 +10,8 @@ For a deeper understanding of Buddy, check out these articles:
 
 ## Manticore Buddy Installation
 
-If you follow the installation instructions above or [on the website](https://manticoresearch.com/install), you don't have to worry about installing or starting Manticore Buddy: it gets installed automatically when you install the package `manticore-extra`, and Manticore Search starts it automatically at launch.
+If you follow the installation instructions above or [on the website](https://manticoresearch.com/install), you don't have to worry about installing or starting Manticore Buddy: it gets installed automatically when you install the `manticore` package, and Manticore Search starts it automatically at launch.
 
 ## Disabling Manticore Buddy
 
 To disable Manticore Buddy, please use the [buddy_path](../Server_settings/Searchd.md#buddy_path) setting.
-

@@ -109,38 +109,4 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 如果您根本不会使用 `indexer` 工具，则不需要查找和安装任何库。
 
 要启用 CJK 分词支持，官方包中包含嵌入式 ICU 库的二进制文件，并包含 ICU 数据文件。它们与系统上可能可用的任何 ICU 运行时库无关，且无法升级。
-
-#### 乌克兰语词形还原器
-词形还原器需要 Python 3.9+。**确保您已安装并使用 `--enable-shared` 进行配置。**
-
-以下是 Debian 和 Ubuntu 上安装 Python 3.9 和乌克兰语词形还原器的方法：
-
-```bash
-# install Manticore Search and UK lemmatizer from APT repository
-cd ~
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt -y update
-sudo apt -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-sudo apt -y update
-sudo apt -y install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
-tar xzf Python-3.9.4.tgz
-cd Python-3.9.4
-./configure --enable-optimizations --enable-shared
-sudo make -j8 altinstall
-
-# update linker cache
-sudo ldconfig
-
-# install pymorphy2 and UK dictionary
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
-```
 <!-- proofread -->
-

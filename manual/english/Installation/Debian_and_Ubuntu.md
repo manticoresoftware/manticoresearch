@@ -109,38 +109,4 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 If you aren't going to use the `indexer` tool at all, you don't need to find and install any libraries.
 
 To enable CJK tokenization support, the official packages contain binaries with embedded ICU library and include ICU data file. They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
-
-#### Ukrainian lemmatizer
-The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**
-
-Here's how to install Python 3.9 and the Ukrainian lemmatizer on Debian and Ubuntu:
-
-```bash
-# install Manticore Search and UK lemmatizer from APT repository
-cd ~
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt -y update
-sudo apt -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-sudo apt -y update
-sudo apt -y install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
-tar xzf Python-3.9.4.tgz
-cd Python-3.9.4
-./configure --enable-optimizations --enable-shared
-sudo make -j8 altinstall
-
-# update linker cache
-sudo ldconfig
-
-# install pymorphy2 and UK dictionary
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
-```
 <!-- proofread -->
-

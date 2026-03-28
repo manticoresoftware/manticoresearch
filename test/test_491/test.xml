@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<requires>
+<lemmatizer_base/>
+</requires>
+<skip_db/>
+
+<name>ukrainian native lemmatizer</name>
+
+<config>
+common
+{
+	lemmatizer_base = <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+index uk_rt
+{
+	type				= rt
+	path				= <data_path/>/uk_rt
+	dict				= keywords
+	index_exact_words	= 1
+	morphology			= lemmatize_uk_all
+	charset_table		= non_cjk, U+0406->U+0456, U+0456, U+0407->U+0457, U+0457, U+0490->U+0491, U+0491
+	rt_attr_uint		= gid
+	rt_field			= title
+}
+
+index uk_all_tpl
+{
+	type				= template
+	dict				= keywords
+	index_exact_words	= 1
+	morphology			= lemmatize_uk_all
+	charset_table		= non_cjk, U+0406->U+0456, U+0456, U+0407->U+0457, U+0457, U+0490->U+0491, U+0491
+}
+
+index uk_single_tpl
+{
+	type				= template
+	dict				= keywords
+	index_exact_words	= 1
+	morphology			= lemmatize_uk
+	charset_table		= non_cjk, U+0406->U+0456, U+0456, U+0407->U+0457, U+0457, U+0490->U+0491, U+0491
+}
+
+</config>
+
+<queries><sphinxql>
+INSERT INTO uk_rt VALUES ( 1, 'ґніт', 11 );
+INSERT INTO uk_rt VALUES ( 2, 'ґніти', 11 );
+INSERT INTO uk_rt VALUES ( 3, 'мрії', 11 );
+INSERT INTO uk_rt VALUES ( 4, 'червона', 11 );
+INSERT INTO uk_rt VALUES ( 5, 'красный', 11 );
+INSERT INTO uk_rt VALUES ( 6, 'красная', 11 );
+INSERT INTO uk_rt VALUES ( 7, 'красное', 11 );
+INSERT INTO uk_rt VALUES ( 8, 'красные', 11 );
+
+SELECT id FROM uk_rt WHERE MATCH('ґніт') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('мрія') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('червоний') ORDER BY id ASC; SHOW META;
+
+CALL KEYWORDS ( 'ґніти', 'uk_all_tpl' );
+CALL KEYWORDS ( 'красный красная красное красные', 'uk_all_tpl' );
+CALL KEYWORDS ( 'ґніти красная красное невідоме foo', 'uk_single_tpl' );
+</sphinxql></queries>
+
+</test>

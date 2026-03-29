@@ -54,9 +54,9 @@ Wait for port to be released
 timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– output –––
 ––– comment –––
-Wait for rebalancing to redistribute shards to remaining 3 nodes
+Wait for rebalancing to complete on node 2 (new master)
 ––– input –––
-timeout 60 bash -c 'while true; do R=$(show_shards 2306 t 2>/dev/null); echo "$R" | grep -q "system.t_s0:" && echo "$R" | grep -q "system.t_s1:" && echo "$R" | grep -q "system.t_s2:" && break; sleep 2; done'; echo $?
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -93,9 +93,9 @@ Wait for port to be released
 timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
 ––– output –––
 ––– comment –––
-Wait for cluster to stabilize on remaining nodes
+Wait for new master to detect the failure
 ––– input –––
-timeout 30 bash -c 'while true; do R=$(for i in 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq); [ "$R" = "OK" ] && break; sleep 2; done'; echo $?
+timeout 20 grep -qm1 'Skipping rebalance for table' <(tail -n 100 -f /var/log/manticore-{3,4}/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––
@@ -113,6 +113,11 @@ mysql -h0 -P3306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
 |    3 |
 +------+
 ––– comment –––
+Clean logs before restart so we can grep fresh
+––– input –––
+truncate -s 0 /var/log/manticore-3/searchd.log
+––– output –––
+––– comment –––
 Restart node 1
 ––– input –––
 export INSTANCE=1
@@ -125,9 +130,9 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– comment –––
-Wait for rebalancing to complete - shards should redistribute back to RF=3 balanced layout
+Wait for rebalancing to complete after both nodes rejoin
 ––– input –––
-timeout 90 bash -c 'while true; do R=$(show_shards 1306 t 2>/dev/null); echo "$R" | grep -q "system.t_s0:" && echo "$R" | grep -q "system.t_s1:" && echo "$R" | grep -q "system.t_s2:" && break; sleep 3; done'; echo $?
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––

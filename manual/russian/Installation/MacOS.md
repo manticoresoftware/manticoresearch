@@ -20,8 +20,8 @@ brew services start manticoresearch
 Если вы предпочитаете версии "Nightly" (разработческие), выполните:
 ```bash
 brew tap manticoresoftware/tap-dev
-brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
-brew services start manticoresearch-dev
+brew install manticoresoftware/tap-dev/manticore-dev
+brew services start manticore-dev
 ```
 
 <!--

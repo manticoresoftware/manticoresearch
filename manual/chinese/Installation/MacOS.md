@@ -20,8 +20,8 @@ Manticore 的默认配置文件位于 `/usr/local/etc/manticoresearch/manticore.
 如果您更喜欢“Nightly”（开发）版本，请执行：
 ```bash
 brew tap manticoresoftware/tap-dev
-brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
-brew services start manticoresearch-dev
+brew install manticoresoftware/tap-dev/manticore-dev
+brew services start manticore-dev
 ```
 
 <!--

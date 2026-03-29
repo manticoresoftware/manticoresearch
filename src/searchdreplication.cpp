@@ -1225,7 +1225,19 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 		{
 			StrVec_t dIndexes = SplitIndexes ( tCmdCluster.m_sIndex );
 			if ( !CheckClusterIndexes ( dIndexes, pCluster ) )
+			{
+				// For DROP: table not in cluster's galera list (already synced via
+				// replication while the node was down), but local m_sCluster may
+				// still be set. Clear it so subsequent DROP TABLE is not blocked.
+				if ( tCmdCluster.m_eCommand == ReplCmd_e::CLUSTER_ALTER_DROP )
+				{
+					AssignClusterToIndexes ( dIndexes, "" );
+					TLS_MSG_STRING ( sError );
+					SaveConfigInt ( sError );
+					return true;
+				}
 				return false;
+			}
 		} else if ( !CheckClusterIndex ( tCmdCluster.m_sIndex, pCluster ) )
 			return false;
 	}

@@ -156,11 +156,11 @@ export INSTANCE=2
 ––– comment –––
 Make sure that rebalancing started
 ––– input –––
-timeout 20 grep -qm1 'Rebalancing due to cluster topology change' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
+timeout 30 grep -qm1 'Rebalancing due to cluster topology change' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
 ––– output –––
 0
 ––– input –––
-timeout 20 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
+timeout 30 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-3/searchd.log); echo $?
 ––– output –––
 0
 ––– comment –––

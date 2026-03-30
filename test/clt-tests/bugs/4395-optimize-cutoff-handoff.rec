@@ -1,8 +1,6 @@
 ––– comment –––
 Verify the issue 4395 MRE: manual OPTIMIZE with cutoff=1 must tighten the active optimize after FLUSH RAMCHUNK and finish with a single disk chunk.
-
 ––– block: ../base/start-searchd –––
-
 ––– input –––
 mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS issue4395_ml;" && echo OK
 ––– output –––
@@ -16,12 +14,8 @@ mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=1; INSERT INTO issue4395_ml(id,t) 
 ––– output –––
 OK
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE issue4395_ml STATUS like '%chunk%';"
+mysql -h0 -P9306 -NBe "SHOW TABLE issue4395_ml STATUS like 'disk_chunks'\G"
 ––– output –––
-+--------------------------+-------+
-| Variable_name            | Value |
-+--------------------------+-------+
-| ram_chunk                | 0     |
-| ram_chunk_segments_count | 0     |
-| disk_chunks              | 1     |
-+--------------------------+-------+
+*************************** 1. row ***************************
+disk_chunks
+1

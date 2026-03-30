@@ -1,0 +1,137 @@
+Test rollback when master node dies during active rebalancing - new master should recover
+––– comment –––
+Start 4-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create table with RF=2 - 3 shards across 4 nodes
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:${TABLE_NAME} (id bigint, value string) shards='3' rf='2'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${TABLE_NAME} (id, value) VALUES (1, 'one'), (2, 'two'), (3, 'three')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify initial shard layout
+––– input –––
+show_shards 1306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:1312 127.0.0.1:2312
+system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
+system.t_s2: 127.0.0.1:3312 127.0.0.1:4312
+––– comment –––
+Kill node 4 to trigger rebalancing on node 1 (master)
+––– input –––
+export INSTANCE=4; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 4 killed"
+––– output –––
+Node 4 killed
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+Wait until master detects the failure and starts rebalancing
+––– input –––
+timeout 20 grep -qm1 'Rebalancing due to inactive nodes' <(tail -n 100 -f /var/log/manticore-1/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Kill the master (node 1) while rebalancing is in progress
+This should trigger master takeover and recovery on the new master
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Master killed"
+––– output –––
+Master killed
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+Wait for new master election on remaining nodes
+––– input –––
+timeout 30 grep -qm1 'becoming master' <(tail -n 100 -f /var/log/manticore-{2,3}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Wait for cluster to stabilize
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Remaining nodes (2,3) should maintain quorum
+––– input –––
+for i in 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Data should still be accessible on surviving nodes
+––– input –––
+mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    3 |
++------+
+––– comment –––
+Restart both dead nodes
+––– input –––
+truncate -s 0 /var/log/manticore-{2,3}/searchd.log
+––– output –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for rebalancing to complete with all nodes back
+––– input –––
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-{2,3}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+All 4 nodes synced
+––– input –––
+for i in 1 2 3 4; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Verify shards distributed with RF=2 on surviving nodes
+After master kill mid-rebalance, shards concentrate on surviving nodes (2,3).
+Rejoining nodes (1,4) will get shards on the next rebalance cycle.
+––– input –––
+show_shards 2306 "$TABLE_NAME"
+––– output –––
+system.t_s0: 127.0.0.1:3312 127.0.0.1:2312
+system.t_s1: 127.0.0.1:3312 127.0.0.1:2312
+system.t_s2: 127.0.0.1:3312 127.0.0.1:2312
+––– comment –––
+Verify full data integrity after recovery
+––– input –––
+mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM ${TABLE_NAME}"
+––– output –––
++------+
+|    3 |
++------+

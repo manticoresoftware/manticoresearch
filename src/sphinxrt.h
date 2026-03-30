@@ -171,6 +171,7 @@ public:
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
 	virtual bool StartOptimize ( OptimizeTask_t tTask ) { return true; }
 	virtual int OptimizesRunning () const noexcept { return 0; }
+	virtual void ManualOptimizeCutoff ( int iCutoff ) {}
 
 	virtual int GetNumOfLocks () const noexcept { return 0; }
 

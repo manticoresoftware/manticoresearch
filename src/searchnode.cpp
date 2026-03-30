@@ -3913,7 +3913,15 @@ const ExtDoc_t * ExtMaybe_c::GetDocsChunk()
 			break;
 
 		if ( !bRightEmpty )
-			bRightEmpty = !WarmupDocs ( pDocR, m_pRight.get() );
+		{
+			if ( !WarmupDocs ( pDocR, m_pRight.get() ) )
+			{
+				if ( TimeExceeded() )
+					break;
+
+				bRightEmpty = true;
+			}
+		}
 
 		if ( !bRightEmpty )
 		{
@@ -3968,7 +3976,8 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
 		if ( !WarmupDocs ( pDocL, m_pLeft.get() ) )
 			break;
 
-		WarmupDocs ( pDocR, m_pRight.get() );
+		if ( !WarmupDocs ( pDocR, m_pRight.get() ) && TimeExceeded() )
+			break;
 
 		// if there's nothing to filter against, simply copy leftovers
 		if ( !HasDocs(pDocR) )
@@ -5849,7 +5858,13 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 			if ( HasDocs(pDocL) )
 				m_pRight->HintRowID ( pDocL->m_tRowID );
 
-			bRightEmpty = !WarmupDocs ( pDocR, pHitR, m_pRight.get() );
+			if ( !WarmupDocs ( pDocR, pHitR, m_pRight.get() ) )
+			{
+				if ( TimeExceeded() )
+					break;
+
+				bRightEmpty = true;
+			}
 		}
 
 		RowID_t tNotRowID = ( bRightEmpty ? INVALID_ROWID : pDocR->m_tRowID );

@@ -353,7 +353,7 @@ bool CSphSchema::IsReserved ( const char* szToken )
 	static const char * dReserved[] =
 	{
 		"AND", "AS", "BY", "COLUMNARSCAN", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
-		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
+		"FACET", "FALSE", "FORCE", "FROM", "HYBRID_MATCH", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
 		"LEFT", "LIMIT", "MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
 		"OFFSET", "ON", "OR", "ORDER", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
 		"TRUE", NULL
@@ -572,7 +572,10 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 		int iId = hKNN[tAttr.m_sName];
 		const auto & tKNN = tSettings.m_dKNN[iId];
 		tAttr.m_tKNN		= tKNN;
-		tAttr.m_tKNNModel	= tKNN;
+		// Explicitly cast to ModelSettings_t base class to correctly extract the ModelSettings_t subobject
+		// from NamedKNNSettings_t (which uses multiple inheritance: IndexSettings_t + ModelSettings_t).
+		// Without the cast, the compiler might copy the wrong memory region or fail to compile due to ambiguity.
+		tAttr.m_tKNNModel	= static_cast<const knn::ModelSettings_t&>(tKNN);
 		tAttr.m_sKNNFrom	= tKNN.m_sFrom;
 	}
 }

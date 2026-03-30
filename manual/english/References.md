@@ -466,6 +466,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the number of queries per batch
   * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum number of active connections
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - How many RT disk chunks are merged per OPTIMIZE job
   * [max_filters](Server_settings/Searchd.md#max_filters) - Maximum allowed per-query filter count
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Maximum allowed per-filter values count
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Maximum number of files allowed to be opened by server
@@ -478,6 +479,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for client requests
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - How many RT disk chunk merges can run in parallel during OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Determines whether to forcibly preopen all tables on startup
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
@@ -610,7 +612,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Documentation for old Manticore versions
@@ -669,4 +671,5 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Installation page](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Installation page](https://manticoresearch.com/install-15.1.0/)
 * [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [Installation page](https://manticoresearch.com/install-17.5.1/)
+* [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [Installation page](https://manticoresearch.com/install-25.0.0/)
 <!-- proofread -->

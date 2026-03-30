@@ -9323,6 +9323,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
+static bool WaitOptimize ( RowBuffer_i & tOut, const CSphString & sIndex )
+{
+	if ( PollOptimizeRunning ( sIndex ) )
+		return true;
+
+	tOut.Error ( "RT table went away during waiting" );
+	return false;
+}
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
@@ -9341,18 +9349,57 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
-	auto bOptimizeStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+	const bool bSync = tStmt.m_tQuery.m_bSync;
+	if ( bHasCutoff )
+		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
 
-	if ( tStmt.m_tQuery.m_bSync && !bOptimizeStarted )
+	bool bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+
+	if ( !bSync )
+	{
+		tOut.Ok ();
+		return;
+	}
+
+	if ( !bStarted )
 	{
 		tOut.Error ( "Can't optimize frozen table" );
 		return;
 	}
 
-	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
-		tOut.Error ( "RT table went away during waiting" );
-	else
-		tOut.Ok ();
+	if ( !WaitOptimize ( tOut, sIndex ) )
+		return;
+
+	if ( bHasCutoff )
+	{
+		CSphIndexStatus tStatus;
+		RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+		if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+		{
+			if ( bHasCutoff )
+				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
+
+			bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+			if ( !bStarted )
+			{
+				tOut.Error ( "Can't optimize frozen table" );
+				return;
+			}
+
+			if ( !WaitOptimize ( tOut, sIndex ) )
+				return;
+
+			RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+			if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+			{
+				tOut.ErrorEx ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
+				return;
+			}
+		}
+	}
+
+	tOut.Ok ();
 }
 
 static CSphString GetLastInsertId ( const ClientSession_c * pSession )

@@ -1,0 +1,27 @@
+––– comment –––
+Verify the issue 4395 MRE: manual OPTIMIZE with cutoff=1 must tighten the active optimize after FLUSH RAMCHUNK and finish with a single disk chunk.
+
+––– block: ../base/start-searchd –––
+
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS issue4395_ml;" && echo OK
+––– output –––
+OK
+––– input –––
+manticore-load --host=127.0.0.1 --port=9306 --threads=1 --batch-size=1 --total=8 --init="CREATE TABLE issue4395_ml(id bigint, t text) optimize_cutoff='2' rt_mem_limit='256K'" --load="INSERT INTO issue4395_ml(id,t) VALUES(<increment>,'<text/3100/3100>')" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=1; INSERT INTO issue4395_ml(id,t) VALUES(1001,'tail'); FLUSH RAMCHUNK issue4395_ml; OPTIMIZE TABLE issue4395_ml OPTION sync=1, cutoff=1;" && echo OK
+––– output –––
+OK
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE issue4395_ml STATUS like '%chunk%';"
+––– output –––
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| ram_chunk                | 0     |
+| ram_chunk_segments_count | 0     |
+| disk_chunks              | 1     |
++--------------------------+-------+

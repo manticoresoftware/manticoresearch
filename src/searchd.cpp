@@ -4815,7 +4815,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 	tOut.Ok ( iDeleted );
 }
 
-bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
+static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 
 /// Compute shard index for a document ID, matching Buddy's jchash(crc32(string(id)), numShards)
@@ -5257,7 +5257,7 @@ void MaybeFixupIndexNameFromMysqldump ( SqlStmt_t & tStmt )
 	tStmt.m_sIndex = dParts[1];
 }
 
-bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
+static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
 {
 	auto * pSession = session::GetClientSession();
 	auto & tAcc = pSession->m_tAcc;

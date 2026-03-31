@@ -17,6 +17,7 @@
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "searchdsql.h"
+#include "tdigest_aggr_utils.h"
 #include "searchdha.h"
 #include "knnmisc.h"
 #include "hybridexecutor.h"
@@ -2516,77 +2517,31 @@ static bool IsSingleValue ( Aggr_e eAggr )
 
 static float GetTdigestCompression ( const CSphColumnInfo & tCol )
 {
-	return tCol.m_fTdigestCompression ? tCol.m_fTdigestCompression : 200.0f;
+	return tdigest_aggr::GetCompression ( tCol );
 }
 
 static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, TDigest_c & tDigest )
 {
-	float fCompression = GetTdigestCompression ( tCol );
-	ByteBlob_t dBlob = tMatch.FetchAttrData ( tCol.m_tLocator, nullptr );
-	sphTDigestLoadFromBlob ( dBlob, tDigest, fCompression );
+	tdigest_aggr::LoadFromMatch ( tMatch, tCol, tDigest );
 }
 
 static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad,
 	CSphVector<TDigestCentroid_t> & dCentroids,
 	CSphVector<JsonAggr_t::MadDeviationEntry_t> & dDeviations )
 {
-	if ( tDigest.GetCount()==0 )
-		return false;
-
-	double fMedian = tDigest.Quantile ( 0.5 );
-
-	tDigest.Export ( dCentroids );
-
-	if ( dCentroids.IsEmpty() )
-		return false;
-
-	dDeviations.Resize ( dCentroids.GetLength() );
-
-	int64_t iTotalWeight = 0;
-	for ( int i = 0; i < dCentroids.GetLength(); ++i )
-	{
-		const auto & tCentroid = dCentroids[i];
-		auto & tDeviation = dDeviations[i];
-		tDeviation.m_fDeviation = std::fabs ( tCentroid.m_fMean - fMedian );
-		tDeviation.m_iWeight = tCentroid.m_iCount;
-		iTotalWeight += tCentroid.m_iCount;
-	}
-
-	std::sort ( dDeviations.Begin(), dDeviations.End(),
-		[] ( const JsonAggr_t::MadDeviationEntry_t & a, const JsonAggr_t::MadDeviationEntry_t & b )
-		{
-			return a.m_fDeviation < b.m_fDeviation;
-		} );
-
-	const double fTarget = 0.5 * (double)iTotalWeight;
-	double fAccumulated = 0.0;
-
-	for ( const auto & tEntry : dDeviations )
-	{
-		fAccumulated += (double)tEntry.m_iWeight;
-		if ( fAccumulated>=fTarget )
-		{
-			fMad = tEntry.m_fDeviation;
-			return true;
-		}
-	}
-
-	fMad = dDeviations.Last().m_fDeviation;
-	return true;
+	(void)dCentroids;
+	(void)dDeviations;
+	return tdigest_aggr::CalcMad ( tDigest, fMad );
 }
 
 static CSphString FormatNumeric ( double fValue )
 {
-	CSphString sValue;
-	sValue.SetSprintf ( "%.15g", fValue );
-	return sValue;
+	return tdigest_aggr::FormatNumeric ( fValue );
 }
 
 static CSphString FormatKey ( double fValue )
 {
-	CSphString sKey;
-	sKey.SetSprintf ( "%.12g", fValue );
-	return sKey;
+	return tdigest_aggr::FormatKey ( fValue );
 }
 
 static void AppendValueStringFields ( JsonEscapedBuilder & tOut, const CSphString & sValue )

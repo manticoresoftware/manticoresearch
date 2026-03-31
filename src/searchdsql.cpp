@@ -1299,37 +1299,6 @@ static Aggr_e ToExtendedAggr ( ESphAggrFunc eAggrFunc )
 	}
 }
 
-static bool ParseBoolOption ( const CSphNamedVariant & tOpt, bool & bValue, CSphString & sError )
-{
-	if ( tOpt.m_eType==VariantType_e::BIGINT )
-	{
-		bValue = ( tOpt.m_iValue!=0 );
-		return true;
-	}
-
-	if ( tOpt.m_eType!=VariantType_e::STRING )
-	{
-		sError.SetSprintf ( "option '%s' should be bool", tOpt.m_sKey.cstr() );
-		return false;
-	}
-
-	CSphString sVal = tOpt.m_sValue;
-	sVal.ToLower();
-	if ( sVal=="1" || sVal=="true" )
-	{
-		bValue = true;
-		return true;
-	}
-	if ( sVal=="0" || sVal=="false" )
-	{
-		bValue = false;
-		return true;
-	}
-
-	sError.SetSprintf ( "option '%s' should be bool", tOpt.m_sKey.cstr() );
-	return false;
-}
-
 static bool ParseCompressionOption ( const CSphNamedVariant & tOpt, float & fCompression, CSphString & sError )
 {
 	if ( tOpt.m_eType==VariantType_e::BIGINT )
@@ -1463,10 +1432,12 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 	if ( eAggrFunc==SPH_AGGR_PERCENTILES )
 	{
 		ApplyDefaultPercentiles ( tAggr.m_tPercentiles.m_dPercents );
+		tAggr.m_tPercentiles.m_bKeyed = true;
 		tItem.m_fTdigestCompression = tAggr.m_tPercentiles.m_fCompression;
 	}
 	else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
 	{
+		tAggr.m_tPercentileRanks.m_bKeyed = true;
 		tItem.m_fTdigestCompression = tAggr.m_tPercentileRanks.m_fCompression;
 	}
 	else if ( eAggrFunc==SPH_AGGR_MAD )
@@ -1497,20 +1468,8 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 
 			if ( tOpt.m_sKey=="keyed" )
 			{
-				bool bKeyed = false;
-				if ( !ParseBoolOption ( tOpt, bKeyed, sError ) )
-					goto failed;
-
-				if ( eAggrFunc==SPH_AGGR_PERCENTILES )
-					tAggr.m_tPercentiles.m_bKeyed = bKeyed;
-				else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
-					tAggr.m_tPercentileRanks.m_bKeyed = bKeyed;
-				else
-				{
-					sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
-					goto failed;
-				}
-				continue;
+				sError.SetSprintf ( "option '%s' is not supported in SphinxQL for this aggregate (output is always keyed)", tOpt.m_sKey.cstr() );
+				goto failed;
 			}
 
 			if ( tOpt.m_sKey=="values" )

@@ -51,6 +51,7 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
+#include "tdigest_aggr_utils.h"
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
 
@@ -7778,100 +7779,30 @@ static bool IsNullSet ( const CSphMatch	& tMatch, int iAttr, SphAttr_t tNullMask
 
 static CSphString FormatNumericSql ( double fValue )
 {
-	CSphString sValue;
-	sValue.SetSprintf ( "%.15g", fValue );
-	return sValue;
-}
-
-static CSphString FormatKeySql ( double fValue )
-{
-	CSphString sKey;
-	sKey.SetSprintf ( "%.12g", fValue );
-	return sKey;
+	return tdigest_aggr::FormatNumeric ( fValue );
 }
 
 static bool LoadTDigestFromMatchSql ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, TDigest_c & tDigest )
 {
-	ByteBlob_t dBlob = tMatch.FetchAttrData ( tCol.m_tLocator, nullptr );
-	if ( !dBlob.first )
-		return false;
-
-	float fCompression = tCol.m_fTdigestCompression ? tCol.m_fTdigestCompression : 200.0f;
-	sphTDigestLoadFromBlob ( dBlob, tDigest, fCompression );
-	return tDigest.GetCount()>0;
+	return tdigest_aggr::LoadFromMatch ( tMatch, tCol, tDigest );
 }
 
 static bool CalcMadFromDigestSql ( const TDigest_c & tDigest, double & fMad )
 {
-	if ( tDigest.GetCount()==0 )
-		return false;
-
-	double fMedian = tDigest.Quantile ( 0.5 );
-
-	CSphVector<TDigestCentroid_t> dCentroids;
-	tDigest.Export ( dCentroids );
-	if ( dCentroids.IsEmpty() )
-		return false;
-
-	struct Deviation_t
-	{
-		double m_fDeviation = 0.0;
-		int64_t m_iWeight = 0;
-	};
-
-	CSphVector<Deviation_t> dDeviations;
-	dDeviations.Resize ( dCentroids.GetLength() );
-	int64_t iTotalWeight = 0;
-	for ( int i = 0; i < dCentroids.GetLength(); ++i )
-	{
-		dDeviations[i].m_fDeviation = std::fabs ( dCentroids[i].m_fMean - fMedian );
-		dDeviations[i].m_iWeight = dCentroids[i].m_iCount;
-		iTotalWeight += dCentroids[i].m_iCount;
-	}
-
-	std::sort ( dDeviations.Begin(), dDeviations.End(),
-		[] ( const Deviation_t & a, const Deviation_t & b ) { return a.m_fDeviation < b.m_fDeviation; } );
-
-	const double fTarget = 0.5 * (double)iTotalWeight;
-	double fAccumulated = 0.0;
-	for ( const auto & tEntry : dDeviations )
-	{
-		fAccumulated += (double)tEntry.m_iWeight;
-		if ( fAccumulated>=fTarget )
-		{
-			fMad = tEntry.m_fDeviation;
-			return true;
-		}
-	}
-
-	fMad = dDeviations.Last().m_fDeviation;
-	return true;
+	return tdigest_aggr::CalcMad ( tDigest, fMad );
 }
 
 static void EncodePercentilesSql ( const AggrPercentilesSetting_t & tSettings, const TDigest_c & tDigest, bool bHasSamples, StringBuilder_c & tOut )
 {
-	tOut << "{\"values\":";
-	if ( tSettings.m_bKeyed )
+	if ( tSettings.m_dPercents.GetLength()==1 )
 	{
-		tOut << "{";
-		bool bFirst = true;
-		for ( float fPercent : tSettings.m_dPercents )
+		if ( bHasSamples )
 		{
-			if ( !bFirst )
-				tOut << ",";
-			bFirst = false;
-
-			CSphString sKey = FormatKeySql ( fPercent );
-			tOut.Sprintf ( "\"%s\":", sKey.cstr() );
-			if ( bHasSamples )
-			{
-				CSphString sValue = FormatNumericSql ( tDigest.Percentile ( fPercent ) );
-				tOut << sValue.cstr();
-			}
-			else
-				tOut << "null";
+			CSphString sValue = FormatNumericSql ( tDigest.Percentile ( tSettings.m_dPercents[0] ) );
+			tOut << sValue.cstr();
 		}
-		tOut << "}}";
+		else
+			tOut << "null";
 		return;
 	}
 
@@ -7883,43 +7814,28 @@ static void EncodePercentilesSql ( const AggrPercentilesSetting_t & tSettings, c
 			tOut << ",";
 		bFirst = false;
 
-		CSphString sKey = FormatKeySql ( fPercent );
-		tOut.Sprintf ( "{\"key\":%s", sKey.cstr() );
 		if ( bHasSamples )
 		{
 			CSphString sValue = FormatNumericSql ( tDigest.Percentile ( fPercent ) );
-			tOut.Sprintf ( ",\"value\":%s,\"value_as_string\":\"%s\"}", sValue.cstr(), sValue.cstr() );
+			tOut << sValue.cstr();
 		}
 		else
-			tOut << ",\"value\":null,\"value_as_string\":null}";
+			tOut << "null";
 	}
-	tOut << "]}";
+	tOut << "]";
 }
 
 static void EncodePercentileRanksSql ( const AggrPercentileRanksSetting_t & tSettings, const TDigest_c & tDigest, bool bHasSamples, StringBuilder_c & tOut )
 {
-	tOut << "{\"values\":";
-	if ( tSettings.m_bKeyed )
+	if ( tSettings.m_dValues.GetLength()==1 )
 	{
-		tOut << "{";
-		bool bFirst = true;
-		for ( double fThreshold : tSettings.m_dValues )
+		if ( bHasSamples )
 		{
-			if ( !bFirst )
-				tOut << ",";
-			bFirst = false;
-
-			CSphString sKey = FormatKeySql ( fThreshold );
-			tOut.Sprintf ( "\"%s\":", sKey.cstr() );
-			if ( bHasSamples )
-			{
-				CSphString sValue = FormatNumericSql ( tDigest.Cdf ( fThreshold ) * 100.0 );
-				tOut << sValue.cstr();
-			}
-			else
-				tOut << "null";
+			CSphString sValue = FormatNumericSql ( tDigest.Cdf ( tSettings.m_dValues[0] ) * 100.0 );
+			tOut << sValue.cstr();
 		}
-		tOut << "}}";
+		else
+			tOut << "null";
 		return;
 	}
 
@@ -7931,36 +7847,34 @@ static void EncodePercentileRanksSql ( const AggrPercentileRanksSetting_t & tSet
 			tOut << ",";
 		bFirst = false;
 
-		CSphString sKey = FormatKeySql ( fThreshold );
-		tOut.Sprintf ( "{\"key\":%s", sKey.cstr() );
 		if ( bHasSamples )
 		{
 			CSphString sValue = FormatNumericSql ( tDigest.Cdf ( fThreshold ) * 100.0 );
-			tOut.Sprintf ( ",\"value\":%s,\"value_as_string\":\"%s\"}", sValue.cstr(), sValue.cstr() );
+			tOut << sValue.cstr();
 		}
 		else
-			tOut << ",\"value\":null,\"value_as_string\":null}";
+			tOut << "null";
 	}
-	tOut << "]}";
+	tOut << "]";
 }
 
 static void EncodeMadSql ( const TDigest_c & tDigest, bool bHasSamples, StringBuilder_c & tOut )
 {
 	if ( !bHasSamples )
 	{
-		tOut << "{\"value\":null,\"value_as_string\":null}";
+		tOut << "null";
 		return;
 	}
 
 	double fMad = 0.0;
 	if ( !CalcMadFromDigestSql ( tDigest, fMad ) )
 	{
-		tOut << "{\"value\":null,\"value_as_string\":null}";
+		tOut << "null";
 		return;
 	}
 
 	CSphString sValue = FormatNumericSql ( fMad );
-	tOut.Sprintf ( "{\"value\":%s,\"value_as_string\":\"%s\"}", sValue.cstr(), sValue.cstr() );
+	tOut << sValue.cstr();
 }
 
 static bool EncodeTDigestAggregateSql ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, StringBuilder_c & tOut )

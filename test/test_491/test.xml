@@ -105,14 +105,16 @@ index agg_mad
 
 	<!-- SphinxQL support for tdigest-based aggs -->
 	<sphinxql>select percentiles(latency) as p from agg_td</sphinxql>
-	<sphinxql>select percentiles(latency, {values='0,100',keyed=1,compression=200}) as p from agg_td</sphinxql>
-	<sphinxql>select percentiles(latency, {values='0,100',keyed=0,compression=200}) as p from agg_td</sphinxql>
-	<sphinxql>select percentile_ranks(latency, {values='-1,999',keyed=1,compression=200}) as r from agg_td</sphinxql>
-	<sphinxql>select percentile_ranks(latency, {values='-1,999',keyed=0,compression=200}) as r from agg_td</sphinxql>
+	<sphinxql>select percentiles(latency, {values='0,100',compression=200}) as p from agg_td</sphinxql>
+	<sphinxql>select percentiles(latency, {values='50',compression=200}) as p from agg_td</sphinxql>
+	<sphinxql>select percentile_ranks(latency, {values='-1,999',compression=200}) as r from agg_td</sphinxql>
+	<sphinxql>select percentile_ranks(latency, {values='30',compression=200}) as r from agg_td</sphinxql>
 	<sphinxql>select median_absolute_deviation(latency) as m from agg_td</sphinxql>
 	<sphinxql>select median_absolute_deviation(latency, {compression=2}) as m from agg_mad</sphinxql>
-	<sphinxql>select percentiles(latency, {values='0,100',keyed=0}) as p from agg_td_empty</sphinxql>
-	<sphinxql>select percentile_ranks(latency, {values='-1,999',keyed=0}) as r from agg_td_empty</sphinxql>
+	<sphinxql>select percentiles(latency, {values='0,100'}) as p from agg_td_empty</sphinxql>
+	<sphinxql>select percentiles(latency, {values='50'}) as p from agg_td_empty</sphinxql>
+	<sphinxql>select percentile_ranks(latency, {values='-1,999'}) as r from agg_td_empty</sphinxql>
+	<sphinxql>select percentile_ranks(latency, {values='30'}) as r from agg_td_empty</sphinxql>
 	<sphinxql>select median_absolute_deviation(latency) as m from agg_td_empty</sphinxql>
 </queries>
 

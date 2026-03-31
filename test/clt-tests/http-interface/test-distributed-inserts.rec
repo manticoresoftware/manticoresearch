@@ -234,11 +234,11 @@ curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_insert" ht
 ––– output –––
 {
   "index": "created",
-  "id": 4
+  "id": "4"
 }
 {
   "index": "created",
-  "id": 5
+  "id": "5"
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -260,11 +260,11 @@ curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_insert" ht
 ––– output –––
 {
   "index": "created",
-  "id": 6
+  "id": "6"
 }
 {
   "index": "created",
-  "id": 7
+  "id": "7"
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -341,10 +341,10 @@ bulk_ops=$(mktemp); echo -e '{"delete":{"_index":"test2","_id":1}}\n{"index":{"_
 ––– input –––
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_ops" http://localhost:9308/_bulk | jq -c '.items[] | {operation: (to_entries | .[0].key), result: (.[].result?), id: (.[]._id?), status: (.[].status?), error: (.[].error?)}'
 ––– output –––
-{"operation":"delete","result":"deleted","id":1,"status":201,"error":null}
-{"operation":"index","result":"created","id":2,"status":201,"error":null}
-{"operation":"index","result":"created","id":17,"status":201,"error":null}
-{"operation":"update","result":"updated","id":6,"status":201,"error":null}
+{"operation":"delete","result":"deleted","id":"1","status":201,"error":null}
+{"operation":"index","result":"created","id":"2","status":201,"error":null}
+{"operation":"index","result":"created","id":"17","status":201,"error":null}
+{"operation":"update","result":"updated","id":"6","status":201,"error":null}
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 WHERE id = 4;"
 ––– output –––

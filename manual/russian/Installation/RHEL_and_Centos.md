@@ -38,11 +38,11 @@ sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
 ```
 
 ### Автономные RPM-пакеты
-Чтобы загрузить автономные RPM-файлы из репозитория Manticore, следуйте инструкциям, доступным по адресу https://manticoresearch.com/install/.
+Чтобы скачать автономные RPM-файлы из репозитория Manticore, следуйте инструкциям, доступным по адресу https://manticoresearch.com/install/.
 
 ### Дополнительные пакеты, которые могут вам понадобиться
 #### Для indexer
-Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, вам необходимо убедиться, что установлены соответствующие клиентские библиотеки, чтобы сделать доступными источники индексирования, которые вам нужны. Строка ниже установит их все сразу; вы можете использовать её как есть или сократить, чтобы установить только нужные вам библиотеки (только для источников mysql — должно быть достаточно просто `mysql-libs`, и unixODBC не нужен).
+Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, вам необходимо убедиться, что установлены соответствующие клиентские библиотеки, чтобы были доступны нужные вам источники индексирования. Строка ниже установит их все сразу; вы можете использовать её как есть или сократить, чтобы установить только необходимые библиотеки (только для источников mysql — должно быть достаточно `mysql-libs`, а unixODBC не нужен).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
@@ -54,5 +54,35 @@ sudo yum install mysql-libs postgresql-libs expat unixODBC
 dnf install mariadb-connector-c
 ```
 
-если вы получаете ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` при попытке построить простую таблицу из MySQL.
+если вы получаете ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` при попытке построить обычную таблицу из MySQL.
+
+#### Украинский лемматизатор
+Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и сконфигурирован с опцией `--enable-shared`.**
+
+Вот как установить Python 3.9 и украинский лемматизатор в Centos 8:
+
+```bash
+# install Manticore Search and UK lemmatizer from YUM repository
+yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+yum -y install manticore manticore-lemmatizer-uk
+
+# install packages needed for building Python
+yum groupinstall "Development Tools" -y
+yum install openssl-devel libffi-devel bzip2-devel wget -y
+
+# download, build and install Python 3.9
+cd ~
+wget https://www.python.org/ftp/python/3.9.2/Python-3.9.2.tgz
+tar xvf Python-3.9.2.tgz
+cd Python-3.9*/
+./configure --enable-optimizations --enable-shared
+make -j8 altinstall
+
+# update linker cache
+ldconfig
+
+# install pymorphy2 and UK dictionary
+pip3.9 install pymorphy2[fast]
+pip3.9 install pymorphy2-dicts-uk
+```
 <!-- proofread -->

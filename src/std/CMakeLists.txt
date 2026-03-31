@@ -40,6 +40,7 @@ add_library ( manticore_std OBJECT
 		fixedvector_impl.h
 		fnv64.h
 		format.h
+		jchash.h
 		generics.h
 		hash.h
 		helpers.h

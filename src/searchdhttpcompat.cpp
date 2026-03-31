@@ -260,7 +260,7 @@ static int GetVersion ( const nljson & tDoc )
 	return iVer;
 }
 
-static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError );
+static bool InsertDoc ( SqlStmt_t & tStmt, CSphString & sError );
 
 static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 {
@@ -275,7 +275,7 @@ static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 	return InsertDoc ( tStmt, sError );
 }
 
-static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError )
+static bool InsertDoc ( SqlStmt_t & tStmt, CSphString & sError )
 {
 	std::unique_ptr<StmtErrorReporter_i> pReporter ( CreateHttpErrorReporter() );
 	sphHandleMysqlInsert ( *pReporter.get(), tStmt );

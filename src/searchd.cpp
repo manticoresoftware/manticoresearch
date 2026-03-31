@@ -62,6 +62,7 @@
 #include "taskflushmutable.h"
 #include "taskpreread.h"
 #include "searchdbuddy.h"
+#include "std/jchash.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
 
@@ -4816,7 +4817,204 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt )
+/// Determine the document ID from an INSERT statement for a specific row
+/// Returns 0 if no explicit ID is provided (auto-generate needed)
+static int64_t GetInsertDocId ( const SqlStmt_t & tStmt, int iRow )
+{
+	// find 'id' in schema
+	ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
+	{
+		if ( tStmt.m_dInsertSchema[i]=="id" )
+		{
+			const auto & tVal = tStmt.m_dInsertValues[i + iRow * tStmt.m_iSchemaSz];
+			if ( tVal.m_iType==SqlInsert_t::CONST_INT )
+				return tVal.GetValueInt();
+			return 0;
+		}
+	}
+
+	// no explicit schema - first column is id by convention
+	if ( tStmt.m_dInsertSchema.IsEmpty() && tStmt.m_iSchemaSz>0 )
+	{
+		const auto & tVal = tStmt.m_dInsertValues[iRow * tStmt.m_iSchemaSz];
+		if ( tVal.m_iType==SqlInsert_t::CONST_INT )
+			return tVal.GetValueInt();
+	}
+
+	return 0;
+}
+
+/// Handle INSERT/REPLACE into a distributed table by routing each row to the correct local shard.
+/// We temporarily swap m_sIndex to the shard name, process, then restore.
+static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, const DistributedIndex_t * pDist )
+{
+	if ( !pDist->m_dAgents.IsEmpty() )
+	{
+		tOut.Error ( "INSERT into distributed table '%s' with remote agents is not yet supported natively", tStmt.m_sIndex.cstr() );
+		return;
+	}
+
+	const auto & dLocals = pDist->m_dLocal;
+	int iNumShards = dLocals.GetLength();
+	if ( iNumShards<=0 )
+	{
+		tOut.Error ( "distributed table '%s' has no local shards", tStmt.m_sIndex.cstr() );
+		return;
+	}
+
+	int iRowCount = tStmt.m_iRowsAffected;
+	int iColCount = tStmt.m_iSchemaSz;
+	if ( iRowCount<=0 || iColCount<=0 )
+	{
+		tOut.Error ( "no rows to insert" );
+		return;
+	}
+
+	auto * pSession = session::GetClientSession();
+	bool bCommit = ( pSession->m_bAutoCommit && !pSession->m_bInTransaction );
+	CSphString sOrigIndex = tStmt.m_sIndex;
+	CSphString sError;
+
+	// single row fast path - no grouping needed
+	if ( iRowCount==1 )
+	{
+		int64_t iDocId = GetInsertDocId ( tStmt, 0 );
+		if ( iDocId==0 )
+			iDocId = UidShort();
+
+		int iShard = JumpConsistentHash ( sphFNV64 ( (uint64_t)iDocId ), iNumShards );
+		const CSphString & sShardName = dLocals[iShard];
+
+		auto pServed = GetServed ( sShardName );
+		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		{
+			tOut.Error ( "shard table '%s' is not mutable", sShardName.cstr() );
+			return;
+		}
+
+		Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+		if ( !tWriting.CanWrite() )
+		{
+			tOut.Error ( "shard table '%s' is locked", sShardName.cstr() );
+			return;
+		}
+
+		// swap index name to shard, process, restore
+		tStmt.m_sIndex = sShardName;
+		GlobalCrashQueryGetRef().m_dIndex = FromStr ( sShardName );
+
+		bool bOk = AddDocument ( tStmt, pServed, tOut );
+		if ( bOk )
+			CommitAcc ( tStmt, pServed, tOut );
+
+		tStmt.m_sIndex = sOrigIndex;
+		return;
+	}
+
+	// multi-row: group rows by target shard
+	CSphVector<CSphVector<int>> dShardRows ( iNumShards );
+	for ( auto & v : dShardRows )
+		v.Reserve ( iRowCount / iNumShards + 1 );
+
+	for ( int iRow = 0; iRow < iRowCount; iRow++ )
+	{
+		int64_t iDocId = GetInsertDocId ( tStmt, iRow );
+		if ( iDocId==0 )
+			iDocId = UidShort();
+
+		int iShard = JumpConsistentHash ( sphFNV64 ( (uint64_t)iDocId ), iNumShards );
+		dShardRows[iShard].Add ( iRow );
+	}
+
+	// for multi-row we need to build per-shard value slices
+	// save original values, then swap in shard-specific subset for each shard
+	CSphVector<SqlInsert_t> dOrigValues;
+	dOrigValues.SwapData ( tStmt.m_dInsertValues );
+	int iOrigRows = tStmt.m_iRowsAffected;
+
+	int iTotalAffected = 0;
+
+	for ( int iShard = 0; iShard < iNumShards; iShard++ )
+	{
+		const auto & dRows = dShardRows[iShard];
+		if ( dRows.IsEmpty() )
+			continue;
+
+		const CSphString & sShardName = dLocals[iShard];
+		auto pServed = GetServed ( sShardName );
+		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		{
+			dOrigValues.SwapData ( tStmt.m_dInsertValues );
+			tStmt.m_iRowsAffected = iOrigRows;
+			tStmt.m_sIndex = sOrigIndex;
+			tOut.Error ( "shard table '%s' is not mutable", sShardName.cstr() );
+			return;
+		}
+
+		Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+		if ( !tWriting.CanWrite() )
+		{
+			dOrigValues.SwapData ( tStmt.m_dInsertValues );
+			tStmt.m_iRowsAffected = iOrigRows;
+			tStmt.m_sIndex = sOrigIndex;
+			tOut.Error ( "shard table '%s' is locked", sShardName.cstr() );
+			return;
+		}
+
+		// build values for this shard
+		tStmt.m_dInsertValues.Resize ( dRows.GetLength() * iColCount );
+		ARRAY_FOREACH ( i, dRows )
+		{
+			int iSrcRow = dRows[i];
+			for ( int iCol = 0; iCol < iColCount; iCol++ )
+				tStmt.m_dInsertValues[i * iColCount + iCol] = dOrigValues[iSrcRow * iColCount + iCol];
+		}
+		tStmt.m_iRowsAffected = dRows.GetLength();
+		tStmt.m_sIndex = sShardName;
+
+		GlobalCrashQueryGetRef().m_dIndex = FromStr ( sShardName );
+
+		if ( !AddDocument ( tStmt, pServed, tOut ) )
+		{
+			dOrigValues.SwapData ( tStmt.m_dInsertValues );
+			tStmt.m_iRowsAffected = iOrigRows;
+			tStmt.m_sIndex = sOrigIndex;
+			return;
+		}
+
+		// commit per shard
+		if ( bCommit )
+		{
+			RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
+			if ( !HandleCmdReplicate ( *pAccum ) )
+			{
+				TlsMsg::MoveError ( sError );
+				RIdx_T<RtIndex_i *> pIndex { pServed };
+				pIndex->RollBack ( pAccum );
+				dOrigValues.SwapData ( tStmt.m_dInsertValues );
+				tStmt.m_iRowsAffected = iOrigRows;
+				tStmt.m_sIndex = sOrigIndex;
+				tOut.Error ( "%s", sError.cstr() );
+				return;
+			}
+		}
+
+		iTotalAffected += tStmt.m_iRowsAffected;
+	}
+
+	// restore original state
+	dOrigValues.SwapData ( tStmt.m_dInsertValues );
+	tStmt.m_iRowsAffected = iOrigRows;
+	tStmt.m_sIndex = sOrigIndex;
+
+	int64_t iLastInsertId = 0;
+	if ( pSession->m_dLastIds.GetLength() )
+		iLastInsertId = pSession->m_dLastIds.Last();
+
+	tOut.Ok ( iTotalAffected, pSession->m_tLastMeta.m_sWarning, iLastInsertId );
+}
+
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -4833,13 +5031,15 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		bool bDistTable = false;
-		if ( !pServed )
+		// check if it's a distributed table - route to shards
+		auto pDist = GetDistr ( tStmt.m_sIndex );
+		if ( pDist )
 		{
-			bDistTable = GetDistr ( tStmt.m_sIndex );
+			HandleDistributedInsert ( tOut, tStmt, pDist );
+			return;
 		}
 
-		if ( pServed || bDistTable )
+		if ( pServed )
 			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());

@@ -948,71 +948,35 @@ private:
 };
 
 
-/// Reply parser for _bulk responses from remote nodes
+/// Reply parser for _bulk responses from remote nodes via SEARCHD_COMMAND_JSON
 class BulkReplyParser_c : public ReplyParser_i
 {
 public:
-	BulkReplyParser_c ( CSphVector<int> & dResults, CSphString & sError )
-		: m_dResults ( dResults )
-		, m_sError ( sError )
+	explicit BulkReplyParser_c ( int & iInserted )
+		: m_iInserted ( iInserted )
 	{}
 
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
-		CSphString sEndpoint = tReq.GetString();
+		// SEARCHD_COMMAND_JSON reply: endpoint string + result blob
+		tReq.GetString(); // endpoint
 		DWORD uLength = tReq.GetDword();
 		CSphFixedVector<BYTE> dResult ( uLength + 1 );
 		tReq.GetBytes ( dResult.Begin(), (int)uLength );
 		dResult[uLength] = '\0';
 
-		// parse JSON response
-		JsonObj_c tJson ( (const char *)dResult.Begin() );
-		if ( !tJson.IsValid() )
-		{
-			m_sError = "failed to parse bulk response from remote";
+		// check for "errors":true in the response
+		// simple string search is sufficient — no need for full JSON parse
+		const char * sBody = (const char *)dResult.Begin();
+		if ( strstr ( sBody, "\"errors\":true" ) )
 			return false;
-		}
 
-		// check for errors flag
-		bool bHasErrors = tJson.GetBool ( "errors", false );
-		if ( bHasErrors )
-		{
-			// extract first error message if available
-			auto tItems = tJson.GetArray ( "items" );
-			if ( tItems.first )
-			{
-				for ( int i = 0; i < tItems.second; i++ )
-				{
-					JsonObj_c tItem ( tItems.first, i );
-					if ( !tItem.IsValid() )
-						continue;
-					JsonObj_c tAction = tItem.GetObj ( "index" );
-					if ( !tAction.IsValid() )
-						tAction = tItem.GetObj ( "create" );
-					if ( !tAction.IsValid() )
-						continue;
-					int iStatus = tAction.GetInt ( "status", 200 );
-					m_dResults.Add ( iStatus );
-				}
-			}
-			m_sError = "remote bulk insert had errors";
-			return false;
-		}
-
-		// success - mark all as 201
-		auto tItems = tJson.GetArray ( "items" );
-		if ( tItems.first )
-		{
-			for ( int i = 0; i < tItems.second; i++ )
-				m_dResults.Add ( 201 );
-		}
-
+		m_iInserted = 1; // success
 		return true;
 	}
 
 private:
-	CSphVector<int> & m_dResults;
-	CSphString & m_sError;
+	int & m_iInserted;
 };
 
 class JsonReplyParser_c : public ReplyParser_i
@@ -3574,7 +3538,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 							sPayload.Appendf ( R"({"%s":{"_index":"%s","_id":"%s"}})", tDoc.m_sAction.cstr(), sIdx.cstr(), sIdBuf );
 							sPayload << "\n";
 							// doc line
-							sPayload.Append ( tDoc.m_tDocLine.first, tDoc.m_tDocLine.second );
+							sPayload << Str_t ( tDoc.m_tDocLine.first, tDoc.m_tDocLine.second );
 							sPayload << "\n";
 						}
 
@@ -3588,24 +3552,22 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 
 						// send _bulk request
 						CSphString sBulkPayload ( sPayload.cstr() );
-						CSphVector<int> dResults;
-						CSphString sRemoteError;
+						int iInserted = 0;
 						auto pRequestBuilder = std::make_unique<BulkRequestBuilder_c> ( sBulkPayload, sShardName );
-						auto pReplyParser = std::make_unique<BulkReplyParser_c> ( dResults, sRemoteError );
+						auto pReplyParser = std::make_unique<BulkReplyParser_c> ( iInserted );
 						PerformRemoteTasks ( dAgentConns, pRequestBuilder.get(), pReplyParser.get() );
 
-						// process results
-						int iResultIdx = 0;
-						for ( int iDocIdx : dDocIdxs )
+						if ( iInserted )
 						{
-							BulkDoc_t & tDoc = dDocs[iDocIdx];
-							if ( iResultIdx < dResults.GetLength() && dResults[iResultIdx] >= 200 && dResults[iResultIdx] < 300 )
-								AddEsReply ( tDoc, tItems );
-							else
-							{
-								AddEsError ( -1, sRemoteError.IsEmpty() ? CSphString("remote insert failed") : sRemoteError, "mapper_parsing_exception", tDoc, tItems );
-								bOk = false;\t						}
-							iResultIdx++;
+							for ( int iDocIdx : dDocIdxs )
+								AddEsReply ( dDocs[iDocIdx], tItems );
+						}
+						else
+						{
+							bOk = false;
+							CSphString sErr ( "remote bulk insert failed" );
+							for ( int iDocIdx : dDocIdxs )
+								AddEsError ( -1, sErr, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
 						}
 					}
 			}

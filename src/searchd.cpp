@@ -63,6 +63,7 @@
 #include "taskpreread.h"
 #include "searchdbuddy.h"
 #include "std/jchash.h"
+#include "std/crc32.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
 
@@ -4817,6 +4818,15 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 
+/// Compute shard index for a document ID, matching Buddy's jchash(crc32(string(id)), numShards)
+static int GetShardForDocId ( int64_t iDocId, int iNumShards )
+{
+	char sBuf[32];
+	snprintf ( sBuf, sizeof(sBuf), INT64_FMT, iDocId );
+	uint64_t uKey = sphCRC32 ( sBuf );
+	return JumpConsistentHash ( uKey, iNumShards );
+}
+
 /// Get doc ID from an INSERT statement for a specific row.
 /// If no explicit ID, generate one via UidShort() and write it into the values
 /// so that AddDocument() uses the same ID we route by.
@@ -4980,7 +4990,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		if ( iDocId==0 )
 			iDocId = UidShort();
 
-		int iShard = JumpConsistentHash ( sphFNV64 ( (uint64_t)iDocId ), iNumShards );
+		int iShard = GetShardForDocId ( iDocId, iNumShards );
 		dShardRows[iShard].Add ( iRow );
 	}
 

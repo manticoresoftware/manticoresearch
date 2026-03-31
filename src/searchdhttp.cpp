@@ -922,6 +922,99 @@ private:
 };
 
 
+
+//////////////////////////////////////////////////////////////////////////
+/// Request builder for sending _bulk to remote nodes via SEARCHD_COMMAND_JSON
+class BulkRequestBuilder_c : public RequestBuilder_i
+{
+public:
+	BulkRequestBuilder_c ( const CSphString & sPayload, const CSphString & sTable )
+		: m_sPayload ( sPayload )
+		, m_sTable ( sTable )
+	{}
+
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
+	{
+		auto tWr = APIHeader ( tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON );
+		tOut.SendString ( "/_bulk" ); // endpoint
+		tOut.SendString ( m_sPayload.cstr() ); // NDJSON body
+		tOut.SendString ( "" ); // raw_query (empty)
+		tOut.SendString ( "" ); // full_url (empty)
+	}
+
+private:
+	CSphString m_sPayload;
+	CSphString m_sTable;
+};
+
+
+/// Reply parser for _bulk responses from remote nodes
+class BulkReplyParser_c : public ReplyParser_i
+{
+public:
+	BulkReplyParser_c ( CSphVector<int> & dResults, CSphString & sError )
+		: m_dResults ( dResults )
+		, m_sError ( sError )
+	{}
+
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
+	{
+		CSphString sEndpoint = tReq.GetString();
+		DWORD uLength = tReq.GetDword();
+		CSphFixedVector<BYTE> dResult ( uLength + 1 );
+		tReq.GetBytes ( dResult.Begin(), (int)uLength );
+		dResult[uLength] = '\0';
+
+		// parse JSON response
+		JsonObj_c tJson ( (const char *)dResult.Begin() );
+		if ( !tJson.IsValid() )
+		{
+			m_sError = "failed to parse bulk response from remote";
+			return false;
+		}
+
+		// check for errors flag
+		bool bHasErrors = tJson.GetBool ( "errors", false );
+		if ( bHasErrors )
+		{
+			// extract first error message if available
+			auto tItems = tJson.GetArray ( "items" );
+			if ( tItems.first )
+			{
+				for ( int i = 0; i < tItems.second; i++ )
+				{
+					JsonObj_c tItem ( tItems.first, i );
+					if ( !tItem.IsValid() )
+						continue;
+					JsonObj_c tAction = tItem.GetObj ( "index" );
+					if ( !tAction.IsValid() )
+						tAction = tItem.GetObj ( "create" );
+					if ( !tAction.IsValid() )
+						continue;
+					int iStatus = tAction.GetInt ( "status", 200 );
+					m_dResults.Add ( iStatus );
+				}
+			}
+			m_sError = "remote bulk insert had errors";
+			return false;
+		}
+
+		// success - mark all as 201
+		auto tItems = tJson.GetArray ( "items" );
+		if ( tItems.first )
+		{
+			for ( int i = 0; i < tItems.second; i++ )
+				m_dResults.Add ( 201 );
+		}
+
+		return true;
+	}
+
+private:
+	CSphVector<int> & m_dResults;
+	CSphString & m_sError;
+};
+
 class JsonReplyParser_c : public ReplyParser_i
 {
 public:
@@ -3368,6 +3461,157 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 	{
 		const CSphString & sIdx = dDocs[tTnx.m_iFrom].m_sIndex;
 		assert ( !sIdx.IsEmpty() );
+
+		// for distributed tables with INSERT/REPLACE, split docs by shard and process each shard
+		// exactly like a local table: ProcessBegin → add docs → ProcessCommitRollback
+		const CSphString & sAction = dDocs[tTnx.m_iFrom].m_sAction;
+		auto pDist = GetDistr ( sIdx );
+		if ( pDist && ( sAction=="index" || sAction=="create" ) )
+		{
+			const auto & dLocals = pDist->m_dLocal;
+			int iNumLocals = dLocals.GetLength();
+			int iNumAgents = pDist->m_dAgents.GetLength();
+			int iNumShards = iNumLocals + iNumAgents;
+
+			// group docs by shard
+			CSphVector<CSphVector<int>> dShardDocs ( iNumShards );
+			for ( int i = 0; i < tTnx.m_iCount; i++ )
+			{
+				int iDoc = tTnx.m_iFrom + i;
+				int64_t iDocId = (int64_t)dDocs[iDoc].m_tDocid;
+				if ( iDocId==0 )
+				{
+					iDocId = UidShort();
+					dDocs[iDoc].m_tDocid = (DocID_t)iDocId;
+				}
+				int iShard = GetShardForDocId ( iDocId, iNumShards );
+				dShardDocs[iShard].Add ( iDoc );
+			}
+
+			// process each shard exactly like a local table
+			for ( int iShard = 0; iShard < iNumShards; iShard++ )
+			{
+				auto & dDocIdxs = dShardDocs[iShard];
+				if ( dDocIdxs.IsEmpty() )
+					continue;
+
+				// resolve shard name
+				CSphString sShardName;
+				if ( iShard < iNumLocals )
+					sShardName = dLocals[iShard];
+				else
+					sShardName = (*pDist->m_dAgents[iShard - iNumLocals])[0].m_sIndexes;
+
+				// check if shard is available locally
+				bool bLocal = !!GetServed ( sShardName );
+
+				if ( bLocal )
+				{
+					// local shard: same flow as local table — begin, add docs, commit
+					ProcessBegin ( sShardName );
+
+					dErrors.Resize ( 0 );
+					for ( int iDocIdx : dDocIdxs )
+					{
+						BulkDoc_t & tDoc = dDocs[iDocIdx];
+						if ( IsEmpty ( tDoc.m_tDocLine ) )
+						{
+							dErrors.Add ( { iDocIdx, "failed to parse, document is empty" } );
+							continue;
+						}
+
+						SqlStmt_t tStmt;
+						tStmt.m_tQuery.m_sIndexes = sShardName;
+						tStmt.m_sIndex = sShardName;
+						tStmt.m_sStmt = tDoc.m_tDocLine.first;
+
+						bool bParsed = ParseSourceLine ( tDoc.m_tDocLine.first, tDoc.m_sAction, tStmt, tDoc.m_tDocid, m_sError );
+						if ( !bParsed )
+						{
+							dErrors.Add ( { iDocIdx, m_sError } );
+							continue;
+						}
+
+						SetQueryOptions ( m_hOpts, tStmt );
+
+						JsonObj_c tResult = JsonNull;
+						ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError, ResultSetFormat_e::ES );
+					}
+
+					JsonObj_c tResult;
+					DocID_t tDocId = 0;
+					bool bCommited = ProcessCommitRollback ( FromStr ( sShardName ), tDocId, tResult, m_sError );
+					if ( bCommited )
+					{
+						for ( int iDocIdx : dDocIdxs )
+							AddEsReply ( dDocs[iDocIdx], tItems );
+					}
+					else
+					{
+						bOk = false;
+						for ( int iDocIdx : dDocIdxs )
+							AddEsError ( -1, m_sError, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
+					}
+				}
+					else
+					{
+						// remote shard: send _bulk request to remote node
+						// build NDJSON payload for all docs in this shard
+						StringBuilder_c sPayload;
+						for ( int iDocIdx : dDocIdxs )
+						{
+							BulkDoc_t & tDoc = dDocs[iDocIdx];
+							if ( IsEmpty ( tDoc.m_tDocLine ) )
+							{
+								AddEsError ( -1, CSphString("document is empty"), "mapper_parsing_exception", tDoc, tItems );
+								bOk = false;
+								continue;
+							}
+
+							// meta line: {"index":{"_index":"table","_id":"id"}}
+							char sIdBuf[32];
+							snprintf ( sIdBuf, sizeof(sIdBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
+							sPayload.Appendf ( R"({"%s":{"_index":"%s","_id":"%s"}})", tDoc.m_sAction.cstr(), sIdx.cstr(), sIdBuf );
+							sPayload << "\n";
+							// doc line
+							sPayload.Append ( tDoc.m_tDocLine.first, tDoc.m_tDocLine.second );
+							sPayload << "\n";
+						}
+
+						// setup agent connection
+						VecRefPtrsAgentConn_t dAgentConns;
+						auto * pAgentConn = new AgentConn_t;
+						pAgentConn->m_tDesc.CloneFrom ( (*pDist->m_dAgents[iShard - iNumLocals])[0] );
+						pAgentConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+						pAgentConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+						dAgentConns.Add ( pAgentConn );
+
+						// send _bulk request
+						CSphString sBulkPayload ( sPayload.cstr() );
+						CSphVector<int> dResults;
+						CSphString sRemoteError;
+						auto pRequestBuilder = std::make_unique<BulkRequestBuilder_c> ( sBulkPayload, sShardName );
+						auto pReplyParser = std::make_unique<BulkReplyParser_c> ( dResults, sRemoteError );
+						PerformRemoteTasks ( dAgentConns, pRequestBuilder.get(), pReplyParser.get() );
+
+						// process results
+						int iResultIdx = 0;
+						for ( int iDocIdx : dDocIdxs )
+						{
+							BulkDoc_t & tDoc = dDocs[iDocIdx];
+							if ( iResultIdx < dResults.GetLength() && dResults[iResultIdx] >= 200 && dResults[iResultIdx] < 300 )
+								AddEsReply ( tDoc, tItems );
+							else
+							{
+								AddEsError ( -1, sRemoteError.IsEmpty() ? CSphString("remote insert failed") : sRemoteError, "mapper_parsing_exception", tDoc, tItems );
+								bOk = false;\t						}
+							iResultIdx++;
+						}
+					}
+			}
+			continue;
+		}
+
 		ProcessBegin ( sIdx );
 
 		bool bUpdate = false;

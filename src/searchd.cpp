@@ -7883,40 +7883,52 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 			}
 
-			// also check agent shards for local replicas (all-agents distributed tables)
-			for ( const auto & pMultiAgent : dDistributed[iIdx]->m_dAgents )
+			// also check agent shards for local replicas (all-agents distributed tables only)
+			if ( dLocal.IsEmpty() )
 			{
-				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
-				auto pServed = GetServed ( sAgentShard );
-				if ( !pServed )
-					continue; // truly remote, handled below
+				for ( const auto & pMultiAgent : dDistributed[iIdx]->m_dAgents )
+				{
+					const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+					auto pServed = GetServed ( sAgentShard );
+					if ( !pServed )
+						continue;
 
-				int64_t tmStartIdx = sphMicroTimer();
-				int iUpdatedIdx = 0;
-				DoExtendedUpdate ( tStmt, sAgentShard.cstr(), sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
-				iUpdated += iUpdatedIdx;
-				iUpdatedReq += iUpdatedIdx;
-				pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
+					int64_t tmStartIdx = sphMicroTimer();
+					int iUpdatedIdx = 0;
+					DoExtendedUpdate ( tStmt, sAgentShard.cstr(), sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
+					iUpdated += iUpdatedIdx;
+					iUpdatedReq += iUpdatedIdx;
+					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
+				}
 			}
 		}
 
-		// update remote agents (only truly remote ones — skip if local replica was already processed)
+		// update remote agents
 		if ( dDistributed[iIdx] && !dDistributed[iIdx]->m_dAgents.IsEmpty() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
+			const bool bAllAgents = pDist->m_dLocal.IsEmpty();
 
 			VecRefPtrsAgentConn_t dAgents;
-			for ( const auto & pMultiAgent : pDist->m_dAgents )
+			if ( bAllAgents )
 			{
-				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
-				if ( GetServed ( sAgentShard ) )
-					continue; // local replica already handled above
+				// skip agents that have local replicas (already handled above)
+				for ( const auto & pMultiAgent : pDist->m_dAgents )
+				{
+					const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+					if ( g_pLocalIndexes->Contains ( sAgentShard ) )
+						continue;
 
-				auto * pAgent = new AgentConn_t;
-				pAgent->m_tDesc.CloneFrom ( (*pMultiAgent)[0] );
-				pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
-				pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
-				dAgents.Add ( pAgent );
+					auto * pAgent = new AgentConn_t;
+					pAgent->m_tDesc.CloneFrom ( (*pMultiAgent)[0] );
+					pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+					pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+					dAgents.Add ( pAgent );
+				}
+			}
+			else
+			{
+				pDist->GetAllHosts ( dAgents );
 			}
 
 			if ( !dAgents.IsEmpty() )
@@ -8708,34 +8720,45 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				}
 			}
 
-			// also check agent shards for local replicas (all-agents distributed tables)
-			for ( const auto & pMultiAgent : dDistributed[iIdx]->m_dAgents )
+			// also check agent shards for local replicas (all-agents distributed tables only)
+			if ( dDistributed[iIdx]->m_dLocal.IsEmpty() )
 			{
-				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
-				if ( g_pLocalIndexes->Contains ( sAgentShard ) )
+				for ( const auto & pMultiAgent : dDistributed[iIdx]->m_dAgents )
 				{
-					iAffected += LocalIndexDoDeleteDocuments ( sAgentShard, sName.cstr(), tStmt, dErrors, bCommit, tAcc );
+					const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+					if ( g_pLocalIndexes->Contains ( sAgentShard ) )
+					{
+						iAffected += LocalIndexDoDeleteDocuments ( sAgentShard, sName.cstr(), tStmt, dErrors, bCommit, tAcc );
+					}
 				}
 			}
 		}
 
-		// delete for remote agents (only truly remote ones)
+		// delete for remote agents
 		if ( !bStoreVar && dDistributed[iIdx] && !dDistributed[iIdx]->m_dAgents.IsEmpty() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
+			const bool bAllAgents = pDist->m_dLocal.IsEmpty();
+
 			VecRefPtrsAgentConn_t dAgents;
-
-			for ( const auto & pMultiAgent : pDist->m_dAgents )
+			if ( bAllAgents )
 			{
-				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
-				if ( g_pLocalIndexes->Contains ( sAgentShard ) )
-					continue; // local replica already handled above
+				for ( const auto & pMultiAgent : pDist->m_dAgents )
+				{
+					const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+					if ( g_pLocalIndexes->Contains ( sAgentShard ) )
+						continue;
 
-				auto * pAgent = new AgentConn_t;
-				pAgent->m_tDesc.CloneFrom ( (*pMultiAgent)[0] );
-				pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
-				pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
-				dAgents.Add ( pAgent );
+					auto * pAgent = new AgentConn_t;
+					pAgent->m_tDesc.CloneFrom ( (*pMultiAgent)[0] );
+					pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+					pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+					dAgents.Add ( pAgent );
+				}
+			}
+			else
+			{
+				pDist->GetAllHosts ( dAgents );
 			}
 
 			if ( !dAgents.IsEmpty() )

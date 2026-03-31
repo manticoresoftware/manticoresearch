@@ -77,6 +77,8 @@
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
+%token	TOK_MAD
+%token	TOK_MEDIAN_ABSOLUTE_DEVIATION
 %token	TOK_HINT_SECONDARY
 %token	TOK_HINT_NO_SECONDARY
 %token	TOK_HINT_DOCID
@@ -100,6 +102,7 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_JOIN
+%token	TOK_HYBRID_MATCH
 %token	TOK_KILL
 %token	TOK_KNN
 %token	TOK_LEFT
@@ -124,6 +127,8 @@
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
 %token	TOK_PLAN
+%token	TOK_PERCENTILES
+%token	TOK_PERCENTILE_RANKS
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
 %token	TOK_QUARTER
@@ -269,6 +274,7 @@ reserved_tokens_without_option:
 	| TOK_INT | TOK_INTEGER | TOK_INTO
 	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
 	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
+	| TOK_PERCENTILES | TOK_PERCENTILE_RANKS
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
 	| TOK_REMAP | TOK_REPLACE
 	| TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
@@ -276,7 +282,7 @@ reserved_tokens_without_option:
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
-	| TOK_INTERVAL | TOK_REGEX
+	| TOK_INTERVAL | TOK_REGEX | TOK_MEDIAN_ABSOLUTE_DEVIATION | TOK_MAD
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
 	| TOK_LOCKS | TOK_SCROLL
 	;
@@ -646,6 +652,14 @@ select_expr:
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
 	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
+	| TOK_PERCENTILES '(' expr ')'		{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_PERCENTILES '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
+	| TOK_PERCENTILE_RANKS '(' expr ')'	{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_PERCENTILE_RANKS '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
+	| TOK_MEDIAN_ABSOLUTE_DEVIATION '(' expr ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_MAD, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_MEDIAN_ABSOLUTE_DEVIATION '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_MAD, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
+	| TOK_MAD '(' expr ')'				{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_MAD, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_MAD '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_MAD, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
@@ -666,18 +680,25 @@ where_clause:
 	;
 
 where_expr:
-	where_item
+	where_items
 	| filter_expr
-	| where_item TOK_AND filter_expr
-	| where_item TOK_AND where_item
-	| where_item TOK_AND filter_expr TOK_AND where_item
-	| where_item TOK_AND where_item TOK_AND filter_expr
-	| filter_expr TOK_AND where_item TOK_AND where_item
-    | filter_expr TOK_AND where_item
-	| filter_expr TOK_AND where_item TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
+	| where_items TOK_AND filter_expr
+	| filter_expr TOK_AND where_items
+	| filter_expr TOK_AND where_items TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
+	| where_items TOK_AND filter_expr TOK_AND where_items
+	;
+
+where_items:
+	where_item
+	| where_items TOK_AND where_item
 	;
 
 where_item:
+	where_item_core
+	| where_item_core TOK_AS identcol		{ pParser->AliasLastWhereItem($3); }
+	;
+
+where_item_core:
 	TOK_MATCH '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->SetMatch($3) )
@@ -699,6 +720,7 @@ where_item:
 				YYERROR;
 		}
 	| knn_item
+	| hybrid_match_item
 	;
 
 knn_item:
@@ -707,9 +729,19 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, nullptr, false ) )
 				YYERROR;
 		}
+	| TOK_KNN '(' ident ',' '(' const_list ')' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $6, nullptr, false ) )
+				YYERROR;
+		}
 	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->SetKNN ( $3, $5, $7, nullptr, true ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, nullptr, true ) )
 				YYERROR;
 		}
 	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
@@ -717,9 +749,42 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, &( pParser->GetNamedVec ( $12.GetValueInt() ) ), false ) )
 				YYERROR;
 		}
+	| TOK_KNN '(' ident ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $6, &( pParser->GetNamedVec ( $10.GetValueInt() ) ), false ) )
+				YYERROR;
+		}
 	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
 		{
 			if ( !pParser->SetKNN ( $3, $5, $7, &( pParser->GetNamedVec ( $10.GetValueInt() ) ), true ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, &( pParser->GetNamedVec ( $8.GetValueInt() ) ), true ) )
+				YYERROR;
+		}
+	;
+
+hybrid_match_item:
+	TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ',' ident ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, $5, nullptr ) )
+				YYERROR;
+		}
+	| TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ',' ident ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, $5, &( pParser->GetNamedVec ( $8.GetValueInt() ) ) ) )
+				YYERROR;
+		}
+	| TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, nullptr ) )
+				YYERROR;
+		}
+	| TOK_HYBRID_MATCH '(' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetHybridMatch ( $3, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) )
 				YYERROR;
 		}
 	;
@@ -1088,6 +1153,7 @@ expr_ident:
 	| TOK_BIGINT '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_FACET '(' ')'
 	| ident TOK_SUBKEY '(' ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_IDENT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 mva_aggr:
@@ -1357,6 +1423,13 @@ named_const:
 		{
 			$$ = $1;
 			$$.SetValueFloat ( $3.GetValueFloat() );
+		}
+	| identcol '=' TOK_QUOTED_STRING
+		{
+			$$ = $1;
+			$$.m_iType = (int)VariantType_e::STRING;
+			$$.m_iValues = $3.m_iStart;
+			$$.m_iParsedOp = $3.m_iEnd;
 		}
 	;
 

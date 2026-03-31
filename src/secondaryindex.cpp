@@ -1273,11 +1273,19 @@ bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 }
 
 
-void SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+bool SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
 {
+	bool bUpdated = false;
 	for ( auto & i : m_dIndexes )
+	{
 		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+		{
 			i.m_pIndex->ColumnUpdated ( sAttr.cstr() );
+			bUpdated = true;
+		}
+	}
+
+	return bUpdated;
 }
 
 
@@ -1364,6 +1372,11 @@ void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo 
 		i.m_pIndex->GetAttrInfo(dInfo);
 }
 
+void SIContainer_c::ClearCache()
+{
+	for ( auto & i : m_dIndexes )
+		i.m_pIndex->ClearCache();
+}
 
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const
 {

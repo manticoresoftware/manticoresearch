@@ -308,13 +308,13 @@ insert_res = index_api.insert(insert_req).await;
 
 > 注意：自动模式需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装Buddy。
 
-Manticore 具有自动表创建机制，当插入查询中指定的表尚未存在时，该机制会自动激活。此机制默认启用。要禁用它，请在Manticore配置文件的[Searchd](../../Server_settings/Searchd.md#auto_schema)部分中设置`auto_schema = 0`。
+Manticore具有自动表创建机制，当插入或替换查询中指定的表尚不存在时，该机制会激活。此机制默认启用。要禁用它，请在Manticore配置文件的[Searchd](../../Server_settings/Searchd.md#auto_schema)部分中设置`auto_schema = 0`。
 
 <!-- example auto-schema -->
 
 默认情况下，`VALUES` 子句中的所有文本值被视为`text`类型，除非它们表示有效的电子邮件地址，这些地址将被视为`string`类型。
 
-如果您尝试插入具有相同字段但不兼容值类型的多行，则自动表创建将被取消，并返回错误消息。但是，如果不同的值类型是兼容的，则结果字段类型将是能够容纳所有值的类型。可能发生的自动数据类型转换包括：
+如果您尝试插入/替换具有相同字段的不同且不兼容值类型的多行，自动表创建将被取消，并返回错误消息。但是，如果不同的值类型兼容，结果字段类型将是能够容纳所有值的类型。可能发生的一些自动数据类型转换包括：
 * mva -> mva64
 * uint -> bigint -> float（这可能会导致一些精度损失）
 * string -> text

@@ -366,6 +366,7 @@ public:
 
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddCount ();
 	void			AliasLastItem ( SqlNode_t * pAlias );
@@ -381,6 +382,10 @@ public:
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
 	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
+	bool			SetHybridMatch ( const SqlNode_t & tText, const SqlNode_t & tAttr, const CSphVector<CSphNamedVariant> * pOpts );
+	bool			SetHybridMatch ( const SqlNode_t & tText, const CSphVector<CSphNamedVariant> * pOpts );
+	void			AliasLastWhereItem ( const SqlNode_t & tAlias );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -447,6 +452,13 @@ public:
 	bool			SetupScroll ( CSphString & sError );
 
 private:
+	enum class LastWhereItem_e : BYTE
+	{
+		NONE,
+		MATCH,
+		KNN
+	};
+
 	bool						m_bMatchClause = false;
 	bool						m_bJoinMatchClause = false;
 	BYTE						m_uSyntaxFlags = 0;
@@ -454,11 +466,15 @@ private:
 	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
 	bool						m_bJoinParseMode = false;
+	LastWhereItem_e				m_eLastWhereItem = LastWhereItem_e::NONE;
+	int							m_iLastWhereItemKnn = -1;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
 	SqlStmt_e		GetSecondaryStmt () const;
+	bool			SetKNN ( const SqlNode_t & tAttr, int iK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
 	void			NegateFilterTree ( int iNode );
+	void			FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept;
 };
 
 using YYSTYPE = SqlNode_t;
@@ -624,6 +640,12 @@ enum class Option_e : BYTE
 	SCROLL,
 	JOIN_BATCH_SIZE,
 	FORCE,
+	FORMAT_OUTPUT_WORDS,
+	EXPAND_BLENDED,
+	FUSION_METHOD,
+	RANK_CONSTANT,
+	WINDOW_SIZE,
+	FUSION_WEIGHTS,
 
 	INVALID_OPTION
 };
@@ -638,7 +660,8 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
+		"fusion_method", "rank_constant", "window_size", "fusion_weights" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -672,7 +695,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
-			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE };
+			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED,
+			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -683,6 +707,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
 
 	static Option_e dSystemOptions[] = { Option_e::FORCE };
+	static Option_e dCreateTableOptions[] = { Option_e::FORCE, Option_e::FORMAT_OUTPUT_WORDS };
 
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
@@ -707,10 +732,13 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 		return CHKOPT( dShowOptions, eOption );
 
 	case STMT_DROP_TABLE:
+	case STMT_DROP_CACHE:
 	case STMT_ALTER_INDEX_SETTINGS:
 	case STMT_DESCRIBE:
-	case STMT_SHOW_CREATE_TABLE:
 		return CHKOPT( dSystemOptions, eOption );
+
+	case STMT_SHOW_CREATE_TABLE:
+		return CHKOPT( dCreateTableOptions, eOption );
 
 	default:
 		return false;
@@ -780,7 +808,8 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::STRICT_, Option_e::COLUMNS, Option_e::RAND_SEED, Option_e::SYNC, Option_e::EXPAND_KEYWORDS,
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
-		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE
+		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE,
+		Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -811,7 +840,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::RETRY_DELAY:					tQuery.m_iRetryDelay = (int)iValue; break;
 	case Option_e::IGNORE_NONEXISTENT_COLUMNS:	tQuery.m_bIgnoreNonexistent = iValue!=0; break;
 	case Option_e::AGENT_QUERY_TIMEOUT:			tQuery.m_iAgentQueryTimeoutMs = (int)iValue; break;
-	case Option_e::MAX_PREDICTED_TIME:			tQuery.m_iMaxPredictedMsec = int ( iValue > INT_MAX ? INT_MAX : iValue ); break;
+	case Option_e::MAX_PREDICTED_TIME:			break;
 	case Option_e::BOOLEAN_SIMPLIFY:			tQuery.m_bSimplify = iValue!=0; break;
 	case Option_e::GLOBAL_IDF:					tQuery.m_bGlobalIDF = iValue!=0; break;
 	case Option_e::LOCAL_DF: 					tQuery.m_bLocalDF = iValue!=0; break;
@@ -819,6 +848,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::STRICT_:						tQuery.m_bStrict = iValue!=0; break;
 	case Option_e::SYNC: 						tQuery.m_bSync = iValue!=0; break;
 	case Option_e::EXPAND_KEYWORDS:				tQuery.m_eExpandKeywords = ( iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED ); break;
+	case Option_e::EXPAND_BLENDED:				tQuery.m_sExpandBlended = ( sValue ); break;
 	case Option_e::THREADS:						tQuery.m_iConcurrency = (int)iValue; break;
 	case Option_e::NOT_ONLY_ALLOWED:			tQuery.m_bNotOnlyAllowed = iValue!=0; break;
 	case Option_e::RAND_SEED:					tQuery.m_iRandSeed = int64_t(DWORD(iValue)); break;
@@ -830,6 +860,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
 	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
 	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
+	case Option_e::RANK_CONSTANT:
+		if ( iValue < 0 )
+			return FAILED ( "rank_constant must be non-negative" );
+		tQuery.m_tHybridSettings.m_iRankConstant = (int)iValue;
+		break;
+	case Option_e::WINDOW_SIZE:
+		if ( iValue < 0 )
+			return FAILED ( "window_size must be non-negative" );
+		tQuery.m_tHybridSettings.m_iWindowSize = (int)iValue;
+		break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -931,6 +971,11 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			return FAILED ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
 		break;
 
+	case Option_e::EXPAND_BLENDED:
+		if ( sVal!="0" )
+			tQuery.m_sExpandBlended = sVal;
+		break;
+
 	case Option_e::STORE: //} else if ( sOpt=="store" )
 		tQuery.m_sStore = sVal;
 		break;
@@ -946,8 +991,18 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 
 	case Option_e::SCROLL:
 		if ( !ParseScroll ( tQuery, sValOrig, sError ) )
-			return FAILED(sError.cstr());		
+			return FAILED(sError.cstr());
 		break;
+
+	case Option_e::FUSION_METHOD:
+	{
+		CSphString sLower = sVal;
+		sLower.ToLower();
+		if ( sLower!="rrf" )
+			return FAILED ( "unknown fusion_method '%s', supported: rrf", sVal.cstr() );
+		tQuery.m_bHybridSearch = true;
+		break;
+	}
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -974,6 +1029,15 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<
 	case Option_e::INDEX_WEIGHTS:
 		for ( const auto & i : dNamed )
 			tQuery.m_dIndexWeights.Add ( { i.m_sKey, i.m_iValue } );
+		break;
+
+	case Option_e::FUSION_WEIGHTS:
+		for ( const auto & i : dNamed )
+		{
+			auto & tW = tQuery.m_tHybridSettings.m_dNamedWeights.Add();
+			tW.m_sName = i.m_sKey;
+			tW.m_fWeight = i.m_fValue;
+		}
 		break;
 
 	default:
@@ -1064,6 +1128,18 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 
 	case Option_e::FORCE:
 		m_pStmt->m_bForce = ( tValue.GetValueInt()==1 );
+		break;
+
+	case Option_e::FORMAT_OUTPUT_WORDS:
+		if ( sVal=="file" )
+			m_pStmt->m_bFormatOutWordsFile = true;
+		else if ( sVal=="list" )
+			m_pStmt->m_bFormatOutWordsFile = false;
+		else
+		{
+			m_pParseError->SetSprintf ( "bad argument '%s' for option '%s', allowed: 'file', 'list'", sVal.cstr(), sOpt.cstr() );
+			return false;
+		}
 		break;
 
 	default: //} else
@@ -1190,13 +1266,288 @@ void SqlParser_c::AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode
 	SetSelect ( pStart, pEnd );
 }
 
+// fixup expressions like 1+`column` - which came from parser as 1+`column - without terminating `
+void SqlParser_c::FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept
+{
+	if ( !pExpr || !m_pLastTokenStart )
+		return;
+
+	if ( (m_pLastTokenStart - m_pBuf) <= pExpr->m_iEnd )
+		return;
+
+	if ( m_pBuf[pExpr->m_iEnd] != '`')
+		return;
+
+	// if we have odd number of backticks - extend expression to include last backtick also
+	auto iBackticks = count_of ( VecTraits_T<const char> { m_pBuf + pExpr->m_iStart, pExpr->m_iEnd-pExpr->m_iStart }, [](const char c) { return c=='`';} );
+	if ( iBackticks & 1 )
+		++pExpr->m_iEnd;
+}
+
+static Aggr_e ToExtendedAggr ( ESphAggrFunc eAggrFunc )
+{
+	switch ( eAggrFunc )
+	{
+	case SPH_AGGR_MIN: return Aggr_e::MIN;
+	case SPH_AGGR_MAX: return Aggr_e::MAX;
+	case SPH_AGGR_SUM: return Aggr_e::SUM;
+	case SPH_AGGR_AVG: return Aggr_e::AVG;
+	case SPH_AGGR_PERCENTILES: return Aggr_e::PERCENTILES;
+	case SPH_AGGR_PERCENTILE_RANKS: return Aggr_e::PERCENTILE_RANKS;
+	case SPH_AGGR_MAD: return Aggr_e::MAD;
+	default: return Aggr_e::NONE;
+	}
+}
+
+static bool ParseBoolOption ( const CSphNamedVariant & tOpt, bool & bValue, CSphString & sError )
+{
+	if ( tOpt.m_eType==VariantType_e::BIGINT )
+	{
+		bValue = ( tOpt.m_iValue!=0 );
+		return true;
+	}
+
+	if ( tOpt.m_eType!=VariantType_e::STRING )
+	{
+		sError.SetSprintf ( "option '%s' should be bool", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	CSphString sVal = tOpt.m_sValue;
+	sVal.ToLower();
+	if ( sVal=="1" || sVal=="true" )
+	{
+		bValue = true;
+		return true;
+	}
+	if ( sVal=="0" || sVal=="false" )
+	{
+		bValue = false;
+		return true;
+	}
+
+	sError.SetSprintf ( "option '%s' should be bool", tOpt.m_sKey.cstr() );
+	return false;
+}
+
+static bool ParseCompressionOption ( const CSphNamedVariant & tOpt, float & fCompression, CSphString & sError )
+{
+	if ( tOpt.m_eType==VariantType_e::BIGINT )
+		fCompression = (float)tOpt.m_iValue;
+	else if ( tOpt.m_eType==VariantType_e::FLOAT )
+		fCompression = tOpt.m_fValue;
+	else
+	{
+		sError.SetSprintf ( "option '%s' should be numeric", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	if ( fCompression<=0.0f )
+	{
+		sError.SetSprintf ( "option '%s' should be positive", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+static bool ParseFloatCsvOption ( const CSphNamedVariant & tOpt, CSphVector<float> & dOut, bool bCheckRange, CSphString & sError )
+{
+	if ( tOpt.m_eType!=VariantType_e::STRING )
+	{
+		sError.SetSprintf ( "option '%s' should be a comma-separated string", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	StrVec_t dVals;
+	sphSplit ( dVals, tOpt.m_sValue.cstr(), "," );
+	dOut.Resize ( 0 );
+	dOut.Reserve ( dVals.GetLength() );
+	for ( auto & sVal : dVals )
+	{
+		sVal.Trim();
+		if ( sVal.IsEmpty() )
+			continue;
+
+		char * pEnd = nullptr;
+		double fVal = strtod ( sVal.cstr(), &pEnd );
+		if ( pEnd==sVal.cstr() || ( pEnd && *pEnd ) )
+		{
+			sError.SetSprintf ( "option '%s' has invalid number '%s'", tOpt.m_sKey.cstr(), sVal.cstr() );
+			return false;
+		}
+
+		if ( bCheckRange && ( fVal<0.0 || fVal>100.0 ) )
+		{
+			sError.SetSprintf ( "option '%s' values should be within [0,100]", tOpt.m_sKey.cstr() );
+			return false;
+		}
+
+		dOut.Add ( (float)fVal );
+	}
+
+	if ( dOut.IsEmpty() )
+	{
+		sError.SetSprintf ( "option '%s' can not be empty", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+static bool ParseDoubleCsvOption ( const CSphNamedVariant & tOpt, CSphVector<double> & dOut, CSphString & sError )
+{
+	if ( tOpt.m_eType!=VariantType_e::STRING )
+	{
+		sError.SetSprintf ( "option '%s' should be a comma-separated string", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	StrVec_t dVals;
+	sphSplit ( dVals, tOpt.m_sValue.cstr(), "," );
+	dOut.Resize ( 0 );
+	dOut.Reserve ( dVals.GetLength() );
+	for ( auto & sVal : dVals )
+	{
+		sVal.Trim();
+		if ( sVal.IsEmpty() )
+			continue;
+
+		char * pEnd = nullptr;
+		double fVal = strtod ( sVal.cstr(), &pEnd );
+		if ( pEnd==sVal.cstr() || ( pEnd && *pEnd ) )
+		{
+			sError.SetSprintf ( "option '%s' has invalid number '%s'", tOpt.m_sKey.cstr(), sVal.cstr() );
+			return false;
+		}
+
+		dOut.Add ( fVal );
+	}
+
+	if ( dOut.IsEmpty() )
+	{
+		sError.SetSprintf ( "option '%s' can not be empty", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+static void ApplyDefaultPercentiles ( CSphVector<float> & dPercents )
+{
+	static const float dDefaults[] = { 1.f, 5.f, 25.f, 50.f, 75.f, 95.f, 99.f };
+	dPercents.Resize ( 0 );
+	dPercents.Reserve ( (int)( sizeof ( dDefaults ) / sizeof ( dDefaults[0] ) ) );
+	for ( float fVal : dDefaults )
+		dPercents.Add ( fVal );
+}
+
 void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	FixupLastBacktick ( pExpr );
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
+	tItem.m_tAggrSettings.m_eAggrFunc = ToExtendedAggr ( eAggrFunc );
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
+}
+
+bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts )
+{
+	AddItem ( pExpr, eAggrFunc, pStart, pEnd );
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Last();
+	AggrSettings_t & tAggr = tItem.m_tAggrSettings;
+
+	if ( eAggrFunc==SPH_AGGR_PERCENTILES )
+	{
+		ApplyDefaultPercentiles ( tAggr.m_tPercentiles.m_dPercents );
+		tItem.m_fTdigestCompression = tAggr.m_tPercentiles.m_fCompression;
+	}
+	else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
+	{
+		tItem.m_fTdigestCompression = tAggr.m_tPercentileRanks.m_fCompression;
+	}
+	else if ( eAggrFunc==SPH_AGGR_MAD )
+	{
+		tItem.m_fTdigestCompression = tAggr.m_tMad.m_fCompression;
+	}
+
+	if ( pOpts )
+	{
+		for ( const auto & tOpt : *pOpts )
+		{
+			if ( tOpt.m_sKey=="compression" )
+			{
+				float fCompression = tItem.m_fTdigestCompression;
+				if ( !ParseCompressionOption ( tOpt, fCompression, m_sError ) )
+					goto failed;
+
+				tItem.m_fTdigestCompression = fCompression;
+				switch ( eAggrFunc )
+				{
+				case SPH_AGGR_PERCENTILES: tAggr.m_tPercentiles.m_fCompression = fCompression; break;
+				case SPH_AGGR_PERCENTILE_RANKS: tAggr.m_tPercentileRanks.m_fCompression = fCompression; break;
+				case SPH_AGGR_MAD: tAggr.m_tMad.m_fCompression = fCompression; break;
+				default: break;
+				}
+				continue;
+			}
+
+			if ( tOpt.m_sKey=="keyed" )
+			{
+				bool bKeyed = false;
+				if ( !ParseBoolOption ( tOpt, bKeyed, m_sError ) )
+					goto failed;
+
+				if ( eAggrFunc==SPH_AGGR_PERCENTILES )
+					tAggr.m_tPercentiles.m_bKeyed = bKeyed;
+				else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
+					tAggr.m_tPercentileRanks.m_bKeyed = bKeyed;
+				else
+				{
+					m_sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
+					goto failed;
+				}
+				continue;
+			}
+
+			if ( tOpt.m_sKey=="values" )
+			{
+				if ( eAggrFunc==SPH_AGGR_PERCENTILES )
+				{
+					if ( !ParseFloatCsvOption ( tOpt, tAggr.m_tPercentiles.m_dPercents, true, m_sError ) )
+						goto failed;
+				}
+				else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
+				{
+					if ( !ParseDoubleCsvOption ( tOpt, tAggr.m_tPercentileRanks.m_dValues, m_sError ) )
+						goto failed;
+				}
+				else
+				{
+					m_sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
+					goto failed;
+				}
+				continue;
+			}
+
+			m_sError.SetSprintf ( "unknown aggregate option '%s'", tOpt.m_sKey.cstr() );
+			goto failed;
+		}
+	}
+
+	if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS && tAggr.m_tPercentileRanks.m_dValues.IsEmpty() )
+	{
+		m_sError = "percentile_ranks requires option values='v1,v2,...'";
+		goto failed;
+	}
+
+	return true;
+
+failed:
+	yyerror ( this, m_sError.cstr() );
+	return false;
 }
 
 bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t * pEnd )
@@ -1336,6 +1687,8 @@ bool SqlParser_c::SetMatch ( const YYSTYPE & tValue )
 	m_bMatchClause = true;
 	m_pQuery->m_sQuery = ToStringUnescape ( tValue );
 	m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
+	m_eLastWhereItem = LastWhereItem_e::MATCH;
+	m_iLastWhereItemKnn = -1;
 	return true;
 }
 
@@ -1364,6 +1717,8 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 		m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
 
 		m_bMatchClause = true;
+		m_eLastWhereItem = LastWhereItem_e::MATCH;
+		m_iLastWhereItemKnn = -1;
 	}
 	else if ( m_pQuery->m_sJoinIdx.Length() && m_pQuery->m_sJoinIdx==sMatchIndex )
 	{
@@ -1377,6 +1732,8 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 		m_pQuery->m_sJoinQuery = ToStringUnescape(tValue);
 
 		m_bJoinMatchClause = true;
+		m_eLastWhereItem = LastWhereItem_e::NONE;
+		m_iLastWhereItemKnn = -1;
 	}
 	else
 	{
@@ -1423,6 +1780,38 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 		tKNN.m_bRescore = !!tOpt.m_iValue;
 		return true;
 	}
+	else if ( sName=="prefilter" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bPrefilter = !!tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="fullscan" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bFullscan = !!tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="early_termination" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_eTerminationPolicy = tOpt.m_iValue ? knn::HNSWTerminationPolicy_e::QUANTILE : knn::HNSWTerminationPolicy_e::NONE;
+		return true;
+	}
+	else if ( sName=="k" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_iK = tOpt.m_iValue;
+		return true;
+	}
 
 	return false;
 }
@@ -1430,15 +1819,31 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 
 bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
 {
-	auto & tKNN = m_pQuery->m_tKnnSettings;
-
-	ToString ( tKNN.m_sAttr, tAttr );
-	tKNN.m_iK = tK.GetValueInt();
-	if ( tKNN.m_iK <= 0 )
+	int iK = tK.GetValueInt();
+	if ( iK <= 0 )
 	{
 		yyerror ( this, "k parameter must be positive" );
 		return false;
 	}
+
+	return SetKNN ( tAttr, iK, tValues, pOpts, bAutoEmb );
+}
+
+
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
+{
+	return SetKNN ( tAttr, -1, tValues, pOpts, bAutoEmb );
+}
+
+
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, int iK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
+{
+	auto & tKNN = m_pQuery->m_dKnnSettings.Add();
+
+	tKNN.m_iK = iK;
+
+	ToString ( tKNN.m_sAttr, tAttr );
+
 	if ( pOpts )
 		for ( auto & i : *pOpts )
 			if ( !ParseKNNOption ( i, tKNN ) )
@@ -1465,8 +1870,70 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 				tKNN.m_dVec.Add( i.m_fValue );
 		}
 	}
-	
+
+	m_eLastWhereItem = LastWhereItem_e::KNN;
+	m_iLastWhereItemKnn = m_pQuery->m_dKnnSettings.GetLength() - 1;
+
 	return true;
+}
+
+
+bool SqlParser_c::SetHybridMatch ( const SqlNode_t & tText, const SqlNode_t & tAttr, const CSphVector<CSphNamedVariant> * pOpts )
+{
+	if ( !SetMatch ( tText ) )
+		return false;
+
+	if ( !SetKNN ( tAttr, tText, pOpts, true ) )
+		return false;
+
+	m_pQuery->m_bHybridSearch = true;
+	return true;
+}
+
+
+bool SqlParser_c::SetHybridMatch ( const SqlNode_t & tText, const CSphVector<CSphNamedVariant> * pOpts )
+{
+	if ( !SetMatch ( tText ) )
+		return false;
+
+	// KNN attr will be resolved later from the index schema (first float_vector with auto-embeddings)
+	auto & tKNN = m_pQuery->m_dKnnSettings.Add();
+	tKNN.m_iK = -1;
+
+	CSphString sEmb;
+	ToString ( sEmb, tText ).Unquote();
+	tKNN.m_sEmbStr = sEmb;
+
+	if ( pOpts )
+		for ( auto & i : *pOpts )
+			if ( !ParseKNNOption ( i, tKNN ) )
+			{
+				CSphString sError;
+				sError.SetSprintf ( "Unable to parse KNN option '%s'", i.m_sKey.cstr() );
+				yyerror ( this, sError.cstr() );
+				return false;
+			}
+
+	m_eLastWhereItem = LastWhereItem_e::KNN;
+	m_iLastWhereItemKnn = m_pQuery->m_dKnnSettings.GetLength() - 1;
+	m_pQuery->m_bHybridSearch = true;
+	return true;
+}
+
+
+void SqlParser_c::AliasLastWhereItem ( const SqlNode_t & tAlias )
+{
+	CSphString sAlias;
+	ToString ( sAlias, tAlias );
+	sAlias.ToLower();
+
+	if ( m_eLastWhereItem==LastWhereItem_e::KNN && m_iLastWhereItemKnn>=0 && m_iLastWhereItemKnn<m_pQuery->m_dKnnSettings.GetLength() )
+		m_pQuery->m_dKnnSettings[m_iLastWhereItemKnn].m_sAlias = sAlias;
+	else if ( m_eLastWhereItem==LastWhereItem_e::MATCH )
+		m_pQuery->m_tHybridSettings.m_sMatchAlias = sAlias;
+
+	m_eLastWhereItem = LastWhereItem_e::NONE;
+	m_iLastWhereItemKnn = -1;
 }
 
 
@@ -1476,9 +1943,22 @@ void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 
 	auto & tAdded = dVec.Add();
 	ToString ( tAdded.m_sKey, tValue ).ToLower();
-	tAdded.m_iValue = tValue.GetValueInt();
-	tAdded.m_fValue = tValue.GetValueFloat();
-	tAdded.m_eType = tValue.m_bFloat ? VariantType_e::FLOAT : VariantType_e::BIGINT;
+
+	if ( tValue.m_iType == (int)VariantType_e::STRING )
+	{
+		// string value positions stored in m_iValues/m_iParsedOp by the grammar
+		SqlNode_t tStrNode;
+		tStrNode.m_iStart = tValue.m_iValues;
+		tStrNode.m_iEnd = tValue.m_iParsedOp;
+		tAdded.m_sValue = ToStringUnescape ( tStrNode );
+		tAdded.m_eType = VariantType_e::STRING;
+	}
+	else
+	{
+		tAdded.m_iValue = tValue.GetValueInt();
+		tAdded.m_fValue = tValue.GetValueFloat();
+		tAdded.m_eType = tValue.m_bFloat ? VariantType_e::FLOAT : VariantType_e::BIGINT;
+	}
 }
 
 
@@ -2138,7 +2618,7 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
 			tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
 			tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
 			tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
-			tStmt.m_tQuery.m_tKnnSettings= tHeadQuery.m_tKnnSettings;
+			tStmt.m_tQuery.m_dKnnSettings= tHeadQuery.m_dKnnSettings;
 			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
 			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
 			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;
@@ -2222,7 +2702,6 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 }
 
 
-
 bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	if ( !IsFilled ( sQuery ) )
@@ -2287,6 +2766,8 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 			tQuery.m_sSelect.SetBinary ( tParser.m_pBuf + tQuery.m_iSQLSelectStart,
 				tQuery.m_iSQLSelectEnd - tQuery.m_iSQLSelectStart );
 		}
+
+		SetupKNNLimit(tQuery);
 
 		// validate tablefuncs
 		// tablefuncs are searchd-level builtins rather than common expression-level functions

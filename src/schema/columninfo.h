@@ -15,6 +15,7 @@
 #include "sphinxstd.h"
 
 #include "sphinxdefs.h"
+#include "aggrexpr.h"
 #include "locator.h"
 #include "sphinxexpr.h"
 #include "knn/knn.h"
@@ -79,6 +80,7 @@ struct CSphColumnInfo
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
 
 	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
+	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs
 
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 

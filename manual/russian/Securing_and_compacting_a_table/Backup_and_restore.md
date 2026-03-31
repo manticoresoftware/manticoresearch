@@ -39,7 +39,7 @@ Manticore Search имеет инструмент командной строки
 
 ### Установка
 
-**Если вы следовали [официальным инструкциям по установке](https://manticoresearch.com/install/), у вас уже все установлено и беспокоиться не о чем.** В противном случае, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) требует PHP 8.1.10 и [определенные модули](https://github.com/manticoresoftware/executor/blob/main/build-linux) или [`manticore-executor`](https://github.com/manticoresoftware/executor), который входит в пакет `manticore-extra`, и вам нужно убедиться, что один из них доступен.
+**Если вы следовали [официальным инструкциям по установке](https://manticoresearch.com/install/), у вас уже должно быть все установлено и не о чем беспокоиться.** В противном случае, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) требует PHP 8.1.10 и [специфические модули](https://github.com/manticoresoftware/executor/blob/main/build-linux) или [`manticore-executor`](https://github.com/manticoresoftware/executor), и вам необходимо убедиться, что один из них доступен.
 
 Обратите внимание, что `manticore-backup` пока недоступен для Windows.
 
@@ -292,7 +292,7 @@ Manticore config
 
 ## Резервное копирование и восстановление с помощью mysqldump
 
-Manticore поддерживает утилиту `mysqldump` из MySQL до версии 9.5 и утилиту `mariadb-dump` из MariaDB до версии 12.1.
+Manticore поддерживает утилиту `mysqldump` из MySQL до версии 9.6 и утилиту `mariadb-dump` из MariaDB до версии 12.2.
 
 <!-- example mysqldump_backup -->
 

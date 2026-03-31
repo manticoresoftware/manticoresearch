@@ -123,7 +123,8 @@ public:
 						break;
 				}
 			}
-			if ( uPreviousStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			const int iRestStack = m_dMockStack.GetLengthBytes() - uPreviousStack;
+			if ( iDelta >= iRestStack )
 				break;
 		}
 

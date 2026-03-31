@@ -5,7 +5,7 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP|FLOAT_VECTOR [KNN options]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
 
@@ -20,18 +20,22 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `bool` - 布尔属性
 * `multi` - 多值整数属性
 * `multi64` - 多值bigint属性
-* `json` - json属性
+* `json` - JSON 属性；使用 `secondary_index='1'` 为 JSON 创建二级索引
 * `string` / `text attribute` / `string attribute` - 字符串属性
 * `text` / `text indexed stored` / `string indexed stored` - 全文索引字段，原始值存储在docstore中
 * `text indexed` / `string indexed` - 全文索引字段，仅索引（原始值不存储在docstore中）
 * `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不将原始值存储在docstore中）
 * `text stored` / `string stored` - 值仅存储在docstore中，不进行全文索引，也不是字符串属性
+* `float_vector` - 向量属性。您可以使用与 [`CREATE TABLE`](Creating_a_table/Data_types.md#Float-vector) 中相同的 KNN 和 auto-embedding 选项
 * 为任何属性（json除外）添加`engine='columnar'`将使其存储在[列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中
 
 #### 重要注意事项：
 * ❗建议在`ALTER`表之前**备份表文件**，以防突然断电或其他类似问题导致数据损坏。
 * 添加列时无法查询表。
-* 新创建的属性值设置为0。
+* 新创建的标量属性默认设置为 `0`。
+* 新增的 `float_vector` 列如果没有 `MODEL_NAME`，则初始化为零向量。
+* 如果添加带有 `MODEL_NAME` 和 `FROM` 的 `float_vector` 列，`ALTER TABLE ... ADD COLUMN` 期间现有行会自动嵌入。
+* 指定 `MODEL_NAME` 时，`FROM` 是必需的。使用 `FROM=''` 从所有 `text` 字段和 `string` 属性中嵌入。
 * `ALTER`不适用于分布式表和无任何属性的表。
 * 不能删除`id`列。
 * 当删除一个既是全文字段又是字符串属性的字段时，第一次`ALTER DROP`删除属性，第二次删除全文字段。
@@ -324,20 +328,62 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## 在RT模式下更新属性API密钥（用于嵌入生成）
+## 重建嵌入
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS column_name
+```
+
+此命令重新生成一个目标 `float_vector` 列的嵌入，该列配置了 `MODEL_NAME` 和 `FROM`。
+
+在需要为现有嵌入列重新生成向量时使用此功能，例如在使用 `ALTER TABLE ... ADD COLUMN` 后稍后添加该列并希望重新处理行，或希望强制为所有行重新生成向量时。
+
+重要行为：
+* 列名是必填项。该命令一次仅重建一个嵌入列。
+* 为该列中的所有行重新生成嵌入，而不仅仅是向量为零的行。
+* 它还会覆盖那些手动插入向量的行，以及使用 `()` 跳过生成并存储零向量的行。
+* 目标列必须是带有嵌入模型配置的索引 `float_vector`。
+* 允许 `FROM=''`，表示“使用所有 `text` 字段和 `string` 属性”。
+
+Manticore 不会持久化该列中当前向量是自动生成、由用户显式提供，还是从 `()` 创建的。如果你运行 `REBUILD EMBEDDINGS`，存储的值将从配置的 `FROM` 源为该列中的每一行重新生成，包括当前值为全零向量的行。
+
+<!-- request Example -->
+```sql
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products REBUILD EMBEDDINGS embedding;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## 在 RT 模式下更新嵌入生成的属性 API 参数
 
 <!-- example api_key -->
 
-当远程模型用于自动嵌入时，可以使用`ALTER`修改API密钥：
+当使用远程模型进行自动嵌入时，可以使用 `ALTER` 修改 API 参数：
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
 ```
+
+**注意事项：**
+- `API_KEY`：在 ALTER 操作期间通过实际 API 请求验证新 API 密钥。
+- `API_URL`：设置为空字符串 (`''`) 以恢复到默认提供方端点。
+- `API_TIMEOUT`：设置为 `'0'` 以使用默认超时时间（10 秒）。必须是非负整数。
 
 <!-- end -->
 
@@ -360,4 +406,3 @@ ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remot
 
 <!-- end -->
 <!-- proofread -->
-

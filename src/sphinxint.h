@@ -35,7 +35,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 67;				///< added jieba
+const DWORD		INDEX_FORMAT_VERSION		= 69;				///< hitless dict layout versioning
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -845,6 +845,16 @@ struct BuildBufferSettings_t
 };
 
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError );
+
+struct MergeTimings_t
+{
+	int64_t m_tmTotal = 0;
+	int64_t m_tmAttrs = 0;
+	int64_t m_tmWords = 0;
+	int64_t m_tmFinalize = 0;
+};
+
+bool			sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings = nullptr );
 
 /// json save/load
 void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema );

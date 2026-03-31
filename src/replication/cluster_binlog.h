@@ -31,6 +31,7 @@ public:
 
 	virtual void OnClusterDelete ( const CSphString & sCluster, const StrVec_t & dIndexes ) = 0;
 	virtual void OnClusterLoad ( ClusterBinlogData_c & tCluster ) = 0;
+	virtual void InvalidateCluster ( const CSphString & sCluster ) = 0;
 
 	virtual void ClusterTnx ( const ClusterBinlogData_c & tCluster ) = 0;
 	virtual void OnClusterSynced ( const ClusterBinlogData_c & tCluster ) = 0;

@@ -1204,7 +1204,7 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 	if ( HasImplicitGrouping ( tQuery ) )
 		return -1;
 
-	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+	if ( tQuery.HasKnn() )
 		return -1;
 
 	bool bDisableCutoff = dSorters.any_of ( []( auto * pSorter ){ return pSorter->IsCutoffDisabled(); } );

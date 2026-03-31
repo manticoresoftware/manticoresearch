@@ -15,7 +15,7 @@ mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (2, 'srthh', 88);
 mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (3, 'srthgrth', 99); FLUSH RAMCHUNK t_ram;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_ram; SHOW CREATE TABLE t_ram;"
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_ram; SHOW CREATE TABLE t_ram OPTION output_words = 'file';"
 ––– output –––
 +-------+------+
 | Table | Type |

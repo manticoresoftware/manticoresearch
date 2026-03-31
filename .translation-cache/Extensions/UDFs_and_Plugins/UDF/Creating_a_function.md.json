@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339815
+    },
+    "__meta": {
+        "source_text": "# CREATE FUNCTION\n\n```sql\nCREATE FUNCTION udf_name\n    RETURNS {INT | INTEGER | BIGINT | FLOAT | STRING}\n    SONAME 'udf_lib_file'\n```\n\n`CREATE FUNCTION` statement installs a user-defined function [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) with the specified name and type from the provided library file. The library file must be located in a trusted [plugin_dir](../../../Server_settings/Common.md#plugin_dir) directory. Upon successful installation, the function becomes available for use in all subsequent queries received by the server. Example:\n\n```sql\nmysql> CREATE FUNCTION avgmva RETURNS INTEGER SONAME 'udfexample.dll';\nQuery OK, 0 rows affected (0.03 sec)\n\nmysql> SELECT *, AVGMVA(tag) AS q from test1;\n+------+--------+---------+-----------+\n| id   | weight | tag     | q         |\n+------+--------+---------+-----------+\n|    1 |      1 | 1,3,5,7 | 4.000000  |\n|    2 |      1 | 2,4,6   | 4.000000  |\n|    3 |      1 | 15      | 15.000000 |\n|    4 |      1 | 7,40    | 23.500000 |\n+------+--------+---------+-----------+\n```\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "aac6487064cf3436836d0f96d27d7b0f"
     }
 }

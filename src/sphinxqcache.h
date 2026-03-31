@@ -85,6 +85,7 @@ QcacheEntry_c *			QcacheFind ( int64_t iIndexId, const CSphQuery & q, const ISph
 std::unique_ptr<ISphRanker>			QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup );
 const QcacheStatus_t &	QcacheGetStatus();
 void					QcacheSetup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );
-void					QcacheDeleteIndex ( int64_t iIndexId );
+void					QcacheClearByIndexId ( int64_t iIndexId );
+void					QcacheClearAll();
 
 #endif // _sphinxqcache_

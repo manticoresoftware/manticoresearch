@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>percentiles and MAD aggregations</name>
+
+<name>blended token expansion during search</name>
 
 <requires>
-	<http/>
+<force-rt/>
 </requires>
 
 <skip_indexer/>
@@ -11,128 +12,175 @@
 <config>
 searchd
 {
-	<Searchd_Settings/>
-	binlog_path =
+	<searchd_settings/>
 }
 
-index agg_td
+index t
 {
 	type			= rt
-	path			= <data_path/>/agg_td
-	rt_field		= data
-	rt_attr_float	= latency
+	path			= <data_path/>/t
+	rt_field		= f
+	blend_chars		= -
+	blend_mode		= trim_all, trim_none
 }
 
-index agg_td2
+index t1
 {
 	type			= rt
-	path			= <data_path/>/agg_td2
-	rt_field		= data
-	rt_attr_float	= latency
+	path			= <data_path/>/t1
+	rt_field		= f
+	blend_chars		= -
+	blend_mode		= trim_all, trim_none
 }
 
-index agg_td_empty
+index t2
 {
 	type			= rt
-	path			= <data_path/>/agg_td_empty
-	rt_field		= data
-	rt_attr_float	= latency
+	path			= <data_path/>/t2
+	rt_field		= f
+	blend_chars		= -
+	blend_mode		= trim_all
 }
 
-index agg_td_unishard
+index dist1
 {
-	type			= rt
-	path			= <data_path/>/agg_td_unishard
-	rt_field		= data
-	rt_attr_float	= latency
-}
-
-index agg_td_skew1
-{
-	type			= rt
-	path			= <data_path/>/agg_td_skew1
-	rt_field		= data
-	rt_attr_float	= latency
-}
-
-index agg_td_skew2
-{
-	type			= rt
-	path			= <data_path/>/agg_td_skew2
-	rt_field		= data
-	rt_attr_float	= latency
-}
-
-index dist_agg
-{
-	type			= distributed
-	local			= agg_td
-	local			= agg_td2
-}
-
-index dist_agg_skew
-{
-	type			= distributed
-	local			= agg_td_skew1
-	local			= agg_td_skew2
-}
-
-index agg_mad
-{
-	type			= rt
-	path			= <data_path/>/agg_mad
-	rt_field		= data
-	rt_attr_float	= latency
+    type = distributed
+    agent = <my_address/>:t
 }
 </config>
 
 <queries>
-	<sphinxql>truncate rtindex agg_td</sphinxql>
-	<sphinxql>insert into agg_td (id,data,latency) values (1,'v',10),(2,'v',20),(3,'v',30),(4,'v',40),(5,'v',50)</sphinxql>
-	<sphinxql>truncate rtindex agg_td2</sphinxql>
-	<sphinxql>insert into agg_td2 (id,data,latency) values (6,'v',60),(7,'v',70),(8,'v',80)</sphinxql>
-	<sphinxql>truncate rtindex agg_td_empty</sphinxql>
-	<sphinxql>truncate rtindex agg_td_unishard</sphinxql>
-	<sphinxql>insert into agg_td_unishard (id,data,latency) values (1001,'v',2),(1002,'v',4),(1003,'v',6),(1004,'v',8),(1005,'v',10),(1006,'v',100),(1007,'v',120),(1008,'v',140),(1009,'v',160),(1010,'v',200),(1011,'v',260),(1012,'v',320),(1013,'v',1000),(1014,'v',2000)</sphinxql>
-	<sphinxql>truncate rtindex agg_td_skew1</sphinxql>
-	<sphinxql>insert into agg_td_skew1 (id,data,latency) values (2001,'v',2),(2002,'v',4),(2003,'v',6),(2004,'v',8),(2005,'v',10),(2006,'v',100),(2007,'v',120)</sphinxql>
-	<sphinxql>truncate rtindex agg_td_skew2</sphinxql>
-	<sphinxql>insert into agg_td_skew2 (id,data,latency) values (2008,'v',140),(2009,'v',160),(2010,'v',200),(2011,'v',260),(2012,'v',320),(2013,'v',1000),(2014,'v',2000)</sphinxql>
+<sphinxql>
+	INSERT INTO t (id, f) VALUES (1, 'well being'), (2, 'well-being'), (3, 'wellbeing');
+    
+	SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC;
+	SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
 
-	<sphinxql>truncate rtindex agg_mad</sphinxql>
-	<sphinxql>insert into agg_mad (id,data,latency) values (1,'v',0),(2,'v',1),(3,'v',2),(4,'v',3),(5,'v',4),(6,'v',5),(7,'v',6),(8,'v',7),(9,'v',8),(10,'v',9),(11,'v',10),(12,'v',11),(13,'v',12),(14,'v',13),(15,'v',14),(16,'v',15),(17,'v',16),(18,'v',17),(19,'v',18),(20,'v',19),(21,'v',20),(22,'v',21),(23,'v',22),(24,'v',23),(25,'v',24),(26,'v',25),(27,'v',26),(28,'v',27),(29,'v',28),(30,'v',29),(31,'v',30),(32,'v',31),(33,'v',32),(34,'v',33),(35,'v',34),(36,'v',35),(37,'v',36),(38,'v',37),(39,'v',38),(40,'v',39),(41,'v',40),(42,'v',41),(43,'v',42),(44,'v',43),(45,'v',44),(46,'v',45),(47,'v',46),(48,'v',47),(49,'v',48),(50,'v',49),(51,'v',50)</sphinxql>
-	<sphinxql>insert into agg_mad (id,data,latency) values (52,'v',51),(53,'v',52),(54,'v',53),(55,'v',54),(56,'v',55),(57,'v',56),(58,'v',57),(59,'v',58),(60,'v',59),(61,'v',60),(62,'v',61),(63,'v',62),(64,'v',63),(65,'v',64),(66,'v',65),(67,'v',66),(68,'v',67),(69,'v',68),(70,'v',69),(71,'v',70),(72,'v',71),(73,'v',72),(74,'v',73),(75,'v',74),(76,'v',75),(77,'v',76),(78,'v',77),(79,'v',78),(80,'v',79),(81,'v',80),(82,'v',81),(83,'v',82),(84,'v',83),(85,'v',84),(86,'v',85),(87,'v',86),(88,'v',87),(89,'v',88),(90,'v',89),(91,'v',90),(92,'v',91),(93,'v',92),(94,'v',93),(95,'v',94),(96,'v',95),(97,'v',96),(98,'v',97),(99,'v',98),(100,'v',99),(101,'v',100)</sphinxql>
+<sphinxql>
+	<!-- two blended token -->
+	INSERT INTO t1 (id, f) VALUES
+	(4, 'well-being test-case'),
+	(5, 'well-being test'),
+	(6, 'well-being case'),
+	(7, 'well test-case'),
+	(8, 'being test-case'),
+	(9, 'wellbeing testcase'),
+	(10, 'well-being'),
+	(11, 'test-case'),
+	(12, 'well being test case');
+</sphinxql>
+
+<sphinxql>
+	<!-- Should create: OR(well-being, well, being, wellbeing) AND OR(test-case, test, case, testcase) -->
+	<!-- Should match documents 4, 5, 6, 7, 8, 9, 12 (both tokens present) -->
+	<!-- Should NOT match documents 10, 11 (only one token present) -->
+	SELECT * FROM t1 WHERE MATCH('well-being test-case') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	INSERT INTO t2 (id, f) VALUES
+	(1, 'well test'),
+	(2, 'well- test-'),
+	(3, 'well-test'),
+	(4, 'well'),
+	(5, 'test'),
+	(6, 'well-'),
+	(7, 'test-'),
+	(8, 'well being'),
+	(9, 'test case'),
+	(10, 'well- case'),
+	(11, 'well test-');
+</sphinxql>
+
+<sphinxql>
+	<!-- Should match documents 1, 2, 3, 11 (both "well" and "test" present) -->
+	<!-- Should NOT match documents 4, 5, 6, 7, 8, 9, 10 (only one token present) -->
+	SELECT * FROM t2 WHERE MATCH('well- test-') ORDER BY id ASC OPTION expand_blended='1';
+	</sphinxql>
+
+<sphinxql>
+	<!-- phrase mode - blended tokens should NOT expand inside phrases -->
+	INSERT INTO t1 (id, f) VALUES
+	(20, 'well-being test-case'),
+	(21, 'well being test case'),
+	(22, 'wellbeing testcase'),
+	(23, 'well-being test'),
+	(24, 'well test-case');
+	
+	SELECT * FROM t1 WHERE MATCH('"well-being test-case"') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	INSERT INTO t1 (id, f) VALUES
+	(30, 'hello well-being world'),
+	(31, 'hello well being world'),
+	(32, 'hello wellbeing world'),
+	(33, 'hello well-being'),
+	(34, 'hello world'),
+	(35, 'well-being world');
+	
+	SELECT * FROM t1 WHERE MATCH('hello well-being world') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- field modifiers with blended tokens -->
+	INSERT INTO t (id, f) VALUES
+	(10, 'well-being'),
+	(11, 'well-being test'),
+	(12, 'test well-being'),
+	(13, 'wellbeing'),
+	(14, 'well being');
+	
+	SELECT * FROM t WHERE MATCH('^well-being$') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- three blended tokens -->
+	INSERT INTO t1 (id, f) VALUES
+	(40, 'well-being test-case multi-part'),
+	(41, 'well being test case multi part'),
+	(42, 'wellbeing testcase multipart'),
+	(43, 'well-being test-case'),
+	(44, 'multi-part'),
+	(45, 'well-being multi-part');
+	
+	SELECT * FROM t1 WHERE MATCH('well-being test-case multi-part') ORDER BY id ASC OPTION expand_blended='1';
+</sphinxql>
+
+<sphinxql>
+	<!-- position consistency -->
+	INSERT INTO t1 (id, f) VALUES
+	(70, 'a well-being b'),
+	(71, 'a well being b'),
+	(72, 'a well-being'),
+	(73, 'well-being b'),
+	(74, 'a b');
+	
+	<!-- First verify matching behavior -->
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC;
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC OPTION expand_blended='1';
+    
+	set profiling=1;
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC;
+	show plan;
+	SELECT * FROM t1 WHERE MATCH('a well-being b') ORDER BY id ASC OPTION expand_blended='1';
+	show plan;
+</sphinxql>
+
+<sphinxql>
+<!-- expand set in options -->
+SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='1';
+show plan;
+SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none';
+show plan;
+
+<!-- expand to distirbuted agent -->
+SELECT * FROM dist1 WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='trim_none';
+
+SELECT * FROM t WHERE MATCH('well-being') ORDER BY id ASC OPTION expand_blended='0';
+show plan;
+</sphinxql>
+
 </queries>
-
-<httpqueries>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[0,100],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_percentiles_array":{"percentiles":{"field":"latency","values":[0,100],"keyed":false}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_percentiles_default_keyed":{"percentiles":{"field":"latency","keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_percentiles_default_array":{"percentiles":{"field":"latency","keyed":false}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_ranks_array":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":false}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td","size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}</query>
-	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_percentiles":{"percentiles":{"field":"latency","values":[0,100],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_ranks":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"dist_agg","size":0,"aggs":{"latency_mad":{"median_absolute_deviation":{"field":"latency"}}}}</query>
-
-	<query endpoint="json/search">{"table":"agg_td_empty","size":0,"aggs":{"latency_percentiles_empty":{"percentiles":{"field":"latency","values":[0,100],"keyed":false}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td_empty","size":0,"aggs":{"latency_ranks_empty":{"percentile_ranks":{"field":"latency","values":[-1,999],"keyed":false}}}}</query>
-
-	<query endpoint="json/search">{"table":"agg_td_unishard","size":0,"aggs":{"latency_percentiles_unishard":{"percentiles":{"field":"latency","values":[5,50,95],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td_unishard","size":0,"aggs":{"latency_ranks_unishard":{"percentile_ranks":{"field":"latency","values":[10,150,1500],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"agg_td_unishard","size":0,"aggs":{"latency_mad_unishard":{"median_absolute_deviation":{"field":"latency"}}}}</query>
-
-	<query endpoint="json/search">{"table":"dist_agg_skew","size":0,"aggs":{"latency_percentiles_dist":{"percentiles":{"field":"latency","values":[5,50,95],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"dist_agg_skew","size":0,"aggs":{"latency_ranks_dist":{"percentile_ranks":{"field":"latency","values":[10,150,1500],"keyed":true}}}}</query>
-	<query endpoint="json/search">{"table":"dist_agg_skew","size":0,"aggs":{"latency_mad_dist":{"median_absolute_deviation":{"field":"latency"}}}}</query>
-
-	<!-- expected output with current digest MAD logic and tdigest.compression=1: {"value":0,"value_as_string":"0"} -->
-	<!-- exact MAD for 0..100 (python/sql exact) is 25; shows centroid-mean MAD can deviate under low compression -->
-	<query endpoint="json/search">{"table":"agg_mad","size":0,"aggs":{"latency_mad_lowc":{"median_absolute_deviation":{"field":"latency","tdigest":{"compression":1}}}}}</query>
-	<!-- expected output with current digest MAD logic and tdigest.compression=2: {"value":25.5,"value_as_string":"25.5"} -->
-	<!-- exact MAD for 0..100 (python/sql exact) is 25; shows approximation drift even when non-zero -->
-	<query endpoint="json/search">{"table":"agg_mad","size":0,"aggs":{"latency_mad_c2":{"median_absolute_deviation":{"field":"latency","tdigest":{"compression":2}}}}}</query>
-</httpqueries>
-
 </test>

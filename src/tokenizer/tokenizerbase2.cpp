@@ -80,6 +80,10 @@ int CSphTokenizerBase2::SkipBlended()
 		iBlended++;
 
 	m_pBufferMax = pMax;
+	// reset flags
+	m_bBlendAdd = false;
+	m_uBlendVariantsPending = 0;
+
 	return iBlended;
 }
 

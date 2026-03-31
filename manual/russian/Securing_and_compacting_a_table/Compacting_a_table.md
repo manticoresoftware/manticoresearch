@@ -111,4 +111,3 @@ ALTER CLUSTER mycluster ADD myindex;
 Операции поиска доступны как обычно в процессе на любом из узлов.
 
 <!-- proofread -->
-

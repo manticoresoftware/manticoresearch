@@ -6,6 +6,7 @@
 <requires>
 <force-rt/>
 <columnar/>
+<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>
@@ -30,6 +31,10 @@ INSERT INTO users (id, name, surname, email, reg_date) VALUES (1, 'Fedor', 'Zayc
 INSERT INTO orders (id, user_id, name, description, price, order_date, attr, region_id, confirm, analogs) VALUES (0, 1, 'iPhone', '14Pro', 1500.50, 1708866233, '{"color":"black","size":14}', 178, 'TRUE', (9,11,15));
 
 SELECT id, name FROM users INNER JOIN orders ON users.id=orders.user_id ORDER BY orders.id ASC;
+
+flush ramchunk users;
+flush ramchunk orders;
+SELECT * FROM users LEFT JOIN orders ON users.id=orders.user_id ORDER BY orders.id ASC;
 
 DROP TABLE users;
 DROP TABLE orders;
@@ -94,6 +99,17 @@ select title, join2.title, uint(join2.j.sort) as table2, weight() * (j.sort + ta
 <!-- cleanup -->
 drop table join1;
 drop table join2;
+
+<!-- test error when left table is prefixed in WHERE clause filters -->
+drop table if exists a;
+create table a;
+insert into a values(1);
+drop table if exists b;
+create table b(a_id int);
+insert into b(id, a_id) values(1, 1);
+select * from a left join b on a.id = b.a_id where a.id = 1 and b.a_id = 1;
+drop table if exists b;
+drop table if exists a;
 
 </sphinxql>
 </queries>

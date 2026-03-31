@@ -5,7 +5,7 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP|FLOAT_VECTOR [KNN options]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
 
@@ -20,18 +20,22 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `bool` - булев атрибут
 * `multi` - многозначный целочисленный атрибут
 * `multi64` - многозначный атрибут bigint
-* `json` - атрибут json
+* `json` - атрибут json; используйте `secondary_index='1'` для создания вторичного индекса по JSON
 * `string` / `text attribute` / `string attribute` - строковый атрибут
 * `text` / `text indexed stored` / `string indexed stored` - полнотекстовое индексируемое поле с исходным значением, хранящимся в docstore
 * `text indexed` / `string indexed` - полнотекстовое индексируемое поле, только индексируемое (исходное значение не хранится в docstore)
 * `text indexed attribute` / `string indexed attribute` - полнотекстовое индексируемое поле + строковый атрибут (исходное значение не хранится в docstore)
 * `text stored` / `string stored` - значение будет храниться только в docstore, не полнотекстово индексироваться и не является строковым атрибутом
+* `float_vector` - векторный атрибут. Вы можете использовать те же опции KNN и авто-встраивания, что и в [`CREATE TABLE`](Creating_a_table/Data_types.md#Float-vector)
 * добавление `engine='columnar'` к любому атрибуту (кроме json) приведет к его хранению в [колоночном хранилище](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
 
 #### Важные замечания:
 * ❗Рекомендуется **создать резервную копию файлов таблицы** перед выполнением `ALTER`, чтобы избежать повреждения данных в случае внезапного отключения питания или других подобных проблем.
 * Запросы к таблице невозможны, пока добавляется столбец.
-* Значения вновь созданного атрибута устанавливаются в 0.
+* Вновь созданные скалярные атрибуты устанавливаются в `0`.
+* Вновь добавленные столбцы `float_vector` без `MODEL_NAME` инициализируются нулевыми векторами.
+* Если вы добавляете столбец `float_vector` с `MODEL_NAME` и `FROM`, существующие строки автоматически встраиваются во время выполнения `ALTER TABLE ... ADD COLUMN`.
+* Когда указан `MODEL_NAME`, требуется `FROM`. Используйте `FROM=''` для встраивания из всех полей `text` и строковых атрибутов.
 * `ALTER` не будет работать для распределенных таблиц и таблиц без каких-либо атрибутов.
 * Нельзя удалить столбец `id`.
 * При удалении поля, которое одновременно является полнотекстовым полем и строковым атрибутом, первый `ALTER DROP` удаляет атрибут, второй — полнотекстовое поле.
@@ -324,20 +328,62 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## Обновление ключа API атрибута (для генерации эмбеддингов) в режиме RT
+## Перестроение встраиваний
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS column_name
+```
+
+Эта команда повторно генерирует встраивания для одного целевого столбца `float_vector`, у которого настроены `MODEL_NAME` и `FROM`.
+
+Используйте его, когда требуется перестроить векторы для существующей колонки с эмбеддингами, например, при необходимости повторной обработки строк после добавления колонки позже с помощью `ALTER TABLE ... ADD COLUMN`, или когда нужно принудительно перегенерировать все строки.
+
+Важное поведение:
+* Имя колонки обязательно. Команда перестраивает одну колонку с эмбеддингами за раз.
+* Она заново генерирует эмбеддинги для всех строк в этой колонке, а не только для строк с нулевыми векторами.
+* Она также перезаписывает строки, векторы которых были вставлены вручную, и строки, где использовалось `()` для пропуска генерации и сохранения нулевого вектора.
+* Целевая колонка должна быть индексированным `float_vector` с настроенной моделью эмбеддингов.
+* `FROM=''` разрешено и означает "использовать все поля `text` и атрибуты `string`".
+
+Manticore не сохраняет информацию о том, был ли текущий вектор в этой колонке сгенерирован автоматически, предоставлен явно пользователем или создан из `()`. Если вы запустите `REBUILD EMBEDDINGS`, сохранённые значения будут перегенерированы из настроенного источника `FROM` для каждой строки в колонке, включая строки, чьё текущее значение является полностью нулевым вектором.
+
+<!-- request Example -->
+```sql
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products REBUILD EMBEDDINGS embedding;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Обновление параметров API атрибутов (для генерации эмбеддингов) в режиме RT
 
 <!-- example api_key -->
 
-`ALTER` можно использовать для изменения ключа API, когда удаленная модель используется для автоэмбеддингов:
+`ALTER` может использоваться для изменения параметров API, когда для авто-эмбеддингов используется удалённая модель:
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
 ```
+
+**Примечания:**
+- `API_KEY`: Новый API-ключ проверяется во время операции ALTER путём выполнения реального API-запроса.
+- `API_URL`: Установите в пустую строку (`''`), чтобы вернуться к конечной точке провайдера по умолчанию.
+- `API_TIMEOUT`: Установите в `'0'`, чтобы использовать таймаут по умолчанию (10 секунд). Должно быть неотрицательным целым числом.
 
 <!-- end -->
 
@@ -360,4 +406,3 @@ ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remot
 
 <!-- end -->
 <!-- proofread -->
-

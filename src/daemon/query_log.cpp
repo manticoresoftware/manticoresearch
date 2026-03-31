@@ -156,8 +156,8 @@ static void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta 
 #endif
 
 	// querytime sec
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 	tBuf.Appendf ( " %d.%03d sec", iRealTime / 1000, iRealTime % 1000 );
 	tBuf.Appendf ( " %d.%03d sec", iQueryTime / 1000, iQueryTime % 1000 );
 
@@ -361,9 +361,6 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf, con
 
 	if ( tQuery.m_uMaxQueryMsec != g_tDefaultQuery.m_uMaxQueryMsec )
 		tBuf.Appendf ( "max_query_time=%u", tQuery.m_uMaxQueryMsec );
-
-	if ( tQuery.m_iMaxPredictedMsec != g_tDefaultQuery.m_iMaxPredictedMsec )
-		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
 
 	if ( tQuery.m_iRetryCount != DEFAULT_QUERY_RETRY )
 		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
@@ -667,9 +664,10 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 	QuotationEscapedBuilder tBuf;
 	int iCompactIN = (g_bLogCompactIn ? LOG_COMPACT_IN : 0);
 
-	// time, conn id, wall, found
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
+	// In distributed/multi-source queries, wall and real may differ.
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );
@@ -743,7 +741,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptio
 
 void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
-	if ( g_iQueryLogMinMs > 0 && tMeta.m_iQueryTime < g_iQueryLogMinMs )
+	if ( g_iQueryLogMinMs > 0 && tMeta.GetQueryTimeMs() < g_iQueryLogMinMs )
 		return;
 	// should not log query from buddy in the info but only in debug and more verbose
 	bool bNoLogQuery = ((q.m_uDebugFlags & QUERY_DEBUG_NO_LOG) == QUERY_DEBUG_NO_LOG);
@@ -796,9 +794,10 @@ void LogBuddyQuery ( Str_t sQuery, BuddyQuery_e tType )
 
 	QuotationEscapedBuilder tBuf;
 
-	// time, conn id, wall, found
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+	// real = elapsed wall-clock; wall = internal query wall-time metric used by query logging.
+	// In distributed/multi-source queries, wall and real may differ.
+	int iQueryTime = tMeta.GetQueryTimeMs();
+	int iRealTime = tMeta.GetRealQueryTimeMs();
 
 	tBuf << "/* ";
 	FormatTimeConnClient ( tBuf );

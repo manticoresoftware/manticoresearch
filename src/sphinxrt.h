@@ -27,6 +27,7 @@
 class RtAccum_t;
 
 using VisitChunk_fn = std::function<void ( const CSphIndex* pIndex )>;
+using VisitChunkEx_fn = std::function<void ( const CSphIndex* pIndex, bool bOptimizing )>;
 
 class InsertDocData_c
 {
@@ -105,6 +106,18 @@ struct CSphReconfigureSetup
 };
 
 /// RAM based updateable backend interface
+class RtIndex_i;
+
+struct AttachArgs_t
+{
+	RtIndex_i *	m_pSrcIndex = nullptr;
+	bool		m_bTruncate = false;
+	bool		m_bConfigless = false;
+	bool		m_bFatal = false;
+
+	AttachArgs_t ( RtIndex_i * pSrcIndex ) : m_pSrcIndex ( pSrcIndex ) {}
+};
+
 class RtIndex_i : public CSphIndexStub
 {
 public:
@@ -129,6 +142,7 @@ public:
 
 	/// commit pending changes
 	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) = 0;
+	virtual bool PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) { return true; }
 
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
@@ -148,7 +162,7 @@ public:
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
 	/// attach all the content of the RT index (flush ramchunk then disk chunks) to the current index
-	virtual bool AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
+	virtual bool AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) { return true; }
 
 	/// truncate index (that is, kill all data)
 	enum Truncate_e : bool { TRUNCATE, DROP };
@@ -157,6 +171,7 @@ public:
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
 	virtual bool StartOptimize ( OptimizeTask_t tTask ) { return true; }
 	virtual int OptimizesRunning () const noexcept { return 0; }
+	virtual void ManualOptimizeCutoff ( int iCutoff ) {}
 
 	virtual int GetNumOfLocks () const noexcept { return 0; }
 
@@ -173,6 +188,7 @@ public:
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
 	virtual void ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const {};
+	virtual void ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const {};
 
 	/// bind indexing accumulator
 	/// returns false if another index already uses it in an open txn
@@ -471,6 +487,8 @@ volatile bool &RTChangesAllowed () noexcept;
 
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
+volatile int & ParallelChunkMergesLimit() noexcept;
+volatile int & MergeChunksPerJob() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 

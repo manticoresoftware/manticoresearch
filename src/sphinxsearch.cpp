@@ -178,7 +178,6 @@ protected:
 	const CSphIndex *			m_pIndex = nullptr;					///< this is he who'll do my filtering!
 	CSphQueryContext *			m_pCtx = nullptr;
 
-	int64_t *					m_pNanoBudget = nullptr;
 	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
 	StrVec_t					m_dZones;
@@ -534,8 +533,12 @@ void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const C
 	}
 	if ( s.m_iFieldMaxPos )
 		tNode.AddInt ( SZ_MAX_FIELD_POS, s.m_iFieldMaxPos );
-	if ( pZones && !s.m_dZones.IsEmpty () )
-		tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, *pZones );
+	if ( !pZones || s.m_dZones.IsEmpty () )
+		return;
+	StrVec_t dZones;
+	for ( const auto& iZone: s.m_dZones )
+		dZones.Add ( (*pZones)[iZone] );
+	tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, dZones );
 }
 
 void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
@@ -667,7 +670,6 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
-	m_pNanoBudget = tSetup.m_pStats ? tSetup.m_pStats->m_pNanoBudget : nullptr;
 
 	m_dZones = tXQ.m_dZones;
 	m_dZoneStart.Resize ( m_dZones.GetLength() );
@@ -1204,8 +1206,6 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 
 		if ( iDocs )
 		{
-			if ( m_pNanoBudget )
-				*m_pNanoBudget -= g_iPredictorCostMatch*iDocs;
 			m_dMyDocs[iDocs].m_tRowID = INVALID_ROWID;
 			return m_dMyDocs;
 		}

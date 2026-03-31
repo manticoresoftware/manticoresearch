@@ -144,6 +144,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "INT"				{ YYSTOREBOUNDS; return TOK_INT; }
 "INTERVAL"			{ YYSTOREBOUNDS; return TOK_INTERVAL; }
 "INTO"				{ YYSTOREBOUNDS; return TOK_INTO; }
+"HYBRID_MATCH"			{ YYSTOREBOUNDS; return TOK_HYBRID_MATCH; }
 "IS"				{ YYSTOREBOUNDS; return TOK_IS; }
 "JOIN"				{ YYSTOREBOUNDS; return TOK_JOIN; }
 "KILL"	    		{ YYSTOREBOUNDS; return TOK_KILL; }
@@ -155,7 +156,9 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "FREEZE"			{ YYSTOREBOUNDS; return TOK_FREEZE; }
 "LIMIT"				{ YYSTOREBOUNDS; return TOK_LIMIT; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
+"MAD"				{ YYSTOREBOUNDS; return TOK_MAD; }
 "MAX"				{ YYSTOREBOUNDS; return TOK_MAX; }
+"MEDIAN_ABSOLUTE_DEVIATION"	{ YYSTOREBOUNDS; return TOK_MEDIAN_ABSOLUTE_DEVIATION; }
 "META"				{ YYSTOREBOUNDS; return TOK_META; }
 "MIN"				{ YYSTOREBOUNDS; return TOK_MIN; }
 "MINUTE"			{ YYSTOREBOUNDS; return TOK_MINUTE; }
@@ -176,6 +179,8 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "OR"				{ YYSTOREBOUNDS; return TOK_OR; }
 "ORDER"				{ YYSTOREBOUNDS; return TOK_ORDER; }
 "PLAN"				{ YYSTOREBOUNDS; return TOK_PLAN; }
+"PERCENTILES"		{ YYSTOREBOUNDS; return TOK_PERCENTILES; }
+"PERCENTILE_RANKS"	{ YYSTOREBOUNDS; return TOK_PERCENTILE_RANKS; }
 "PLUGINS"			{ YYSTOREBOUNDS; return TOK_PLUGINS; }
 "PROFILE"			{ YYSTOREBOUNDS; return TOK_PROFILE; }
 "QUARTER"	    	{ YYSTOREBOUNDS; return TOK_QUARTER; }
@@ -233,6 +238,9 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 '([^'\\]|\\.|\\\\)*'			{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->SetValueInt ( ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ) ); return TOK_QUOTED_STRING; }
 
 {FLOAT_CONSTANT}	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+ "inf"               { YYSTOREBOUNDS; lvalp->m_fValue = INFINITY; return TOK_CONST_FLOAT; } /* leading space excludes token from list of reserved words */
+ "-inf"               { YYSTOREBOUNDS; lvalp->m_fValue = -INFINITY; return TOK_CONST_FLOAT; } /* leading space excludes token from list of reserved words */
+ "nan"               { YYSTOREBOUNDS; lvalp->m_fValue = NAN; return TOK_CONST_FLOAT; } /* leading space excludes token from list of reserved words */
 \.{INT}{ID}			{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 \.{INT}			    { YYSTOREBOUNDS; return TOK_DOT_NUMBER; }
 {INT}               { YYSTOREBOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false ); return TOK_CONST_INT; }

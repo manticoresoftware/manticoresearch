@@ -60,6 +60,10 @@ if ( SEARCHD_CLI_EXTRA )
 	set ( sd_extra "--sd_extra ${SEARCHD_CLI_EXTRA}" )
 endif()
 
+if ( FLOAT_TOLERANCE )
+	set ( ubt_float_tolerance "--float-tolerance" )
+endif()
+
 # since cmake 3.18 names need fixup
 include(fixup_test_name)
 
@@ -80,6 +84,7 @@ function (add_ubertest testN tst_name LABELS prefix label flags)
 			WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}/test"
 			COMMAND php ubertest.php
 			--ctest -u test --strict-verbose --no-demo
+			${ubt_float_tolerance}
 			${flags}
 			${sd_extra} t ${testN})
 
@@ -245,5 +250,4 @@ foreach ( test ${tests} )
 endforeach ()
 
 add_subdirectory(indextool)
-
 

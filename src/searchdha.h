@@ -723,9 +723,6 @@ struct SearchdStats_t : public CommandStats_t
 	std::atomic<int64_t>	m_iDiskReads;		///< total read IO calls (fired by search queries)
 	std::atomic<int64_t>	m_iDiskReadBytes;	///< total read IO traffic
 	std::atomic<int64_t>	m_iDiskReadTime;	///< total read IO time
-
-	std::atomic<int64_t>	m_iPredictedTime;	///< total agent predicted query time
-	std::atomic<int64_t>	m_iAgentPredictedTime;	///< total agent predicted query time
 };
 
 void InitSearchdStats ();

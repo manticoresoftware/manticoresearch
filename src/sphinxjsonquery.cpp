@@ -19,6 +19,7 @@
 #include "searchdsql.h"
 #include "searchdha.h"
 #include "knnmisc.h"
+#include "hybridexecutor.h"
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
 #include "std/tdigest.h"
@@ -971,7 +972,7 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 		tIndex = tRoot.GetStrItem ( "index", sError, true );
 		if ( !tIndex )
 			return false;
-		
+
 		sError = "";
 	}
 
@@ -1143,16 +1144,26 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 			CSphVector<CSphNamedVariant> dNamed;
 			for ( const auto & tNamed : i )
 			{
-				if ( !tNamed.IsInt() )
+				if ( !tNamed.IsInt() && !tNamed.IsDbl() )
 				{
-					sError.SetSprintf ( "\"%s\" property of \"%s\"' option should be integer", sOpt.cstr(), tNamed.Name() );
+					sError.SetSprintf ( "\"%s\" property of \"%s\"' option should be numeric", sOpt.cstr(), tNamed.Name() );
 					return false;
 				}
 
 				auto& dNewNamed = dNamed.Add();
 				dNewNamed.m_sKey = tNamed.Name();
-				dNewNamed.m_iValue = tNamed.IntVal();
-				dNewNamed.m_eType = VariantType_e::BIGINT;
+				if ( tNamed.IsDbl() )
+				{
+					dNewNamed.m_fValue = (float)tNamed.DblVal();
+					dNewNamed.m_iValue = (int64_t)tNamed.DblVal();
+					dNewNamed.m_eType = VariantType_e::FLOAT;
+				}
+				else
+				{
+					dNewNamed.m_iValue = tNamed.IntVal();
+					dNewNamed.m_fValue = (float)tNamed.IntVal();
+					dNewNamed.m_eType = VariantType_e::BIGINT;
+				}
 			}
 
 			eAdd = ::AddOption ( tQuery, sOpt, dNamed, STMT_SELECT, sError );
@@ -1233,25 +1244,26 @@ static bool FillQueryVec ( KnnSearchSettings_t & tKNN, const JsonObj_c & tQueryV
 }
 
 
-static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+static bool ParseSingleKNN ( const JsonObj_c & tJson, KnnSearchSettings_t & tKNN, CSphQuery & tQuery, CSphString & sError )
 {
-	if ( !tJson )
-		return true;
+	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError, true ) )	return false;
 
-	if ( !tJson.IsObj() )
-	{	
-		sError = "\"knn\" property value should be an object";
+	JsonObj_c tK = tJson.GetIntItem ( "k", sError, true );
+	if ( !sError.IsEmpty() )
 		return false;
-	}
 
-	auto & tKNN = tQuery.m_tKnnSettings;
-	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError ) )	return false;
-	if ( !tJson.FetchIntItem ( tKNN.m_iK, "k", sError ) )			return false;
-	if ( tKNN.m_iK <= 0 )
+	if ( tK )
 	{
-		sError = "k parameter must be positive";
-		return false;
+		tKNN.m_iK = (int)tK.IntVal();
+		if ( tKNN.m_iK <= 0 )
+		{
+			sError = "k parameter must be positive";
+			return false;
+		}
 	}
+	else
+		tKNN.m_iK = -1;
+
 	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
 	if ( tKNN.m_iEf < 0 )
 	{
@@ -1259,12 +1271,21 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return false;
 	}
 	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bFullscan, "fullscan", sError, true ) )			return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bPrefilter, "prefilter", sError, true ) )		return false;
+
+	JsonObj_c tEarlyTermination = tJson.GetBoolItem ( "early_termination", sError, true );
+	if ( tEarlyTermination )
+		tKNN.m_eTerminationPolicy = tEarlyTermination.BoolVal() ? knn::HNSWTerminationPolicy_e::QUANTILE : knn::HNSWTerminationPolicy_e::NONE;
+
 	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 	if ( tKNN.m_fOversampling < 1.0f )
 	{
 		sError = "oversampling parameter must be >= 1.0";
 		return false;
 	}
+
+	if ( !tJson.FetchStrItem ( tKNN.m_sAlias, "name", sError, true ) )	return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError, true );
 	if ( tQueryVec )
@@ -1274,18 +1295,17 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 	}
 	else
 	{
-		// mayber a "query" is present?
-		JsonObj_c tQuery = tJson.GetItem("query");
-		if ( !tQuery )
+		JsonObj_c tQueryItem = tJson.GetItem("query");
+		if ( !tQueryItem )
 			return false;
 
-		if ( tQuery.IsArray() )
+		if ( tQueryItem.IsArray() )
 		{
-			if ( !FillQueryVec ( tKNN, tQuery, sError ) )
+			if ( !FillQueryVec ( tKNN, tQueryItem, sError ) )
 				return false;
 		}
-		else if ( tQuery.IsStr() )
-			tKNN.m_sEmbStr = tQuery.StrVal();
+		else if ( tQueryItem.IsStr() )
+			tKNN.m_sEmbStr = tQueryItem.StrVal();
 		else
 		{
 			sError = "\"query\" property value should be string or a vector";
@@ -1294,6 +1314,79 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 	}
 
 	return true;
+}
+
+
+static bool ParseHybridQuery ( const JsonObj_c & tHybridQuery, CSphQuery & tQuery, CSphString & sError )
+{
+	if ( !tHybridQuery.IsObj() )
+	{
+		sError = "\"hybrid\" property value should be an object";
+		return false;
+	}
+
+	CSphString sHybridText;
+	if ( !tHybridQuery.FetchStrItem ( sHybridText, "query", sError ) )
+		return false;
+
+	// set default select list (same as ParseJsonQueryFilters does)
+	CSphQueryItem & tItem = tQuery.m_dItems.Add();
+	tItem.m_sExpr = "*";
+	tItem.m_sAlias = "*";
+	tQuery.m_sSelect = "*";
+
+	// set text search
+	tQuery.m_sQuery = sHybridText;
+	tQuery.m_sRawQuery = sHybridText;
+
+	// set KNN with auto-embeddings
+	auto & tKNN = tQuery.m_dKnnSettings.Add();
+	tKNN.m_iK = -1;
+	tKNN.m_sEmbStr = sHybridText;
+
+	// optional field override
+	CSphString sField;
+	if ( !tHybridQuery.FetchStrItem ( sField, "field", sError, true ) )
+		return false;
+	if ( !sField.IsEmpty() )
+		tKNN.m_sAttr = sField;
+
+	tQuery.m_bHybridSearch = true;
+	return true;
+}
+
+
+static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+{
+	if ( !tJson )
+		return true;
+
+	if ( tJson.IsArray() )
+	{
+		// array of KNN objects
+		for ( const auto & tItem : tJson )
+		{
+			if ( !tItem.IsObj() )
+			{
+				sError = "\"knn\" array items should be objects";
+				return false;
+			}
+
+			auto & tKNN = tQuery.m_dKnnSettings.Add();
+			if ( !ParseSingleKNN ( tItem, tKNN, tQuery, sError ) )
+				return false;
+		}
+		return true;
+	}
+
+	if ( !tJson.IsObj() )
+	{
+		sError = "\"knn\" property value should be an object or array";
+		return false;
+	}
+
+	auto & tKNN = tQuery.m_dKnnSettings.Add();
+	return ParseSingleKNN ( tJson, tKNN, tQuery, sError );
 }
 
 
@@ -1462,24 +1555,64 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 
 	JsonObj_c tJsonQuery = tRoot.GetItem("query");
 	JsonObj_c tKNNQuery = tRoot.GetItem("knn");
-	if ( tJsonQuery && tKNNQuery )
-		return TlsMsg::Err ( "\"query\" can't be used together with \"knn\"" );
+	JsonObj_c tHybridQuery = tRoot.GetItem("hybrid");
 
-	// common code used by search queries and update/delete by query
-	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )
+	if ( tHybridQuery && tKNNQuery )
+	{
+		sError = "\"hybrid\" and \"knn\" cannot be used together";
 		return false;
+	}
 
-	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
-		return false;
+	if ( tHybridQuery )
+	{
+		if ( !ParseHybridQuery ( tHybridQuery, tQuery, sError ) )
+			return false;
+	}
+	else
+	{
+		// parse KNN settings first so HasKnn() is available for prefilter/postfilter decisions
+		if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
+			return false;
 
-	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
-		return false;
+		// common code used by search queries and update/delete by query
+		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )
+			return false;
+
+		// legacy: parse "filter" nested inside the "knn" object (deprecated, pre-prefilter syntax)
+		if ( tKNNQuery && tKNNQuery.HasItem("filter") )
+		{
+			if ( tQuery.m_bHybridSearch )
+			{
+				sError = "\"filter\" inside \"knn\" is not supported in hybrid search; move filters to the \"query\" object";
+				return false;
+			}
+
+			if ( !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
+				return false;
+		}
+
+	}
 
 	if ( !ParseJoin ( tRoot, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
+	// parse options before checking hybrid mode (fusion_method may be set in options)
 	if ( !ParseOptions ( tRoot, tPJQuery, sError ) )
 		return false;
+
+	// single KNN + no text query + fusion_method makes no sense (nothing to fuse);
+	// but multiple KNN entries without text is valid KNN-only fusion
+	if ( tQuery.m_bHybridSearch && tQuery.m_sQuery.IsEmpty() && !tJsonQuery && tQuery.m_dKnnSettings.GetLength() < 2 )
+	{
+		sError = "hybrid search requires both a \"query\" and a \"knn\" entry";
+		return false;
+	}
+
+	if ( tQuery.HasMultipleKnn() && !tQuery.m_bHybridSearch )
+	{
+		sError = "multiple KNN clauses require hybrid fusion (set fusion_method='rrf')";
+		return false;
+	}
 
 	if ( !tRoot.FetchBoolItem ( tPJQuery.m_bProfile, "profile", sError, true ) )
 		return false;
@@ -1553,6 +1686,8 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 
 	if ( !SetupScroll ( tQuery, sError ) )
 		return false;
+
+	SetupKNNLimit(tQuery);
 
 	return true;
 }
@@ -2084,6 +2219,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
 	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
+	if ( sName.Begins ( GetHybridScoreAttrName() ) ) return true;
 	if ( IsJoinedWeight ( sName, tQuery ) ) return true;
 
 	if ( !tQuery.m_dIncludeItems.GetLength() && !tQuery.m_dExcludeItems.GetLength () )
@@ -2911,7 +3047,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 
 	tOut.ObjectBlock();
 
-	tOut.Sprintf (R"("took":%d,"timed_out":false)", tRes.m_iQueryTime);
+	tOut.Sprintf (R"("took":%d,"timed_out":false)", tRes.GetQueryTimeMs() );
 	if ( !tRes.m_sWarning.IsEmpty() )
 	{
 		tOut.StartBlock ( nullptr, R"("warning":{"reason":)", "}" );
@@ -2964,6 +3100,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 	{
 		const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
 		const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+		const CSphColumnInfo * pHybridScore = tSchema.GetAttr ( GetHybridScoreAttrName() );
 
 		bool bCompatId = false;
 		const CSphColumnInfo * pCompatRaw = nullptr;
@@ -3018,6 +3155,9 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 
 			if ( pKNNDist )
 				tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
+
+			if ( pHybridScore )
+				tOut.Sprintf( R"("_hybrid_score":%f)", tMatch.GetAttrFloat ( pHybridScore->m_tLocator ) );
 
 			tOut.StartBlock ( ",", "\"_source\":{", "}");
 

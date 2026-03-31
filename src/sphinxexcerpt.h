@@ -29,11 +29,12 @@ class TextSource_i
 public:
 	virtual						~TextSource_i() {}
 
-	virtual bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, CSphString & sError ) = 0;
+	virtual bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool bFilterCJK, CSphString & sError ) = 0;
 	virtual VecTraits_T<BYTE>	GetText ( int iField ) const = 0;
 	virtual int					GetNumFields() const = 0;
 	virtual const char *		GetFieldName ( int iField ) const = 0;
 	virtual bool				TextFromIndex() const = 0;
+	virtual const VecTraits_T<int> & GetSpaces ( int iField ) const = 0;
 };
 
 

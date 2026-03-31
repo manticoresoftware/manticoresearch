@@ -107,6 +107,55 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 <!-- end -->
 
+### parallel_chunk_merges
+
+<!-- example conf parallel_chunk_merges -->
+此设置控制服务器在 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 期间允许并行运行的磁盘块合并任务数量，适用于实时表。
+
+这仅影响磁盘块合并（压缩），不影响查询并行性。
+
+将其设置为 `1` 以禁用并行块合并（合并任务将逐个运行）。较高的值可能会在具有快速存储的系统上加快压缩速度，但会增加并发磁盘 I/O。
+
+默认情况下，Manticore 使用 [threads](../Server_settings/Searchd.md#threads) 设置的值进行此计算；如果未配置 `threads`，则默认为逻辑 CPU 的数量。`parallel_chunk_merges` 的默认值为 `1`，当 `threads` 为 `1`、`2` 或 `3` 时，以及 `2` 当 `threads` 为 `4` 或更高时（即 `max(1, min(2, threads/2))` 使用整数除法）。
+
+可以在运行时使用 `SET GLOBAL parallel_chunk_merges = N` 更改此值，并通过 `SHOW VARIABLES` 查看。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Disable -->
+```ini
+parallel_chunk_merges = 1
+```
+
+<!-- request Increase -->
+```ini
+parallel_chunk_merges = 4
+```
+
+<!-- end -->
+
+### merge_chunks_per_job
+
+<!-- example conf merge_chunks_per_job -->
+此设置控制在单个 OPTIMIZE 任务中合并多少个 RT 磁盘块（N 路合并）。如果可用块少于此数量，任务将合并它能合并的块（最少 2 个）。
+
+较低的值允许更多任务并行调度；较高的值减少任务数量但增加每次合并的规模。
+
+默认值为 `2`。
+
+可以在运行时使用 `SET GLOBAL merge_chunks_per_job = N` 更改此值，并通过 `SHOW VARIABLES` 查看。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Increase -->
+```ini
+merge_chunks_per_job = 4
+```
+
+<!-- end -->
+
 ### auto_schema
 
 <!-- example conf auto_schema -->
@@ -1066,57 +1115,6 @@ pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 
-
-### predicted_time_costs
-
-<!-- example conf predicted_time_costs -->
-查询时间预测模型的成本，以纳秒为单位。可选，默认为 `doc=64, hit=48, skip=2048, match=64`。
-
-<!-- intro -->
-##### 示例：
-
-<!-- request Example -->
-
-```ini
-predicted_time_costs = doc=128, hit=96, skip=4096, match=128
-```
-<!-- end -->
-
-<!-- example conf predicted_time_costs 1 -->
-基于执行时间（使用最大查询时间设置）在查询完成前终止查询是一个不错的安全网，但有一个固有的缺点：结果不确定（不稳定）。也就是说，如果您多次重复执行完全相同的（复杂）搜索查询并设置时间限制，时间限制将在不同的阶段被触发，您将得到*不同的*结果集。
-
-<!-- intro -->
-##### SQL：
-
-<!-- request SQL -->
-
-```sql
-SELECT … OPTION max_query_time
-```
-<!-- request API -->
-
-```api
-SetMaxQueryTime()
-```
-<!-- end -->
-
-有一个选项 [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time)，它允许您限制查询时间*并*获得稳定、可重复的结果。与其在评估查询时定期检查实际当前时间（这会导致不确定的结果），它使用一个简单的线性模型来预测当前运行时间：
-
-```ini
-predicted_time =
-    doc_cost * processed_documents +
-    hit_cost * processed_hits +
-    skip_cost * skiplist_jumps +
-    match_cost * found_matches
-```
-
-当 `predicted_time` 达到给定限制时，查询将提前终止。
-
-当然，这并不是实际所花时间的硬性限制（不过，它确实是处理工作量的硬性限制），而且一个简单的线性模型远非理想精确。因此，墙钟时间*可能*低于或超过目标限制。然而，误差范围是相当可接受的：例如，在我们以100毫秒为目标限制的实验中，大多数测试查询落在95到105毫秒的范围内，*所有*查询都在80到120毫秒的范围内。此外，作为一项不错的副作用，使用建模的查询时间而不是测量实际运行时间，也会减少一些gettimeofday()调用。
-
-没有两台服务器的型号和规格是完全相同的，因此`predicted_time_costs`指令允许您为上述模型配置成本。为了方便，它们是整数，以纳秒为单位计算。（max_predicted_time中的限制以毫秒计算，而需要将成本值指定为0.000128毫秒而不是128纳秒则更容易出错。）不需要一次性指定所有四个成本，未指定的将采用默认值。然而，我们强烈建议为了可读性而指定所有成本。
-
-
 ### preopen_tables
 
 <!-- example conf preopen_tables -->
@@ -1522,6 +1520,23 @@ shutdown_timeout = 3m # wait for up to 3 minutes
 
 调用来自VIP Manticore SQL连接的 'shutdown' 命令所需的密码的SHA1哈希值。如果没有它，[debug](../Reporting_bugs.md#DEBUG) 'shutdown' 子命令将永远不会导致服务器停止。请注意，这种简单的哈希不应被视为强保护，因为我们没有使用加盐哈希或任何现代哈希函数。它旨在作为本地网络中管理守护进程的防呆措施。  
 
+### skiplist_cache_size  
+
+<!-- example conf skiplist_cache_size -->
+此设置指定解压跳过列表的内存缓存最大大小。可选，默认为64M。  
+
+跳过列表用于加快大型文档列表的查找速度。缓存它们可以避免在查询中重复解压相同的跳过列表数据。将此选项设置为`0`以禁用缓存。  
+
+<!-- intro -->
+##### 示例：  
+
+<!-- request Example -->
+
+```ini
+skiplist_cache_size = 128M
+```
+<!-- end -->
+
 ### snippets_file_prefix  
 
 <!-- example conf snippets_file_prefix -->
@@ -1764,4 +1779,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

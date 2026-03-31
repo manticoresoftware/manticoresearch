@@ -62,7 +62,7 @@ class AttributePacker_i
 {
 public:
 	virtual								~AttributePacker_i(){}
-	virtual bool						SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
+	virtual bool						SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) = 0;
 	virtual const CSphVector<BYTE> &	GetData() const = 0;
 };
 
@@ -70,8 +70,14 @@ public:
 class AttributePacker_c : public AttributePacker_i
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	AttributePacker_c () = default;
+
+	explicit AttributePacker_c ( BlobAttrInput_e eExpectedInput )
+		: m_eExpectedInput ( eExpectedInput ) {}
+
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
+		assert ( eInput==m_eExpectedInput );
 		m_dData.Resize ( iDataLen );
 		if (iDataLen)
 			memcpy ( m_dData.Begin(), pData, iDataLen );
@@ -84,6 +90,7 @@ public:
 	}
 
 protected:
+	const BlobAttrInput_e m_eExpectedInput = BlobAttrInput_e::RAW_BYTES;
 	CSphVector<BYTE>	m_dData;
 };
 
@@ -93,15 +100,31 @@ class AttributePacker_MVA_T : public AttributePacker_c
 public:
 	AttributePacker_MVA_T ( bool bNeedSorting = false ) : m_bNeedSorting ( bNeedSorting ) {}
 
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
-		int iValueSize = sizeof ( int64_t );
-		int iNumValues = iDataLen/iValueSize;
-		if (!iNumValues)
+		if ( !iDataLen )
 		{
 			m_dData.Resize ( 0 );
 			return true;
 		}
+
+		int iValueSize = 0;
+		switch ( eInput )
+		{
+		case BlobAttrInput_e::MVA_INT64:	iValueSize = sizeof ( int64_t );	break;
+		case BlobAttrInput_e::MVA_DWORD:	iValueSize = sizeof ( DWORD );		break;
+		default:
+			sError = "Invalid blob input layout for MVA/float_vector";
+			return false;
+		}
+
+		if ( iDataLen % iValueSize )
+		{
+			sError.SetSprintf ( "Invalid MVA/float_vector payload size: %d", iDataLen );
+			return false;
+		}
+
+		int iNumValues = iDataLen/iValueSize;
 
 		if ( m_bNeedSorting )
 		{
@@ -109,7 +132,9 @@ public:
 			auto * pUnsorted = (T*)m_dUnsorted.Begin();
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = ( iValueSize==(int)sizeof(int64_t) )
+					? sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) )
+					: sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
 				*pUnsorted++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -125,7 +150,9 @@ public:
 
 			for ( int i = 0; i<iNumValues; i++ )
 			{
-				auto iVal = sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) );
+				SphAttr_t iVal = ( iValueSize==(int)sizeof(int64_t) )
+					? sphUnalignedRead ( *(int64_t*)const_cast<BYTE*>(pData) )
+					: sphUnalignedRead ( *(DWORD*)const_cast<BYTE*>(pData) );
 				*pResult++ = ConvertType<IN_T>(iVal);
 				pData += iValueSize;
 			}
@@ -147,8 +174,9 @@ using AttributePacker_Int2FloatVec_c = AttributePacker_MVA_T<float,DWORD>;
 class AttributePacker_Json_c : public AttributePacker_c
 {
 public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) override
+	bool SetData ( const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override
 	{
+		assert ( eInput==BlobAttrInput_e::RAW_BYTES );
 		m_dData.Resize(0);
 		if ( !iDataLen )
 			return true;
@@ -169,7 +197,7 @@ public:
 class BlobRowBuilder_Base_c : public BlobRowBuilder_i
 {
 public:
-	bool	SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) override		{ return m_dAttrs[iAttr]->SetData ( pData, iDataLen, sError ); }
+	bool	SetAttr ( int iAttr, const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) override		{ return m_dAttrs[iAttr]->SetData ( pData, iDataLen, eInput, sError ); }
 
 protected:
 	CSphVector<std::unique_ptr<AttributePacker_i>> m_dAttrs;
@@ -207,8 +235,11 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 		switch ( tCol.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
-		case SPH_ATTR_INT64SET:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(BlobAttrInput_e::MVA_INT64) );
 			break;
 
 		case SPH_ATTR_UINT32SET:
@@ -349,8 +380,11 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_JSON:			// json doesn't go to a separate packer because we work with pre-parsed json in this case
-		case SPH_ATTR_INT64SET:
 			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			break;
+
+		case SPH_ATTR_INT64SET:
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(BlobAttrInput_e::MVA_INT64) );
 			break;
 
 		case SPH_ATTR_UINT32SET:
@@ -434,7 +468,13 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 		if ( !dAttrsUpdated.BitGet(i) )
 		{
-			m_dAttrs.Add ( std::make_unique<AttributePacker_c>() );
+			BlobAttrInput_e eExpectedInput = BlobAttrInput_e::RAW_BYTES;
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
+				eExpectedInput = BlobAttrInput_e::MVA_DWORD;
+			else if ( tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				eExpectedInput = BlobAttrInput_e::MVA_INT64;
+
+			m_dAttrs.Add ( std::make_unique<AttributePacker_c>(eExpectedInput) );
 			continue;
 		}
 
@@ -1070,6 +1110,28 @@ bool sphIsBlobAttr ( const CSphColumnInfo & tAttr )
 bool IsMvaAttr ( ESphAttr eAttr )
 {
 	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR || eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_FLOAT_VECTOR_PTR;
+}
+
+bool IsBlobAttrEmpty ( const ByteBlob_t & tAttr )
+{
+	return tAttr.second==0;
+}
+
+bool IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims )
+{
+	if ( IsBlobAttrEmpty ( tAttr ) )
+		return true;
+
+	if ( iDims<=0 || tAttr.second!=iDims*(int)sizeof(float) || !tAttr.first )
+		return false;
+
+	const DWORD * pVals = (const DWORD *)tAttr.first;
+	const int iVals = tAttr.second / (int)sizeof(DWORD);
+	for ( int i = 0; i < iVals; i++ )
+		if ( pVals[i]!=0 )
+			return false;
+
+	return true;
 }
 
 

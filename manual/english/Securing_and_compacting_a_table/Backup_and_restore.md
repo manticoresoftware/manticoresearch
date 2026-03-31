@@ -39,7 +39,7 @@ The `manticore-backup` tool, included in the official Manticore Search [packages
 
 ### Installation
 
-**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), which is a part of the `manticore-extra` package, and you need to ensure that one of these is available.
+**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), and you need to ensure that one of these is available.
 
 Note that `manticore-backup` is not available for Windows yet.
 
@@ -292,7 +292,7 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
-Manticore supports `mysqldump` utility from MySQL up to 9.5 and `mariadb-dump` utility from MariaDB up to 12.1.
+Manticore supports `mysqldump` utility from MySQL up to 9.6 and `mariadb-dump` utility from MariaDB up to 12.2.
 
 <!-- example mysqldump_backup -->
 

@@ -1,58 +1,58 @@
-# Установка пакетов Manticore на RedHat и CentOS
+# 在 RedHat 和 CentOS 上安装 Manticore 软件包
 
-### Поддерживаемые версии:
+### 受支持的版本：
 
-* CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
+* CentOS 8、RHEL 8、Oracle Linux 8、CentOS Stream 8
 * Amazon Linux 2
-* CentOS 9, RHEL 9, AlmaLinux 9
-* AlmaLinux 10, другие дистрибутивы на базе RHEL 10
+* CentOS 9、RHEL 9、AlmaLinux 9
+* AlmaLinux 10、其他基于 RHEL 10 的发行版
 
-### Репозиторий YUM
+### YUM 仓库
 
-Самый простой способ установить Manticore на RedHat/CentOS — использовать наш репозиторий YUM:
+在 RedHat/CentOS 上安装 Manticore 的最简单方法是使用我们的 YUM 仓库：
 
-Установите репозиторий:
+安装仓库：
 ```bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 ```
 
-Затем установите Manticore Search:
+然后安装 Manticore Search：
 ```bash
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+如果您是从旧版本升级到 Manticore 6，建议先删除旧软件包，以避免因更新的软件包结构导致的冲突：
 
 ```bash
 sudo yum remove manticore*
 ```
 
-Это не удалит ваши данные и файл конфигурации.
+这不会删除您的数据和配置文件。
 
-###### Пакеты для разработки
-Если вы предпочитаете версии "Nightly" (разработческие), выполните:
+###### 开发软件包
+如果您更喜欢使用 "Nightly"（开发）版本，请执行以下操作：
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
 sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
 ```
 
-### Отдельные RPM-пакеты
-Чтобы скачать отдельные RPM-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
+### 独立 RPM 软件包
+要从 Manticore 仓库下载独立的 RPM 文件，请遵循 https://manticoresearch.com/install/ 上的说明。
 
-### Дополнительные пакеты, которые могут понадобиться
-#### Для индексатора
-Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, необходимо убедиться, что установлены соответствующие клиентские библиотеки для обеспечения поддержки нужных вам источников индексации. В строке ниже они устанавливаются все сразу; вы можете использовать её как есть или сократить установку, оставив только необходимые библиотеки (для MySQL-источников достаточно только `mysql-libs`, unixODBC не обязателен).
+### 您可能需要的其他软件包
+#### 用于 indexer
+如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部源创建表，您需要确保已安装相应的客户端库，以便使用您想要的索引源。以下命令将一次性安装所有库；您可以直接使用它，或将其缩减为仅安装您需要的库（仅用于 MySQL 源 - 仅安装 `mysql-libs` 即可，不需要 unixODBC）。
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
 
-В CentOS Stream 8 вам может понадобиться выполнить:
+在 CentOS Stream 8 中，您可能需要运行：
 
 ```
 dnf install mariadb-connector-c
 ```
 
-если при сборке plain-таблицы из MySQL вы получаете ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`.
+如果您在尝试从 MySQL 创建普通表时遇到错误 `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`。
 <!-- proofread -->

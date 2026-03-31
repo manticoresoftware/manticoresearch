@@ -7882,18 +7882,43 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				if ( pServed )
 					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 			}
+
+			// also check agent shards for local replicas (all-agents distributed tables)
+			for ( const auto & pMultiAgent : dDistributed[iIdx]->m_dAgents )
+			{
+				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+				auto pServed = GetServed ( sAgentShard );
+				if ( !pServed )
+					continue; // truly remote, handled below
+
+				int64_t tmStartIdx = sphMicroTimer();
+				int iUpdatedIdx = 0;
+				DoExtendedUpdate ( tStmt, sAgentShard.cstr(), sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
+				iUpdated += iUpdatedIdx;
+				iUpdatedReq += iUpdatedIdx;
+				pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
+			}
 		}
 
-		// update remote agents
+		// update remote agents (only truly remote ones — skip if local replica was already processed)
 		if ( dDistributed[iIdx] && !dDistributed[iIdx]->m_dAgents.IsEmpty() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 
-			VecRefPtrs_t<AgentConn_t *> dAgents;
-			pDist->GetAllHosts ( dAgents );
+			VecRefPtrsAgentConn_t dAgents;
+			for ( const auto & pMultiAgent : pDist->m_dAgents )
+			{
+				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+				if ( GetServed ( sAgentShard ) )
+					continue; // local replica already handled above
 
-			// connect to remote agents and query them
-			// validation happens on remote side; errors will be returned via dFails
+				auto * pAgent = new AgentConn_t;
+				pAgent->m_tDesc.CloneFrom ( (*pMultiAgent)[0] );
+				pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+				pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+				dAgents.Add ( pAgent );
+			}
+
 			if ( !dAgents.IsEmpty() )
 			{
 				int iUpdatedRemote = 0;
@@ -8682,26 +8707,47 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 					iAffected += LocalIndexDoDeleteDocuments ( sLocal, sName.cstr(), tStmt, dErrors, bCommit, tAcc );
 				}
 			}
+
+			// also check agent shards for local replicas (all-agents distributed tables)
+			for ( const auto & pMultiAgent : dDistributed[iIdx]->m_dAgents )
+			{
+				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+				if ( g_pLocalIndexes->Contains ( sAgentShard ) )
+				{
+					iAffected += LocalIndexDoDeleteDocuments ( sAgentShard, sName.cstr(), tStmt, dErrors, bCommit, tAcc );
+				}
+			}
 		}
 
-		// delete for remote agents
+		// delete for remote agents (only truly remote ones)
 		if ( !bStoreVar && dDistributed[iIdx] && !dDistributed[iIdx]->m_dAgents.IsEmpty() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
-			pDist->GetAllHosts ( dAgents );
 
-			int iGot = 0;
-			int iWarns = 0;
+			for ( const auto & pMultiAgent : pDist->m_dAgents )
+			{
+				const CSphString & sAgentShard = (*pMultiAgent)[0].m_sIndexes;
+				if ( g_pLocalIndexes->Contains ( sAgentShard ) )
+					continue; // local replica already handled above
 
-			// connect to remote agents and query them
-			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors, nullptr );
-			PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				auto * pAgent = new AgentConn_t;
+				pAgent->m_tDesc.CloneFrom ( (*pMultiAgent)[0] );
+				pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+				pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+				dAgents.Add ( pAgent );
+			}
 
-			// FIXME!!! report error & warnings from agents
-			// FIXME? profile update time too?
-			iAffected += iGot;
+			if ( !dAgents.IsEmpty() )
+			{
+				int iGot = 0;
+				int iWarns = 0;
+
+				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors, nullptr );
+				PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				iAffected += iGot;
+			}
 		}
 	}
 

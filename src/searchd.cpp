@@ -4923,7 +4923,7 @@ static CSphString BuildInsertSqlForShard ( const SqlStmt_t & tStmt, const CSphSt
 					ARRAY_FOREACH ( j, dVals )
 					{
 						if ( j ) sBuf << ",";
-						sBuf.Appendf ( INT64_FMT, (int64_t)dVals[j] );
+						sBuf.Appendf ( INT64_FMT, dVals[j].m_iValue );
 					}
 				}
 				sBuf << ")";

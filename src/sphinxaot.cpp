@@ -271,6 +271,8 @@ private:
 	static const CSphString * GetStringById ( const CSphVector<CSphString> & dStrings, DWORD uId, const char * sWhat, CSphString & sError );
 	static void AddUniqueLemma ( std::vector<CSphString> & dLemmas, const CSphString & sLemma );
 	static void AddUniqueLemma ( CSphVector<CSphString> & dLemmas, const char * sLemma );
+	static void AddAffixedLemmas ( const CSphVector<CSphString> & dBaseLemmas, const char * sPrefix, const char * sSuffix, CSphVector<CSphString> & dLemmas );
+	static void AddHyphenatedLemmas ( const char * sLeft, const CSphVector<CSphString> & dRightLemmas, CSphVector<CSphString> & dLemmas );
 	static bool StartsWith ( const std::string & sValue, const char * sPrefix );
 	static bool EndsWith ( const std::string & sValue, const char * sSuffix );
 	static std::string ApplyUkCharSubstitute ( const std::string & sWord );
@@ -2245,6 +2247,29 @@ void NativeUkLemmatizer_c::AddUniqueLemma ( CSphVector<CSphString> & dLemmas, co
 	dLemmas.Add ( sLemma );
 }
 
+void NativeUkLemmatizer_c::AddAffixedLemmas ( const CSphVector<CSphString> & dBaseLemmas, const char * sPrefix, const char * sSuffix, CSphVector<CSphString> & dLemmas )
+{
+	for ( const auto & sLemma : dBaseLemmas )
+	{
+		std::string sFullLemma = sPrefix ? sPrefix : "";
+		sFullLemma += sLemma.cstr();
+		if ( sSuffix )
+			sFullLemma += sSuffix;
+		AddUniqueLemma ( dLemmas, sFullLemma.c_str() );
+	}
+}
+
+void NativeUkLemmatizer_c::AddHyphenatedLemmas ( const char * sLeft, const CSphVector<CSphString> & dRightLemmas, CSphVector<CSphString> & dLemmas )
+{
+	for ( const auto & sRightLemma : dRightLemmas )
+	{
+		std::string sCombined = sLeft;
+		sCombined += "-";
+		sCombined += sRightLemma.cstr();
+		AddUniqueLemma ( dLemmas, sCombined.c_str() );
+	}
+}
+
 bool NativeUkLemmatizer_c::StartsWith ( const std::string & sValue, const char * sPrefix )
 {
 	return sValue.rfind ( sPrefix, 0 )==0;
@@ -2423,12 +2448,7 @@ bool NativeUkLemmatizer_c::LookupHyphenParticle ( const std::string & sWord, CSp
 		if ( !LookupWord ( sBase, dBaseLemmas, iDepth+1 ) )
 			return false;
 
-		for ( const auto & sLemma : dBaseLemmas )
-		{
-			std::string sFullLemma = sLemma.cstr();
-			sFullLemma += sParticle;
-			AddUniqueLemma ( dLemmas, sFullLemma.c_str() );
-		}
+		AddAffixedLemmas ( dBaseLemmas, "", sParticle, dLemmas );
 		return dLemmas.GetLength()>0;
 	}
 
@@ -2459,21 +2479,9 @@ bool NativeUkLemmatizer_c::LookupHyphenatedWord ( const std::string & sWord, CSp
 
 	if ( bLeftFound )
 		for ( const auto & sLeftLemma : dLeftLemmas )
-			for ( const auto & sRightLemma : dRightLemmas )
-			{
-				std::string sCombined = sLeftLemma.cstr();
-				sCombined += "-";
-				sCombined += sRightLemma.cstr();
-				AddUniqueLemma ( dLemmas, sCombined.c_str() );
-			}
+			AddHyphenatedLemmas ( sLeftLemma.cstr(), dRightLemmas, dLemmas );
 
-	for ( const auto & sRightLemma : dRightLemmas )
-	{
-		std::string sCombined = sLeft;
-		sCombined += "-";
-		sCombined += sRightLemma.cstr();
-		AddUniqueLemma ( dLemmas, sCombined.c_str() );
-	}
+	AddHyphenatedLemmas ( sLeft.c_str(), dRightLemmas, dLemmas );
 
 	return dLemmas.GetLength()>0;
 }
@@ -2493,12 +2501,7 @@ bool NativeUkLemmatizer_c::LookupKnownPrefix ( const std::string & sWord, CSphVe
 		if ( !LookupWord ( sRemainder, dBaseLemmas, iDepth+1 ) )
 			continue;
 
-		for ( const auto & sLemma : dBaseLemmas )
-		{
-			std::string sFullLemma = sPrefix;
-			sFullLemma += sLemma.cstr();
-			AddUniqueLemma ( dLemmas, sFullLemma.c_str() );
-		}
+		AddAffixedLemmas ( dBaseLemmas, sPrefix, "", dLemmas );
 
 		if ( dLemmas.GetLength()>0 )
 			return true;

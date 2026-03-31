@@ -1458,6 +1458,7 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 	AddItem ( pExpr, eAggrFunc, pStart, pEnd );
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Last();
 	AggrSettings_t & tAggr = tItem.m_tAggrSettings;
+	CSphString sError;
 
 	if ( eAggrFunc==SPH_AGGR_PERCENTILES )
 	{
@@ -1480,7 +1481,7 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 			if ( tOpt.m_sKey=="compression" )
 			{
 				float fCompression = tItem.m_fTdigestCompression;
-				if ( !ParseCompressionOption ( tOpt, fCompression, m_sError ) )
+				if ( !ParseCompressionOption ( tOpt, fCompression, sError ) )
 					goto failed;
 
 				tItem.m_fTdigestCompression = fCompression;
@@ -1497,7 +1498,7 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 			if ( tOpt.m_sKey=="keyed" )
 			{
 				bool bKeyed = false;
-				if ( !ParseBoolOption ( tOpt, bKeyed, m_sError ) )
+				if ( !ParseBoolOption ( tOpt, bKeyed, sError ) )
 					goto failed;
 
 				if ( eAggrFunc==SPH_AGGR_PERCENTILES )
@@ -1506,7 +1507,7 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 					tAggr.m_tPercentileRanks.m_bKeyed = bKeyed;
 				else
 				{
-					m_sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
+					sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
 					goto failed;
 				}
 				continue;
@@ -1516,37 +1517,37 @@ bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFun
 			{
 				if ( eAggrFunc==SPH_AGGR_PERCENTILES )
 				{
-					if ( !ParseFloatCsvOption ( tOpt, tAggr.m_tPercentiles.m_dPercents, true, m_sError ) )
+					if ( !ParseFloatCsvOption ( tOpt, tAggr.m_tPercentiles.m_dPercents, true, sError ) )
 						goto failed;
 				}
 				else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
 				{
-					if ( !ParseDoubleCsvOption ( tOpt, tAggr.m_tPercentileRanks.m_dValues, m_sError ) )
+					if ( !ParseDoubleCsvOption ( tOpt, tAggr.m_tPercentileRanks.m_dValues, sError ) )
 						goto failed;
 				}
 				else
 				{
-					m_sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
+					sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
 					goto failed;
 				}
 				continue;
 			}
 
-			m_sError.SetSprintf ( "unknown aggregate option '%s'", tOpt.m_sKey.cstr() );
+			sError.SetSprintf ( "unknown aggregate option '%s'", tOpt.m_sKey.cstr() );
 			goto failed;
 		}
 	}
 
 	if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS && tAggr.m_tPercentileRanks.m_dValues.IsEmpty() )
 	{
-		m_sError = "percentile_ranks requires option values='v1,v2,...'";
+		sError = "percentile_ranks requires option values='v1,v2,...'";
 		goto failed;
 	}
 
 	return true;
 
 failed:
-	yyerror ( this, m_sError.cstr() );
+	yyerror ( this, sError.cstr() );
 	return false;
 }
 

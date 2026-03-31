@@ -18,11 +18,10 @@
 #include <iostream>
 
 using nljson = nlohmann::json;
-using nlohmann::literals::json_literals::operator""_json;
 #include "http/log_management.h"
 
 static RwLock_t g_tLockKbnTable;
-static nljson g_tKbnTable = "{}"_json;
+static nljson g_tKbnTable = nljson::parse ( "{}" );
 
 static bool g_bEnabled = true;
 
@@ -595,7 +594,7 @@ private:
 
 			if ( tFullQuery[tNew].cbegin().value().count ( "query" )==1 )
 			{
-				nljson tEq = R"({})"_json;
+				nljson tEq = nljson::parse ( R"({})" );
 				tEq[tFullQuery[tNew].cbegin().key()] = tFullQuery[tNew].cbegin().value()["query"];
 				tFullQuery[tNew] = tEq;
 			}
@@ -622,7 +621,7 @@ private:
 
 			const StrVec_t & dFields = m_hParentFields[sFieldName];
 
-			nljson tExistVec = R"([])"_json;
+			nljson tExistVec = nljson::parse ( R"([])" );
 			for ( const auto & tFieldIt : dFields )
 			{
 				nljson tNewField;
@@ -654,7 +653,7 @@ private:
 			//std::cout << tIt << " : " << tFullQuery[tIt] << "\n";
 
 			nljson::json_pointer tParent = tIt.parent_pointer();
-			tFullQuery[tParent] = R"({ "term": { "missed_exists": "none" } })"_json;
+			tFullQuery[tParent] = nljson::parse ( R"({ "term": { "missed_exists": "none" } })" );
 
 			//std::cout << tFullQuery[tParent] << "\n";
 		}
@@ -1470,12 +1469,12 @@ static int ProcessFilter ( const CSphString * sFilters, nljson & tRes )
 	if ( !sFilters )
 		return 0;
 
-	nljson tResFiltered = R"({})"_json;
+	nljson tResFiltered = nljson::parse ( R"({})" );
 
 	StrVec_t dFilters = sphSplit ( sFilters->cstr(), "," );
 	for ( const CSphString & sFilter : dFilters )
 	{
-		nljson tPartJs = R"({})"_json;
+		nljson tPartJs = nljson::parse ( R"({})" );
 		StrVec_t dParts = sphSplit ( sFilter.cstr(), "." );
 		if ( ProcessFilterPath ( tRes, dParts, 0, tPartJs ) )
 			tResFiltered.merge_patch ( tPartJs );
@@ -1564,7 +1563,7 @@ static int ProcessFilterSource ( const CSphString * sSourceFilter, nljson & tRes
 		
 		const nljson & tSrc = tHit[tSrcCol];
 
-		nljson tSrcFiltered = R"({})"_json;
+		nljson tSrcFiltered = nljson::parse ( R"({})" );
 		for ( const auto & tCol : dColumns )
 		{
 			if ( tSrc.contains ( tCol ) )
@@ -1634,7 +1633,7 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 	if ( sFilter=="_all" )
 		sFilter = "*";
 
-	nljson tRes = R"({
+nljson tRes = nljson::parse ( R"({
     "took": 10, 
     "timed_out": false, 
     "_shards": {
@@ -1658,7 +1657,7 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
             "buckets": []
         }
     }
-})"_json;
+})" );
 
 	nljson::json_pointer tBuckets ( "/aggregations/indices/buckets" );
 
@@ -1680,7 +1679,7 @@ static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, 
 
 		iIndexes++;
 		iDocsTotal += iDocsCount;
-		nljson tItem = R"({})"_json;
+		nljson tItem = nljson::parse ( R"({})" );
 		tItem["key"] = tIt.first.cstr();
 		tItem["doc_count"] = iDocsCount;
 
@@ -1775,7 +1774,7 @@ bool HttpCompatHandler_c::ProcessCount()
 
 void HttpCompatHandler_c::ProcessEmptyHead ()
 {
-	nljson tJsonRes = R"(
+	nljson tJsonRes = nljson::parse ( R"(
 {
   "name" : "4e9d933ebde2",
   "cluster_name" : "docker-cluster",
@@ -1793,7 +1792,7 @@ void HttpCompatHandler_c::ProcessEmptyHead ()
   },
   "tagline" : "You Know, for Search"
 }
-)"_json;
+)" );
 
 	std::string sRes = tJsonRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
@@ -1858,7 +1857,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 	tRes["_seq_no"] = 0;
 	tRes["_primary_term"] = 1;
 	tRes["result"] = ( dIds.GetLength() ? "deleted" : "not_found" );
-	tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
+	tRes["_shards"] = nljson::parse ( R"( { "total": 1, "successful": 1, "failed": 0 } )" );
 
 	std::string sRes = tRes.dump();
 	BuildReply ( FromStd ( sRes ), EHTTP_STATUS::_200 );
@@ -1940,11 +1939,11 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 
 	COMPATINFO << "created table '" << sName.cstr() << "'";
 
-	nljson tRes = R"(
+	nljson tRes = nljson::parse ( R"(
 {
     "acknowledged": true, 
     "shards_acknowledged": true
-})"_json;
+})" );
 	tRes["index"] = sName.cstr();
 
 	std::string sRes = tRes.dump();
@@ -1995,7 +1994,7 @@ void HttpCompatHandler_c::ProcessCCR()
 
 void HttpCompatHandler_c::ProcessILM()
 {
-	nljson tItems = R"({})"_json;
+	nljson tItems = nljson::parse ( R"({})" );
 
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 	for ( const auto & tIt : *hLocal )
@@ -2003,13 +2002,13 @@ void HttpCompatHandler_c::ProcessILM()
 		if ( !tIt.second )
 			continue;
 
-		nljson tItem = R"({"managed": false})"_json;
+		nljson tItem = nljson::parse ( R"({"managed": false})" );
 		tItem["index"] = tIt.first.cstr();
 
 		tItems[tIt.first.cstr()] = tItem;
 	}
 
-	nljson tRes = R"({})"_json;
+	nljson tRes = nljson::parse ( R"({})" );
 	tRes["indices"] = tItems;
 	std::string sRes = tRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
@@ -2119,7 +2118,7 @@ static void DropKbnTables()
 	}
 	{
 		ScWL_t tLock ( g_tLockKbnTable );
-		g_tKbnTable = "{}"_json;
+		g_tKbnTable = nljson::parse ( "{}" );
 	}
 
 	// look for local indexes with kibana names

@@ -5062,7 +5062,9 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		iTotalAffected += tStmt.m_iRowsAffected;
 	}
 
-	// --- Process remote agent shards ---
+	// --- Process agent shards ---
+	// Agent shards might have a local replica (rf>1). Check GetServed first.
+	// If local replica exists, insert locally. Otherwise send to a remote mirror.
 	SearchFailuresLog_c dErrors;
 	for ( int iAgent = 0; iAgent < iNumAgents; iAgent++ )
 	{
@@ -5071,23 +5073,78 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		if ( dRows.IsEmpty() )
 			continue;
 
-		// get agent connection
-		VecRefPtrsAgentConn_t dAgents;
-		auto * pAgent = new AgentConn_t;
-		// use first mirror of this agent group
-		pAgent->m_tDesc.CloneFrom ( (*pDist->m_dAgents[iAgent])[0] );
-		pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
-		pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+		// get the shard table name from the first mirror
+		const CSphString & sAgentShardName = (*pDist->m_dAgents[iAgent])[0].m_sIndexes;
 
-		// send INSERT INTO the distributed table name — the remote node will
-		// run HandleDistributedInsert locally, find the shard as local, and insert correctly
+		// try local replica first
+		auto pServed = GetServed ( sAgentShardName );
+		if ( pServed && ServedDesc_t::IsMutable ( pServed ) )
+		{
+			Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+			if ( !tWriting.CanWrite() )
+			{
+				dOrigValues.SwapData ( tStmt.m_dInsertValues );
+				tStmt.m_iRowsAffected = iOrigRows;
+				tStmt.m_sIndex = sOrigIndex;
+				tStmt.m_sCluster = sOrigCluster;
+				tOut.Error ( "shard table '%s' is locked", sAgentShardName.cstr() );
+				return;
+			}
+
+			tStmt.m_dInsertValues.Resize ( dRows.GetLength() * iColCount );
+			ARRAY_FOREACH ( i, dRows )
+			{
+				int iSrcRow = dRows[i];
+				for ( int iCol = 0; iCol < iColCount; iCol++ )
+					tStmt.m_dInsertValues[i * iColCount + iCol] = dOrigValues[iSrcRow * iColCount + iCol];
+			}
+			tStmt.m_iRowsAffected = dRows.GetLength();
+			tStmt.m_sIndex = sAgentShardName;
+			tStmt.m_sCluster = pServed->m_sCluster;
+
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( sAgentShardName );
+
+			if ( !AddDocument ( tStmt, pServed, tOut ) )
+			{
+				dOrigValues.SwapData ( tStmt.m_dInsertValues );
+				tStmt.m_iRowsAffected = iOrigRows;
+				tStmt.m_sIndex = sOrigIndex;
+				tStmt.m_sCluster = sOrigCluster;
+				return;
+			}
+
+			if ( bCommit )
+			{
+				RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
+				if ( !HandleCmdReplicate ( *pAccum ) )
+				{
+					TlsMsg::MoveError ( sError );
+					RIdx_T<RtIndex_i *> pIndex { pServed };
+					pIndex->RollBack ( pAccum );
+					dOrigValues.SwapData ( tStmt.m_dInsertValues );
+					tStmt.m_iRowsAffected = iOrigRows;
+					tStmt.m_sIndex = sOrigIndex;
+					tStmt.m_sCluster = sOrigCluster;
+					tOut.Error ( "%s", sError.cstr() );
+					return;
+				}
+			}
+
+			iTotalAffected += tStmt.m_iRowsAffected;
+			continue;
+		}
+
+		// no local replica — send INSERT INTO distributed_table to a remote mirror
+		// the remote node has its own view of the distributed table and will find the shard locally
+		VecRefPtrsAgentConn_t dAgentConns;
+		auto * pAgentConn = new AgentConn_t;
+		pAgentConn->m_tDesc.CloneFrom ( (*pDist->m_dAgents[iAgent])[0] );
+		pAgentConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+		pAgentConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+
 		CSphString sSql = BuildInsertSqlForShard ( tStmt, sOrigIndex, dOrigValues, dRows );
-
-		// clear agent index name — the full SQL already contains the correct table name
-		// SphinxqlRequestBuilder_c sends: m_sBegin + agent.m_sIndexes + m_sEnd
-		// with iListStart=len, iListEnd=len: m_sBegin=full_sql, m_sEnd=""
-		pAgent->m_tDesc.m_sIndexes = "";
-		dAgents.Add ( pAgent );
+		pAgentConn->m_tDesc.m_sIndexes = "";
+		dAgentConns.Add ( pAgentConn );
 
 		Str_t tSqlQuery = FromStr ( sSql );
 		SqlStmt_t tRemoteStmt;
@@ -5098,7 +5155,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		int iWarns = 0;
 		auto pRequestBuilder = std::make_unique<SphinxqlRequestBuilder_c> ( tSqlQuery, tRemoteStmt );
 		auto pReplyParser = CreateReplyParser ( false, iGot, iWarns, dErrors, nullptr );
-		PerformRemoteTasks ( dAgents, pRequestBuilder.get(), pReplyParser.get() );
+		PerformRemoteTasks ( dAgentConns, pRequestBuilder.get(), pReplyParser.get() );
 		iTotalAffected += iGot;
 	}
 

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>hybrid search group by should not crash</name>
+
+<skip_indexer/>
+
+<requires>
+<knn/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t (title text, vacid bigint, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+	insert into t (id,title,vacid,vec) values (1,'machine learning basics',101,(0.10,0.10,0.10,0.10));
+	insert into t (id,title,vacid,vec) values (2,'deep learning for machine vision',102,(0.15,0.12,0.08,0.11));
+	insert into t (id,title,vacid,vec) values (3,'machine learning algorithms',103,(0.20,0.15,0.12,0.09));
+	insert into t (id,title,vacid,vec) values (4,'cooking recipes italian',104,(0.11,0.09,0.13,0.10));
+	insert into t (id,title,vacid,vec) values (5,'travel guide europe',105,(0.18,0.11,0.10,0.12));
+	insert into t (id,title,vacid,vec) values (6,'sports news football',106,(0.22,0.14,0.09,0.08));
+	flush ramchunk t;
+
+	select id, vacid, knn_dist() as dist from t where match('machine learning') and knn(vec,5,(0.1,0.1,0.1,0.1)) group by vacid option fusion_method='rrf';
+	select id, vacid, knn_dist() as dist from t where match('machine learning') and knn(vec,5,(0.1,0.1,0.1,0.1)) group by vacid having dist &lt; 0.12 option fusion_method='rrf';
+
+	drop table t;
+</sphinxql>
+</queries>
+</test>

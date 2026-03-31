@@ -438,7 +438,17 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 
 	EvalDependentExprs ( dExprs, tNewMatch );
 
-	pSorter->Push ( tNewMatch );
+	const CSphColumnInfo * pGroupBy = pDstSchema->GetAttr ( "@groupby" );
+	if ( pSorter->IsGroupby() && pGroupBy && iBestSet>=0 )
+	{
+		const ISphSchema * pSrcSchema = m_dSubResults[iBestSet].m_pSorter->GetSchema();
+		const CSphColumnInfo * pSrcGroupBy = pSrcSchema->GetAttr ( "@groupby" );
+		assert ( pSrcGroupBy );
+		tNewMatch.SetAttr ( pGroupBy->m_tLocator, m_dSubResults[iBestSet].m_dMatches[iBestMatch].GetAttr ( pSrcGroupBy->m_tLocator ) );
+		pSorter->PushGrouped ( tNewMatch, false );
+	}
+	else
+		pSorter->Push ( tNewMatch );
 	pDstSchema->FreeDataPtrs ( tNewMatch );
 	tNewMatch.ResetDynamic();
 }

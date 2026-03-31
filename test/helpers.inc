@@ -964,14 +964,11 @@ function JsonValuesEqualWithTolerance ( $v1, $v2, $epsilon )
 	if ( $v1 === $v2 )
 		return true;
 
-	// both numeric (floats, ints, or numeric strings with decimals): compare with epsilon
+	// In KNN tolerance mode, the same value may be formatted differently
+	// across platforms (for example "0" vs "0.000000"). Compare all numerics
+	// by value instead of requiring a decimal point in the string form.
 	if ( is_numeric($v1) && is_numeric($v2) )
-	{
-		$s1 = is_string($v1) ? $v1 : (string)$v1;
-		$s2 = is_string($v2) ? $v2 : (string)$v2;
-		if ( strpos($s1, '.') !== false || strpos($s2, '.') !== false )
-			return abs ( floatval($v1) - floatval($v2) ) <= $epsilon;
-	}
+		return abs ( floatval($v1) - floatval($v2) ) <= $epsilon;
 
 	// string float vectors (SphinxQL path: comma-separated floats)
 	if ( is_string($v1) && is_string($v2) && IsFloatVector($v1) && IsFloatVector($v2) )
@@ -3517,7 +3514,9 @@ class SphinxConfig
 				$rows2 = json_decode ( $rows2, true );
 			}
 
-			$epsilon = $this->Requires("embeddings") ? 1e-4 : 1e-5;
+			// Explicit KNN tolerance tests allow slightly wider cross-platform
+			// drift in floating-point formatting and serialization.
+			$epsilon = ( $this->Requires("embeddings") || $this->Requires("knn_float_tolerance") ) ? 1e-4 : 1e-5;
 			if ( is_array($rows1) && is_array($rows2) && JsonValuesEqualWithTolerance ( $rows1, $rows2, $epsilon ) )
 			{
 				$set1["rows"] = $set2["rows"];

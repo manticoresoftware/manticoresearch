@@ -4865,16 +4865,91 @@ static int64_t GetOrAssignInsertDocId ( SqlStmt_t & tStmt, int iRow )
 	return UidShort();
 }
 
-/// Handle INSERT/REPLACE into a distributed table by routing each row to the correct local shard.
-/// We temporarily swap m_sIndex to the shard name, process, then restore.
+/// Build SQL INSERT string for a subset of rows targeting a specific shard table
+static CSphString BuildInsertSqlForShard ( const SqlStmt_t & tStmt, const CSphString & sShardName,
+	const CSphVector<SqlInsert_t> & dValues, const CSphVector<int> & dRows )
+{
+	bool bReplace = ( tStmt.m_eStmt==STMT_REPLACE );
+	int iColCount = tStmt.m_iSchemaSz;
+
+	StringBuilder_c sBuf;
+	sBuf << ( bReplace ? "REPLACE" : "INSERT" ) << " INTO " << sShardName;
+
+	// columns
+	if ( tStmt.m_dInsertSchema.GetLength() )
+	{
+		sBuf << " (";
+		ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
+		{
+			if ( i ) sBuf << ",";
+			sBuf << tStmt.m_dInsertSchema[i];
+		}
+		sBuf << ")";
+	}
+
+	sBuf << " VALUES ";
+
+	// rows
+	ARRAY_FOREACH ( iRowIdx, dRows )
+	{
+		if ( iRowIdx ) sBuf << ",";
+		sBuf << "(";
+		int iSrcRow = dRows[iRowIdx];
+		for ( int iCol = 0; iCol < iColCount; iCol++ )
+		{
+			if ( iCol ) sBuf << ",";
+			const auto & tVal = dValues[iSrcRow * iColCount + iCol];
+			switch ( tVal.m_iType )
+			{
+			case SqlInsert_t::CONST_INT:
+				sBuf.Appendf ( INT64_FMT, tVal.GetValueInt() );
+				break;
+			case SqlInsert_t::CONST_FLOAT:
+				sBuf.Appendf ( "%f", tVal.m_fVal );
+				break;
+			case SqlInsert_t::QUOTED_STRING:
+				sBuf << "'";
+				sBuf << tVal.m_sVal;
+				sBuf << "'";
+				break;
+			case SqlInsert_t::TOK_NULL:
+				sBuf << "NULL";
+				break;
+			case SqlInsert_t::CONST_MVA:
+				sBuf << "(";
+				if ( tVal.m_pVals )
+				{
+					ARRAY_FOREACH ( j, *tVal.m_pVals )
+					{
+						if ( j ) sBuf << ",";
+						sBuf.Appendf ( INT64_FMT, (*tVal.m_pVals)[j] );
+					}
+				}
+				sBuf << ")";
+				break;
+			default:
+				sBuf << "''";
+				break;
+			}
+		}
+		sBuf << ")";
+	}
+
+	return CSphString ( sBuf.cstr() );
+}
+
+/// Handle INSERT/REPLACE into a distributed table by routing each row to the correct shard.
+/// Supports both local shards and remote agents.
 static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, const DistributedIndex_t * pDist )
 {
-	assert ( pDist->m_dAgents.IsEmpty() && !pDist->m_dLocal.IsEmpty() );
 	const auto & dLocals = pDist->m_dLocal;
-	int iNumShards = dLocals.GetLength();
+	int iNumLocals = dLocals.GetLength();
+	int iNumAgents = pDist->m_dAgents.GetLength();
+	int iNumShards = iNumLocals + iNumAgents;
+
 	if ( iNumShards<=0 )
 	{
-		tOut.Error ( "distributed table '%s' has no local shards", tStmt.m_sIndex.cstr() );
+		tOut.Error ( "distributed table '%s' has no shards", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
@@ -4891,43 +4966,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 	CSphString sOrigIndex = tStmt.m_sIndex;
 	CSphString sError;
 
-	// single row fast path - no grouping needed
-	if ( iRowCount==1 )
-	{
-		int64_t iDocId = GetOrAssignInsertDocId ( tStmt, 0 );
-		if ( iDocId==0 )
-			iDocId = UidShort();
-
-		int iShard = JumpConsistentHash ( sphFNV64 ( (uint64_t)iDocId ), iNumShards );
-		const CSphString & sShardName = dLocals[iShard];
-
-		auto pServed = GetServed ( sShardName );
-		if ( !ServedDesc_t::IsMutable ( pServed ) )
-		{
-			tOut.Error ( "shard table '%s' is not mutable", sShardName.cstr() );
-			return;
-		}
-
-		Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
-		if ( !tWriting.CanWrite() )
-		{
-			tOut.Error ( "shard table '%s' is locked", sShardName.cstr() );
-			return;
-		}
-
-		// swap index name to shard, process, restore
-		tStmt.m_sIndex = sShardName;
-		GlobalCrashQueryGetRef().m_dIndex = FromStr ( sShardName );
-
-		bool bOk = AddDocument ( tStmt, pServed, tOut );
-		if ( bOk )
-			CommitAcc ( tStmt, pServed, tOut );
-
-		tStmt.m_sIndex = sOrigIndex;
-		return;
-	}
-
-	// multi-row: group rows by target shard
+	// group rows by target shard (locals first, then agents)
 	CSphVector<CSphVector<int>> dShardRows ( iNumShards );
 	for ( auto & v : dShardRows )
 		v.Reserve ( iRowCount / iNumShards + 1 );
@@ -4942,15 +4981,14 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		dShardRows[iShard].Add ( iRow );
 	}
 
-	// for multi-row we need to build per-shard value slices
-	// save original values, then swap in shard-specific subset for each shard
+	// save original values for multi-row processing
 	CSphVector<SqlInsert_t> dOrigValues;
 	dOrigValues.SwapData ( tStmt.m_dInsertValues );
 	int iOrigRows = tStmt.m_iRowsAffected;
-
 	int iTotalAffected = 0;
 
-	for ( int iShard = 0; iShard < iNumShards; iShard++ )
+	// --- Process local shards ---
+	for ( int iShard = 0; iShard < iNumLocals; iShard++ )
 	{
 		const auto & dRows = dShardRows[iShard];
 		if ( dRows.IsEmpty() )
@@ -4998,7 +5036,6 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 			return;
 		}
 
-		// commit per shard
 		if ( bCommit )
 		{
 			RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
@@ -5018,10 +5055,57 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		iTotalAffected += tStmt.m_iRowsAffected;
 	}
 
+	// --- Process remote agent shards ---
+	SearchFailuresLog_c dErrors;
+	for ( int iAgent = 0; iAgent < iNumAgents; iAgent++ )
+	{
+		int iShard = iNumLocals + iAgent;
+		const auto & dRows = dShardRows[iShard];
+		if ( dRows.IsEmpty() )
+			continue;
+
+		// get agent connection
+		VecRefPtrsAgentConn_t dAgents;
+		auto * pAgent = new AgentConn_t;
+		const auto & tMultiAgent = *pDist->m_dAgents[iAgent];
+		pAgent->m_tDesc.CloneFrom ( tMultiAgent.ChooseAgent() );
+		pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+		pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+
+		// build INSERT SQL targeting the agent's shard table
+		CSphString sSql = BuildInsertSqlForShard ( tStmt, pAgent->m_tDesc.m_sIndexes, dOrigValues, dRows );
+
+		// clear agent index name — the full SQL already contains the correct table name
+		// SphinxqlRequestBuilder_c sends: m_sBegin + agent.m_sIndexes + m_sEnd
+		// with iListStart=len, iListEnd=len: m_sBegin=full_sql, m_sEnd=""
+		pAgent->m_tDesc.m_sIndexes = "";
+		dAgents.Add ( pAgent );
+
+		Str_t tSqlQuery = FromStr ( sSql );
+		SqlStmt_t tRemoteStmt;
+		tRemoteStmt.m_iListStart = sSql.Length();
+		tRemoteStmt.m_iListEnd = sSql.Length();
+
+		int iGot = 0;
+		int iWarns = 0;
+		auto pRequestBuilder = std::make_unique<SphinxqlRequestBuilder_c> ( tSqlQuery, tRemoteStmt );
+		auto pReplyParser = CreateReplyParser ( false, iGot, iWarns, dErrors, nullptr );
+		PerformRemoteTasks ( dAgents, pRequestBuilder.get(), pReplyParser.get() );
+		iTotalAffected += iGot;
+	}
+
 	// restore original state
 	dOrigValues.SwapData ( tStmt.m_dInsertValues );
 	tStmt.m_iRowsAffected = iOrigRows;
 	tStmt.m_sIndex = sOrigIndex;
+
+	if ( !dErrors.IsEmpty() )
+	{
+		StringBuilder_c sReport;
+		dErrors.BuildReport ( sReport );
+		tOut.Error ( "%s", sReport.cstr() );
+		return;
+	}
 
 	int64_t iLastInsertId = 0;
 	if ( pSession->m_dLastIds.GetLength() )
@@ -5047,17 +5131,15 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		// check if it's a local-only distributed table - route to shards natively
+		// check if it's a distributed table - route to shards
 		auto pDist = GetDistr ( tStmt.m_sIndex );
-		if ( pDist && pDist->m_dAgents.IsEmpty() && !pDist->m_dLocal.IsEmpty() )
+		if ( pDist )
 		{
 			HandleDistributedInsert ( tOut, tStmt, pDist );
 			return;
 		}
 
-		// distributed with remote agents or non-distributed — let Buddy handle via error fallback
-		bool bDistTable = !!pDist;
-		if ( pServed || bDistTable )
+		if ( pServed )
 			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());

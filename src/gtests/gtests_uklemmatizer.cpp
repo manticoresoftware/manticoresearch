@@ -79,6 +79,11 @@ void WriteUkAsset ()
 	dStrings.Add ( "ти" );
 	dStrings.Add ( "" );
 	dStrings.Add ( "т" );
+	dStrings.Add ( "мрії" );
+	dStrings.Add ( "мрія" );
+	dStrings.Add ( "червона" );
+	dStrings.Add ( "червоний" );
+	dStrings.Add ( "ґніт" );
 
 	CSphVector<BYTE> dStringsPayload;
 	AppendDword ( dStringsPayload, dStrings.GetLength() );
@@ -99,6 +104,21 @@ void WriteUkAsset ()
 	AppendDword ( dExactPayload, 5 );
 	AppendDword ( dExactPayload, 1 );
 	AppendDword ( dExactPayload, 6 );
+
+	AppendDword ( dExactPayload, 10 );
+	AppendDword ( dExactPayload, 1 );
+	AppendDword ( dExactPayload, 11 );
+
+	AppendDword ( dExactPayload, 12 );
+	AppendDword ( dExactPayload, 1 );
+	AppendDword ( dExactPayload, 13 );
+
+	AppendDword ( dExactPayload, 14 );
+	AppendDword ( dExactPayload, 1 );
+	AppendDword ( dExactPayload, 14 );
+
+	const DWORD uExactEntries = 6;
+	memcpy ( dExactPayload.Begin(), &uExactEntries, sizeof(uExactEntries) );
 
 	CSphVector<BYTE> dPredictionPayload;
 	AppendDword ( dPredictionPayload, 2 );
@@ -221,6 +241,60 @@ TEST_F ( UkrainianLemmatizerTest_c, NativeSingleAndAllForms )
 	BYTE sUnknown[] = "невідоме";
 	sphAotLemmatizeUk ( sUnknown, tLemmatizer.get() );
 	ASSERT_STREQ ( (char*)sUnknown, "невідоме" );
+}
+
+TEST_F ( UkrainianLemmatizerTest_c, NativeCurrentBehaviorForUkrainianProbeCases )
+{
+	CSphString sError;
+	ASSERT_TRUE ( sphAotInit ( g_sUkAssetPath, sError, AOT_UK ) ) << sError.cstr();
+
+	auto tLemmatizer = CreateLemmatizer ( AOT_UK );
+	ASSERT_TRUE ( (bool)tLemmatizer );
+
+	BYTE sDreams[MAX_KEYWORD_BYTES] = "мрії";
+	sphAotLemmatizeUk ( sDreams, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sDreams, "мрія" );
+
+	BYTE sRed[MAX_KEYWORD_BYTES] = "червона";
+	sphAotLemmatizeUk ( sRed, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sRed, "червоний" );
+
+	BYTE sWent[MAX_KEYWORD_BYTES] = "йшли";
+	sphAotLemmatizeUk ( sWent, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sWent, "йти" );
+
+	BYTE sCanonicalG[MAX_KEYWORD_BYTES] = "ґніт";
+	sphAotLemmatizeUk ( sCanonicalG, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sCanonicalG, "ґніт" );
+
+	// Proxy baseline in tmp/lem-uk/pymorphy2-tests differs for these cases.
+	BYTE sSubstituteGap[MAX_KEYWORD_BYTES] = "гніт";
+	sphAotLemmatizeUk ( sSubstituteGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sSubstituteGap, "гніт" );
+
+	BYTE sKnownPrefixGap[MAX_KEYWORD_BYTES] = "псевдокотом";
+	sphAotLemmatizeUk ( sKnownPrefixGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sKnownPrefixGap, "псевдокотом" );
+
+	BYTE sUnknownPrefixGap[MAX_KEYWORD_BYTES] = "мегакотом";
+	sphAotLemmatizeUk ( sUnknownPrefixGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sUnknownPrefixGap, "мегакотом" );
+
+	BYTE sHyphenFixedGap[MAX_KEYWORD_BYTES] = "інтернет-магазину";
+	sphAotLemmatizeUk ( sHyphenFixedGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sHyphenFixedGap, "інтернет-магазину" );
+
+	BYTE sHyphenMutableGap[MAX_KEYWORD_BYTES] = "команд-учасниць";
+	sphAotLemmatizeUk ( sHyphenMutableGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sHyphenMutableGap, "команд-учасниць" );
+
+	BYTE sHyphenParticleGap[MAX_KEYWORD_BYTES] = "скажи-но";
+	sphAotLemmatizeUk ( sHyphenParticleGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sHyphenParticleGap, "скажи-но" );
+
+	BYTE sHyphenAdverbGap[MAX_KEYWORD_BYTES] = "по-західному";
+	sphAotLemmatizeUk ( sHyphenAdverbGap, tLemmatizer.get() );
+	ASSERT_STREQ ( (char*)sHyphenAdverbGap, "по-західному" );
 }
 
 } // namespace

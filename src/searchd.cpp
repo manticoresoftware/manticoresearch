@@ -4919,10 +4919,11 @@ static CSphString BuildInsertSqlForShard ( const SqlStmt_t & tStmt, const CSphSt
 				sBuf << "(";
 				if ( tVal.m_pVals )
 				{
-					ARRAY_FOREACH ( j, *tVal.m_pVals )
+					auto & dVals = *tVal.m_pVals;
+					ARRAY_FOREACH ( j, dVals )
 					{
 						if ( j ) sBuf << ",";
-						sBuf.Appendf ( INT64_FMT, (*tVal.m_pVals)[j] );
+						sBuf.Appendf ( INT64_FMT, (int64_t)dVals[j] );
 					}
 				}
 				sBuf << ")";
@@ -5067,8 +5068,8 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		// get agent connection
 		VecRefPtrsAgentConn_t dAgents;
 		auto * pAgent = new AgentConn_t;
-		const auto & tMultiAgent = *pDist->m_dAgents[iAgent];
-		pAgent->m_tDesc.CloneFrom ( tMultiAgent.ChooseAgent() );
+		// use first mirror of this agent group
+		pAgent->m_tDesc.CloneFrom ( (*pDist->m_dAgents[iAgent])[0] );
 		pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 		pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
 

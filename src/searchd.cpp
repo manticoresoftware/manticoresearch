@@ -4848,12 +4848,7 @@ static int64_t GetInsertDocId ( const SqlStmt_t & tStmt, int iRow )
 /// We temporarily swap m_sIndex to the shard name, process, then restore.
 static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, const DistributedIndex_t * pDist )
 {
-	if ( !pDist->m_dAgents.IsEmpty() )
-	{
-		tOut.Error ( "INSERT into distributed table '%s' with remote agents is not yet supported natively", tStmt.m_sIndex.cstr() );
-		return;
-	}
-
+	assert ( pDist->m_dAgents.IsEmpty() && !pDist->m_dLocal.IsEmpty() );
 	const auto & dLocals = pDist->m_dLocal;
 	int iNumShards = dLocals.GetLength();
 	if ( iNumShards<=0 )
@@ -5031,15 +5026,17 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt )
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		// check if it's a distributed table - route to shards
+		// check if it's a local-only distributed table - route to shards natively
 		auto pDist = GetDistr ( tStmt.m_sIndex );
-		if ( pDist )
+		if ( pDist && pDist->m_dAgents.IsEmpty() && !pDist->m_dLocal.IsEmpty() )
 		{
 			HandleDistributedInsert ( tOut, tStmt, pDist );
 			return;
 		}
 
-		if ( pServed )
+		// distributed with remote agents or non-distributed — let Buddy handle via error fallback
+		bool bDistTable = !!pDist;
+		if ( pServed || bDistTable )
 			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());

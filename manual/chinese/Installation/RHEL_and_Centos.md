@@ -55,34 +55,4 @@ dnf install mariadb-connector-c
 ```
 
 如果您尝试从 MySQL 构建普通表时出现错误 `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`。
-
-#### 乌克兰语词干提取器
-词干提取器需要 Python 3.9+。**请确保已安装并使用 `--enable-shared` 进行配置。**
-
-以下是在 Centos 8 中安装 Python 3.9 和乌克兰语词干提取器的方法：
-
-```bash
-# install Manticore Search and UK lemmatizer from YUM repository
-yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-yum -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-yum groupinstall "Development Tools" -y
-yum install openssl-devel libffi-devel bzip2-devel wget -y
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.2/Python-3.9.2.tgz
-tar xvf Python-3.9.2.tgz
-cd Python-3.9*/
-./configure --enable-optimizations --enable-shared
-make -j8 altinstall
-
-# update linker cache
-ldconfig
-
-# install pymorphy2 and UK dictionary
-pip3.9 install pymorphy2[fast]
-pip3.9 install pymorphy2-dicts-uk
-```
 <!-- proofread -->

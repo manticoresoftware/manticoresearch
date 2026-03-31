@@ -110,7 +110,7 @@ index agg_mad
 	<sphinxql>select percentile_ranks(latency, {values='-1,999',keyed=1,compression=200}) as r from agg_td</sphinxql>
 	<sphinxql>select percentile_ranks(latency, {values='-1,999',keyed=0,compression=200}) as r from agg_td</sphinxql>
 	<sphinxql>select median_absolute_deviation(latency) as m from agg_td</sphinxql>
-	<sphinxql>select mad(latency, {compression=2}) as m from agg_mad</sphinxql>
+	<sphinxql>select median_absolute_deviation(latency, {compression=2}) as m from agg_mad</sphinxql>
 	<sphinxql>select percentiles(latency, {values='0,100',keyed=0}) as p from agg_td_empty</sphinxql>
 	<sphinxql>select percentile_ranks(latency, {values='-1,999',keyed=0}) as r from agg_td_empty</sphinxql>
 	<sphinxql>select median_absolute_deviation(latency) as m from agg_td_empty</sphinxql>

@@ -928,9 +928,8 @@ private:
 class BulkRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	BulkRequestBuilder_c ( const CSphString & sPayload, const CSphString & sTable )
+	explicit BulkRequestBuilder_c ( const CSphString & sPayload )
 		: m_sPayload ( sPayload )
-		, m_sTable ( sTable )
 	{}
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
@@ -944,7 +943,6 @@ public:
 
 private:
 	CSphString m_sPayload;
-	CSphString m_sTable;
 };
 
 
@@ -3517,59 +3515,59 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 							AddEsError ( -1, m_sError, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
 					}
 				}
+				else
+				{
+					// remote shard: send _bulk request to remote node
+					// build NDJSON payload for all docs in this shard
+					StringBuilder_c sPayload;
+					for ( int iDocIdx : dDocIdxs )
+					{
+						BulkDoc_t & tDoc = dDocs[iDocIdx];
+						if ( IsEmpty ( tDoc.m_tDocLine ) )
+						{
+							AddEsError ( -1, CSphString("document is empty"), "mapper_parsing_exception", tDoc, tItems );
+							bOk = false;
+							continue;
+						}
+
+						// meta line: {"index":{"_index":"table","_id":"id"}}
+						char sIdBuf[32];
+						snprintf ( sIdBuf, sizeof(sIdBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
+						sPayload.Appendf ( R"({"%s":{"_index":"%s","_id":"%s"}})", tDoc.m_sAction.cstr(), sIdx.cstr(), sIdBuf );
+						sPayload << "\n";
+						// doc line
+						sPayload << Str_t ( tDoc.m_tDocLine.first, tDoc.m_tDocLine.second );
+						sPayload << "\n";
+					}
+
+					// setup agent connection
+					VecRefPtrsAgentConn_t dAgentConns;
+					auto * pAgentConn = new AgentConn_t;
+					pAgentConn->m_tDesc.CloneFrom ( (*pDist->m_dAgents[iShard - iNumLocals])[0] );
+					pAgentConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
+					pAgentConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
+					dAgentConns.Add ( pAgentConn );
+
+					// send _bulk request
+					CSphString sBulkPayload ( sPayload.cstr() );
+					int iInserted = 0;
+					auto pRequestBuilder = std::make_unique<BulkRequestBuilder_c> ( sBulkPayload );
+					auto pReplyParser = std::make_unique<BulkReplyParser_c> ( iInserted );
+					PerformRemoteTasks ( dAgentConns, pRequestBuilder.get(), pReplyParser.get() );
+
+					if ( iInserted )
+					{
+						for ( int iDocIdx : dDocIdxs )
+							AddEsReply ( dDocs[iDocIdx], tItems );
+					}
 					else
 					{
-						// remote shard: send _bulk request to remote node
-						// build NDJSON payload for all docs in this shard
-						StringBuilder_c sPayload;
+						bOk = false;
+						CSphString sErr ( "remote bulk insert failed" );
 						for ( int iDocIdx : dDocIdxs )
-						{
-							BulkDoc_t & tDoc = dDocs[iDocIdx];
-							if ( IsEmpty ( tDoc.m_tDocLine ) )
-							{
-								AddEsError ( -1, CSphString("document is empty"), "mapper_parsing_exception", tDoc, tItems );
-								bOk = false;
-								continue;
-							}
-
-							// meta line: {"index":{"_index":"table","_id":"id"}}
-							char sIdBuf[32];
-							snprintf ( sIdBuf, sizeof(sIdBuf), UINT64_FMT, (uint64_t)tDoc.m_tDocid );
-							sPayload.Appendf ( R"({"%s":{"_index":"%s","_id":"%s"}})", tDoc.m_sAction.cstr(), sIdx.cstr(), sIdBuf );
-							sPayload << "\n";
-							// doc line
-							sPayload << Str_t ( tDoc.m_tDocLine.first, tDoc.m_tDocLine.second );
-							sPayload << "\n";
-						}
-
-						// setup agent connection
-						VecRefPtrsAgentConn_t dAgentConns;
-						auto * pAgentConn = new AgentConn_t;
-						pAgentConn->m_tDesc.CloneFrom ( (*pDist->m_dAgents[iShard - iNumLocals])[0] );
-						pAgentConn->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
-						pAgentConn->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
-						dAgentConns.Add ( pAgentConn );
-
-						// send _bulk request
-						CSphString sBulkPayload ( sPayload.cstr() );
-						int iInserted = 0;
-						auto pRequestBuilder = std::make_unique<BulkRequestBuilder_c> ( sBulkPayload, sShardName );
-						auto pReplyParser = std::make_unique<BulkReplyParser_c> ( iInserted );
-						PerformRemoteTasks ( dAgentConns, pRequestBuilder.get(), pReplyParser.get() );
-
-						if ( iInserted )
-						{
-							for ( int iDocIdx : dDocIdxs )
-								AddEsReply ( dDocs[iDocIdx], tItems );
-						}
-						else
-						{
-							bOk = false;
-							CSphString sErr ( "remote bulk insert failed" );
-							for ( int iDocIdx : dDocIdxs )
-								AddEsError ( -1, sErr, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
-						}
+							AddEsError ( -1, sErr, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
 					}
+				}
 			}
 			continue;
 		}

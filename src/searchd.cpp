@@ -4918,10 +4918,17 @@ static CSphString BuildInsertSqlForShard ( const SqlStmt_t & tStmt, const CSphSt
 				sBuf.Appendf ( "%f", tVal.m_fVal );
 				break;
 			case SqlInsert_t::QUOTED_STRING:
+			{
 				sBuf << "'";
-				sBuf << tVal.m_sVal;
+				for ( const char * s = tVal.m_sVal.cstr(); s && *s; ++s )
+				{
+					if ( *s=='\'' || *s=='\\' )
+						sBuf << '\\';
+					sBuf << *s;
+				}
 				sBuf << "'";
 				break;
+			}
 			case SqlInsert_t::TOK_NULL:
 				sBuf << "NULL";
 				break;
@@ -5064,6 +5071,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 				dOrigValues.SwapData ( tStmt.m_dInsertValues );
 				tStmt.m_iRowsAffected = iOrigRows;
 				tStmt.m_sIndex = sOrigIndex;
+				tStmt.m_sCluster = sOrigCluster;
 				tOut.Error ( "%s", sError.cstr() );
 				return;
 			}

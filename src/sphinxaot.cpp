@@ -19,6 +19,7 @@
 #include "tokenizer/token_filter.h"
 #include "dict/word_forms.h"
 #include "lz4/lz4.h"
+#include <algorithm>
 #include <array>
 #include <string>
 #include <unordered_map>

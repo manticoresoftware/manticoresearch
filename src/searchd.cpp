@@ -4817,31 +4817,52 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut );
 
-/// Determine the document ID from an INSERT statement for a specific row
-/// Returns 0 if no explicit ID is provided (auto-generate needed)
-static int64_t GetInsertDocId ( const SqlStmt_t & tStmt, int iRow )
+/// Get doc ID from an INSERT statement for a specific row.
+/// If no explicit ID, generate one via UidShort() and write it into the values
+/// so that AddDocument() uses the same ID we route by.
+static int64_t GetOrAssignInsertDocId ( SqlStmt_t & tStmt, int iRow )
 {
-	// find 'id' in schema
+	// find 'id' in explicit schema
 	ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
 	{
 		if ( tStmt.m_dInsertSchema[i]=="id" )
 		{
-			const auto & tVal = tStmt.m_dInsertValues[i + iRow * tStmt.m_iSchemaSz];
+			auto & tVal = tStmt.m_dInsertValues[i + iRow * tStmt.m_iSchemaSz];
 			if ( tVal.m_iType==SqlInsert_t::CONST_INT )
-				return tVal.GetValueInt();
-			return 0;
+			{
+				int64_t iId = tVal.GetValueInt();
+				if ( iId!=0 )
+					return iId;
+			}
+			// id=0 or not an int → generate and inject
+			int64_t iNewId = UidShort();
+			tVal.m_iType = SqlInsert_t::CONST_INT;
+			tVal.SetValueInt ( iNewId );
+			return iNewId;
 		}
 	}
 
 	// no explicit schema - first column is id by convention
 	if ( tStmt.m_dInsertSchema.IsEmpty() && tStmt.m_iSchemaSz>0 )
 	{
-		const auto & tVal = tStmt.m_dInsertValues[iRow * tStmt.m_iSchemaSz];
+		auto & tVal = tStmt.m_dInsertValues[iRow * tStmt.m_iSchemaSz];
 		if ( tVal.m_iType==SqlInsert_t::CONST_INT )
-			return tVal.GetValueInt();
+		{
+			int64_t iId = tVal.GetValueInt();
+			if ( iId!=0 )
+				return iId;
+		}
+		// id=0 → generate and inject
+		int64_t iNewId = UidShort();
+		tVal.m_iType = SqlInsert_t::CONST_INT;
+		tVal.SetValueInt ( iNewId );
+		return iNewId;
 	}
 
-	return 0;
+	// no id column at all — can't inject, AddDocument will auto-generate
+	// generate one for routing, but AddDocument will use its own
+	// this only happens if schema has no 'id' field at all — rare edge case
+	return UidShort();
 }
 
 /// Handle INSERT/REPLACE into a distributed table by routing each row to the correct local shard.
@@ -4873,7 +4894,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 	// single row fast path - no grouping needed
 	if ( iRowCount==1 )
 	{
-		int64_t iDocId = GetInsertDocId ( tStmt, 0 );
+		int64_t iDocId = GetOrAssignInsertDocId ( tStmt, 0 );
 		if ( iDocId==0 )
 			iDocId = UidShort();
 
@@ -4913,7 +4934,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 
 	for ( int iRow = 0; iRow < iRowCount; iRow++ )
 	{
-		int64_t iDocId = GetInsertDocId ( tStmt, iRow );
+		int64_t iDocId = GetOrAssignInsertDocId ( tStmt, iRow );
 		if ( iDocId==0 )
 			iDocId = UidShort();
 

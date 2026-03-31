@@ -32,7 +32,7 @@ sudo apt update
 
 Then install Manticore Search:
 ```
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:

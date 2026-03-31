@@ -7472,15 +7472,19 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
 		const char * sReqIndex = dIndexNames[iIdx].cstr();
+		int64_t tmStartReq = sphMicroTimer();
+		int iSuccessesReq = 0;
+		int iUpdatedReq = 0;
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
 			int64_t tmStartIdx = sphMicroTimer();
 			int iUpdatedIdx = 0;
 
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pLocked );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
 
 			iUpdated += iUpdatedIdx;
+			iUpdatedReq += iUpdatedIdx;
 			pLocked->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 
 		} else if ( dDistributed[iIdx] )
@@ -7495,9 +7499,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
 
 				iUpdated += iUpdatedIdx;
+				iUpdatedReq += iUpdatedIdx;
 				if ( pServed )
 					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 			}
@@ -7515,9 +7520,15 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			// validation happens on remote side; errors will be returned via dFails
 			if ( !dAgents.IsEmpty() )
 			{
+				int iUpdatedRemote = 0;
+				int iWarnsRemote = 0;
 				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails, &sWarning );
-				iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdatedRemote, iWarnsRemote, dFails, &sWarning );
+				int iSuccessesRemote = PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				iSuccessesReq += iSuccessesRemote;
+				iUpdated += iUpdatedRemote;
+				iUpdatedReq += iUpdatedRemote;
+				iWarns += iWarnsRemote;
 
 				// collect errors from failed agents
 				for ( const AgentConn_t * pAgent : dAgents )
@@ -7536,6 +7547,14 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 						dFails.Submit ( pAgent->m_tDesc.m_sIndexes, sReqIndex, sError );
 					}
 			}
+		}
+
+		iSuccesses += iSuccessesReq;
+		if ( dDistributed[iIdx] && iSuccessesReq )
+		{
+			auto pDist = GetDistr ( sReqIndex );
+			if ( pDist )
+				pDist->m_tStats.AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedReq, tmStartReq );
 		}
 	}
 
@@ -9304,6 +9323,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
+static bool WaitOptimize ( RowBuffer_i & tOut, const CSphString & sIndex )
+{
+	if ( PollOptimizeRunning ( sIndex ) )
+		return true;
+
+	tOut.Error ( "RT table went away during waiting" );
+	return false;
+}
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
@@ -9322,18 +9349,57 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
-	auto bOptimizeStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+	const bool bSync = tStmt.m_tQuery.m_bSync;
+	if ( bHasCutoff )
+		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
 
-	if ( tStmt.m_tQuery.m_bSync && !bOptimizeStarted )
+	bool bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+
+	if ( !bSync )
+	{
+		tOut.Ok ();
+		return;
+	}
+
+	if ( !bStarted )
 	{
 		tOut.Error ( "Can't optimize frozen table" );
 		return;
 	}
 
-	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
-		tOut.Error ( "RT table went away during waiting" );
-	else
-		tOut.Ok ();
+	if ( !WaitOptimize ( tOut, sIndex ) )
+		return;
+
+	if ( bHasCutoff )
+	{
+		CSphIndexStatus tStatus;
+		RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+		if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+		{
+			if ( bHasCutoff )
+				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
+
+			bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+			if ( !bStarted )
+			{
+				tOut.Error ( "Can't optimize frozen table" );
+				return;
+			}
+
+			if ( !WaitOptimize ( tOut, sIndex ) )
+				return;
+
+			RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+			if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+			{
+				tOut.ErrorEx ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
+				return;
+			}
+		}
+	}
+
+	tOut.Ok ();
 }
 
 static CSphString GetLastInsertId ( const ClientSession_c * pSession )

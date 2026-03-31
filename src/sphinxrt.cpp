@@ -1526,6 +1526,7 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
+	std::atomic<int>			m_iManualOptimizeCutoff { 0 };
 	Coro::Waitable_T<int>		m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
@@ -1714,6 +1715,8 @@ private:
 	bool						GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const override;
 	bool						ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) override;
 	void						FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) override;
+
+	virtual void				ManualOptimizeCutoff ( int iCutoff );
 };
 
 
@@ -10737,6 +10740,11 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
+void RtIndex_c::ManualOptimizeCutoff ( int iCutoff )
+{
+	m_iManualOptimizeCutoff.store ( iCutoff, std::memory_order_relaxed );
+}
+
 int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
@@ -10762,6 +10770,10 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )
 	{
+		int iRequestedCutoff = m_iManualOptimizeCutoff.exchange ( 0, std::memory_order_acq_rel );
+		if ( iRequestedCutoff>0 )
+			iCutoff = Min ( iCutoff, iRequestedCutoff );
+
 		auto pChunks = m_tRtChunks.DiskChunks();
 		const int iFinallyRemainigChunks = pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks );
 		if ( iFinallyRemainigChunks <= iCutoff )
@@ -10842,6 +10854,9 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 		const CSphIndex& tVictim = pVictim->Cidx();
 		SkipOrDrop ( tVictim.m_iChunk, tVictim, false, &iAffected );
 	}
+
+	// A late async request might arrive after the last loop iteration and should not leak into a future optimize run.
+	m_iManualOptimizeCutoff.store ( 0, std::memory_order_relaxed );
 	return iAffected;
 }
 

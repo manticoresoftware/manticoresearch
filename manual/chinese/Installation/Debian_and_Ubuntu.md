@@ -32,7 +32,7 @@ sudo apt update
 
 然后安装 Manticore Search：
 ```
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 如果您是从旧版本升级到 Manticore 6，建议先删除旧包以避免由于包结构更新导致的冲突：

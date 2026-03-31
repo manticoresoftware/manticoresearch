@@ -4965,6 +4965,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 	auto * pSession = session::GetClientSession();
 	bool bCommit = ( pSession->m_bAutoCommit && !pSession->m_bInTransaction );
 	CSphString sOrigIndex = tStmt.m_sIndex;
+	CSphString sOrigCluster = tStmt.m_sCluster;
 	CSphString sError;
 
 	// group rows by target shard (locals first, then agents)
@@ -5002,6 +5003,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 			dOrigValues.SwapData ( tStmt.m_dInsertValues );
 			tStmt.m_iRowsAffected = iOrigRows;
 			tStmt.m_sIndex = sOrigIndex;
+			tStmt.m_sCluster = sOrigCluster;
 			tOut.Error ( "shard table '%s' is not mutable", sShardName.cstr() );
 			return;
 		}
@@ -5012,6 +5014,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 			dOrigValues.SwapData ( tStmt.m_dInsertValues );
 			tStmt.m_iRowsAffected = iOrigRows;
 			tStmt.m_sIndex = sOrigIndex;
+			tStmt.m_sCluster = sOrigCluster;
 			tOut.Error ( "shard table '%s' is locked", sShardName.cstr() );
 			return;
 		}
@@ -5026,6 +5029,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		}
 		tStmt.m_iRowsAffected = dRows.GetLength();
 		tStmt.m_sIndex = sShardName;
+		tStmt.m_sCluster = pServed->m_sCluster;  // use shard's actual cluster for validation + replication
 
 		GlobalCrashQueryGetRef().m_dIndex = FromStr ( sShardName );
 
@@ -5034,6 +5038,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 			dOrigValues.SwapData ( tStmt.m_dInsertValues );
 			tStmt.m_iRowsAffected = iOrigRows;
 			tStmt.m_sIndex = sOrigIndex;
+			tStmt.m_sCluster = sOrigCluster;
 			return;
 		}
 
@@ -5099,6 +5104,7 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 	dOrigValues.SwapData ( tStmt.m_dInsertValues );
 	tStmt.m_iRowsAffected = iOrigRows;
 	tStmt.m_sIndex = sOrigIndex;
+	tStmt.m_sCluster = sOrigCluster;
 
 	if ( !dErrors.IsEmpty() )
 	{

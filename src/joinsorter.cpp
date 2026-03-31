@@ -1542,6 +1542,12 @@ bool JoinSorter_c::RunBatch ( PUSH && fnPush )
 template <typename PUSH>
 bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush, bool bGrouped )
 {
+	// Hybrid fusion already works on sub-query results after JOIN processing.
+	// Re-running JOIN here would require the original left-side match shape,
+	// which fused matches no longer have.
+	if ( m_tQuery.m_bHybridSearch )
+		return fnPush ( tEntry );
+
 	if ( m_bFinalCalcOnly )
 		return fnPush(tEntry);
 

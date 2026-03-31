@@ -9,6 +9,7 @@
 <knn/>
 <http/>
 <force-rt/>
+<knn_float_tolerance/>
 </requires>
 
 <config>
@@ -137,6 +138,17 @@ searchd
 	select id, hybrid_score() from t4 where match('machine learning') and knn(vec1, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf', fusion_weights=(nonexistent=0.5);
 
 	drop table t4;
+
+	<!-- Regression: LEFT JOIN must not crash hybrid fusion -->
+	create table j1 (title text);
+	create table t5 (post_subject text, forum_id int, vec float_vector knn_type='hnsw' knn_dims='1' hnsw_similarity='L2');
+	insert into t5 (id, post_subject, forum_id, vec) values (1, 'test', 1, (0.1));
+	flush ramchunk t5;
+
+	select id, hybrid_score() from t5 left join j1 on t5.forum_id = j1.id where match('test') and knn(vec, (0.1)) option fusion_method='rrf';
+
+	drop table t5;
+	drop table j1;
 </sphinxql>
 </queries>
 

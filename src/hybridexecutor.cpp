@@ -134,12 +134,14 @@ static void CopyAttrs ( CSphMatch & tDstMatch, CSphMatch & tSrcMatch, const ISph
 		const CSphAttrLocator & tSrcLoc = pSrcSchema->GetAttr(i).m_tLocator;
 		const CSphAttrLocator & tDstLoc = pDstSchema->GetAttr(iDst).m_tLocator;
 
-		// for ptr attrs, free existing dst value (if any) before overwriting, then null out source
+		// Hybrid fusion must not steal pointer attrs from source matches because
+		// sub-query sorters may still own them or back them with shared storage
+		// (for example LEFT JOIN null rows). Copy them into standalone storage.
 		if ( sphIsDataPtrAttr ( pSrcSchema->GetAttr(i).m_eAttrType ) )
 		{
 			sphDeallocatePacked ( (BYTE*)tDstMatch.GetAttr ( tDstLoc ) );
-			tDstMatch.SetAttr ( tDstLoc, tSrcMatch.GetAttr ( tSrcLoc ) );
-			tSrcMatch.SetAttr ( tSrcLoc, 0 );
+			const auto * pSrcData = (const BYTE *)tSrcMatch.GetAttr ( tSrcLoc );
+			tDstMatch.SetAttr ( tDstLoc, pSrcData ? (SphAttr_t)sphCopyPackedAttr ( pSrcData ) : 0 );
 		}
 		else
 			tDstMatch.SetAttr ( tDstLoc, tSrcMatch.GetAttr ( tSrcLoc ) );

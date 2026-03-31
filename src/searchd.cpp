@@ -5079,17 +5079,9 @@ static void HandleDistributedInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tS
 		pAgent->m_iMyQueryTimeoutMs = pDist->GetAgentQueryTimeoutMs();
 		pAgent->m_iMyConnectTimeoutMs = pDist->GetAgentConnectTimeoutMs();
 
-		// resolve cluster name for the shard — check if we have a local replica
-		CSphString sShardName = pAgent->m_tDesc.m_sIndexes;
-		CSphString sClusterPrefix;
-		auto pLocalCopy = GetServed ( sShardName );
-		if ( pLocalCopy && !pLocalCopy->m_sCluster.IsEmpty() )
-			sClusterPrefix.SetSprintf ( "%s:", pLocalCopy->m_sCluster.cstr() );
-
-		// build INSERT SQL with cluster:shard_name for proper cluster validation on remote
-		CSphString sTargetName;
-		sTargetName.SetSprintf ( "%s%s", sClusterPrefix.cstr(), sShardName.cstr() );
-		CSphString sSql = BuildInsertSqlForShard ( tStmt, sTargetName, dOrigValues, dRows );
+		// send INSERT INTO the distributed table name — the remote node will
+		// run HandleDistributedInsert locally, find the shard as local, and insert correctly
+		CSphString sSql = BuildInsertSqlForShard ( tStmt, sOrigIndex, dOrigValues, dRows );
 
 		// clear agent index name — the full SQL already contains the correct table name
 		// SphinxqlRequestBuilder_c sends: m_sBegin + agent.m_sIndexes + m_sEnd

@@ -1,4 +1,5 @@
 Test auto-embeddings functionality via JSON API
+
 ––– comment –––
 Start Manticore Search with buddy
 ––– block: ../base/start-searchd-with-buddy –––

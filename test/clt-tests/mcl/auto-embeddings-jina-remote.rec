@@ -34,7 +34,7 @@ id bigint,
 title text,
 content text,
 description text,
-embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='jina/jina-embeddings-v4' FROM='title, content'
+embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='jina/jina-embeddings-v4' from='title, content' api_timeout='10'
 )
 ––– comment –––
 Test data insertion with auto-generated vectors

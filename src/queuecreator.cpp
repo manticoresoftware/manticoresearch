@@ -1058,8 +1058,14 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		return true;
 	}
 
-	if ( IsKnnDist(sExpr) && m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )<0 && !m_tQuery.m_bHybridSearch )
-		return Err ( "KNN_DIST() is only allowed for KNN() queries" );
+	if ( IsKnnDist(sExpr) )
+	{
+		if ( m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )<0 && !m_tQuery.m_bHybridSearch )
+			return Err ( "%s is only allowed for KNN() queries", sExpr.cstr() );
+
+		if ( sExpr==GetKnnDistAttrName() )
+			return true; // this already is an expression, no need to add it twice
+	}
 
 	if ( sExpr==GetHybridScoreAttrName() || sExpr=="hybrid_score()" )
 	{

@@ -70,9 +70,11 @@ table test_vec {
 При создании таблицы для автоэмбеддингов укажите:
 - `MODEL_NAME`: Модель эмбеддингов для использования
 - `FROM`: Какие поля использовать для генерации эмбеддингов (пустое значение означает все текстовые/строковые поля)
+- `API_KEY`: Требуется для удаленных моделей (OpenAI, Voyage, Jina). Ключ API проверяется при создании таблицы путем выполнения реального API-запроса.
+- `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
+- `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
 **Поддерживаемые модели эмбеддингов:**
-
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на основе BERT, автоматически загружаются |
@@ -124,6 +126,17 @@ CREATE TABLE products_openai (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
+);
+```
+
+Использование OpenAI с пользовательским URL API и таймаутом (опционально)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

@@ -70,9 +70,11 @@ The easiest way to work with vector data is using **auto embeddings**. With this
 When creating a table for auto embeddings, specify:
 - `MODEL_NAME`: The embedding model to use
 - `FROM`: Which fields to use for embedding generation (empty means all text/string fields)
+- `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
+- `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
+- `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
 **Supported embedding models:**
-
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | No | Local BERT-based models, auto-downloaded |
@@ -124,6 +126,17 @@ CREATE TABLE products_openai (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
+);
+```
+
+Using OpenAI with custom API URL and timeout (optional)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

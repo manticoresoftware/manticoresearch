@@ -44,6 +44,26 @@ static constexpr DWORD UK_SECTION_EXACT = 2;
 static constexpr DWORD UK_SECTION_PREDICTIONS = 3;
 static constexpr DWORD UK_CODEC_NONE = 0;
 static constexpr DWORD UK_CODEC_LZ4 = 1;
+static constexpr int UK_MAX_ANALOGY_DEPTH = 4;
+static constexpr const char * UK_CHAR_SUBSTITUTE_TO = "ґ";
+static constexpr std::array<const char *,4> UK_PARTICLES_AFTER_HYPHEN {
+	"-но",
+	"-таки",
+	"-бо",
+	"-от"
+};
+static constexpr std::array<const char *,10> UK_KNOWN_PREFIXES {
+	"інтернет-",
+	"псевдо-",
+	"псевдо",
+	"мега-",
+	"мега",
+	"гіпер-",
+	"гіпер",
+	"супер-",
+	"супер",
+	"міні"
+};
 
 struct UkSectionDesc_t
 {
@@ -240,13 +260,21 @@ private:
 	};
 
 	bool LoadV3 ( CSphReader & rd, CSphString & sError );
-	bool LookupExact ( const BYTE * pWord, CSphVector<CSphString> & dLemmas ) const;
-	bool LookupPrediction ( const BYTE * pWord, CSphVector<CSphString> & dLemmas ) const;
+	bool LookupWord ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const;
+	bool LookupExact ( const std::string & sWord, CSphVector<CSphString> & dLemmas ) const;
+	bool LookupPrediction ( const std::string & sWord, CSphVector<CSphString> & dLemmas ) const;
+	bool LookupHyphenParticle ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const;
+	bool LookupHyphenatedWord ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const;
+	bool LookupKnownPrefix ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const;
 	static bool ReadSection ( CSphReader & rd, const UkSectionDesc_t & tSection, CSphVector<BYTE> & dOut, CSphString & sError );
 	static const UkSectionDesc_t * FindSection ( const CSphVector<UkSectionDesc_t> & dSections, DWORD uType );
 	static const CSphString * GetStringById ( const CSphVector<CSphString> & dStrings, DWORD uId, const char * sWhat, CSphString & sError );
 	static void AddUniqueLemma ( std::vector<CSphString> & dLemmas, const CSphString & sLemma );
 	static void AddUniqueLemma ( CSphVector<CSphString> & dLemmas, const char * sLemma );
+	static bool StartsWith ( const std::string & sValue, const char * sPrefix );
+	static bool EndsWith ( const std::string & sValue, const char * sSuffix );
+	static std::string ApplyUkCharSubstitute ( const std::string & sWord );
+	static bool HasKnownDashPrefix ( const std::string & sWord );
 
 	std::unordered_map<std::string,std::vector<CSphString>> m_mLemmas;
 	std::unordered_map<std::string,std::vector<PredictionRule_t>> m_mPredictionRules;
@@ -2217,75 +2245,259 @@ void NativeUkLemmatizer_c::AddUniqueLemma ( CSphVector<CSphString> & dLemmas, co
 	dLemmas.Add ( sLemma );
 }
 
-bool NativeUkLemmatizer_c::LookupExact ( const BYTE * pWord, CSphVector<CSphString> & dLemmas ) const
+bool NativeUkLemmatizer_c::StartsWith ( const std::string & sValue, const char * sPrefix )
 {
-	auto it = m_mLemmas.find ( std::string ( (const char*)pWord ) );
-	if ( it==m_mLemmas.end() )
-		return false;
-
-	for ( const auto & sLemma : it->second )
-		AddUniqueLemma ( dLemmas, sLemma.cstr() );
-
-	return dLemmas.GetLength()>0;
+	return sValue.rfind ( sPrefix, 0 )==0;
 }
 
-bool NativeUkLemmatizer_c::LookupPrediction ( const BYTE * pWord, CSphVector<CSphString> & dLemmas ) const
+bool NativeUkLemmatizer_c::EndsWith ( const std::string & sValue, const char * sSuffix )
+{
+	const auto iSuffixLen = strlen ( sSuffix );
+	return sValue.length()>=iSuffixLen && sValue.compare ( sValue.length()-iSuffixLen, iSuffixLen, sSuffix )==0;
+}
+
+std::string NativeUkLemmatizer_c::ApplyUkCharSubstitute ( const std::string & sWord )
+{
+	std::string sResult;
+	bool bChanged = false;
+	const char * pCur = sWord.c_str();
+	while ( *pCur )
+	{
+		const BYTE * pCharStart = (const BYTE *)pCur;
+		const BYTE * pNext = pCharStart;
+		int iCode = sphUTF8Decode ( pNext );
+		if ( iCode==0x433 )
+		{
+			sResult += UK_CHAR_SUBSTITUTE_TO;
+			pCur = (const char *)pNext;
+			bChanged = true;
+			continue;
+		}
+
+		sResult.append ( pCur, (const char *)pNext - pCur );
+		pCur = (const char *)pNext;
+	}
+
+	return bChanged ? sResult : sWord;
+}
+
+bool NativeUkLemmatizer_c::HasKnownDashPrefix ( const std::string & sWord )
+{
+	for ( const auto * sPrefix : UK_KNOWN_PREFIXES )
+		if ( strchr ( sPrefix, '-' ) && StartsWith ( sWord, sPrefix ) )
+			return true;
+
+	return false;
+}
+
+bool NativeUkLemmatizer_c::LookupExact ( const std::string & sWord, CSphVector<CSphString> & dLemmas ) const
+{
+	auto tAddEntry = [this, &dLemmas] ( const std::string & sLookupWord )
+	{
+		auto it = m_mLemmas.find ( sLookupWord );
+		if ( it==m_mLemmas.end() )
+			return false;
+
+		for ( const auto & sLemma : it->second )
+			AddUniqueLemma ( dLemmas, sLemma.cstr() );
+		return true;
+	};
+
+	bool bFound = tAddEntry ( sWord );
+
+	auto sSubstitute = ApplyUkCharSubstitute ( sWord );
+	if ( sSubstitute!=sWord )
+		bFound = tAddEntry ( sSubstitute ) || bFound;
+
+	return bFound;
+}
+
+bool NativeUkLemmatizer_c::LookupPrediction ( const std::string & sWord, CSphVector<CSphString> & dLemmas ) const
 {
 	if ( m_mPredictionRules.empty() )
 		return false;
 
-	std::string sWord ( (const char*)pWord );
 	const int iWordCodepoints = sphUTF8Len ( sWord.c_str() );
 	if ( iWordCodepoints < (int)m_uPredictionMinWordLen )
 		return false;
 
-	std::vector<int> dSuffixStarts;
-	dSuffixStarts.reserve ( Min ( iWordCodepoints, (int)m_uPredictionMaxSuffixLen ) );
-	const BYTE * pCur = (const BYTE*)sWord.c_str();
-	const BYTE * pStart = pCur;
-	while ( *pCur )
+	struct ScoredLemma_t
 	{
-		const BYTE * pCharStart = pCur;
-		sphUTF8Decode ( pCur );
-		dSuffixStarts.push_back ( int ( pCharStart - pStart ) );
-	}
+		DWORD		m_uCount = 0;
+		CSphString	m_sLemma;
+	};
 
-	const int iMaxSuffixChars = Min ( iWordCodepoints, (int)m_uPredictionMaxSuffixLen );
-	for ( int iSuffixChars=iMaxSuffixChars; iSuffixChars>=1; --iSuffixChars )
+	auto tCollectPredictions = [this, &dLemmas, iWordCodepoints] ( const std::string & sLookupWord ) -> bool
 	{
-		const int iSuffixStart = dSuffixStarts [ iWordCodepoints - iSuffixChars ];
-		auto sEnding = sWord.substr ( iSuffixStart );
-		auto itRules = m_mPredictionRules.find ( sEnding );
-		if ( itRules==m_mPredictionRules.end() )
+		std::vector<int> dSuffixStarts;
+		dSuffixStarts.reserve ( Min ( iWordCodepoints, (int)m_uPredictionMaxSuffixLen ) );
+		const BYTE * pCur = (const BYTE*)sLookupWord.c_str();
+		const BYTE * pStart = pCur;
+		while ( *pCur )
+		{
+			const BYTE * pCharStart = pCur;
+			sphUTF8Decode ( pCur );
+			dSuffixStarts.push_back ( int ( pCharStart - pStart ) );
+		}
+
+		const int iMaxSuffixChars = Min ( iWordCodepoints, (int)m_uPredictionMaxSuffixLen );
+		for ( int iSuffixChars=iMaxSuffixChars; iSuffixChars>=1; --iSuffixChars )
+		{
+			const int iSuffixStart = dSuffixStarts [ iWordCodepoints - iSuffixChars ];
+			auto sEnding = sLookupWord.substr ( iSuffixStart );
+			auto itRules = m_mPredictionRules.find ( sEnding );
+			if ( itRules==m_mPredictionRules.end() )
+				continue;
+
+			std::vector<ScoredLemma_t> dCandidates;
+			for ( const auto & tRule : itRules->second )
+			{
+				if ( tRule.m_sRequiredPrefix.Length()>0 && sLookupWord.rfind ( tRule.m_sRequiredPrefix.cstr(), 0 )!=0 )
+					continue;
+
+				std::string sFixedWord = sLookupWord.substr ( 0, iSuffixStart );
+				sFixedWord += tRule.m_sFixedSuffix.cstr();
+
+				const auto iCurrentPrefixLen = tRule.m_sCurrentPrefix.Length();
+				const auto iCurrentSuffixLen = tRule.m_sCurrentSuffix.Length();
+				if ( iCurrentPrefixLen>0 && sFixedWord.rfind ( tRule.m_sCurrentPrefix.cstr(), 0 )!=0 )
+					continue;
+				if ( iCurrentSuffixLen>0 )
+				{
+					if ( (int)sFixedWord.length()<iCurrentSuffixLen )
+						continue;
+					if ( sFixedWord.compare ( sFixedWord.length()-iCurrentSuffixLen, iCurrentSuffixLen, tRule.m_sCurrentSuffix.cstr() )!=0 )
+						continue;
+				}
+				if ( (int)sFixedWord.length() < iCurrentPrefixLen + iCurrentSuffixLen )
+					continue;
+
+				std::string sStem = sFixedWord.substr ( iCurrentPrefixLen, sFixedWord.length() - iCurrentPrefixLen - iCurrentSuffixLen );
+				ScoredLemma_t tCandidate;
+				tCandidate.m_uCount = tRule.m_uCount;
+				std::string sLemma = tRule.m_sNormalPrefix.cstr();
+				sLemma += sStem;
+				sLemma += tRule.m_sNormalSuffix.cstr();
+				tCandidate.m_sLemma = sLemma.c_str();
+				dCandidates.emplace_back ( std::move ( tCandidate ) );
+			}
+
+			std::stable_sort ( dCandidates.begin(), dCandidates.end(), [] ( const ScoredLemma_t & a, const ScoredLemma_t & b )
+			{
+				return a.m_uCount > b.m_uCount;
+			} );
+
+			for ( const auto & tCandidate : dCandidates )
+				AddUniqueLemma ( dLemmas, tCandidate.m_sLemma.cstr() );
+
+			if ( dLemmas.GetLength()>0 )
+				return true;
+		}
+
+		return false;
+	};
+
+	bool bFound = tCollectPredictions ( sWord );
+	if ( bFound )
+		return true;
+
+	auto sSubstitute = ApplyUkCharSubstitute ( sWord );
+	if ( sSubstitute!=sWord )
+		return tCollectPredictions ( sSubstitute );
+
+	return false;
+}
+
+bool NativeUkLemmatizer_c::LookupHyphenParticle ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const
+{
+	for ( const auto * sParticle : UK_PARTICLES_AFTER_HYPHEN )
+	{
+		if ( !EndsWith ( sWord, sParticle ) )
 			continue;
 
-		for ( const auto & tRule : itRules->second )
+		std::string sBase = sWord.substr ( 0, sWord.length() - strlen ( sParticle ) );
+		if ( sBase.empty() )
+			return false;
+
+		CSphVector<CSphString> dBaseLemmas;
+		if ( !LookupWord ( sBase, dBaseLemmas, iDepth+1 ) )
+			return false;
+
+		for ( const auto & sLemma : dBaseLemmas )
 		{
-			if ( tRule.m_sRequiredPrefix.Length()>0 && sWord.rfind ( tRule.m_sRequiredPrefix.cstr(), 0 )!=0 )
-				continue;
+			std::string sFullLemma = sLemma.cstr();
+			sFullLemma += sParticle;
+			AddUniqueLemma ( dLemmas, sFullLemma.c_str() );
+		}
+		return dLemmas.GetLength()>0;
+	}
 
-			std::string sFixedWord = sWord.substr ( 0, iSuffixStart );
-			sFixedWord += tRule.m_sFixedSuffix.cstr();
+	return false;
+}
 
-			const auto iCurrentPrefixLen = tRule.m_sCurrentPrefix.Length();
-			const auto iCurrentSuffixLen = tRule.m_sCurrentSuffix.Length();
-			if ( iCurrentPrefixLen>0 && sFixedWord.rfind ( tRule.m_sCurrentPrefix.cstr(), 0 )!=0 )
-				continue;
-			if ( iCurrentSuffixLen>0 )
+bool NativeUkLemmatizer_c::LookupHyphenatedWord ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const
+{
+	const auto iHyphen = sWord.find ( '-' );
+	if ( iHyphen==std::string::npos || iHyphen==0 || iHyphen+1>=sWord.length() )
+		return false;
+
+	if ( sWord.find ( '-', iHyphen+1 )!=std::string::npos )
+		return false;
+
+	if ( HasKnownDashPrefix ( sWord ) )
+		return false;
+
+	std::string sLeft = sWord.substr ( 0, iHyphen );
+	std::string sRight = sWord.substr ( iHyphen+1 );
+	CSphVector<CSphString> dLeftLemmas;
+	CSphVector<CSphString> dRightLemmas;
+
+	const bool bLeftFound = LookupWord ( sLeft, dLeftLemmas, iDepth+1 );
+	const bool bRightFound = LookupWord ( sRight, dRightLemmas, iDepth+1 );
+	if ( !bRightFound )
+		return false;
+
+	if ( bLeftFound )
+		for ( const auto & sLeftLemma : dLeftLemmas )
+			for ( const auto & sRightLemma : dRightLemmas )
 			{
-				if ( (int)sFixedWord.length()<iCurrentSuffixLen )
-					continue;
-				if ( sFixedWord.compare ( sFixedWord.length()-iCurrentSuffixLen, iCurrentSuffixLen, tRule.m_sCurrentSuffix.cstr() )!=0 )
-					continue;
+				std::string sCombined = sLeftLemma.cstr();
+				sCombined += "-";
+				sCombined += sRightLemma.cstr();
+				AddUniqueLemma ( dLemmas, sCombined.c_str() );
 			}
-			if ( (int)sFixedWord.length() < iCurrentPrefixLen + iCurrentSuffixLen )
-				continue;
 
-			std::string sStem = sFixedWord.substr ( iCurrentPrefixLen, sFixedWord.length() - iCurrentPrefixLen - iCurrentSuffixLen );
-			std::string sLemma = tRule.m_sNormalPrefix.cstr();
-			sLemma += sStem;
-			sLemma += tRule.m_sNormalSuffix.cstr();
-			AddUniqueLemma ( dLemmas, sLemma.c_str() );
+	for ( const auto & sRightLemma : dRightLemmas )
+	{
+		std::string sCombined = sLeft;
+		sCombined += "-";
+		sCombined += sRightLemma.cstr();
+		AddUniqueLemma ( dLemmas, sCombined.c_str() );
+	}
+
+	return dLemmas.GetLength()>0;
+}
+
+bool NativeUkLemmatizer_c::LookupKnownPrefix ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const
+{
+	for ( const auto * sPrefix : UK_KNOWN_PREFIXES )
+	{
+		if ( !StartsWith ( sWord, sPrefix ) )
+			continue;
+
+		std::string sRemainder = sWord.substr ( strlen ( sPrefix ) );
+		if ( sphUTF8Len ( sRemainder.c_str() )<3 )
+			continue;
+
+		CSphVector<CSphString> dBaseLemmas;
+		if ( !LookupWord ( sRemainder, dBaseLemmas, iDepth+1 ) )
+			continue;
+
+		for ( const auto & sLemma : dBaseLemmas )
+		{
+			std::string sFullLemma = sPrefix;
+			sFullLemma += sLemma.cstr();
+			AddUniqueLemma ( dLemmas, sFullLemma.c_str() );
 		}
 
 		if ( dLemmas.GetLength()>0 )
@@ -2295,15 +2507,32 @@ bool NativeUkLemmatizer_c::LookupPrediction ( const BYTE * pWord, CSphVector<CSp
 	return false;
 }
 
+bool NativeUkLemmatizer_c::LookupWord ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const
+{
+	if ( iDepth>UK_MAX_ANALOGY_DEPTH || sWord.empty() )
+		return false;
+
+	if ( LookupExact ( sWord, dLemmas ) )
+		return true;
+
+	if ( LookupHyphenParticle ( sWord, dLemmas, iDepth ) )
+		return true;
+
+	if ( LookupHyphenatedWord ( sWord, dLemmas, iDepth ) )
+		return true;
+
+	if ( LookupKnownPrefix ( sWord, dLemmas, iDepth ) )
+		return true;
+
+	return LookupPrediction ( sWord, dLemmas );
+}
+
 bool NativeUkLemmatizer_c::Lookup ( const BYTE * pWord, CSphVector<CSphString> & dLemmas ) const
 {
 	if ( !pWord || !*pWord )
 		return false;
 
-	if ( LookupExact ( pWord, dLemmas ) )
-		return true;
-
-	return LookupPrediction ( pWord, dLemmas );
+	return LookupWord ( (const char*)pWord, dLemmas, 0 );
 }
 
 bool LoadLemmatizerUk ( const CSphString & sDictFile, CSphString & sError )
@@ -2384,6 +2613,9 @@ static bool SkipNonUkToken ( const BYTE * pWord )
 		if ( iCode>=0x400 && iCode<=0x4ff )
 			continue;
 
+		if ( iCode=='-' )
+			continue;
+
 		// allow non_cjk uk mapping too
 		if ( iCode==0x69 || iCode==0x73 || iCode==0xE6 )
 			continue;
@@ -2424,7 +2656,12 @@ void sphAotLemmatizeUk ( StrVec_t & dLemmas, const BYTE * pWord, LemmatizerTrait
 	for ( int i=0; i<iExtraCount; i++ )
 		dLemmas.Add (  (const char *)pLemmatizer->GetExtraToken () );
 
-	dLemmas.Uniq();
+	for ( int i=0; i<dLemmas.GetLength(); ++i )
+		for ( int j=i+1; j<dLemmas.GetLength(); )
+			if ( dLemmas[i]==dLemmas[j] )
+				dLemmas.Remove ( j );
+			else
+				++j;
 }
 
 std::unique_ptr<LemmatizerTrait_i> CreateLemmatizer ( int iLang )

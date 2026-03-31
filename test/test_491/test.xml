@@ -60,14 +60,27 @@ INSERT INTO uk_rt VALUES ( 5, 'красный', 11 );
 INSERT INTO uk_rt VALUES ( 6, 'красная', 11 );
 INSERT INTO uk_rt VALUES ( 7, 'красное', 11 );
 INSERT INTO uk_rt VALUES ( 8, 'красные', 11 );
+INSERT INTO uk_rt VALUES ( 9, 'псевдокотом', 11 );
+INSERT INTO uk_rt VALUES ( 10, 'мегакотом', 11 );
+INSERT INTO uk_rt VALUES ( 11, 'інтернет-магазину', 11 );
+INSERT INTO uk_rt VALUES ( 12, 'команд-учасниць', 11 );
+INSERT INTO uk_rt VALUES ( 13, 'скажи-но', 11 );
+INSERT INTO uk_rt VALUES ( 14, 'гніт', 11 );
 
 SELECT id FROM uk_rt WHERE MATCH('ґніт') ORDER BY id ASC; SHOW META;
 SELECT id FROM uk_rt WHERE MATCH('мрія') ORDER BY id ASC; SHOW META;
 SELECT id FROM uk_rt WHERE MATCH('червоний') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('псевдокіт') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('мегакіт') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('інтернет-магазин') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('команда-учасниця') ORDER BY id ASC; SHOW META;
+SELECT id FROM uk_rt WHERE MATCH('сказати-но') ORDER BY id ASC; SHOW META;
 
 CALL KEYWORDS ( 'ґніти', 'uk_all_tpl' );
+CALL KEYWORDS ( 'гніт ґніти гніти', 'uk_all_tpl' );
+CALL KEYWORDS ( 'інтернет-магазину команд-учасниць скажи-но псевдокотом мегакітові мегакотом', 'uk_all_tpl' );
 CALL KEYWORDS ( 'красный красная красное красные', 'uk_all_tpl' );
-CALL KEYWORDS ( 'ґніти красная красное невідоме foo', 'uk_single_tpl' );
+CALL KEYWORDS ( 'ґніти інтернет-магазину команд-учасниць скажи-но псевдокотом мегакотом красная красное невідоме foo', 'uk_single_tpl' );
 </sphinxql></queries>
 
 </test>

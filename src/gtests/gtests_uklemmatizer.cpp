@@ -14,6 +14,8 @@
 #include "sphinxint.h"
 #include "dict/stem/sphinxstem.h"
 #include "dict/dict_base.h"
+#include <unordered_map>
+#include <vector>
 
 namespace {
 
@@ -50,6 +52,13 @@ void AppendString ( CSphVector<BYTE> & dDst, const char * sValue )
 	memcpy ( pDst, sValue, iLen );
 }
 
+void AppendSectionStringId ( CSphVector<BYTE> & dDst, const std::unordered_map<std::string,DWORD> & hStringIds, const char * sValue )
+{
+	auto it = hStringIds.find ( sValue );
+	ASSERT_NE ( it, hStringIds.end() );
+	AppendDword ( dDst, it->second );
+}
+
 CSphVector<BYTE> CompressSection ( const CSphVector<BYTE> & dSrc, DWORD & uCodec )
 {
 	CSphVector<BYTE> dCompressed;
@@ -68,77 +77,101 @@ CSphVector<BYTE> CompressSection ( const CSphVector<BYTE> & dSrc, DWORD & uCodec
 
 void WriteUkAsset ()
 {
-	CSphVector<const char *> dStrings;
-	dStrings.Add ( "коти" );
-	dStrings.Add ( "кіт" );
-	dStrings.Add ( "замки" );
-	dStrings.Add ( "замок" );
-	dStrings.Add ( "замок_пристрій" );
-	dStrings.Add ( "йшли" );
-	dStrings.Add ( "йти" );
-	dStrings.Add ( "ти" );
-	dStrings.Add ( "" );
-	dStrings.Add ( "т" );
-	dStrings.Add ( "мрії" );
-	dStrings.Add ( "мрія" );
-	dStrings.Add ( "червона" );
-	dStrings.Add ( "червоний" );
-	dStrings.Add ( "ґніт" );
+	struct ExactEntry_t
+	{
+		const char *				m_sWord;
+		std::vector<const char *>	m_dLemmas;
+	};
+	struct PredictionEntry_t
+	{
+		const char *	m_sEnding;
+		const char *	m_sRequiredPrefix;
+		const char *	m_sFixedSuffix;
+		const char *	m_sCurrentPrefix;
+		const char *	m_sCurrentSuffix;
+		const char *	m_sNormalPrefix;
+		const char *	m_sNormalSuffix;
+		DWORD			m_uCount;
+	};
+
+	const std::vector<ExactEntry_t> dExactEntries {
+		{ "коти", { "коти", "кіт", "котити" } },
+		{ "мрії", { "мрія" } },
+		{ "червона", { "червоний" } },
+		{ "йшли", { "йти" } },
+		{ "ґніт", { "ґніт" } },
+		{ "гніт", { "гніт" } },
+		{ "гніти", { "гніт" } },
+		{ "замки", { "замок", "замок_пристрій" } },
+		{ "магазину", { "магазин" } },
+		{ "команд", { "команда" } },
+		{ "учасниць", { "учасниця" } },
+		{ "скажи", { "сказати" } },
+		{ "котом", { "кіт" } },
+		{ "кітові", { "кіт", "кітовий" } }
+	};
+	const std::vector<PredictionEntry_t> dPredictionEntries {
+		{ "ніти", "", "ніти", "", "ніти", "", "ніти", 128 },
+		{ "ніти", "", "ніти", "", "ніти", "", "ніт", 54 }
+	};
+
+	std::vector<const char *> dStrings;
+	std::unordered_map<std::string,DWORD> hStringIds;
+	auto tAddString = [&dStrings, &hStringIds] ( const char * sValue )
+	{
+		if ( !hStringIds.count ( sValue ) )
+		{
+			hStringIds [ sValue ] = (DWORD)dStrings.size();
+			dStrings.push_back ( sValue );
+		}
+	};
+
+	for ( const auto & tEntry : dExactEntries )
+	{
+		tAddString ( tEntry.m_sWord );
+		for ( const auto * sLemma : tEntry.m_dLemmas )
+			tAddString ( sLemma );
+	}
+
+	for ( const auto & tRule : dPredictionEntries )
+	{
+		tAddString ( tRule.m_sEnding );
+		tAddString ( tRule.m_sRequiredPrefix );
+		tAddString ( tRule.m_sFixedSuffix );
+		tAddString ( tRule.m_sCurrentPrefix );
+		tAddString ( tRule.m_sCurrentSuffix );
+		tAddString ( tRule.m_sNormalPrefix );
+		tAddString ( tRule.m_sNormalSuffix );
+	}
 
 	CSphVector<BYTE> dStringsPayload;
-	AppendDword ( dStringsPayload, dStrings.GetLength() );
+	AppendDword ( dStringsPayload, dStrings.size() );
 	for ( const auto * sValue : dStrings )
 		AppendString ( dStringsPayload, sValue );
 
 	CSphVector<BYTE> dExactPayload;
-	AppendDword ( dExactPayload, 3 );
-	AppendDword ( dExactPayload, 0 );
-	AppendDword ( dExactPayload, 1 );
-	AppendDword ( dExactPayload, 1 );
-
-	AppendDword ( dExactPayload, 2 );
-	AppendDword ( dExactPayload, 2 );
-	AppendDword ( dExactPayload, 3 );
-	AppendDword ( dExactPayload, 4 );
-
-	AppendDword ( dExactPayload, 5 );
-	AppendDword ( dExactPayload, 1 );
-	AppendDword ( dExactPayload, 6 );
-
-	AppendDword ( dExactPayload, 10 );
-	AppendDword ( dExactPayload, 1 );
-	AppendDword ( dExactPayload, 11 );
-
-	AppendDword ( dExactPayload, 12 );
-	AppendDword ( dExactPayload, 1 );
-	AppendDword ( dExactPayload, 13 );
-
-	AppendDword ( dExactPayload, 14 );
-	AppendDword ( dExactPayload, 1 );
-	AppendDword ( dExactPayload, 14 );
-
-	const DWORD uExactEntries = 6;
-	memcpy ( dExactPayload.Begin(), &uExactEntries, sizeof(uExactEntries) );
+	AppendDword ( dExactPayload, dExactEntries.size() );
+	for ( const auto & tEntry : dExactEntries )
+	{
+		AppendSectionStringId ( dExactPayload, hStringIds, tEntry.m_sWord );
+		AppendDword ( dExactPayload, tEntry.m_dLemmas.size() );
+		for ( const auto * sLemma : tEntry.m_dLemmas )
+			AppendSectionStringId ( dExactPayload, hStringIds, sLemma );
+	}
 
 	CSphVector<BYTE> dPredictionPayload;
-	AppendDword ( dPredictionPayload, 2 );
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 8 );
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 8 );
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 8 );
-	AppendDword ( dPredictionPayload, 9 );
-	AppendDword ( dPredictionPayload, 10 );
-
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 8 );
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 8 );
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 8 );
-	AppendDword ( dPredictionPayload, 7 );
-	AppendDword ( dPredictionPayload, 5 );
+	AppendDword ( dPredictionPayload, dPredictionEntries.size() );
+	for ( const auto & tRule : dPredictionEntries )
+	{
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sEnding );
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sRequiredPrefix );
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sFixedSuffix );
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sCurrentPrefix );
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sCurrentSuffix );
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sNormalPrefix );
+		AppendSectionStringId ( dPredictionPayload, hStringIds, tRule.m_sNormalSuffix );
+		AppendDword ( dPredictionPayload, tRule.m_uCount );
+	}
 
 	DWORD uStringsCodec = 0;
 	DWORD uExactCodec = 0;
@@ -224,7 +257,7 @@ TEST_F ( UkrainianLemmatizerTest_c, NativeSingleAndAllForms )
 
 	BYTE sKnown[] = "коти";
 	sphAotLemmatizeUk ( sKnown, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sKnown, "кіт" );
+	ASSERT_STREQ ( (char*)sKnown, "коти" );
 
 	StrVec_t dLemmas;
 	sphAotLemmatizeUk ( dLemmas, (const BYTE*)"замки", tLemmatizer.get() );
@@ -235,66 +268,58 @@ TEST_F ( UkrainianLemmatizerTest_c, NativeSingleAndAllForms )
 	dLemmas.Resize ( 0 );
 	sphAotLemmatizeUk ( dLemmas, (const BYTE*)"ґніти", tLemmatizer.get() );
 	ASSERT_EQ ( dLemmas.GetLength(), 2 );
-	ASSERT_STREQ ( dLemmas[0].cstr(), "ґніт" );
-	ASSERT_STREQ ( dLemmas[1].cstr(), "ґніти" );
+	ASSERT_STREQ ( dLemmas[0].cstr(), "ґніти" );
+	ASSERT_STREQ ( dLemmas[1].cstr(), "ґніт" );
 
 	BYTE sUnknown[] = "невідоме";
 	sphAotLemmatizeUk ( sUnknown, tLemmatizer.get() );
 	ASSERT_STREQ ( (char*)sUnknown, "невідоме" );
 }
 
-TEST_F ( UkrainianLemmatizerTest_c, NativeCurrentBehaviorForUkrainianProbeCases )
+TEST_F ( UkrainianLemmatizerTest_c, NativeMatchesProxyBaselineProbeCases )
 {
 	CSphString sError;
 	ASSERT_TRUE ( sphAotInit ( g_sUkAssetPath, sError, AOT_UK ) ) << sError.cstr();
 
 	auto tLemmatizer = CreateLemmatizer ( AOT_UK );
 	ASSERT_TRUE ( (bool)tLemmatizer );
+	auto tCheckSingle = [tLemmatizer = tLemmatizer.get()] ( const char * sWord, const char * sExpected )
+	{
+		BYTE sBuffer [ 128 ] {};
+		strncpy ( (char*)sBuffer, sWord, sizeof(sBuffer)-1 );
+		sphAotLemmatizeUk ( sBuffer, tLemmatizer );
+		ASSERT_STREQ ( (char*)sBuffer, sExpected ) << sWord;
+	};
 
-	BYTE sDreams[MAX_KEYWORD_BYTES] = "мрії";
-	sphAotLemmatizeUk ( sDreams, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sDreams, "мрія" );
+	auto tCheckAll = [tLemmatizer = tLemmatizer.get()] ( const char * sWord, std::initializer_list<const char *> dExpected )
+	{
+		StrVec_t dLemmas;
+		sphAotLemmatizeUk ( dLemmas, (const BYTE*)sWord, tLemmatizer );
+		ASSERT_EQ ( dLemmas.GetLength(), dExpected.size() ) << sWord;
+		int i = 0;
+		for ( const auto * sExpected : dExpected )
+			ASSERT_STREQ ( dLemmas[i++].cstr(), sExpected ) << sWord;
+	};
 
-	BYTE sRed[MAX_KEYWORD_BYTES] = "червона";
-	sphAotLemmatizeUk ( sRed, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sRed, "червоний" );
+	tCheckSingle ( "мрії", "мрія" );
+	tCheckSingle ( "червона", "червоний" );
+	tCheckSingle ( "йшли", "йти" );
+	tCheckSingle ( "ґніт", "ґніт" );
+	tCheckSingle ( "гніт", "гніт" );
+	tCheckSingle ( "інтернет-магазину", "інтернет-магазин" );
+	tCheckSingle ( "команд-учасниць", "команда-учасниця" );
+	tCheckSingle ( "по-західному", "по-західному" );
+	tCheckSingle ( "скажи-но", "сказати-но" );
+	tCheckSingle ( "псевдокотом", "псевдокіт" );
+	tCheckSingle ( "мегакітові", "мегакіт" );
+	tCheckSingle ( "мегакотом", "мегакіт" );
 
-	BYTE sWent[MAX_KEYWORD_BYTES] = "йшли";
-	sphAotLemmatizeUk ( sWent, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sWent, "йти" );
-
-	BYTE sCanonicalG[MAX_KEYWORD_BYTES] = "ґніт";
-	sphAotLemmatizeUk ( sCanonicalG, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sCanonicalG, "ґніт" );
-
-	// Proxy baseline in tmp/lem-uk/pymorphy2-tests differs for these cases.
-	BYTE sSubstituteGap[MAX_KEYWORD_BYTES] = "гніт";
-	sphAotLemmatizeUk ( sSubstituteGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sSubstituteGap, "гніт" );
-
-	BYTE sKnownPrefixGap[MAX_KEYWORD_BYTES] = "псевдокотом";
-	sphAotLemmatizeUk ( sKnownPrefixGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sKnownPrefixGap, "псевдокотом" );
-
-	BYTE sUnknownPrefixGap[MAX_KEYWORD_BYTES] = "мегакотом";
-	sphAotLemmatizeUk ( sUnknownPrefixGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sUnknownPrefixGap, "мегакотом" );
-
-	BYTE sHyphenFixedGap[MAX_KEYWORD_BYTES] = "інтернет-магазину";
-	sphAotLemmatizeUk ( sHyphenFixedGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sHyphenFixedGap, "інтернет-магазину" );
-
-	BYTE sHyphenMutableGap[MAX_KEYWORD_BYTES] = "команд-учасниць";
-	sphAotLemmatizeUk ( sHyphenMutableGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sHyphenMutableGap, "команд-учасниць" );
-
-	BYTE sHyphenParticleGap[MAX_KEYWORD_BYTES] = "скажи-но";
-	sphAotLemmatizeUk ( sHyphenParticleGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sHyphenParticleGap, "скажи-но" );
-
-	BYTE sHyphenAdverbGap[MAX_KEYWORD_BYTES] = "по-західному";
-	sphAotLemmatizeUk ( sHyphenAdverbGap, tLemmatizer.get() );
-	ASSERT_STREQ ( (char*)sHyphenAdverbGap, "по-західному" );
+	tCheckAll ( "коти", { "коти", "кіт", "котити" } );
+	tCheckAll ( "гніт", { "гніт", "ґніт" } );
+	tCheckAll ( "ґніти", { "ґніти", "ґніт" } );
+	tCheckAll ( "гніти", { "гніт" } );
+	tCheckAll ( "команд-учасниць", { "команда-учасниця", "команд-учасниця" } );
+	tCheckAll ( "мегакітові", { "мегакіт", "мегакітовий" } );
 }
 
 } // namespace

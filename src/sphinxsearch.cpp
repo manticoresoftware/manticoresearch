@@ -4604,7 +4604,15 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 		// shared docs count
 		if ( tCtx.m_pLocalDocs )
 		{
-			int64_t * pDocs = (*tCtx.m_pLocalDocs)( sIDFWord );
+			CSphString sLocalDFWord;
+			const CSphString * pLocalDFWord = &sIDFWord;
+			if ( *sIDFWord.cstr()==MAGIC_WORD_HEAD_NONSTEMMED )
+			{
+				sLocalDFWord = sIDFWord;
+				*const_cast<char *>( sLocalDFWord.cstr() ) = '=';
+				pLocalDFWord = &sLocalDFWord;
+			}
+			int64_t * pDocs = (*tCtx.m_pLocalDocs)( *pLocalDFWord );
 			if ( pDocs )
 				iTermDocs = *pDocs;
 		}

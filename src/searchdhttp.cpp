@@ -3450,6 +3450,11 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 				dShardDocs[iShard].Add ( iDoc );
 			}
 
+			// track per-doc results to preserve original request order in the response
+			CSphVector<bool> dDocOk ( tTnx.m_iCount );
+			CSphVector<CSphString> dDocErr ( tTnx.m_iCount );
+			for ( auto & b : dDocOk ) b = false;
+
 			// process each shard exactly like a local table
 			for ( int iShard = 0; iShard < iNumShards; iShard++ )
 			{
@@ -3506,13 +3511,13 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 					if ( bCommited )
 					{
 						for ( int iDocIdx : dDocIdxs )
-							AddEsReply ( dDocs[iDocIdx], tItems );
+							dDocOk[iDocIdx - tTnx.m_iFrom] = true;
 					}
 					else
 					{
 						bOk = false;
 						for ( int iDocIdx : dDocIdxs )
-							AddEsError ( -1, m_sError, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
+							dDocErr[iDocIdx - tTnx.m_iFrom] = m_sError;
 					}
 				}
 				else
@@ -3525,7 +3530,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 						BulkDoc_t & tDoc = dDocs[iDocIdx];
 						if ( IsEmpty ( tDoc.m_tDocLine ) )
 						{
-							AddEsError ( -1, CSphString("document is empty"), "mapper_parsing_exception", tDoc, tItems );
+							dDocErr[iDocIdx - tTnx.m_iFrom] = "document is empty";
 							bOk = false;
 							continue;
 						}
@@ -3558,16 +3563,25 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 					if ( iInserted )
 					{
 						for ( int iDocIdx : dDocIdxs )
-							AddEsReply ( dDocs[iDocIdx], tItems );
+							dDocOk[iDocIdx - tTnx.m_iFrom] = true;
 					}
 					else
 					{
 						bOk = false;
-						CSphString sErr ( "remote bulk insert failed" );
 						for ( int iDocIdx : dDocIdxs )
-							AddEsError ( -1, sErr, "mapper_parsing_exception", dDocs[iDocIdx], tItems );
+							dDocErr[iDocIdx - tTnx.m_iFrom] = "remote bulk insert failed";
 					}
 				}
+			}
+
+			// emit responses in original request order
+			for ( int i = 0; i < tTnx.m_iCount; i++ )
+			{
+				int iDoc = tTnx.m_iFrom + i;
+				if ( dDocOk[i] )
+					AddEsReply ( dDocs[iDoc], tItems );
+				else
+					AddEsError ( -1, dDocErr[i], "mapper_parsing_exception", dDocs[iDoc], tItems );
 			}
 			continue;
 		}

@@ -83,12 +83,12 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 
 默认情况下，表压缩会自动进行。您可以通过`auto_optimize`设置修改此行为：
 * 0 表示禁用自动表压缩（您仍可以手动调用`OPTIMIZE`）
-* 1 表示显式启用
-* 启用它，同时将优化阈值乘以2。
+* 1 启用自动表压缩并使用默认阈值
+* 任何大于 1 的整数 启用自动表压缩，同时将阈值乘以该值
 
-默认情况下，OPTIMIZE会一直运行，直到磁盘块数量小于或等于逻辑CPU核心数乘以2。
+默认情况下，阈值是逻辑 CPU 核心数乘以 2。
 
-但是，如果表具有KNN索引属性，则此阈值不同。在这种情况下，为了提高KNN搜索性能，它被设置为物理CPU核心数除以2。
+但是，如果表具有带有 KNN 索引的属性，则默认阈值不同。在这种情况下，它设置为物理 CPU 核心数除以 2，最小值为 1，以提高 KNN 搜索性能。
 
 请注意，开启或关闭`auto_optimize`不会阻止您手动运行[OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 

@@ -11857,6 +11857,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
 		return true;
 
+	case STMT_CLUSTER_EXIT:
+		m_tLastMeta = CSphQueryResultMeta();
+		if ( ClusterExit ( pStmt->m_sCluster, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
+			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
+		else
+			tOut.Error ( m_tLastMeta.m_sError.cstr() );
+		return true;
+
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 		m_tLastMeta = CSphQueryResultMeta();

@@ -427,6 +427,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	SHUTINFO << "Shutdown alone threads (if any) ...";
+	Detached::SetNotifier ( &sd::extend30s );
 	Detached::ShutdownAllAlones();
 	sd::extend30s();
 

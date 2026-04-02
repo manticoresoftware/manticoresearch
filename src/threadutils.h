@@ -290,6 +290,10 @@ namespace searchd
 // send them SIGTERM on shutdown
 namespace Detached
 {
+	using ShutdownNotifierFn = void (*) () noexcept;
+
+	void SetNotifier ( ShutdownNotifierFn fnNotifier ) noexcept;
+
 	void AddThread ( Threads::LowThreadDesc_t* pThread );
 
 	void RemoveThread ( Threads::LowThreadDesc_t* pThread );

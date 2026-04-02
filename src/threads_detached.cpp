@@ -11,7 +11,6 @@
 //
 
 #include "threadutils.h"
-#include "daemon/notifier.h"
 #include <csignal>
 
 using namespace Threads;
@@ -28,6 +27,8 @@ namespace {
 		static CSphVector<LowThreadDesc_t *> dDetachedThreads GUARDED_BY ( g_dDetachedGuard () );
 		return dDetachedThreads;
 	}
+
+	Detached::ShutdownNotifierFn g_fnNotifier = nullptr;
 }
 
 // walk over list of running detached threads and apply fnHandler to each of them
@@ -63,6 +64,11 @@ void Detached::MakeAloneIteratorAvailable ()
 }
 
 static int64_t g_tmShutdownAllAlonesDelta = 3; // max allowed wait in seconds
+
+void Detached::SetNotifier ( ShutdownNotifierFn fnNotifier ) noexcept
+{
+	g_fnNotifier = fnNotifier;
+}
 
 void Detached::ShutdownAllAlones()
 {
@@ -115,7 +121,8 @@ void Detached::ShutdownAllAlones()
 		}
 
 		++iTurn;
-		sd::extend30s();
+		if ( g_fnNotifier )
+			( *g_fnNotifier )();
 
 		int64_t tmCur = sphMicroTimer(); 
 		if ( tmCur>tmEnd )

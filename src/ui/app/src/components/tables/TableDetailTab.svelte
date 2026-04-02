@@ -5,9 +5,10 @@
 	import { refreshTables } from '../../lib/stores/tables.svelte';
 	import type { QueryResult } from '../../lib/types';
 
-	let { tableName, onOpenQuery }: {
+	let { tableName, onOpenQuery, onInsertRow }: {
 		tableName: string;
 		onOpenQuery: (sql: string) => void;
+		onInsertRow: (tableName: string) => void;
 	} = $props();
 
 	let schema = $state<QueryResult | null>(null);
@@ -66,6 +67,9 @@
 		<div class="detail-actions">
 			<button class="btn btn-ghost" onclick={() => onOpenQuery(`SELECT * FROM ${tableName} LIMIT 100`)}>
 				Query
+			</button>
+			<button class="btn btn-ghost" onclick={() => onInsertRow(tableName)}>
+				Insert
 			</button>
 			<button class="btn btn-ghost" onclick={handleOptimize}>Optimize</button>
 			<button class="btn btn-danger" onclick={handleDrop} disabled={dropping}>

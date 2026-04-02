@@ -341,36 +341,28 @@
 		gap: var(--space-sm);
 		flex-wrap: wrap;
 	}
+	.field-name, .field-type, .field-extra {
+		height: 34px;
+		padding: 0 10px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-size: var(--font-size-sm);
+		background: var(--color-bg);
+		outline: none;
+	}
 	.field-name {
 		flex: 1;
 		min-width: 120px;
-		padding: 6px 10px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		font-size: var(--font-size-sm);
 		font-family: var(--font-mono);
-		background: var(--color-bg);
-		outline: none;
 	}
-	.field-name:focus { border-color: var(--color-primary); }
 	.field-type {
 		width: 130px;
-		padding: 6px 8px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		font-size: var(--font-size-sm);
-		background: var(--color-bg);
-		outline: none;
 	}
-	.field-type:focus { border-color: var(--color-primary); }
 	.field-extra {
 		width: 80px;
-		padding: 6px 8px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		font-size: var(--font-size-sm);
-		background: var(--color-bg);
-		outline: none;
+	}
+	.field-name:focus, .field-type:focus, .field-extra:focus {
+		border-color: var(--color-primary);
 	}
 	.field-model, .field-from {
 		flex: 1;

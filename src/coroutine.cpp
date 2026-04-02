@@ -656,6 +656,11 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	tEvent.WaitEvent ();
 }
 
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler )
+{
+	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(tWait) );
+}
+
 ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
 {
 	Coro::Worker_c::MockRun ( std::move ( fnHandler ), dStack );

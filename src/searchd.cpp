@@ -406,14 +406,25 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 			RWIdx_c ( tIt.second )->Unlock();
 	}
 
-	CallCoroutine ( [] {
+	auto fnHandler = [] {
 		SHUTINFO << "Abandon local tables list ...";
 		g_pLocalIndexes->ReleaseAndClear();
 
 		// unlock Distr indexes automatically done by d-tr
 		SHUTINFO << "Abandon distr tables list ...";
 		g_pDistIndexes->ReleaseAndClear();
-	} );
+	};
+
+	std::atomic<bool> bIsDone { false };
+	auto dWaiter = Waiter_t ( nullptr, [&bIsDone] ( void * ) { bIsDone = true; } );
+	StartCall ( std::move ( fnHandler ), std::move ( dWaiter ) );
+	auto uLastWritten = GlobalWritten ();
+	while ( !bIsDone ) {
+		sphSleepMsec ( 50 );
+		const auto uNowWritten = GlobalWritten ();
+		if ( uNowWritten != std::exchange ( uLastWritten, uNowWritten ) )
+			sd::extend30s();
+	}
 
 	SHUTINFO << "Shutdown alone threads (if any) ...";
 	Detached::ShutdownAllAlones();

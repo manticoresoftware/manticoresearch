@@ -60,6 +60,9 @@ bool CallCoroutineRes ( Predicate fnHandler );
 // start handler in coroutine, self (if any) or main scheduler, second-priority
 void StartJob ( Handler handler, Scheduler_i * pScheduler = GlobalWorkPool() );
 
+// start handler in coroutine, with provided waiter used to detect when call is done.
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler = GlobalWorkPool() );
+
 // perform handler in custom stack
 // note: handler is called as linear routine, without scheduler.
 // It should NOT switch context (i.e. no yield/resume)

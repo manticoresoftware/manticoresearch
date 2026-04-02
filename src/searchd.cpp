@@ -13539,6 +13539,8 @@ void ShowHelp ()
 		"-t, --table <table>\tonly serve given table(s)\n"
 #if !_WIN32
 		"--nodetach\t\tdo not detach into background\n"
+		"--watchdog\t\tforce using watchdog (overrides config/systemd setting)\n"
+		"--no-watchdog\t\tdisable watchdog (override config setting)\n"
 #endif
 		"--logdebug, --logdebugv, --logdebugvv\n"
 		"\t\t\tenable additional debug information logging\n"
@@ -14834,6 +14836,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--ntservice" )		{} // it's valid but handled elsewhere
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
+		OPT1 ( "--watchdog" )		g_tWatchdog = true;
+		OPT1 ( "--no-watchdog" )	g_tWatchdog = false;
 #endif
 		OPT1 ( "--logdebug" )		UpdateLogLevel ( SPH_LOG_DEBUG );
 		OPT1 ( "--logdebugv" )		UpdateLogLevel ( SPH_LOG_VERBOSE_DEBUG );
@@ -15008,7 +15012,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( g_bOptNoDetach || bTestMode )
 		g_tWatchdog = false;
 	else
-		g_tWatchdog = hSearchdpre.OptBool ( "watchdog" );
+		if ( !g_tWatchdog.has_value() ) // value may be already set via cmdline
+			g_tWatchdog = hSearchdpre.OptBool ( "watchdog" );
 
 	int iDevNull = open ( "/dev/null", O_RDWR );
 	if ( g_tWatchdog.value_or ( !g_bSystemd ) )

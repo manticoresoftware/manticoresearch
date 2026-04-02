@@ -204,7 +204,7 @@ jobs:
         mkdir build
         cd build
         export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
-        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
+        cmake -DPACK=1 -DPACK_BUNDLE=1 -DWITH_UI=1 ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*deb"
@@ -232,7 +232,7 @@ jobs:
         mkdir build
         cd build
         export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
-        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
+        cmake -DPACK=1 -DPACK_BUNDLE=1 -DWITH_UI=1 ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
@@ -258,7 +258,7 @@ jobs:
         mkdir build
         cd build
         export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
-        cmake -DPACK=1 -DPACK_BUNDLE=1 -DDL_CURL=1 \
+        cmake -DPACK=1 -DPACK_BUNDLE=1 -DWITH_UI=1 -DDL_CURL=1 \
           -DCURL_LIBRARY=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib \
           -DCURL_LIBRARY_RELEASE=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib ..
         cmake --build . --target package
@@ -282,7 +282,7 @@ jobs:
         mkdir build
         cd build
         export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
-        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
+        cmake -DPACK=1 -DPACK_BUNDLE=1 -DWITH_UI=1 ..
         cmake --build . --target package
       cache_key: pack_windows_x64
       artifact_list: "build/manticore*exe build/manticore*zip"

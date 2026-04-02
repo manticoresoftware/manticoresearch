@@ -3,10 +3,10 @@ option ( WITH_UI "Build embedded web UI" OFF )
 if ( WITH_UI )
 	find_program ( NODE_EXECUTABLE node )
 	find_program ( NPM_EXECUTABLE npm )
-	find_program ( PYTHON_EXECUTABLE python3 )
+	find_program ( UI_PYTHON_EXECUTABLE python3 )
 	if ( NOT NODE_EXECUTABLE OR NOT NPM_EXECUTABLE )
 		message ( FATAL_ERROR "WITH_UI=ON requires node and npm" )
-	elseif ( NOT PYTHON_EXECUTABLE )
+	elseif ( NOT UI_PYTHON_EXECUTABLE )
 		message ( FATAL_ERROR "WITH_UI=ON requires python3" )
 	endif ()
 endif ()
@@ -26,7 +26,7 @@ if ( WITH_UI )
 
 	add_custom_command (
 		OUTPUT "${UI_GENERATED}"
-		COMMAND ${PYTHON_EXECUTABLE}
+		COMMAND ${UI_PYTHON_EXECUTABLE}
 			"${CMAKE_CURRENT_SOURCE_DIR}/embed_assets.py"
 			"${UI_DIST_DIR}"
 			"${UI_GENERATED}"

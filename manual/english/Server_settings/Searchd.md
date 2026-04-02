@@ -83,12 +83,12 @@ This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_tabl
 
 By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
 * 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
-* 1 to explicitly enable it
-* to enable it while multiplying the optimization threshold by 2.
+* 1 to enable automatic table compaction with the default threshold
+* any integer greater than 1 to enable automatic table compaction while multiplying the threshold by that value
 
-By default, OPTIMIZE runs until the number of disk chunks is less than or equal to the number of logical CPU cores multiplied by 2.
+By default, the threshold is the number of logical CPU cores multiplied by 2.
 
-However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+However, if the table has attributes with KNN indexes, the default threshold is different. In this case, it is set to the number of physical CPU cores divided by 2, with a minimum value of 1, to improve KNN search performance.
 
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
@@ -116,7 +116,7 @@ This affects only disk chunk merging (compaction), not query parallelism.
 
 Set it to `1` to disable parallel chunk merging (merge jobs will run one-by-one). Higher values may speed up compaction on systems with fast storage, but will increase concurrent disk I/O.
 
-Default is `max(1, min(2, threads/2))`.
+By default, Manticore uses the value of the [threads](../Server_settings/Searchd.md#threads) setting for this calculation; if `threads` is not configured, it defaults to the number of logical CPUs. The resulting default for `parallel_chunk_merges` is `1` when `threads` is `1`, `2`, or `3`, and `2` when `threads` is `4` or higher (that is, `max(1, min(2, threads/2))` using integer division).
 
 This value can be changed at runtime using `SET GLOBAL parallel_chunk_merges = N` and inspected via `SHOW VARIABLES`.
 

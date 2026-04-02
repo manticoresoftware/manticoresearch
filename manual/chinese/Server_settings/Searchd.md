@@ -83,12 +83,12 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 
 默认情况下，表压缩会自动进行。您可以通过`auto_optimize`设置修改此行为：
 * 0 表示禁用自动表压缩（您仍可以手动调用`OPTIMIZE`）
-* 1 表示显式启用
-* 启用它，同时将优化阈值乘以2。
+* 1 启用自动表压缩并使用默认阈值
+* 任何大于 1 的整数 启用自动表压缩，同时将阈值乘以该值
 
-默认情况下，OPTIMIZE会一直运行，直到磁盘块数量小于或等于逻辑CPU核心数乘以2。
+默认情况下，阈值是逻辑 CPU 核心数乘以 2。
 
-但是，如果表具有KNN索引属性，则此阈值不同。在这种情况下，为了提高KNN搜索性能，它被设置为物理CPU核心数除以2。
+但是，如果表具有带有 KNN 索引的属性，则默认阈值不同。在这种情况下，它设置为物理 CPU 核心数除以 2，最小值为 1，以提高 KNN 搜索性能。
 
 请注意，开启或关闭`auto_optimize`不会阻止您手动运行[OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 
@@ -116,7 +116,7 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 将其设置为 `1` 以禁用并行块合并（合并任务将逐个运行）。较高的值可能会在具有快速存储的系统上加快压缩速度，但会增加并发磁盘 I/O。
 
-默认值为 `max(1, min(2, threads/2))`。
+默认情况下，Manticore 使用 [threads](../Server_settings/Searchd.md#threads) 设置的值进行此计算；如果未配置 `threads`，则默认为逻辑 CPU 的数量。`parallel_chunk_merges` 的默认值为 `1`，当 `threads` 为 `1`、`2` 或 `3` 时，以及 `2` 当 `threads` 为 `4` 或更高时（即 `max(1, min(2, threads/2))` 使用整数除法）。
 
 可以在运行时使用 `SET GLOBAL parallel_chunk_merges = N` 更改此值，并通过 `SHOW VARIABLES` 查看。
 

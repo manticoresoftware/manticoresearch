@@ -4599,11 +4599,20 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	for ( auto& hQword : hQwords )
 	{
 		ExtQword_t & tWord = hQword.second;
+		const CSphString & sIDFWord = tWord.m_sDictWord.IsEmpty() ? tWord.m_sWord : tWord.m_sDictWord;
 		int64_t iTermDocs = tWord.m_iDocs;
 		// shared docs count
 		if ( tCtx.m_pLocalDocs )
 		{
-			int64_t * pDocs = (*tCtx.m_pLocalDocs)( tWord.m_sWord );
+			CSphString sLocalDFWord;
+			const CSphString * pLocalDFWord = &sIDFWord;
+			if ( *sIDFWord.cstr()==MAGIC_WORD_HEAD_NONSTEMMED )
+			{
+				sLocalDFWord = sIDFWord;
+				*const_cast<char *>( sLocalDFWord.cstr() ) = '=';
+				pLocalDFWord = &sLocalDFWord;
+			}
+			int64_t * pDocs = (*tCtx.m_pLocalDocs)( *pLocalDFWord );
 			if ( pDocs )
 				iTermDocs = *pDocs;
 		}
@@ -4611,7 +4620,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 		// build IDF
 		float fIDF = 0.0f;
 		if ( tQuery.m_bGlobalIDF )
-			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, iTermDocs, tQuery.m_bPlainIDF );
+			fIDF = pIndex->GetGlobalIDF ( sIDFWord, iTermDocs, tQuery.m_bPlainIDF );
 		else if ( iTermDocs )
 		{
 			// (word_docs > total_docs) case *is* occasionally possible

@@ -407,7 +407,7 @@ knn_dist(): 0.31627#!/[0-9]{3}/!#
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.33028#!/[0-9]{3}/!#
+knn_dist(): 0.330283
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043
@@ -515,7 +515,7 @@ knn_dist(): 0.31627#!/[0-9]{3}/!#
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.33028#!/[0-9]{3}/!#
+knn_dist(): 0.330283
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043

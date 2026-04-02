@@ -10,6 +10,7 @@
 
 	let columns = $state<ColumnDef[]>([]);
 	let values = $state<Record<string, string>>({});
+	let valuesVersion = $state(0);
 	let loading = $state(false);
 	let executing = $state(false);
 	let error = $state<string | null>(null);
@@ -31,8 +32,7 @@
 				.map(row => ({
 					name: (row['Field'] || row['field'] || '') as string,
 					type: (row['Type'] || row['type'] || '') as string,
-				}))
-				.filter(c => c.name !== 'id');
+				}));
 			values = {};
 			for (const col of columns) {
 				values[col.name] = '';
@@ -44,13 +44,19 @@
 		}
 	}
 
+	function updateValue(name: string, val: string) {
+		values[name] = val;
+		valuesVersion++;
+	}
+
 	function buildSQL(): string {
-		const filled = columns.filter(c => values[c.name]?.trim());
+		void valuesVersion; // trigger reactivity
+		const filled = columns.filter(c => String(values[c.name] ?? '').trim());
 		if (!filled.length || !tableName) return '';
 
 		const cols = filled.map(c => c.name).join(', ');
 		const vals = filled.map(c => {
-			const v = values[c.name].trim();
+			const v = String(values[c.name] ?? '').trim();
 			const t = c.type.toLowerCase();
 			if (['integer', 'int', 'bigint', 'float', 'bool', 'timestamp'].some(n => t.includes(n))) {
 				return v;
@@ -75,6 +81,7 @@
 			for (const col of columns) {
 				values[col.name] = '';
 			}
+			valuesVersion++;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -128,18 +135,19 @@
 						<div class="field-group">
 							<label for="insert-{col.name}">
 								<span class="field-label">{col.name}</span>
-								<span class="field-type-hint">{col.type}</span>
+								<span class="field-type-hint">{col.type}{col.name === 'id' ? ' — optional, auto-generated if empty' : ''}</span>
 							</label>
 							{#if isTextArea(col.type)}
 								<textarea
 									id="insert-{col.name}"
-									bind:value={values[col.name]}
-									placeholder={col.type}
+									value={values[col.name] ?? ''}
+									oninput={(e) => updateValue(col.name, e.currentTarget.value)}
+									placeholder={col.name === 'id' ? 'auto-generated if empty' : col.type}
 									rows="2"
 									class:mono={col.type.toLowerCase() === 'json'}
 								></textarea>
 							{:else if col.type.toLowerCase() === 'bool'}
-								<select id="insert-{col.name}" bind:value={values[col.name]}>
+								<select id="insert-{col.name}" value={values[col.name] ?? ''} onchange={(e) => updateValue(col.name, e.currentTarget.value)}>
 									<option value="">— select —</option>
 									<option value="1">true (1)</option>
 									<option value="0">false (0)</option>
@@ -147,9 +155,11 @@
 							{:else}
 								<input
 									id="insert-{col.name}"
-									type={inputType(col.type)}
-									bind:value={values[col.name]}
-									placeholder={col.type}
+									type="text"
+									inputmode={inputType(col.type) === 'number' ? 'numeric' : 'text'}
+									value={values[col.name] ?? ''}
+									oninput={(e) => updateValue(col.name, e.currentTarget.value)}
+									placeholder={col.name === 'id' ? 'auto-generated if empty' : col.type}
 								/>
 							{/if}
 						</div>

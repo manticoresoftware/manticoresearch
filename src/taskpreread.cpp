@@ -58,6 +58,7 @@ void DoPreread ()
 		sphLogDebug ( "preread table '%s' in %0.3f sec", sName.cstr (), float ( tmRead ) / 1000000.0f );
 
 		++iRead;
+		sd::extend30s();
 	}
 
 	int64_t tmFinished = sphMicroTimer () - tmStart;

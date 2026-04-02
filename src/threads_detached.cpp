@@ -11,6 +11,7 @@
 //
 
 #include "threadutils.h"
+#include "daemon/notifier.h"
 #include <csignal>
 
 using namespace Threads;
@@ -114,6 +115,7 @@ void Detached::ShutdownAllAlones()
 		}
 
 		++iTurn;
+		sd::extend30s();
 
 		int64_t tmCur = sphMicroTimer(); 
 		if ( tmCur>tmEnd )

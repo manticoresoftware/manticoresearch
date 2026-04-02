@@ -22,6 +22,7 @@ void mainpid (int iPid) noexcept;
 void ready() noexcept;
 void stopping() noexcept;
 void reloading() noexcept;
+void extend30s() noexcept;
 void keep_alive() noexcept;
 
 [[nodiscard]] std::optional<uint64_t> WatchdogTimeout () noexcept;

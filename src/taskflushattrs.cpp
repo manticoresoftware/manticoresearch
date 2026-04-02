@@ -14,6 +14,7 @@
 #include "searchdtask.h"
 #include "searchdaemon.h"
 #include "coroutine.h"
+#include "daemon/notifier.h"
 
 //////////////////////////////////////////////////////////////////////////
 struct FlushState_t
@@ -50,7 +51,7 @@ static Saved_e CheckSaveIndexes ()
 				eSaveState = Saved_e::NOT_ALL;
 			}
 		}
-
+		sd::extend30s();
 	}
 
 	if ( !bDirty )

@@ -21,6 +21,7 @@ void mainpid ( int ) noexcept {}
 void ready() noexcept {}
 void stopping() noexcept {};
 void reloading() noexcept {};
+void extend30s() noexcept {};
 void keep_alive() noexcept {};
 
 [[nodiscard]] std::optional<uint64_t> WatchdogTimeout () noexcept {return std::nullopt;}
@@ -170,6 +171,17 @@ void reloading() noexcept
 {
 	uint64_t now = MonoMicroTimer();
 	::notifyf ( "RELOADING=1\nMONOTONIC_USEC=%U", now);
+}
+
+void extend30s() noexcept
+{
+	static auto uLastTimestamp = sphMicroTimer();
+	const auto uNowTime = sphMicroTimer();
+	if ( ( uNowTime-uLastTimestamp ) < 15*S2US )
+		return;
+
+	uLastTimestamp = uNowTime;
+	::notify (FROMS("EXTEND_TIMEOUT_USEC=30000000"));
 }
 
 void keep_alive() noexcept

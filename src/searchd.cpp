@@ -307,9 +307,11 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// force even long time searches to shut
 	SHUTINFO << "Trigger g_bInterruptNow ...";
 	sphInterruptNow ();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown curl query subsystem ...";
 	ShutdownCurl();
+	sd::extend30s();
 
 #if !_WIN32
 	int fdStopwait = -1;
@@ -330,10 +332,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #endif
 
 	int64_t tmShutStarted = sphMicroTimer ();
+	sd::extend30s();
 
 	// release all planned/scheduled tasks
 	SHUTINFO << "Shut down mini timer ...";
 	sph::ShutdownMiniTimer();
+	sd::extend30s();
 
 	SHUTINFO << "Shut down flushing mutable ...";
 	ShutdownFlushingMutable();
@@ -341,10 +345,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// stop search threads; up to shutdown_timeout seconds
 	SHUTINFO << "Wait preread (if any) finished ...";
 	WaitPrereadFinished ( g_iShutdownTimeoutUs );
+	sd::extend30s();
 
 	// save attribute updates for all local indexes
 	SHUTINFO << "Finally save tables ...";
 	bAttrsSaveOk = FinallySaveIndexes();
+	sd::extend30s();
 
 	// right before unlock loop
 	if ( g_bJsonConfigLoadedOk )
@@ -352,6 +358,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		CSphString sError;
 		SHUTINFO << "Save json config ...";
 		SaveConfigInt(sError);
+		sd::extend30s();
 	}
 
 	// stop netloop processing
@@ -360,12 +367,14 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		pNetLoop->StopNetLoop ();
 		SafeRelease ( pNetLoop );
+		sd::extend30s();
 	}
 
 	// stop netloop threads
 	SHUTINFO << "Stop netloop pool ...";
 	if ( g_pTickPoolThread )
 		g_pTickPoolThread->StopAll ();
+	sd::extend30s();
 
 	// call scheduled callbacks:
 	// shutdown replication,
@@ -373,10 +382,14 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// shutdown tick threads,
 	SHUTINFO << "Invoke shutdown callbacks ...";
 	searchd::FireShutdownCbs ();
+	sd::extend30s();
 
 	SHUTINFO << "Waiting clients to finish ... (" << myinfo::CountClients() << ")";
 	while ( ( myinfo::CountClients ()>0 ) && ( sphMicroTimer ()-tmShutStarted )<g_iShutdownTimeoutUs )
+	{
+		sd::extend30s();
 		sphSleepMsec ( 50 );
+	}
 
 	if ( myinfo::CountClients ()>0 )
 	{
@@ -404,9 +417,11 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown alone threads (if any) ...";
 	Detached::ShutdownAllAlones();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown main work pool ...";
 	StopGlobalWorkPool();
+	sd::extend30s();
 
 	SHUTINFO << "Remove local tables list ...";
 	g_pLocalIndexes.reset();
@@ -417,31 +432,43 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";
 	sphDoneIOStats();
+	sd::extend30s();
 
 	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
+	sd::extend30s();
+
+	SHUTINFO << "Finish replication binlog serving ...";
 	ReplicationBinlogStop();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown skip cache ...";
 	ShutdownSkipCache();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown global IDFs ...";
 	sph::ShutdownGlobalIDFs ();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown aot ...";
 	sphAotShutdown ();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown columnar ...";
 	ShutdownColumnar();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown secondary ...";
 	ShutdownSecondary();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown knn ...";
 	ShutdownKNN();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown listeners ...";
 	for ( auto& dListener : g_dListeners )
@@ -450,6 +477,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
+	sd::extend30s();
 
 	// close pid
 	SHUTINFO << "Release (close) pid file ...";
@@ -463,17 +491,20 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
+	sd::extend30s();
 
 	// wordforms till there might be referenced from accum (rt-index), which, in turn, is part of client session.
 	// so, shutdown them before will probably fail.
 	// after hazard shutdown, all sessions are surely done, so wordforms is good to be destroyed at this point.
 	SHUTINFO << "Shutdown wordforms ...";
 	sphShutdownWordforms();
+	sd::extend30s();
 
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );
 
 	Threads::Done ( GetDaemonLogFD() );
+	sd::extend30s();
 
 #if _WIN32
 	CloseWinPipe();

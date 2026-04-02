@@ -13,6 +13,7 @@
 	let showCreateTable = $state(false);
 	let showInsertRow = $state(false);
 	let insertTableName = $state('');
+	let tableRefreshKey = $state(0);
 	let tabs = $state<Tab[]>([
 		{ id: 'sql-1', type: 'sql', label: 'SQL Editor' },
 	]);
@@ -113,7 +114,7 @@
 				{#if activeTab?.type === 'sql'}
 					<SqlEditorTab initialQuery={sqlInitialQuery} />
 				{:else if activeTab?.type === 'table' && activeTab.tableName}
-					<TableDetailTab tableName={activeTab.tableName} onOpenQuery={handleOpenQuery} onInsertRow={(name) => { insertTableName = name; showInsertRow = true; }} />
+					<TableDetailTab tableName={activeTab.tableName} onOpenQuery={handleOpenQuery} onInsertRow={(name) => { insertTableName = name; showInsertRow = true; }} refreshKey={tableRefreshKey} />
 				{:else if activeTab?.type === 'status'}
 					<ServerStatusTab />
 				{/if}
@@ -123,7 +124,7 @@
 </div>
 
 <CreateTableDialog open={showCreateTable} onClose={() => showCreateTable = false} />
-<InsertRowDialog open={showInsertRow} tableName={insertTableName} onClose={() => showInsertRow = false} />
+<InsertRowDialog open={showInsertRow} tableName={insertTableName} onClose={() => { showInsertRow = false; tableRefreshKey++; }} />
 
 <style>
 	.app {

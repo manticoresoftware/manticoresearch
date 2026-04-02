@@ -5,10 +5,11 @@
 	import { refreshTables } from '../../lib/stores/tables.svelte';
 	import type { QueryResult } from '../../lib/types';
 
-	let { tableName, onOpenQuery, onInsertRow }: {
+	let { tableName, onOpenQuery, onInsertRow, refreshKey = 0 }: {
 		tableName: string;
 		onOpenQuery: (sql: string) => void;
 		onInsertRow: (tableName: string) => void;
+		refreshKey?: number;
 	} = $props();
 
 	let schema = $state<QueryResult | null>(null);
@@ -19,6 +20,7 @@
 	let dropping = $state(false);
 
 	$effect(() => {
+		void refreshKey;
 		loadTableInfo(tableName);
 	});
 
@@ -33,6 +35,14 @@
 			schema = s;
 			status = st;
 			preview = p;
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		}
+	}
+
+	async function reloadPreview() {
+		try {
+			preview = await executeSQL(`SELECT * FROM ${tableName} LIMIT 20`);
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		}
@@ -84,7 +94,7 @@
 
 	<div class="section-tabs">
 		<button class="section-tab" class:active={activeSection === 'schema'} onclick={() => activeSection = 'schema'}>Schema</button>
-		<button class="section-tab" class:active={activeSection === 'data'} onclick={() => activeSection = 'data'}>Data Preview</button>
+		<button class="section-tab" class:active={activeSection === 'data'} onclick={() => { activeSection = 'data'; reloadPreview(); }}>Data Preview</button>
 		<button class="section-tab" class:active={activeSection === 'status'} onclick={() => activeSection = 'status'}>Status</button>
 	</div>
 

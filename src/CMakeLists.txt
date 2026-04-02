@@ -117,6 +117,11 @@ if (WITH_STEMMER)
 	target_link_libraries ( lmanticore PRIVATE stemmer::stemmer )
 endif ()
 if (WITH_RE2)
+	# Prefer the headers that belong to the imported re2::re2 archive.
+	# Homebrew's generic include path may also contain re2 headers with a newer ABI,
+	# which breaks the link when we intentionally use the cached static library.
+	target_include_directories ( lmanticore BEFORE PRIVATE
+		$<TARGET_PROPERTY:re2::re2,INTERFACE_INCLUDE_DIRECTORIES> )
 	target_link_libraries ( lmanticore PRIVATE re2::re2 )
 endif ()
 

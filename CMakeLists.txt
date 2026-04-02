@@ -660,16 +660,17 @@ foreach (var BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR LOCALSTATEDIR R
 	cmake_print_variables ( CMAKE_INSTALL_${var} CMAKE_INSTALL_FULL_${var} )
 endforeach ()
 
-# Configure CPack source packaging for SRPM generation
-set ( CPACK_SOURCE_GENERATOR "RPM" )
-set ( CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}" )
+# Configure CPack source packaging only when SRPM generation was explicitly requested.
+# Local binary builds should not depend on CPack source templates being available.
+if ( BUILD_SRPMS OR CPACK_RPM_PACKAGE_SOURCES )
+	set ( CPACK_SOURCE_GENERATOR "RPM" )
+	set ( CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}" )
 
-# For source RPMs: Override the make command to use cmake --build instead
-# This automatically handles any generator (Unix Makefiles, Ninja, etc.)
-if (CPACK_SOURCE_GENERATOR STREQUAL "RPM" OR CPACK_RPM_PACKAGE_SOURCES)
-    set ( CPACK_RPM_SPEC_MORE_DEFINE "${CPACK_RPM_SPEC_MORE_DEFINE}
-%global __make cmake --build . --parallel")
-endif()
+	# For source RPMs: override the make command to use cmake --build instead.
+	# This automatically handles any generator (Unix Makefiles, Ninja, etc.)
+	set ( CPACK_RPM_SPEC_MORE_DEFINE "${CPACK_RPM_SPEC_MORE_DEFINE}
+%global __make cmake --build . --parallel" )
+endif ()
 
 # Configure source directories for debuginfo packages
 # This is required when debuginfo packaging is enabled

@@ -62,6 +62,7 @@
 #include "taskflushmutable.h"
 #include "taskpreread.h"
 #include "searchdbuddy.h"
+#include "ui/searchdui.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
 
@@ -14084,6 +14085,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( hSearchd("seamless_rotate") )
 		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
 
+	if ( hSearchd("ui") )
+		g_bUI = ( hSearchd["ui"].intval()!=0 );
+
 	if ( hSearchd ( "grouping_in_utc" ) )
 	{
 		if ( IsTimeZoneSet() )
@@ -15490,6 +15494,19 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
 
 	g_bJsonConfigLoadedOk = true;
+
+	if ( g_bUI )
+	{
+		for ( const auto & tDesc : dListenerDescs )
+		{
+			if ( tDesc.m_eProto == Proto_e::HTTP || tDesc.m_eProto == Proto_e::HTTPS )
+			{
+				const char * sAddr = tDesc.m_sAddr.IsEmpty() ? "localhost" : tDesc.m_sAddr.cstr();
+				sphInfo ( "Web UI available at http://%s:%d/ui/", sAddr, tDesc.m_iPort );
+				break;
+			}
+		}
+	}
 
 	dListenerDescs.Reset(); // make valgrind happy
 

@@ -283,10 +283,11 @@ trace ( lextra )
 trace ( lsearchd )
 
 add_subdirectory ( daemon )
+add_subdirectory ( ui )
 
 # our executables
 add_executable ( searchd searchd.cpp )
-target_link_libraries ( searchd daemon searchd_ssl lmanticore lsearchd )
+target_link_libraries ( searchd daemon searchd_ssl lmanticore lsearchd lui )
 
 if (NOT STATIC_BINARY)
 	add_executable ( indexer indexer.cpp )

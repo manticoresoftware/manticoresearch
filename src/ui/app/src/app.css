@@ -1,0 +1,126 @@
+:root {
+	/* Manticore brand colors */
+	--color-primary: #7B8C2D;
+	--color-primary-hover: #6A7A26;
+	--color-primary-light: #e8edcf;
+	--color-primary-subtle: #f4f6e8;
+
+	/* Neutrals */
+	--color-bg: #ffffff;
+	--color-bg-secondary: #f8f9fa;
+	--color-bg-tertiary: #f0f1f3;
+	--color-bg-hover: #e9ecef;
+	--color-text: #1a1a1a;
+	--color-text-secondary: #6c757d;
+	--color-text-muted: #adb5bd;
+	--color-border: #dee2e6;
+	--color-border-light: #e9ecef;
+
+	/* Semantic */
+	--color-success: #5a8a3c;
+	--color-warning: #c49520;
+	--color-error: #c0392b;
+	--color-info: #2980b9;
+
+	/* Spacing */
+	--space-xs: 4px;
+	--space-sm: 8px;
+	--space-md: 12px;
+	--space-lg: 16px;
+	--space-xl: 24px;
+
+	/* Typography */
+	--font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+	--font-size-xs: 11px;
+	--font-size-sm: 12px;
+	--font-size-md: 13px;
+	--font-size-lg: 15px;
+	--font-size-xl: 18px;
+
+	/* Layout */
+	--sidebar-width: 240px;
+	--header-height: 44px;
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+
+	--shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+	--shadow-md: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Dark mode */
+[data-theme="dark"] {
+	--color-primary: #9ab033;
+	--color-primary-hover: #a8bd3f;
+	--color-primary-light: #2e3318;
+	--color-primary-subtle: #1e2010;
+
+	--color-bg: #1a1b1e;
+	--color-bg-secondary: #212226;
+	--color-bg-tertiary: #2a2b30;
+	--color-bg-hover: #32333a;
+	--color-text: #e4e5e7;
+	--color-text-secondary: #9a9da3;
+	--color-text-muted: #5c5f66;
+	--color-border: #383a40;
+	--color-border-light: #2e3035;
+
+	--color-success: #7bc25a;
+	--color-warning: #e0ac30;
+	--color-error: #e74c3c;
+	--color-info: #5dade2;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html, body, #app {
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--font-sans);
+	font-size: var(--font-size-md);
+	color: var(--color-text);
+	background: var(--color-bg);
+	-webkit-font-smoothing: antialiased;
+}
+
+button {
+	cursor: pointer;
+	font-family: inherit;
+	font-size: inherit;
+	border: none;
+	background: none;
+	color: inherit;
+}
+
+input, textarea, select {
+	font-family: inherit;
+	font-size: inherit;
+	color: inherit;
+}
+
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-text-muted);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-text-secondary);
+}

@@ -31,6 +31,7 @@ target_link_libraries ( gmanticoretest PRIVATE
 		searchd_ssl
 		source_svpipe
 		daemon
+		lui
 )
 
 if (WITH_EXPAT)

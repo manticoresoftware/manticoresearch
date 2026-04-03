@@ -1241,19 +1241,7 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 		{
 			StrVec_t dIndexes = SplitIndexes ( tCmdCluster.m_sIndex );
 			if ( !CheckClusterIndexes ( dIndexes, pCluster ) )
-			{
-				// For DROP: table not in cluster's galera list (already synced via
-				// replication while the node was down), but local m_sCluster may
-				// still be set. Clear it so subsequent DROP TABLE is not blocked.
-				if ( tCmdCluster.m_eCommand == ReplCmd_e::CLUSTER_ALTER_DROP )
-				{
-					AssignClusterToIndexes ( dIndexes, "" );
-					TLS_MSG_STRING ( sError );
-					SaveConfigInt ( sError );
-					return true;
-				}
 				return false;
-			}
 		} else if ( !CheckClusterIndex ( tCmdCluster.m_sIndex, pCluster ) )
 			return false;
 	}
@@ -1410,19 +1398,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 	sphLogDebugRpl ( "SetIndexesClusterTOI '%s' for cluster '%s': indexes '%s' > '%s'", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), Vec2Str ( pCluster->GetIndexes() ).cstr() );
 
 	if ( tCmd.m_bCheckIndex && !CheckClusterIndexes ( dIndexes, pCluster ) )
-	{
-		// For DROP: table not in cluster's galera list (already synced), but local
-		// m_sCluster metadata may still be set from before the node went down.
-		// Clear it so subsequent DROP TABLE is not blocked by IsCluster() check.
-		if ( tCmd.m_eCommand == ReplCmd_e::CLUSTER_ALTER_DROP )
-		{
-			AssignClusterToIndexes ( dIndexes, "" );
-			TLS_MSG_STRING ( sError );
-			SaveConfigInt ( sError );
-			return true;
-		}
 		return false;
-	}
 
 	if ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD )
 	{

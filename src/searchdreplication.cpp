@@ -1472,6 +1472,12 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 
 	sph::StringSet hIndexes ( dIndexes );
 
+	StrVec_t hCurrentIndexes ( pCluster->GetIndexes() );
+	StrVec_t dStaleIndexes;
+	for ( const auto & sIndex : hCurrentIndexes )
+		if ( !hIndexes[sIndex] )
+			dStaleIndexes.Add ( sIndex );
+
 	// scope for check of cluster data
 	{
 		Threads::SccRL_t rLock( g_tClustersLock );
@@ -1498,7 +1504,8 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 		}
 	}
 
-	bool bOk = AssignClusterToIndexes ( dIndexes, sCluster );
+	bool bOk = AssignClusterToIndexes ( dStaleIndexes, "" );
+	bOk &= AssignClusterToIndexes ( dIndexes, sCluster );
 
 	// need to enable back local index write
 	for ( const CSphString & sIndex : dIndexes )
@@ -1510,10 +1517,10 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 	pCluster->WithWlockedIndexes([&] ( auto & hIndexes, auto & hIndexesLoaded )
 	{
 		hIndexes.Reset();
-		dIndexes.for_each ( [&hIndexes, &hIndexesLoaded] ( const auto & sIndex )
+		hIndexesLoaded.Reset();
+		dIndexes.for_each ( [&hIndexes] ( const auto & sIndex )
 		{
 			hIndexes.Add ( sIndex );
-			hIndexesLoaded.Delete ( sIndex );
 		});
 
 		pCluster->m_iClusterEpoch = iClusterEpoch;

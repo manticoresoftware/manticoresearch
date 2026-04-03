@@ -177,7 +177,7 @@ Read [the full instruction for the docker image](https://github.com/manticoresof
 ### YUM repo for RHEL/Centos/Amazon/Oracle Linux
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
 ### APT repo for Ubuntu/Debian/Mint
@@ -185,7 +185,7 @@ sudo yum install manticore manticore-extra
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 ### Homebrew on MacOS

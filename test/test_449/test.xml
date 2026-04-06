@@ -133,6 +133,12 @@ searchd
 	select * from book order by id asc;
 	select title_len from book order by id asc;
 	drop table book;
+
+	<!-- regression crash on columnar + index_field_lengths + bm25a custom ranker -->
+	create table rank_bug (f text) engine='columnar' index_field_lengths='1';
+	insert into rank_bug values (1,'a');
+	select id from rank_bug where match('a') option ranker=expr('1000*bm25a(1,1)');
+	drop table rank_bug;
 </sphinxql>
 </queries>
 

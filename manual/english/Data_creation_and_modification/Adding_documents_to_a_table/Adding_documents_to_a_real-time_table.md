@@ -423,14 +423,16 @@ Manticore provides an auto ID generation functionality for the column ID of docu
 The generated ID value is guaranteed to be unique under the following conditions:
 * The [server_id](../../Server_settings/Searchd.md#server_id) value of the current server is in the range of 0 to 127 and is unique among nodes in the cluster, or it uses the default value generated from the MAC address as a seed
 * The system time does not change for the Manticore node between server restarts
-* The auto ID is generated fewer than 16 million times per second between search server restarts
+* The average auto-ID generation rate between two server starts stays below about 16 million IDs per second
 
-The auto ID generator creates a 64-bit integer for a document ID and uses the following schema:
-* Bits 0 to 23 form a counter that gets incremented on every call to the auto ID generator
-* Bits 24 to 55 represent the Unix timestamp of the server start
-* Bits 56 to 63 correspond to the server_id
+The auto ID generator creates a 64-bit integer for a document ID and uses the following layout:
+* Bits 0 to 23 are a counter that is incremented on every call to the auto ID generator
+* Bits 24 to 55 store the server start time in seconds, encoded as `(unix_timestamp_at_start - 2019-05-01 00:00:00 UTC)`
+* Bits 56 to 62 store the `server_id` (the value is masked to the range 0..127)
 
-This schema ensures that the generated ID is unique among all nodes in the cluster and that data inserted into different cluster nodes does not create collisions between the nodes.
+This layout ensures that generated IDs are unique among cluster nodes and that data inserted into different nodes does not create collisions between them.
+
+Important: the 24-bit counter is not a hard limit on the total number of documents you can insert during one server run. You can insert more than 16,777,216 documents after startup; the IDs will still keep increasing and remain unique for that running process. The `~16 million IDs per second` rule matters for uniqueness across restarts: after a restart, the time-based part must advance far enough so that newly generated IDs do not overlap with IDs created before the restart.
 
 As a result, the first ID from the generator used for auto ID is NOT 1 but a larger number. Additionally, the document stream inserted into a table might have non-sequential ID values if inserts into other tables occur between calls, as the ID generator is singular in the server and shared between all its tables.
 

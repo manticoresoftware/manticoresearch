@@ -10921,15 +10921,17 @@ ServedIndexRefPtr_c MakeCloneForRotation ( const cServedIndexRefPtr_c& pSource, 
 
 bool LockIndex ( const ServedIndex_c& tIdx, CSphIndex* pIdx, CSphString& sError )
 {
+	if ( g_bDaemonReadOnly && tIdx.m_eType==IndexType_e::PLAIN )
+	{
+		sphWarning ( "table '%s': daemon read-only mode, serving without lock", pIdx->GetName() );
+		tIdx.UpdateMass();
+		return true;
+	}
+
 	if ( !g_bOptNoLock && !pIdx->Lock() )
 	{
-		if ( g_bDaemonReadOnly && pIdx->LoadedFromReadOnlyStorage() )
-			sphWarning ( "table '%s': lock file unavailable on read-only storage, serving without lock", pIdx->GetName() );
-		else
-		{
-			sError.SetSprintf ( "lock: %s", pIdx->GetLastError().cstr() );
-			return false;
-		}
+		sError.SetSprintf ( "lock: %s", pIdx->GetLastError().cstr() );
+		return false;
 	}
 
 	tIdx.UpdateMass();
@@ -14508,15 +14510,10 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 
 		bool bHaveNewFiles = dJustAddedFiles.HasAllFiles ( ".new" );
 		bool bIgnoreNewFiles = false;
-		if ( g_bDaemonReadOnly && bHaveNewFiles && dJustAddedFiles.HasAllFiles() )
+		if ( g_bDaemonReadOnly && bHaveNewFiles )
 		{
-			CSphString sPathError;
-			CSphString sIndexDir = GetPathOnly ( pJustLoadedLocal->m_sIndexPath );
-			if ( !CheckPath ( sIndexDir, true, sPathError, ".manticore-write-check" ) )
-			{
-				dWarnings.Add ( SphSprintf ( "ignoring pending .new files for table '%s' on read-only storage", szIndexName ) );
-				bIgnoreNewFiles = true;
-			}
+			dWarnings.Add ( SphSprintf ( "ignoring pending .new files for table '%s' in daemon read-only mode", szIndexName ) );
+			bIgnoreNewFiles = true;
 		}
 
 		if ( bHaveNewFiles && !bIgnoreNewFiles )

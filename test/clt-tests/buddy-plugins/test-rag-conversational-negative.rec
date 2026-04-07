@@ -28,7 +28,7 @@ mysql -h0 -P9306 -e "INSERT INTO test_docs (id, content, title) VALUES (1, 'Test
 ––– comment –––
 Test 1: Create a valid model for testing
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (llm_provider='openai', llm_model='gpt-4o-mini');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (model='openai:gpt-4o-mini');"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -38,13 +38,17 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (llm_provider='openai', llm_mo
 ––– comment –––
 Test 2: CREATE RAG MODEL with missing required parameter
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL incomplete_model (llm_provider='openai');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL incomplete_model (description='openai');"
 ––– output –––
-ERROR 1064 (42000) at line 1: Required field 'llm_model' is missing or empty
+ERROR 1064 (42000) at line 1: Required field 'model' is missing or empty
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL incomplete_model (unsupported='openai');"
+––– output –––
+ERROR 1064 (42000) at line 1: Unsupported field 'unsupported'
 ––– comment –––
 Test 3: CREATE RAG MODEL with duplicate name
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (llm_provider='openai', llm_model='gpt-4o-mini');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL valid_model (model='openai:gpt-4o-mini');"
 ––– output –––
 ERROR 1064 (42000) at line 1: RAG model 'valid_model' already exists
 ––– comment –––
@@ -96,44 +100,69 @@ Test 9: DROP non-existent RAG MODEL
 mysql -h0 -P9306 -e "DROP RAG MODEL nonexistent_model;"
 ––– output –––
 ERROR 1064 (42000) at line 1: RAG model 'nonexistent_model' not found
-––– comment –––
-Test 10: CREATE RAG MODEL with invalid temperature (below 0)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model (llm_provider='openai', llm_model='gpt-4o-mini', temperature='-0.5');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_model (model='gpt-4o-mini');"
 ––– output –––
-ERROR 1064 (42000) at line 1: Temperature must be between 0 and 2
-––– comment –––
-Test 11: CREATE RAG MODEL with out-of-range temperature (above 2)
+ERROR 1064 (42000) at line 1: model must use 'provider:model' format
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_model (llm_provider='openai', llm_model='gpt-4o-mini', temperature='3.0');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model (model='openai:gpt-4o-mini', timeout='-0.5');"
 ––– output –––
-ERROR 1064 (42000) at line 1: Temperature must be between 0 and 2
-––– comment –––
-Test 12: CREATE RAG MODEL with invalid max_tokens (above 32768)
+ERROR 1064 (42000) at line 1: timeout can't be less than 1
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_tokens_model (llm_provider='openai', llm_model='gpt-4o-mini', max_tokens='100000');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_2 (model='openai:gpt-4o-mini', timeout='NaN');"
 ––– output –––
-ERROR 1064 (42000) at line 1: max_tokens must be between 1 and 32768
-––– comment –––
-Test 13: CREATE RAG MODEL without llm_provider parameter
+ERROR 1064 (42000) at line 1: timeout should be int from 1 to 65536
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL no_provider_model (llm_model='gpt-4o-mini');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_3 (model='openai:gpt-4o-mini', retrieval_limit=-2);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Required field 'llm_provider' is missing or empty
-––– comment –––
-Test 14: CREATE RAG MODEL with k_results less than 1
+ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_k_low_model (llm_provider='openai', llm_model='gpt-4o-mini', k_results='0');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_4 (model='openai:gpt-4o-mini', retrieval_limit=-1);"
 ––– output –––
-ERROR 1064 (42000) at line 1: k_results must be between 1 and 50
-––– comment –––
-Test 15: CREATE RAG MODEL with k_results greater than 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_k_high_model (llm_provider='openai', llm_model='gpt-4o-mini', k_results='51');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_5 (model='openai:gpt-4o-mini', retrieval_limit=0.72);"
 ––– output –––
-ERROR 1064 (42000) at line 1: k_results must be between 1 and 50
-––– comment –––
-Cleanup
+ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_6 (model='openai:gpt-4o-mini', retrieval_limit='0.72');"
+––– output –––
+ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_5 (model='openai:gpt-4o-mini', retrieval_limit=5.72);"
+––– output –––
+ERROR 1064 (42000) at line 1: retrieval_limit must be int between 1 and 50
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_6 (model='openai:gpt-4o-mini', retrieval_limit='5.72');"
+––– output –––
+ERROR 1064 (42000) at line 1: retrieval_limit must be int between 1 and 50
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_7 (model='openai:gpt-4o-mini', retrieval_limit='99993839857847384737564378672661');"
+––– output –––
+ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_8 (model='openai:gpt-4o-mini', retrieval_limit='NaN');"
+––– output –––
+ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_11 (model='openai:gpt-4o-mini', max_document_length=-50);"
+––– output –––
+ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_12 (model='openai:gpt-4o-mini', max_document_length='-50');"
+––– output –––
+ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_13 (model='openai:gpt-4o-mini', max_document_length=2.72);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_15 (model='openai:gpt-4o-mini', max_document_length=0);"
+––– output –––
+ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
+––– input –––
+mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_16 (model='openai:gpt-4o-mini', max_document_length=90990438589382393829473742987897189237);"
+––– output –––
+ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "DROP RAG MODEL valid_model;"
 ––– output –––

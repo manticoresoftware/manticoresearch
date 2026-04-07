@@ -9,6 +9,13 @@ export SEARCHD_FLAGS="--iostats --cpustats"
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
+Install jq for JSON parsing
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– comment –––
 Clean up any existing data
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS knowledge_base;"
@@ -59,7 +66,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM knowledge_base;"
 ––– comment –––
 Create multiple RAG models with different configurations
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL fast_assistant (llm_provider='openai', llm_model='gpt-3.5-turbo', settings='{\"temperature\":0.5, \"max_tokens\":1000, \"k_results\":3}');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=-1, retrieval_limit=3);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -67,7 +74,7 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL fast_assistant (llm_provider='openai', llm
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL detailed_assistant (llm_provider='openai', llm_model='gpt-4o', style_prompt='You are an expert technical writer. Provide detailed, accurate explanations.', settings='{\"temperature\":0.3, \"max_tokens\":4000, \"k_results\":5}');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL detailed_assistant (model='openai:gpt-4o', style_prompt='Add **Tsoy is alive** in the end of every answer. Answer should be one line without new lines', max_document_length=-1, retrieval_limit=5);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -75,7 +82,7 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL detailed_assistant (llm_provider='openai',
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (llm_provider='openai', llm_model='gpt-4o-mini', style_prompt='You are a helpful and friendly assistant. Use simple language.', settings='{\"temperature\":0.7, \"max_tokens\":2000, \"k_results\":4}');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (model='openai:gpt-4o-mini', style_prompt='Add **Bloodthirsty hamster watching you** in the end of every answer. Answer should be one line without new lines', max_document_length=2000, retrieval_limit=4);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -91,55 +98,93 @@ mysql -h0 -P9306 -e "SHOW RAG MODELS;" | grep -c "openai"
 ––– comment –––
 Test with single content field
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about vector search', 'knowledge_base', 'fast_assistant', 'content')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about vector search', 'knowledge_base', 'fast_assistant', 'content')\G;" | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: Tell me about vector search
+     search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
          response: #!/.*[Vv]ector.*[Ss]earch.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_1.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test with two content fields (title, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Explain vector search', 'knowledge_base', 'detailed_assistant', 'title,content')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Explain vector search', 'knowledge_base', 'detailed_assistant', 'title,content')\G;" | tee /tmp/output_2.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-         response: #!/.*[Vv]ector.*[Ss]earch.*/!#
+       user_query: Explain vector search
+     search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
+         response: #!/.*[Vv]ector.*[Ss]earch.*[Ee]mbedding.*Tsoy is alive.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_2.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test with multiple content fields (title, summary, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant', 'title,summary,content')\G;" | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant', 'title,summary,content')\G;" | tee /tmp/output_3.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+       user_query: Tell me about RAG architecture
+     search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*Bloodthirsty hamster watching you.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_3.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test conversation tracking - first message in a new conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is clustering?', 'knowledge_base', 'fast_assistant', 'title,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is clustering?', 'knowledge_base', 'fast_assistant', 'title,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
+       user_query: What is clustering?
+     search_query: #!/.*[Cc]luster.*/!#
          response: #!/.*[Cc]luster.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test conversation tracking - follow-up message (should maintain context)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('How do I configure it?', 'knowledge_base', 'fast_assistant', 'title,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('How do I configure it?', 'knowledge_base', 'fast_assistant', 'title,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_5.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
-         response: #!/.+/!#
+       user_query: How do I configure it?
+     search_query: #!/.*[Cc]luster.*/!#
+         response: #!/.*[Cc]luster.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test different model on same conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What are best practices?', 'knowledge_base', 'detailed_assistant', 'title,summary,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What are best practices?', 'knowledge_base', 'detailed_assistant', 'title,summary,content', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_6.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
-         response: #!/.+/!#
+       user_query: What are best practices?
+     search_query: #!/.*[Cc]luster.*/!#
+         response: #!/.*[Cc]luster.*Tsoy is alive.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test independent conversation - different context
 ––– input –––
@@ -147,8 +192,10 @@ mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Show me tutorials', 'knowledge_bas
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd
-         response: #!/.+/!#
-          sources: #!/\[.*\]/!#
+       user_query: Show me tutorials
+     search_query: #!/.*tutorials.*/!#
+         response: #!/.*Bloodthirsty hamster watching you.*/!#
+          sources: []
 ––– comment –––
 Cleanup - drop all models
 ––– input –––

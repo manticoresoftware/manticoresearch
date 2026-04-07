@@ -718,6 +718,22 @@ kibana_version_string = 1.2.3
 ```
 <!-- end -->
 
+### read_only
+
+```ini
+read_only = {0 | 1}
+```
+
+Enables daemon-wide [read-only mode](../Security/Read_only.md). When set to `1`:
+
+- all new client connections start in read-only mode
+- modifying queries such as `INSERT`, `REPLACE`, `DELETE`, `UPDATE`, `CREATE`, `DROP`, `ALTER`, `ATTACH`, `OPTIMIZE`, and similar statements are rejected
+- `SET ro=0` is not allowed, even on VIP connections
+
+This setting is useful when Manticore should explicitly avoid modifying table storage, for example when serving plain tables from a replicated read-only filesystem. In this mode Manticore can serve plain tables from read-only storage, skip creating lock files when the filesystem does not allow it, and ignore pending `.new` plain-table artifacts with a warning if the current table files are still usable.
+
+This setting does not make RT mode (`data_dir`) work on a read-only filesystem. `data_dir` still requires writable storage.
+
 ### listen
 
 <!-- example conf listen -->
@@ -753,7 +769,7 @@ You can also specify a protocol handler (listener) to be used for connections on
 
 Adding suffix `_vip` to client protocols (that is, all except `replication`, for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of severe overload when the server would either stall or not let you connect via a regular port otherwise.
 
-Suffix `_readonly` sets [read-only mode](../Security/Read_only.md) for the listener and limits it to accept only read queries.
+Suffix `_readonly` sets [read-only mode](../Security/Read_only.md) for the listener and limits it to accept only read queries. If `read_only` is enabled daemon-wide, all listeners behave as read-only listeners automatically.
 
 <!-- intro -->
 ##### Example:

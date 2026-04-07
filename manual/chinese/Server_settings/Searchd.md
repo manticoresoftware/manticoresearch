@@ -718,6 +718,22 @@ kibana_version_string = 1.2.3
 ```
 <!-- end -->
 
+### read_only
+
+```ini
+read_only = {0 | 1}
+```
+
+启用整个守护进程的 [只读模式](../Security/Read_only.md)。当设置为 `1` 时：
+
+- 所有新的客户端连接都以只读模式开始
+- 修改查询如 `INSERT`、`REPLACE`、`DELETE`、`UPDATE`、`CREATE`、`DROP`、`ALTER`、`ATTACH`、`OPTIMIZE` 和类似语句将被拒绝
+- 即使在 VIP 连接上，`SET ro=0` 也不被允许
+
+当 Manticore 应该明确避免修改表存储时，此设置非常有用，例如在从只读文件系统提供普通表时。在此模式下，Manticore 可以从只读存储中提供普通表，当文件系统不允许时跳过创建锁定文件，并在当前表文件仍可用时忽略待处理的 `.new` 普通表工件，同时发出警告。
+
+此设置不会使 RT 模式（`data_dir`）在只读文件系统上工作。`data_dir` 仍然需要可写存储。
+
 ### listen
 
 <!-- example conf listen -->
@@ -753,7 +769,7 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 
 在客户端协议后添加后缀 `_vip`（即所有协议，除了 `replication`，例如 `mysql_vip` 或 `http_vip` 或仅 `_vip`）会强制为连接创建专用线程，以绕过不同限制。这在服务器严重过载时进行节点维护很有用，因为在这种情况下，服务器可能会停滞或无法通过常规端口连接。
 
-后缀 `_readonly` 会为监听器设置 [只读模式](../Security/Read_only.md)，并限制其仅接受只读查询。
+后缀 `_readonly` 会为监听器设置 [只读模式](../Security/Read_only.md)，并限制其仅接受读取查询。如果全局启用了 `read_only`，所有监听器会自动表现为只读监听器。
 
 <!-- intro -->
 ##### 示例：

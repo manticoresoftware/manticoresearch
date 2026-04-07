@@ -50,7 +50,7 @@ Manticore Search 支持影响特定服务器设置的会话级和全局服务器
 * `WAIT_TIMEOUT = <value>`：设置非交互式 SQL 会话的 SQL 连接超时（空闲时间）。一个常见示例是客户端库连接到 Manticore 服务器并维护连接池以供重复使用。这类似于 `INTERACTIVE_TIMEOUT`，但专用于非交互式会话。
 * `OPTIMIZE_BY_ID = {0 | 1}`：用于某些 `debug` 命令的内部标志。
 * `PROFILING = {0 | 1}` 在当前会话启用查询分析。默认为 0。另见 [show profile](../Node_info_and_management/Profiling/Query_profile.md)。
-* `ro = {1 | 0}` 将会话切换为只读模式或恢复为非只读模式。在 `show variables` 的输出中，该变量显示为 `session_read_only`。
+* `ro = {1 | 0}` 将会话切换为只读模式或切换回正常模式。在 `show variables` 输出中，该变量显示为 `session_read_only`。如果启用了 `searchd.read_only`，则会话会自动以只读模式启动，`SET ro=0` 会被拒绝。
 * `throttling_period = <INT_VALUE>`：当前运行查询的重新调度间隔（毫秒）。值为 0 表示禁用节流，查询将占用 CPU 核心直到完成。如果同时有其他连接的并发查询，它们将被分配到空闲核心，或挂起直到核心释放。提供负值（-1）时将节流重置为默认编译值（100ms），意味着查询每 100ms 重新调度一次，允许并发查询被执行。全局值（通过 `set global` 设置）仅从 VIP 连接设置时有效。
 * `thread_stack = <value>`：动态修改栈大小限制，即单个任务的线程栈大小。这里的“线程”指的是用户空间线程，也称为协程，而非操作系统线程。这在加载需求意外高的 percolate 表时特别有用，此时“call pq”可能因栈空间不足失败。通常应停止守护进程，在配置中增加该值然后重启。但也可以通过设置该变量在线尝试新值，无需重启。全局值也可在线通过 `set global thread_stack` 修改，但仅限 VIP 连接。
 * `threads_ex`（诊断用）：强制 Manticore 以所提供的 CPU 配置运行。简而言之，`set threads_ex='4/2+6/3'` 表示“你有 4 个空闲 CPU 核心，调度多查询时每 2 个批处理；另有 6 个 CPU 核心用于伪分片，分片大小为 3”。此选项用于诊断，例如，查看查询如何在本地没有的配置（如 128 核 CPU）上执行；或快速限制守护进程为单线程模式，以定位瓶颈或调查崩溃。

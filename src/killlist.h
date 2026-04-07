@@ -70,6 +70,7 @@ public:
 	uint64_t	GetCoreSize () const override;
 	bool		Flush ( bool bWaitComplete, CSphString & sError ) const;
 	bool		Prealloc ( DWORD uRows, const CSphString & sFilename, CSphString & sError );
+	bool		UsedReadOnlyFallback() const { return m_tData.UsedReadOnlyFallback(); }
 	void		Dealloc();
 	void		Preread ( const char * sIndexName, const char * sFor, bool bMlock );
 

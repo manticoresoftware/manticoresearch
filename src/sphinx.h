@@ -1269,6 +1269,8 @@ public:
 	int64_t						GetIndexId() const { return m_iIndexId; }
 	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
 	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
+	bool				LoadedFromReadOnlyStorage () const { return m_bLoadedFromReadOnlyStorage; }
+	void				SetLoadedFromReadOnlyStorage ( bool bLoaded ) { m_bLoadedFromReadOnlyStorage = bLoaded; }
 
 	virtual std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const { return { 0, 0 }; }
 	virtual bool				MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQueries, bool bHasSI, const VecTraits_T<int64_t> & dMaxCountDistinct, bool & bForceSingleThread ) const;
@@ -1460,6 +1462,7 @@ public:
 
 protected:
 	CSphString					m_sGlobalIDFPath;
+	bool					m_bLoadedFromReadOnlyStorage { false };
 };
 
 const CSphSourceStats& GetStubStats();

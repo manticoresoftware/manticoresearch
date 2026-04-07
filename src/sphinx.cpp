@@ -2108,6 +2108,13 @@ int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, 
 
 int CSphIndex::UpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
 {
+	if ( LoadedFromReadOnlyStorage() )
+	{
+		bCritical = false;
+		sError = "table is loaded from read-only storage";
+		return -1;
+	}
+
 	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning );
 }
 
@@ -9789,6 +9796,9 @@ bool CSphIndex_VLN::PreallocAttributes()
 	if ( !m_tAttr.Setup ( GetFilename ( SPH_EXT_SPA ), m_sLastError, true ) )
 		return false;
 
+	if ( m_tAttr.UsedReadOnlyFallback() )
+		SetLoadedFromReadOnlyStorage ( true );
+
 	if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
 		return false;
 
@@ -9798,6 +9808,9 @@ bool CSphIndex_VLN::PreallocAttributes()
 	{
 		if ( !m_tBlobAttrs.Setup ( GetFilename ( SPH_EXT_SPB ), m_sLastError, true ) )
 			return false;
+
+		if ( m_tBlobAttrs.UsedReadOnlyFallback() )
+			SetLoadedFromReadOnlyStorage ( true );
 	}
 
 	return true;
@@ -9823,7 +9836,10 @@ bool CSphIndex_VLN::PreallocKilllist()
 	if ( m_bDebugCheck )
 		return true;
 
-	return m_tDeadRowMap.Prealloc ( (DWORD)m_iDocinfo, GetFilename ( SPH_EXT_SPM ), m_sLastError );
+	bool bRes = m_tDeadRowMap.Prealloc ( (DWORD)m_iDocinfo, GetFilename ( SPH_EXT_SPM ), m_sLastError );
+	if ( bRes && m_tDeadRowMap.UsedReadOnlyFallback() )
+		SetLoadedFromReadOnlyStorage ( true );
+	return bRes;
 }
 
 

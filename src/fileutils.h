@@ -133,6 +133,8 @@ void			sphLockUn ( int iFile );
 
 /// create and lock the file
 bool			RawFileLock ( const CSphString& sFile, int& iLockFD, CSphString& sError );
+void			SetReadOnlyStorageMode ( bool bReadOnly );
+bool			GetReadOnlyStorageMode ();
 
 /// unlock and unlink file
 void			RawFileUnLock ( const CSphString& sFile, int& iLockFD );
@@ -200,6 +202,7 @@ public:
 	{
 		m_sFilename = sFile;
 		m_bWrite = bWrite;
+		m_bReadOnlyFallback = false;
 
 #if _WIN32
 		assert ( m_iFD==INVALID_HANDLE_VALUE );
@@ -261,7 +264,17 @@ public:
 
 		int iFD = sphOpenFile ( sFile.cstr(), sError, bWrite );
 		if ( iFD<0 )
-			return false;
+		{
+			int iOpenErr = errno;
+			if ( !( bWrite && GetReadOnlyStorageMode() && ( iOpenErr==EACCES || iOpenErr==EROFS ) ) )
+				return false;
+
+			iFD = sphOpenFile ( sFile.cstr(), sError, false );
+			if ( iFD<0 )
+				return false;
+
+			m_bReadOnlyFallback = true;
+		}
 		m_iFD = iFD;
 
 		int64_t iFileSize = sphGetFileSize ( iFD, &sError );
@@ -275,11 +288,16 @@ public:
 		if ( iFileSize>0 )
 		{
 			int iProt = PROT_READ;
+			int iFlags = MAP_SHARED;
 
 			if ( bWrite )
+			{
 				iProt |= PROT_WRITE;
+				if ( m_bReadOnlyFallback )
+					iFlags = MAP_PRIVATE;
+			}
 
-			pData = (T *)mmap ( NULL, iFileSize, iProt, MAP_SHARED, iFD, 0 );
+			pData = (T *)mmap ( NULL, iFileSize, iProt, iFlags, iFD, 0 );
 			if ( pData==MAP_FAILED )
 			{
 				sError.SetSprintf ( "failed to mmap file '%s': %s (length=" INT64_FMT ")", sFile.cstr(), strerrorm(errno), iFileSize );
@@ -319,12 +337,19 @@ public:
 #endif
 
 		this->Set ( NULL, 0 );
+		m_bReadOnlyFallback = false;
 	}
 
 	bool Resize ( uint64_t uNewSize, CSphString & sWarning, CSphString & sError )
 	{
 		if ( !this->GetReadPtr() )
 			return false;
+
+		if ( m_bReadOnlyFallback )
+		{
+			sError.SetSprintf ( "buffer '%s' is mapped from read-only storage", m_sFilename.cstr() );
+			return false;
+		}
 
 		bool bMlock = this->m_bMemLocked;
 		if ( bMlock )
@@ -429,6 +454,12 @@ public:
 		if ( !this->GetReadPtr() )
 			return true;
 
+		if ( m_bReadOnlyFallback )
+		{
+			sError.SetSprintf ( "buffer '%s' is mapped from read-only storage", m_sFilename.cstr() );
+			return false;
+		}
+
 #if _WIN32
 		if ( !::FlushViewOfFile ( this->GetReadPtr(), this->GetLengthBytes() ) )
 		{
@@ -453,6 +484,7 @@ public:
 	}
 
 	const char * GetFileName() const { return m_sFilename.cstr(); }
+	bool UsedReadOnlyFallback() const { return m_bReadOnlyFallback; }
 
 private:
 #if _WIN32
@@ -463,6 +495,7 @@ private:
 #endif
 
 	bool		m_bWrite {false};
+	bool		m_bReadOnlyFallback { false };
 	CSphString	m_sFilename;
 };
 

@@ -18,6 +18,12 @@
 #include "dict/stem/sphinxstem.h"
 #include "stripper/html_stripper.h"
 #include <cmath>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <cstring>
+#if !_WIN32
+#include <unistd.h>
+#endif
 
 
 // Miscelaneous tests mostly processing texts with many test cases: HTML Stripper, levenstein,
@@ -780,3 +786,52 @@ TEST ( Text, sphNormalizeRelativePath )
 	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../../../../../../" ).cstr(), "../../.." );
 	ASSERT_STREQ ( sphNormalizePath( "..//bbb" ).cstr(), "../bbb" );
 }
+
+
+#if !_WIN32
+TEST ( Text, MappedBufferReadOnlyFallback )
+{
+	char sDirTemplate[] = "/tmp/mcore-ro-map-XXXXXX";
+	char * pDir = mkdtemp ( sDirTemplate );
+	ASSERT_NE ( pDir, nullptr );
+
+	std::string sPath = std::string ( pDir ) + "/attrs.bin";
+	int iFD = ::open ( sPath.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644 );
+	ASSERT_GE ( iFD, 0 );
+
+	DWORD dValues[] = { 1, 2 };
+	ASSERT_EQ ( ::write ( iFD, dValues, sizeof(dValues) ), (ssize_t)sizeof(dValues) );
+	::close ( iFD );
+
+	ASSERT_EQ ( ::chmod ( sPath.c_str(), 0444 ), 0 );
+
+	int iProbe = ::open ( sPath.c_str(), O_RDWR );
+	if ( iProbe>=0 )
+	{
+		::close ( iProbe );
+		ASSERT_EQ ( ::chmod ( sPath.c_str(), 0644 ), 0 );
+		ASSERT_EQ ( ::unlink ( sPath.c_str() ), 0 );
+		ASSERT_EQ ( ::rmdir ( pDir ), 0 );
+		GTEST_SKIP() << "process can still open 0444 file for writing (for example when running as root), so read-only fallback cannot be exercised";
+	}
+
+	CSphMappedBuffer<DWORD> tBuffer;
+	CSphString sError;
+	SetReadOnlyStorageMode ( true );
+	ASSERT_TRUE ( tBuffer.Setup ( sPath.c_str(), sError, true ) ) << sError.cstr();
+	ASSERT_TRUE ( tBuffer.UsedReadOnlyFallback() );
+	ASSERT_EQ ( tBuffer.GetReadPtr()[0], 1UL );
+
+	tBuffer.GetWritePtr()[0] = 7;
+	ASSERT_EQ ( tBuffer.GetReadPtr()[0], 7UL );
+
+	ASSERT_FALSE ( tBuffer.Flush ( true, sError ) );
+	ASSERT_NE ( std::strstr ( sError.cstr(), "read-only storage" ), nullptr );
+
+	tBuffer.Reset();
+	SetReadOnlyStorageMode ( false );
+	ASSERT_EQ ( ::chmod ( sPath.c_str(), 0644 ), 0 );
+	ASSERT_EQ ( ::unlink ( sPath.c_str() ), 0 );
+	ASSERT_EQ ( ::rmdir ( pDir ), 0 );
+}
+#endif

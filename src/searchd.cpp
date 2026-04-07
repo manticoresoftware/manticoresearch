@@ -179,6 +179,7 @@ bool					g_bIOStats		= false;
 static auto&			g_bCpuStats 	= sphGetbCpuStat ();
 static bool				g_bOptNoDetach	= false; // whether to detach from console, or work in front
 static bool				g_bOptNoLock	= false; // whether to lock indexes (with .spl) or not
+static bool				g_bDaemonReadOnly = false; // daemon-level explicit read-only mode
 static bool				g_bOptQuiet		= false; // suppress startup output except errors
 static bool				g_bStripPath	= false;
 
@@ -665,7 +666,7 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 	tListener.m_eProto = tDesc.m_eProto;
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
-	tListener.m_bReadOnly = tDesc.m_bReadOnly;
+	tListener.m_bReadOnly = tDesc.m_bReadOnly || g_bDaemonReadOnly;
 
 #if !_WIN32
 	if ( !tDesc.m_sUnix.IsEmpty () )
@@ -8553,6 +8554,12 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 
 	if ( sName == "ro" )
 	{
+		if ( g_bDaemonReadOnly && !iSetValue )
+		{
+			sError = "daemon is read-only";
+			return true;
+		}
+
 		if ( !tSess.GetVip() )
 		{
 			if ( !sphCheckWeCanModify (sError) )
@@ -10916,8 +10923,13 @@ bool LockIndex ( const ServedIndex_c& tIdx, CSphIndex* pIdx, CSphString& sError 
 {
 	if ( !g_bOptNoLock && !pIdx->Lock() )
 	{
-		sError.SetSprintf ( "lock: %s", pIdx->GetLastError().cstr() );
-		return false;
+		if ( g_bDaemonReadOnly && pIdx->LoadedFromReadOnlyStorage() )
+			sphWarning ( "table '%s': lock file unavailable on read-only storage, serving without lock", pIdx->GetName() );
+		else
+		{
+			sError.SetSprintf ( "lock: %s", pIdx->GetLastError().cstr() );
+			return false;
+		}
 	}
 
 	tIdx.UpdateMass();
@@ -14288,6 +14300,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	else
 		sphWarning ( "%s", sWarning.cstr() );
 
+	g_bDaemonReadOnly = hSearchd.GetBool ( "read_only", false );
+	SetReadOnlyStorageMode ( g_bDaemonReadOnly );
+
 	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
 	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
@@ -14491,7 +14506,20 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 
 		IndexFiles_c dJustAddedFiles ( pJustLoadedLocal->m_sIndexPath );
 
-		if ( dJustAddedFiles.HasAllFiles ( ".new" ) )
+		bool bHaveNewFiles = dJustAddedFiles.HasAllFiles ( ".new" );
+		bool bIgnoreNewFiles = false;
+		if ( g_bDaemonReadOnly && bHaveNewFiles && dJustAddedFiles.HasAllFiles() )
+		{
+			CSphString sPathError;
+			CSphString sIndexDir = GetPathOnly ( pJustLoadedLocal->m_sIndexPath );
+			if ( !CheckPath ( sIndexDir, true, sPathError, ".manticore-write-check" ) )
+			{
+				dWarnings.Add ( SphSprintf ( "ignoring pending .new files for table '%s' on read-only storage", szIndexName ) );
+				bIgnoreNewFiles = true;
+			}
+		}
+
+		if ( bHaveNewFiles && !bIgnoreNewFiles )
 		{
 			WIdx_c WFake { pJustLoadedLocal }; // as RotateIndexGreedy wants w-locked
 			if ( RotateIndexGreedy ( *pJustLoadedLocal, szIndexName, sError ) )

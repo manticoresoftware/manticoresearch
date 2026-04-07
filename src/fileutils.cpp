@@ -25,6 +25,7 @@
 
 // whether to collect IO stats
 static bool g_bCollectIOStats = false;
+static bool g_bReadOnlyStorageMode = false;
 static thread_local CSphIOStats* g_pTlsIOStats;
 
 
@@ -61,6 +62,17 @@ void CSphIOStats::Add ( const CSphIOStats & b )
 	m_iWriteTime += b.m_iWriteTime;
 	m_iWriteOps += b.m_iWriteOps;
 	m_iWriteBytes += b.m_iWriteBytes;
+}
+
+
+void SetReadOnlyStorageMode ( bool bReadOnly )
+{
+	g_bReadOnlyStorageMode = bReadOnly;
+}
+
+bool GetReadOnlyStorageMode ()
+{
+	return g_bReadOnlyStorageMode;
 }
 
 void SafeClose ( int& iFD )

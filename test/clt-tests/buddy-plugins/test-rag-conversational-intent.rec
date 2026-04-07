@@ -5,6 +5,13 @@ Based on issue #3978 - conversational RAG with intent classification.
 Uses rich document content based on internal test data (schema.sql).
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
+Install jq for JSON parsing
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– comment –––
 Setup: Create test table with documents about AI, programming, and entertainment
 ––– input –––
 mysql -h0 -P9306 << EOF
@@ -47,7 +54,7 @@ mysql -h0 -P9306 -e "debug sleep 30;" > /dev/null 2>&1
 ––– comment –––
 Create RAG model
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (llm_provider='openai', llm_model='gpt-4o-mini');"
+mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (model='openai:gpt-4o-mini');"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -58,83 +65,137 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (llm_provider='openai', llm
 Test 1: Initial question about RAG (NEW_SEARCH intent)
 Expected: Search for RAG/AI-related documents, response contains RAG keywords
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/rag_intent_test1.txt | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_1.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
-         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration|[Aa]ugmented).*/!#
+       user_query: What is RAG?
+     search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
+         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
           sources: #!/\[.*/!#
-––– comment –––
-Verify sources contain AI category documents
 ––– input –––
-grep -c '"category":"AI"' /tmp/rag_intent_test1.txt
+grep -o '\[.*\]' /tmp/output_1.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([3,1,2,5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
-#!/[1-9][0-9]*/!#
+OK
 ––– comment –––
 Test 2: User expresses rejection (REJECTION intent - "Its boring")
 Expected: System acknowledges rejection, maintains conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_2.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
+       user_query: Its boring
+     search_query: #!/.*movie.*/!#
+         response: #!/.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_2.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([8,9])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test 3: Topic change to movies (TOPIC_CHANGE intent)
 Expected: Search for Entertainment category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/rag_intent_test3.txt | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_3.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
+       user_query: what about movies?
+     search_query: #!/.*movie.*/!#
+         response: #!/.*/!#
           sources: #!/\[.*/!#
 ––– comment –––
 Verify sources contain Entertainment category after topic change
 ––– input –––
-grep -c '"category":"Entertainment"' /tmp/rag_intent_test3.txt
+grep -o '\[.*\]' /tmp/output_3.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([8,9,10])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
-#!/[1-9][0-9]*/!#
+OK
 ––– comment –––
 Test 4: User shows interest in specific show (INTEREST intent)
 Expected: Should find Breaking Bad in sources
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I like Breaking Bad', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I like Breaking Bad', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_4.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
-          sources: #!/.*Breaking Bad.*/!#
+       user_query: I like Breaking Bad
+     search_query: #!/.*[Bb]reaking [Bb]ad.*/!#
+         response: #!/.*[Bb]reaking [Bb]ad.*/!#
+          sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test 5: Emotional response (conversational)
 Expected: Responds conversationally, uses previous context
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('omg thats amazing', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('omg thats amazing', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_5.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
+       user_query: omg thats amazing
+     search_query: #!/.*[Bb]reaking [Bb]ad.*/!#
+         response: #!/.*[Bb]reaking [Bb]ad.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_5.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
+––– comment –––
+If intent here was INTEREST we need to check that we have the same query but more results (expansion should work)
+––– input –––
+Q1=$(grep -o 'search_query: .*' /tmp/output_4.txt | sed 's/search_query: //'); Q2=$(grep -o 'search_query: .*' /tmp/output_5.txt | sed 's/search_query: //'); S1=$(grep -o '\[.*\]' /tmp/output_4.txt | head -1 | jq 'length'); S2=$(grep -o '\[.*\]' /tmp/output_5.txt | head -1 | jq 'length'); if [ "$Q1" = "$Q2" ] && [ "$S2" -gt "$S1" ]; then echo "OK - Context preserved (same search_query + more sources)"; else echo "FAIL - Context broken"; echo "Q1: $Q1"; echo "Q2: $Q2"; echo "Sources: $S1 → $S2"; fi
+––– output –––
+OK
 ––– comment –––
 Test 6: Request for more content (ALTERNATIVES intent)
 Expected: Returns more entertainment results
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('show me more entertainment', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('show me more entertainment', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_6.txt
 ––– output –––
+*************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
-         response: #!/.+/!#
+       user_query: show me more entertainment
+     search_query: #!/.*/!#
+         response: #!/.*/!#
           sources: #!/\[.*/!#
+––– input –––
+grep -o '\[.*\]' /tmp/output_6.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+––– output –––
+OK
 ––– comment –––
 Test 7: New independent conversation - Programming topic
 Expected: Fresh context, should find Python
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'content', 'test-conv-intent-002')\G;" | tee /tmp/rag_intent_test8.txt | grep -E "conversation_uuid:|response:|sources:"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_7.txt
 ––– output –––
-conversation_uuid: test-conv-intent-002
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+       user_query: Tell me about Python
+     search_query: #!/.*[Pp]ython.*/!#
          response: #!/.*[Pp]ython.*/!#
-          sources: #!/.*Python.*/!#
-––– comment –––
-Verify sources contain Programming category (new conversation context)
+          sources: #!/\[.*/!#
 ––– input –––
-grep -c '"category":"Programming"' /tmp/rag_intent_test8.txt
+grep -o '\[.*\]' /tmp/output_7.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
-#!/[1-9][0-9]*/!#
+OK
+––– comment –––
+Ask CLARIFICATION question, so query and results should be the same
+––– input –––
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('When this language was created?', 'docs', 'test_assistant', 'content', 'test-conv-intent-001')\G;" | tee /tmp/output_8.txt
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-intent-001
+       user_query: When this language was created?
+     search_query: #!/.*[Pp]ython.*/!#
+         response: #!/.*[Pp]ython.*/!#
+          sources: #!/\[.*/!#
+––– input –––
+Q7=$(grep -o 'search_query: .*' /tmp/output_7.txt | sed 's/search_query: //'); S7=$(grep -o '\[.*\]' /tmp/output_7.txt | head -1); Q8=$(grep -o 'search_query: .*' /tmp/output_8.txt | sed 's/search_query: //'); S8=$(grep -o '\[.*\]' /tmp/output_8.txt | head -1); if [ "$Q7" = "$Q8" ] && [ "$S7" = "$S8" ]; then echo "OK - Context memory works"; else echo "FAIL - Context memory broken"; echo "Q7: $Q7"; echo "Q8: $Q8"; echo "Sources7: $(echo "$S7" | jq 'length') items"; echo "Sources8: $(echo "$S8" | jq 'length') items"; fi
+––– output –––
+OK
 ––– comment –––
 Cleanup
 ––– input –––

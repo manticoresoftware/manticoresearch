@@ -1,0 +1,85 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=exit_cluster
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE exit_rt (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD exit_rt;" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:exit_rt VALUES (1,'before exit');"
+––– output –––
+––– input –––
+sleep 2; mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "EXIT CLUSTER ${CLUSTER_NAME};"
+––– output –––
+––– input –––
+bash -c 'out=$(mysql -h0 -P2306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_status'\''\\G" 2>&1 || true); [ -z "$out" ] && echo "cluster status absent" || { echo "$out"; exit 1; }'
+––– output –––
+cluster status absent
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM exit_rt ORDER BY id ASC;"
+––– output –––
++------+-------------+
+| id   | title       |
++------+-------------+
+|    1 | before exit |
++------+-------------+
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO ${CLUSTER_NAME}:exit_rt VALUES (2,'should fail');" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: table 'exit_rt' is not in any cluster, use just 'exit_rt'
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do view=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_nodes_view'\''\\G" 2>/dev/null || true); setv=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_nodes_set'\''\\G" 2>/dev/null || true); echo "$view" | grep -q "Counter: cluster_${CLUSTER_NAME}_nodes_view" || { sleep 1; continue; }; echo "$setv" | grep -q "Counter: cluster_${CLUSTER_NAME}_nodes_set" || { sleep 1; continue; }; echo "$view" | grep -q "2306" && { sleep 1; continue; }; echo "$setv" | grep -q "2306" && { sleep 1; continue; }; echo "Survivor view converged"; echo "$view" | grep "Value:"; echo "$setv" | grep "Value:"; exit 0; done; echo "Timeout waiting for survivor nodes cleanup"; exit 1'
+––– output –––
+Survivor view converged
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication
+  Value: 127.0.0.1:1312
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:exit_rt VALUES (2,'after exit');" && mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: #!/cluster_[a-z_]+_status/!#
+  Value: primary
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS cnt FROM exit_rt;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO exit_rt VALUES (3,'local after exit');" && mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_NAME};" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS exit_rt;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS exit_rt;"
+––– output –––

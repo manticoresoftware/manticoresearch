@@ -1,0 +1,103 @@
+Verify a mixed stale/live DROP stays rejected after a node rejoins; t1 is stale locally while t2 is still a real cluster member
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=staledropmix
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_staledropmix_status
+  Value: primary
+––– comment –––
+Create two tables and make both cluster members
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t1 (id bigint, value text);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t2 (id bigint, value text);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD t1,t2;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: #!/(t1,t2|t2,t1)/!#
+––– comment –––
+Stop node 1, remove only t1 from the live cluster, then restart node 1
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 stopped"
+––– output –––
+Node 1 stopped
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "ALTER CLUSTER ${CLUSTER_NAME} DROP t1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: t2
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_status'\''\G" > /tmp/status_1306.log 2>/dev/null && grep -q "Value: primary" /tmp/status_1306.log && { echo "Port 1306: Node synced"; cat /tmp/status_1306.log; exit 0; }; sleep 1; done; cat /tmp/status_1306.log; exit 1'
+––– output –––
+Port 1306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_staledropmix_status
+  Value: primary
+––– comment –––
+The restarted node still has local t1, but cluster membership only lists t2
+––– input –––
+mysql -h0 -P1306 -e "DESC t1" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: t2
+––– comment –––
+Correct behavior here is to reject the mixed DROP because t1 is stale but t2 is still a real cluster member
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} DROP t1,t2;" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: table 't1' is not in cluster 'staledropmix'
+––– comment –––
+If t2 was detached locally by mistake, this DROP TABLE would start succeeding. It must still be blocked as a cluster table.
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE t2;" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: DROP TABLE failed: unable to drop a cluster table 't2'
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: t2

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>hybrid search with auto-embeddings</name>
+
+<skip_indexer/>
+
+<requires>
+<knn/>
+<knn_float_tolerance/>
+<embeddings/>
+<http/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t ( title text, category int, vec float_vector knn_type='hnsw'	hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' );
+	insert into t (id, title, category) values (1, 'machine learning algorithms and neural networks', 1);
+	insert into t (id, title, category) values (2, 'deep learning for computer vision applications', 1);
+	insert into t (id, title, category) values (3, 'natural language processing with transformers', 1);
+	insert into t (id, title, category) values (4, 'cooking italian pasta recipes at home', 2);
+	insert into t (id, title, category) values (5, 'travel guide to european destinations', 2);
+	insert into t (id, title, category) values (6, 'football match results and sports news', 2);
+	flush ramchunk t;
+
+	select id, hybrid_score() from t where hybrid_match('machine learning', vec);
+	select id, hybrid_score() from t where hybrid_match('machine learning');
+	select id, hybrid_score() from t where hybrid_match('machine learning', vec, {k=3}) option rank_constant=10;
+	select id, category, hybrid_score() from t where hybrid_match('machine learning', vec) and category=1;
+	select id, hybrid_score() from t where hybrid_match('xyznonexistent', vec);
+	select id, weight(), knn_dist(), hybrid_score() from t where match('machine learning') and knn(vec, 3, 'machine learning') option fusion_method='rrf';
+	select id, hybrid_score() hs from t where hybrid_match('neural networks', vec) order by hs desc;
+	select id, knn_dist() from t where hybrid_match('neural networks', vec) order by knn_dist() asc;
+	select id, weight() w from t where hybrid_match('neural networks', vec) order by w desc;
+	drop table t;
+</sphinxql>
+</queries>
+
+<httpqueries>
+
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE ht (title text, vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title')</query>
+<query endpoint="json/insert">{"index":"ht","id":1,"doc":{"title":"machine learning algorithms and neural networks"}}</query>
+<query endpoint="json/insert">{"index":"ht","id":2,"doc":{"title":"deep learning for computer vision applications"}}</query>
+<query endpoint="json/insert">{"index":"ht","id":3,"doc":{"title":"natural language processing with transformers"}}</query>
+<query endpoint="json/insert">{"index":"ht","id":4,"doc":{"title":"cooking italian pasta recipes at home"}}</query>
+<query endpoint="json/insert">{"index":"ht","id":5,"doc":{"title":"travel guide to european destinations"}}</query>
+<query endpoint="json/insert">{"index":"ht","id":6,"doc":{"title":"football match results and sports news"}}</query>
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK ht</query>
+
+<!-- hybrid with string query (auto-embedded) -->
+<query endpoint="json/search">
+{
+	"index": "ht",
+	"knn": {
+		"field": "vec",
+		"query": "machine learning",
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid with string query, no k (default) -->
+<query endpoint="json/search">
+{
+	"index": "ht",
+	"knn": {
+		"field": "vec",
+		"query": "machine learning"
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid with string query, no field (auto-detect) -->
+<query endpoint="json/search">
+{
+	"index": "ht",
+	"knn": {
+		"query": "machine learning",
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid with string query, no field, no k -->
+<query endpoint="json/search">
+{
+	"index": "ht",
+	"knn": {
+		"query": "machine learning"
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<!-- hybrid with string query and rank_constant -->
+<query endpoint="json/search">
+{
+	"index": "ht",
+	"knn": {
+		"query": "neural networks"
+	},
+	"query": { "match": { "title": "neural networks" } },
+	"options": { "fusion_method": "rrf", "rank_constant": 10 }
+}
+</query>
+
+<query endpoint="sql?mode=raw" method="post">DROP TABLE ht</query>
+
+<!-- simplified hybrid -->
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE hj (title text, vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title')</query>
+<query endpoint="json/insert">{"index":"hj","id":1,"doc":{"title":"machine learning algorithms and neural networks"}}</query>
+<query endpoint="json/insert">{"index":"hj","id":2,"doc":{"title":"deep learning for computer vision applications"}}</query>
+<query endpoint="json/insert">{"index":"hj","id":3,"doc":{"title":"natural language processing with transformers"}}</query>
+<query endpoint="json/insert">{"index":"hj","id":4,"doc":{"title":"cooking italian pasta recipes at home"}}</query>
+<query endpoint="json/insert">{"index":"hj","id":5,"doc":{"title":"travel guide to european destinations"}}</query>
+<query endpoint="json/insert">{"index":"hj","id":6,"doc":{"title":"football match results and sports news"}}</query>
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK hj</query>
+
+<!-- KNN and text query from same string -->
+<query endpoint="json/search">
+{
+	"index": "hj",
+	"hybrid": { "query": "machine learning" }
+}
+</query>
+
+<!-- hybrid syntax with explicit field -->
+<query endpoint="json/search">
+{
+	"index": "hj",
+	"hybrid": { "query": "machine learning", "field": "vec" }
+}
+</query>
+
+<!-- hybrid with rank_constant in options -->
+<query endpoint="json/search">
+{
+	"index": "hj",
+	"hybrid": { "query": "machine learning" },
+	"options": { "rank_constant": 10 }
+}
+</query>
+
+<!-- hybrid with non-matching text (KNN should still return results) -->
+<query endpoint="json/search">
+{
+	"index": "hj",
+	"hybrid": { "query": "xyznonexistent" }
+}
+</query>
+
+<!-- hybrid with sort by weight -->
+<query endpoint="json/search">
+{
+	"index": "hj",
+	"hybrid": { "query": "neural networks" },
+	"sort": [{ "_score": "desc" }]
+}
+</query>
+
+<query endpoint="sql?mode=raw" method="post">DROP TABLE hj</query>
+
+</httpqueries>
+
+</test>

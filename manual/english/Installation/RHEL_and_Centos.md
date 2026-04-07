@@ -18,7 +18,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 
 Then install Manticore Search:
 ```bash
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
 If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
@@ -34,7 +34,7 @@ If you prefer "Nightly" (development) versions do:
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
-sudo yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera manticore-galera-debuginfo manticore-language-packs manticore-load
+sudo yum -y --disablerepo=manticore --enablerepo manticore-dev install manticore
 ```
 
 ### Standalone RPM packages
@@ -86,4 +86,3 @@ pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
-

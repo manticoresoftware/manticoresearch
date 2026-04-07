@@ -6,7 +6,7 @@
 
 ``` bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
 Если вы обновляетесь с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
@@ -25,7 +25,7 @@ sudo yum --setopt=tsflags=noscripts remove manticore*
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
@@ -86,4 +86,3 @@ helm install manticore -n manticore --create-namespace manticoresearch/manticore
 <!-- end -->
 
 <!-- proofread -->
-

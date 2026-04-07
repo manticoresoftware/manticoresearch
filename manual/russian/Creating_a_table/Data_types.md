@@ -2549,13 +2549,14 @@ let search_res = search_api.search(search_req).await;
 При создании таблицы с автоматическими эмбеддингами укажите эти дополнительные параметры:
 - `MODEL_NAME`: Модель эмбеддинга для автоматической генерации векторов
 - `FROM`: Какие поля использовать для генерации эмбеддингов (пустая строка означает все текстовые/строковые поля)
+- `API_KEY`: Требуется для удаленных моделей (OpenAI, Voyage, Jina). API-ключ проверяется при создании таблицы путем выполнения реального API-запроса.
+- `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
+- `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
 **Поддерживаемые модели эмбеддингов:**
 - **Sentence Transformers**: Любая [подходящая модель Hugging Face на основе BERT](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
 - **Локальные эмбеддинги Qwen**: Модели эмбеддингов Qwen, такие как `Qwen/Qwen3-Embedding-0.6B` — API-ключ не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI**: Модели эмбеддингов OpenAI, такие как `openai/text-embedding-ada-002` - требует параметр `API_KEY='<OPENAI_API_KEY>'`
-- **Voyage**: Модели эмбеддингов Voyage AI - требует параметр `API_KEY='<VOYAGE_API_KEY>'`
-- **Jina**: Модели эмбеддингов Jina AI - требует параметр `API_KEY='<JINA_API_KEY>'`
+- **OpenAI, Voyage, Jina**: Удаленные модели эмбеддингов (например, `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - требуют параметр `API_KEY='<API_KEY>'`. При необходимости укажите `API_URL='<CUSTOM_URL>'` для использования пользовательской конечной точки API и `API_TIMEOUT='<SECONDS>'` для настройки HTTP-таймаута (по умолчанию 10 секунд).
 
 <!-- intro -->
 ##### SQL:
@@ -2591,6 +2592,17 @@ CREATE TABLE products_openai (
 );
 ```
 
+Использование OpenAI с пользовательским URL API и таймаутом (опционально)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
 Использование всех текстовых полей для эмбеддингов (FROM пуст)
 ```sql
 CREATE TABLE products_all_fields (
@@ -2611,11 +2623,16 @@ CREATE TABLE products_all_fields (
 - **Конкретные поля**: `FROM='title'` - используется только поле title
 - **Несколько полей**: `FROM='title,description'` - оба поля title и description объединяются и используются
 - **Все текстовые поля**: `FROM=''` (пусто) - используются все поля `text` (полнотекстовое поле) и `string` (строковый атрибут) в таблице
-- **Пустые векторы**: Вы по-прежнему можете вставлять пустые векторы с помощью `()`, чтобы исключить документы из векторного поиска
+- **Ручная override**: Даже когда настроен `MODEL_NAME`, вы все равно можете предоставить свой собственный вектор в `INSERT`/`REPLACE`
+- **Пустые векторы**: Вы можете вставить `()` чтобы пропустить генерацию эмбеддинга для этой строки; Manticore хранит нулевой вектор с размерностью модели
 
 #### Вставка данных с автоматическими эмбеддингами
 
-При использовании автоматических эмбеддингов **не указывайте поле вектора** в ваших операторах INSERT. Эмбеддинги автоматически генерируются из указанных текстовых полей:
+При использовании авто-эмбеддингов, вы имеете три режима вставки:
+
+- Опустить векторную колонку и позволить Manticore генерировать эмбеддинг из полей указанных в `FROM`
+- Предоставить свой собственный вектор явно, чтобы перехватить авто генерацию для этой строки
+- Предоставить `()` чтобы пропустить генерацию и хранить нулевой вектор вместо этого
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2623,10 +2640,16 @@ INSERT INTO products (title, description) VALUES
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
 
--- Insert with empty vector (excluded from vector search)
+-- Insert with a user-provided vector - no auto generation for this row
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+
+-- Insert with empty vector - no auto generation, stores a zero vector
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+
+`()` полезно когда вы хотите сохранить строку без генерации эмбеддинга сразу. Внутренне, значение хранится как вектор заполненный нулями, поэтому он должен обрабатываться как "нет значимого эмбеддинга ещё" а не как семантический вектор. Если позже запустить `ALTER TABLE ... REBUILD EMBEDDINGS`, эта строка тоже ребилдится; `REBUILD EMBEDDINGS` не пропускает строки просто потому что их текущий вектор полностью нулевой.
 <!-- end -->
 
 <!-- example manual -->
@@ -2650,6 +2673,44 @@ INSERT INTO products VALUES
 (1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)),
 (2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406));
 ```
+
+<!-- end -->
+
+<!-- example alter_embedding_column -->
+#### Способ 3: Добавление столбца эмбеддингов после массовой загрузки
+
+Если скорость первоначальной загрузки важнее, чем немедленный векторный поиск, вы можете сначала загрузить таблицу без столбца эмбеддингов и добавить столбец `float_vector` с поддержкой модели позже.
+
+Этот подход полезен, когда вы хотите, чтобы массовые вставки завершались как можно быстрее, и готовы запустить генерацию эмбеддингов позже в виде отдельной, потенциально длительной операции `ALTER`.
+
+Как это работает:
+- Создайте таблицу только с исходными полями `text` и атрибутами `string`
+- Вставьте или импортируйте все данные
+- Добавьте столбец с эмбеддингами позже с помощью `ALTER TABLE ... ADD COLUMN`
+
+Когда вы добавляете столбец `float_vector` с `MODEL_NAME` и `FROM`, Manticore генерирует эмбеддинги для существующих строк во время выполнения `ALTER`. Если позже вам потребуется перегенерировать их, используйте `ALTER TABLE ... REBUILD EMBEDDINGS column_name`.
+
+Будьте осторожны с `REBUILD EMBEDDINGS`: он пересоздает целевой столбец для каждой строки. Это включает строки, где текущий вектор был вставлен ручным способом, и строки, где использовался `()` для сохранения нулевого вектора. После фиксирования данных Manticore не сохраняет информацию о том, был сохраненный вектор создан автоматически, предоставлен пользователем или создан из `()`, и `REBUILD EMBEDDINGS` не рассматривает нулевые векторы как специальный маркер "исключить эту строку".
+
+Ограничения:
+- Этот метод работает только для локальных RT-таблиц. Он недоступен для таблиц, входящих в репликационный кластер, потому что кластеризованные таблицы не поддерживают `ALTER`.
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+Для получения дополнительных сведений см. [Обновление схемы таблицы](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).
 
 <!-- end -->
 

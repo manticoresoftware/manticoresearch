@@ -39,7 +39,7 @@ Manticore Search 提供了用于物理备份的命令行工具 [manticore-backup
 
 ### 安装
 
-**如果您按照了[官方安装说明](https://manticoresearch.com/install/)，应该已经安装完成，无需额外操作。** 否则， [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) 需要 PHP 8.1.10 和 [特定模块](https://github.com/manticoresoftware/executor/blob/main/build-linux) 或 [`manticore-executor`](https://github.com/manticoresoftware/executor)，后者是 `manticore-extra` 包的一部分，您需要确保其中之一可用。
+**如果您遵循了 [官方安装说明](https://manticoresearch.com/install/)，您应该已经安装了所有内容，无需担心。** 否则，[`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) 需要 PHP 8.1.10 和 [特定模块](https://github.com/manticoresoftware/executor/blob/main/build-linux) 或 [`manticore-executor`](https://github.com/manticoresoftware/executor)，并且您需要确保其中一个可用。
 
 注意，目前 `manticore-backup` 尚不支持 Windows。
 

@@ -730,10 +730,14 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 	// total_found => m_iTotalMatches
 	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
 
-	// time => m_iQueryTime \ m_iRealQueryTime
+	// time => query/real time stored canonically in microseconds
 	float fTime = 0.0f;
 	if ( ConvertValue ( "time", tSrcMeta, fTime ) )
-		tLastMeta.m_iRealQueryTime = tLastMeta.m_iQueryTime = (int)( fTime * 1000.0f );
+	{
+		int iTimeMs = (int)( fTime * 1000.0f );
+		tLastMeta.SetQueryTimeMs ( iTimeMs );
+		tLastMeta.SetRealQueryTimeMs ( iTimeMs );
+	}
 
 	// total_relation => m_bTotalMatchesApprox
 	CSphString sRel;

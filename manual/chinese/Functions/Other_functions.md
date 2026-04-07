@@ -14,9 +14,19 @@ mysql> select CONNECTION_ID();
 1 row in set (0.00 sec)
 ```
 
+### HYBRID_SCORE()
+
+返回[混合搜索](../Searching/Hybrid_search.md)的RRF融合得分。仅在混合查询（使用`OPTION fusion_method='rrf'`的查询）中可用。默认情况下，结果按`hybrid_score() DESC`排序。
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
 ### KNN_DIST()
 
-返回 [KNN 向量搜索](../Searching/KNN.md) 距离。
+返回[KNN向量搜索](../Searching/KNN.md)的距离。在包含多个KNN子查询的[混合搜索](../Searching/Hybrid_search.md)查询中，返回所有子查询中的最小距离。
 
 ```sql
 mysql> select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) ) and match('white') and id < 10;

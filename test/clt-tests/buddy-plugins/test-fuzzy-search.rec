@@ -572,49 +572,15 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('mi', 'name', 0 AS append, 1 AS prepend);
 ––– output –––
 +--------+
 | cami   |
-| darci  |
-| joan   |
-| jody   |
-| joe    |
-| joel   |
-| joey   |
-| john   |
-| johnie |
-| johnny |
-| joi    |
-| jon    |
-| jonas  |
-| jordan |
-| jorge  |
-| jose   |
-| joseph |
-| joshi  |
-| joshua |
-| joy    |
-| joyce  |
-| kaci   |
 | kami   |
 | kimi   |
-| laci   |
-| luci   |
-| marci  |
 | mi     |
-| nanci  |
 | naomi  |
 | neomi  |
 | nohemi |
-| ricci  |
-| staci  |
 | tami   |
 | tammi  |
-| tobias |
-| todd   |
-| toi    |
-| tom    |
-| tomas  |
 | tomi   |
-| toney  |
-| traci  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
@@ -622,6 +588,11 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expans
 | chang |
 | chong |
 | chung |
+––– comment –––
+Validating that default behaviour for autocomplete is none layouts specified
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name');" | tail -n +4 | sort
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
@@ -650,6 +621,60 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl1; CREATE TABLE tbl1 (title TEXT) m
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\` WHERE MATCH('abc') OPTION fuzzy = 1;"
 ––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM tbl1, name WHERE MATCH('abc') OPTION fuzzy = 1;"
+––– output –––
++--------+-----------------+------+
+| id     | username        | s    |
++--------+-----------------+------+
+| 600513 | ANNABELL BABB   | a    |
+| 238434 | LISABETH GABEL  | a    |
+| 700235 | LIZABETH ABEL   | a    |
+| 800188 | ABEL SALERNO    | a    |
+| 801664 | ARDEN ABEL      | a    |
+| 805560 | ABEL TOWNSEND   | a    |
+| 811835 | FRIDA ABEL      | a    |
+| 814479 | ROSALVA ABEL    | a    |
+| 819693 | ABEL RUTHERFORD | a    |
+| 820449 | BENITA ABEL     | a    |
+| 821189 | ALBINA ABEL     | a    |
+| 822200 | ROSENDA ABEL    | a    |
+| 822419 | ABEL REILLY     | a    |
+| 822686 | JOETTA ABEL     | a    |
+| 822731 | COLLENE ABEL    | a    |
+| 822742 | ALFREDIA ABEL   | a    |
+| 824361 | ABEL BATISTA    | a    |
+| 832433 | ABEL ADAME      | a    |
+| 836043 | VAN ABEL        | a    |
+| 838247 | ABEL DAVIS      | a    |
++--------+-----------------+------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\`, \`name\` WHERE MATCH('abc') OPTION fuzzy = 1;"
+––– output –––
++--------+-----------------+------+
+| id     | username        | s    |
++--------+-----------------+------+
+| 600513 | ANNABELL BABB   | a    |
+| 238434 | LISABETH GABEL  | a    |
+| 700235 | LIZABETH ABEL   | a    |
+| 800188 | ABEL SALERNO    | a    |
+| 801664 | ARDEN ABEL      | a    |
+| 805560 | ABEL TOWNSEND   | a    |
+| 811835 | FRIDA ABEL      | a    |
+| 814479 | ROSALVA ABEL    | a    |
+| 819693 | ABEL RUTHERFORD | a    |
+| 820449 | BENITA ABEL     | a    |
+| 821189 | ALBINA ABEL     | a    |
+| 822200 | ROSENDA ABEL    | a    |
+| 822419 | ABEL REILLY     | a    |
+| 822686 | JOETTA ABEL     | a    |
+| 822731 | COLLENE ABEL    | a    |
+| 822742 | ALFREDIA ABEL   | a    |
+| 824361 | ABEL BATISTA    | a    |
+| 832433 | ABEL ADAME      | a    |
+| 836043 | VAN ABEL        | a    |
+| 838247 | ABEL DAVIS      | a    |
++--------+-----------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
 ––– output –––
@@ -931,11 +956,6 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1', 1 AS fuzziness);"
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('3*', 'idx1', 1 AS fuzziness);"
 ––– output –––
-+-------+
-| query |
-+-------+
-| 340   |
-+-------+
 ––– input –––
 echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9312\nlisten = 9308:http\nlog = /tmp/searchd.log\nquery_log = /tmp/query.log\npid_file = /tmp/searchd.pid\n}\n\nsource src_idx {\ntype = tsvpipe\ntsvpipe_command = cat /tmp/data.tsv\ntsvpipe_field_string = f\ntsvpipe_attr_bigint = id\n}\n\nindex idx_plain {\ntype = plain\nsource = src_idx\npath = /tmp/idx_plain\nmin_infix_len = 2\n}" > /tmp/manticore_idx.conf; echo $?
 ––– output –––

@@ -6,7 +6,7 @@
 
 ``` bash
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
 If you are upgrading from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
@@ -25,7 +25,7 @@ For more details on the installation, see [below](../Installation/RHEL_and_Cento
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
@@ -86,4 +86,3 @@ You can find more information about installing the Helm chart [in the documentat
 <!-- end -->
 
 <!-- proofread -->
-

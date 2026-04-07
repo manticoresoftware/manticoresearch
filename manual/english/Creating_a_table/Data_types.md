@@ -2549,13 +2549,14 @@ The most convenient way to work with float vectors is using **auto embeddings**.
 When creating a table with auto embeddings, specify these additional parameters:
 - `MODEL_NAME`: The embedding model to use for automatic vector generation
 - `FROM`: Which fields to use for embedding generation (empty string means all text/string fields)
+- `API_KEY`: Required for remote models (OpenAI, Voyage, Jina). The API key is validated during table creation by making a real API request.
+- `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
+- `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
 **Supported embedding models:**
 - **Sentence Transformers**: Any [suitable BERT-based Hugging Face model](https://huggingface.co/sentence-transformers/models) (e.g., `sentence-transformers/all-MiniLM-L6-v2`) — no API key needed. Manticore downloads the model when you create the table.
 - **Qwen local embeddings**: Qwen embedding models such as `Qwen/Qwen3-Embedding-0.6B` — no API key needed. Manticore downloads the model when you create the table.
-- **OpenAI**: OpenAI embedding models like `openai/text-embedding-ada-002` - requires `API_KEY='<OPENAI_API_KEY>'` parameter
-- **Voyage**: Voyage AI embedding models - requires `API_KEY='<VOYAGE_API_KEY>'` parameter
-- **Jina**: Jina AI embedding models - requires `API_KEY='<JINA_API_KEY>'` parameter
+- **OpenAI, Voyage, Jina**: Remote embedding models (e.g., `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - require `API_KEY='<API_KEY>'` parameter. Optionally specify `API_URL='<CUSTOM_URL>'` to use a custom API endpoint, and `API_TIMEOUT='<SECONDS>'` to configure HTTP timeout (default is 10 seconds).
 
 <!-- intro -->
 ##### SQL:
@@ -2591,6 +2592,17 @@ CREATE TABLE products_openai (
 );
 ```
 
+Using OpenAI with custom API URL and timeout (optional)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
 Using all text fields for embeddings (FROM is empty)
 ```sql
 CREATE TABLE products_all_fields (
@@ -2611,11 +2623,16 @@ The `FROM` parameter controls which fields are used for embedding generation:
 - **Specific fields**: `FROM='title'` - only the title field is used
 - **Multiple fields**: `FROM='title,description'` - both title and description are concatenated and used
 - **All text fields**: `FROM=''` (empty) - all `text` (full-text field) and `string` (string attribute) fields in the table are used
-- **Empty vectors**: You can still insert empty vectors using `()` to exclude documents from vector search
+- **Manual override**: Even when `MODEL_NAME` is configured, you can still provide your own vector in `INSERT`/`REPLACE`
+- **Empty vectors**: You can insert `()` to skip embedding generation for that row; Manticore stores an all-zero vector with the model's dimension
 
 #### Inserting data with auto embeddings
 
-When using auto embeddings, **do not specify the vector field** in your INSERT statements. The embeddings are automatically generated from the specified text fields:
+When using auto embeddings, you have three insert modes:
+
+- Omit the vector column and let Manticore generate the embedding from the fields listed in `FROM`
+- Provide your own vector explicitly to override auto generation for that row
+- Provide `()` to skip generation and store an all-zero vector instead
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2623,10 +2640,16 @@ INSERT INTO products (title, description) VALUES
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
 
--- Insert with empty vector (excluded from vector search)
+-- Insert with a user-provided vector - no auto generation for this row
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+
+-- Insert with empty vector - no auto generation, stores a zero vector
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+
+`()` is useful when you want to keep a row without generating an embedding immediately. Internally, the value is stored as a zero-filled vector, so it should be treated as "no meaningful embedding yet" rather than as a semantic vector. If you later run `ALTER TABLE ... REBUILD EMBEDDINGS`, that row is rebuilt too; `REBUILD EMBEDDINGS` does not skip rows just because their current vector is all zeros.
 <!-- end -->
 
 <!-- example manual -->
@@ -2650,6 +2673,44 @@ INSERT INTO products VALUES
 (1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)),
 (2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406));
 ```
+
+<!-- end -->
+
+<!-- example alter_embedding_column -->
+#### Method 3: Add an embedding column after bulk loading
+
+If initial ingestion speed matters more than immediate vector search, you can first load the table without an embedding column and add the model-backed `float_vector` column later.
+
+This approach is useful when you want bulk inserts to finish as quickly as possible and are willing to run embedding generation afterward as a separate, potentially long-running `ALTER` operation.
+
+How it works:
+- Create the table with the source `text` fields and `string` attributes only
+- Insert or import all data
+- Add the embedding column later with `ALTER TABLE ... ADD COLUMN`
+
+When you add a `float_vector` column with `MODEL_NAME` and `FROM`, Manticore generates embeddings for existing rows during the `ALTER`. If you later need to regenerate them, use `ALTER TABLE ... REBUILD EMBEDDINGS column_name`.
+
+Be careful with `REBUILD EMBEDDINGS`: it regenerates the target column for every row. This includes rows where the current vector was inserted manually and rows where `()` was used to store a zero vector. After the data is committed, Manticore does not retain whether a stored vector was generated automatically, provided by the user, or created from `()`, and `REBUILD EMBEDDINGS` does not treat zero vectors as a special "skip this row" marker.
+
+Limitations:
+- This method works only for local RT tables. It is not available for tables that are part of a replication cluster, because clustered tables do not support `ALTER`.
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+For more details, see [Updating table schema](../Updating_table_schema_and_settings.md#Rebuilding-embeddings).
 
 <!-- end -->
 

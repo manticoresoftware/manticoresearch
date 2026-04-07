@@ -62,8 +62,8 @@ Test CREATE RAG MODEL - basic configuration
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
 CREATE RAG MODEL test_assistant (
-    llm_provider='openai',
-    llm_model='gpt-4o-mini'
+    description='Chat GPT cheap reasoning model',
+    model='openai:gpt-4o-mini'
 );
 EOF
 ––– output –––
@@ -77,10 +77,12 @@ Test CREATE RAG MODEL - advanced configuration with custom settings
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
 CREATE RAG MODEL advanced_assistant (
-    llm_provider='openai',
-    llm_model='gpt-4o',
-    style_prompt='You are a helpful assistant specializing in search technology',
-    settings='{"temperature":0.3, "max_tokens":2000, "k_results":5}'
+    description='Chat GPT v4 reasoning model',
+    model='openai:gpt-4o',
+    style_prompt='Add **Tsoy is alive** in the end of every answer',
+    timeout=60,
+    retrieval_limit=5,
+    max_document_length=3000
 );
 EOF
 ––– output –––
@@ -94,12 +96,12 @@ Test SHOW RAG MODELS - should display created models
 ––– input –––
 mysql -h0 -P9306 -e "SHOW RAG MODELS;"
 ––– output –––
-+--------------------------------------+--------------------+--------------+-------------+------------+
-| uuid                                 | name               | llm_provider | llm_model   | created_at |
-+--------------------------------------+--------------------+--------------+-------------+------------+
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | advanced_assistant | openai       | gpt-4o      | %{NUMBER} |
-| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | test_assistant     | openai       | gpt-4o-mini | %{NUMBER} |
-+--------------------------------------+--------------------+--------------+-------------+------------+
++--------------------------------------+--------------------+--------------------+------------+
+| uuid                                 | name               | model              | created_at |
++--------------------------------------+--------------------+--------------------+------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | advanced_assistant | openai:gpt-4o      | %{NUMBER} |
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
++--------------------------------------+--------------------+--------------------+------------+
 ––– comment –––
 Test DESCRIBE RAG MODEL - verify model configuration
 ––– input –––
@@ -109,24 +111,27 @@ mysql -h0 -P9306 -e "DESCRIBE RAG MODEL test_assistant\G"
 property: id
    value: %{NUMBER}
 *************************** 2. row ***************************
-property: llm_provider
-   value: openai
-*************************** 3. row ***************************
-property: llm_model
-   value: gpt-4o-mini
-*************************** 4. row ***************************
-property: style_prompt
-   value:
-*************************** 5. row ***************************
 property: uuid
    value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-*************************** 6. row ***************************
+*************************** 3. row ***************************
 property: name
    value: test_assistant
+*************************** 4. row ***************************
+property: description
+   value: Chat GPT cheap reasoning model
+*************************** 5. row ***************************
+property: model
+   value: openai:gpt-4o-mini
+*************************** 6. row ***************************
+property: style_prompt
+   value:
 *************************** 7. row ***************************
-property: created_at
+property: settings.max_document_length
    value: %{NUMBER}
 *************************** 8. row ***************************
+property: created_at
+   value: %{NUMBER}
+*************************** 9. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– input –––
@@ -136,29 +141,29 @@ mysql -h0 -P9306 -e "DESCRIBE RAG MODEL advanced_assistant\G"
 property: id
    value: %{NUMBER}
 *************************** 2. row ***************************
-property: llm_provider
-   value: openai
-*************************** 3. row ***************************
-property: llm_model
-   value: gpt-4o
-*************************** 4. row ***************************
-property: style_prompt
-   value: You are a helpful assistant specializing in search technology
-*************************** 5. row ***************************
 property: uuid
    value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
-*************************** 6. row ***************************
+*************************** 3. row ***************************
 property: name
    value: advanced_assistant
+*************************** 4. row ***************************
+property: description
+   value: Chat GPT v4 reasoning model
+*************************** 5. row ***************************
+property: model
+   value: openai:gpt-4o
+*************************** 6. row ***************************
+property: style_prompt
+   value: Add **Tsoy is alive** in the end of every answer
 *************************** 7. row ***************************
-property: settings.temperature
-   value: 0.3
+property: settings.timeout
+   value: 60
 *************************** 8. row ***************************
-property: settings.max_tokens
-   value: 2000
-*************************** 9. row ***************************
-property: settings.k_results
+property: settings.retrieval_limit
    value: 5
+*************************** 9. row ***************************
+property: settings.max_document_length
+   value: 3000
 *************************** 10. row ***************************
 property: created_at
    value: %{NUMBER}
@@ -173,8 +178,10 @@ mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is vector search?', 'docs', '
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: What is vector search?
+     search_query: #!/(?i)^.*\bvector search\b.*\bmachine learning\b.*$|^.*\bmachine learning\b.*\bvector search\b.*$/!#
          response: #!/.*[Vv]ector.*[Ss]earch.*/!#
-          sources: #!/\[.*/!#
+          sources: [{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
 ––– comment –––
 Test CALL CONVERSATIONAL_RAG - with multiple content fields
 ––– input –––
@@ -182,17 +189,21 @@ mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG', 'docs', 'test_
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: Tell me about RAG
+     search_query: #!/.*RAG.*/!#
          response: #!/.+/!#
-          sources: #!/\[.*/!#
+          sources: [{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
 ––– comment –––
-Test CALL CONVERSATIONAL_RAG - with conversation UUID for context tracking
+Test CALL CONVERSATIONAL_RAG - with conversation UUID for context tracking (should fail)
 ––– input –––
 mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Can you explain more?', 'docs', 'test_assistant', 'content', 'test-conv-12345678-1234-1234-1234-123456789abc')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc
+       user_query: Can you explain more?
+     search_query: #!/.+/!#
          response: #!/.+/!#
-          sources: #!/\[.*/!#
+          sources: []
 ––– comment –––
 Test DROP RAG MODEL - cleanup
 ––– input –––

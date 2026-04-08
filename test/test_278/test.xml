@@ -391,6 +391,12 @@ select id from join1 inner join join2 on join1.id = join2.id where join2.j.b is 
 select id from join1 inner join join2 on join1.id = join2.id where join2.j.table='join2' order by id asc;
 select id from join1 inner join join2 on join1.id = join2.id where join2.j.table!='join2' order by id asc;
 
+<!-- uppercase table name -->
+select * from JOIN1 left join join2 on JOIN1.id = join2.id where join2.name = 'name1' order by id asc;
+select * from join1 left join JOIN2 on join1.id = JOIN2.id where join2.name = 'name1' order by id asc;
+select * from join1 left join JOIN2 on join1.id = JOIN2.id where JOIN2.name = 'name1' order by id asc;
+select * from JOIN1 left join JOIN2 on JOIN1.id = JOIN2.id where JOIN2.name = 'name1' order by id asc;
+select * from JoIn1 left join jOiN2 on jOiN1.id = JoiN2.id where jOIn2.name = 'name1' order by id asc;
 </sphinxql>
 
 <query endpoint="json/search">

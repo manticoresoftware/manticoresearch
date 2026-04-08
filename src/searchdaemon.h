@@ -1098,6 +1098,8 @@ inline cServedIndexRefPtr_c GetServed ( const CSphString &sName )
 	return g_pLocalIndexes->Get ( sName );
 }
 
+void CanonicalizeIndexName ( CSphString & sName ) noexcept;
+
 class ServedClone_c: ISphNoncopyable
 {
 	cServedIndexRefPtr_c m_pSource;

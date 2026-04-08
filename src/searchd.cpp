@@ -1107,6 +1107,14 @@ inline static void FixupSystemTableName ( SqlStmt_t * pStmt ) noexcept
 		pStmt->m_tQuery.m_sIndexes = sName;
 }
 
+void CanonicalizeIndexName ( CSphString & sName ) noexcept
+{
+	if ( g_pLocalIndexes->Contains ( sName ) || ( g_pDistIndexes && g_pDistIndexes->Contains ( sName ) ))
+		return;
+
+	sName.ToLower();
+}
+
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
 {
 	if ( ( uVer>>8)!=( uDaemonVersion>>8) )

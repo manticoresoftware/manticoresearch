@@ -16,10 +16,9 @@ searchd
   read_only = 1
 }
 EOF
-searchd --config /tmp/issue4449-ro-invalid/rt-mode.conf 2>&1 || true
+searchd --config /tmp/issue4449-ro-invalid/rt-mode.conf 2>&1 | grep -o "'read_only' cannot be used together with 'data_dir'.*" || true
 ––– output –––
-[#!/.*'read_only' cannot be used together with 'data_dir'.*/!#]
-
+'read_only' cannot be used together with 'data_dir' in '/tmp/issue4449-ro-invalid/rt-mode.conf'
 ––– comment –––
 Reject read_only in plain-config mode when an RT table is declared
 ––– input –––
@@ -40,10 +39,9 @@ searchd
   read_only = 1
 }
 EOF
-searchd --config /tmp/issue4449-ro-invalid/rt-table.conf 2>&1 || true
+searchd --config /tmp/issue4449-ro-invalid/rt-table.conf 2>&1 | grep -o "'read_only' cannot be used with table 'rt_bad' of type 'rt'.*" || true
 ––– output –––
-[#!/.*'read_only' cannot be used with table 'rt_bad' of type 'rt'.*/!#]
-
+'read_only' cannot be used with table 'rt_bad' of type 'rt' in '/tmp/issue4449-ro-invalid/rt-table.conf'
 ––– comment –––
 Clean up
 ––– input –––

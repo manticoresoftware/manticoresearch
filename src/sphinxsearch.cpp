@@ -2784,19 +2784,17 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
 	float					m_fK1;
 	float					m_fB;
-	float					m_fAvgDocLen;
 	CSphFixedVector<int>			m_dWeights { 0 };			///< per field weights
 	CSphFixedVector<float>			m_dAvgDocFieldLens { 0 };	///< per field avg lengths
 	mutable CSphFixedVector<int>	m_dFieldLens { 0 };		///< per field lengths
 	int					m_iWeightMax;			///< the largest field weight
 
-	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, float k1, float b, float fAvgDocLen, ISphExpr * pFieldWeights )
+	explicit Expr_BM25F_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, float k1, float b, ISphExpr * pFieldWeights )
 	{
 		// bind k1, b
 		m_pState = pState;
 		m_fK1 = k1;
 		m_fB = b;
-		m_fAvgDocLen = fAvgDocLen;
 
 		m_dWeights.Reset ( pState->m_iFields );
 		m_dAvgDocFieldLens.Reset ( pState->m_iFields );
@@ -2828,12 +2826,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 
 		// compute avg length per field
 		m_dAvgDocFieldLens.Fill ( 0.0f );
-		if ( m_fAvgDocLen>0.0f )
-		{
-			float fPerFieldAvg = m_fAvgDocLen / Max ( m_pState->m_iFields, 1 );
-			for ( int i=0; i<m_pState->m_iFields; i++ )
-				m_dAvgDocFieldLens[i] = fPerFieldAvg;
-		} else if ( m_pState->m_pFieldLens && m_pState->m_iTotalDocuments )
+		if ( m_pState->m_pFieldLens && m_pState->m_iTotalDocuments )
 			for ( int i=0; i<m_pState->m_iFields; i++ )
 				m_dAvgDocFieldLens[i] = m_pState->m_pFieldLens[i] / m_pState->m_iTotalDocuments; // FIXME? Total of documents with non empty field value is actually needed here
 	}
@@ -2889,7 +2882,6 @@ private:
 		: m_pState ( rhs.m_pState )
 		, m_fK1 ( rhs.m_fK1 )
 		, m_fB ( rhs.m_fB )
-		, m_fAvgDocLen ( rhs.m_fAvgDocLen )
 		, m_dWeights ( rhs.m_dWeights.GetLength() )
 		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens.GetLength() )
 		, m_dFieldLens ( rhs.m_dFieldLens.GetLength() )
@@ -3229,7 +3221,7 @@ public:
 					float fB = pLeft->GetArg(1)->Eval ( tDummy );
 					fK1 = Max ( fK1, 0.001f );
 					fB = Min ( Max ( fB, 0.0f ), 1.0f );
-					return new Expr_BM25F_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, fK1, fB, 0.0f, pLeft->GetNumArgs()>=3 ? pLeft->GetArg(2) : nullptr );
+					return new Expr_BM25F_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, fK1, fB, pLeft->GetArg(2) );
 				}
 
 			case XRANK_SUM:					return new Expr_Sum_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, pLeft );

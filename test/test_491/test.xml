@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>bm25a optional avgdl argument</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, content FROM test_table
+}
+
+index test
+{
+	source = srctest
+	path = <data_path/>/test
+	index_field_lengths = 1
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(1024) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+( 1, 'apple short' ),
+( 2, 'apple apple apple filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler' ),
+( 3, 'banana other' );
+</db_insert>
+
+<queries>
+<sphinxql>
+<!-- With the native corpus avgdl, the shorter doc should rank above the longer higher-TF doc. -->
+select id, weight() as w from test where match('apple') option ranker=expr('1000000*bm25a(1.2,0.75)'), idf='plain,tfidf_unnormalized';
+<!-- With a fixed avgdl=256, the higher term frequency in doc 2 should outweigh its length and flip the order. -->
+select id, weight() as w from test where match('apple') option ranker=expr('1000000*bm25a(1.2,0.75,256)'), idf='plain,tfidf_unnormalized';
+</sphinxql>
+</queries>
+
+</test>

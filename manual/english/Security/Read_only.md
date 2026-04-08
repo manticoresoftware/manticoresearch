@@ -16,6 +16,8 @@ Read-only mode can be enabled at 3 different levels:
 
 When `searchd.read_only=1` is enabled, all new client connections start in read-only mode automatically. This mode is intended for deployments where Manticore must not modify table storage, for example when serving plain tables from a replicated read-only filesystem. In that mode, modifying queries are rejected in the same way as on a `_readonly` listener.
 
+Daemon-wide `read_only` is only supported for serving plain-table storage. It cannot be combined with `data_dir`, and it cannot be used in configs that declare RT or percolate tables.
+
 ## Deactivation
 
 If you're connected to a [VIP](../Server_settings/Searchd.md#listen) socket, you can execute `SET ro=0` (even if the socket you are connected to was defined as read-only in the config and not interactively). This will switch the connection to the usual (not read-only) mode with all modifications allowed.

@@ -663,6 +663,35 @@ std::unique_ptr<FilenameBuilder_i> CreateFilenameBuilder ( const char * szIndex 
 }
 
 
+static bool ValidateDaemonReadOnlyMode ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError )
+{
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+	if ( !hSearchd.GetBool ( "read_only", false ) )
+		return true;
+
+	if ( hSearchd.Exists ( "data_dir" ) )
+	{
+		sError.SetSprintf ( "'read_only' cannot be used together with 'data_dir' in '%s'", sConfigFile.cstr() );
+		return false;
+	}
+
+	if ( !hConf.Exists ( "index" ) )
+		return true;
+
+	for ( const auto & tIndex : hConf["index"] )
+	{
+		const auto sType = tIndex.second.GetStr ( "type", nullptr );
+		auto eType = TypeOfIndexConfig ( sType );
+		if ( eType==IndexType_e::RT || eType==IndexType_e::PERCOLATE )
+		{
+			sError.SetSprintf ( "'read_only' cannot be used with table '%s' of type '%s' in '%s'", tIndex.first.cstr(), sType.cstr(), sConfigFile.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError )
 {
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
@@ -701,6 +730,9 @@ static const char * g_sJsonConfName = "manticore.json";
 bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError ) REQUIRES (MainThread)
 {
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+
+	if ( !ValidateDaemonReadOnlyMode ( hConf, sConfigFile, sError ) )
+		return false;
 
 	g_bConfigless = hSearchd.Exists("data_dir");
 	if ( !g_bConfigless )

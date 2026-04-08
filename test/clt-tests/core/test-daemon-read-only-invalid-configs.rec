@@ -1,0 +1,53 @@
+# Verify daemon read_only mode rejects RT/configless setups it does not support.
+# Related issue: https://github.com/manticoresoftware/manticoresearch/issues/4449
+
+––– comment –––
+Reject read_only together with data_dir (RT mode)
+––– input –––
+mkdir -p /tmp/issue4449-ro-invalid/data
+cat > /tmp/issue4449-ro-invalid/rt-mode.conf <<'EOF'
+searchd
+{
+  listen = 127.0.0.1:19406:mysql41
+  log = /tmp/issue4449-ro-invalid/searchd.log
+  query_log = /tmp/issue4449-ro-invalid/query.log
+  pid_file = /tmp/issue4449-ro-invalid/searchd.pid
+  data_dir = /tmp/issue4449-ro-invalid/data
+  read_only = 1
+}
+EOF
+searchd --config /tmp/issue4449-ro-invalid/rt-mode.conf 2>&1 || true
+––– output –––
+[#!/.*'read_only' cannot be used together with 'data_dir'.*/!#]
+
+––– comment –––
+Reject read_only in plain-config mode when an RT table is declared
+––– input –––
+cat > /tmp/issue4449-ro-invalid/rt-table.conf <<'EOF'
+index rt_bad
+{
+  type = rt
+  path = /tmp/issue4449-ro-invalid/rt_bad
+  rt_field = title
+}
+
+searchd
+{
+  listen = 127.0.0.1:19407:mysql41
+  log = /tmp/issue4449-ro-invalid/searchd2.log
+  query_log = /tmp/issue4449-ro-invalid/query2.log
+  pid_file = /tmp/issue4449-ro-invalid/searchd2.pid
+  read_only = 1
+}
+EOF
+searchd --config /tmp/issue4449-ro-invalid/rt-table.conf 2>&1 || true
+––– output –––
+[#!/.*'read_only' cannot be used with table 'rt_bad' of type 'rt'.*/!#]
+
+––– comment –––
+Clean up
+––– input –––
+rm -rf /tmp/issue4449-ro-invalid
+echo cleaned
+––– output –––
+cleaned

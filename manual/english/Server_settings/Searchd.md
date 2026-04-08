@@ -732,7 +732,7 @@ Enables daemon-wide [read-only mode](../Security/Read_only.md). When set to `1`:
 
 This setting is useful when Manticore should explicitly avoid modifying table storage, for example when serving plain tables from a replicated read-only filesystem. In this mode Manticore can serve plain tables from read-only storage, skip creating lock files when the filesystem does not allow it, and ignore pending `.new` plain-table artifacts with a warning if the current table files are still usable.
 
-This setting does not make RT mode (`data_dir`) work on a read-only filesystem. `data_dir` still requires writable storage.
+This setting does not make RT mode (`data_dir`) work on a read-only filesystem. `data_dir` still requires writable storage. `read_only` also cannot be used in configs that declare RT or percolate tables.
 
 ### listen
 

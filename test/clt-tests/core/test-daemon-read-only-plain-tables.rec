@@ -1,0 +1,198 @@
+# Verify daemon read_only mode can serve plain tables from read-only storage
+# while rejecting all modifications.
+# Related issue: https://github.com/manticoresoftware/manticoresearch/issues/4449
+
+––– comment –––
+Prepare source data and custom configs
+––– input –––
+cat > /tmp/issue4449-ro/docs1.tsv <<'EOF'
+1	hello title	plain body one	10
+2	second title	plain body two	20
+EOF
+cat > /tmp/issue4449-ro/docs2.tsv <<'EOF'
+11	plain extra	alpha world	110
+12	world extra	beta plain	120
+EOF
+cat > /tmp/issue4449-ro/base.conf <<'EOF'
+source src_docs1
+{
+  type = tsvpipe
+  tsvpipe_command = cat /tmp/issue4449-ro/docs1.tsv
+  tsvpipe_field = title
+  tsvpipe_field = body
+  tsvpipe_attr_uint = gid
+}
+
+source src_docs2
+{
+  type = tsvpipe
+  tsvpipe_command = cat /tmp/issue4449-ro/docs2.tsv
+  tsvpipe_field = title
+  tsvpipe_field = body
+  tsvpipe_attr_uint = gid
+}
+
+index idx_docs
+{
+  type = plain
+  source = src_docs1
+  path = /tmp/issue4449-ro/data/idx_docs
+}
+
+index idx_docs2
+{
+  type = plain
+  source = src_docs2
+  path = /tmp/issue4449-ro/data/idx_docs2
+}
+
+searchd
+{
+  listen = 127.0.0.1:19306:mysql41
+  listen = 127.0.0.1:19307:mysql41_readonly
+  listen = 127.0.0.1:19308:http
+  listen = 127.0.0.1:19312
+  log = /tmp/issue4449-ro/run/searchd.log
+  query_log = /tmp/issue4449-ro/run/query.log
+  pid_file = /tmp/issue4449-ro/run/searchd.pid
+}
+EOF
+cp /tmp/issue4449-ro/base.conf /tmp/issue4449-ro/ro.conf
+sed -i '/^searchd\s*{/a\  read_only = 1' /tmp/issue4449-ro/ro.conf
+––– output –––
+
+––– comment –––
+Build the current plain tables
+––– input –––
+indexer --config /tmp/issue4449-ro/base.conf --all --quiet
+––– output –––
+
+––– comment –––
+Start writable daemon and create pending .new files the supported way via indexer+indextool
+––– input –––
+rm -f /tmp/issue4449-ro/run/searchd.log
+searchd --config /tmp/issue4449-ro/base.conf > /dev/null
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/issue4449-ro/run/searchd.log); then echo 'Writable daemon started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Writable daemon started!
+––– input –––
+indexer --config /tmp/issue4449-ro/base.conf --rotate --nohup idx_docs idx_docs2 --quiet
+indextool --config /tmp/issue4449-ro/base.conf --check --rotate idx_docs > /dev/null
+indextool --config /tmp/issue4449-ro/base.conf --check --rotate idx_docs2 > /dev/null
+ls /tmp/issue4449-ro/data/idx_docs.new.sph /tmp/issue4449-ro/data/idx_docs2.new.sph >/dev/null && echo pending-new-ready
+––– output –––
+pending-new-ready
+––– input –––
+searchd --config /tmp/issue4449-ro/base.conf --stopwait > /dev/null 2>&1 || true
+chmod -R a+rX /tmp/issue4449-ro
+chmod -R a-w /tmp/issue4449-ro/data
+if [ "$(id -u)" = "0" ] && id nobody >/dev/null 2>&1; then
+  chown -R nobody /tmp/issue4449-ro/run
+fi
+echo ready
+––– output –––
+ready
+
+––– comment –––
+Start read-only daemon against the read-only plain-table snapshot
+––– input –––
+rm -f /tmp/issue4449-ro/run/searchd.log
+if [ "$(id -u)" = "0" ] && id nobody >/dev/null 2>&1; then
+  su -s /bin/sh nobody -c "searchd --config /tmp/issue4449-ro/ro.conf" > /dev/null
+else
+  searchd --config /tmp/issue4449-ro/ro.conf > /dev/null
+fi
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/issue4449-ro/run/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+
+––– comment –––
+Verify the daemon logged the read-only plain-table startup behavior
+––– input –––
+grep -F "daemon read-only mode, serving without lock" /tmp/issue4449-ro/run/searchd.log | wc -l
+––– output –––
+2
+––– input –––
+grep -F "ignoring pending .new files for table 'idx_docs' in daemon read-only mode" /tmp/issue4449-ro/run/searchd.log
+––– output –––
+[#!/.*ignoring pending \.new files for table 'idx_docs' in daemon read-only mode/!#]
+––– input –––
+grep -F "ignoring pending .new files for table 'idx_docs2' in daemon read-only mode" /tmp/issue4449-ro/run/searchd.log
+––– output –––
+[#!/.*ignoring pending \.new files for table 'idx_docs2' in daemon read-only mode/!#]
+
+––– comment –––
+Verify reads work correctly from both plain tables
+––– input –––
+mysql -h127.0.0.1 -P19306 -Nse "show variables like 'session_read_only';"
+––– output –––
+session_read_only	1
+––– input –––
+mysql -h127.0.0.1 -P19307 -Nse "show variables like 'session_read_only';"
+––– output –––
+session_read_only	1
+––– input –––
+curl -s -X POST http://127.0.0.1:19308/search -d '{"index":"idx_docs","query":{"match":{"title":"hello"}}}' | jq -r '.hits.total'
+––– output –––
+1
+––– input –––
+php -r 'require "/Users/sn/manticore_github/api/sphinxapi.php"; $cl=new SphinxClient(); $cl->SetServer("127.0.0.1",19312); $res=$cl->Query("hello","idx_docs"); if ($res!==false && ($res["total"]??0)==1) echo "api_search_ok\n"; else echo "api_search_fail: ".$cl->GetLastError()."\n"; $upd=$cl->UpdateAttributes("idx_docs",["gid"],[1=>[999]]); if ($upd===-1) echo $cl->GetLastError()."\n"; else echo "updated=$upd\n";'
+––– output –––
+api_search_ok
+connection is read-only
+––– input –––
+mysql -h127.0.0.1 -P19306 -Nse "show tables;"
+––– output –––
+idx_docs	local
+idx_docs2	local
+––– input –––
+mysql -h127.0.0.1 -P19306 -Nse "select count(*) from idx_docs;"
+––– output –––
+2
+––– input –––
+mysql -h127.0.0.1 -P19306 -Nse "select count(*) from idx_docs2;"
+––– output –––
+2
+––– input –––
+mysql -h127.0.0.1 -P19306 -Nse "select id,title,gid from idx_docs where match('hello') order by id;"
+––– output –––
+1	hello title	10
+––– input –––
+mysql -h127.0.0.1 -P19306 -Nse "select id,title,gid from idx_docs,idx_docs2 where match('plain') order by id;"
+––– output –––
+1	hello title	10
+2	second title	20
+11	plain extra	110
+12	world extra	120
+
+––– comment –––
+Verify modifications are rejected in daemon read_only mode
+––– input –––
+mysql -h127.0.0.1 -P19306 -e "set ro=0;" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: daemon is read-only
+––– input –––
+mysql -h127.0.0.1 -P19307 -e "set ro=0;" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: daemon is read-only
+––– input –––
+curl -s -X POST http://127.0.0.1:19308/sql -d "update idx_docs set gid=999 where id=1" | grep -o 'connection is read-only'
+––– output –––
+connection is read-only
+––– input –––
+mysql -h127.0.0.1 -P19306 -e "update idx_docs set gid=999 where id=1;" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: connection is read-only
+––– input –––
+mysql -h127.0.0.1 -P19306 -e "create table rt_fail (id bigint, t text);" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: connection is read-only
+
+––– comment –––
+Stop the daemon and clean up
+––– input –––
+searchd --config /tmp/issue4449-ro/ro.conf --stopwait > /dev/null 2>&1 || true
+rm -rf /tmp/issue4449-ro
+echo cleaned
+––– output –––
+cleaned

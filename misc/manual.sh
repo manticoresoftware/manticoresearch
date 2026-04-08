@@ -36,6 +36,13 @@ MANUAL_POLL_INTERVAL="${MANUAL_POLL_INTERVAL:-5}"
 USE_GITHUB_AUTH=0
 GITHUB_AUTH_HEADER=""
 
+# Checking if the doc version is multi-language
+IS_MULTI_LANG=0
+count=$(find "$MANUAL_SRC" -maxdepth 1 -type f -name '*.md' | wc -l)
+if [ "$count" -eq 0 ]; then
+	IS_MULTI_LANG=1
+fi
+
 error() {
   printf '[error] %s\n' "$*" >&2
   exit 1
@@ -205,7 +212,7 @@ monitor_manual_changes() {
     current_snapshot="$(manual_snapshot)"
     if [[ "$current_snapshot" != "$last_snapshot" ]]; then
       printf "Detected changes in '%s'; re-running setup inside container...\n" "$MANUAL_SRC"
-      if run_docker exec "$CONTAINER_NAME" ./setup.sh >/dev/null; then
+      if run_docker exec  -e IS_MULTI_LANG=$IS_MULTI_LANG "$CONTAINER_NAME" ./setup.sh >/dev/null; then
         run_docker exec "$CONTAINER_NAME" ./setup.sh -d . checkDocs
         echo "Setup and doc validation completed."
       else

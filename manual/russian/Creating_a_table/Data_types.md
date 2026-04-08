@@ -2549,13 +2549,14 @@ let search_res = search_api.search(search_req).await;
 При создании таблицы с автоматическими эмбеддингами укажите эти дополнительные параметры:
 - `MODEL_NAME`: Модель эмбеддинга для автоматической генерации векторов
 - `FROM`: Какие поля использовать для генерации эмбеддингов (пустая строка означает все текстовые/строковые поля)
+- `API_KEY`: Требуется для удаленных моделей (OpenAI, Voyage, Jina). API-ключ проверяется при создании таблицы путем выполнения реального API-запроса.
+- `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
+- `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
 **Поддерживаемые модели эмбеддингов:**
 - **Sentence Transformers**: Любая [подходящая модель Hugging Face на основе BERT](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
 - **Локальные эмбеддинги Qwen**: Модели эмбеддингов Qwen, такие как `Qwen/Qwen3-Embedding-0.6B` — API-ключ не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI**: Модели эмбеддингов OpenAI, такие как `openai/text-embedding-ada-002` - требует параметр `API_KEY='<OPENAI_API_KEY>'`
-- **Voyage**: Модели эмбеддингов Voyage AI - требует параметр `API_KEY='<VOYAGE_API_KEY>'`
-- **Jina**: Модели эмбеддингов Jina AI - требует параметр `API_KEY='<JINA_API_KEY>'`
+- **OpenAI, Voyage, Jina**: Удаленные модели эмбеддингов (например, `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - требуют параметр `API_KEY='<API_KEY>'`. При необходимости укажите `API_URL='<CUSTOM_URL>'` для использования пользовательской конечной точки API и `API_TIMEOUT='<SECONDS>'` для настройки HTTP-таймаута (по умолчанию 10 секунд).
 
 <!-- intro -->
 ##### SQL:
@@ -2588,6 +2589,17 @@ CREATE TABLE products_openai (
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
+);
+```
+
+Использование OpenAI с пользовательским URL API и таймаутом (опционально)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

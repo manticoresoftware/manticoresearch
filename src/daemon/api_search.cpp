@@ -1633,6 +1633,13 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	myinfo::SetTaskInfo ( R"(api-search query="%s" comment="%s" table="%s")", q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
 	tHandler.RunQueries();
 
+	ARRAY_FOREACH ( i, tHandler.m_dQueries )
+	{
+		const auto & tMeta = tHandler.m_dAggrResults[i];
+		auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+		gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
+	}
+
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_SEARCH );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		SendResult ( uVer, tOut, tHandler.m_dAggrResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );

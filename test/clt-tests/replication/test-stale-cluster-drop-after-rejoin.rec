@@ -1,0 +1,105 @@
+Verify stale local cluster metadata is cleaned after a node rejoins and a table was dropped from the cluster while it was offline
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=staledrop
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Wait until all nodes report primary before changing cluster membership
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_staledrop_status
+  Value: primary
+––– comment –––
+Create two local RT tables and add both to the cluster
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t1 (id bigint, value text);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t2 (id bigint, value text);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD t1,t2;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: #!/(t1,t2|t2,t1)/!#
+––– comment –––
+Stop node 1 so it misses the upcoming cluster DROP
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 stopped"
+––– output –––
+Node 1 stopped
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+Drop t1 from the cluster while node 1 is offline; the table itself remains local
+––– input –––
+mysql -h0 -P2306 -e "ALTER CLUSTER ${CLUSTER_NAME} DROP t1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: t2
+––– comment –––
+Restart node 1 and wait until it becomes primary again
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_NAME}_status'\''\G" > /tmp/status_1306.log 2>/dev/null && grep -q "Value: primary" /tmp/status_1306.log && { echo "Port 1306: Node synced"; cat /tmp/status_1306.log; exit 0; }; sleep 1; done; cat /tmp/status_1306.log; exit 1'
+––– output –––
+Port 1306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_staledrop_status
+  Value: primary
+––– comment –––
+After rejoin, node 1 still has the local table but cluster metadata says only t2 belongs to the cluster
+––– input –––
+mysql -h0 -P1306 -e "DESC t1" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_indexes'\G" | grep "Value:"
+––– output –––
+  Value: t2
+––– comment –––
+After cleanup, ALTER CLUSTER DROP should reject t1 locally because it is no longer part of the cluster
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} DROP t1;" 2>&1 || true
+––– output –––
+ERROR 1064 (42000) at line 1: table 't1' is not in cluster 'staledrop'
+––– comment –––
+The stale local cluster marker must be gone, so the plain DROP TABLE now succeeds
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE t1;"; echo $?
+––– output –––
+0

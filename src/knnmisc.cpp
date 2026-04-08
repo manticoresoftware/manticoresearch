@@ -19,6 +19,14 @@
 #include "memio.h"
 #include "sphinxjson.h"
 #include "sphinxsort.h"
+#include "conversion.h"
+
+
+const char * GetAPITimeoutErrorMsg()
+{
+	static const char * API_TIMEOUT_ERROR = "API_TIMEOUT must be a non-negative integer (0 means use default, positive value is timeout in seconds)";
+	return API_TIMEOUT_ERROR;
+}
 
 
 bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
@@ -500,7 +508,13 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 	{
 		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
 		if ( !tAttr.m_sKNNFrom.IsEmpty() )
-			sRes << " FROM='" << tAttr.m_sKNNFrom.cstr() << "'";
+			sRes << " from='" << tAttr.m_sKNNFrom.cstr() << "'";
+
+		if ( !tKNNModel.m_sAPIUrl.empty() )
+			sRes << " api_url='" << tKNNModel.m_sAPIUrl.c_str() << "'";
+
+		if ( tKNNModel.m_iAPITimeout > 0 )
+			sRes << " api_timeout='" << tKNNModel.m_iAPITimeout << "'";
 	}
 
 	if ( !tKNNModel.m_sCachePath.empty() )
@@ -524,6 +538,8 @@ void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSet
 
 	tMS.m_sModelName	= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
 	tMS.m_sAPIKey		= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
+	tMS.m_sAPIUrl		= bson::String ( tRoot.ChildByName ( "api_url" ) ).cstr();
+	tMS.m_iAPITimeout	= (int) bson::Int ( tRoot.ChildByName ( "api_timeout" ), tMS.m_iAPITimeout );
 	tMS.m_sCachePath	= bson::String ( tRoot.ChildByName ( "cache_path" ) ).cstr();
 	tMS.m_bUseGPU		= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
 	sKNNFrom = bson::String ( tRoot.ChildByName ( "from" ) );
@@ -549,6 +565,11 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 		tOut.NamedString ( "from", sKNNFrom );
 		tOut.NamedString ( "cache_path", tMS.m_sCachePath.c_str() );
 		tOut.NamedString ( "api_key", tMS.m_sAPIKey.c_str() );
+		if ( !tMS.m_sAPIUrl.empty() )
+			tOut.NamedString ( "api_url", tMS.m_sAPIUrl.c_str() );
+
+		if ( tMS.m_iAPITimeout > 0 )
+			tOut.NamedVal ( "api_timeout", tMS.m_iAPITimeout );
 		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
 	}
 }
@@ -576,6 +597,11 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 			tObj.AddStr ( "from", i.m_sFrom.cstr() );
 			tObj.AddStr ( "cache_path", i.m_sCachePath.c_str() );
 			tObj.AddStr ( "api_key", i.m_sAPIKey.c_str() );
+			if ( !i.m_sAPIUrl.empty() )
+				tObj.AddStr ( "api_url", i.m_sAPIUrl.c_str() );
+
+			if ( i.m_iAPITimeout > 0 )
+				tObj.AddInt ( "api_timeout", i.m_iAPITimeout );
 			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
 		}
 
@@ -655,6 +681,8 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			if ( !i.FetchStrItem ( tParsed.m_sFrom, "from", sError, true ) ) return false;
 			if ( !i.FetchStrItem ( tParsed.m_sAPIKey, "api_key", sError, true ) ) return false;
 			if ( !i.FetchStrItem ( tParsed.m_sCachePath, "cache_path", sError, true ) ) return false;
+			if ( !i.FetchStrItem ( tParsed.m_sAPIUrl, "api_url", sError, true ) ) return false;
+			if ( !i.FetchIntItem ( tParsed.m_iAPITimeout, "api_timeout", sError, true ) ) return false;
 			if ( !i.FetchBoolItem ( tParsed.m_bUseGPU, "use_gpu", sError, true ) ) return false;
 		}
 	}
@@ -923,6 +951,39 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 		return pSorter;
 
 	return new RescoreSorter_c(pSorter);
+}
+
+bool ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError )
+{
+	if ( sValue.IsEmpty() )
+	{
+		sError = GetAPITimeoutErrorMsg();
+		return false;
+	}
+
+	// Check that all characters are digits (non-negative integer only)
+	const char * p = sValue.cstr();
+	while ( *p >= '0' && *p <= '9' )
+		p++;
+
+	// If we didn't consume the entire string, it's invalid
+	if ( *p != '\0' )
+	{
+		sError = GetAPITimeoutErrorMsg();
+		return false;
+	}
+
+	// Parse and check for overflow
+	char * pEnd = nullptr;
+	unsigned long ulTimeout = strtoul ( sValue.cstr(), &pEnd, 10 );
+	if ( ulTimeout > INT_MAX )
+	{
+		sError = GetAPITimeoutErrorMsg();
+		return false;
+	}
+
+	iTimeout = (int)ulTimeout;
+	return true;
 }
 
 void EmbeddingsSrc_c::Row_t::SwapData ( Row_t & rhs )

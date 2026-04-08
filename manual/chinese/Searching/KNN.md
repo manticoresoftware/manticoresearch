@@ -70,9 +70,11 @@ table test_vec {
 创建自动嵌入表时，请指定：
 - `MODEL_NAME`: 要使用的嵌入模型
 - `FROM`: 用于生成嵌入的字段（留空表示所有文本/字符串字段）
+- `API_KEY`: 远程模型（OpenAI、Voyage、Jina）需要。在表创建期间通过实际 API 请求验证 API 密钥。
+- `API_URL`: 可选。自定义 API 端点 URL。如果未指定，则使用默认提供程序端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
+- `API_TIMEOUT`: 可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建期间的验证请求和插入操作期间的嵌入生成。
 
 **支持的嵌入模型：**
-
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | 否 | 本地 BERT 基模型，自动下载 |
@@ -124,6 +126,17 @@ CREATE TABLE products_openai (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
+);
+```
+
+使用 OpenAI 与自定义 API URL 和超时（可选）
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

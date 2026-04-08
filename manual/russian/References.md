@@ -69,6 +69,7 @@
 ##### Репликация
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Присоединяется к кластеру репликации
 * [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Добавляет/удаляет таблицу в кластере репликации
+* [EXIT CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - отключение текущего узла от кластера репликации
 * [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Изменяет настройки кластера репликации
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Удаляет кластер репликации
 
@@ -466,6 +467,7 @@ index_converter {--config /path/to/config|--path}
   * [log](Server_settings/Searchd.md#log) - Путь к файлу журнала сервера Manticore
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Ограничивает количество запросов в пакете
   * [max_connections](Server_settings/Searchd.md#max_connections) - Максимальное количество активных соединений
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - Сколько RT-дисковых чанков объединяется за одну задачу OPTIMIZE
   * [max_filters](Server_settings/Searchd.md#max_filters) - Максимально допустимое количество фильтров на запрос
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Максимально допустимое количество значений на фильтр
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Максимальное количество файлов, разрешенных для открытия сервером
@@ -478,6 +480,7 @@ index_converter {--config /path/to/config|--path}
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Сетевой таймаут для запросов клиентов
   * [node_address](Server_settings/Searchd.md#node_address) - Определяет сетевой адрес узла
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Максимальное количество одновременных постоянных соединений с удаленными постоянными агентами
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - Сколько слияний RT-дисковых чанков может выполняться параллельно во время OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Путь к pid-файлу сервера Manticore
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Определяет, следует ли принудительно предварительно открывать все таблицы при запуске
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Включает псевдошардинг для поисковых запросов к обычным и реального времени таблицам
@@ -610,7 +613,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 Полный алфавитный список ключевых слов, в настоящее время зарезервированных в синтаксисе Manticore SQL (поэтому их нельзя использовать как идентификаторы).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Документация по старым версиям Manticore
@@ -669,4 +672,5 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Страница установки](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Страница установки](https://manticoresearch.com/install-15.1.0/)
 * [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [Страница установки](https://manticoresearch.com/install-17.5.1/)
+* [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [Страница установки](https://manticoresearch.com/install-25.0.0/)
 <!-- proofread -->

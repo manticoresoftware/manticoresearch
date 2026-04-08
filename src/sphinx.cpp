@@ -7948,8 +7948,9 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 	bool ProcessInRowIdOrder() const final
 	{
 		// columnar expressions don't like random access, they are optimized for sequental access
-		// that's why if we have a columnar expression, we need to call Process it ascending RowId order
-		return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );
+		// that's why if we have a columnar expression, or another expression that explicitly
+		// prefers sequential access, we need to call Process in ascending RowId order
+		return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && ( i.m_pExpr->IsColumnar() || i.m_pExpr->PrefersRowIdOrder() ); } );
 	}
 
 	void Process ( CSphMatch * pMatch ) final

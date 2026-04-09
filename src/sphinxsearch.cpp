@@ -2423,8 +2423,7 @@ public:
 				assert ( m_dFieldLenIters[i] );
 				dl += m_dFieldLenIters[i]->Get ( tMatch.m_tRowID );
 			}
-		} else {
-			assert ( m_tFieldLensLoc.m_iBitOffset>=0 );
+		} else if ( m_tFieldLensLoc.m_iBitOffset>=0 ) {
 			CSphAttrLocator tLoc = m_tFieldLensLoc;
 			for ( int i=0; i<m_iFields; ++i )
 			{
@@ -2857,8 +2856,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 				assert ( m_pState->m_dFieldLenIters[i] );
 				m_dFieldLens[i] = (int)m_pState->m_dFieldLenIters[i]->Get ( tMatch.m_tRowID );
 			}
-		} else {
-			assert ( tLoc.m_iBitOffset>=0 );
+		} else if ( tLoc.m_iBitOffset>=0 ) {
 			for ( int i=0; i<m_pState->m_iFields; ++i )
 			{
 				m_dFieldLens[i] = tMatch.GetAttr ( tLoc );

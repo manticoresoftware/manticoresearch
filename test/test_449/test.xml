@@ -132,7 +132,15 @@ searchd
 	flush ramchunk book;
 	select * from book order by id asc;
 	select title_len from book order by id asc;
+	SELECT /*!40001 SQL_NO_CACHE */ * FROM book;
 	drop table book;
+
+	<!-- regression for mysqldump on columnar + index_field_lengths -->
+	create table dump_bug (f text) engine='columnar' index_field_lengths='1';
+	insert into dump_bug values (1,'abc def');
+	SELECT /*!40001 SQL_NO_CACHE */ * FROM dump_bug;
+	SELECT * FROM dump_bug;
+	drop table dump_bug;
 
 	<!-- regression crash on columnar + index_field_lengths + bm25a custom ranker -->
 	create table rank_bug (f text indexed, ff text indexed, fff text indexed, ffff text indexed) engine='columnar' index_field_lengths='1';

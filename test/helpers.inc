@@ -864,16 +864,6 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
-// Check if a result set contains "knn" in the query (case insensitive)
-function HasKnnInQuery ( $result_set )
-{
-	if ( isset ( $result_set['sphinxql'] ) )
-		return stripos($result_set['sphinxql'], 'knn') !== false;
-	if ( isset ( $result_set['http_request'] ) )
-		return stripos($result_set['http_request'], 'knn') !== false;
-	return false;
-}
-
 function RandomWords ( $n, $seed )
 {
 	srand ( $seed );
@@ -1059,10 +1049,8 @@ function CompareColumns ( $a, $b )
 }
 
 
-function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $force_knn_rounding=false, $vector_roundoff=0 )
+function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $vector_roundoff=0 )
 {
-	$has_knn = HasKnnInQuery($set) || $force_knn_rounding;
-
 	if ( isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
@@ -2471,7 +2459,7 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
-        $has_knn = HasKnnInQuery($query_result);
+        $has_knn = $this->Requires("knn");
 
         if ( $keep_json_ctrls )
         {
@@ -2679,8 +2667,6 @@ class SphinxConfig
 
 	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time, $ignore_rows )
 	{
-		global $g_disable_float_tolerance;
-
 	    $raw_result["sphinxql"] = $query;
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
@@ -2708,9 +2694,8 @@ class SphinxConfig
             $raw_result["total_rows"] = mysqli_num_rows($result);
 			$query_result["total_rows"] = $raw_result["total_rows"];
 			
-			// Check if query contains "knn" (case insensitive) to determine if we should round floats
-			$has_knn = (stripos($query, 'knn') !== false);
-			$round_knn = $has_knn && !$g_disable_float_tolerance;
+			// Tests that require <knn/> round floats to tolerate tiny cross-ISA FP drift
+			$round_knn = $this->Requires("knn");
 
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
@@ -3433,7 +3418,7 @@ class SphinxConfig
 
 		// fixup floats in json via http
 		if ( isset ( $set["http"] ) && $set["http"]==1 )
-			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls, $this->Requires("knn_float_tolerance") );
+			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls, $this->Requires("knn") );
 		else
 			SqlRsetFixup ( $set, IsColumnar() );
 
@@ -3493,8 +3478,6 @@ class SphinxConfig
 
 	function CompareResultSets ( $set1, $set2 )
 	{
-		global $g_disable_float_tolerance;
-
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
@@ -3502,13 +3485,12 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
-		$has_knn = HasKnnInQuery($set1) || HasKnnInQuery($set2);
-		$round_knn = ($has_knn && !$g_disable_float_tolerance) || $this->Requires("knn_float_tolerance");
+		$round_knn = $this->Requires("knn");
 
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		// For knn_float_tolerance tests, use epsilon comparison instead of rounding
+		// For <knn/> tests, use epsilon comparison instead of rounding
 		// (rounding always has boundary issues; epsilon comparison does not)
 		if ( $round_knn && isset($set1["rows"]) && isset($set2["rows"]) )
 		{

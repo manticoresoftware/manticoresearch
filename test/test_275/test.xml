@@ -5,7 +5,6 @@
 
 <requires>
 	<knn/>
-	<knn_float_tolerance/>
 	<force-rt/>
 </requires>
 

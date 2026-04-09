@@ -10,8 +10,20 @@
         "updated_at": 1766339819
     },
     "__meta": {
-        "source_text": "# KILL\n\n<!-- example KILL -->\n```sql\nKILL <query id>\n```\n\n`KILL` terminates the execution of a query by its ID, which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\n```sql\nmysql> KILL 4;\nQuery OK, 1 row affected (0.00 sec)\n```\n\n<!-- end -->\n<!-- proofread -->\n\n",
-        "updated_at": 1768530797,
-        "source_md5": "c75b5ca03bad4fbb514c544271e7c144"
+        "source_text": "# KILL\n\n<!-- example KILL -->\n```sql\nKILL <query id>\n```\n\n`KILL` terminates the execution of a query by its ID, which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\n```sql\nmysql> KILL 4;\nQuery OK, 1 row affected (0.00 sec)\n```\n\n<!-- request JSON -->\n```JSON\nPOST /sql?mode=raw -d \"KILL 4\"\n[\n  {\n    \"total\": 1,\n    \"error\": \"\",\n    \"warning\": \"\"\n  }\n]\n```\n\n<!-- end -->\n<!-- proofread -->\n\n",
+        "updated_at": 1775719984,
+        "source_md5": "c2407a94b3a89da4950c838361860d23",
+        "source_snapshot": "/tmp/translator-source-0ImsYu",
+        "target_snapshot": "/tmp/translator-target-bGFbTS"
+    },
+    "2a8c0c4fc36e741ee38d260e2cbced1805684fa8b964651c980c346d93edf8a4": {
+        "original": "# KILL\n\n<!-- example KILL -->\nCODE_BLOCK_0\n\n`KILL` terminates the execution of a query by its ID, which you can find in [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\nCODE_BLOCK_1\n\n<!-- request JSON -->\nCODE_BLOCK_2\n\n<!-- end -->\n<!-- proofread -->\n\n",
+        "translations": {
+            "russian": "# KILL\n\n<!-- example KILL -->\nCODE_BLOCK_0\n\n`KILL` \u0437\u0430\u0432\u0435\u0440\u0448\u0430\u0435\u0442 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0435 \u0437\u0430\u043f\u0440\u043e\u0441\u0430 \u043f\u043e \u0435\u0433\u043e \u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440\u0443, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u043c\u043e\u0436\u043d\u043e \u043d\u0430\u0439\u0442\u0438 \u0432 [SHOW QUERIES](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES).\n\n<!-- request SQL -->\nCODE_BLOCK_1\n\n<!-- request JSON -->\nCODE_BLOCK_2\n\n<!-- end -->\n<!-- proofread -->\n\n",
+            "chinese": "# \u7ec8\u6b62\n\n<!-- example KILL -->\nCODE_BLOCK_0\n\n`\u7ec8\u6b62` \u901a\u8fc7\u5176ID\u7ec8\u6b62\u67e5\u8be2\u7684\u6267\u884c\uff0c\u60a8\u53ef\u4ee5\u5728 [\u663e\u793a\u67e5\u8be2](../Node_info_and_management/SHOW_QUERIES.md#SHOW-QUERIES) \u4e2d\u627e\u5230\u8be5ID\u3002\n\n<!-- request SQL -->\nCODE_BLOCK_1\n\n<!-- request JSON -->\nCODE_BLOCK_2\n\n<!-- end -->\n<!-- proofread -->\n\n"
+        },
+        "is_code_or_comment": false,
+        "model": "qwen/qwen3-14b",
+        "updated_at": 1775719984
     }
 }

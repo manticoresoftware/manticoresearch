@@ -39,6 +39,16 @@ SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; S
 DELIMITER _
 SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC_
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC"
+```
+
 <!-- end -->
 
 ## Оптимизации мультизапросов

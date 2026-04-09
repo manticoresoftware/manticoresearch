@@ -40,6 +40,56 @@ SHOW TABLES;
 5 rows in set (0.00 sec)
 ```
 
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW TABLES"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "dist",
+        "Type": "distributed"
+      },
+      {
+        "Table": "plain",
+        "Type": "local"
+      },
+      {
+        "Table": "pq",
+        "Type": "percolate"
+      },{
+        "Table": "rt",
+        "Type": "rt"
+      },{
+        "Table": "template",
+        "Type": "template"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+
+```
+
 <!-- request PHP -->
 
 ```php
@@ -157,6 +207,12 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 
 <!-- end -->
 
+<!--
+以下示例的数据：
+
+CREATE TABLE products type='distributed' local='products' agent='127.0.0.1:9312:products'
+-->
+
 <!-- example Example_2 -->
 支持可选的 LIKE 子句，用于按名称过滤表。
 
@@ -179,6 +235,41 @@ SHOW TABLES LIKE 'pro%';
 | products | distributed |
 +----------+-------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLES LIKE 'pro%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "products",
+        "Type": "distributed"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request PHP -->
@@ -322,6 +413,13 @@ mysql> DESC rt;
 
 ### SELECT FROM name.@table
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
+--> 
+
 <!-- example name_table -->
 您还可以通过执行查询 `select * from <table_name>.@table` 查看表模式。此方法的优点是您可以使用 `WHERE` 子句进行过滤：
 
@@ -338,6 +436,24 @@ select * from tbl.@table where type='text';
 |    2 | title | text | indexed stored |
 +------+-------+------+----------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+```sql
+POST /sql?mode=raw -d "select * from tbl.@table where type='text';"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"id":{"type":"long long"}},{"field":{"type":"string"}},{"type":{"type":"string"}},{"properties":{"type":"string"}}],
+"data":[
+{"id":2,"field":"title","type":"text","properties":"indexed stored"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
 ```
 
 <!-- end -->
@@ -386,6 +502,28 @@ f text indexed stored
 ) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"Table":{"type":"string"}},{"Create Table":{"type":"string"}}],
+"data":[
+{"Table":"tbl","Create Table":"CREATE TABLE tbl (\nf text)"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 ### Percolate 表模式

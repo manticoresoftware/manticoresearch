@@ -2614,6 +2614,25 @@ CREATE TABLE products_all_fields (
 );
 ```
 
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+Использование [модели sentence-transformers](https://huggingface.co/sentence-transformers/models) (API-ключ не требуется)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title TEXT, description TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title')"
+```
+
+Использование модели OpenAI (требуется параметр API_KEY)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_openai (title TEXT, content TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>')"
+```
+
+Использование всех текстовых полей для эмбеддингов (FROM пуст)
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products_all_fields (title TEXT, description TEXT, tags TEXT, embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='')"
+```
+
 <!-- end -->
 
 #### Использование параметра FROM

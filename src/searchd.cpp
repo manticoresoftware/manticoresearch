@@ -4881,12 +4881,28 @@ void MaybeFixupIndexNameFromMysqldump ( SqlStmt_t & tStmt )
 	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) )
 		return;
 
+	auto sLowerIndex = tStmt.m_sIndex;
+	sLowerIndex.ToLower();
+
+	if ( g_pLocalIndexes->Contains ( sLowerIndex ) )
+	{
+		tStmt.m_sIndex = std::move(sLowerIndex);
+		return;
+	}
+
 	auto dParts = sphSplit ( tStmt.m_sIndex.cstr (), ":" );
 	if ( dParts.GetLength ()!=2 )
 		return;
 
 	tStmt.m_sCluster = dParts[0];
 	tStmt.m_sIndex = dParts[1];
+	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) )
+		return;
+
+	sLowerIndex = tStmt.m_sIndex;
+	sLowerIndex.ToLower();
+	if ( g_pLocalIndexes->Contains ( sLowerIndex ) )
+		tStmt.m_sIndex = std::move(sLowerIndex);
 }
 
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
@@ -11411,8 +11427,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	if ( eStmt!=STMT_SHOW_META )
 		m_eLastStmt = eStmt;
 
+	for ( auto& tStmt : dStmt ) {
+		FixupSystemTableName ( &tStmt );
+		CanonicalizeIndexName ( tStmt.m_sIndex );
+	}
 	SqlStmt_t * pStmt = dStmt.Begin();
-	FixupSystemTableName ( pStmt );
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( SqlStmt2Str(eStmt) );

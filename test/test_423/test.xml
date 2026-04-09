@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>normalize table names sphinxql</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<metaindex name='META:test'>
+	<index>test</index>
+	<index>TeST1</index>
+	<index>system.Ttest</index>
+</metaindex>
+
+<metaindex name='META:alias'>
+	<index>test</index>
+	<index>tEsT</index>
+	<index>TeST1</index>
+	<index>test1</index>
+	<index>system.Ttest</index>
+	<index>system.ttest</index>
+	<index>test,tEsT,teST1,test1</index>
+</metaindex>
+
+<queries>
+<sphinxql>
+	drop table if exists META:test;
+	create table META:test (tt text, val integer);
+	desc META:test;
+	show tables;
+	show tables from system;
+	insert into META:test values (1,'ttext',20);
+	select * from META:alias;
+	replace into META:test values (1,'ttext ssdf',300);
+	replace into test1 values (2,'ttextsd ssdfff',300);
+	select * from META:alias order by id asc;
+	update META:test set val=342 where id=1;
+	select * from META:alias order by id asc;
+	drop table META:test;
+</sphinxql>
+</queries>
+
+</test>

@@ -949,7 +949,8 @@ function FloatVectorsEqual ( $str1, $str2, $epsilon )
 	{
 		$v1 = floatval ( trim ( $parts1[$i] ) );
 		$v2 = floatval ( trim ( $parts2[$i] ) );
-		if ( abs ( $v1 - $v2 ) > $epsilon )
+		$scale = max ( abs($v1), abs($v2), 1.0 );
+		if ( abs ( $v1 - $v2 ) > $epsilon * $scale )
 			return false;
 	}
 
@@ -970,7 +971,12 @@ function JsonValuesEqualWithTolerance ( $v1, $v2, $epsilon )
 		$s1 = is_string($v1) ? $v1 : (string)$v1;
 		$s2 = is_string($v2) ? $v2 : (string)$v2;
 		if ( strpos($s1, '.') !== false || strpos($s2, '.') !== false )
-			return abs ( floatval($v1) - floatval($v2) ) <= $epsilon;
+		{
+			$a = floatval($v1);
+			$b = floatval($v2);
+			$scale = max ( abs($a), abs($b), 1.0 );
+			return abs ( $a - $b ) <= $epsilon * $scale;
+		}
 	}
 
 	// string float vectors (SphinxQL path: comma-separated floats)

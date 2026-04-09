@@ -155,7 +155,7 @@ tablename:
 		}
 	| tableident '.' tableident
 		{
-			auto sDbName = pParser->GetTableName ( $1 );
+			auto sDbName = pParser->GetString ( $1 );
 			if ( sDbName!="system" )
 			{
 				yyerror ( pParser, SphSprintf ( "unexpected db '%s', only 'system' allowed", sDbName.cstr() ).cstr() );

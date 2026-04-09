@@ -829,6 +829,37 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 
 bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags )
 {
+	auto fnGetAggrName = [&tExprCol] ()
+	{
+		switch ( tExprCol.m_eAggrFunc )
+		{
+		case SPH_AGGR_MAX: return "MAX";
+		case SPH_AGGR_MIN: return "MIN";
+		case SPH_AGGR_SUM: return "SUM";
+		case SPH_AGGR_AVG: return "AVG";
+		case SPH_AGGR_PERCENTILES: return "PERCENTILES";
+		case SPH_AGGR_PERCENTILE_RANKS: return "PERCENTILE_RANKS";
+		case SPH_AGGR_MAD: return "MEDIAN_ABSOLUTE_DEVIATION";
+		default: return "";
+		}
+	};
+
+	auto fnIsTDigestNumericInput = [] ( ESphAttr eAttr )
+	{
+		switch ( eAttr )
+		{
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_FLOAT:
+		case SPH_ATTR_DOUBLE:
+			return true;
+		default:
+			return false;
+		}
+	};
+
 	// validate that MAX/MIN/SUM/AVG cannot be used on string/text columns
 	// This check must happen BEFORE the switch statement that may modify tExprCol.m_eAttrType
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX || tExprCol.m_eAggrFunc==SPH_AGGR_MIN 
@@ -836,11 +867,18 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 	{
 		if ( tExprCol.m_eAttrType==SPH_ATTR_STRING || tExprCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 		{
-			const char * sFunc = ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX ) ? "MAX" 
-				: ( tExprCol.m_eAggrFunc==SPH_AGGR_MIN ) ? "MIN"
-				: ( tExprCol.m_eAggrFunc==SPH_AGGR_SUM ) ? "SUM" : "AVG";
-			return Err ( "%s() cannot be used on text/string column '%s'", sFunc, sExpr.cstr() );
+			return Err ( "%s() cannot be used on text/string column '%s'", fnGetAggrName(), sExpr.cstr() );
 		}
+	}
+
+	// validate tdigest aggregate input type before rewriting output type to SPH_ATTR_TDIGEST_PTR
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_PERCENTILES || tExprCol.m_eAggrFunc==SPH_AGGR_PERCENTILE_RANKS || tExprCol.m_eAggrFunc==SPH_AGGR_MAD )
+	{
+		if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD || tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD_PTR )
+			return Err ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", sExpr.cstr() );
+
+		if ( !fnIsTDigestNumericInput ( tExprCol.m_eAttrType ) )
+			return Err ( "%s() requires a numeric expression, got '%s'", fnGetAggrName(), sExpr.cstr() );
 	}
 
 	switch ( tExprCol.m_eAggrFunc )

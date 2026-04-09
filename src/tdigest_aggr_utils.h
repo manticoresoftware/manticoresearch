@@ -17,6 +17,12 @@
 
 namespace tdigest_aggr
 {
+struct MadDeviationEntry_t
+{
+	double m_fDeviation = 0.0;
+	int64_t m_iWeight = 0;
+};
+
 inline float GetCompression ( const CSphColumnInfo & tCol )
 {
 	return tCol.m_fTdigestCompression ? tCol.m_fTdigestCompression : 200.0f;
@@ -32,25 +38,18 @@ inline bool LoadFromMatch ( const CSphMatch & tMatch, const CSphColumnInfo & tCo
 	return tDigest.GetCount()>0;
 }
 
-inline bool CalcMad ( const TDigest_c & tDigest, double & fMad )
+template <typename DeviationEntry_t>
+inline bool CalcMad ( const TDigest_c & tDigest, double & fMad, CSphVector<TDigestCentroid_t> & dCentroids, CSphVector<DeviationEntry_t> & dDeviations )
 {
 	if ( tDigest.GetCount()==0 )
 		return false;
 
 	double fMedian = tDigest.Quantile ( 0.5 );
 
-	struct Deviation_t
-	{
-		double m_fDeviation = 0.0;
-		int64_t m_iWeight = 0;
-	};
-
-	CSphVector<TDigestCentroid_t> dCentroids;
 	tDigest.Export ( dCentroids );
 	if ( dCentroids.IsEmpty() )
 		return false;
 
-	CSphVector<Deviation_t> dDeviations;
 	dDeviations.Resize ( dCentroids.GetLength() );
 
 	int64_t iTotalWeight = 0;
@@ -64,7 +63,7 @@ inline bool CalcMad ( const TDigest_c & tDigest, double & fMad )
 	}
 
 	std::sort ( dDeviations.Begin(), dDeviations.End(),
-		[] ( const Deviation_t & a, const Deviation_t & b ) { return a.m_fDeviation < b.m_fDeviation; } );
+		[] ( const DeviationEntry_t & a, const DeviationEntry_t & b ) { return a.m_fDeviation < b.m_fDeviation; } );
 
 	const double fTarget = 0.5 * (double)iTotalWeight;
 	double fAccumulated = 0.0;
@@ -81,6 +80,13 @@ inline bool CalcMad ( const TDigest_c & tDigest, double & fMad )
 
 	fMad = dDeviations.Last().m_fDeviation;
 	return true;
+}
+
+inline bool CalcMad ( const TDigest_c & tDigest, double & fMad )
+{
+	CSphVector<TDigestCentroid_t> dCentroids;
+	CSphVector<MadDeviationEntry_t> dDeviations;
+	return CalcMad ( tDigest, fMad, dCentroids, dDeviations );
 }
 
 inline CSphString FormatNumeric ( double fValue )

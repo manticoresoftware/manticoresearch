@@ -2529,9 +2529,7 @@ static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad,
 	CSphVector<TDigestCentroid_t> & dCentroids,
 	CSphVector<JsonAggr_t::MadDeviationEntry_t> & dDeviations )
 {
-	(void)dCentroids;
-	(void)dDeviations;
-	return tdigest_aggr::CalcMad ( tDigest, fMad );
+	return tdigest_aggr::CalcMad ( tDigest, fMad, dCentroids, dDeviations );
 }
 
 static CSphString FormatNumeric ( double fValue )

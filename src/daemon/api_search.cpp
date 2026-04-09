@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -26,7 +26,7 @@ enum
 {
 	QFLAG_REVERSE_SCAN			= 1UL << 0,		// deprecated
 	QFLAG_SORT_KBUFFER			= 1UL << 1,
-	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,
+	QFLAG_MAX_PREDICTED_TIME	= 1UL << 2,		// deprecated
 	QFLAG_SIMPLIFY				= 1UL << 3,
 	QFLAG_PLAIN_IDF				= 1UL << 4,
 	QFLAG_GLOBAL_IDF			= 1UL << 5,
@@ -60,7 +60,6 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	// reason being, i might add flags that affect *any* of the subsequent data (eg. qflag_pack_ints)
 	DWORD uFlags = 0;
 	uFlags |= QFLAG_SORT_KBUFFER * q.m_bSortKbuffer;
-	uFlags |= QFLAG_MAX_PREDICTED_TIME * ( q.m_iMaxPredictedMsec > 0 );
 	uFlags |= QFLAG_SIMPLIFY * q.m_bSimplify.value_or ( CSphQuery::m_bDefaultSimplify );
 	uFlags |= QFLAG_PLAIN_IDF * q.m_bPlainIDF;
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
@@ -202,8 +201,6 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendString ( q.m_sComment.cstr() );
 	tOut.SendInt ( 0 ); // WAS: overrides
 	tOut.SendString ( q.m_sSelect.cstr() );
-	if ( q.m_iMaxPredictedMsec>0 )
-		tOut.SendInt ( q.m_iMaxPredictedMsec );
 
 	// emulate empty sud-select for agent (client ver 1.29) as master sends fixed outer offset+limits
 	tOut.SendString ( NULL );
@@ -272,21 +269,38 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( (int)i.m_eTypeCast2 );
 	}
 
-	const auto & tKNN = q.m_tKnnSettings;
-	tOut.SendString ( tKNN.m_sAttr.cstr() );
-	if ( !tKNN.m_sAttr.IsEmpty() )
+	// serialize all KNN entries with aliases (v29+)
+	tOut.SendInt ( q.m_dKnnSettings.GetLength() );
+	for ( const auto & tKNN : q.m_dKnnSettings )
 	{
+		tOut.SendString ( tKNN.m_sAttr.cstr() );
 		tOut.SendInt ( tKNN.m_iK );
 		tOut.SendInt ( tKNN.m_iEf );
 		tOut.SendInt ( tKNN.m_bRescore );
 		tOut.SendFloat ( tKNN.m_fOversampling );
+		tOut.SendInt ( tKNN.m_bPrefilter );
+		tOut.SendInt ( tKNN.m_bFullscan );
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
-
 		tOut.SendByte ( !!tKNN.m_sEmbStr );
 		if ( tKNN.m_sEmbStr )
 			tOut.SendString ( tKNN.m_sEmbStr->cstr() );
+		tOut.SendString ( tKNN.m_sAlias.cstr() );
+	}
+
+	tOut.SendInt ( q.m_bHybridSearch );
+	if ( q.m_bHybridSearch )
+	{
+		tOut.SendInt ( q.m_tHybridSettings.m_iRankConstant );
+		tOut.SendInt ( q.m_tHybridSettings.m_iWindowSize );
+		tOut.SendString ( q.m_tHybridSettings.m_sMatchAlias.cstr() );
+		tOut.SendInt ( q.m_tHybridSettings.m_dNamedWeights.GetLength() );
+		for ( const auto & tW : q.m_tHybridSettings.m_dNamedWeights )
+		{
+			tOut.SendString ( tW.m_sName.cstr() );
+			tOut.SendFloat ( tW.m_fWeight );
+		}
 	}
 
 	tOut.SendInt ( (int)q.m_eJiebaMode );
@@ -303,6 +317,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendFloat ( i.m_fValue );
 		tOut.SendString ( i.m_sValue.cstr() );
 	}
+
+	tOut.SendString ( q.m_sExpandBlended.cstr() );
 }
 
 
@@ -525,7 +541,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
 		tRes.m_bTotalMatchesApprox = !!tReq.GetInt();
-		tRes.m_iQueryTime = tReq.GetInt ();
+		tRes.SetQueryTimeMs ( tReq.GetInt() );
 
 		// agents always send IO/CPU stats to master
 		BYTE uStatMask = tReq.GetByte();
@@ -543,7 +559,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			tRes.m_iCpuTime = tReq.GetUint64();
 
 		if ( uStatMask & 4U )
-			tRes.m_iPredictedTime = tReq.GetUint64();
+			tReq.GetUint64(); // was predicted time; removed
 
 		tRes.m_iAgentFetchedDocs = tReq.GetDword();
 		tRes.m_iAgentFetchedHits = tReq.GetDword();
@@ -928,7 +944,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 		// fetch optional stuff
 		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )
-			tQuery.m_iMaxPredictedMsec = tReq.GetInt();
+			tReq.GetInt(); // predicted time was removed, but if bit is present - we need to read (skip) int stub here.
 	}
 
 	// v.1.29
@@ -1038,12 +1054,14 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		}
 	}
 
-	if ( uMasterVer>=22 )
+	if ( uMasterVer>=22 && uMasterVer<29 )
 	{
-		auto & tKNN = tQuery.m_tKnnSettings;
-		tKNN.m_sAttr = tReq.GetString();
-		if ( !tKNN.m_sAttr.IsEmpty() )
+		// old format: single KNN entry identified by empty-string sentinel
+		CSphString sAttr = tReq.GetString();
+		if ( !sAttr.IsEmpty() )
 		{
+			auto & tKNN = tQuery.m_dKnnSettings.Add();
+			tKNN.m_sAttr = sAttr;
 			tKNN.m_iK = tReq.GetInt();
 			if ( tKNN.m_iK <= 0 )
 			{
@@ -1067,6 +1085,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				}
 			}
 
+			if ( uMasterVer>=28 )
+			{
+				tKNN.m_bPrefilter = !!tReq.GetInt();
+				tKNN.m_bFullscan = !!tReq.GetInt();
+			}
+
 			tKNN.m_dVec.Resize ( tReq.GetInt() );
 			for ( auto & i : tKNN.m_dVec )
 				i = tReq.GetFloat();
@@ -1076,6 +1100,74 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				bool bHasEmb = !!tReq.GetByte();
 				if ( bHasEmb )
 					tKNN.m_sEmbStr = tReq.GetString();
+			}
+		}
+	}
+
+	if ( uMasterVer>=29 )
+	{
+		int iNumKnn = tReq.GetInt();
+		for ( int i = 0; i < iNumKnn; i++ )
+		{
+			auto & tKNN = tQuery.m_dKnnSettings.Add();
+			tKNN.m_sAttr = tReq.GetString();
+			tKNN.m_iK = tReq.GetInt();
+			if ( tKNN.m_iK <= 0 )
+			{
+				SendErrorReply ( tOut, "k parameter must be positive" );
+				return false;
+			}
+
+			tKNN.m_iEf = tReq.GetInt();
+			if ( tKNN.m_iEf < 0 )
+			{
+				SendErrorReply ( tOut, "ef parameter must be non-negative" );
+				return false;
+			}
+
+			tKNN.m_bRescore = !!tReq.GetInt();
+			tKNN.m_fOversampling = tReq.GetFloat();
+			if ( tKNN.m_fOversampling < 1.0f )
+			{
+				SendErrorReply ( tOut, "oversampling parameter must be >= 1.0" );
+				return false;
+			}
+
+			tKNN.m_bPrefilter = !!tReq.GetInt();
+			tKNN.m_bFullscan = !!tReq.GetInt();
+			tKNN.m_dVec.Resize ( tReq.GetInt() );
+			for ( auto & j : tKNN.m_dVec )
+				j = tReq.GetFloat();
+
+			bool bHasEmb = !!tReq.GetByte();
+			if ( bHasEmb )
+				tKNN.m_sEmbStr = tReq.GetString();
+
+			tKNN.m_sAlias = tReq.GetString();
+		}
+
+		tQuery.m_bHybridSearch = !!tReq.GetInt();
+		if ( tQuery.m_bHybridSearch )
+		{
+			tQuery.m_tHybridSettings.m_iRankConstant = tReq.GetInt();
+			if ( tQuery.m_tHybridSettings.m_iRankConstant < 0 )
+			{
+				SendErrorReply ( tOut, "rank_constant must be non-negative" );
+				return false;
+			}
+			tQuery.m_tHybridSettings.m_iWindowSize = tReq.GetInt();
+			if ( tQuery.m_tHybridSettings.m_iWindowSize < 0 )
+			{
+				SendErrorReply ( tOut, "window_size must be non-negative" );
+				return false;
+			}
+			tQuery.m_tHybridSettings.m_sMatchAlias = tReq.GetString();
+			int iNumWeights = tReq.GetInt();
+			tQuery.m_tHybridSettings.m_dNamedWeights.Resize(iNumWeights);
+			for ( auto & tW : tQuery.m_tHybridSettings.m_dNamedWeights )
+			{
+				tW.m_sName = tReq.GetString();
+				tW.m_fWeight = tReq.GetFloat();
 			}
 		}
 	}
@@ -1099,6 +1191,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			i.m_sValue = tReq.GetString();
 		}
 	}
+
+	if ( uMasterVer>=27 )
+		tQuery.m_sExpandBlended = tReq.GetString();
 
 	/////////////////////
 	// additional checks
@@ -1446,13 +1541,11 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	if ( bAgentMode && uMasterVer>=19 )
 		tOut.SendInt ( tRes.m_bTotalMatchesApprox ? 1 : 0 );
 
-	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
+	tOut.SendInt ( tRes.GetQueryTimeMs() );
 
 	if ( iVer>=0x11A && bAgentMode )
 	{
-		bool bNeedPredictedTime = tQuery.m_iMaxPredictedMsec > 0;
-
-		BYTE uStatMask = ( bNeedPredictedTime ? 4U : 0U ) | ( g_bCpuStats ? 2U : 0U ) | ( g_bIOStats ? 1U : 0U );
+		BYTE uStatMask = ( g_bCpuStats ? 2U : 0U ) | ( g_bIOStats ? 1U : 0U );
 		tOut.SendByte ( uStatMask );
 
 		if ( g_bIOStats )
@@ -1473,8 +1566,6 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 			tOut.SendUint64 ( iCpuTime );
 		}
 
-		if ( bNeedPredictedTime )
-			tOut.SendUint64 ( tRes.m_iPredictedTime + tRes.m_iAgentPredictedTime );
 	}
 	if ( bAgentMode && uMasterVer>=7 )
 	{
@@ -1541,6 +1632,13 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	const CSphQuery & q = tHandler.m_dQueries.First();
 	myinfo::SetTaskInfo ( R"(api-search query="%s" comment="%s" table="%s")", q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
 	tHandler.RunQueries();
+
+	ARRAY_FOREACH ( i, tHandler.m_dQueries )
+	{
+		const auto & tMeta = tHandler.m_dAggrResults[i];
+		auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+		gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
+	}
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_SEARCH );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )

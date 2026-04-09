@@ -3,15 +3,92 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
-  pull_request:
-    paths:
-      - 'manual/**'
-    branches:
-      - master
-      - manticore-*
+  workflow_run:
+    workflows: 
+      - 📖 Trigger doc check
+    types:
+      - completed
 
 jobs:
+  translate_docs:
+    runs-on: ubuntu-24.04
+    outputs:
+      repo: ${{ steps.repo-check.outputs.repo }}
+      ref: ${{ steps.repo-check.outputs.ref }}
+    permissions:
+      contents: write
+      pull-requests: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Download an artifact with PR repo name
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: pr_repo
+          path: .
+      - name: Check origin repository
+        id: repo-check
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            PR_REPO=$(cat ./pr_repo.txt)
+            repo=$(head -n 1 <<< "$PR_REPO")
+            ref=$(tail -n 1 <<< "$PR_REPO")
+          else
+            repo="${{ github.repository }}"
+            ref="${{ github.head_ref }}"
+          fi
+          echo "repo=$repo" >> $GITHUB_OUTPUT
+          echo "ref=$ref" >> $GITHUB_OUTPUT
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: ${{ steps.repo-check.outputs.repo }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          ref: ${{ steps.repo-check.outputs.ref }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+          extensions: curl
+
+      - name: Run auto-translate
+        env:
+          OPENROUTER_TRANSLATOR_API_KEY: ${{ secrets.OPENROUTER_TRANSLATOR_API_KEY }}
+        run: |
+          set -e
+          # Install PHP dependencies for translator
+          cd translator
+          composer install --no-dev --no-interaction --prefer-dist
+          cd ..
+
+          # Configure git for commits
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Run auto-translate
+          ./translator/bin/auto-translate
+
+          # Check if there are any changes to commit (including untracked files)
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Auto-translate made changes, committing them..."
+            git add -A
+            git commit -m "docs: Auto-translate documentation changes by ${{ github.actor }}"
+            git push
+            echo "Changes committed and pushed successfully"
+          else
+            echo "No changes made by auto-translate"
+          fi
+
   docs_check:
+    needs: translate_docs
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -33,12 +110,18 @@ jobs:
       - name: Check origin repository
         id: repo-check
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            repo="${{ needs.translate_docs.outputs.repo }}"
+            ref="${{ needs.translate_docs.outputs.ref }}"
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
             repo="${{ github.event.pull_request.head.repo.full_name }}"
+            ref="${{ github.head_ref }}"
           else
             repo="${{ github.repository }}"
+            ref="${{ github.head_ref || github.ref_name }}"
           fi
           echo "repo=$repo" >> $GITHUB_OUTPUT
+          echo "ref=$ref" >> $GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v3
@@ -47,7 +130,7 @@ jobs:
           repository: ${{ steps.repo-check.outputs.repo }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
-          ref: ${{ github.head_ref }}
+          ref: ${{ steps.repo-check.outputs.ref }}
 
       - name: Fetch master and get changed files
         id: changed-files
@@ -73,42 +156,6 @@ jobs:
           done
           echo "$filepathes"
           echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
-      - name: Run auto-translate
-        run: |
-          set -e
-          add-apt-repository ppa:rmescandon/yq
-          apt-get update -y 
-          apt-get install -y yq gettext-base
-          curl -sSL https://github.com/sigoden/aichat/releases/download/v0.30.0/aichat-v0.30.0-x86_64-unknown-linux-musl.tar.gz > /tmp/aichat.tar.gz
-          tar -xzf /tmp/aichat.tar.gz -C /usr/bin/
-
-          # Configure the aichat
-          mkdir -p ~/.config/aichat
-          echo "clients:" > ~/.config/aichat/config.yaml
-          echo "- type: openai" >> ~/.config/aichat/config.yaml
-          echo "  api_key: ${{ secrets.TRANSLATOR_OPENAI_KEY }}" >> ~/.config/aichat/config.yaml
-          echo "- type: claude" >> ~/.config/aichat/config.yaml
-          echo "  api_key: ${{ secrets.TRANSLATOR_ANTHROPIC_KEY }}" >> ~/.config/aichat/config.yaml
-
-          cat ~/.config/aichat/config.yaml
-
-          # Configure git for commits
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Run auto-translate
-          ./translator/bin/auto-translate
-          
-          # Check if there are any changes to commit
-          if ! git diff --quiet; then
-            echo "Auto-translate made changes, committing them..."
-            git add .
-            git commit -m "docs: Auto-translate documentation changes by ${{ github.actor }}"
-            git push
-            echo "Changes committed and pushed successfully"
-          else
-            echo "No changes made by auto-translate"
-          fi
       - name: Check docs
         id: check
         run: |

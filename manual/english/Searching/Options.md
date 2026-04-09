@@ -221,6 +221,35 @@ The accuracy of the `HyperLogLog` and the threshold for converting from the hash
 ### expand_keywords
 `0` or `1` (`0` by default). Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
+### expand_blended
+`0`, `off`, `1`, or any combination of `blend_mode` options (`0` by default). Expands blended keywords (tokens that contain characters configured via [blend_chars](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)) into their constituent variants during query parsing. When enabled, keywords like "well-being" (if `-` is configured in `blend_chars`) are expanded into variants such as "well-being", "wellbeing", "well", and "being", which are then grouped into OR subtrees in the query tree.
+
+The supported values are:
+* `0` or `off` - Blended expansion is disabled (default). Blended keywords are processed normally without expansion.
+* `1` - Blended expansion is enabled and uses the table's [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) setting to determine which variants to generate.
+* Any blend mode option(s) - Blended expansion is enabled with the specified blend mode(s), overriding the table's `blend_mode` setting.
+
+Refer to [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) for more details on options.
+
+### fusion_method
+String. Enables [hybrid search](../Searching/Hybrid_search.md) result fusion. Currently the only supported value is `'rrf'` (Reciprocal Rank Fusion). When set, `MATCH(...)` and `KNN(...)` run as independent sub-queries whose results are fused by rank.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
+### fusion_weights
+Named float list. Per-sub-query weights for [hybrid search](../Searching/Hybrid_search.md) RRF scoring. Requires `fusion_method='rrf'`. Sub-queries must be given explicit aliases using `AS` in SQL or `"name"` in JSON. Unspecified aliases default to weight 1.0.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AS text
+  AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) AS dense
+OPTION fusion_method='rrf', fusion_weights=(text=0.7, dense=0.3);
+```
+
 ### field_weights
 Named integer list (per-field user weights for ranking).
 
@@ -289,9 +318,6 @@ You can also enforce a guaranteed groupby/aggregate accuracy mode using the [acc
 
 ### max_query_time
 Sets the maximum search query time in milliseconds. Must be a non-negative integer. The default value is 0, which means "do not limit." Local search queries will be stopped once the specified time has elapsed. Note that if you're performing a search that queries multiple local tables, this limit applies to each table separately. Be aware that this may slightly increase the query's response time due to the overhead caused by constantly tracking whether it's time to stop the query.
-
-### max_predicted_time
-Integer. Maximum predicted search time; see [predicted_time_costs](../Server_settings/Searchd.md#predicted_time_costs).
 
 ### morphology
 `none` allows replacing all query terms with their exact forms if the table was built with [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. This is useful for preventing stemming or lemmatizing query terms.
@@ -369,6 +395,15 @@ POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1
 
 <!-- end -->
 
+### rank_constant
+Integer. Default is 60. Smoothing constant for [hybrid search](../Searching/Hybrid_search.md) RRF ranking. Each document's score from a sub-query is `weight / (rank_constant + rank)`, where `rank` is its 1-based position in that sub-query's results. A lower value (e.g. 10) makes top positions count much more than lower ones; a higher value (e.g. 100) flattens the difference between positions. Requires `fusion_method='rrf'`.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', rank_constant=10;
+```
+
 ### ranker
 Choose from the following options:
 * `proximity_bm25`
@@ -401,6 +436,23 @@ String. A scroll token for paginating results using the [Scroll pagination appro
 * `pq` - priority queue, set by default
 * `kbuffer` - provides faster sorting for already pre-sorted data, e.g., table data sorted by id
 The result set is the same in both cases; choosing one option or the other may simply improve (or worsen) performance.
+
+### window_size
+Integer. Default is 0 (auto). Controls how many results each sub-query (text and every KNN) retrieves before [hybrid search](../Searching/Hybrid_search.md) RRF fusion. A larger window feeds more candidates into fusion, improving recall at the cost of performance. Requires `fusion_method='rrf'`.
+
+When set to 0 (auto), the window is computed as the **maximum** of:
+- the largest KNN requested-docs count across all KNN sub-queries (which is `k * oversampling` when rescoring is enabled, or just `k` otherwise), and
+- the query's `LIMIT`.
+
+For example, with `LIMIT 20` and `knn(vec, 10, ...)` (default oversampling 3.0, rescoring on), auto window = max(10*3, 20) = 30. Both the text sub-query and KNN sub-query will each retrieve up to 30 results before fusion.
+
+When set explicitly, that value overrides the automatic calculation and is used as the limit for all sub-queries.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', window_size=50;
+```
 
 ### threads
 Limits the max number of threads used for current query processing. Default - no limit (the query can occupy all [threads](../Server_settings/Searchd.md#threads) as defined globally).

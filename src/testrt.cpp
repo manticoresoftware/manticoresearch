@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -75,7 +75,7 @@ void DoSearch ( CSphIndex * pIndex )
 	{
 		auto & tOneRes = tResult.m_dResults.Add ();
 		tOneRes.FillFromSorter ( pSorter );
-		printf ( "%d results found in %d.%03d sec!\n", tOneRes.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
+		printf ( "%d results found in %d.%03d sec!\n", tOneRes.m_dMatches.GetLength(), tResult.GetQueryTimeMs()/1000, tResult.GetQueryTimeMs()%1000 );
 		ARRAY_FOREACH ( i, tOneRes.m_dMatches )
 			printf ( "%d. rowid=%u, weight=%d\n", 1+i, tOneRes.m_dMatches[i].m_tRowID, tOneRes.m_dMatches[i].m_iWeight );
 	}

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT local_df exact-term regression</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+index rt_local_df
+{
+	type				= rt
+	path				= <data_path/>/rt_local_df
+	rt_field			= title
+	index_field_lengths	= 1
+	index_exact_words	= 1
+	morphology			= stem_en
+}
+</config>
+
+<queries>
+<sphinxql>
+	INSERT INTO rt_local_df VALUES
+	(1, 'runs'),
+	(2, 'alpha');
+	FLUSH RAMCHUNK rt_local_df;
+
+	INSERT INTO rt_local_df VALUES
+	(3, 'runs'),
+	(4, 'beta');
+	FLUSH RAMCHUNK rt_local_df;
+
+	<!-- control: local_df should affect the stemmed term across 2 disk chunks -->
+	SELECT id, weight() AS w FROM rt_local_df WHERE MATCH('runs') ORDER BY id ASC OPTION ranker=expr('1000000*sum(sum_idf)'), idf='plain,tfidf_unnormalized';
+	SELECT id, weight() AS w FROM rt_local_df WHERE MATCH('runs') ORDER BY id ASC OPTION ranker=expr('1000000*sum(sum_idf)'), idf='plain,tfidf_unnormalized', local_df=0;
+
+	<!-- regression: before the fix these 2 queries return the same weights -->
+	<!-- exact terms are stored in local_df under '=runs', but m_sDictWord still keeps the internal exact-form marker -->
+	SELECT id, weight() AS w FROM rt_local_df WHERE MATCH('=runs') ORDER BY id ASC OPTION ranker=expr('1000000*sum(sum_idf)'), idf='plain,tfidf_unnormalized';
+	SELECT id, weight() AS w FROM rt_local_df WHERE MATCH('=runs') ORDER BY id ASC OPTION ranker=expr('1000000*sum(sum_idf)'), idf='plain,tfidf_unnormalized', local_df=0;
+</sphinxql>
+</queries>
+
+</test>

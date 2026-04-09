@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,8 @@ void				SetJoinBatchSize ( int iSize );
 int					GetJoinBatchSize();
 
 CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema, const char * szJoinedIndex );
-bool				NeedToMoveMixedJoinFilters ( const CSphQuery & tQuery, const ISphSchema & tSchema );
+bool				NeedPostJoinFilterEvaluation ( const CSphQuery & tQuery, const ISphSchema & tSchema );
+bool				NeedPostJoinFilterEvaluation ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sJoinIdx, bool bFilterTree, JoinType_e eJoinType, const ISphSchema & tSchema );
 bool				ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftSchema );
 std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tSettings, const CSphAttrLocator & tNullMapLocator );
 bool				SplitJoinedAttrName ( const CSphString & sJoinedAttr, CSphString & sTable, CSphString & sAttr, CSphString * pError = nullptr );

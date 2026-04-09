@@ -69,6 +69,7 @@
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
 * [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Adds/deletes a table to a replication cluster
+* [EXIT CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Detaches the current node from a replication cluster
 * [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Changes replication cluster settings
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 
@@ -134,6 +135,7 @@
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
 * [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
+* [bigram_delimiter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
@@ -145,9 +147,11 @@
 * [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
 * [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
+* [exceptions_list](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions_list)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
 * [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [hitless_words_list](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words_list)
 * [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
 * [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
 * [html_strip](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
@@ -185,10 +189,12 @@
 * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
 * [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
+* [stopwords_list](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_list)
 * [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
 * [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
 * [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
+* [wordforms_list](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms_list)
 
 ##### Plain table settings
 * [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
@@ -461,6 +467,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the number of queries per batch
   * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum number of active connections
+  * [merge_chunks_per_job](Server_settings/Searchd.md#merge_chunks_per_job) - How many RT disk chunks are merged per OPTIMIZE job
   * [max_filters](Server_settings/Searchd.md#max_filters) - Maximum allowed per-query filter count
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Maximum allowed per-filter values count
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Maximum number of files allowed to be opened by server
@@ -473,8 +480,8 @@ To be put in the `searchd {}` section of the configuration file:
   * [network_timeout](Server_settings/Searchd.md#network_timeout) - Network timeout for client requests
   * [node_address](Server_settings/Searchd.md#node_address) - Specifies network address of the node
   * [persistent_connections_limit](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum number of simultaneous persistent connections to remote persistent agents
+  * [parallel_chunk_merges](Server_settings/Searchd.md#parallel_chunk_merges) - How many RT disk chunk merges can run in parallel during OPTIMIZE
   * [pid_file](Server_settings/Searchd.md#pid_file) - Path to Manticore server pid file
-  * [predicted_time_costs](Server_settings/Searchd.md#predicted_time_costs) - Costs for the query time prediction model
   * [preopen_tables](Server_settings/Searchd.md#preopen_tables) - Determines whether to forcibly preopen all tables on startup
   * [pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) - Enables pseudo-sharding for search queries to plain and real-time tables
   * [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) - Maximum RAM allocated for cached result sets
@@ -495,6 +502,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [server_id](Server_settings/Searchd.md#server_id) - Server identifier used as a seed to generate a unique document ID
   * [shutdown_timeout](Server_settings/Searchd.md#shutdown_timeout) - Searchd `--stopwait` timeout
   * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 hash of the password required to invoke `shutdown` command from VIP SQL connection
+  * [skiplist_cache_size](Server_settings/Searchd.md#skiplist_cache_size) - Maximum size of the in-memory cache for decompressed skiplists
   * [snippets_file_prefix](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Prefix to prepend to the local file names when generating snippets in `load_files` mode
   * [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) - Path to file where the current SQL state will be serialized
   * [sphinxql_timeout](Server_settings/Searchd.md#sphinxql_timeout) - Maximum time to wait between requests from a MySQL client
@@ -519,6 +527,7 @@ searchd [OPTIONS]
 * [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - Removes the Manticore service from Microsoft Management Console and other locations where services are registered
 * [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - Prevents the server from serving incoming connections until table files are pre-read
 * [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - Displays all available parameters
+* [--quiet, -q](Starting_the_server/Manually.md#searchd-command-line-options) - Only print errors on startup
 * [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - Restricts the server to serve only the specified table
 * [--install](Starting_the_server/Manually.md#searchd-command-line-options) - Installs searchd as a service in Microsoft Management Console
 * [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - Enables input/output reporting
@@ -604,7 +613,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HYBRID_MATCH, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Documentation for old Manticore versions
@@ -662,5 +671,6 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [13.13.0](https://manual.manticoresearch.com/manticore-13-13-0/). [Installation page](https://manticoresearch.com/install-13.13.0/)
 * [14.1.0](https://manual.manticoresearch.com/manticore-14-1-0/). [Installation page](https://manticoresearch.com/install-14.1.0/)
 * [15.1.0](https://manual.manticoresearch.com/manticore-15-1-0/). [Installation page](https://manticoresearch.com/install-15.1.0/)
+* [17.5.1](https://manual.manticoresearch.com/manticore-17-5-1/). [Installation page](https://manticoresearch.com/install-17.5.1/)
+* [25.0.0](https://manual.manticoresearch.com/manticore-25-0-0/). [Installation page](https://manticoresearch.com/install-25.0.0/)
 <!-- proofread -->
-

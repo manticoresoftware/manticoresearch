@@ -28,10 +28,13 @@
 %token	TOK_ATTRIBUTES
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_BAD_NUMERIC
+%token	TOK_CACHE
 %token	TOK_CLUSTER
 %token	TOK_COMMITTED
 %token	TOK_COMPRESS
 %token	TOK_DELETE
+%token	TOK_DROP
+%token	TOK_EXIT
 %token	TOK_FLUSH
 %token	TOK_FREEZE
 %token	TOK_GLOBAL
@@ -95,10 +98,12 @@ statement:
 	| flush_index
 	| flush_hostnames
 	| flush_logs
+	| drop_cache
 	| reload_plugins
 	| reload_index
     | reload_indexes
     | delete_cluster
+    | exit_cluster
     | freeze_indexes
     | unfreeze_indexes
   	| kill_connid
@@ -109,7 +114,7 @@ statement:
 ident_no_option:
 	TOK_ATTACH | TOK_ATTRIBUTES | TOK_CLUSTER | TOK_COMMITTED | TOK_COMPRESS | TOK_FLUSH | TOK_FREEZE | TOK_GLOBAL
 	| TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXES | TOK_ISOLATION | TOK_KILL | TOK_LEVEL | TOK_LIKE | TOK_LOGS | TOK_OFF
-	| TOK_ON | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE
+	| TOK_ON | TOK_QUERY | TOK_RAMCHUNK | TOK_READ | TOK_RECONFIGURE | TOK_REPEATABLE | TOK_DELETE | TOK_EXIT
 	| TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET | TOK_TABLE | TOK_TABLES | TOK_TO
 	| TOK_UNCOMMITTED | TOK_UNFREEZE | TOK_WAIT | TOK_WITH | TOK_FROM | TOK_PLUGINS | TOK_RELOAD | TOK_SONAME
 	| TOK_TRUNCATE | TOK_IDENT
@@ -396,6 +401,14 @@ flush_logs:
 		}
 	;
 
+drop_cache:
+	TOK_DROP TOK_CACHE
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_DROP_CACHE;
+		}
+	;
+
 //////////////////////////////////////////////////////////////////////////
 
 reload_plugins:
@@ -439,6 +452,15 @@ delete_cluster:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_DELETE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	;
+
+exit_cluster:
+	TOK_EXIT TOK_CLUSTER ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_EXIT;
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	;
 

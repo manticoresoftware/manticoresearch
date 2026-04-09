@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -16,10 +16,5 @@
 
 enum class NODES_E : bool;
 
-struct UpdateNodesRequest_t : public ClusterRequest_t
-{
-	NODES_E m_eKindNodes;
-};
-
 bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes );
-
+bool SendClusterExitUpdateNodes ( const CSphString& sCluster, const CSphString& sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString>& dNodes );

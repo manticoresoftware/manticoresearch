@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -25,12 +25,19 @@ struct CSphAttrLocator;
 struct ThrottleState_t;
 class DebugCheckReader_i;
 
+enum class BlobAttrInput_e
+{
+	RAW_BYTES,
+	MVA_INT64,
+	MVA_DWORD
+};
+
 class BlobRowBuilder_i
 {
 public:
 	virtual				~BlobRowBuilder_i() {}
 
-	virtual bool		SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
+	virtual bool		SetAttr ( int iAttr, const BYTE * pData, int iDataLen, BlobAttrInput_e eInput, CSphString & sError ) = 0;
 	virtual std::pair<SphOffset_t,SphOffset_t> Flush() = 0;
 	virtual std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) = 0;
 	virtual bool		Done ( CSphString & sError ) = 0;
@@ -103,6 +110,8 @@ bool				sphIsBlobAttr ( ESphAttr eAttr );
 bool				sphIsBlobAttr ( const CSphColumnInfo & tAttr );
 
 bool				IsMvaAttr ( ESphAttr eAttr );
+bool				IsBlobAttrEmpty ( const ByteBlob_t & tAttr );
+bool				IsBlobAttrZero ( const ByteBlob_t & tAttr, int iDims );
 
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes

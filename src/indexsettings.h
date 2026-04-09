@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -242,7 +242,23 @@ enum ESphBigram : BYTE
 	SPH_BIGRAM_NONE			= 0,	///< no bigrams
 	SPH_BIGRAM_ALL			= 1,	///< index all word pairs
 	SPH_BIGRAM_FIRSTFREQ	= 2,	///< only index pairs where one of the words is in a frequent words list
-	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
+	SPH_BIGRAM_BOTHFREQ		= 3,	///< only index pairs where both words are in a frequent words list
+	SPH_BIGRAM_SECONDNUMERIC = 4,	///< only index pairs where second token contains ASCII digits only
+	SPH_BIGRAM_SECONDHASDIGIT = 5	///< only index pairs where second token contains at least one ASCII digit
+};
+
+bool BigramNeedsFreq ( ESphBigram eMode ) noexcept;
+bool BigramHasDigit ( const BYTE * pWord, int iLen ) noexcept;
+bool BigramIsDigitsOnly ( const BYTE * pWord, int iLen ) noexcept;
+bool BigramIsSecondDigit ( ESphBigram eMode, const BYTE * pSecond, int iLen ) noexcept;
+
+enum class BigramDelimiter_e : BYTE
+{
+	NONE = 0,		///< store concatenated bigram only
+	DELIMITED,	///< store internal delimited bigram only
+	BOTH,		///< store both internal and concatenated bigrams
+
+	DEFAULT = DELIMITED
 };
 
 enum class JiebaMode_e
@@ -272,6 +288,7 @@ public:
 	KillListTargets_c m_tKlistTargets;	///< list of indexes to apply killlist to
 
 	ESphBigram		m_eBigramIndex = SPH_BIGRAM_NONE;
+	BigramDelimiter_e m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
 	CSphString		m_sBigramWords;
 	StrVec_t		m_dBigramWords;
 
@@ -399,6 +416,7 @@ struct CreateTableAttr_t
 	bool					m_bStringHash = true;
 	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
+	bool					m_bKNNFromSet = false;
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;
@@ -428,6 +446,7 @@ public:
 	virtual bool			Add ( const char * szName, const CSphString & sValue ) = 0;
 	virtual bool			Add ( const CSphString & sName, const CSphString & sValue ) = 0;
 	virtual CSphString		Get ( const CSphString & sName ) const =0 ;
+	virtual CSphString		GetList ( const CSphString & sName ) const = 0;
 	virtual bool			Contains ( const char * szName ) const = 0;
 	virtual void			RemoveKeys ( const CSphString & sName ) = 0;
 	virtual bool			AddOption ( const CSphString & sName, const CSphString & sValue, bool bExtCopy ) = 0;
@@ -446,6 +465,12 @@ class CSphDict;
 class CSphIndex;
 class Writer_i;
 
+enum class ExtFilesFormat_e
+{
+	FILE,
+	LIST
+};
+
 void		SaveTokenizerSettings ( Writer_i & tWriter, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
@@ -455,7 +480,7 @@ void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFile
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
-CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt );
 
 // daemon-level callback
 using CreateFilenameBuilder_fn = std::unique_ptr<FilenameBuilder_i> (*) ( const char * szIndex );
@@ -488,5 +513,7 @@ void		LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings 
 void		operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSettings );
 void		LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void		SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
+
+CSphString		FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder );
 
 #endif // _indexsettings_

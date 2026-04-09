@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1483,7 +1483,18 @@ static bool TryToCreateSpecialFilter ( std::unique_ptr<ISphFilter> & pFilter, co
 }
 
 
-static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
+static bool IsColumnarAliasedAttr ( const ISphSchema & tLookupSchema, const CSphString & sAliasedCol )
+{
+	int iAliasedAttr = tLookupSchema.GetAttrIndex ( sAliasedCol.cstr() );
+	if ( iAliasedAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAliasedAttr = tLookupSchema.GetAttr ( iAliasedAttr );
+	return tAliasedAttr.IsColumnar() || tAliasedAttr.IsColumnarExpr();
+}
+
+
+static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema, const ISphSchema * pIndexSchema )
 {
 	if ( iAttr<0 )
 		return false;
@@ -1503,7 +1514,17 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	// we had a columnar expression in the select list that we wanted to evaluate at the final stage
 	// we replaced it with a stored expression
 	// now we want to create a columnar filter based on the original columnar attribute
-	if ( tCol.IsStoredExpr() )
+	if ( !tCol.IsStoredExpr() )
+		return false;
+
+	CSphString sAliasedCol;
+	tCol.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+	if ( IsColumnarAliasedAttr ( tSchema, sAliasedCol ) )
+		return true;
+
+	// result-set schemas can contain extra attrs shadowing base attrs by name;
+	// check index schema too to resolve original aliased columnar attribute.
+	if ( pIndexSchema && pIndexSchema!=&tSchema && IsColumnarAliasedAttr ( *pIndexSchema, sAliasedCol ) )
 		return true;
 
 	return false;
@@ -1538,7 +1559,7 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter,
 	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tFixedSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
-	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema );
+	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema, tCtx.m_pIndexSchema );
 
 	if ( iAttr>=0 && !bColumnar )
 	{
@@ -1847,13 +1868,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	if ( tCtx.m_sJoinIdx.IsEmpty() )
 		return;
 
-	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pMatchSchema, tCtx.m_sJoinIdx.cstr() );
-
-	bool bHaveNullFilters = false;
-	for ( const auto & i : dRightFilters )
-		bHaveNullFilters |= dModified[i.first].m_eType==SPH_FILTER_NULL;
-
-	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() && dRightFilters.GetLength() && ( bHaveNullFilters || dRightFilters.GetLength()!=dModified.GetLength() ) )
+	if ( NeedPostJoinFilterEvaluation ( dModified, tCtx.m_sJoinIdx, tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength(), tCtx.m_eJoinType, *tCtx.m_pMatchSchema ) )
 	{
 		// mixed joined and non-joined filters; they will be handled in join sorter
 		// remove all filters from the query (keep the @rowid/pseudo_sharding filter)
@@ -2001,23 +2016,6 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	return true;
-}
-
-
-int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx )
-{
-	if ( !tCtx.m_pHistograms )
-		return tCtx.m_iTotalDocs;
-
-	Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tSettings.m_sAttrName );
-	if ( !pHistogram || pHistogram->IsOutdated() )
-		return tCtx.m_iTotalDocs;
-
-	HistogramRset_t tEstimate;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
-		return tCtx.m_iTotalDocs;
-
-	return tEstimate.m_iTotal;
 }
 
 

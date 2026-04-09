@@ -18,6 +18,7 @@
 #include <iostream>
 
 using nljson = nlohmann::json;
+using nlohmann::literals::json_literals::operator""_json;
 #include "http/log_management.h"
 
 static RwLock_t g_tLockKbnTable;
@@ -1127,6 +1128,18 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 			CompatWarning ( "'%s' at '%s' body '%s'", tAggr.m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 			bOk = false;
 			TlsMsg::Err ( tAggr.m_sError );
+		}
+	}
+
+	if ( bOk )
+	{
+		ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		{
+			const auto & tMeta = tHandler.m_dAggrResults[i];
+			auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
 		}
 	}
 

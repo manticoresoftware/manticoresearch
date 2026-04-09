@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -635,15 +635,6 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 	// collect unique tags from matches
 	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
 
-	// generates docstore session id
-	DocstoreSession_c tSession;
-	auto iSessionUID = tSession.GetUID();
-
-	// spawn buffered readers for the current session
-	// put them to a global hash
-	for ( int iTag : dDocstoreTags )
-		tRes.m_dResults[iTag].m_pDocstore->CreateReader ( iSessionUID );
-
 	int iLastTag = -1;
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
 	for ( auto & dMatch : dMatches )
@@ -658,7 +649,8 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 		if ( iTag!=iLastTag )
 		{
 			for ( const auto & pCol : dPostlimit )
-				SetupPostlimitExprs ( pDocstore, pCol, sQuery, iSessionUID );
+				SetupPostlimitExprs ( pDocstore, pCol, sQuery, -1 );
+
 			iLastTag = iTag;
 		}
 

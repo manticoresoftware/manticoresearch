@@ -467,26 +467,12 @@ POST /sql?mode=raw -d "SELECT id,channel_id FROM records WHERE MATCH('one|two|th
 
 <!-- end -->
 
-<!--
-data for the following examples:
-
-DROP TABLE IF EXISTS hn_small;
-CREATE TABLE hn_small(story_author text, comment_ranking int);
-INSERT INTO hn_small(story_author, comment_ranking) VALUES
-('anewkid', 4),
-('sasjri', 1),
-('bks', 5);
--->
-
-<!-- example show meta predicted_time -->
-Additional values, such as `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips`, and their respective `dist_fetched_*` counterparts, will only be available if `searchd` was configured with [predicted time costs](../Server_settings/Searchd.md#predicted_time_costs) and the query included `predicted_time` in the `OPTION` clause.
-
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5 option max_predicted_time=100;
+SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') limit 5;
 
 SHOW META;
 ```
@@ -513,10 +499,6 @@ mysql> show meta;
 | total_found         | 266385 |
 | total_relation      | eq     |
 | time                | 0.012  |
-| local_fetched_docs  | 307212 |
-| local_fetched_hits  | 407390 |
-| local_fetched_skips | 24     |
-| predicted_time      | 56     |
 | keyword[0]          | one    |
 | docs[0]             | 224387 |
 | hits[0]             | 310327 |

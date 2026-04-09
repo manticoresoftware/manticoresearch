@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -723,9 +723,6 @@ struct SearchdStats_t : public CommandStats_t
 	std::atomic<int64_t>	m_iDiskReads;		///< total read IO calls (fired by search queries)
 	std::atomic<int64_t>	m_iDiskReadBytes;	///< total read IO traffic
 	std::atomic<int64_t>	m_iDiskReadTime;	///< total read IO time
-
-	std::atomic<int64_t>	m_iPredictedTime;	///< total agent predicted query time
-	std::atomic<int64_t>	m_iAgentPredictedTime;	///< total agent predicted query time
 };
 
 void InitSearchdStats ();

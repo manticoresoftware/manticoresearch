@@ -39,7 +39,7 @@ The `manticore-backup` tool, included in the official Manticore Search [packages
 
 ### Installation
 
-**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), which is a part of the `manticore-extra` package, and you need to ensure that one of these is available.
+**If you followed [the official installation instructions](https://manticoresearch.com/install/), you should already have everything installed and don't need to worry.** Otherwise, [`manticore-backup`](https://github.com/manticoresoftware/manticoresearch-backup) requires PHP 8.1.10 and [specific modules](https://github.com/manticoresoftware/executor/blob/main/build-linux) or [`manticore-executor`](https://github.com/manticoresoftware/executor), and you need to ensure that one of these is available.
 
 Note that `manticore-backup` is not available for Windows yet.
 
@@ -133,8 +133,8 @@ Manticore versions:
 
 | Argument | Description |
 |-|-|
-| `--backup-dir=path` | This is the path to the backup directory where the backup will be stored. The directory must already exist. This argument is required and has no default value. On each backup run, manticore-backup will create a subdirectory in the provided directory with a timestamp in the name (`backup-[datetime]`), and will copy all required tables to it. So the `--backup-dir` is a container for all your backups, and it's safe to run the script multiple times.|
-| `--restore[=backup]` | Restore from `--backup-dir`. Just --restore lists available backups. `--restore=backup` will restore from `<--backup-dir>/backup`. |
+| `--backup-dir=path` | Path to the backup directory where the backup will be stored. The directory must already exist. This argument is required and has no default value. On each backup run, `manticore-backup` will create a subdirectory in the provided directory with a timestamp in the name (`backup-[datetime]`), and will copy all required tables to it. So the `--backup-dir` is a container for all your backups, and it's safe to run the script multiple times. Supports S3 URLs in the format `s3://bucket/prefix` — see [S3 storage support](../Securing_and_compacting_a_table/Backup_and_restore.md#S3-storage-support) for details.|
+| `--restore[=backup]` | Restore from `--backup-dir`. Just `--restore` lists available backups. `--restore=backup` will restore from `<--backup-dir>/backup`. Works with both local paths and S3 URLs. |
 | `--force` | Skip versions check on restore and gracefully restore the backup. |
 | `--disable-telemetry` | Pass this flag in case you want to disable sending anonymized metrics  to Manticore. You can also use environment variable TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Path to the Manticore configuration. Optional. If not provided, a default configuration for your operating system will be used. Used to determine the host and port for communication with the Manticore daemon. The `manticore-backup` tool supports [dynamic configuration](../Server_settings/Scripted_configuration.md) files. You can specify the `--config` option multiple times if your configuration is spread across multiple files. |
@@ -143,6 +143,65 @@ Manticore versions:
 | `--unlock` | In rare cases when something goes wrong, tables can be left in a locked state. Use this argument to unlock them. |
 | `--version` | Show the current version. |
 | `--help` | Show this help. |
+
+
+## S3 storage support
+
+`manticore-backup` supports storing and restoring backups directly to/from S3-compatible storage, including AWS S3, MinIO, Wasabi, Cloudflare R2, and others. Simply pass an `s3://bucket/prefix` URL as `--backup-dir`.
+
+### Configuration
+
+Set the following environment variables before running `manticore-backup`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | Yes | AWS access key (or `AWS_ACCESS_KEY`) |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret key (or `AWS_SECRET_KEY`) |
+| `AWS_REGION` | No | AWS region (default: `us-east-1`) |
+| `AWS_ENDPOINT_URL` | No | Custom S3-compatible endpoint — **server URL only, no bucket name** (e.g., `http://localhost:9000`) |
+| `AWS_S3_ENCRYPTION` | No | Enable SSE-S3 server-side encryption (default: `1` for AWS S3; set to `0` for MinIO, R2, or other custom endpoints) |
+
+> ⚠️ `AWS_ENDPOINT_URL` must not include the bucket name. The bucket is taken from the `s3://bucket/prefix` argument. Including the bucket in the endpoint URL causes it to be doubled in every request and results in errors.
+>
+> ```
+> # Wrong — bucket "mybucket" duplicated in URL path
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com/mybucket
+>
+> # Correct — endpoint is the server only
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com
+> ```
+
+### Usage examples
+
+```bash
+# Backup to AWS S3 (SSE-S3 encryption enabled by default)
+export AWS_ACCESS_KEY_ID=your_key
+export AWS_SECRET_ACCESS_KEY=your_secret
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Restore from S3
+manticore-backup --restore --backup-dir=s3://my-bucket/backups
+manticore-backup --restore=backup-20221004171839 --backup-dir=s3://my-bucket/backups
+
+# Use with MinIO (disable encryption)
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ENDPOINT_URL=http://localhost:9000
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Use with Cloudflare R2
+export AWS_ACCESS_KEY_ID=your_r2_access_key
+export AWS_SECRET_ACCESS_KEY=your_r2_secret_key
+export AWS_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+export AWS_REGION=auto
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+```
+
+### Required S3 permissions
+
+The backup requires `s3:PutObject`, restore requires `s3:GetObject`, and listing available restore points requires `s3:ListBucket`.
 
 ## BACKUP SQL command reference
 
@@ -292,7 +351,7 @@ Manticore config
 
 ## Backup and restore with mysqldump
 
-Manticore supports `mysqldump` utility from MySQL up to 9.5 and `mariadb-dump` utility from MariaDB up to 12.1.
+Manticore supports `mysqldump` utility from MySQL up to 9.6 and `mariadb-dump` utility from MariaDB up to 12.2.
 
 <!-- example mysqldump_backup -->
 

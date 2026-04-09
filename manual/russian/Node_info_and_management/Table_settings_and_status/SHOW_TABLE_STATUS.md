@@ -2,7 +2,7 @@
 
 <!-- example SHOW TABLE STATUS -->
 
-`SHOW TABLE STATUS` — это SQL-запрос, который отображает различные статистические данные по каждой таблице.
+`SHOW TABLE STATUS` — это оператор SQL, который отображает различные статистические данные для каждой таблицы.
 
 Синтаксис:
 
@@ -16,42 +16,42 @@ SHOW TABLE table_name STATUS
 * **distributed**: `index_type`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
 * **percolate**: `index_type`, `stored_queries`, `ram_bytes`, `disk_bytes`, `max_stack_need`, `average_stack_base`, `
   desired_thread_stack`, `tid`, `tid_saved`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
-* **plain**: `index_type`, `indexed_documents`, `indexed_bytes`, может быть набор `field_tokens_*` и `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
-* **rt**: `index_type`, `indexed_documents`, `indexed_bytes`, может быть набор `field_tokens_*` и `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `ram_chunk`, `ram_chunk_segments_count`, `disk_chunks`, `mem_limit`, `mem_limit_rate`, `ram_bytes_retired`, `optimizing`, `locked`, `tid`, `tid_saved`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
+* **plain**: `index_type`, `indexed_documents`, `indexed_bytes`, возможно набор `field_tokens_*` и `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
+* **rt**: `index_type`, `indexed_documents`, `indexed_bytes`, возможно набор `field_tokens_*` и `total_tokens`, `ram_bytes`, `disk_bytes`, `disk_mapped`, `disk_mapped_cached`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists`, `disk_mapped_cached_hitlists`, `killed_documents`, `killed_rate`, `ram_chunk`, `ram_chunk_segments_count`, `disk_chunks`, `mem_limit`, `mem_limit_rate`, `ram_bytes_retired`, `optimizing`, `locked`, `tid`, `tid_saved`, `query_time_1min`, `query_time_5min`,`query_time_15min`,`query_time_total`, `exact_query_time_1min`, `exact_query_time_5min`, `exact_query_time_15min`, `exact_query_time_total`, `found_rows_1min`, `found_rows_5min`, `found_rows_15min`, `found_rows_total`.
 
-Значения означают следующее:
+Вот что означают эти значения:
 
 * `index_type`: в настоящее время один из `disk`, `rt`, `percolate`, `template` и `distributed`.
-* `indexed_documents`: количество проиндексированных документов.
-* `indexed_bytes`: общий размер проиндексированного текста. Обратите внимание, что это значение не строгое, так как в полнотекстовом индексе невозможно строго восстановить исходный текст для измерения.
-* `stored_queries`: количество перколяторных запросов, сохранённых в таблице.
-* `field_tokens_XXX`: опционально, общая длина по полям (в токенах) по всей таблице (используется внутренне для функций ранжирования `BM25A` и `BM25F`). Доступно только для таблиц, созданных с `index_field_lengths=1`.
-* `total_tokens`: опционально, общая сумма всех `field_tokens_XXX`.
-* `ram_bytes`: общий объём оперативной памяти, занимаемый таблицей.
-* `disk_bytes`: общий объём дискового пространства, занимаемый таблицей.
-* `disk_mapped`: общий размер отображённых файлов.
-* `disk_mapped_cached`: общий размер отображённых файлов, фактически кэшируемых в ОЗУ.
-* `disk_mapped_doclists` и `disk_mapped_cached_doclists`: часть общих и кэшируемых отображений, относящаяся к спискам документов.
-* `disk_mapped_hitlists` и `disk_mapped_cached_hitlists`: часть общих и кэшируемых отображений, относящаяся к спискам попаданий. Значения doclists и hitlists показаны отдельно, так как они обычно занимают большой объём (например, около 90% от размера всей таблицы).
-* `killed_documents` и `killed_rate`: первое указывает количество удалённых документов, второе — отношение удалённых к проиндексированным. Технически удаление документа означает подавление его в результатах поиска, но он физически остаётся в таблице и будет удалён только после слияния/оптимизации таблицы.
-* `ram_chunk`: размер RAM-чанка таблицы реального времени или перколяторной таблицы.
-* `ram_chunk_segments_count`: RAM-чанк внутренне состоит из сегментов, обычно не более 32. Эта строка показывает текущее количество.
-* `disk_chunks`: количество дисковых чанков в таблице реального времени.
+* `indexed_documents`: количество индексированных документов.
+* `indexed_bytes`: общий размер индексированного текста. Обратите внимание, что это значение не является строгим, поскольку в полнотекстовом индексе невозможно строго восстановить хранимый текст для его измерения.
+* `stored_queries`: количество перколяторных запросов, хранящихся в таблице.
+* `field_tokens_XXX`: необязательно, общая длина по полям (в токенах) по всей таблице (используется внутренне для функций ранжирования `BM25A` и `BM25F`). Доступно только для таблиц, созданных с `index_field_lengths=1`.
+* `total_tokens`: необязательно, общий суммарный показатель всех `field_tokens_XXX`.
+* `ram_bytes`: общий объем оперативной памяти, занятой таблицей.
+* `disk_bytes`: общий объем дискового пространства, занятого таблицей.
+* `disk_mapped`: общий размер отображаемых файлов.
+* `disk_mapped_cached`: общий размер отображаемых файлов, фактически кэшированных в ОЗУ.
+* `disk_mapped_doclists` и `disk_mapped_cached_doclists`: часть от общих и кэшированных отображений, принадлежащих спискам документов.
+* `disk_mapped_hitlists` и `disk_mapped_cached_hitlists`: часть от общих и кэшированных отображений, принадлежащих спискам попаданий. Значения doclists и hitlists показываются отдельно, поскольку они обычно крупные (например, около 90% от всего размера таблицы).
+* `killed_documents` и `killed_rate`: первое показывает количество удаленных документов, а второе — отношение удаленных к индексированным. Технически удаление документа означает подавление его в результатах поиска, но он физически всё ещё существует в таблице и будет удален только после слияния/оптимизации таблицы.
+* `ram_chunk`: размер оперативной памяти, занятой сегментом таблицы реального времени или перколяторной таблицы.
+* `ram_chunk_segments_count`: сегмент оперативной памяти внутренне состоит из сегментов, обычно не более 32. Эта строка показывает их текущее количество.
+* `disk_chunks`: количество дисковых сегментов в таблице реального времени.
 * `mem_limit`: фактическое значение `rt_mem_limit` для таблицы.
-* `mem_limit_rate`: доля, при достижении которой RAM-чанк будет сброшен как дисковый чанк, например, если `rt_mem_limit` равен 128M, а доля 50%, новый дисковый чанк будет сохранён, когда RAM-чанк превысит 64M.
-* `ram_bytes_retired`: размер мусора в RAM-чанках (например, удалённые или заменённые документы, ещё не окончательно удалённые).
-* `optimizing`: значение больше 0 указывает, что таблица в данный момент оптимизируется (т.е. сейчас происходит слияние некоторых дисковых чанков).
-* `locked`: значение больше 0 указывает, что таблица в данный момент заблокирована с помощью [FREEZE](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#Freezing-a-table). Число показывает, сколько раз таблица была заморожена. Например, таблица может быть заморожена `manticore-backup`, а затем снова заморожена репликацией. Полное размораживание должно происходить только тогда, когда ни один другой процесс не требует её заморозки.
-* `max_stack_need`: объём стека, необходимый для вычисления самых сложных из сохранённых перколяторных запросов. Это динамическое значение, зависящее от деталей сборки, таких как компилятор, оптимизация, оборудование и т.д.
-* `average_stack_base`: объём стека, обычно занимаемый в начале вычисления перколяторного запроса.
-* `desired_thread_stack`: сумма вышеуказанных значений, округлённая до ближайшего значения, кратного 128 байтам. Если это значение больше `thread_stack`, выполнение `call pq` по этой таблице может быть невозможно, так как некоторые сохранённые запросы завершатся с ошибкой. Значение `thread_stack` по умолчанию — 1M (1048576); другие значения должны быть настроены.
-* `tid` и `tid_saved`: представляют состояние сохранения таблицы. `tid` увеличивается при каждом изменении (транзакции). `tid_saved` показывает максимальный `tid` состояния, сохраненного в блоке ОЗУ в файле `<table>.ram`. Когда числа отличаются, некоторые изменения существуют только в ОЗУ и также поддерживаются binlog (если включен). Выполнение `FLUSH TABLE` или планирование периодической очистки сохраняет эти изменения. После очистки binlog очищается, и `tid_saved` представляет новое актуальное состояние.
-* `query_time_*`, `exact_query_time_*`: статистика времени выполнения запросов за последние 1 минуту, 5 минут, 15 минут и всего с момента запуска сервера; данные инкапсулированы как JSON-объект, включающий количество запросов и минимальные, максимальные, средние, 95-й и 99-й перцентили.
-* `found_rows_*`: статистика найденных строк по запросам; предоставляется за последние 1 минуту, 5 минут, 15 минут и всего с момента запуска сервера; данные инкапсулированы как JSON-объект, включающий количество запросов и минимальные, максимальные, средние, 95-й и 99-й перцентили.
-* `command_*`: счетчики общего количества успешных выполнений конкретной команды для этой таблицы.
-* `search_stats_ms_*`: статистика времени выполнения (в миллисекундах) поисковых запросов. Звездочка (*) указывает временной интервал (например, 1min, 5min, 15min, total). Эти статистики рассчитываются по скользящим окнам 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й перцентили времени запросов.
-* `insert_replace_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов вставки и замены. Звездочка (*) указывает временной интервал (например, 1min, 5min, 15min, total). Эти статистики рассчитываются по скользящим окнам 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й перцентили времени запросов.
-* `update_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов обновления. Звездочка (*) указывает временной интервал (например, 1min, 5min, 15min, total). Эти статистики рассчитываются по скользящим окнам 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й перцентили времени запросов.
+* `mem_limit_rate`: отношение, при котором сегмент оперативной памяти будет сброшен как дисковый сегмент, например, если `rt_mem_limit` составляет 128M и отношение 50%, новый дисковый сегмент будет сохранен при превышении сегментом оперативной памяти 64M.
+* `ram_bytes_retired`: представляет размер мусора в сегментах оперативной памяти (например, удаленные или заменённые документы, еще не окончательно удалённые).
+* `optimizing`: значение больше 0 указывает, что таблица в настоящее время оптимизируется (т.е. сейчас происходит слияние некоторых дисковых сегментов).
+* `locked`: значение больше 0 указывает, что таблица в настоящее время заблокирована с помощью [FREEZE](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#Freezing-a-table). Число показывает, сколько раз таблица была заморожена. Например, таблица может быть заморожена `manticore-backup`, а затем снова заморожена репликацией. Полное размораживание происходит только тогда, когда ни один процесс больше не требует заморозки.
+* `max_stack_need`: объем стека, необходимый для расчёта самых сложных из сохранённых перколяторных запросов. Это динамическое значение, зависит от деталей сборки, таких как компилятор, оптимизация, оборудование и т.д.
+* `average_stack_base`: объем стека, который обычно занят в начале вычисления перколяторного запроса.
+* `desired_thread_stack`: сумма вышеперечисленных значений, округленная до значения, кратного 128 байтам. Если это значение больше `thread_stack`, выполнение `call pq` для этой таблицы может привести к ошибкам в некоторых сохранённых запросах. Значение по умолчанию `thread_stack` — 1М (1048576); другие значения должны быть настроены.
+* `tid` и `tid_saved`: отражают состояние сохранения таблицы. `tid` увеличивается при каждом изменении (транзакции). `tid_saved` показывает максимальный `tid` состояния, сохранённого в сегменте оперативной памяти в файле `<table>.ram`. Если числа отличаются, некоторые изменения существуют только в ОЗУ и также сохранены в binlog (если он включён). Выполнение `FLUSH TABLE` или плановое периодическое сбрасывание сохраняет эти изменения. После сброса binlog очищается, и `tid_saved` отображает новое фактическое состояние.
+* `query_time_*`, `exact_query_time_*`: статистика времени выполнения запросов за последние 1 минуту, 5 минут, 15 минут и с момента запуска сервера; данные представлены в виде JSON-объекта, включая количество запросов и параметры min, max, avg, 95-й и 99-й перцентили.
+* `found_rows_*`: статистика найденных запросами строк; предоставляется за последние 1 минуту, 5 минут, 15 минут и с начала работы сервера; данные представлены в виде JSON-объекта с количеством запросов и min, max, avg, 95-й и 99-й перцентили.
+* `command_*`: счётчики общего количества успешных выполнений конкретных команд для этой таблицы.
+* `search_stats_ms_*`: статистика времени выполнения (в миллисекундах) для поисковых запросов. Звездочка указывает временное окно (например, 1min, 5min, 15min, total). Эти статистики рассчитываются за скользящие окна в 1, 5 и 15 минут, показывая среднее, минимальное, максимальное значения и значения 95-го/99-го процентилей для времени запросов. Для распределенных таблиц эти значения отражают совокупный вклад локальных и удаленных таблиц и могут быть выше, чем на уровне отдельного узла.
+* `insert_replace_stats_ms_*`: статистика времени выполнения (в миллисекундах) запросов вставки и замены. `*` указывает временное окно (например, 1min, 5min, 15min, total). Эти статистики рассчитываются на скользящих окнах в 1, 5 и 15 минут, показывая среднее, минимальное, максимальное и значения 95-го/99-го перцентилей времени выполнения запросов.
+* `update_stats_ms_*`: статистика времени выполнения (в миллисекундах) обновляющих запросов. `*` указывает временное окно (например, 1min, 5min, 15min, total). Эти статистики рассчитываются на скользящих окнах в 1, 5 и 15 минут, показывая среднее, минимальное, максимальное и значения 95-го/99-го перцентилей времени выполнения запросов.
 
 <!-- intro -->
 ##### SQL:
@@ -127,271 +127,6 @@ mysql> SHOW TABLE statistic STATUS;
 | update_stats_ms_pct99         | 0.530 0.530 0.530                                                        |
 +-------------------------------+--------------------------------------------------------------------------+
 29 rows in set (0.00 sec)
-```
-
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW TABLE t STATUS"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Variable_name": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Variable_name": "table_type",
-        "Value": "rt"
-      },
-      {
-        "Variable_name": "indexed_documents",
-        "Value": "5"
-      },
-      {
-        "Variable_name": "indexed_bytes",
-        "Value": "28"
-      },
-      {
-        "Variable_name": "ram_bytes",
-        "Value": "23400"
-      },
-      {
-        "Variable_name": "disk_bytes",
-        "Value": "1969"
-      },
-      {
-        "Variable_name": "disk_mapped",
-        "Value": "196"
-      },
-      {
-        "Variable_name": "disk_mapped_cached",
-        "Value": "16384"
-      },
-      {
-        "Variable_name": "disk_mapped_doclists",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "disk_mapped_cached_doclists",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "disk_mapped_hitlists",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "disk_mapped_cached_hitlists",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "killed_documents",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "killed_rate",
-        "Value": "0.00%"
-      },
-      {
-        "Variable_name": "ram_chunk",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "ram_chunk_segments_count",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "disk_chunks",
-        "Value": "1"
-      },
-      {
-        "Variable_name": "mem_limit",
-        "Value": "134217728"
-      },
-      {
-        "Variable_name": "mem_limit_rate",
-        "Value": "95.00%"
-      },
-      {
-        "Variable_name": "ram_bytes_retired",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "optimizing",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "locked",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "tid",
-        "Value": "7"
-      },
-      {
-        "Variable_name": "tid_saved",
-        "Value": "7"
-      },
-      {
-        "Variable_name": "query_time_1min",
-        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
-      },
-      {
-        "Variable_name": "query_time_5min",
-        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
-      },
-      {
-        "Variable_name": "query_time_15min",
-        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
-      },
-      {
-        "Variable_name": "query_time_total",
-        "Value": "{\"queries\":30, \"avg_sec\":0.324, \"min_sec\":0.051, \"max_sec\":1.718, \"pct95_sec\":1.017, \"pct99_sec\":1.718}"
-      },
-      {
-        "Variable_name": "found_rows_1min",
-        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
-      },
-      {
-        "Variable_name": "found_rows_5min",
-        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
-      },
-      {
-        "Variable_name": "found_rows_15min",
-        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
-      },
-      {
-        "Variable_name": "found_rows_total",
-        "Value": "{\"queries\":30, \"avg\":2, \"min\":0, \"max\":5, \"pct95\":5, \"pct99\":5}"
-      },
-      {
-        "Variable_name": "command_search",
-        "Value": "30"
-      },
-      {
-        "Variable_name": "command_excerpt",
-        "Value": "3"
-      },
-      {
-        "Variable_name": "command_update",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "command_keywords",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "command_status",
-        "Value": "1"
-      },
-      {
-        "Variable_name": "command_delete",
-        "Value": "1"
-      },
-      {
-        "Variable_name": "command_insert",
-        "Value": "6"
-      },
-      {
-        "Variable_name": "command_replace",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "command_commit",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "command_suggest",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "command_callpq",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "command_getfield",
-        "Value": "0"
-      },
-      {
-        "Variable_name": "insert_replace_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "insert_replace_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "insert_replace_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "insert_replace_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "insert_replace_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "search_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "search_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "search_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "search_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "search_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "update_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "update_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "update_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "update_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Variable_name": "update_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      }
-    ],
-    "total": 58,
-    "error": "",
-    "warning": ""
-  }
-]
 ```
 
 <!-- intro -->

@@ -2,9 +2,9 @@
 
 <!-- example highlighting -->
 
-Подсветка позволяет получать выделенные фрагменты текста (называемые сниппетами) из документов, содержащих совпадающие ключевые слова.
+Подсветка позволяет получить выделенные фрагменты текста (называемые сниппетами) из документов, содержащих совпадающие ключевые слова.
 
-Функция SQL `HIGHLIGHT()`, свойство `"highlight"` в JSON-запросах через HTTP и функция `highlight()` в PHP-клиенте используют встроенное хранилище документов для получения оригинального содержимого поля (включено по умолчанию).
+Функция SQL `HIGHLIGHT()`, свойство `"highlight"` в JSON-запросах через HTTP и функция `highlight()` в PHP-клиенте используют встроенное хранилище документов для получения исходного содержимого поля (включено по умолчанию).
 
 <!-- intro -->
 ##### SQL:
@@ -328,7 +328,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 					"<b>Text 1</b>"
 				]
 			}
-		}]
+		]}
 	}
 }
 ```
@@ -337,22 +337,22 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 При использовании SQL для подсветки результатов поиска вы получите сниппеты из различных полей, объединённые в одну строку из-за ограничений протокола MySQL. Вы можете настроить разделители конкатенации с помощью опций `field_separator` и `snippet_separator`, как описано ниже.
 
-При выполнении JSON-запросов через HTTP или использовании PHP-клиента таких ограничений нет, и результирующий набор включает массив полей, содержащих массивы сниппетов (без разделителей).
+При выполнении JSON-запросов через HTTP или использовании PHP-клиента таких ограничений нет, и набор результатов включает массив полей, содержащих массивы сниппетов (без разделителей).
 
-Имейте в виду, что опции генерации сниппетов, такие как `limit`, `limit_words` и `limit_snippets`, по умолчанию применяются к каждому полю отдельно. Вы можете изменить это поведение с помощью опции `limits_per_field`, но это может привести к нежелательным результатам. Например, в одном поле могут быть совпадающие ключевые слова, но сниппеты из этого поля не будут включены в результат, потому что они не получили такой высокий рейтинг, как сниппеты из других полей в механизме подсветки.
+Учтите, что параметры генерации сниппетов, такие как `limit`, `limit_words` и `limit_snippets`, применяются по умолчанию к каждому полю отдельно. Вы можете изменить это поведение с помощью опции `limits_per_field`, но это может привести к нежелательным результатам. Например, в одном поле могут быть совпадающие ключевые слова, но сниппеты из него не будут включены в результат, если они не набрали высокий рейтинг по сравнению со сниппетами из других полей в движке подсветки.
 
-Алгоритм подсветки в настоящее время отдаёт приоритет лучшим сниппетам (с более точными совпадениями фраз), а затем сниппетам с ключевыми словами, ещё не включёнными в результат. В целом, он стремится выделить лучшее совпадение для запроса и выделить все ключевые слова запроса в пределах установленных ограничений. Если в текущем поле совпадений не найдено, начало документа будет обрезано согласно ограничениям и возвращено по умолчанию. Чтобы вернуть пустую строку вместо этого, установите опцию `allow_empty` в 1.
+Алгоритм подсветки в настоящее время отдает приоритет лучшим сниппетам (с более близкими совпадениями фраз), а затем сниппетам с ключевыми словами, которые еще не включены в результат. В общем, он стремится выделить лучшее совпадение для запроса и подсветить все ключевые слова запроса, насколько это разрешено лимитами. Если в текущем поле совпадений не найдено, начало документа будет обрезано в соответствии с лимитами и возвращено по умолчанию. Чтобы вернуть пустую строку вместо этого, установите опцию `allow_empty` в 1.
 
-Подсветка выполняется на так называемом этапе `post limit`, что означает, что генерация сниппетов откладывается не только до подготовки всего итогового набора результатов, но и после применения оператора LIMIT. Например, с оператором LIMIT 20,10 функция `HIGHLIGHT()` будет вызвана максимум 10 раз.
+Подсветка выполняется на так называемом этапе `post limit`, что означает, что генерация сниппетов откладывается не только до подготовки всего финального набора результатов, но и после применения клаузы LIMIT. Например, с клаузой LIMIT 20,10 функция `HIGHLIGHT()` будет вызвана максимум 10 раз.
 
-## Опции подсветки
+## Параметры подсветки
 
 <!-- example highlighting options -->
 
-Существует несколько дополнительных опций подсветки, которые можно использовать для тонкой настройки генерации сниппетов, общих для SQL, HTTP и PHP клиентов.
+Существует несколько дополнительных параметров подсветки, которые можно использовать для тонкой настройки генерации сниппетов. Они общие для SQL, HTTP и PHP клиентов.
 
 #### before_match
-Строка, вставляемая перед совпадением ключевого слова. В этой строке можно использовать макрос `%SNIPPET_ID%`. Первое вхождение макроса заменяется на увеличивающийся номер сниппета внутри текущего сниппета. Нумерация начинается с 1 по умолчанию, но может быть переопределена опцией `start_snippet_id`. %SNIPPET_ID% сбрасывается в начале каждого нового документа. Значение по умолчанию — `<b>`.
+Строка, вставляемая перед совпадением ключевого слова. В этой строке можно использовать макрос `%SNIPPET_ID%`. Первое вхождение макроса заменяется на увеличивающийся номер сниппета в пределах текущего сниппета. Нумерация начинается с 1 по умолчанию, но может быть переопределена опцией `start_snippet_id`. `%SNIPPET_ID%` сбрасывается в начале каждого нового документа. Значение по умолчанию — `<b>`.
 
 #### after_match
 Строка, вставляемая после совпадения ключевого слова. Значение по умолчанию — `</b>`.
@@ -361,42 +361,42 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 Максимальный размер сниппета в символах (кодовых точках). Значение по умолчанию — 256. Применяется по умолчанию к каждому полю отдельно, см. `limits_per_field`.
 
 #### limit_words
-Ограничивает максимальное количество слов, которые могут быть включены в результат. Обратите внимание, что это ограничение применяется ко всем словам, а не только к совпадающим ключевым словам для подсветки. Например, если подсвечивается `Mary` и выбран сниппет `Mary had a little lamb`, он учитывается как 5 слов, а не 1. Значение по умолчанию — 0 (без ограничений). Применяется по умолчанию к каждому полю отдельно, см. `limits_per_field`.
+Ограничивает максимальное количество слов, которое может быть включено в результат. Обратите внимание, что это ограничение применяется ко всем словам, а не только к совпавшим ключевым словам для подсветки. Например, если подсвечивается `Mary` и выбран сниппет `Mary had a little lamb`, то это включает 5 слов в этот лимит, а не только 1. Значение по умолчанию — 0 (без ограничений). Применяется по умолчанию к каждому полю отдельно, см. `limits_per_field`.
 
 #### limit_snippets
 Ограничивает максимальное количество сниппетов, которые могут быть включены в результат. Значение по умолчанию — 0 (без ограничений). Применяется по умолчанию к каждому полю отдельно, см. `limits_per_field`.
 
 #### limits_per_field
-Определяет, применяются ли `limit`, `limit_words` и `limit_snippets` как индивидуальные ограничения для каждого поля документа, подсвечиваемого, или как глобальные ограничения для всего документа. Установка этой опции в 0 означает, что все объединённые результаты подсветки для одного документа должны укладываться в указанные ограничения. Недостаток в том, что вы можете получить несколько подсвеченных сниппетов в одном поле и ни одного в другом, если механизм подсветки решит, что они более релевантны. Значение по умолчанию — 1 (использовать ограничения по полям).
+Определяет, работают ли `limit`, `limit_words` и `limit_snippets` как индивидуальные ограничения в каждом поле документа, который подсвечивается, или как глобальные ограничения на весь документ. Установка этой опции в 0 означает, что все объединённые результаты подсветки для одного документа должны укладываться в указанные лимиты. Недостаток этого в том, что вы можете получить несколько подсвеченных сниппетов в одном поле и ни одного в другом, если движок подсветки решит, что они релевантнее. Значение по умолчанию — 1 (использовать лимиты на поле).
 #### around
-Количество слов, выбираемых вокруг каждого блока совпадающих ключевых слов. Значение по умолчанию — 5.
+Количество слов, выбираемых вокруг каждого блока с совпадающим ключевым словом. Значение по умолчанию — 5.
 
 #### use_boundaries
-Определяет, следует ли дополнительно разбивать сниппеты по символам границ фраз, как настроено в параметрах таблицы с помощью директивы [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary). Значение по умолчанию — 0 (не использовать границы).
+Определяет, следует ли дополнительно разбивать сниппеты по границам фраз, как настроено в параметрах таблицы с использованием директивы [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary). Значение по умолчанию — 0 (не использовать границы).
 
 #### weight_order
-Указывает, сортировать ли извлечённые сниппеты по релевантности (по убыванию веса) или по порядку появления в документе (по возрастанию позиции). Значение по умолчанию — 0 (не использовать сортировку по весу).
+Задает порядок сортировки извлечённых сниппетов: по релевантности (убывание веса) или по порядку появления в документе (возрастание позиции). Значение по умолчанию — 0 (не использовать сортировку по весу).
 
 #### force_all_words
-Игнорирует ограничение по длине до тех пор, пока результат не будет включать все ключевые слова. Значение по умолчанию — 0 (не принуждать к включению всех ключевых слов).
+Игнорирует лимит длины до тех пор, пока в результате не будут включены все ключевые слова. Значение по умолчанию — 0 (не заставлять включать все ключевые слова).
 
 #### start_snippet_id
 Устанавливает начальное значение макроса `%SNIPPET_ID%` (который обнаруживается и расширяется в строках `before_match`, `after_match`). Значение по умолчанию — 1.
 
 #### html_strip_mode
-Определяет режим удаления HTML. По умолчанию — `index`, что означает использование настроек таблицы. Другие значения включают `none` и `strip`, которые принудительно пропускают или применяют удаление независимо от настроек таблицы; и `retain`, который сохраняет HTML-разметку и защищает её от подсветки. Режим `retain` можно использовать только при подсветке полных документов, поэтому он требует отсутствия ограничений по размеру фрагментов. Допустимые строковые значения: `none`, `strip`, `index` и `retain`.
+Определяет режим удаления HTML-разметки. По умолчанию `index`, что означает использование настроек таблицы. Другие значения: `none` и `strip`, которые принудительно пропускают или применяют удаление независимо от настроек таблицы; и `retain`, который сохраняет HTML-разметку и защищает её от выделения. Режим `retain` можно использовать только при выделении полных документов и, следовательно, требует, чтобы не были установлены ограничения на размер сниппетов. Допустимые строковые значения: `none`, `strip`, `index` и `retain`.
 
 #### allow_empty
-Позволяет возвращать пустую строку как результат подсветки, если в текущем поле не удалось сгенерировать фрагменты (нет совпадений по ключевым словам или фрагменты не помещаются в лимит). По умолчанию вместо пустой строки возвращается начало исходного текста. Значение по умолчанию — 0 (не разрешать пустой результат).
+Разрешает возвращать пустую строку в качестве результата выделения, когда для текущего поля не удалось сгенерировать сниппеты (нет совпадения ключевых слов или сниппеты не укладываются в ограничение). По умолчанию вместо пустой строки возвращается начало исходного текста. Значение по умолчанию — 0 (не разрешать пустой результат).
 
 #### snippet_boundary
-Обеспечивает, что фрагменты не пересекают границы предложения, абзаца или зоны (когда используется таблица с соответствующими включёнными настройками индексации). Допустимые значения: `sentence`, `paragraph` и `zone`.
+Гарантирует, что сниппеты не пересекают границы предложения, абзаца или зоны (при использовании с таблицей, у которой включены соответствующие настройки индексации). Допустимые значения: `sentence`, `paragraph` и `zone`.
 
 #### emit_zones
-Вставляет HTML-тег с именем окружающей зоны перед каждым фрагментом. Значение по умолчанию — 0 (не вставлять имена зон).
+Добавляет HTML-тег с именем охватывающей зоны перед каждым сниппетом. По умолчанию 0 (не добавлять имена зон).
 
 #### force_snippets
-Определяет, будет ли принудительно генерироваться набор фрагментов, даже если лимиты позволяют подсветить весь текст целиком. Значение по умолчанию — 0 (не принуждать генерацию фрагментов).
+Определяет, следует ли принудительно генерировать сниппеты, даже если ограничения позволяют выделить весь текст. По умолчанию 0 (не принуждать к генерации сниппетов).
 
 <!-- intro -->
 ##### SQL:
@@ -830,27 +830,16 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 
-## Подсветка через SQL
+## Выделение через SQL
 
-Функция `HIGHLIGHT()` может использоваться для подсветки результатов поиска. Вот синтаксис:
+Функция `HIGHLIGHT()` может использоваться для выделения результатов поиска. Вот её синтаксис:
 
 ```sql
 HIGHLIGHT([options], [field_list], [query] )
 ```
 
-<!--
-данные для следующих примеров:
-
-DROP TABLE IF EXISTS books;
-CREATE TABLE books(title text, content text);
-INSERT INTO books(title, content) VALUES
-('Book one', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.'),
-('Book two', 'A door opened before them, revealing a small room.'),
-('Book five', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.');
--->
-
 <!-- example highlight() no args -->
-По умолчанию функция работает без аргументов.
+По умолчанию она работает без аргументов.
 
 <!-- intro -->
 ##### SQL:
@@ -871,49 +860,11 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 1 row in set (0.00 sec)
 ```
 
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "before"}
-  },
-  "highlight": {},
-  "_source": ""
-}
-```
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1747,
-        "_source": {},
-        "highlight": {
-          "content": [
-            "A door opened <b>before</b> them, revealing a small room."
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() field syntax -->
 
-`HIGHLIGHT()` извлекает все доступные полнотекстовые поля из хранилища документов и подсвечивает их на основе предоставленного запроса. В запросах поддерживается синтаксис полей. Текст полей разделяется `field_separator`, который можно изменить в опциях.
+`HIGHLIGHT()` извлекает все доступные полнотекстовые поля из хранилища документов и выделяет их в соответствии с предоставленным запросом. Поддерживается синтаксис полей в запросах. Текст полей разделяется с помощью `field_separator`, который можно изменить в опциях.
 
 <!-- intro -->
 ##### SQL:
@@ -934,49 +885,10 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 1 row in set (0.00 sec)
 ```
 
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-```json
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"title": "one"}
-  },
-  "highlight": {},
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>one</b>"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() options -->
-Опциональный первый аргумент в `HIGHLIGHT()` — список опций.
+Необязательный первый аргумент в `HIGHLIGHT()` — это список опций.
 
 <!-- intro -->
 ##### SQL:
@@ -997,52 +909,11 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 1 row in set (0.00 sec)
 ```
 
-
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"title": "one"}
-  },
-  "highlight": {
-    "before_match": "[match]",
-    "after_match": "[/match]"
-  },
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book [match]one[/match]"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() field list -->
 
-Опциональный второй аргумент — строка, содержащая одно поле или список полей, разделённых запятой. Если этот аргумент присутствует, из хранилища документов извлекаются и подсвечиваются только указанные поля. Пустая строка во втором аргументе означает «извлечь все доступные поля».
+Необязательный второй аргумент — это строка, содержащая одно поле или список полей, разделённых запятыми. Если этот аргумент присутствует, из хранилища документов будут извлечены и выделены только указанные поля. Пустая строка в качестве второго аргумента означает "извлечь все доступные поля".
 
 <!-- intro -->
 ##### SQL:
@@ -1064,67 +935,11 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 2 rows in set (0.00 sec)
 ```
 
-
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "one|robots"}
-  },
-  "highlight": {
-    "fields": ["title", "content"]
-  },
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 2,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>one</b>"
-          ],
-          "content": [
-            "They followed Bander. The <b>robots</b> remained at a polite distance, but their presence was a constantly felt threat."
-          ]
-        }
-      },
-      {
-        "_id": 5,
-        "_score": 1557,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book five"
-          ],
-          "content": [
-            "Bander ushered all three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander gestured the other <b>robots</b> away and entered itself. The door closed behind it."
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() string attr -->
 
-В качестве альтернативы, второй аргумент может задавать строковый атрибут или имя поля без кавычек. В этом случае переданный текст подсвечивается относительно запроса, но синтаксис полей игнорируется.
+В качестве альтернативы, вы можете использовать второй аргумент для указания строкового атрибута или имени поля без кавычек. В этом случае предоставленная строка будет выделена в соответствии с запросом, но синтаксис полей будет проигнорирован.
 
 <!-- intro -->
 ##### SQL:
@@ -1146,50 +961,11 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 2 rows in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "one"}
-  },
-  "highlight": {
-    "fields": ["title"]
-  },
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>one</b>"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() query -->
 
-Опциональный третий аргумент — это запрос. Он используется для подсветки результатов поиска относительно запроса, отличного от того, что использовался для самого поиска.
+Необязательный третий аргумент — это запрос. Он используется для выделения результатов поиска по запросу, отличному от того, который использовался для поиска.
 
 <!-- intro -->
 ##### SQL:
@@ -1211,63 +987,11 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 2 rows in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "one"}
-  },
-  "highlight": {
-    "fields": ["title"],
-    "highlight_query": {
-      "match": { "*": "five" }
-    }
-  },
-  "_source": [""]
-}
-
-```
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 2,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book one"
-          ]
-        }
-      },
-      {
-        "_id": 5,
-        "_score": 1557,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>five</b>"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example HIGHLIGHT TO_STRING -->
 
-Хотя `HIGHLIGHT()` предназначена для работы с полнотекстовыми полями и строковыми атрибутами, её также можно использовать для подсветки произвольного текста. Учтите, что если запрос содержит операторы поиска по полям (например, `@title hello @body world`), то часть с указанием поля в этом случае игнорируется.
+Хотя `HIGHLIGHT()` предназначена для работы с хранимыми полнотекстовыми полями и строковыми атрибутами, её также можно использовать для выделения произвольного текста. Имейте в виду, что если запрос содержит какие-либо операторы поиска по полям (например, `@title hello @body world`), часть, относящаяся к полю, в этом случае игнорируется.
 
 <!-- intro -->
 ##### SQL:
@@ -1288,53 +1012,26 @@ SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books
 1 row in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books WHERE MATCH('@title one')"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        " highlight({},TO_STRING('some text to highlight'), 'highlight')": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        " highlight({},TO_STRING('some text to highlight'), 'highlight')": "some text to <b>highlight</b>"
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
-Несколько опций актуальны только при генерации одной строки в результате (а не массива фрагментов). Это относится исключительно к SQL-функции `HIGHLIGHT()`:
+Некоторые опции актуальны только при генерации одной строки в качестве результата (а не массива сниппетов). Это относится исключительно к SQL-функции `HIGHLIGHT()`:
 
 #### snippet_separator
-Строка для вставки между фрагментами. По умолчанию это ` ... `.
+Строка для вставки между сниппетами. По умолчанию ` ... `.
 #### field_separator
-Строка для вставки между полями. По умолчанию это `|`.
+Строка для вставки между полями. По умолчанию `|`.
 
 
-Другой способ выделить текст — использовать оператор [CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS). Он в основном дублирует функциональность `HIGHLIGHT()`, но не может использовать встроенное хранилище документов. Однако он может загружать исходный текст из файлов.
+Другой способ выделения текста — использование оператора [CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS). Он в основном дублирует функциональность `HIGHLIGHT()`, но не может использовать встроенное хранилище документов. Однако он может загружать исходный текст из файлов.
 
 
-## Подсветка через HTTP
+## Выделение через HTTP
 
 <!-- example highlight in JSON -->
 
-Для подсветки результатов полнотекстового поиска в JSON-запросах через HTTP содержимое полей должно храниться в хранилище документов (включено по умолчанию). В примере полнотекстовые поля `content` и `title` извлекаются из хранилища документов и подсвечиваются относительно запроса, указанного в разделе `query`.
+Для выделения результатов полнотекстового поиска в JSON-запросах через HTTP содержимое полей должно храниться в хранилище документов (включено по умолчанию). В примере полнотекстовые поля `content` и `title` извлекаются из хранилища документов и выделяются в соответствии с запросом, указанным в условии `query`.
 
-Подсвеченные фрагменты возвращаются в свойстве `highlight` массива `hits`.
+Выделенные сниппеты возвращаются в свойстве `highlight` массива `hits`.
 
 <!-- intro -->
 ##### JSON:
@@ -1663,7 +1360,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example highlight JSON all field  -->
 
-Чтобы подсветить все возможные поля, передайте пустой объект в качестве свойства `highlight`.
+Чтобы выделить все возможные поля, передайте пустой объект в качестве свойства `highlight`.
 
 <!-- intro -->
 ##### JSON:
@@ -1995,19 +1692,19 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-В дополнение к общим опциям подсветки, для JSON-запросов через HTTP доступны несколько синонимов:
+В дополнение к общим опциям выделения, для JSON-запросов через HTTP доступно несколько синонимов:
 
 #### fields
-Объект `fields` содержит имена атрибутов с опциями. Он также может быть массивом имен полей (без опций).
+Объект `fields` содержит имена атрибутов с опциями. Он также может быть массивом имен полей (без каких-либо опций).
 
-Обратите внимание, что по умолчанию попытка подсветить результаты основана на полнотекстовом запросе. В общем случае, если вы не указываете поля для подсветки, подсветка делается на основе вашего полнотекстового запроса. Однако если вы указываете поля для подсветки, подсветка происходит только если полнотекстовый запрос соответствует выбранным полям.
+Обратите внимание, что по умолчанию выделение пытается подсветить результаты в соответствии с полнотекстовым запросом. В общем случае, если вы не указываете поля для выделения, подсветка основывается на вашем полнотекстовом запросе. Однако, если вы указываете поля для выделения, подсветка происходит только если полнотекстовый запрос соответствует выбранным полям.
 
 #### encoder
-`encoder` может быть установлен в `default` или `html`. При установке в `html` сохраняется HTML-разметка при подсветке. Это работает аналогично опции `html_strip_mode=retain`.
+Параметр `encoder` может быть установлен в `default` или `html`. При установке в `html`, он сохраняет HTML-разметку при выделении. Это работает аналогично опции `html_strip_mode=retain`.
 
 <!-- example highlight_query -->
 #### highlight_query
-Опция `highlight_query` позволяет подсвечивать по запросу, отличному от вашего поискового запроса. Синтаксис такой же, как в основном `query`.
+Опция `highlight_query` позволяет выделять текст на основе запроса, отличного от вашего поискового запроса. Синтаксис такой же, как в основном `query`.
 
 <!-- intro -->
 ##### JSON:
@@ -2278,7 +1975,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example pre_tags  -->
 
 #### pre_tags и post_tags
-`pre_tags` и `post_tags` задают открывающие и закрывающие теги для подсвеченных фрагментов текста. Они работают аналогично опциям `before_match` и `after_match`. Эти параметры являются необязательными, с значениями по умолчанию `<b>` и `</b>`.
+`pre_tags` и `post_tags` устанавливают открывающие и закрывающие теги для выделенных фрагментов текста. Они функционируют аналогично опциям `before_match` и `after_match`. Эти параметры необязательны, значения по умолчанию — `<b>` и `</b>`.
 
 <!-- intro -->
 ##### JSON:
@@ -2549,7 +2246,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example no_match_size  -->
 #### no_match_size
-`no_match_size` работает аналогично опции `allow_empty`. Если установлено в 0, действует как `allow_empty=1`, позволяя вернуть пустую строку в качестве результата подсветки, когда фрагмент не может быть сгенерирован. В противном случае будет возвращено начало поля. Это опционально, значение по умолчанию равно 1.
+`no_match_size` функционирует аналогично опции `allow_empty`. Если установлено в 0, это действует как `allow_empty=1`, позволяя возвращать пустую строку в качестве результата выделения, когда фрагмент не может быть сгенерирован. В противном случае будет возвращено начало поля. Этот параметр необязателен, значение по умолчанию — 1.
 
 <!-- intro -->
 ##### JSON:
@@ -2811,7 +2508,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example order  -->
 #### order
-`order` задаёт порядок сортировки извлечённых фрагментов. Если установлено `"score"`, сортирует извлечённые фрагменты по релевантности. Это опционально и работает аналогично опции `weight_order`.
+`order` устанавливает порядок сортировки извлеченных фрагментов. Если установлено в `"score"`, извлеченные фрагменты сортируются по релевантности. Этот параметр необязателен и работает аналогично опции `weight_order`.
 
 <!-- intro -->
 ##### JSON:
@@ -3073,7 +2770,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example fragment_size -->
 #### fragment_size
-`fragment_size` задаёт максимальный размер фрагмента в символах. Может быть глобальным или для каждого поля. Опции для отдельных полей переопределяют глобальные. Это опционально, значение по умолчанию 256. Работает аналогично опции `limit`.
+`fragment_size` устанавливает максимальный размер фрагмента в символах. Он может быть глобальным или для каждого поля. Параметры для каждого поля переопределяют глобальные параметры. Это необязательный параметр со значением по умолчанию 256. Работает аналогично опции `limit`.
 
 <!-- intro -->
 ##### JSON:
@@ -3327,7 +3024,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example number_of_fragments -->
 #### number_of_fragments
-`number_of_fragments` ограничивает максимальное количество фрагментов в результате. Как и `fragment_size`, может быть глобальным или для каждого поля. Это опционально, значение по умолчанию 0 (без ограничений). Работает аналогично опции `limit_snippets`.
+`number_of_fragments` ограничивает максимальное количество фрагментов в результате. Как и `fragment_size`, может быть глобальным или для каждого поля. Это необязательный параметр со значением по умолчанию 0 (без ограничений). Работает аналогично опции `limit_snippets`.
 
 <!-- intro -->
 ##### JSON:
@@ -3588,7 +3285,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example highlight json per-field limits -->
 
 #### limit, limit_words, limit_snippets
-Опции `limit`, `limit_words` и `limit_snippets` могут задаваться как глобально, так и для отдельных полей. Глобальные опции используются как лимиты по умолчанию для полей, если не переопределены опциями для конкретных полей. В примере поле `title` подсвечивается с настройками лимита по умолчанию, а поле `content` использует другой лимит.
+Опции, такие как `limit`, `limit_words` и `limit_snippets`, могут быть установлены как глобальные или для каждого поля. Глобальные опции используются в качестве ограничений для каждого поля, если они не переопределены параметрами для каждого поля. В примере поле `title` выделяется с настройками лимита по умолчанию, в то время как поле `content` использует другой лимит.
 
 <!-- intro -->
 ##### JSON:
@@ -3856,7 +3553,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example highlight json global limits -->
 
 #### limits_per_field
-Глобальные лимиты также могут применяться при указании `limits_per_field=0`. Установка этой опции означает, что все комбинированные результаты подсветки должны находиться в пределах указанных лимитов. Недостаток в том, что вы можете получить несколько подсвеченных фрагментов в одном поле и ни одного — в другом, если движок подсветки сочтёт их более релевантными.
+Глобальные ограничения также могут быть применены путем указания `limits_per_field=0`. Установка этой опции означает, что все объединенные результаты выделения должны находиться в пределах указанных ограничений. Недостаток в том, что вы можете получить несколько выделенных фрагментов в одном поле и ни одного в другом, если механизм выделения решит, что они более релевантны.
 
 <!-- intro -->
 ##### JSON:
@@ -3912,10 +3609,11 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-{'aggregations': None,
+res =searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
 ```
 <!-- response Python -->
 ``` python
+{'aggregations': None,
  'hits': {'hits': [{u'_id': u'1',
                     u'_score': 1597,
                     u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
@@ -3926,16 +3624,16 @@ Highlight for content:
  'profile': None,
  'timed_out': False,
  'took': 0}
-res = await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
 
 ```
 
 <!-- request Python-asyncio -->
 ``` python
-{'aggregations': None,
+res = await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
 ```
 <!-- response Python-asyncio -->
 ``` python
+{'aggregations': None,
  'hits': {'hits': [{u'_id': u'1',
                     u'_score': 1597,
                     u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
@@ -3946,25 +3644,25 @@ res = await searchApi.search({"table":"books","query":{"match":{"content":"and f
  'profile': None,
  'timed_out': False,
  'took': 0}
-res =  await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
 
 ```
 
 <!-- request Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
+res =  await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
 ```
 <!-- response Javascript -->
 ``` javascript
-##### Java:
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
 
 ```
 <!-- intro -->
-searchRequest = new SearchRequest();
+##### Java:
 
 <!-- request Java -->
 
 ```java
+searchRequest = new SearchRequest();
 searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
@@ -3982,15 +3680,15 @@ highlight = new HashMap<String,Object>(){{
 }};
 searchRequest.setHighlight(highlight);
 searchResponse = searchApi.search(searchRequest);
-##### C#:
 ```
 
 <!-- intro -->
-var searchRequest = new SearchRequest("books");
+##### C#:
 
 <!-- request C# -->
 
 ```clike
+var searchRequest = new SearchRequest("books");
 searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
 var highlight = new Highlight();
 highlight.LimitsPerField = 0;
@@ -3998,15 +3696,15 @@ var highlightField = new HighlightField("title");
 highlight.Fields = new List<Object> {highlightField};
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
-##### Rust:
 ```
 
 <!-- intro -->
-let match_filter = HashMap::new();
+##### Rust:
 
 <!-- request Rust -->
 
 ```rust
+let match_filter = HashMap::new();
 match_filter.insert("*".to_string(), "one|robots".to_string());
 let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
@@ -4018,19 +3716,19 @@ let highlight = Highlight {
     limit_per_field: Some(serde_json::json!(false)),
     ..Default::default(),
 };
-let search_req = SearchRequest {
 
+let search_req = SearchRequest {
     table: "books".to_string(),
     query: Some(Box::new(query)),
     highlight: serde_json::json!(highlight),
     ..Default::default(),
 };
 let search_res = search_api.search(search_req).await;
-res = await searchApi.search({
 ```
 
 <!-- request TypeScript -->
 ``` typescript
+res = await searchApi.search({
   index: 'test',
   query: {
     match: {
@@ -4039,152 +3737,91 @@ res = await searchApi.search({
   },
   highlight: { limits_per_field: 0 }
 });
-matchClause := map[string]interface{} {"*": "Text 1"};
 ```
 
 <!-- request Go -->
 ``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
 query := map[string]interface{} {"match": matchClause};
 searchRequest.SetQuery(query);
 highlight := manticoreclient.NewHighlight()
 highlight.SetLimitsPerField(0)
 searchRequest.SetHighlight(highlight)
 res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
-## CALL SNIPPETS
 ```
 <!-- end -->
 
-The `CALL SNIPPETS` statement builds a snippet from provided data and query using specified table settings. It can't access built-in document storage, which is why it's recommended to use the [HIGHLIGHT() function](../Searching/Highlighting.md) instead.
+## CALL SNIPPETS
 
 <!-- example CALL SNIPPETS -->
 
-The syntax is:
+Оператор `CALL SNIPPETS` создает фрагмент из предоставленных данных и запроса, используя настройки указанной таблицы. Он не может обращаться к встроенному хранилищу документов, поэтому рекомендуется использовать вместо него [функцию HIGHLIGHT()](../Searching/Highlighting.md).
 
-CALL SNIPPETS(data, table, query[, opt_value AS opt_name[, ...]])
+Синтаксис:
 
 ```sql
-#### data
+CALL SNIPPETS(data, table, query[, opt_value AS opt_name[, ...]])
 ```
 
-`data` serves as the source from which a snippet is extracted. It can either be a single string or a list of strings enclosed in curly brackets.
+#### data
+`data` служит источником, из которого извлекается фрагмент. Это может быть либо одна строка, либо список строк, заключенных в фигурные скобки.
 #### table
-`table` refers to the name of the table that provides the text processing settings for snippet generation.
+`table` относится к имени таблицы, которая предоставляет настройки обработки текста для генерации фрагментов.
 #### query
-`query` is the full-text query used to build the snippets.
-#### opt_value and opt_name
-`opt_value` and `opt_name` represent the [snippet generation options](../Searching/Highlighting.md).
-##### SQL:
+`query` — это полнотекстовый запрос, используемый для построения фрагментов.
+#### opt_value и opt_name
+`opt_value` и `opt_name` представляют [опции генерации фрагментов](../Searching/Highlighting.md).
 
 <!-- intro -->
-CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit);
+##### SQL:
 <!-- request SQL -->
 
 ```sql
-+----------------------------------------+
+CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit);
 ```
 <!-- response SQL -->
 ```sql
++----------------------------------------+
 | snippet                                |
 +----------------------------------------+
 | this <b>is</b> my document <b>text</b> |
 | this <b>is</b> my another <b>text</b>  |
 +----------------------------------------+
 2 rows in set (0.02 sec)
-POST /sql?mode=raw -d "CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit)"
-```
-
-<!-- request JSON -->
-```JSON
-[
-```
-<!-- response JSON -->
-```JSON
-  {
-    "columns": [
-      {
-        "snippet": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "snippet": "this <b>is</b> my document <b>text</b>"
-      },
-      {
-        "snippet": "this <b>is</b> my another <b>text</b>"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-Most options are the same as in the [HIGHLIGHT() function](../Searching/Highlighting.md). There are, however, several options that can only be used with `CALL SNIPPETS`.
 ```
 
 <!-- end -->
 
-The following options can be used to highlight text stored in separate files:
+Большинство опций такие же, как в [функции HIGHLIGHT()](../Searching/Highlighting.md). Однако есть несколько опций, которые можно использовать только с `CALL SNIPPETS`.
 
 <!-- example CALL SNIPPETS load files -->
+Следующие опции можно использовать для подсветки текста, хранящегося в отдельных файлах:
+
 #### load_files
+Эта опция, при включении, рассматривает первый аргумент как имена файлов, а не данные для извлечения сниппетов. Указанные файлы на стороне сервера будут загружены для данных. Для параллелизации работы при включении этого флага будет использовано до [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) рабочих потоков на запрос. Значение по умолчанию — 0 (нет ограничения). Для распределения генерации сниппетов между удалёнными агентами, вызывайте генерацию сниппетов в распределённой таблице, содержащей только одного(!) локального агента и нескольких удалённых. Опция [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) используется для генерации итогового имени файла. Например, если searchd сконфигурирован с `snippets_file_prefix = /var/data_`, а в качестве имени файла предоставлен `text.txt`, сниппеты будут сгенерированы из содержимого файла `/var/data_text.txt`.
 
-This option, when enabled, treats the first argument as file names instead of data to extract snippets from. The specified files on the server side will be loaded for data. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents, invoke snippets generation in a distributed table containing only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) option is used to generate the final file name. For example, when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
 #### load_files_scattered
+Эта опция работает только с распределённой генерацией сниппетов с удалёнными агентами. Исходные файлы для генерации сниппетов могут быть распределены между разными агентами, и основной сервер объединит все безошибочные результаты. Например, если у одного агента распределённой таблицы есть `file1.txt`, у другого — `file2.txt`, и вы используете `CALL SNIPPETS` с обоими этими файлами, searchd объединит результаты агентов, так что вы получите результаты как из `file1.txt`, так и из `file2.txt`. Значение по умолчанию — 0.
 
-This option only works with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents, and the main server will merge all non-erroneous results. For example, if one agent of the distributed table has `file1.txt`, another agent has `file2.txt`, and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
-If the `load_files` option is also enabled, the request will return an error if any of the files is not available anywhere. Otherwise (if `load_files` is not enabled), it will return empty strings for all absent files. Searchd does not pass this flag to agents, so agents do not generate a critical error if the file does not exist. If you want to be sure that all source files are loaded, set both `load_files_scattered` and `load_files` to 1. If the absence of some source files on some agent is not critical, set only `load_files_scattered` to 1.
-
-##### SQL:
+Если опция `load_files` также включена, запрос вернёт ошибку, если какой-либо из файлов недоступен где-либо. Иначе (если `load_files` не включена), для всех отсутствующих файлов будут возвращены пустые строки. Searchd не передаёт этот флаг агентам, поэтому агенты не будут генерировать критическую ошибку, если файл не существует. Если вы хотите быть уверены, что все исходные файлы загружены, установите обе опции `load_files_scattered` и `load_files` в 1. Если отсутствие некоторых исходных файлов на некоторых агентах некритично, установите только `load_files_scattered` в 1.
 
 <!-- intro -->
-CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files);
+##### SQL:
 <!-- request SQL -->
 
 ```sql
-+----------------------------------------+
+CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files);
 ```
 
 <!-- response SQL -->
 ```
++----------------------------------------+
 | snippet                                |
 +----------------------------------------+
 | this <b>is</b> my document <b>text</b> |
 | this <b>is</b> my another <b>text</b>  |
 +----------------------------------------+
 2 rows in set (0.02 sec)
-POST /sql?mode=raw -d "CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files)"
-```
-
-<!-- request JSON -->
-```JSON
-[
-```
-<!-- response JSON -->
-```JSON
-  {
-    "columns": [
-      {
-        "snippet": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "snippet": "this <b>is</b> my document <b>text</b>"
-      },
-      {
-        "snippet": "this <b>is</b> my another <b>text</b>"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-]
 ```
 
 <!-- end -->

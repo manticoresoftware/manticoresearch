@@ -2,9 +2,9 @@
 
 <!-- example highlighting -->
 
-高亮显示使您能够从包含匹配关键字的文档中获取高亮的文本片段（称为摘要）。
+高亮显示使您能够从包含匹配关键词的文档中获取高亮的文本片段（称为片段）。
 
-SQL 中的 `HIGHLIGHT()` 函数、通过 HTTP 的 JSON 查询中的 `"highlight"` 属性以及 PHP 客户端中的 `highlight()` 函数都利用内置的文档存储来检索原始字段内容（默认启用）。
+SQL 中的 `HIGHLIGHT()` 函数，通过 HTTP 的 JSON 查询中的 `"highlight"` 属性，以及 PHP 客户端中的 `highlight()` 函数，均利用内置的文档存储来检索原始字段内容（默认启用）。
 
 <!-- intro -->
 ##### SQL:
@@ -328,75 +328,75 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 					"<b>Text 1</b>"
 				]
 			}
-		}]
+		]}
 	}
 }
 ```
 
 <!-- end -->
 
-使用 SQL 进行高亮搜索结果时，由于 MySQL 协议的限制，您将收到来自多个字段的摘要合并成的单个字符串。您可以通过下面详细说明的 `field_separator` 和 `snippet_separator` 选项调整连接分隔符。
+当使用 SQL 进行搜索结果高亮时，由于 MySQL 协议的限制，您将从多个字段接收合并为单个字符串的片段。您可以通过下面详细说明的 `field_separator` 和 `snippet_separator` 选项调整拼接分隔符。
 
-通过 HTTP 执行 JSON 查询或使用 PHP 客户端时，没有此类限制，结果集包含字段数组，每个字段包含摘要数组（无分隔符）。
+当通过 HTTP 执行 JSON 查询或使用 PHP 客户端时，没有此类限制，结果集将包含一个字段数组，每个字段包含片段数组（无分隔符）。
 
-请注意，摘要生成选项如 `limit`、`limit_words` 和 `limit_snippets` 默认分别应用于每个字段。您可以使用 `limits_per_field` 选项更改此行为，但可能导致不希望的结果。例如，一个字段可能包含匹配关键字，但由于该字段的摘要排名不如其他字段，结果集中不包含该字段的摘要。
+请注意，生成片段的选项如 `limit`、`limit_words` 和 `limit_snippets` 默认是针对每个字段单独生效的。您可以通过 `limits_per_field` 选项更改此行为，但这可能导致不希望出现的结果。例如，某个字段有匹配的关键词，但因高亮引擎中该字段的片段排名不如其他字段高，导致该字段的片段未包含在结果集中。
 
-高亮算法当前优先考虑更好的摘要（短语匹配更接近），然后是包含尚未包含关键字的摘要。通常，它旨在突出显示查询的最佳匹配，并尽可能突出显示所有查询关键字（受限于限制）。如果当前字段中未找到匹配项，则默认根据限制修剪文档开头并返回。若要返回空字符串，请将 `allow_empty` 选项设置为 1。
+当前的高亮算法优先考虑更好的片段（具有更接近的短语匹配），其次是包含当前结果中尚未出现的关键词的片段。通常，它旨在高亮查询的最佳匹配，并高亮全部查询关键词（受限制条件允许）。如果当前字段没有匹配，则根据限制剪裁文档开头并返回默认内容。若想返回空字符串，请将 `allow_empty` 选项设置为 1。
 
-高亮是在所谓的“后限制”阶段执行的，这意味着摘要生成不仅推迟到整个最终结果集准备好之后，还推迟到应用 LIMIT 子句之后。例如，对于 LIMIT 20,10 子句，`HIGHLIGHT()` 函数最多调用 10 次。
+高亮是在所谓的 `post limit` 阶段执行的，这意味着片段生成被推迟，不仅直到整个最终结果集准备好，而且在应用 LIMIT 子句之后。例如，使用 LIMIT 20,10 子句时，`HIGHLIGHT()` 函数最多会被调用 10 次。
 
 ## 高亮选项
 
 <!-- example highlighting options -->
 
-有几个可选的高亮选项可用于微调摘要生成，这些选项在 SQL、HTTP 和 PHP 客户端中通用。
+有若干可选高亮选项可用于微调片段生成，这些选项在 SQL、HTTP 和 PHP 客户端中通用。
 
 #### before_match
-在关键字匹配前插入的字符串。此字符串中可以使用 `%SNIPPET_ID%` 宏。宏的第一次出现会被替换为当前摘要内递增的摘要编号。编号默认从 1 开始，但可以通过 `start_snippet_id` 选项覆盖。%SNIPPET_ID% 在每个新文档开始时重置。默认值为 `<b>`。
+插入到关键词匹配前的字符串。此字符串中可以使用 `%SNIPPET_ID%` 宏。宏的第一次出现会被替换成当前片段内递增的片段编号。编号默认从 1 开始，但可用 `start_snippet_id` 选项覆盖。%SNIPPET_ID% 在每个新文档开头重新计数。默认值是 `<b>`。
 
 #### after_match
-在关键字匹配后插入的字符串。默认值为 `</b>`。
+插入到关键词匹配后的字符串。默认值是 `</b>`。
 
 #### limit
-摘要的最大大小，单位为符号（代码点）。默认值为 256。默认情况下此限制按字段应用，详见 `limits_per_field`。
+片段最大大小，单位为符号（代码点）。默认值是 256。默认情况下此限制针对每个字段单独应用，具体见 `limits_per_field`。
 
 #### limit_words
-限制结果中包含的最大单词数。请注意，此限制适用于所有单词，而不仅仅是要高亮的匹配关键字。例如，如果高亮 `Mary`，且选中的摘要为 `Mary had a little lamb`，则此摘要贡献了 5 个单词，而不仅仅是 1 个。默认值为 0（无限制）。默认情况下此限制按字段应用，详见 `limits_per_field`。
+限制结果中包含的最大单词数。注意此限制应用于所有单词，而不仅仅是要高亮的匹配关键词。例如，高亮 `Mary`，而选中的片段为 `Mary had a little lamb`，这将计入 5 个单词，而非仅 1。默认值是 0（无限制）。默认情况下此限制针对每个字段单独应用，具体见 `limits_per_field`。
 
 #### limit_snippets
-限制结果中包含的最大摘要数。默认值为 0（无限制）。默认情况下此限制按字段应用，详见 `limits_per_field`。
+限制结果中包含的最大片段数。默认值是 0（无限制）。默认情况下此限制针对每个字段单独应用，具体见 `limits_per_field`。
 
 #### limits_per_field
-确定 `limit`、`limit_words` 和 `limit_snippets` 是作为每个被高亮文档字段的单独限制，还是作为整个文档的全局限制。将此选项设置为 0 表示一个文档的所有合并高亮结果必须在指定限制内。缺点是如果高亮引擎认为某些字段的摘要更相关，可能会在一个字段中高亮多个摘要，而另一个字段中没有摘要。默认值为 1（使用每字段限制）。
+决定 `limit`、`limit_words` 和 `limit_snippets` 是在每个字段内分别独立限制，还是对整个文档作为全局限制。将此选项设置为 0 表示一个文档的所有合并高亮结果必须在指定限制内。缺点是如果高亮引擎判断某些片段更相关，某字段可能突出显示多个片段，而另一个字段可能没有片段。默认值是 1（使用每字段限制）。
 #### around
-在每个匹配关键字块周围选择的单词数。默认值为 5。
+每个匹配关键词块周围选择的单词数。默认值是 5。
 
 #### use_boundaries
-确定是否额外按短语边界字符拆分摘要，这些边界字符在表设置中通过 [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) 指令配置。默认值为 0（不使用边界）。
+决定是否通过在表设置中使用 [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) 指令配置的短语边界字符，额外拆分片段。默认值是 0（不使用边界）。
 
 #### weight_order
-指定是否按相关性（权重递减）排序提取的摘要，或按文档中出现顺序（位置递增）排序。默认值为 0（不使用权重排序）。
+指定是否按相关性（权重递减）排序提取的片段，或者按在文档中出现的顺序（位置递增）排序。默认值是 0（不使用权重排序）。
 
 #### force_all_words
-忽略长度限制，直到结果包含所有关键字。默认值为 0（不强制包含所有关键字）。
+忽略长度限制，直到结果包含所有关键词。默认值是 0（不强制包含所有关键词）。
 
 #### start_snippet_id
-设置 `%SNIPPET_ID%` 宏的起始值（该宏在 `before_match`、`after_match` 字符串中被检测并展开）。默认值为 1。
+设置 `%SNIPPET_ID%` 宏的起始值（该宏会在 `before_match`、`after_match` 字符串中被检测并展开）。默认值是 1。
 
 #### html_strip_mode
-定义了HTML剥离模式设置。默认为 `index`，意味着将使用表的设置。其他值包括 `none` 和 `strip`，无论表的设置如何，都强制跳过或应用剥离；以及 `retain`，保留HTML标记并保护其免受高亮。`retain` 模式只能在高亮完整文档时使用，因此要求未设置片段大小限制。允许的字符串值为 `none`、`strip`、`index` 和 `retain`。
+定义HTML剥离模式设置。默认为`index`，表示将使用表设置。其他值包括`none`和`strip`，它们会强制跳过或应用剥离，无视表设置；以及`retain`，它会保留HTML标记并保护其不被高亮。`retain`模式仅在高亮完整文档时可用，因此要求不设置任何片段大小限制。允许的字符串值为`none`、`strip`、`index`和`retain`。
 
 #### allow_empty
-允许在当前字段无法生成片段（没有关键词匹配或没有片段符合限制）时返回空字符串作为高亮结果。默认情况下，会返回原始文本的开头，而不是空字符串。默认值为0（不允许空结果）。
+当当前字段无法生成任何片段（无关键词匹配或无片段符合限制）时，允许返回空字符串作为高亮结果。默认情况下，将返回原始文本的开头而不是空字符串。默认值为0（不允许空结果）。
 
 #### snippet_boundary
-确保片段不跨越句子、段落或区域边界（当与启用了相应索引设置的表一起使用时）。允许的值为 `sentence`、`paragraph` 和 `zone`。
+确保片段不跨越句子、段落或区域边界（当与启用了相应索引设置的表一起使用时）。允许的值为`sentence`、`paragraph`和`zone`。
 
 #### emit_zones
-在每个片段之前发出包含区域名称的HTML标签。默认值为0（不发出区域名称）。
+在每个片段前输出一个包含包围区域名称的HTML标签。默认值为0（不输出区域名称）。
 
 #### force_snippets
-确定是否强制生成片段，即使限制允许高亮整个文本。默认值为0（不强制生成片段）。
+决定即使限制允许高亮整个文本时，是否强制生成片段。默认值为0（不强制生成片段）。
 
 <!-- intro -->
 ##### SQL:
@@ -832,25 +832,14 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ## 通过SQL进行高亮
 
-`HIGHLIGHT()` 函数可以用来高亮搜索结果。语法如下：
+`HIGHLIGHT()`函数可用于高亮搜索结果。语法如下：
 
 ```sql
 HIGHLIGHT([options], [field_list], [query] )
 ```
 
-<!--
-以下示例的数据：
-
-DROP TABLE IF EXISTS books;
-CREATE TABLE books(title text, content text);
-INSERT INTO books(title, content) VALUES
-('Book one', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.'),
-('Book two', 'A door opened before them, revealing a small room.'),
-('Book five', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.');
--->
-
 <!-- example highlight() no args -->
-默认情况下，不带任何参数工作。
+默认情况下，它无需参数即可工作。
 
 <!-- intro -->
 ##### SQL:
@@ -871,49 +860,11 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 1 row in set (0.00 sec)
 ```
 
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "before"}
-  },
-  "highlight": {},
-  "_source": ""
-}
-```
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1747,
-        "_source": {},
-        "highlight": {
-          "content": [
-            "A door opened <b>before</b> them, revealing a small room."
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() field syntax -->
 
-`HIGHLIGHT()` 从文档存储中检索所有可用的全文字段，并针对提供的查询对其进行高亮。支持查询中的字段语法。字段文本由 `field_separator` 分隔，该选项可以修改。
+`HIGHLIGHT()`从文档存储中检索所有可用的全文字段，并根据提供的查询对它们进行高亮。查询中的字段语法受支持。字段文本由`field_separator`分隔，该分隔符可在选项中修改。
 
 <!-- intro -->
 ##### SQL:
@@ -934,49 +885,10 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 1 row in set (0.00 sec)
 ```
 
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-```json
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"title": "one"}
-  },
-  "highlight": {},
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>one</b>"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() options -->
-`HIGHLIGHT()` 的可选第一个参数是选项列表。
+`HIGHLIGHT()`中的可选第一个参数是选项列表。
 
 <!-- intro -->
 ##### SQL:
@@ -997,52 +909,11 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 1 row in set (0.00 sec)
 ```
 
-
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"title": "one"}
-  },
-  "highlight": {
-    "before_match": "[match]",
-    "after_match": "[/match]"
-  },
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book [match]one[/match]"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() field list -->
 
-可选的第二个参数是包含单个字段或以逗号分隔字段列表的字符串。如果存在此参数，则仅从文档存储中获取指定字段并进行高亮。第二个参数为空字符串表示“获取所有可用字段”。
+可选的第二个参数是一个包含单个字段或逗号分隔字段列表的字符串。如果存在此参数，则仅从文档存储中获取并高亮指定的字段。空字符串作为第二个参数表示“获取所有可用字段”。
 
 <!-- intro -->
 ##### SQL:
@@ -1064,67 +935,11 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 2 rows in set (0.00 sec)
 ```
 
-
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "one|robots"}
-  },
-  "highlight": {
-    "fields": ["title", "content"]
-  },
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 2,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>one</b>"
-          ],
-          "content": [
-            "They followed Bander. The <b>robots</b> remained at a polite distance, but their presence was a constantly felt threat."
-          ]
-        }
-      },
-      {
-        "_id": 5,
-        "_score": 1557,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book five"
-          ],
-          "content": [
-            "Bander ushered all three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander gestured the other <b>robots</b> away and entered itself. The door closed behind it."
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() string attr -->
 
-或者，可以使用第二个参数指定字符串属性或字段名（不带引号）。在这种情况下，提供的字符串将针对给定查询进行高亮，但字段语法将被忽略。
+或者，您可以使用第二个参数指定不带引号的字符串属性或字段名称。在这种情况下，提供的字符串将根据给定的查询进行高亮，但字段语法将被忽略。
 
 <!-- intro -->
 ##### SQL:
@@ -1146,50 +961,11 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 2 rows in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "one"}
-  },
-  "highlight": {
-    "fields": ["title"]
-  },
-  "_source": [""]
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 1,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>one</b>"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example highlight() query -->
 
-可选的第三个参数是查询。它用于针对不同于搜索时使用的查询来高亮搜索结果。
+可选的第三个参数是查询。这用于根据与搜索所用查询不同的查询来高亮搜索结果。
 
 <!-- intro -->
 ##### SQL:
@@ -1211,63 +987,11 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 2 rows in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /search
-{
-  "table": "books",
-  "query": {
-    "match": {"*": "one"}
-  },
-  "highlight": {
-    "fields": ["title"],
-    "highlight_query": {
-      "match": { "*": "five" }
-    }
-  },
-  "_source": [""]
-}
-
-```
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 2,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book one"
-          ]
-        }
-      },
-      {
-        "_id": 5,
-        "_score": 1557,
-        "_source": {},
-        "highlight": {
-          "title": [
-            "Book <b>five</b>"
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example HIGHLIGHT TO_STRING -->
 
-尽管 `HIGHLIGHT()` 设计为用于存储的全文字段和字符串属性，也可以用来高亮任意文本。请注意，如果查询包含任何字段搜索操作符（例如 `@title hello @body world`），则在这种情况下忽略它们的字段部分。
+尽管`HIGHLIGHT()`设计用于处理存储的全文字段和字符串属性，但它也可用于高亮任意文本。请注意，如果查询包含任何字段搜索运算符（例如`@title hello @body world`），在这种情况下，其字段部分将被忽略。
 
 <!-- intro -->
 ##### SQL:
@@ -1288,53 +1012,26 @@ SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books
 1 row in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /sql?mode=raw -d "SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books WHERE MATCH('@title one')"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        " highlight({},TO_STRING('some text to highlight'), 'highlight')": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        " highlight({},TO_STRING('some text to highlight'), 'highlight')": "some text to <b>highlight</b>"
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
-只有在生成单个字符串作为结果时（而不是片段数组），某些选项才相关。这仅适用于 SQL 的 `HIGHLIGHT()` 函数：
+有几个选项仅当生成单个字符串作为结果（而不是片段数组）时才相关。这仅适用于SQL `HIGHLIGHT()`函数：
 
 #### snippet_separator
-插入在片段之间的字符串。默认是 ` ... `。
+插入片段之间的字符串。默认为` ... `。
 #### field_separator
-插入在字段之间的字符串。默认是 `|`。
+插入字段之间的字符串。默认为`|`。
 
 
-另一种高亮文本的方法是使用 [CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS) 语句。这在很大程度上复制了 `HIGHLIGHT()` 的功能，但不能使用内置的文档存储。不过，它可以从文件加载源文本。
+另一种高亮文本的方法是使用[CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS)语句。这基本上复制了`HIGHLIGHT()`的功能，但无法使用内置文档存储。不过，它可以从文件加载源文本。
 
 
-## 通过 HTTP 高亮
+## 通过HTTP进行高亮
 
 <!-- example highlight in JSON -->
 
-要通过 HTTP 在 JSON 查询中高亮全文搜索结果，字段内容必须存储在文档存储中（默认启用）。示例中，全文字段 `content` 和 `title` 从文档存储中获取，并根据 `query` 子句中指定的查询进行高亮。
+要通过HTTP在JSON查询中高亮全文搜索结果，字段内容必须存储在文档存储中（默认启用）。在示例中，全文字段`content`和`title`从文档存储中获取，并根据`query`子句中指定的查询进行高亮。
 
-高亮的片段作为 `hits` 数组的 `highlight` 属性返回。
+高亮的片段在`hits`数组的`highlight`属性中返回。
 
 <!-- intro -->
 ##### JSON:
@@ -1471,7 +1168,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -1507,7 +1204,7 @@ class SearchResponse {
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -1537,7 +1234,7 @@ class SearchResponse {
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -1663,10 +1360,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example highlight JSON all field  -->
 
-要高亮所有可能的字段，传递一个空对象作为 `highlight` 属性。
+为了高亮所有可能的字段，请将空对象作为 `highlight` 属性传递。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -1710,7 +1407,7 @@ POST /search
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -1804,7 +1501,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -1838,7 +1535,7 @@ class SearchResponse {
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -1867,7 +1564,7 @@ class SearchResponse {
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -1995,22 +1692,22 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-除了通用高亮选项外，通过 HTTP 的 JSON 查询还提供了几个同义词选项：
+除了常见的高亮选项外，还可以通过 HTTP 查询 JSON 查询时使用一些同义词：
 
 #### fields
-`fields` 对象包含带选项的属性名。它也可以是字段名数组（无任何选项）。
+`fields` 对象包含属性名称及其选项。它也可以是一个字段名称的数组（没有选项）。
 
-请注意，默认情况下，高亮尝试根据全文查询的结果进行高亮。通常情况下，当你不指定高亮字段时，高亮基于你的全文查询。然而，如果你指定了要高亮的字段，只有当全文查询匹配选中的字段时才进行高亮。
+请注意，默认情况下，高亮尝试根据全文查询高亮结果。在一般情况下，如果不指定要高亮的字段，则高亮基于您的全文查询。但是，如果您指定了要高亮的字段，则仅在全文查询匹配选定字段时进行高亮。
 
 #### encoder
-`encoder` 可以设置为 `default` 或 `html`。设置为 `html` 时，高亮时保留 HTML 标记。这与 `html_strip_mode=retain` 选项类似。
+`encoder` 可以设置为 `default` 或 `html`。设置为 `html` 时，高亮时保留 HTML 标记。这类似于 `html_strip_mode=retain` 选项。
 
 <!-- example highlight_query -->
 #### highlight_query
-`highlight_query` 选项允许你针对比搜索查询不同的查询进行高亮。语法与主查询中的相同。
+`highlight_query` 选项允许您使用除搜索查询之外的查询进行高亮。语法与主 `query` 语法相同。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -2026,7 +1723,7 @@ POST /search
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -2103,7 +1800,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"content":"one|
 
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -2129,7 +1826,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -2148,7 +1845,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -2278,10 +1975,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example pre_tags  -->
 
 #### pre_tags 和 post_tags
-`pre_tags` 和 `post_tags` 设置高亮文本片段的起始和结束标签。它们的功能类似于 `before_match` 和 `after_match` 选项。这些是可选的，默认值分别是 `<b>` 和 `</b>`。
+`pre_tags` 和 `post_tags` 设置高亮文本片段的开闭标签。它们的功能类似于 `before_match` 和 `after_match` 选项。这些是可选的，默认值为 `<b>` 和 `</b>`。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -2298,7 +1995,7 @@ POST /search
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -2393,7 +2090,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -2415,7 +2112,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -2431,7 +2128,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -2549,10 +2246,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example no_match_size  -->
 #### no_match_size
-`no_match_size` 的作用类似于 `allow_empty` 选项。如果设置为 0，它的表现就像 `allow_empty=1`，允许在无法生成片段时返回一个空字符串作为高亮结果。否则，将返回字段的开头部分。此项为可选，默认值为 1。
+`no_match_size` 与 `allow_empty` 选项类似。如果设置为 0，则作为高亮结果返回空字符串，当无法生成片段时。否则，返回字段的开头。这是可选的，默认值为 1。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -2568,7 +2265,7 @@ POST /search
 }
 ```
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -2662,7 +2359,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 ```
 
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -2683,7 +2380,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -2698,7 +2395,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -2811,10 +2508,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example order  -->
 #### order
-`order` 用来设置提取片段的排序顺序。如果设置为 `"score"`，它将按相关性对提取的片段进行排序。这是可选的，且其作用类似于 `weight_order` 选项。
+`order` 设置提取片段的排序顺序。如果设置为 `"score"`，则按相关性顺序排序提取的片段。这是可选的，类似于 `weight_order` 选项。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -2922,7 +2619,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 
 ```
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -2943,7 +2640,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -2958,7 +2655,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -3073,10 +2770,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example fragment_size -->
 #### fragment_size
-`fragment_size` 用来设置片段的最大符号数，可以是全局设置或字段特定设置。字段特定选项会覆盖全局选项。此项为可选，默认值为 256。其功能类似于 `limit` 选项。
+`fragment_size` 设置片段的最大符号数。它可以是全局的或字段特定的。字段特定选项会覆盖全局选项。这是可选的，默认值为 256。它类似于 `limit` 选项。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -3178,7 +2875,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 {"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
 ```
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -3199,7 +2896,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -3214,7 +2911,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -3327,10 +3024,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example number_of_fragments -->
 #### number_of_fragments
-`number_of_fragments` 限制结果中片段的最大数目。与 `fragment_size` 类似，它可以是全局设置或字段特定设置。此项为可选，默认值为 0（不限制）。其功能类似于 `limit_snippets` 选项。
+`number_of_fragments` 限制结果中的最大片段数量。与 `fragment_size` 类似，它可以是全局的或字段特定的。这是可选的，默认值为 0（无限制）。它类似于 `limit_snippets` 选项。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -3438,7 +3135,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 
 ```
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -3459,7 +3156,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -3474,7 +3171,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -3588,10 +3285,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example highlight json per-field limits -->
 
 #### limit, limit_words, limit_snippets
-选项如 `limit`、`limit_words` 和 `limit_snippets` 可以设置为全局或字段特定选项。全局选项用作字段限制，除非被字段特定选项覆盖。示例中，`title` 字段使用默认的限制设置进行高亮，`content` 字段则使用不同的限制。
+选项如 `limit`、`limit_words` 和 `limit_snippets` 可以设置为全局或字段特定选项。全局选项会在字段特定选项未被覆盖时使用。在示例中，`title` 字段使用默认限制设置进行高亮显示，而 `content` 字段使用不同的限制。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -3693,7 +3390,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots
 {"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
 ```
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -3719,7 +3416,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -3735,7 +3432,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -3856,10 +3553,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example highlight json global limits -->
 
 #### limits_per_field
-也可以通过设置 `limits_per_field=0` 来强制执行全局限制。设置此选项意味着所有合并的高亮结果必须在指定限制内。缺点是，如果高亮引擎判定某些片段更相关，可能会在一个字段中获得多个高亮片段，而在另一个字段中没有任何高亮。
+也可以通过设置 `limits_per_field=0` 来强制执行全局限制。设置此选项意味着所有组合的高亮结果必须在指定的限制内。缺点是，如果高亮引擎认为某些内容更相关，则可能会在一个字段中获得多个片段高亮显示而在另一个字段中没有任何片段高亮显示。
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 <!-- request JSON -->
 
 ```json
@@ -3960,7 +3657,7 @@ res =  await searchApi.search({"table":"books","query":{"match":{"content":"and 
 
 ```
 <!-- intro -->
-##### Java:
+##### Java：
 
 <!-- request Java -->
 
@@ -3986,7 +3683,7 @@ searchResponse = searchApi.search(searchRequest);
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -4002,7 +3699,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -4058,25 +3755,25 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example CALL SNIPPETS -->
 
-The `CALL SNIPPETS` statement builds a snippet from provided data and query using specified table settings. It can't access built-in document storage, which is why it's recommended to use the [HIGHLIGHT() function](../Searching/Highlighting.md) instead.
+`CALL SNIPPETS` 语句使用提供的数据和查询以及指定的表设置构建一个片段。它不能访问内置文档存储，因此建议使用 [HIGHLIGHT() 函数](../Searching/Highlighting.md)。
 
-The syntax is:
+语法如下：
 
 ```sql
 CALL SNIPPETS(data, table, query[, opt_value AS opt_name[, ...]])
 ```
 
 #### data
-`data` serves as the source from which a snippet is extracted. It can either be a single string or a list of strings enclosed in curly brackets.
+`data` 是从中提取片段的来源。它可以是一个字符串或用花括号包围的字符串列表。
 #### table
-`table` refers to the name of the table that provides the text processing settings for snippet generation.
+`table` 是提供片段生成文本处理设置的表名。
 #### query
-`query` is the full-text query used to build the snippets.
-#### opt_value and opt_name
-`opt_value` and `opt_name` represent the [snippet generation options](../Searching/Highlighting.md).
+`query` 是用于构建片段的全文查询。
+#### opt_value 和 opt_name
+`opt_value` 和 `opt_name` 表示 [片段生成选项](../Searching/Highlighting.md)。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -4093,50 +3790,20 @@ CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', '
 2 rows in set (0.02 sec)
 ```
 
-<!-- request JSON -->
-```JSON
-POST /sql?mode=raw -d "CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', 'is text', 5 AS around, 200 AS limit)"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "snippet": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "snippet": "this <b>is</b> my document <b>text</b>"
-      },
-      {
-        "snippet": "this <b>is</b> my another <b>text</b>"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
-Most options are the same as in the [HIGHLIGHT() function](../Searching/Highlighting.md). There are, however, several options that can only be used with `CALL SNIPPETS`.
+大多数选项与[HIGHLIGHT()函数](../Searching/Highlighting.md)中的相同。然而，有几个选项只能与`CALL SNIPPETS`一起使用。
 
 <!-- example CALL SNIPPETS load files -->
-The following options can be used to highlight text stored in separate files:
+以下选项可用于突出显示存储在单独文件中的文本：
 
 #### load_files
-This option, when enabled, treats the first argument as file names instead of data to extract snippets from. The specified files on the server side will be loaded for data. Up to [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents, invoke snippets generation in a distributed table containing only one(!) local agent and several remotes. The [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) option is used to generate the final file name. For example, when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
+启用此选项时，将第一个参数视为文件名，而不是用于提取片段的数据。服务器端指定的文件将被加载作为数据。当启用此标志时，每个请求将使用最多[ max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query)个工作线程来并行处理工作。默认值为0（无上限）。要在远程代理之间分发片段生成，请在仅包含一个本地代理和若干远程代理的分布式表中调用片段生成。[snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix)选项用于生成最终文件名。例如，当searchd配置为`snippets_file_prefix = /var/data_`且提供`text.txt`作为文件名时，片段将从`/var/data_text.txt`的内容中生成。
 
 #### load_files_scattered
-This option only works with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents, and the main server will merge all non-erroneous results. For example, if one agent of the distributed table has `file1.txt`, another agent has `file2.txt`, and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
+此选项仅适用于带有远程代理的分布式片段生成。片段生成的源文件可以分布在不同的代理上，主服务器将合并所有无错误的结果。例如，如果分布式表的一个代理拥有`file1.txt`，另一个代理拥有`file2.txt`，并且你使用包含这两个文件的`CALL SNIPPETS`，searchd将合并代理结果，因此你将获得来自`file1.txt`和`file2.txt`的结果。默认值为0。
 
-If the `load_files` option is also enabled, the request will return an error if any of the files is not available anywhere. Otherwise (if `load_files` is not enabled), it will return empty strings for all absent files. Searchd does not pass this flag to agents, so agents do not generate a critical error if the file does not exist. If you want to be sure that all source files are loaded, set both `load_files_scattered` and `load_files` to 1. If the absence of some source files on some agent is not critical, set only `load_files_scattered` to 1.
+如果同时启用了`load_files`选项，当任何文件在任何位置不可用时，请求将返回错误。否则（如果未启用`load_files`），所有缺失文件将返回空字符串。searchd不会将此标志传递给代理，因此如果文件不存在，代理不会生成严重错误。如果您想确保所有源文件都已加载，请将`load_files_scattered`和`load_files`都设置为1。如果某些代理缺少部分源文件不重要，则只需将`load_files_scattered`设置为1。
 
 <!-- intro -->
 ##### SQL:
@@ -4155,36 +3822,6 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 | this <b>is</b> my another <b>text</b>  |
 +----------------------------------------+
 2 rows in set (0.02 sec)
-```
-
-<!-- request JSON -->
-```JSON
-POST /sql?mode=raw -d "CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_files)"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "snippet": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "snippet": "this <b>is</b> my document <b>text</b>"
-      },
-      {
-        "snippet": "this <b>is</b> my another <b>text</b>"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
 ```
 
 <!-- end -->

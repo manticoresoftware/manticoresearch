@@ -1,52 +1,52 @@
 # Percolate 查询
 
-Percolate 查询也称为持久查询、前瞻搜索、文档路由、反向搜索和逆向搜索。
+Percolate 查询也被称为持久查询、前瞻搜索、文档路由、逆向搜索和反向搜索。
 
-传统的搜索方式是存储文档并对其执行搜索查询。然而，有些情况下我们希望将查询应用于新到达的文档以标记匹配。一些需要这种方式的场景包括监控系统收集数据并通知用户特定事件，例如达到某个指标阈值或监控数据中出现特定值。另一个例子是新闻聚合，用户可能只想收到某些类别或主题，甚至特定“关键词”的通知。
+传统的搜索方式是存储文档并在其中执行搜索查询。然而，在某些情况下，我们希望将查询应用于新来的文档以发出匹配信号。这种需求出现在监控系统中，这些系统收集数据并向用户通知特定事件，例如某个度量标准达到某个阈值或监控数据中出现特定值。另一个例子是新闻聚合，用户可能只想收到特定类别或主题的通知，甚至特定的“关键词”。
 
-在这些情况下，传统搜索并不适用，因为它假设搜索是在整个集合上执行的。这个过程会随着用户数量的增加而成倍增长，导致大量查询在整个集合上运行，可能造成显著的额外负载。本节描述的替代方法是存储查询，然后将它们测试于新到达的文档或文档批次。
+在这种情况下，传统的搜索方式并不适用，因为它假设所需的搜索是在整个集合上进行的。这个过程会随着用户的数量而增加，导致许多查询在整集中运行，从而造成显著的额外负载。本节中描述的另一种方法是将查询存储起来，并在新文档或一批文档中测试它们。
 
-Google Alerts、AlertHN、Bloomberg Terminal 以及其他允许用户订阅特定内容的系统都使用类似技术。
+Google Alerts、AlertHN、彭博终端和其他允许用户订阅特定内容的系统使用类似的技术。
 
-> * 参见 [percolate](../Creating_a_table/Local_tables/Percolate_table.md) 了解如何创建 PQ 表。
-> * 参见 [向 percolate 表添加规则](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 学习如何添加 percolate 规则（也称为 PQ 规则）。这里有一个快速示例：
+> * 请参阅 [percolate](../Creating_a_table/Local_tables/Percolate_table.md) 以获取创建 PQ 表的信息。
+> * 请参阅 [向 percolate 表添加规则](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 以了解如何添加 percolate 规则（也称为 PQ 规则）。这里有一个快速示例：
 
 
 ### 使用 CALL PQ 执行 percolate 查询
 
-关于 percolate 查询，关键是你的搜索查询已经存储在表中。你需要提供的是文档，**以检查它们是否匹配任何存储的规则**。
+关于 percolate 查询需要记住的关键点是，你的搜索查询已经存储在表中。你需要提供的是一些文档，以检查它们是否与任何存储的规则匹配。
 
-你可以通过 SQL 或 JSON 接口执行 percolate 查询，也可以使用编程语言客户端。SQL 方法更灵活，而 HTTP 方法更简单，且提供了大部分所需功能。下表帮助你理解两者的区别。
+你可以通过 SQL 或 JSON 接口，或者使用编程语言客户端来执行 percolate 查询。SQL 方法提供了更多的灵活性，而 HTTP 方法则更简单，并提供了你所需的大部功能。下表可以帮助你理解它们之间的差异。
 
-| 期望行为                      | SQL                                     | HTTP                                 |
+| 需求行为              | SQL                                     | HTTP                                 |
 | ----------------------------- | --------------------------------------- | ------------------------------------ |
-| 提供单个文档                 | `CALL PQ('tbl', '{doc1}')`              | `query.percolate.document{doc1}`     |
-| 提供单个文档（替代）         | `CALL PQ('tbl', 'doc1', 0 as docs_json)` | - |
-| 提供多个文档                 | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | - |
-| 提供多个文档（替代）         | `CALL PQ('tbl', ('{doc1}', '{doc2}'))` | - |
-| 提供多个文档（替代）         | `CALL PQ('tbl', '[{doc1}, {doc2}]')` | - |
-| 返回匹配的文档 ID            | 0/1 作为 docs（默认禁用）               | 默认启用                           |
-| 使用文档自身 ID 显示结果     | 'id field' 作为 docs_id（默认禁用）     | 不可用                             |
-| 认为输入文档是 JSON          | 1 作为 docs_json（默认 1）               | 默认启用                           |
-| 认为输入文档是纯文本         | 0 作为 docs_json（默认 1）               | 不可用                             |
-| [稀疏分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | 默认                                  | 默认                              |
-| [分片分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | sharded 作为 mode                      | 不可用                             |
-| 返回匹配查询的所有信息       | 1 作为 query（默认 0）                   | 默认启用                           |
-| 跳过无效 JSON               | 1 作为 skip_bad_json（默认 0）           | 不可用                             |
-| 在 [SHOW META](../Node_info_and_management/SHOW_META.md) 中显示扩展信息 | 1 作为 verbose（默认 0）                 | 不可用                             |
-| 定义当未提供 docs_id 字段时加到文档 ID 的数值（主要用于[分布式 PQ 模式](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)） | 1 作为 shift（默认 0）                   | 不可用                             |
+| 提供单个文档     | `CALL PQ('tbl', '{doc1}')`              | `query.percolate.document{doc1}`     |
+| 提供单个文档（替代） | `CALL PQ('tbl', 'doc1', 0 as docs_json)` | - |
+| 提供多个文档    | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | - |
+| 提供多个文档（替代） | `CALL PQ('tbl', ('{doc1}', '{doc2}'))` | - |
+| 提供多个文档（替代） | `CALL PQ('tbl', '[{doc1}, {doc2}]')` | - |
+| 返回匹配文档 id  | 0/1 as docs (默认禁用)       | 默认启用                   |
+| 使用文档自身的 id 显示在结果中 | 'id field' as docs_id (默认禁用) | 无 |
+| 考虑输入文档是 JSON | 1 as docs_json (默认 1) | 默认启用 |
+| 考虑输入文档是纯文本 | 0 as docs_json (默认 1) | 无 |
+| [稀疏分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | 默认 | 默认 |
+| [分片分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | sharded as mode | 无 |
+| 返回匹配查询的所有信息 | 1 as query (默认 0) | 默认启用 |
+| 跳过无效 JSON | 1 as skip_bad_json (默认 0) | 无 |
+| 在 [SHOW META](../Node_info_and_management/SHOW_META.md) 中提供扩展信息 | 1 as verbose (默认 0) | 无 |
+| 定义如果未提供 docs_id 字段将添加到文档 id 的数字（主要适用于 [分布式 PQ 模式](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)） | 1 as shift (默认 0) | 无 |
 
 <!-- example create percolate -->
-为了演示其工作原理，以下是几个示例。我们创建一个包含两个字段的 PQ 表：
+为了演示如何操作，这里有一些示例。让我们创建一个具有两个字段的 PQ 表：
 
-* title（文本）
-* color（字符串）
+* title (文本)
+* color (字符串)
 
-以及其中的三条规则：
+并在此表中添加三个规则：
 
-* 仅全文。查询：`@title bag`
-* 全文加过滤。查询：`@title shoes`。过滤条件：`color='red'`
-* 全文加更复杂的过滤。查询：`@title shoes`。过滤条件：`color IN('blue', 'green')`
+* 仅全文搜索。查询: `@title bag`
+* 全文搜索和过滤。查询: `@title shoes`。过滤: `color='red'`
+* 全文搜索和更复杂的过滤。查询: `@title shoes`。过滤: `color IN('blue', 'green')`
 
 <!-- intro -->
 #### SQL
@@ -509,9 +509,9 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 <!-- example single -->
 ##### 只告诉我哪些 PQ 规则匹配我的单个文档
 
-第一个文档不匹配任何规则。它可能匹配前两个，但它们需要额外的过滤条件。
+第一个文档没有匹配任何规则。它可以匹配前两个规则，但它们需要额外的过滤条件。
 
-第二个文档匹配一条规则。注意 CALL PQ 默认期望文档为 JSON，但如果使用 `0 as docs_json`，你可以传递纯字符串。
+第二个文档匹配一个规则。请注意，CALL PQ 默认期望文档是一个 JSON，但如果你使用 `0 as docs_json`，你可以传递一个纯字符串。
 
 <!-- intro -->
 SQL:
@@ -890,7 +890,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 <!-- end -->
 
 <!-- example pq_rules -->
-##### 我想知道完全匹配我的文档的 PQ 规则
+##### 我想知道完全匹配我文档的 PQ 规则
 <!-- intro -->
 SQL:
 <!-- request SQL -->
@@ -1263,13 +1263,13 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- example multiple -->
 
-##### 多个文档怎么样？
+##### 多文档如何处理？
 
-注意，使用 `CALL PQ`，您可以通过不同方式提供多个文档：
+请注意，使用 `CALL PQ` 时，你可以通过不同方式提供多个文档：
 
-* 作为圆括号内的纯文档数组 `('doc1', 'doc2')`。这需要 `0 as docs_json`
-* 作为圆括号内的 JSON 数组 `('{doc1}', '{doc2}')`
-* 或作为标准的 JSON 数组 `'[{doc1}, {doc2}]'`
+* 作为普通文档数组，使用圆括号如 `('doc1', 'doc2')`。这需要 `0 as docs_json`
+* 作为 JSON 数组，使用圆括号如 `('{doc1}', '{doc2}')`
+* 或者作为标准 JSON 数组 `'[{doc1}, {doc2}]'`
 
 <!-- intro -->
 SQL:
@@ -1785,7 +1785,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 <!-- example docs_1 -->
 ##### 我想知道哪些文档匹配哪些规则
 
-使用选项 `1 as docs` 可以让您看到所提供的文档中哪些匹配了哪些规则。
+使用选项 `1 as docs` 可以让你查看所提供文档中哪些匹配了哪些规则。
 <!-- intro -->
 SQL:
 <!-- request SQL -->
@@ -2281,20 +2281,11 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- example docs_id -->
 #### 静态 id
-默认情况下，匹配的文档 id 对应于您提供列表中的相对编号。但是，在某些情况下，每个文档已经有自己的 id。对于这种情况，`CALL PQ` 有一个选项 `'id field name' as docs_id`。
+默认情况下，匹配文档的 id 对应于你提供列表中的相对编号。然而，在某些情况下，每个文档已经有它自己的 id。对于这种情况，`CALL PQ` 提供了选项 `'id field name' as docs_id`。
 
-注意，如果通过提供的字段名找不到 id，PQ 规则将不会显示在结果中。
+请注意，如果通过提供的字段名找不到 id，结果中将不会显示该 PQ 规则。
 
-该选项仅适用于通过 SQL 使用 `CALL PQ`。
-
-<!--
-data for the following examples:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, color string) type='pq';
-INSERT INTO products(query, filters) VALUES ('@title shoes', 'color IN ("blue", "green")');
-INSERT INTO products(query, tags) VALUES ('@title bag', 'Louis Vuitton');
--->
+此选项仅适用于通过 SQL 调用 `CALL PQ`。
 
 <!-- intro -->
 ##### SQL:
@@ -2314,76 +2305,12 @@ CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"
 | 1657852401006149666 | 123       | @title shoes |      | color IN ('blue, 'green') |
 +---------------------+-----------+--------------+------+---------------------------+
 ```
-
-<!-- intro -->
-##### JSON:
-
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs)"
-```
-<!-- response JSON -->
-
-```JSON
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "documents": {
-          "type": "long long"
-        }
-      },
-      {
-        "query": {
-          "type": "string"
-        }
-      },
-      {
-        "tags": {
-          "type": "string"
-        }
-      },
-      {
-        "filters": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 1657852401006149664,
-        "documents": 456,
-        "query": "@title bag",
-        "tags": "",
-        "filters": ""
-      },
-      {
-        "id": 1657852401006149666,
-        "documents": 123,
-        "query": "@title shoes",
-        "tags": "",
-        "filters": "color IN ('blue, 'green')"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
 <!-- example invalid_json -->
-##### I may have invalid JSONs, please skip them
+##### 我可能有无效的 JSON，请跳过它们
 
-When using CALL PQ with separate JSONs, you can use the option 1 as skip_bad_json to skip any invalid JSONs in the input. In the example below, the 2nd query fails due to an invalid JSON, but the 3rd query avoids the error by using 1 as skip_bad_json. Keep in mind that this option is not available when sending JSON queries over HTTP, as the whole JSON query must be valid in that case.
+当使用 CALL PQ 处理多个单独的 JSON 时，可以使用选项 1 as skip_bad_json 来跳过输入中的任何无效 JSON。下面的例子中，第 2 个查询因无效 JSON 而失败，但第 3 个查询通过使用 1 as skip_bad_json 避免了错误。请记住，当通过 HTTP 发送 JSON 查询时，这个选项不可用，因为此时整个 JSON 查询必须是有效的。
 
 <!-- intro -->
 SQL:
@@ -2415,81 +2342,17 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 +---------------------+
 ```
 
-<!-- intro -->
-JSON:
-<!-- request JSON -->
-
-```JSON
-POST /pq/products/search
-{
-  "query": {
-    "percolate": {
-      "documents": [
-        {"title": "nice pair of shoes", "color": "blue"},
-        {"title": "beautiful bag"}
-      ]
-    }
-  }
-}
-```
-<!-- response JSON -->
-
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 2,
-    "max_score": 1,
-    "hits": [
-      {
-        "table": "products",
-        "_type": "doc",
-        "_id": 1657852401006149644,
-        "_score": "1",
-        "_source": {
-          "query": {
-            "ql": "@title bag"
-          }
-        },
-        "fields": {
-          "_percolator_document_slot": [
-            2
-          ]
-        }
-      },
-      {
-        "table": "products",
-        "_type": "doc",
-        "_id": 1657852401006149646,
-        "_score": "1",
-        "_source": {
-          "query": {
-            "ql": "@title shoes"
-          }
-        },
-        "fields": {
-          "_percolator_document_slot": [
-            1
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
 <!-- end -->
 
-##### I want higher performance of a percolate query
-Percolate queries are designed with high throughput and large data volumes in mind. To optimize performance for lower latency and higher throughput, consider the following.
+##### 我想提高渗透查询的性能
+渗透查询的设计初衷是处理高吞吐量和大数据量。为了优化性能以实现更低的延迟和更高的吞吐量，请考虑以下方面。
 
-There are two modes of distribution for a percolate table and how a percolate query can work against it:
+渗透表的分布有两种模式，渗透查询可以针对这些模式工作：
 
-* **Sparse (default).** Ideal for: many documents, mirrored PQ tables. When your document set is large but the set of queries stored in the PQ table is small, the sparse mode is beneficial. In this mode, the batch of documents you pass will be divided among the number of agents, so each node processes only a portion of the documents from your request. Manticore splits your document set and distributes chunks among the mirrors. Once the agents have finished processing the queries, Manticore collects and merges the results, returning a final query set as if it came from a single table. Use [replication](../References.md#Replication) to assist the process.
-* **Sharded.** Ideal for: many PQ rules, rules split among PQ tables. In this mode, the entire document set is broadcast to all tables of the distributed PQ table without initially splitting the documents. This is beneficial when pushing a relatively small set of documents, but the number of stored queries is large. In this case, it's more appropriate to store only a portion of PQ rules on each node and then merge the results returned from the nodes that process the same set of documents against different sets of PQ rules. This mode must be explicitly set, as it implies an increase in network payload and expects tables with different PQs, which [replication](../References.md#Replication) cannot do out-of-the-box.
+* **稀疏模式（默认）。** 适用于：文档数量多，镜像渗透表。当你的文档集很大，但存储在渗透表中的查询集很小时，稀疏模式是有益的。在这种模式下，你传递的文档批次将被分配到多个代理中，因此每个节点只处理你请求中的一部分文档。Manticore 会分割你的文档集，并将块分配给各个镜像。一旦代理处理完查询，Manticore 会收集并合并结果，返回一个最终的查询集，就像它来自单个表一样。使用[复制](../References.md#Replication)来辅助此过程。
+* **分片模式。** 适用于：渗透规则数量多，规则分散在多个渗透表中。在这种模式下，整个文档集会被广播到分布式渗透表的所有表中，而不会初始分割文档。当推送相对较小的文档集，但存储的查询数量很大时，这种模式是有益的。在这种情况下，更合适的是在每个节点上只存储一部分渗透规则，然后合并从处理相同文档集但针对不同渗透规则集的节点返回的结果。这种模式必须显式设置，因为它意味着网络负载的增加，并且期望表具有不同的渗透规则集，而[复制](../References.md#Replication)无法直接实现这一点。
 
-Assume you have table `pq_d2` defined as:
+假设你有一个表 `pq_d2` 定义如下：
 
 ``` ini
 table pq_d2
@@ -2501,11 +2364,11 @@ table pq_d2
 ```
 
 <!-- example distributed pq modes 1 -->
-Each of 'pq' and 'ptitle' contains:
+'pq' 和 'ptitle' 各自包含：
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -2892,11 +2755,11 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- example call_pq_example -->
 
-And you execute `CALL PQ` on the distributed table with a couple of documents.
+并且你在分布式表上执行 `CALL PQ`，并传入几个文档。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -3349,7 +3212,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 <!-- end -->
 
-In the previous example, we used the default **sparse** mode. To demonstrate the **sharded** mode, let's create a distributed PQ table consisting of 2 local PQ tables and add 2 documents to "products1" and 1 document to "products2":
+在前面的例子中，我们使用了默认的**稀疏**模式。为了演示**分片**模式，让我们创建一个由 2 个本地渗透表组成的分布式渗透表，并向 "products1" 添加 2 个文档，向 "products2" 添加 1 个文档：
 ```sql
 create table products1(title text, color string) type='pq';
 create table products2(title text, color string) type='pq';
@@ -3361,10 +3224,10 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 ```
 
 <!-- example sharded -->
-Now, if you add `'sharded' as mode` to `CALL PQ`, it will send the documents to all the agent's tables (in this case, just local tables, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
+现在，如果你在 `CALL PQ` 中添加 `'sharded' as mode`，它会将文档发送到所有代理的表（在这个例子中，只是本地表，但它们也可以是远程的，以利用外部硬件）。这种模式不通过 JSON 接口提供。
 
 <!-- intro -->
-SQL:
+SQL：
 <!-- request SQL -->
 
 ```sql
@@ -3381,69 +3244,16 @@ CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue
 +---------------------+--------------+------+---------------------------+
 ```
 
-<!-- intro -->
-JSON:
-<!-- request JSON -->
-```JSON
-POST /sql?mode=raw -d "CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "id": {
-          "type": "long long"
-        }
-      },
-      {
-        "query": {
-          "type": "string"
-        }
-      },
-      {
-        "tags": {
-          "type": "string"
-        }
-      },
-      {
-        "filters": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "id": 1657852401006149639,
-        "query": "@title bag",
-        "tags": "",
-        "filters": ""
-      },
-      {
-        "id": 1657852401006149643,
-        "query": "@title shoes",
-        "tags": "",
-        "filters": "color IN ('blue, 'green')"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
-请注意，配置中代理镜像的语法（当多个主机通过 `|` 分隔被分配到一条 `agent` 行时）与 `CALL PQ` 查询模式无关。每个 `agent` 始终代表**一个**节点，无论为该代理指定了多少个高可用镜像。
+请注意，配置中的代理镜像语法（当多个主机分配给一个 `agent` 行，用 `|` 分隔时）与 `CALL PQ` 查询模式无关。每个 `agent` 始终代表**一个**节点，无论为该代理指定了多少个 HA 镜像。
 
 <!-- example verbose -->
-##### 我如何了解更多关于性能的信息？
-在某些情况下，你可能想获得更多关于 percolate 查询性能的细节。为此，有一个选项 `1 as verbose`，该选项仅通过 SQL 可用，允许你保存更多的性能指标。你可以使用 `SHOW META` 查询查看它们，该查询可以在 `CALL PQ` 之后运行。更多信息请参见 [SHOW META](../Node_info_and_management/SHOW_META.md)。
+##### 如何了解更多关于性能的信息？
+在某些情况下，你可能希望获取更多关于渗透查询性能的详细信息。为此，有一个选项 `1 as verbose`，它仅通过 SQL 可用，允许你保存更多的性能指标。你可以使用 `SHOW META` 查询来查看它们，该查询可以在 `CALL PQ` 之后运行。更多信息请参见 [SHOW META](../Node_info_and_management/SHOW_META.md)。
 
 <!-- intro -->
-1 as verbose:
+1 as verbose：
 <!-- request 1 as verbose -->
 
 ```sql
@@ -3474,7 +3284,7 @@ CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 +-------------------------+-----------+
 ```
 <!-- intro -->
-0 as verbose (默认):
+0 as verbose（默认）：
 <!-- request 0 as verbose -->
 
 ```sql

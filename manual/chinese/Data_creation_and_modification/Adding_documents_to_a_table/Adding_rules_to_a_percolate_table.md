@@ -1,18 +1,18 @@
-# 向 percolate 表添加规则
+# 在percolate表中添加规则
 
 <!-- example -->
-在 [percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md) 中，存储着 percolate 查询规则，且必须遵循四个字段的严格模式：
+在一个[percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)中，存储了可查询规则的文档，并且必须遵循四个字段的确切模式：
 
-| field | type | description |
+| 字段 | 类型 | 描述 |
 | - | - | - |
-| id | bigint | PQ 规则标识符（如果省略，则会自动分配） |
-| query | string | 兼容 [percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md) 的全文查询（可以为空） |
-| filters | string | 按非全文字段的附加过滤器（可以为空），兼容 [percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md) |
-| tags   | string | 一个含有一个或多个逗号分隔标签的字符串，可用于选择性显示/删除保存的查询 |
+| id | 大整数 | PQ规则标识符（如果省略，则将自动分配） |
+| query | 字符串 | 兼容[percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)的全文查询（可以为空） |
+| filters | 字符串 | 兼容[percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)的非全文字段的附加过滤器（可以为空） |
+| tags   | 字符串 | 一个或多个用逗号分隔的标签字符串，可用于选择性地显示/删除保存的查询 |
 
-其他字段名称不被支持，将触发错误。
+其他任何字段名称都不受支持，并将触发错误。
 
-**警告：** 通过 SQL 插入/替换 JSON 格式的 PQ 规则是无效的。换言之，JSON 特定操作符（`match` 等）只是视为规则文本的一部分，应与文档匹配。如果你偏好 JSON 语法，请使用 HTTP 接口而非 `INSERT`/`REPLACE`。
+**警告：** 通过SQL插入/替换JSON格式的PQ规则不会生效。换句话说，JSON特定的操作符（如`match`等）将被视为规则文本的一部分，应该与文档匹配。如果您更喜欢JSON语法，请使用HTTP端点而不是`INSERT`/`REPLACE`。
 
 <!-- intro -->
 ##### SQL
@@ -36,8 +36,8 @@ SELECT * FROM pq;
 <!-- intro -->
 ##### JSON
 <!-- request JSON -->
-可以通过两种方式将 percolate 查询添加到 percolate 表中：
-* JSON /search 兼容格式的查询，描述见 [json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
+有以下两种方式可以将percolate查询添加到percolate表中：
+* 使用JSON /search兼容格式的查询，描述在[json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)中
 ```json
 PUT /pq/pq_table/doc/1
 {
@@ -55,7 +55,7 @@ PUT /pq/pq_table/doc/1
 }
 ```
 
-* SQL 格式的查询，描述见 [search query syntax](../../Searching/Filters.md#Queries-in-SQL-format)
+* 使用SQL格式的查询，描述在[搜索查询语法](../../Searching/Filters.md#Queries-in-SQL-format)中
 ```json
 PUT /pq/pq_table/doc/2
 {
@@ -161,12 +161,12 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example noid -->
-## 自动 ID 分配
+## 自动ID分配
 
-如果未指定 ID，则会自动分配。你可以在这里了解更多关于自动 ID 的信息 [here](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。
+如果没有指定ID，将自动分配ID。您可以阅读更多关于自动ID的内容[这里](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -357,12 +357,12 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example noschema -->
-## SQL 中无模式
-在 SQL `INSERT` 命令中省略模式时，期望以下参数：
-1. ID。你可以使用 `0` 作为 ID 以触发自动 ID 生成。
+## SQL中没有模式
+如果SQL `INSERT`命令中省略了模式，则预期以下参数：
+1. ID。可以使用`0`作为ID以触发自动ID生成。
 2. 查询 - 全文查询。
-3. 标签 - PQ 规则标签字符串。
-4. 过滤器 - 按属性的附加过滤器。
+3. 标签 - PQ规则标签字符串。
+4. 过滤器 - 属性的附加过滤器。
 
 <!-- request SQL -->
 
@@ -381,77 +381,16 @@ SELECT * FROM pq;
 | 2810855531667783689 | @title shoes | Louis Vuitton |         |
 +---------------------+--------------+---------------+---------+
 ```
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS pq;
-CREATE TABLE pq(title text, meta json) type='pq';
--->
-
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', '', '')"
-POST /sql?mode=raw -d "INSERT INTO pq VALUES (0, '@title shoes', 'Louis Vuitton', '')"
-POST /sql -d "SELECT * FROM pq"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "total": 1,
-    "error": "",
-    "warning": ""
-  }
-]
-[
-  {
-    "total": 1,
-    "error": "",
-    "warning": ""
-  }
-]
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 2,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "id": 724024784404348900,
-        "_score": 1,
-        "_source": {
-          "query": "@title shoes",
-          "tags": "Louis Vuitton",
-          "filters": ""
-        }
-      },
-      {
-        "id": 724024784404348900,
-        "_score": 1,
-        "_source": {
-          "query": "@title shoes",
-          "tags": "",
-          "filters": ""
-        }
-      }
-    ]
-}
-```
-
 <!-- end -->
 
 <!-- example replace -->
-## 替换 PQ 表中的规则
+## 在PQ表中替换规则
 
-要用新的 PQ 规则替换 SQL 中已有的规则，只需使用常规的 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 命令。对于通过 HTTP JSON 接口以 JSON 模式定义的 PQ 规则，有一个特殊的语法 `?refresh=1` 用于替换。
+要通过SQL替换现有PQ规则为新规则，只需使用常规的[REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)命令。有一种特殊的语法`?refresh=1`，用于通过HTTP JSON接口替换**定义在JSON模式下的PQ规则**。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 ```sql

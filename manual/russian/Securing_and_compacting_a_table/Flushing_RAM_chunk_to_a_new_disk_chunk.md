@@ -1,4 +1,4 @@
-# Запись содержимого RAM-чанк в новый диск-чанк
+# Сброс RAM-чанка в новый дисковый чанк
 
 ## FLUSH RAMCHUNK
 
@@ -8,9 +8,9 @@
 FLUSH RAMCHUNK rt_table
 ```
 
-Команда `FLUSH RAMCHUNK` создаёт новый диск-чанк в таблице RT.
+Команда `FLUSH RAMCHUNK` создает новый дисковый чанк в RT-таблице.
 
-Обычно таблица RT автоматически сбрасывает и конвертирует содержимое RAM-чанка в новый диск-чанк, когда выполняется одно из [специальных условий](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#RAM-chunk-flushing-conditions). Однако в некоторых случаях вы можете захотеть запустить сброс вручную — и оператор `FLUSH RAMCHUNK` позволяет это сделать.
+Обычно RT-таблица автоматически сбрасывает и преобразует содержимое RAM-чанка в новый дисковый чанк при выполнении одного из [специальных условий](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#RAM-chunk-flushing-conditions). Однако в некоторых случаях может потребоваться вручную инициировать сброс — и оператор `FLUSH RAMCHUNK` позволяет это сделать.
 
 <!-- intro -->
 ##### SQL:
@@ -24,26 +24,6 @@ FLUSH RAMCHUNK rt;
 ```sql
 Query OK, 0 rows affected (0.05 sec)
 ```
-
-<!-- intro -->
-##### JSON:
-
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "FLUSH RAMCHUNK rt"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "total": 0,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 <!-- proofread -->
 

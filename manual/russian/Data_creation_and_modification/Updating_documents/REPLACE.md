@@ -2,13 +2,15 @@
 
 <!-- example replace -->
 
-`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но перед вставкой нового документа помечает предыдущий документ с тем же ID как удалённый.
+`REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но предварительно помечает предыдущий документ с таким же ID как удалённый перед вставкой нового.
+
+Если таблица, в которую вы пытаетесь заменить документы, не существует, Manticore попытается создать её автоматически. Подробности см. в разделе [Автосхема](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema).
 
 Если вам нужны обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
 
-Синтаксис SQL оператора `REPLACE` следующий:
+Синтаксис SQL-запроса `REPLACE` следующий:
 
 **Для замены всего документа:**
 ```sql
@@ -27,6 +29,17 @@ REPLACE INTO table
 Обратите внимание, что в этом режиме фильтровать можно только по id.
 
 > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+
+**Для замены из SELECT:**
+```sql
+REPLACE INTO table
+    SELECT ... FROM source
+```
+```sql
+REPLACE INTO table (column1, column2, column3)
+    SELECT ... FROM source
+```
+> ПРИМЕЧАНИЕ: Этот синтаксис требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если он не работает, убедитесь, что Buddy установлен.
 
 Подробнее о `UPDATE` и частичной замене `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
@@ -48,8 +61,8 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` — это псевдоним эндпоинта и работает так же.
-* Эндпоинт в стиле Elasticsearch `<table>/_doc/<id>`:
+  `/index` — алиас для этого эндпоинта и работает так же.
+* Elasticsearch-подобный эндпоинт `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -58,7 +71,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  > ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+  > ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 * Частичная замена:
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -68,7 +81,7 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет выполнять обновления по конкретному кластеру при необходимости.
+  `<table name>` может быть просто названием таблицы или в формате `cluster:table`. Это позволяет делать обновления в конкретном кластере, если это необходимо.
 
   > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
@@ -100,6 +113,37 @@ REPLACE INTO products SET description='HUAWEI Matebook 15', price=10 WHERE id = 
 
 ```sql
 Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### REPLACE ... SELECT:
+<!-- request REPLACE ... SELECT -->
+
+```sql
+CREATE TABLE products_src (id int, title text, price float, category_id int);
+CREATE TABLE products (id int, title text, price float, category_id int);
+
+INSERT INTO products_src VALUES
+    (1, 'Notebook Stand', 45.00, 10),
+    (2, 'USB-C Hub', 79.90, 12),
+    (3, 'Wireless Mouse', 129.00, 10);
+
+REPLACE INTO products_a (id, price)
+    SELECT id, price FROM products_src;
+
+REPLACE INTO products_b
+    SELECT * FROM products_src;
+
+REPLACE INTO products_c (id, title, category_id)
+    SELECT id, title, category_id
+    FROM products_src
+    WHERE price >= 100;
+```
+
+<!-- response REPLACE ... SELECT -->
+
+```sql
+Query OK, 3 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
@@ -140,7 +184,7 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
-> ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Elasticsearch-подобная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 ```json
 PUT /products/_doc/2
@@ -435,15 +479,15 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` доступен для real-time и percolate таблиц. Нельзя заменять данные в plain таблице.
+`REPLACE` доступен для реального времени и перколационных таблиц. В обычных таблицах заменить данные нельзя.
 
-При выполнении `REPLACE` предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+Когда вы запускаете `REPLACE`, предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы форсировать слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-## Bulk replace
+## Массовая замена
 
 <!-- example bulk_replace -->
 
-Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [bulk adding documents](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
+Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [массовое добавление документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
 
 <!-- intro -->
 ##### HTTP:

@@ -1,19 +1,19 @@
 # 数据库连接
 
-源定义必须包含连接的设置，这包括主机、端口、用户凭据或驱动程序的特定设置。
+源定义必须包含连接设置，这包括主机、端口、用户凭据或驱动程序的特定设置。
 
 ## sql_host
 
-要连接的数据库服务器主机。请注意，MySQL 客户端库会根据主机名选择是通过 TCP/IP 还是通过 UNIX 套接字连接。具体来说，“localhost”将强制使用 UNIX 套接字（这是默认且通常推荐的模式），而“127.0.0.1”将强制使用 TCP/IP。
+要连接的数据库服务器主机。注意 MySQL 客户端库会根据主机名选择是通过 TCP/IP 还是通过 UNIX 套接字进行连接。具体来说，“localhost”将强制使用 UNIX 套接字（这是默认且通常推荐的方式），而“127.0.0.1”将强制使用 TCP/IP。
 
 ## sql_port
 
-要连接的服务器 IP 端口。
-对于 `mysql`，默认端口是 3306，对于 `pgsql`，是 5432。
+要连接的服务器 IP 端口号。
+对于 `mysql`，默认值为 3306，而对于 `pgsql`，默认值为 5432。
 
 ## sql_db
 
-连接建立后要使用的 SQL 数据库，并在其中执行进一步的查询。
+在建立连接后使用的 SQL 数据库，并在此数据库内执行进一步查询。
 
 ## sql_user
 
@@ -21,11 +21,11 @@
 
 ## sql_pass
 
-连接时使用的用户密码。如果密码中包含 `#`（配置文件中可用于添加注释），可以用 `\` 转义。
+连接时使用的用户密码。如果密码包含 `#`（可以在配置文件中用它来添加注释），可以使用 `\` 进行转义。
 
 ## sql_sock
 
-用于本地数据库服务器连接的 UNIX 套接字名称。请注意，是否实际使用此值取决于 `sql_host` 设置。
+要连接的本地数据库服务器的 UNIX 套接字名称。请注意，是否使用此值取决于 `sql_host` 设置。
 
 ```ini
 sql_sock = /var/lib/mysql/mysql.sock
@@ -39,12 +39,12 @@ sql_sock = /var/lib/mysql/mysql.sock
 
 MySQL 客户端连接标志。可选，默认值为 0（不设置任何标志）。
 
-此选项必须包含标志值的整数和。该值将原样传递给 mysql_real_connect()。标志在 mysql_com.h 头文件中列举。与索引相关特别有趣的标志及其对应值如下：
+此选项必须包含一个整数值，该值为标志的总和。该值将原封不动地传递给 mysql_real_connect()。这些标志在 mysql_com.h 包含文件中枚举。特别感兴趣的与索引相关的标志及其相应的值如下：
 
-* CLIENT_COMPRESS = 32；可使用压缩协议
+* CLIENT_COMPRESS = 32；可以使用压缩协议
 * CLIENT_SSL = 2048；握手后切换到 SSL
 * CLIENT_SECURE_CONNECTION = 32768；新的 4.1 认证
-例如，您可以指定 2080（2048+32）以同时使用压缩和 SSL，或指定 32768 仅使用新认证。最初引入此选项是为了在索引器和 mysqld 位于不同主机时能够使用压缩。理论和实践中，在 1 Gbps 链路上启用压缩很可能会影响索引时间，尽管它减少了网络流量。然而，在 100 Mbps 链路上启用压缩可能显著改善索引时间（据报道总索引时间提升了 20-30%）。实际效果可能因情况而异。
+例如，您可以指定 2080（2048 + 32）以同时使用压缩和 SSL，或者指定 32768 仅使用新认证。最初引入此选项是为了能够在不同的主机上使用压缩协议。在 1 Gbps 链路上，尽管压缩减少了网络流量，但实际测试表明，启用压缩可能会显著增加索引时间（报告的总索引时间改进幅度可达 20-30%）。您的体验可能有所不同。
 
 ```ini
 mysql_connect_flags = 32 # enable compression
@@ -63,18 +63,18 @@ mysql_connect_flags = 32 # enable compression
 unpack_mysqlcompress_maxsize = 1M
 ```
 
-使用 MySQL `UNCOMPRESS()` 算法解压的列。多值，可选，默认值为空列列表。
+要使用 MySQL `UNCOMPRESS()` 算法解压的列。多值，可选，默认值为空列表。
 
-使用此指令指定的列将由索引器使用 MySQL `COMPRESS()` 和 `UNCOMPRESS()` 函数所用的修改版 zlib 算法解压。当索引器与数据库不在同一台机器上时，这可以减轻数据库负载并节省网络流量。此功能仅在构建时同时具备 zlib 和 zlib-devel 时可用。
+使用此指令指定的列将由索引器使用 MySQL `COMPRESS()` 和 `UNCOMPRESS()` 函数使用的修改过的 zlib 算法进行解压。当在数据库之外进行索引时，这可以让您卸载数据库并节省网络流量。此功能仅在编译时 zlib 和 zlib-devel 都可用时才可用。
 
 ```ini
 unpack_mysqlcompress = body_compressed
 unpack_mysqlcompress = description_compressed
 ```
 
-默认情况下，解压数据时使用 16M 的缓冲区。可以通过设置 `unpack_mysqlcompress_maxsize` 来更改。
+默认情况下，用于解压数据的缓冲区大小为 16M。可以通过设置 `unpack_mysqlcompress_maxsize` 来更改此大小。
 
-使用 unpack_mysqlcompress 时，由于实现细节，无法从压缩数据推断所需缓冲区大小。因此，缓冲区必须预先分配，且解压后的数据不能超过缓冲区大小。
+使用 `unpack_mysqlcompress` 时，由于实现细节的原因，无法从压缩数据中推断出所需的缓冲区大小。因此，缓冲区必须提前分配，解压后的数据不能超过缓冲区大小。
 
 ### unpack_zlib
 
@@ -83,13 +83,13 @@ unpack_zlib = col1
 unpack_zlib = col2
 ```
 
-使用 zlib（又名 deflate，或 gunzip）解压的列。多值，可选，默认值为空列列表。仅适用于源类型 `mysql` 和 `pgsql`。
+要使用 zlib（又称 deflate 或 gunzip）解压的列。多值，可选，默认值为空列表。仅适用于 `mysql` 和 `pgsql` 类型的源。
 
-使用此指令指定的列将由 `indexer` 使用标准 zlib 算法（称为 deflate，也由 `gunzip` 实现）解压。当索引器与数据库不在同一台机器上时，这可以减轻数据库负载并节省网络流量。此功能仅在构建时同时具备 zlib 和 zlib-devel 时可用。
+使用此指令指定的列将由 `indexer` 使用标准 zlib 算法（称为 deflate 并且也由 gunzip 实现）进行解压。当在数据库之外进行索引时，这可以让您卸载数据库并节省网络流量。此功能仅在编译时 zlib 和 zlib-devel 都可用时才可用。
 
 ### MSSQL
 
-MS SQL Windows 认证标志。连接 MS SQL Server 时是否使用当前登录的 Windows 账户凭据进行认证。
+MS SQL Windows 认证标志。连接到 MS SQL Server 时是否使用当前登录的 Windows 账户凭据进行身份验证。
 
 ```ini
 mssql_winauth = 1
@@ -97,7 +97,7 @@ mssql_winauth = 1
 
 ### ODBC
 
-使用 ODBC 的源需要存在 DSN（数据源名称）字符串，可通过 `odbc_dsn` 设置。
+使用 ODBC 的源需要设置 DSN（数据源名称）字符串，可以通过 `odbc_dsn` 设置。
 
 ```ini
 odbc_dsn = Driver={Oracle ODBC Driver};Dbq=myDBName;Uid=myUsername;Pwd=myPassword

@@ -4,27 +4,27 @@
 
 Вы можете просмотреть информацию о статусе кластера, проверив статус узла. Это можно сделать с помощью команды [Node status](../../Node_info_and_management/Node_status.md), которая отображает различную информацию об узле, включая переменные статуса кластера.
 
-Формат вывода переменных статуса кластера следующий:  `cluster_name_variable_name` `variable_value`. Большинство переменных описаны в [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). В дополнение к этим переменным, Manticore Search также отображает:
+Формат вывода для переменных статуса кластера следующий:  `cluster_name_variable_name` `variable_value`. Большинство переменных описаны в [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). В дополнение к этим переменным, Manticore Search также отображает:
 
-* `cluster_name` - имя кластера, как определено в [настройке репликации](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)
-* `node_state` - текущее состояние узла: `closed`, `destroyed`, `joining`, `donor`, `synced`
+* `cluster_name` - имя кластера, определённое в [настройке репликации](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)
+* `node_state` - текущий статус узла: `closed`, `destroyed`, `joining`, `donor`, `synced`
 * `indexes_count` - количество таблиц, управляемых кластером
 * `indexes` - список имен таблиц, управляемых кластером
-* `nodes_set` - список узлов в кластере, определенный с помощью команд `CREATE`, `JOIN` или `ALTER UPDATE`
-* `nodes_view` - фактический список узлов в кластере, которые видит текущий узел.
+* `nodes_set` - список узлов в кластере, определённый с помощью команд `CREATE`, `JOIN` или `ALTER UPDATE`
+* `nodes_view` - фактический список узлов в кластере, которые видит текущий узел
 * `state_uuid` - UUID состояния кластера. Если он совпадает со значением в local_state_uuid, локальные и кластерные узлы синхронизированы.
-* `conf_id` - общее количество изменений членства в кластере, которые произошли.
-* `status` - статус компонента кластера. Возможные значения: primary (конфигурация первичной группы, кворум присутствует), non_primary (конфигурация непервичной группы, кворум потерян), или disconnected (не подключен к группе, повторная попытка).
-* `size` - количество узлов, в настоящее время находящихся в кластере.
-* `local_index` - индекс узла в кластере.
-* `last_error` - последнее зарегистрированное сообщение об ошибке, связанной с операцией кластера. Сообщение предоставляет общий обзор проблемы. Для более подробного контекста следует обратиться к файлу `searchd.log`.
+* `conf_id` - общее количество изменений состава кластера.
+* `status` - статус компонента кластера. Возможные значения: primary (конфигурация основной группы, кворум присутствует), non_primary (конфигурация непервичной группы, кворум отсутствует), или disconnected (отсутствует соединение с группой, повтор попытки).
+* `size` - количество узлов, находящихся в кластере в данный момент.
+* `local_index` - индекс данного узла в кластере.
+* `last_error` - последнее зафиксированное сообщение об ошибке, связанной с операцией кластера. Сообщение дает общий обзор проблемы. Для более подробного контекста следует обратиться к файлу `searchd.log`.
 
 ### Метрики прогресса SST
 
-Во время передачи снимка состояния (SST) один узел обеспечивает другой, передавая полную копию данных. Это происходит, когда новый узел присоединяется к кластеру [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) или когда добавляются новые таблицы [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). Пока SST активен, на узлах-доноре и присоединяющемся будут доступны следующие дополнительные переменные статуса, прогресс которых синхронизирован.
+Во время передачи снимка состояния (State Snapshot Transfer, SST) один узел подготавливает другой, передавая полную копию данных. Это происходит, когда новый узел присоединяется к кластеру [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) или когда добавляются новые таблицы [ALTER CLUSTER ADD](Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). Пока активен SST, на обоих узлах - доноре и присоединяющемся - доступны дополнительные переменные статуса, прогресс которых синхронизирован.
 
 * `cluster_name_sst_total` - общий прогресс всей операции SST, от 0 до 100. Это основной счетчик для отслеживания.
-* `cluster_name_sst_stage` - название текущей фазы работы. Процесс проходит через эти стадии для каждой передаваемой таблицы:
+* `cluster_name_sst_stage` - название текущей фазы работы. Процесс циклично проходит следующие этапы для каждой передаваемой таблицы:
     * `await nodes sync`
     * `block checksum calculate`
     * `analyze remote`
@@ -32,9 +32,9 @@
     * `activate tables`
 * `cluster_name_sst_stage_total` - прогресс текущей стадии, от 0 до 100.
 * `cluster_name_sst_tables` - общее количество таблиц, передаваемых в SST.
-* `cluster_name_sst_table` - имя и индекс таблицы, которая в данный момент обрабатывается (например, `3 (products)`).
+* `cluster_name_sst_table` - имя и индекс текущей обрабатываемой таблицы (например, `3 (products)`).
 
-Для большинства случаев использования достаточно `cluster_name_sst_total`. Однако другие счетчики могут быть полезны для расследования зависаний или проблем с производительностью на конкретной стадии SST или с определенной таблицей.
+Для большинства случаев достаточно переменной `cluster_name_sst_total`. Однако остальные счетчики могут быть полезны при исследовании зависаний или проблем с производительностью на конкретной стадии SST или при передаче конкретной таблицы.
 
 <!-- intro -->
 ##### SQL:

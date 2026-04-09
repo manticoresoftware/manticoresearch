@@ -1,4 +1,4 @@
-# Сброс части оперативной памяти RAM на диск
+# Запись куска RAM в файл
 
 ## FLUSH TABLE
 
@@ -8,11 +8,11 @@
 FLUSH TABLE rt_table
 ```
 
-`FLUSH TABLE` принудительно сбрасывает содержимое части оперативной памяти (RAM chunk) RT таблицы на диск.
+`FLUSH TABLE` принудительно записывает содержимое RAM-куска таблицы RT на диск.
 
-Часть оперативной памяти (RAM chunk) таблицы реального времени [real-time table](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) автоматически сбрасывается на диск при корректном завершении работы или периодически каждые [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) секунд.
+Кусок RAM реального времени таблицы [RT](../Creating_a_table/Local_tables/Real-time_table.md#Real-time-table-files-structure) автоматически сбрасывается на диск во время корректного завершения работы или периодически каждые [rt_flush_period](../Server_settings/Searchd.md#rt_flush_period) секунд.
 
-Выполнение команды `FLUSH TABLE` не только заставляет записать содержимое части оперативной памяти на диск, но и запускает очистку файлов бинарного лога.
+Выполнение команды `FLUSH TABLE` не только принудительно записывает содержимое RAM-куска на диск, но и запускает очистку бинарных логов.
 
 <!-- intro -->
 ##### SQL:
@@ -26,26 +26,6 @@ FLUSH TABLE rt;
 ```sql
 Query OK, 0 rows affected (0.05 sec)
 ```
-
-<!-- intro -->
-##### JSON:
-
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "FLUSH TABLE rt"
-```
-<!-- response JSON -->
-```JSON
-[
-  {
-    "total": 0,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
 <!-- proofread -->

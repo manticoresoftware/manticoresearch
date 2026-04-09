@@ -14,9 +14,19 @@ mysql> select CONNECTION_ID();
 1 row in set (0.00 sec)
 ```
 
+### HYBRID_SCORE()
+
+Возвращает оценку слияния RRF для [гибридного поиска](../Searching/Hybrid_search.md). Доступна только в гибридных запросах (тех, которые используют `OPTION fusion_method='rrf'`). Результаты по умолчанию сортируются по `hybrid_score() DESC`.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
 ### KNN_DIST()
 
-Возвращает расстояние [KNN векторного поиска](../Searching/KNN.md).
+Возвращает расстояние для [KNN векторного поиска](../Searching/KNN.md). В запросах [гибридного поиска](../Searching/Hybrid_search.md) с несколькими KNN подзапросами возвращает минимальное расстояние среди всех них.
 
 ```sql
 mysql> select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) ) and match('white') and id < 10;
@@ -53,9 +63,9 @@ mysql> select LAST_INSERT_ID();
 
 ### UUID_SHORT()
 
-Возвращает "короткий" универсальный идентификатор в виде 63-битного беззнакового целого числа, используя тот же алгоритм, что и для [автоматической генерации ID](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
+Возвращает «короткий» универсальный идентификатор в виде 63-битного беззнакового целого числа по тому же алгоритму, что и для [генерации авто-идентификаторов](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID).
 
-> ПРИМЕЧАНИЕ: Использование `uuid_short()` увеличит счетчик, используемый для авто-ID, поэтому используйте его с осторожностью. Хотя вы можете запускать `uuid_short()` в запросах типа `SELECT uuid_short() FROM ...`, такой подход не идеален, так как может создавать большие пропуски в ваших автоматически сгенерированных ID.
+> ПРИМЕЧАНИЕ: Использование `uuid_short()` увеличивает счетчик, используемый для авто-ID, поэтому используйте его с осторожностью. Хотя можно выполнять `uuid_short()` в запросах типа `SELECT uuid_short() FROM ...`, такой подход не идеален, так как может создавать большие пропуски в автоматически сгенерированных идентификаторах.
 
 ```sql
 mysql> select uuid_short();

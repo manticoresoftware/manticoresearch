@@ -1,24 +1,24 @@
 # 分面搜索
 
-分面搜索对于现代搜索应用程序来说，与[自动完成](../Searching/Autocomplete.md)、[拼写纠正](../Searching/Spell_correction.md)和搜索关键字[高亮](../Searching/Highlighting.md)一样重要，尤其是在电子商务产品中。
+分面搜索对于现代搜索应用来说，与[自动补全](../Searching/Autocomplete.md)、[拼写纠正](../Searching/Spell_correction.md)和搜索关键词[高亮](../Searching/Highlighting.md)同样重要，尤其是在电子商务产品中。
 
 ![分面搜索](faceted.png)
 
-当处理大量数据和各种相互关联的属性（如尺寸、颜色、制造商或其他因素）时，分面搜索非常有用。在查询大量数据时，搜索结果常常包含许多不符合用户期望的条目。分面搜索使最终用户能够明确指定他们希望搜索结果满足的条件。
+当处理大量数据和各种相互关联的属性时，例如尺寸、颜色、制造商或其他因素，分面搜索就派上用场了。在查询海量数据时，搜索结果常常包含许多不符合用户预期的条目。分面搜索使最终用户能够明确定义他们希望搜索结果满足的条件。
 
-在 Manticore Search 中，有一种优化方法，它维护原始查询的结果集并在每个分面计算中重用它。由于聚合应用于已计算的文档子集，因此速度很快，总执行时间通常仅比初始查询稍长。分面可以添加到任何查询中，分面可以是任何属性或表达式。分面结果包括分面值和分面计数。可以通过在查询的最后声明分面来使用 SQL `SELECT` 语句访问分面。
+在 Manticore Search 中，有一项优化功能，它会保留原始查询的结果集，并在每个分面计算中重复使用。由于聚合操作应用于已计算好的文档子集，因此速度很快，总执行时间通常仅比初始查询稍长一些。分面可以添加到任何查询中，分面可以是任何属性或表达式。分面结果包括分面值和分面计数。可以通过在查询末尾声明分面，使用 SQL `SELECT` 语句访问分面。
 
 ## 聚合
 
 <!-- example Aggregations -->
 ### SQL
-分面值可以来自属性、JSON 属性中的 JSON 属性或表达式。分面值也可以别名，但**别名必须在所有结果集（主查询结果集和其他分面结果集）中唯一**。分面值来自于聚合的属性/表达式，但也可以来自另一个属性/表达式。
+分面值可以来自属性、JSON 属性内的 JSON 属性或表达式。分面值也可以使用别名，但**别名在所有结果集（主查询结果集和其他分面结果集）中必须是唯一的**。分面值源自聚合的属性/表达式，但也可以来自另一个属性/表达式。
 
 ```sql
 FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
-多个分面声明必须以空格分隔。
+多个分面声明必须用空格分隔。
 
 ### HTTP JSON
 
@@ -41,11 +41,11 @@ FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FA
 
 其中：
 * `group name` 是分配给聚合的别名
-* `field` 值必须包含要分面的属性或表达式名称
-* 可选的 `size` 指定结果中包含的最大桶数量。如果未指定，则继承主查询的限制。更多细节请参见[分面结果大小](../Searching/Faceted_search.md#Size-of-facet-result)部分。
-* 可选的 `sort` 指定属性和/或附加属性数组，使用与[主查询中的 "sort" 参数](../Searching/Sorting_and_ranking.md#Sorting-via-JSON)相同的语法。
+* `field` 值必须包含要进行分面的属性或表达式的名称
+* 可选的 `size` 指定结果中包含的最大桶数。未指定时，继承主查询的限制。更多详细信息可以在[分面结果大小](../Searching/Faceted_search.md#Size-of-facet-result)部分找到。
+* 可选的 `sort` 指定一个属性数组和/或附加属性，使用与[主查询中的"sort"参数](../Searching/Sorting_and_ranking.md#Sorting-via-JSON)相同的语法。
 
-结果集将包含一个带有返回分面的 `aggregations` 节点，其中 `key` 是聚合值，`doc_count` 是聚合计数。
+结果集将包含一个 `aggregations` 节点，其中包含返回的分面，`key` 是聚合值，`doc_count` 是聚合计数。
 
 ``` json
     "aggregations": {
@@ -759,22 +759,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example Another_attribute -->
 
-### 基于另一个属性的聚合分面
+### 通过聚合另一个属性进行分面
 
-数据可以通过聚合另一个属性或表达式进行分面。例如，如果文档同时包含品牌 ID 和名称，我们可以在分面中返回品牌名称，但聚合品牌 ID。可以使用 `FACET {expr1} BY {expr2}` 来实现。
+可以通过聚合另一个属性或表达式对数据进行分面。例如，如果文档同时包含品牌ID和名称，我们可以在分面中返回品牌名称，但聚合品牌ID。这可以通过使用 `FACET {expr1} BY {expr2}` 来实现。
 
-
-<!--
-data for the following examples:
-
-DROP TABLE IF EXISTS facetdemo;
-CREATE TABLE facetdemo(price float, brand_id int, title text, brand_name string, brand_id int, j json, categories multi);
-INSERT INTO facetdemo(price, brand_id, title, brand_name, brand_id, j, categories) VALUES
-(306, 1, 'Product Ten Three', 'Brand One', 'Six_Ten', {"prop1":66,"prop2":91,"prop3":"One"}, (10,11)),
-(400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', {"prop1":69,"prop2":19,"prop3":"One"}, (13,14)),
-(855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', {"prop1":63,"prop2":78,"prop3":"One"}, (10,11,12)),
-(31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', {"prop1":79,"prop2":42,"prop3":"One"}, '(12,13,14));
---> 
 
 <!-- intro -->
 ##### SQL:
@@ -815,81 +803,17 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 10 rows in set (0.00 sec)
 ```
 
-<!-- request JSON -->
-
-```JSON
-POST /sql -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took": 0,
-  "timed_out": false,
-  "hits": {
-    "total": 20,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 1,
-        "_score": 1500,
-        "_source": {
-          "brand_name": "Brand One",
-          "brand_id": 1
-        }
-      },
-      {
-        "_id": 2,
-        "_score": 1500,
-        "_source": {
-          "brand_name": "Brand Ten",
-          "brand_id": 10
-        }
-      },
-      ...
-      {
-        "_id": 20,
-        "_score": 1500,
-        "_source": {
-          "brand_name": "Brand Nine",
-          "brand_id": 9
-        }
-      },
-    ]
-  },
-  "aggregations": {
-    "brand_name": {
-      "buckets": [
-        {
-          "key": "Brand One",
-          "doc_count": 1013
-        },
-        {
-          "key": "Brand Ten",
-          "doc_count": 998
-        },
-        ...
-        {
-          "key": "Brand Seven",
-          "doc_count": 965
-        },
-      ]
-    }
-  }
-}
-```
-
 <!-- end -->
 
 <!-- example Distinct -->
 
 ### 去重分面
 
-如果你需要从 FACET 返回的桶中去除重复项，可以使用 `DISTINCT field_name`，其中 `field_name` 是你要去重的字段。也可以是 `id`（这是默认的），如果你对分布式表进行 FACET 查询且不确定表中是否有唯一 ID（表应是本地表且具有相同的架构）。
+如果需要从 FACET 返回的桶中移除重复项，可以使用 `DISTINCT field_name`，其中 `field_name` 是您希望用于去重的字段。如果您对分布式表进行 FACET 查询，并且不确定表中是否有唯一的ID（表应该是本地的且具有相同的模式），也可以是 `id`（这是默认值）。
 
-如果查询中有多个 FACET 声明，`field_name` 应该在所有声明中保持一致。
+如果查询中有多个 FACET 声明，`field_name` 在所有声明中应该相同。
 
-`DISTINCT` 会在 `count(*)` 列之前返回一个额外的列 `count(distinct ...)`，使你无需进行另一次查询即可获得两种结果。
+`DISTINCT` 会在 `count(*)` 列之前返回一个额外的列 `count(distinct ...)`，使您无需进行另一个查询即可获得两个结果。
 
 <!-- intro -->
 ##### SQL:
@@ -1027,7 +951,7 @@ POST /sql -d 'SELECT brand_name, property FROM facetdemo FACET brand_name distin
 <!-- example Expressions -->
 ### 基于表达式的分面
 
-Facets 可以对表达式进行聚合。一个经典的例子是按特定范围对价格进行分段：
+分面可以基于表达式进行聚合。一个经典的例子是按特定范围对价格进行分段：
 
 <!-- request SQL -->
 
@@ -1601,9 +1525,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example Multi-level -->
 
-### 多级分组的 Facet
+### 多级分组的Facet
 
-Facets 可以对多级分组进行聚合，结果集与查询执行多级分组时的结果相同：
+Facets可以对多级分组进行聚合，结果集与查询执行多级分组时的结果相同：
 
 <!-- request SQL -->
 
@@ -1639,102 +1563,20 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            1 | Brand Four  |      195 |
 ...
 ```
-
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo FACET price_range AS price_range,brand_name ORDER BY brand_name asc"
-```
-
-<!-- response JSON -->
-
-```JSON
-[
-  {
-    "columns": [
-      {
-        "brand_name": {
-          "type": "string"
-        }
-      },
-      {
-        "price_range": {
-          "type": "long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "brand_name": "Brand One",
-        "price_range": 1
-      },
-      ...
-    ],
-    "total": 20,
-    "error": "",
-    "warning": ""
-  },
-  {
-    "columns": [
-      {
-        "fprice_range": {
-          "type": "long"
-        }
-      },
-      {
-        "brand_name": {
-          "type": "string"
-        }
-      },
-      {
-        "count(*)": {
-          "type": "long long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "fprice_range": 1,
-        "brand_name": "Brand Eight",
-        "count(*)": 197
-      },
-      {
-        "fprice_range": 4,
-        "brand_name": "Brand Eight",
-        "count(*)": 235
-      },
-      ...
-      {
-        "fprice_range": 0,
-        "brand_name": "Brand Five",
-        "count(*)": 183
-      },
-      {
-        "fprice_range": 1,
-        "brand_name": "Brand Four",
-        "count(*)": 195
-      }
-    ],
-    "total": 10,
-    "error": "",
-    "warning": ""
-  }
-]
-```
 <!-- end -->
 
 <!-- example histogram -->
 
-### 针对直方图值的 Facet
+### 基于直方图值的Facet
 
-Facets 可以通过构造固定大小的桶对直方图值进行聚合。
-关键函数为：
+Facets可以通过构造固定大小的桶来对值进行直方图聚合。
+键函数是：
 
 ```sql
 key_of_the_bucket = interval + offset * floor ( ( value - offset ) / interval )
 ```
 
-直方图参数 `interval` 必须为正，直方图参数 `offset` 必须为正且小于 `interval`。默认情况下，桶作为数组返回。直方图参数 `keyed` 会使响应变为带有桶键的字典。
+直方图参数`interval`必须为正数，直方图参数`offset`必须为正数且小于`interval`。默认情况下，桶以数组形式返回。直方图参数`keyed`使得响应以字典形式返回桶键。
 
 <!-- request SQL -->
 
@@ -1866,17 +1708,17 @@ POST /search -d '
 
 <!-- example histogram_date -->
 
-### 针对日期直方图值的 Facet
+### 基于日期直方图值的Facet
 
-Facets 可以对日期直方图值进行聚合，这类似于普通直方图。不同之处在于间隔是使用日期或时间表达式指定的。这类表达式需要特殊支持，因为间隔长度不总是固定的。值使用以下关键函数舍入到最接近的桶：
+Facets可以对日期直方图值进行聚合，这与普通直方图类似。不同之处在于，区间由日期或时间表达式指定。此类表达式需要特殊支持，因为区间长度不总是固定的。值会根据以下键函数四舍五入到最近的桶：
 
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
 
-直方图参数 `calendar_interval` 可以识别月份天数的不同。
-与 `calendar_interval` 不同，`fixed_interval` 参数使用固定数量的单位，不会偏离日历位置。但是，`fixed_interval` 不能处理诸如月份之类的单位，因为月份不是固定数量。尝试为 `fixed_interval` 指定周或月等单位将导致错误。
-接受的间隔在 [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) 表达式中描述。默认情况下，桶作为数组返回。直方图参数 `keyed` 会使响应变成带桶键的字典。
+直方图参数`calendar_interval`理解月份具有不同的天数。
+与`calendar_interval`不同，`fixed_interval`参数使用固定数量的单位，无论其在日历中的位置如何，都不会偏离。但是`fixed_interval`无法处理如周或月这样的单位，因为月不是一个固定数量。尝试为`fixed_interval`指定如周或月这样的单位将导致错误。
+接受的区间在[日期直方图](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29)表达式中描述。默认情况下，桶以数组形式返回。直方图参数`keyed`使得响应以字典形式返回桶键。
 
 <!-- request SQL -->
 
@@ -1957,10 +1799,10 @@ POST /search -d '
 
 <!-- example facet range -->
 
-### 针对一组范围的 Facet
+### 基于范围的Facet
 
-Facets 可以对一组范围进行聚合。值将检查是否在桶的范围内，其中每个桶包含范围内的 `from` 值，不包含 `to` 值。
-将 `keyed` 属性设置为 `true` 会使响应为带桶键的字典，而不是数组。
+Facets可以对一组范围进行聚合。值会与桶范围进行检查，其中每个桶包括`from`值并排除`to`值。
+将`keyed`属性设置为`true`使得响应以字典形式返回桶键，而不是数组。
 
 <!-- request SQL -->
 
@@ -2100,9 +1942,9 @@ POST /search -d '
 
 <!-- example facet range_date -->
 
-### 针对一组日期范围的 Facet
+### 基于日期范围的Facet
 
-Facets 可以对一组日期范围进行聚合，这类似于普通范围。不同之处在于，`from` 和 `to` 值可以用 [日期数学](../Functions/Date_and_time_functions.md#Date-math) 表达式表示。该聚合对每个范围包含 `from` 值且不包含 `to` 值。将 `keyed` 属性设置为 `true` 会使响应为带桶键的字典，而不是数组。
+Facets可以对一组日期范围进行聚合，这与普通范围类似。不同之处在于，`from`和`to`值可以使用[日期数学](../Functions/Date_and_time_functions.md#Date-math)表达式表示。此聚合包括`from`值并排除每个范围的`to`值。将`keyed`属性设置为`true`使得响应以字典形式返回桶键，而不是数组。
 
 <!-- request SQL -->
 
@@ -2193,13 +2035,13 @@ POST /search -d '
 <!-- end -->
 
 <!-- example Ordering -->
-### Facet 结果的排序
+### Facet结果中的排序
 
-Facets 支持与标准查询一样的 `ORDER BY` 子句。每个 facet 可以有自己的排序，facet 的排序不会影响主结果集的排序，主结果集排序由主查询的 `ORDER BY` 决定。排序可以基于属性名、计数（使用 `COUNT(*)`、`COUNT(DISTINCT attribute_name)`）或特殊的 `FACET()` 函数，该函数提供聚合数据值。默认情况下，带有 `ORDER BY COUNT(*)` 的查询会按降序排序。
+Facets支持`ORDER BY`子句，就像标准查询一样。每个Facet可以有自己的排序方式，Facet的排序不会影响主结果集的排序，这由主查询的`ORDER BY`决定。排序可以基于属性名、计数（使用`COUNT(*)`、`COUNT(DISTINCT attribute_name)`）或特殊的`FACET()`函数，该函数提供聚合数据值。默认情况下，带有`ORDER BY COUNT(*)`的查询将按降序排序。
 
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -2273,7 +2115,7 @@ FACET brand_name BY brand_id order BY COUNT(*);
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON：
 
 <!-- request JSON -->
 
@@ -2378,14 +2220,14 @@ POST /search -d '
 
 
 <!-- example Size -->
-### Facet 结果的大小
+### Facet结果的大小
 
-默认情况下，每个 facet 结果集限制为 20 个值。每个 facet 的值数量可以通过 `LIMIT` 子句单独控制，格式为返回值数量 `LIMIT count`，或带偏移量 `LIMIT offset, count`。
+默认情况下，每个Facet结果集仅限于20个值。可以通过`LIMIT`子句单独为每个Facet控制Facet值的数量，提供返回值的数量格式`LIMIT count`或使用偏移量`LIMIT offset, count`。
 
-返回的最大 facet 值数量受查询的 `max_matches` 设置限制。如果您想实现动态 `max_matches`（将 `max_matches` 限制为 offset + 每页数量以提高性能），必须考虑到过低的 `max_matches` 值可能会影响 facet 值的数量。在这种情况下，应使用一个足够覆盖 facet 值数量的最小 `max_matches` 值。
+返回的最大Facet值数量受查询的`max_matches`设置限制。如果您想实现动态`max_matches`（限制`max_matches`为偏移量+每页以提高性能），必须考虑到过低的`max_matches`值可能会影响Facet值的数量。在这种情况下，应使用足以覆盖Facet值数量的最小`max_matches`值。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -2974,17 +2816,17 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 
 <!-- end -->
-### 返回结果集
+### 返回的结果集
 
-使用 SQL 时，带有 facets 的搜索会返回多个结果集。所使用的 MySQL 客户端/库/连接器 **必须** 支持多结果集，才能访问 facet 结果集。
+当使用SQL时，带有 facets 的搜索会返回多个结果集。MySQL客户端/库/连接器所使用的 **必须** 支持多个结果集，以便访问 facets 结果集。
 
 <!-- example Performance -->
 ### 性能
 
-在内部，`FACET` 是执行多查询的简写，其中第一个查询包含主搜索查询，批次中其余查询各自有一个聚类。与多查询的情况类似，共同的查询优化可以应用于有 facet 的搜索，这意味着搜索查询只执行一次，facets 在搜索查询结果上操作，每个 facet 只增加总查询时间的一小部分。
+内部，`FACET` 是执行多查询的一个快捷方式，其中第一个查询包含主要搜索查询，批次中的其余查询各自包含聚类。正如多查询的情况一样，对于带有 facets 的搜索，常见的查询优化可以启动，这意味着搜索查询只执行一次，而 facets 则在搜索查询结果上操作，每个 facet 只增加总查询时间的一小部分。
 
 
-要检查带 facet 的搜索是否以优化模式运行，可以查看[查询日志](../Logging/Query_logging.md)，所有记录的查询中都会包含一个 `xN` 字符串，其中 `N` 是优化组中运行的查询数。或者，可以查看 [SHOW META](../Node_info_and_management/SHOW_META.md) 语句的输出，它会显示一个 `multiplier` 指标：
+要检查 facets 搜索是否以优化模式运行，可以在 [查询日志](../Logging/Query_logging.md) 中查找，其中所有记录的查询将包含一个 `xN` 字符串，`N` 是优化组中运行的查询数量。或者，可以检查 [SHOW META](../Node_info_and_management/SHOW_META.md) 语句的输出，该语句将显示一个 `multiplier` 指标：
 
 <!-- request SQL -->
 
@@ -3026,132 +2868,6 @@ SHOW META LIKE 'multiplier';
 | multiplier    | 4     |
 +---------------+-------+
 1 row in set (0.00 sec)
-```
-
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET price FACET categories; SHOW META LIKE 'multiplier'"
-```
-
-<!-- response JSON -->
-
-```JSON
-[
-  {
-    "columns": [
-      {
-        "brand_name": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "brand_name": "Brand One"
-      },
-      ...
-    ],
-    "total": 20,
-    "error": "",
-    "warning": ""
-  },
-  {
-    "columns": [
-      {
-        "brand_id": {
-          "type": "long"
-        }
-      },
-      {
-        "count(*)": {
-          "type": "long long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "brand_id": 1,
-        "count(*)": 1013
-      },
-      ...
-    ],
-    "total": 20,
-    "error": "",
-    "warning": ""
-  },
-  {
-    "columns": [
-      {
-        "price": {
-          "type": "long"
-        }
-      },
-      {
-        "count(*)": {
-          "type": "long long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "price": 306,
-        "count(*)": 7
-      },
-      ...
-    ],
-    "total": 20,
-    "error": "",
-    "warning": ""
-  },
-  {
-    "columns": [
-      {
-        "categories": {
-          "type": "string"
-        }
-      },
-      {
-        "count(*)": {
-          "type": "long long"
-        }
-      }
-    ],
-    "data": [
-      {
-        "categories": "10,11",
-        "count(*)": 2436
-      },
-      ...
-    ],
-    "total": 15,
-    "error": "",
-    "warning": ""
-  },
-  {
-    "columns": [
-      {
-        "Variable_name": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Variable_name": "multiplier",
-        "Value": "4"
-      }
-    ],
-    "total": 1,
-    "error": "",
-    "warning": ""
-  }
-]
 ```
 
 <!-- end -->

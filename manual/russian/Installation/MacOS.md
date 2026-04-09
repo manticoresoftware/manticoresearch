@@ -12,22 +12,22 @@ brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/mantico
 brew services start manticoresearch
 ```
 
-Файл конфигурации по умолчанию для Manticore находится либо по пути `/usr/local/etc/manticoresearch/manticore.conf`, либо `/opt/homebrew/etc/manticoresearch/manticore.conf`.
+Конфигурационный файл Manticore по умолчанию находится по адресу `/usr/local/etc/manticoresearch/manticore.conf` или `/opt/homebrew/etc/manticoresearch/manticore.conf`.
 
-Если вы планируете использовать [indexer](../Creating_a_table/Local_tables/Plain_table.md) для получения данных из источников, таких как MySQL, PostgreSQL или другой базы данных через ODBC, вам могут понадобиться дополнительные библиотеки, такие как `mysql@5.7`, `libpq` и `unixodbc` соответственно.
+Если вы планируете использовать [индексатор](../Creating_a_table/Local_tables/Plain_table.md) для получения данных из источников, таких как MySQL, PostgreSQL или другой базы данных с использованием ODBC, вам могут понадобиться дополнительные библиотеки, такие как `mysql@5.7`, `libpq` и `unixodbc`, соответственно.
 
 #### Пакеты для разработки
-Если вы предпочитаете "Nightly" (разработческие) версии, выполните:
+Если вы предпочитаете "Ночные" (разработческие) версии, выполните:
 ```bash
 brew tap manticoresoftware/tap-dev
-brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
-brew services start manticoresearch-dev
+brew install manticoresoftware/tap-dev/manticore-dev
+brew services start manticore-dev
 ```
 
 <!--
-## Из tarball с бинарными файлами
+## From tarball with binaries
 
-Скачайте его [с сайта](https://manticoresearch.com/install/) и распакуйте в папку:
+Download it [from the website](https://manticoresearch.com/install/) and unpack to a folder:
 
 ```bash
 mkdir manticore
@@ -49,9 +49,8 @@ FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticor
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 
-Файл конфигурации Manticore — `./etc/manticoresearch/manticore.conf` после распаковки архива.
+Manticore configuration file is `./etc/manticoresearch/manticore.conf` after you unpack the archive.
 
 -->
 
 <!-- proofread -->
-

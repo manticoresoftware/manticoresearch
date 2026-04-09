@@ -1,27 +1,27 @@
 # 节点状态
 
-## STATUS
+## 状态
 
 <!-- example status -->
-查看 Manticore 节点的高层信息最简单的方法是在 MySQL 客户端中运行 `status`。它会显示各个方面的信息，例如：
+通过在MySQL客户端运行`status`可以查看关于Manticore节点的高级信息。它将显示各种方面的信息，例如：
 * 当前版本
-* 是否启用了 SSL
-* 当前 TCP 端口/Unix 套接字
+* 是否启用SSL
+* 当前TCP端口/Unix套接字
 * 运行时间
-* [线程](../Server_settings/Searchd.md#threads) 数量
-* [队列中的作业](../Server_settings/Searchd.md#jobs_queue_size) 数量
+* 线程数量（[参见此处](../Server_settings/Searchd.md#threads)）
+* 队列中的任务数量（[参见此处](../Server_settings/Searchd.md#jobs_queue_size)）
 * 连接数（`clients`）
 * 当前正在处理的任务数
-* 启动以来执行的查询数量
-* 队列中作业数和任务数，按线程数归一化
+* 自启动以来执行的查询数
+* 根据线程数量归一化的队列中的任务数和任务数
 
 <!-- request SQL -->
-```mysql
+```sql
 mysql> status
 ```
 
 <!-- response SQL -->
-```mysql
+```sql
 --------------
 mysql  Ver 14.14 Distrib 5.7.30, for Linux (x86_64) using  EditLine wrapper
 
@@ -50,7 +50,7 @@ Queue/Th: 0.2  Tasks/Th: 0.4
 
 <!-- end-->
 
-## SHOW STATUS
+## SHOW 状态
 
 ```sql
 SHOW STATUS [ LIKE pattern ]
@@ -58,10 +58,10 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` 是一个 SQL 语句，用于显示各种有用的性能计数器。只有当 `searchd` 使用 `--iostats` 和 `--cpustats` 启动开关（或通过 `SET GLOBAL iostats/cpustats=1` 启用）时，IO 和 CPU 计数器才可用。
+`SHOW STATUS`是一个SQL语句，提供了各种有用的性能计数器。IO和CPU计数器仅在`searchd`以`--iostats`和`--cpustats`开关启动时或通过`SET GLOBAL iostats/cpustats=1`启用时可用。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -151,344 +151,11 @@ SHOW STATUS;
 +-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW STATUS"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Counter": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Counter": "uptime",
-        "Value": "107191"
-      },
-      {
-        "Counter": "connections",
-        "Value": "214577"
-      },
-      {
-        "Counter": "maxed_out",
-        "Value": "0"
-      },
-      {
-        "Counter": "version",
-        "Value": "13.13.4 0bc5a9641@25101507 dev (columnar 8.1.0 e1522a2@25100213) (secondary 8.1.0 e1522a2@25100213) (knn 8.1.0 e1522a2@25100213) (embeddings 1.0.1) (buddy v3.35.1+25090418-41d9811f-dev)"
-      },
-      {
-        "Counter": "mysql_version",
-        "Value": "13.13.4 0bc5a9641@25101507 dev (columnar 8.1.0 e1522a2@25100213) (secondary 8.1.0 e1522a2@25100213) (knn 8.1.0 e1522a2@25100213) (embeddings 1.0.1)"
-      },
-      {
-        "Counter": "command_search",
-        "Value": "47"
-      },
-      {
-        "Counter": "command_excerpt",
-        "Value": "3"
-      },
-      {
-        "Counter": "command_update",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_keywords",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_persist",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_status",
-        "Value": "361"
-      },
-      {
-        "Counter": "command_flushattrs",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_sphinxql",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_ping",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_delete",
-        "Value": "1"
-      },
-      {
-        "Counter": "command_set",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_insert",
-        "Value": "13"
-      },
-      {
-        "Counter": "command_replace",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_commit",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_suggest",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_json",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_callpq",
-        "Value": "8"
-      },
-      {
-        "Counter": "command_cluster",
-        "Value": "0"
-      },
-      {
-        "Counter": "command_getfield",
-        "Value": "0"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "agent_connect",
-        "Value": "0"
-      },
-      {
-        "Counter": "agent_tfo",
-        "Value": "0"
-      },
-      {
-        "Counter": "agent_retry",
-        "Value": "0"
-      },
-      {
-        "Counter": "queries",
-        "Value": "44"
-      },
-      {
-        "Counter": "dist_queries",
-        "Value": "0"
-      },
-      {
-        "Counter": "workers_total",
-        "Value": "8"
-      },
-      {
-        "Counter": "workers_active",
-        "Value": "3"
-      },
-      {
-        "Counter": "workers_clients",
-        "Value": "1"
-      },
-      {
-        "Counter": "workers_clients_vip",
-        "Value": "0"
-      },
-      {
-        "Counter": "workers_clients_buddy",
-        "Value": "1"
-      },
-      {
-        "Counter": "work_queue_length",
-        "Value": "8"
-      },
-      {
-        "Counter": "load",
-        "Value": "0.00 0.00 0.00"
-      },
-      {
-        "Counter": "load_primary",
-        "Value": "0.00 0.00 0.00"
-      },
-      {
-        "Counter": "load_secondary",
-        "Value": "0.00 0.00 0.00"
-      },
-      {
-        "Counter": "query_wall",
-        "Value": "0.007"
-      },
-      {
-        "Counter": "query_cpu",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "dist_wall",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "dist_local",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "dist_wait",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "query_reads",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "query_readkb",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "query_readtime",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "avg_query_wall",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "avg_query_cpu",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "avg_dist_wall",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "avg_dist_local",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "avg_dist_wait",
-        "Value": "0.000"
-      },
-      {
-        "Counter": "avg_query_reads",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "avg_query_readkb",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "avg_query_readtime",
-        "Value": "OFF"
-      },
-      {
-        "Counter": "qcache_max_bytes",
-        "Value": "16777216"
-      },
-      {
-        "Counter": "qcache_thresh_msec",
-        "Value": "3000"
-      },
-      {
-        "Counter": "qcache_ttl_sec",
-        "Value": "60"
-      },
-      {
-        "Counter": "qcache_cached_queries",
-        "Value": "0"
-      },
-      {
-        "Counter": "qcache_used_bytes",
-        "Value": "0"
-      },
-      {
-        "Counter": "qcache_hits",
-        "Value": "0"
-      }
-    ],
-    "total": 75,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
 <!-- example show status like -->
 
-支持可选的 `LIKE` 子句，允许选择仅匹配特定模式的变量。模式语法遵循标准 SQL 通配符，其中 `%` 表示任意数量的任意字符，`_` 表示单个字符。
+支持可选的`LIKE`子句，允许您选择仅匹配特定模式的变量。模式语法遵循标准SQL通配符，其中`%`表示任意数量的任何字符，而`_`表示一个字符。
 
 <!-- request qcache -->
 
@@ -510,61 +177,6 @@ SHOW STATUS LIKE 'qcache%';
 +-----------------------+-------+
 ```
 
-<!-- request qcache(JSON) -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW STATUS LIKE 'qcache%'"
-```
-
-<!-- response qcache(JSON) -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Counter": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Counter": "qcache_max_bytes",
-        "Value": "16777216"
-      },
-      {
-        "Counter": "qcache_thresh_msec",
-        "Value": "3000"
-      },
-      {
-        "Counter": "qcache_ttl_sec",
-        "Value": "60"
-      },
-      {
-        "Counter": "qcache_cached_queries",
-        "Value": "0"
-      },
-      {
-        "Counter": "qcache_used_bytes",
-        "Value": "0"
-      },
-      {
-        "Counter": "qcache_hits",
-        "Value": "0"
-      }
-    ],
-    "total": 6,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- request perf_stats -->
 
 ```sql
@@ -592,97 +204,6 @@ SHOW STATUS LIKE '%stats_ms%';
 | update_stats_ms_pct95         | N/A 0.042 0.042   |
 | update_stats_ms_pct99         | N/A 0.042 0.042   |
 +-------------------------------+-------------------+
-```
-
-<!-- request perf_stats(JSON) -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
-```
-
-<!-- response perf_stats(JSON) -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Counter": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Counter": "insert_replace_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      }
-    ],
-    "total": 15,
-    "error": "",
-    "warning": ""
-  }
-]
 ```
 
 <!-- end -->
@@ -691,20 +212,26 @@ POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
 
 <!-- example show status like stats_ms -->
 
-`SHOW STATUS` 命令详细报告了 Manticore 的各种性能指标，包括插入/替换、搜索和更新查询的查询时间统计。这些统计数据基于 1、5 和 15 分钟的滑动时间窗口，显示了查询时间的平均值、最小值、最大值以及 95%/99% 百分位值。
+`SHOW STATUS`命令提供了Manticore中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的时间统计。这些统计数据是在1分钟、5分钟和15分钟的滑动窗口上计算的，显示了每种查询类型的时间的平均值、最小值、最大值以及95%和99%分位数。
 
-这些指标有助于跟踪特定时间区间内的性能，便于发现查询响应时间的趋势和可能的瓶颈。
+这些指标有助于跟踪特定时间段内的性能，使发现查询响应时间的趋势和可能瓶颈变得更加容易。
 
-`SHOW STATUS` 输出中的相关指标包括：
-- `*_avg`：最近 1、5 和 15 分钟内各类型查询的平均查询时间。
-- `*_min`：各类型查询记录的最短查询时间。
-- `*_max`：各类型查询记录的最长查询时间。
-- `*_pct95`：95% 的查询可以在此时间内完成。
-- `*_pct99`：99% 的查询可以在此时间内完成。
+对于搜索时间：
+- `search_stats_ms_*` 在 `SHOW STATUS` 中基于与查询日志中显示为 `wall` 的相同查询墙时间家族。
+- `query_wall` / `avg_query_wall` 是执行查询的累积/平均节点计数器。
+- `dist_wall`、`dist_local` 和 `dist_wait` 是仅限分布式维度，应一起解释，而不是作为 `search_stats_ms_*` 的直接替代。
+- 每个表的计时器（`SHOW TABLE ... STATUS`）可能与节点级计数器不同，尤其是对于分布式表。
 
-这些统计数据分别为插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询提供，详细展示不同操作的性能情况。
+以下是`SHOW STATUS`输出的一部分指标：
+- `*_avg`：每种查询类型的平均查询时间，分别在过去1分钟、5分钟和15分钟内。
+- `*_min`：每种查询类型记录的最短查询时间。
+- `*_max`：每种查询类型记录的最长查询时间。
+- `*_pct95`：完成95%查询所需的时间。
+- `*_pct99`：完成99%查询所需的时间。
 
-如果在监控区间内没有执行任何查询，系统将显示 `N/A`。
+这些统计数据分别提供给插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询，提供了不同操作性能的详细见解。
+
+如果在监控间隔内没有执行查询，则系统将显示`N/A`。
 
 <!-- request perf_stats -->
 
@@ -735,111 +262,20 @@ SHOW STATUS LIKE '%stats_ms%';
 +-------------------------------+-------------------+
 ```
 
-<!-- request perf_stats(JSON) -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW STATUS LIKE '%stats_ms%'"
-```
-
-<!-- response perf_stats(JSON) -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Counter": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Counter": "insert_replace_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "insert_replace_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "search_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_avg",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_min",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_max",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_pct95",
-        "Value": "N/A N/A N/A"
-      },
-      {
-        "Counter": "update_stats_ms_pct99",
-        "Value": "N/A N/A N/A"
-      }
-    ],
-    "total": 15,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
-## SHOW SETTINGS
+## SHOW 设置
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` 是一个 SQL 语句，用于显示当前配置文件中的设置。设置名称格式为：`'config_section_name'.'setting_name'`
+`SHOW SETTINGS`是一个SQL语句，显示配置文件中的当前设置。设置名称以以下格式表示：`'config_section_name'.'setting_name'`
 
-结果还包含两个额外值：
+结果还包括两个额外的值：
 - `configuration_file` - 配置文件路径
-- `worker_pid` - 运行中 `searchd` 实例的进程 ID
+- `worker_pid` - 运行中的`searchd`实例的进程ID
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -868,96 +304,19 @@ SHOW SETTINGS;
 13 rows in set (0.00 sec)
 ```
 
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW SETTINGS"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Setting_name": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Setting_name": "configuration_file",
-        "Value": "/etc/manticoresearch/manticore.conf.sh"
-      },
-      {
-        "Setting_name": "worker_pid",
-        "Value": 1
-      },
-      {
-        "Setting_name": "searchd.listen",
-        "Value": "9306:mysql41"
-      },
-      {
-        "Setting_name": "searchd.listen",
-        "Value": "/var/run/mysqld/mysqld.sock:mysql41"
-      },
-      {
-        "Setting_name": "searchd.listen",
-        "Value": "9308:http"
-      },
-      {
-        "Setting_name": "searchd.listen",
-        "Value": "172.17.0.2:9312"
-      },
-      {
-        "Setting_name": "searchd.listen",
-        "Value": "172.17.0.2:9315-9325:replication"
-      },
-      {
-        "Setting_name": "searchd.pid_file",
-        "Value": "/run/manticore/searchd.pid"
-      },
-      {
-        "Setting_name": "searchd.data_dir",
-        "Value": "/var/lib/manticore"
-      },
-      {
-        "Setting_name": "searchd.binlog_path",
-        "Value": "/var/lib/manticore/binlog"
-      },
-      {
-        "Setting_name": "common.plugin_dir",
-        "Value": "/usr/local/lib/manticore"
-      }
-    ],
-    "total": 11,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- end -->
 
-## SHOW AGENT STATUS
+## SHOW AGENT 状态
 ```sql
 SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 ```
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` 显示[远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)或分布式表的统计信息，包括最后请求的时间、最后响应的时间、各种错误和成功的次数等。统计信息按最后 1、5 和 15 个时间间隔显示，每个间隔包含 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒。
+`SHOW AGENT 状态`显示远程代理或分布式表的统计信息。它包括诸如上次请求的年龄、最后回答的年龄、各种类型错误和成功的数量等值。统计信息按[ha_period_karma](../Server_settings/Searchd.md#ha_period_karma)秒为单位，显示每个代理过去1分钟、5分钟和15分钟的统计信息。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -1025,45 +384,8 @@ SHOW AGENT STATUS;
 50 rows in set (0.01 sec)
 ```
 
-```JSON
-POST /sql?mode=raw -d "SHOW AGENT STATUS"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Key": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Key": "status_period_seconds",
-        "Value": "60"
-      },
-      {
-        "Key": "status_stored_periods",
-        "Value": "15"
-      }
-    ],
-    "total": 2,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
 <!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -1128,7 +450,7 @@ Array(
 )
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -1196,7 +518,7 @@ utilsApi.sql('SHOW AGENT STATUS')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -1264,7 +586,7 @@ await utilsApi.sql('SHOW AGENT STATUS')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -1332,7 +654,7 @@ res = await utilsApi.sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -1400,7 +722,7 @@ utilsApi.sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -1468,7 +790,7 @@ utilsApi.Sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### Rust:
+##### Rust：
 
 <!-- request Rust -->
 
@@ -1536,7 +858,7 @@ utils_api.sql("SHOW AGENT STATUS", Some(true)).await;
 ```
 
 <!-- intro -->
-##### TypeScript:
+##### TypeScript：
 
 <!-- request TypeScript -->
 
@@ -1619,7 +941,7 @@ res = await utilsApi.sql("SHOW AGENT STATUS");
 ```
 
 <!-- intro -->
-##### Go:
+##### Go：
 
 <!-- request Go -->
 
@@ -1706,10 +1028,10 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-支持可选的 `LIKE` 子句，语法同 `SHOW STATUS`。
+支持可选的`LIKE`子句，语法与`SHOW STATUS`相同。
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 <!-- request SQL -->
 
 ```sql
@@ -1729,52 +1051,7 @@ SHOW AGENT STATUS LIKE '%5period%msec%';
 ```
 
 <!-- intro -->
-##### JSON:
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW AGENT STATUS LIKE '%5period%msec%'"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Key": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Key": "ag_0_5periods_msecsperquery",
-        "Value": "234.72"
-      },
-      {
-        "Key": "ag_1_5periods_msecsperquery",
-        "Value": "234.72"
-      },
-      {
-        "Key": "ag_2_5periods_msecsperquery",
-        "Value": "234.72"
-      }
-    ],
-    "total": 3,
-    "error": "",
-    "warning": ""
-  }
-]
-```
-
-<!-- intro -->
-##### PHP:
+##### PHP：
 
 <!-- request PHP -->
 
@@ -1796,7 +1073,7 @@ Array(
 )
 ```
 <!-- intro -->
-##### Python:
+##### Python：
 
 <!-- request Python -->
 
@@ -1818,7 +1095,7 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
 ```
 
 <!-- intro -->
-##### Python-asyncio:
+##### Python-asyncio：
 
 <!-- request Python-asyncio -->
 
@@ -1840,7 +1117,7 @@ await utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
 ```
 
 <!-- intro -->
-##### Javascript:
+##### Javascript：
 
 <!-- request javascript -->
 
@@ -1863,7 +1140,7 @@ res = await utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 
 
 <!-- intro -->
-##### java:
+##### java：
 
 <!-- request Java -->
 
@@ -1885,7 +1162,7 @@ utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 ```
 
 <!-- intro -->
-##### C#:
+##### C#：
 
 <!-- request C# -->
 
@@ -1995,7 +1272,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-You can specify a particular agent by its address. In this case, only that agent's data will be displayed. Additionally, the `agent_` prefix will be used instead of `ag_N_`:
+您可以通过其地址指定特定的代理。在这种情况下，将仅显示该代理的数据。此外，将使用 `agent_` 前缀而不是 `ag_N_`：
 
 <!-- intro -->
 ##### SQL:
@@ -2312,7 +1589,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-Finally, you can check the status of the agents in a specific distributed table using the `SHOW AGENT table_name STATUS` statement. This statement displays the table's HA status (i.e., whether or not it uses agent mirrors at all) and provides information on the mirrors, including: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect.
+最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。此语句会显示表的HA状态（即是否使用代理镜像）以及镜像的信息，包括：地址、黑洞和持久性标志，以及在使用加权概率策略之一时使用的镜像选择概率。
 
 <!-- intro -->
 ##### SQL:
@@ -2342,91 +1619,6 @@ SHOW AGENT dist_index STATUS;
 | dstindex_1mirror3_is_persistent      | 0                              |
 +--------------------------------------+--------------------------------+
 13 rows in set (0.00 sec)
-```
-
-<!-- intro -->
-##### JSON:
-<!-- request JSON -->
-
-```JSON
-POST /sql?mode=raw -d "SHOW AGENT dist_index STATUS"
-```
-
-<!-- response JSON -->
-```JSON
-[
-  {
-    "columns": [
-      {
-        "Key": {
-          "type": "string"
-        }
-      },
-      {
-        "Value": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "Key": "dstindex_1_is_ha",
-        "Value": "1"
-      },
-      {
-        "Key": "dstindex_1mirror1_id",
-        "Value": "192.168.0.202:6713:loc"
-      },
-      {
-        "Key": "dstindex_1mirror1_probability_weight",
-        "Value": "0.372864"
-      },
-      {
-        "Key": "dstindex_1mirror1_is_blackhole",
-        "Value": "0"
-      },
-      {
-        "Key": "dstindex_1mirror1_is_persistent",
-        "Value": "0"
-      },
-      {
-        "Key": "dstindex_1mirror2_id",
-        "Value": "192.168.0.202:6714:loc"
-      },
-      {
-        "Key": "dstindex_1mirror2_probability_weight",
-        "Value": "0.3746350"
-      },
-      {
-        "Key": "dstindex_1mirror2_is_blackhole",
-        "Value": "0"
-      },
-      {
-        "Key": "dstindex_1mirror2_is_persistent",
-        "Value": "0"
-      },
-      {
-        "Key": "dstindex_1mirror3_id",
-        "Value": "dev1.manticoresearch.com:6714:loc"
-      },
-      {
-        "Key": "dstindex_1mirror3_probability_weight",
-        "Value": "0.252501"
-      },
-      {
-        "Key": "dstindex_1mirror3_is_blackhole",
-        "Value": "0"
-      },
-      {
-        "Key": "dstindex_1mirror3_is_persistent",
-        "Value": "0"
-      }
-    ],
-    "total": 13,
-    "error": "",
-    "warning": ""
-  }
-]
 ```
 
 <!-- intro -->
@@ -2743,10 +1935,10 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 
 <!-- example prometheus exporter -->
 
-Manticore Search has a built-in Prometheus exporter.
-To request metrics, make sure the HTTP port is exposed and simply call the /metrics endpoint.
+Manticore Search 具有内置的 Prometheus 导出器。
+要请求指标，请确保暴露了 HTTP 端口并简单地调用 /metrics 终端节点。
 
-**Note:** The exporter requires **Buddy** to be enabled.
+**注意：** 导出器需要 **Buddy** 被启用。
 
 <!-- intro -->
 ##### HTTP:

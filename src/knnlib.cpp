@@ -166,13 +166,13 @@ bool InitKNN ( CSphString & sError )
 	{
 		std::string sErrorSTL;
 		g_pEmbeddingsLib = std::unique_ptr<knn::EmbeddingsLib_i> ( g_fnLoadEmbeddingsLib ( sEmbeddingsLibFile, sErrorSTL ) );
-		if ( !sErrorSTL.empty() )
-			sError = sErrorSTL.c_str();
+		if ( !g_pEmbeddingsLib )
+			return false;
 	}
 
 	g_pKNNLib = tHandle.Leak();
 
-	return !!g_pEmbeddingsLib;
+	return true;
 }
 
 void ShutdownKNN()

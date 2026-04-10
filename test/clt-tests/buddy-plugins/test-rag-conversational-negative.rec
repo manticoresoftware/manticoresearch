@@ -82,7 +82,7 @@ CALL CONVERSATIONAL_RAG(
 );
 EOF
 ––– output –––
-ERROR 1064 (42000) at line 1: Schema detection failed: no such table 'nonexistent_table'
+ERROR 1064 (42000) at line 1: Table 'nonexistent_table' not found
 ––– comment –––
 Test 8: CALL CONVERSATIONAL_RAG with missing required parameters (too few arguments)
 ––– input –––
@@ -107,62 +107,67 @@ ERROR 1064 (42000) at line 1: model must use 'provider:model' format
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model (model='openai:gpt-4o-mini', timeout='-0.5');"
 ––– output –––
-ERROR 1064 (42000) at line 1: timeout can't be less than 1
+ERROR 1064 (42000) at line 1: timeout must be an integer between 1 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_2 (model='openai:gpt-4o-mini', timeout='NaN');"
 ––– output –––
-ERROR 1064 (42000) at line 1: timeout should be int from 1 to 65536
+ERROR 1064 (42000) at line 1: timeout must be an integer between 1 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_3 (model='openai:gpt-4o-mini', retrieval_limit=-2);"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_4 (model='openai:gpt-4o-mini', retrieval_limit=-1);"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_5 (model='openai:gpt-4o-mini', retrieval_limit=0.72);"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_6 (model='openai:gpt-4o-mini', retrieval_limit='0.72');"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_5 (model='openai:gpt-4o-mini', retrieval_limit=5.72);"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be int between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_6 (model='openai:gpt-4o-mini', retrieval_limit='5.72');"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be int between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_7 (model='openai:gpt-4o-mini', retrieval_limit='99993839857847384737564378672661');"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_8 (model='openai:gpt-4o-mini', retrieval_limit='NaN');"
 ––– output –––
-ERROR 1064 (42000) at line 1: retrieval_limit must be between 1 and 50
+ERROR 1064 (42000) at line 1: retrieval_limit must be an integer between 1 and 50
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_11 (model='openai:gpt-4o-mini', max_document_length=-50);"
 ––– output –––
-ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
+ERROR 1064 (42000) at line 1: max_document_length must be 0 or an integer between 100 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_12 (model='openai:gpt-4o-mini', max_document_length='-50');"
 ––– output –––
-ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
+ERROR 1064 (42000) at line 1: max_document_length must be 0 or an integer between 100 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_13 (model='openai:gpt-4o-mini', max_document_length=2.72);"
 ––– output –––
+ERROR 1064 (42000) at line 1: max_document_length must be 0 or an integer between 100 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_15 (model='openai:gpt-4o-mini', max_document_length=0);"
 ––– output –––
-ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "CREATE RAG MODEL invalid_temp_low_model_16 (model='openai:gpt-4o-mini', max_document_length=90990438589382393829473742987897189237);"
 ––– output –––
-ERROR 1064 (42000) at line 1: max_document_length must be integer between -1 and 65536
+ERROR 1064 (42000) at line 1: max_document_length must be 0 or an integer between 100 and 65536
 ––– input –––
 mysql -h0 -P9306 -e "DROP RAG MODEL valid_model;"
 ––– output –––

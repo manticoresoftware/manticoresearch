@@ -864,6 +864,31 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
+function HasKnnInQuery ( $query_or_result )
+{
+	$query = null;
+	if ( is_array ( $query_or_result ) )
+	{
+		if ( isset ( $query_or_result['sphinxql'] ) )
+			$query = $query_or_result['sphinxql'];
+		else if ( isset ( $query_or_result['http_request'] ) )
+			$query = $query_or_result['http_request'];
+	}
+	else if ( is_string ( $query_or_result ) )
+		$query = $query_or_result;
+
+	if ( !is_string ( $query ) || $query==='' )
+		return false;
+
+	$query = strtolower ( $query );
+	return strpos ( $query, 'knn(' )!==false
+		|| strpos ( $query, 'knn_dist(' )!==false
+		|| strpos ( $query, 'hybrid_score(' )!==false
+		|| strpos ( $query, 'hybrid_match(' )!==false
+		|| strpos ( $query, '_knn_dist' )!==false
+		|| strpos ( $query, '_hybrid_score' )!==false;
+}
+
 function RandomWords ( $n, $seed )
 {
 	srand ( $seed );
@@ -2459,7 +2484,7 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
-        $has_knn = $this->Requires("knn");
+        $has_knn = $this->Requires("knn") && HasKnnInQuery ( $query_result );
 
         if ( $keep_json_ctrls )
         {
@@ -2694,8 +2719,7 @@ class SphinxConfig
             $raw_result["total_rows"] = mysqli_num_rows($result);
 			$query_result["total_rows"] = $raw_result["total_rows"];
 			
-			// Tests that require <knn/> round floats to tolerate tiny cross-ISA FP drift
-			$round_knn = $this->Requires("knn");
+			$round_knn = $this->Requires("knn") && HasKnnInQuery ( $query );
 
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
@@ -3418,7 +3442,7 @@ class SphinxConfig
 
 		// fixup floats in json via http
 		if ( isset ( $set["http"] ) && $set["http"]==1 )
-			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls, $this->Requires("knn") );
+			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls, HasKnnInQuery ( $set ) );
 		else
 			SqlRsetFixup ( $set, IsColumnar() );
 
@@ -3485,7 +3509,7 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
-		$round_knn = $this->Requires("knn");
+		$round_knn = $this->Requires("knn") && ( HasKnnInQuery ( $set1 ) || HasKnnInQuery ( $set2 ) );
 
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );

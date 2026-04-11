@@ -7,10 +7,10 @@ MOCK SERVER SETUP FOR PARAMETER COMBINATIONS TESTING
 
 To test parameter combinations with local mock servers:
 
-OpenAI provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
-Voyage provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
-Generic server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8083
-Slow server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+OpenAI provider: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
+Voyage provider: php test/clt-tests/ae/mock-embeddings-server.php --port 8081 --provider voyage
+Generic server: php test/clt-tests/ae/mock-embeddings-server.php --port 8083
+Slow server: php test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
 
 The mock server returns deterministic random embeddings seeded by input text
 API Key Validation: All keys are valid except "wrong" (returns 401 error)
@@ -22,7 +22,7 @@ MOCK SERVER STARTUP
 
 Start mock server for OpenAI provider on port 8080
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
 MOCK_PID_8080=$!
 echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
 sleep 1
@@ -31,7 +31,7 @@ Mock server started on port 8080 (PID: #!/[0-9]+/!#)
 ––– comment –––
 Start mock server for Voyage provider on port 8081
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage > /tmp/mock-server-8081.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8081 --provider voyage > /tmp/mock-server-8081.log 2>&1 &
 MOCK_PID_8081=$!
 echo "Mock server started on port 8081 (PID: $MOCK_PID_8081)"
 sleep 1
@@ -40,7 +40,7 @@ Mock server started on port 8081 (PID: #!/[0-9]+/!#)
 ––– comment –––
 Start generic mock server (no provider) on port 8083
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8083 > /tmp/mock-server-8083.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8083 > /tmp/mock-server-8083.log 2>&1 &
 MOCK_PID_8083=$!
 echo "Generic mock server started on port 8083 (PID: $MOCK_PID_8083)"
 sleep 1
@@ -49,7 +49,7 @@ Generic mock server started on port 8083 (PID: #!/[0-9]+/!#)
 ––– comment –––
 Start slow mock server for timeout testing on port 8084 (6 second delay)
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0 > /tmp/mock-server-8084.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0 > /tmp/mock-server-8084.log 2>&1 &
 MOCK_PID_8084=$!
 echo "Slow mock server started on port 8084 (PID: $MOCK_PID_8084)"
 sleep 1
@@ -60,7 +60,7 @@ All Valid Parameters Together
 
 Test: CREATE TABLE with all valid parameters (MODEL_NAME, FROM, API_KEY, API_URL, API_TIMEOUT)
 Expected: Table creation succeeds, all parameters work together, SHOW CREATE TABLE displays api_url, api_timeout, from (but not api_key)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_all_params (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='valid-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
 ––– output –––
@@ -83,7 +83,7 @@ API_URL + API_TIMEOUT (No API_KEY)
 Test: CREATE TABLE with API_URL and API_TIMEOUT but no API_KEY
 Expected: Table creation fails (API_KEY required for remote models)
 Verify: Error message indicates API key required
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_url_timeout_no_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1
 ––– output –––
@@ -94,7 +94,7 @@ API_URL + Invalid API_KEY
 Test: CREATE TABLE with API_URL and invalid API_KEY
 Expected: Table creation fails during validation
 Verify: Real API validation occurs
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_url_invalid_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='wrong' API_URL='http://localhost:8080/v1/embeddings')" 2>&1
 ––– output –––
@@ -105,7 +105,7 @@ API_TIMEOUT + Slow Server
 Test: CREATE TABLE with API_TIMEOUT='5' and slow server (delay=6.0)
 Expected: Table creation fails with timeout error
 Verify: Timeout enforced correctly
-Setup: Requires slow mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+Setup: Requires slow mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_timeout_slow_server (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8084/v1/embeddings' API_TIMEOUT='5')" 2>&1
 ––– output –––
@@ -116,7 +116,7 @@ Custom API_URL + Provider Mismatch
 Test: Custom API_URL with provider mismatch (OpenAI model with Voyage provider)
 Expected: Table creation fails with model/provider mismatch
 Verify: Provider validation works with custom URL
-Setup: Requires mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider voyage
+Setup: Requires mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8081 --provider voyage
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_url_provider_mismatch (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8081/v1/embeddings')" 2>&1
 ––– output –––
@@ -127,7 +127,7 @@ Custom API_URL + Provider Override in Text
 Test: Custom API_URL with provider override in input text
 Expected: INSERT succeeds with provider override
 Verify: Provider override works with custom URL
-Setup: Requires generic mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8083 (no --provider)
+Setup: Requires generic mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8083 (no --provider)
 
 Create table with generic server
 ––– input –––
@@ -193,7 +193,7 @@ Expected: Both tables use separate model object instances (different registry ke
 Each INSERT makes a fresh HTTP request with the respective timeout
 Verification: We verify separate instances by confirming both tables can operate independently with their respective timeout settings
 Note: Both use the same endpoint, so we can't verify by comparing embeddings. Instead, we verify that both operations succeed independently, which would fail if they incorrectly shared the same model instance with conflicting timeout settings.
-Setup: Requires slow mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+Setup: Requires slow mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
 
 Create table1 with API_TIMEOUT='30'
 ––– input –––
@@ -229,7 +229,7 @@ Same Parameters Reuse Model Instance
 Test: Two tables with same API_URL, API_TIMEOUT, and model name
 Expected: Both tables share the same model object instance (same registry key)
 Each INSERT still makes a fresh HTTP request (no response caching)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table1 with specific parameters
 ––– input –––
@@ -261,7 +261,7 @@ Very Long API_URL
 
 Test: CREATE TABLE with very long API_URL (with query string)
 Expected: Table creation fails because mock server doesn't handle query parameters (returns 404)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table with long API_URL
 ––– input –––
@@ -274,7 +274,7 @@ Special Characters in API_URL
 
 Test: CREATE TABLE with API_URL containing query parameters and special characters
 Expected: Table creation fails because mock server doesn't handle query parameters (returns 404)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_special_chars_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings?param=value&other=test')" 2>&1; echo $?
 ––– output –––
@@ -285,7 +285,7 @@ API_URL with Authentication in URL
 
 Test: CREATE TABLE with API_URL containing authentication (user:pass@host)
 Expected: May work or fail based on implementation. If works, authentication in URL handled correctly
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_auth_url (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://user:pass@localhost:8080/v1/embeddings')" 2>&1; echo $?
 ––– output –––
@@ -295,7 +295,7 @@ Concurrent ALTER Operations
 
 Test: Multiple ALTER commands on the same table
 Expected: Operations handled correctly (may serialize or fail appropriately), no race conditions or corruption
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table first
 ––– input –––
@@ -378,7 +378,7 @@ FROM Parameter with API_URL
 Test: CREATE TABLE with FROM parameter and API_URL
 Expected: Both parameters work together, embeddings generated from specified fields, custom endpoint used
 Verify: FROM and API_URL work together
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_from_api_url (title TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
 ––– output –––

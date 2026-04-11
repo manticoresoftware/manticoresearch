@@ -7,7 +7,7 @@ MOCK SERVER SETUP FOR API_URL TESTING
 
 To test API_URL parameter with a local mock server:
 
-Start mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Start mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 Use API_URL='http://localhost:8080/v1/embeddings' in CREATE TABLE statements
 The mock server returns deterministic random embeddings seeded by input text
 This allows testing API_URL functionality without making real API calls
@@ -21,7 +21,7 @@ MOCK SERVER STARTUP
 ––– comment –––
 Start mock server for OpenAI provider on port 8080
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
 MOCK_PID_8080=$!
 echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
 sleep 3
@@ -142,7 +142,7 @@ Test Cases: Server accessible but returns wrong response format
 Expected: Table creation fails during API key validation (validation request fails to parse response)
 Test Method: Use response-type=TYPE in input text to override response format
 Note: The response-type=... parameter is removed from text before generating embeddings
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Test Case 1: Server returns HTML (not JSON) - use "response-type=html" in input text
 Note: This test requires inserting data with "response-type=html" in the text to trigger HTML response
@@ -187,7 +187,7 @@ API_URL Valid and Working (Custom Endpoint)
 
 Test: API_URL='http://localhost:8080/v1/embeddings' with mock server
 Expected: Table creation succeeds, embeddings generated successfully, SHOW CREATE TABLE displays api_url
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_api_url_custom_endpoint (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings')" 2>&1; echo $?
 ––– output –––

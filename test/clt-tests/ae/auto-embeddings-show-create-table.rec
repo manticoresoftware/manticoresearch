@@ -7,7 +7,7 @@ MOCK SERVER SETUP FOR SHOW CREATE TABLE TESTING
 
 To test SHOW CREATE TABLE with a local mock server:
 
-OpenAI provider: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+OpenAI provider: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 The mock server returns deterministic random embeddings seeded by input text
 API Key Validation: All keys are valid except "wrong" (returns 401 error)
@@ -19,7 +19,7 @@ MOCK SERVER STARTUP
 
 Start mock server for OpenAI provider on port 8080
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
 MOCK_PID_8080=$!
 echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
 sleep 1
@@ -30,7 +30,7 @@ With api_url Specified
 
 Test: SHOW CREATE TABLE for table created with API_URL='http://localhost:8080/v1/embeddings' api_timeout='10'
 Expected: Output includes api_url='http://localhost:8080/v1/embeddings' api_timeout='10'
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table with api_url
 ––– input –––
@@ -78,7 +78,7 @@ With api_timeout Specified (Non-Default)
 
 Test: SHOW CREATE TABLE for table created with API_TIMEOUT='30'
 Expected: Output includes api_timeout='30'
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table with api_timeout
 ––– input –––
@@ -172,7 +172,7 @@ api_key Should NOT Appear (Security)
 Test: SHOW CREATE TABLE for table created with API_KEY='secret-key'
 Expected: Output does NOT include api_key
 Verify: api_key never appears in output (security requirement)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table with api_key
 ––– input –––
@@ -196,7 +196,7 @@ All Parameters Together
 
 Test: SHOW CREATE TABLE for table with api_url, api_timeout, and from specified
 Expected: Output includes all three (but not api_key)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 
 Create table with all parameters
 ––– input –––

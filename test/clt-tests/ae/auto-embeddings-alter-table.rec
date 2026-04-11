@@ -7,8 +7,8 @@ MOCK SERVER SETUP FOR ALTER TABLE TESTING
 
 To test ALTER TABLE with a local mock server:
 
-Start mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
-Start second mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider openai
+Start mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
+Start second mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8081 --provider openai
 The mock server returns deterministic random embeddings seeded by input text
 API Key Validation: All keys are valid except "wrong" (returns 401 error)
 ––– comment –––
@@ -19,7 +19,7 @@ MOCK SERVER STARTUP
 ––– comment –––
 Start mock server for OpenAI provider on port 8080
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
 MOCK_PID_8080=$!
 echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
 sleep 1
@@ -28,7 +28,7 @@ Mock server started on port 8080 (PID: #!/[0-9]+/!#)
 ––– comment –––
 Start second mock server for OpenAI provider on port 8081 (for testing API_URL changes)
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8081 --provider openai > /tmp/mock-server-8081.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8081 --provider openai > /tmp/mock-server-8081.log 2>&1 &
 MOCK_PID_8081=$!
 echo "Mock server started on port 8081 (PID: $MOCK_PID_8081)"
 sleep 1
@@ -39,7 +39,7 @@ Add API_URL (Previously Not Specified)
 
 Test: Create table without API_URL, then ALTER to add it
 Expected: ALTER succeeds, new API_URL used for subsequent requests, SHOW CREATE TABLE displays api_url
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– comment –––
 Create table without API_URL
 ––– input –––
@@ -316,7 +316,7 @@ Change API_KEY (Previously Specified)
 
 Test: Create table with API_KEY, then ALTER to change it
 Expected: ALTER succeeds, new API_KEY validated, new key used for subsequent requests
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– comment –––
 Create table with old API_KEY
 ––– input –––
@@ -359,7 +359,7 @@ ALTER API_KEY with Invalid Key
 Test: ALTER TABLE ... MODIFY COLUMN embedding API_KEY='wrong'
 Expected: ALTER fails during validation with "Invalid API key" error
 Verify: Real API validation occurs
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– comment –––
 First create table with valid key
 ––– input –––

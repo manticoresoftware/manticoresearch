@@ -886,7 +886,9 @@ function HasKnnInQuery ( $query_or_result )
 		|| strpos ( $query, 'hybrid_score(' )!==false
 		|| strpos ( $query, 'hybrid_match(' )!==false
 		|| strpos ( $query, '_knn_dist' )!==false
-		|| strpos ( $query, '_hybrid_score' )!==false;
+		|| strpos ( $query, '_hybrid_score' )!==false
+		|| strpos ( $query, '"knn"' )!==false
+		|| strpos ( $query, '"hybrid"' )!==false;
 }
 
 function RandomWords ( $n, $seed )

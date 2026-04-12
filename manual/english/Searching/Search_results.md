@@ -83,7 +83,7 @@ POST /search
 <!-- end -->
 
 <!--
-data for the following example:
+data for the following examples:
 
 DROP TABLE IF EXISTS hn_small;
 CREATE TABLE hn_small(story_author string, comment_author string);
@@ -94,6 +94,13 @@ INSERT INTO hn_small(story_author, comment_author) VALUES
 ('joe', 'SwellJoe'),
 ('joe', 'samb'),
 ('joe', 'jsjenkins168');
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
 --> 
 
 <!-- example sql2 -->

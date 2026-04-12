@@ -1,5 +1,17 @@
 # SHOW TABLE STATUS
 
+<!--
+data for the following example:
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f text);
+INSERT INTO t(f) VALUES
+('first'),
+('second'),
+('third'),
+('fourth'),
+('fifth');
+-->
+
 <!-- example SHOW TABLE STATUS -->
 
 `SHOW TABLE STATUS` is an SQL statement that displays various per-table statistics.

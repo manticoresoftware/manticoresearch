@@ -6,6 +6,16 @@ Beginning with Manticore 4, this process occurs [automatically by default](../Se
 
 ## OPTIMIZE TABLE
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
 <!-- example optimize -->
 ```sql
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
@@ -120,6 +130,13 @@ POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
 
 <!-- end -->
 <!-- example cluster_manual_optimize -->
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
 Optimize the table:
 <!-- request SQL -->
 ```sql

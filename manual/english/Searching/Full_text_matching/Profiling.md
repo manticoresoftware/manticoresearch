@@ -1309,6 +1309,14 @@ POST /sql?mode=raw -d "EXPLAIN QUERY tbl '@title a' option format=dot"
 ]
 ```
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test1;
+CREATE TABLE test1(title text);
+INSERT INTO test1(title) VALUES ('test one');
+-->
+
 <!-- request JSON -->
 ```JSON
 POST /search

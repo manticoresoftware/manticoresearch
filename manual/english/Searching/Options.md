@@ -377,7 +377,7 @@ POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1
         "_score": 2500,
         "_source": {
           "f1": "c",
-          "f2": 3"
+          "f2": 3
         }
       },
       {
@@ -487,6 +487,17 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```
 
 <!-- end -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int);
+INSERT INTO students(name, age) VALUES
+('Alice', 20),
+('Bob', 22),
+('Carol', 25);
+-->
 
 <!-- example comments -->
 When using a MySQL/MariaDB client, make sure to include the `--comments` flag to enable the hints in your queries.

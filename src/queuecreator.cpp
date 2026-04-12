@@ -207,6 +207,9 @@ void CSphGroupSorterSettings::FixupLocators ( const ISphSchema * pOldSchema, con
 
 	if ( m_pDistinctFetcher )
 		m_pDistinctFetcher->FixupLocators ( pOldSchema, pNewSchema );
+
+	if ( m_pGrouper )
+		m_pGrouper->FixupLocators ( pOldSchema, pNewSchema );
 }
 
 void CSphGroupSorterSettings::SetupDistinctAccuracy ( int iThresh )

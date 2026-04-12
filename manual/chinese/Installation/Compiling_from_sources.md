@@ -1,27 +1,27 @@
-# 从源码编译 Manticore
+# 从源代码编译 Manticore
 
-从源码编译 Manticore Search 可以实现自定义的构建配置，例如禁用某些功能或添加新的补丁进行测试。例如，您可能希望从源码编译并禁用嵌入式 ICU，以便使用系统上安装的、可以独立于 Manticore 升级的不同版本。如果您有兴趣为 Manticore Search 项目做贡献，这也很有用。
+从源代码编译 Manticore Search 可以启用自定义构建配置，例如禁用某些功能或添加新补丁进行测试。例如，您可能希望从源代码编译并禁用嵌入式 ICU，以便使用系统上安装的不同版本，该版本可以独立于 Manticore 进行升级。如果您有兴趣为 Manticore Search 项目做出贡献，这也非常有用。
 
 ## 使用 CI Docker 构建
-为了准备[官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。该镜像包含必要的工具，并设计为与外部系统根目录（sysroots）一起使用，因此一个容器可以为所有操作系统构建软件包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) 来构建该镜像，或者使用 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 上的镜像。这是为任何支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
+为了准备 [官方发布和开发包](https://repo.manticoresearch.com/)，我们使用 Docker 和一个特殊的构建镜像。此镜像包含必要的工具，并设计为与外部 sysroots 一起使用，因此一个容器可以为所有操作系统构建包。您可以使用 [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) 和 [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) 构建该镜像，或使用来自 [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags) 的镜像。这是为任何受支持的操作系统和架构创建二进制文件的最简单方法。运行容器时，您还需要指定以下环境变量：
 
 * `DISTR`：目标平台：`bionic`，`focal`，`jammy`，`buster`，`bullseye`，`bookworm`，`rhel8`，`rhel9`，`rhel10`，`macos`，`windows`，`freebsd13`
-* `arch`：架构：`x86_64`、`x64`（适用于 Windows）、`aarch64`、`arm64`（适用于 Macos）
-* `SYSROOT_URL`：系统根目录归档文件的 URL。除非您自己构建系统根目录（说明可以在[这里](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)找到），否则可以使用 https://repo.manticoresearch.com/repository/sysroots。
-* 参考 CI 工作流文件以查找您可能需要使用的其他环境变量：
+* `arch`：架构：`x86_64`，`x64`（用于 Windows），`aarch64`，`arm64`（用于 Macos）
+* `SYSROOT_URL`：系统根存档的 URL。您可以使用 https://repo.manticoresearch.com/repository/sysroots，除非您自己构建 sysroots（说明可在 [此处](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots) 找到）。
+* 使用 CI 工作流文件作为参考，找到您可能需要使用的其他环境变量：
   - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/pack_publish.yml
   - https://github.com/manticoresoftware/manticoresearch/blob/master/.github/workflows/build_template.yml
 
-要查找 `DISTR` 和 `arch` 的可能值，您可以参考目录 https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/，因为它包含了所有支持组合的系统根目录。
+要找到 `DISTR` 和 `arch` 的可能值，您可以使用目录 https://repo.manticoresearch.com/repository/sysroots/roots_with_zstd/ 作为参考，因为它包含所有受支持组合的 sysroots。
 
-之后，在 Docker 容器内构建软件包就像调用以下命令一样简单：
+之后，在 Docker 容器内构建包就像调用以下命令一样简单：
 
 ```bash
 cmake -DPACK=1 /path/to/sources
 cmake --build .
 ```
 
-例如，要创建一个类似于 Manticore 核心团队提供的官方版本的 Ubuntu Jammy 软件包，您应该在包含 Manticore Search 源代码的目录中执行以下命令。该目录是从 https://github.com/manticoresoftware/manticoresearch 克隆的仓库的根目录：
+例如，要在包含 Manticore Search 源代码的目录中创建一个与 Manticore Core 团队提供的官方版本类似的 Ubuntu Jammy 包，您应该在该目录中执行以下命令。该目录是来自 https://github.com/manticoresoftware/manticoresearch 的克隆仓库的根目录：
 
 ```bash
 docker run -it --rm \
@@ -41,24 +41,23 @@ docker run -it --rm \
 -e PACK_GALERA=0 \
 -e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:vcpkg331_20250114 bash
+manticoresearch/external_toolchain:vcpkg331_20260310 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 cmake --build .
 # or if you want to build packages:
 # cmake --build . --target package
 ```
-在某些情况下（例如 Centos），需要较长的源代码目录路径，否则可能无法成功构建源代码。
+长源目录路径是必需的，否则在某些情况下（例如 Centos）可能无法构建源代码。
 
-同样地，您不仅可以为流行的 Linux 发行版构建二进制文件或软件包，还可以为 FreeBSD、Windows 和 macOS 构建。
+同样，您可以构建二进制文件或包，不仅适用于流行的 Linux 发行版，还适用于 FreeBSD、Windows 和 macOS。
 
 #### 使用 Docker 构建 SRPM
 
-您也可以使用相同的特殊 Docker 镜像来构建 SRPM：
+您还可以使用相同的特殊 Docker 镜像来构建 SRPM：
 
 ```bash
 docker run -it --rm \
@@ -78,13 +77,12 @@ docker run -it --rm \
 -e PACK_GALERA=0 \
 -e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:vcpkg331_20250114 bash
+manticoresearch/external_toolchain:vcpkg331_20260310 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
 # The CPackSourceConfig.cmake file is now generated in the build directory
 cpack -G RPM --config ./CPackSourceConfig.cmake
 ```
@@ -93,7 +91,7 @@ cpack -G RPM --config ./CPackSourceConfig.cmake
 
 #### 从 SRPM 构建二进制 RPM
 
-生成 SRPM 后，您可以使用它来构建完整的二进制 RPM 软件包集：
+一旦生成了 SRPM，您可以使用它来构建完整的二进制 RPM 包集合：
 
 ```bash
 # Install build tools and dependencies
@@ -109,31 +107,31 @@ rpmbuild --rebuild manticore-*.src.rpm
 ls ~/rpmbuild/RPMS/*/manticore*
 ```
 
-> 注意：**要从 SRPM 构建 RPM，您需要确保 SRPM 中列出的所有依赖项都已完全安装，这可能具有挑战性。** SRPM 在以下方面仍然有用：
+> 注意：**要从 SRPM 构建 RPM，您需要确保 SRPM 中列出的所有依赖项都已完全安装，这可能具有挑战性。** SRPM 仍然可以用于：
 > - 审计构建过程或检查源代码和 spec 文件
-> - 对构建进行自定义修改或打补丁
+> - 对构建进行自定义修改或补丁
 > - 了解二进制文件是如何生成的
 > - 满足开源许可证合规性要求
 
 ## 手动构建
 
-不使用构建 Docker 来编译 Manticore **不推荐**，但如果您需要这样做，以下是一些您可能需要了解的信息：
+不使用构建 Docker 来编译 Manticore **不推荐**，但如果您需要这样做，以下是一些您可能需要了解的内容：
 
 ### 所需工具
 
 * C++ 编译器
-  * 在 Linux 中 - 可以使用 GNU（4.7.2 及以上版本）或 Clang
-  * 在 Windows 中 - Microsoft Visual Studio 2019 及以上版本（社区版即可）
-  * 在 macOS 中 - Clang（来自 XCode 的命令行工具，使用 `xcode-select --install` 安装）。
-* Bison, Flex - 在大多数系统上，它们可以作为软件包使用；在 Windows 上，它们在 cygwin 框架中可用。
+  * 在 Linux 上 - GNU（4.7.2 及以上版本）或 Clang 可以使用
+  * 在 Windows 上 - Microsoft Visual Studio 2019 及以上版本（社区版就足够了）
+  * 在 macOS 上 - Clang（来自 XCode 的命令行工具，使用 `xcode-select --install` 安装）。
+* Bison、Flex - 在大多数系统上，它们作为软件包可用，在 Windows 上它们在 cygwin 框架中可用。
 * Cmake - 在所有平台上使用（需要 3.19 或更高版本）
 
 ### 获取源代码
 
 #### 从 git
 
-Manticore 源代码[托管在 GitHub 上](https://github.com/manticoresoftware/manticoresearch)。
-要获取源代码，请克隆仓库，然后检出所需的分支或标签。分支 `master` 代表主要的开发分支。发布时，会创建一个版本标签，例如 `3.6.0`，并为当前版本启动一个新分支，在本例中为 `manticore-3.6.0`。该版本分支在所有更改后的头部被用作构建所有二进制发布的源代码。例如，要获取 3.6.0 版本的源代码，您可以运行：
+Manticore 源代码 [托管在 GitHub](https://github.com/manticoresoftware/manticoresearch)。
+要获取源代码，请克隆仓库，然后检出所需的分支或标签。分支 `master` 表示主开发分支。发布时，会创建一个版本标签，例如 `3.6.0`，并开始一个新的当前发布分支，即 `manticore-3.6.0`。在所有更改之后，版本分支的头部将用作构建所有二进制发布版本的源代码。例如，要获取 3.6.0 版本的源代码，您可以运行：
 
 ```bash
 git clone https://github.com/manticoresoftware/manticoresearch.git
@@ -141,9 +139,9 @@ cd manticoresearch
 git checkout manticore-3.6.0
 ```
 
-#### 从归档文件
+#### 从存档
 
-您可以通过使用 "Download ZIP" 按钮从 GitHub 下载所需的代码。.zip 和 .tar.gz 格式都适用。
+您可以通过使用 GitHub 上的 "Download ZIP" 按钮下载所需的代码。.zip 和 .tar.gz 格式都适用。
 
 ```bash
 wget -c https://github.com/manticoresoftware/manticoresearch/archive/refs/tags/3.6.0.tar.gz
@@ -153,14 +151,14 @@ cd manticoresearch-3.6.0
 
 ### 配置
 
-Manticore 使用 CMake。假设您在克隆的仓库的根目录内：
+Manticore 使用 CMake。假设您在克隆的仓库根目录内：
 
 ```bash
 mkdir build && cd build
 cmake ..
 ```
 
-CMake 将检查可用的功能并根据它们配置构建。默认情况下，如果可用，所有功能都被视为启用。该脚本还会下载并构建一些外部库，假设您想使用它们。隐式地，您将获得最大数量功能的支持。
+CMake 将调查可用功能并根据这些功能配置构建。默认情况下，如果功能可用，所有功能都将被视为启用。该脚本还会下载并构建一些外部库，假设您想使用它们。隐式地，您将获得对最大数量功能的支持。
 
 您也可以通过标志和选项显式地配置构建。要启用功能 `FOO`，请在 CMake 调用中添加 `-DFOO=1`。
 要禁用它，请使用 `-DFOO=0`。如果没有明确说明，启用一个不可用的功能（例如，在 MS Windows 构建中 `WITH_GALERA`）会导致配置失败并出现错误。禁用一个功能不仅会从构建中排除该功能，还会禁用对该系统的检查，并禁用任何相关外部库的下载/构建。  
@@ -314,23 +312,23 @@ cmake --build . --clean-first --config RelWithDebInfo
 - 单配置需要在配置期间提供的构建类型，通过 `CMAKE_BUILD_TYPE` 参数。如果没有定义，则构建将回退到 `RelWithDebInfo` 类型，适合你只是从源代码构建 Manticore 而不参与开发。对于显式构建，你应该提供一个构建类型，如 `-DCMAKE_BUILD_TYPE=Debug`。
 - 多配置在构建期间选择构建类型。它应该通过 `--config` 选项提供，否则将构建一种称为 `noconfig` 的类型，这是不希望的。所以，你应该始终指定构建类型，如 `--config Debug`。
 
-如果您希望指定构建类型但不关心它是 '单' 配置还是 '多' 配置生成器——只需在两个地方都提供必要的键。即，配置时使用 `-DCMAKE_BUILD_TYPE=Debug`，然后构建时使用 `--config Debug`。只需确保这两个值相同。如果目标构建器是单配置的，它会使用配置参数。如果是多配置的，配置参数会被忽略，但正确的构建配置会被 `--config` 键选择。
+如果你想指定构建类型，但不想关心它是'single'还是'multi'配置生成器 - 只需在两个位置提供必要的键。即，使用 `-DCMAKE_BUILD_TYPE=Debug` 进行配置，然后使用 `--config Debug` 进行构建。只需确保两个值相同。如果目标构建器是单配置，它将使用配置参数。如果是多配置，配置参数将被忽略，但正确的构建配置将通过 `--config` 键选择。
 
-如果您想要 `RelWithDebInfo`（即仅构建用于生产）并且知道您在一个单配置平台（即除了 Windows 之外的所有平台）——您可以在在 cmake 调用中省略 `--config` 标志。那么默认 `CMAKE_BUILD_TYPE=RelWithDebInfo` 会被配置并使用。所有 '构建'、'安装' 和 '构建包' 命令会变得更短。
+如果你想使用 `RelWithDebInfo`（即仅构建生产环境）并且知道你处于单配置平台（即所有平台，除了 Windows） - 你可以在 cmake 调用时省略 `--config` 标志。此时将配置默认的 `CMAKE_BUILD_TYPE=RelWithDebInfo`，并使用它。然后，“构建”、“安装”和“构建包”的所有命令都会变得更简短。
 
-#### 明确选择构建系统生成器
+#### 显式选择构建系统生成器
 
-Cmake 是工具本身不执行构建，但它生本地构建系统的规则。
-通常，它很好地确定可用构建系统，但有时您可能需要明确提供生成器。您
-可以运行 `cmake -G` 并查看可用生成器列表。
+CMake 是一个本身不执行构建的工具，但它为本地构建系统生成规则。
+通常，它能很好地确定可用的构建系统，但有时你可能需要显式提供生成器。你
+可以运行 `cmake -G` 并查看可用生成器的列表。
 
-- 在 Windows，如果您有多个 Visual Studio 版本安装，您可能需要指定使用哪一个，
-如：
+- 在 Windows 上，如果你安装了多个版本的 Visual Studio，你可能需要指定使用哪一个，
+  例如：
 ```bash
 cmake -G "Visual Studio 16 2019" ....
   ```
-- 在所有其他平台——通常使用 Unix Makefiles，但您可以指定另一个，如 Ninja，或 Ninja 多配置，如：
-  多配置`，如：
+- 在所有其他平台上 - 通常使用 Unix Makefiles，但你可以指定另一个，例如 Ninja 或 Ninja Multi-Config，例如：
+  Multi-Config`，例如：
 ```bash
   cmake -GNinja ...
   ```
@@ -338,35 +336,35 @@ cmake -G "Visual Studio 16 2019" ....
 ```bash
   cmake -G"Ninja Multi-Config" ...
 ```
-Ninja 多配置相当有用，因为它真的 '多配置' 并可用在 Linux/macOS/BSD。用此生成器，您可能将选择配置类型到构建时间，并且您可能在同一构建文件夹构建多个配置，仅改变 `--config` 参数。
+Ninja Multi-Config 非常有用，因为它确实是“多配置”的，并且在 Linux/macOS/BSD 上可用。使用此生成器，你可以将配置类型的选择推迟到构建时，并且可以在同一个构建文件夹中构建多个配置，只需更改 `--config` 参数即可。
 
 ### 注意事项
 
-1. 如果您最终想构建全功能 RPM 包，构建目录路径必须足够长以便正确构建调试符号。
-如 `/manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789`，例如。这是因为 RPM 工具在构建调试信息时会修改编译二进制路径，并且它可能仅覆盖现有空间不会分配更多。前述长路径有 100 字符，足够为此情况。
+1. 如果你最终要构建一个功能齐全的 RPM 包，构建目录的路径必须足够长，以便正确构建调试符号。
+   例如，像 `/manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789` 这样的路径。这是因为 RPM 工具在构建调试信息时会修改编译后的二进制文件的路径，它可能会覆盖现有空间而不会分配更多空间。上述长路径有 100 个字符，这在这种情况中已经足够。
 
-## 外部依赖
+## 外部依赖项
 
-如果您想使用它们，某些库应该可用。
-- 对于索引（`indexer` 工具）：`expat`，`iconv`，`mysql`，`odbc`，`postgresql`。没有它们，您仅能处理 `tsv` 和 `csv` 源。
-- 对于服务查询（`searchd` 守护）：可能需要 `openssl`。
-- 对于所有（必需，强制！）我们需要 Boost 库。最低版本是 1.61.0，然而，我们构建二进制用较新版本 1.75.0。更近期版本（如 1.76）也应也正常。在 Windows，您可从他们的网站（boost.org）下载预构建 Boost 并安装到默认建议路径（即 `C:\\boost...`）。在 MacOs，brew 提供的版本正常。在 Linux，您可检查官方仓库可用版本，如果不匹配要求，您可从源码构建。我们需要组件 'context'，您也可构建组件 'system' 和 'program_options'，它们会必要如果您也想从源码构建 Galera 库。查看 `dist/build_dockers/xxx/boost_175/Dockerfile` 为简短自文档脚本/指令如何做。
+如果你想使用某些库，它们必须可用。
+- 对于索引（`indexer` 工具）：`expat`、`iconv`、`mysql`、`odbc`、`postgresql`。没有它们，你只能处理 `tsv` 和 `csv` 源。
+- 对于查询服务（`searchd` 守护进程）：可能需要 `openssl`。
+- 对于所有（必需、强制！）我们需要 Boost 库。最低版本是 1.61.0，但我们在构建二进制文件时使用更新的版本 1.75.0。甚至更新的版本（如 1.76）也应该可以。在 Windows 上，你可以从他们的网站（boost.org）下载预构建的 Boost 并安装到默认建议的路径（即 `C:\\boost...`）。在 MacOs 上，brew 提供的版本是可以的。在 Linux 上，你可以检查官方仓库中的可用版本，如果不符合要求，你可以从源代码构建。我们需要组件 'context'，你也可以构建组件 'system' 和 'program_options'，如果你还想从源代码构建 Galera 库，它们将是必要的。查看 `dist/build_dockers/xxx/boost_175/Dockerfile` 以获取简短的自文档脚本/说明，了解如何操作。
 
-在构建系统，您需要这些包安装的 'dev' 或 'devel' 版本（即 - libmysqlclient-devel，unixodbc-devel，等。查看我们 dockerfile 为具体包名称）。
+在构建系统上，你需要安装这些包的 'dev' 或 'devel' 版本（例如：libmysqlclient-devel、unixodbc-devel 等。查看我们的 dockerfile 以获取具体包的名称）。
 
-在运行系统，这些包应至少存在最终（非 dev）变。（devel 变通常更大，因为它们包含不仅目标二进制，而且不同开发东西如包含头，等）。
+在运行系统上，这些包至少需要在最终（非开发）版本中存在。（开发版本通常更大，因为它们不仅包含目标二进制文件，还包含其他开发内容，如包含头文件等。）
 
-### 在 Windows 构建
+### 在 Windows 上构建
 
-除了必要前提，您可能需要预构建 `expat`，`iconv`，`mysql`，和 `postgresql` 客户端库。您必须要么自己构建它们要么联系我们获取我们构建包（简单 zip 归档，其中这些目标文件夹位于）。
+除了必要的前提条件外，你可能还需要预构建的 `expat`、`iconv`、`mysql` 和 `postgresql` 客户端库。你必须自己构建它们，或者联系我们以获取我们的构建捆绑包（一个简单的 zip 存档，其中包含这些目标的文件夹）。
 
-- ODBC 不必要，因为它系统库。
-- OpenSSL 可从源码构建或从 https://slproweb.com/products/Win32OpenSSL.html 下载预构建（如 cmake 内部脚本 FindOpenSSL 提及）。
-- Boost 可从 https://www.boost.org/ 发布下载预构建。
+- ODBC 不是必需的，因为它是一个系统库。
+- OpenSSL 可以从源代码构建，或者从 https://slproweb.com/products/Win32OpenSSL.html 下载预构建的（如 cmake 内部脚本 FindOpenSSL 中提到的）。
+- Boost 可以从 https://www.boost.org/ 下载预构建的版本。
 
-### 查看编译内容
+### 查看已编译的内容
 
-运行 `indexer -h`。它会显示哪些功能配置并构建（无论它们明确或探测，不重要）：
+运行 `indexer -h`。它将显示哪些功能被配置和构建（无论它们是显式还是被调查，无关紧要）：
 
 ```
 Built on Linux x86_64 by GNU 8.3.1 compiler.
@@ -378,4 +376,3 @@ Configured with these definitions: -DDISTR_BUILD=rhel8 -DUSE_SYSLOG=1 -DWITH_GAL
 -DFULL_SHARE_DIR=/usr/share/manticore
 ```
 <!-- proofread -->
-

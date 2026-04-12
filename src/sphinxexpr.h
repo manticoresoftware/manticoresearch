@@ -147,6 +147,9 @@ public:
 	/// was this expression spawned in place of a columnar attr?
 	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
 
+	/// does this expression benefit from rowid-ordered final processing?
+	virtual bool PrefersRowIdOrder() const { return false; }
+
 	/// was this expression spawned in place of a columnar expression?
 	virtual bool IsStored() const { return false; }
 
@@ -391,4 +394,3 @@ CSphString& MySQLVersion();
 }
 
 #endif // _sphinxexpr_
-

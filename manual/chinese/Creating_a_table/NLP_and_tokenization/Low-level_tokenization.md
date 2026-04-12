@@ -1176,7 +1176,7 @@ table products {
 ### bigram_index
 
 ```ini
-bigram_index = {none|all|first_freq|both_freq}
+bigram_index = {none|all|first_freq|both_freq|second_numeric|second_has_digit}
 ```
 
 <!-- example bigram_index -->
@@ -1189,10 +1189,16 @@ bigram_index = {none|all|first_freq|both_freq}
 * `all`，索引每个单独的词对
 * `first_freq`，仅索引第一个词是频繁词的词对（见 [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)）。例如，`bigram_freq_words = the, in, i, a`，则索引"text alone in the dark"文本时，将存储"the dark"和"in the"词对作为双字节，因为它们以频繁关键词（分别为"the"或"in"）开头，但"alone in"不会被索引，因为"in"是该词对中的第二个词。
 * `both_freq`，仅索引两个词都是频繁词的词对。继续上述例子，在这种模式下索引"text alone in the dark"只会存储"in the"（从搜索角度来看最糟糕的一个）作为双字节，但没有任何其他词对。
+* `second_numeric`，仅索引第二个词为 ASCII 数字的词对。例如，`xt 806` 匹配，但 `xt rt9600` 和 `xt v2` 不匹配。
+* `second_has_digit`，仅索引第二个词包含至少一个 ASCII 数字的词对。例如，`xt 806`、`xt rt9600` 和 `xt v2` 匹配，但 `xt abc` 不匹配。
 
 对于大多数用例，`both_freq` 是最佳模式，但您的体验可能会有所不同。
 
 重要的是要注意，`bigram_index` 只在分词级别工作，并不考虑诸如 `形态学`、`词形变化` 或 `停用词` 等转换。这意味着它创建的词元非常直接，这使得短语匹配更加精确和严格。虽然这可以提高短语匹配的准确性，但也使系统更难以识别不同形式的词或词的不同表现形式。
+
+数字感知模式仅使用 ASCII 数字（`0-9`）。它们不将 `+`、`-` 或 Unicode 数字视为数字。检查也使用当前分词器路径生成的词文本，不进行任何额外的标点符号规范化。
+
+使用 [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter) 来控制符合条件的双字节是存储为内部分隔的词、粘合词如 `iphone17`，还是同时存储为这两种形式。
 
 <!-- request SQL -->
 
@@ -1289,6 +1295,124 @@ table products {
 ```
 <!-- end -->
 
+### bigram_delimiter
+
+```ini
+bigram_delimiter = {true|none|both}
+```
+
+<!-- example bigram_delimiter -->
+双字节分隔符标记存储模式。可选，缺省值为 `true`。
+
+`bigram_delimiter` 控制 [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index) 所选的合格双字节分隔符的标记形式：
+
+* `true`，仅存储内部分隔的双字节分隔符标记。这是当前的默认行为。
+* `none`，仅存储粘合的标记形式，例如 `iphone17`。
+* `both`，同时存储内部分隔形式和粘合形式。
+
+搜索行为取决于所选模式：
+
+* 使用 `true` 时，短语优化将合格的短语对重写为内部分隔的标记
+* 使用 `none` 时，短语优化将合格的短语对重写为粘合的标记，例如 `"iphone 17"` 变为 `iphone17`
+* 使用 `both` 时，短语优化被跳过，短语查询保持普通短语查询，但粘合标记搜索仍可匹配，因为粘合形式也被存储
+
+`bigram_delimiter` 仅改变存储的标记形状。它不决定哪些配对是合格的；这仍然由 [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index) 控制。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'bigram_index' => 'all',
+            'bigram_delimiter' => 'none'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_index = \'all\' bigram_delimiter = \'none\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_index = 'all' bigram_delimiter = 'none'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  bigram_index = all
+  bigram_delimiter = none
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
 ### bigram_freq_words
 
 ```ini
@@ -1298,9 +1422,18 @@ bigram_freq_words = the, a, you, i
 <!-- example bigram_freq_words -->
 一个关键词列表，当索引双字节时被认为是“频繁”的。可选，默认为空。
 
-一些双词索引模式（参见[bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)）需要定义一组频繁关键词。这些关键词**不**与停用词混淆。停用词在索引和搜索时都会被完全消除。频繁关键词仅用于双词来确定是否索引当前词对。
+某些双字节索引模式（参见 [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)）需要一个频繁关键词列表。这些关键词**不能**与停用词混淆。停用词在索引和搜索时都会被完全排除。频繁关键词仅用于双字节来决定是否索引当前词对。
 
 `bigram_freq_words` 允许您定义这样一组关键词。
+
+此选项仅在以下模式中需要：
+
+`first_freq`
+
+* `both_freq`
+* 必须为空的模式：
+* `none`
+* `all`
 
 <!-- request SQL -->
 
@@ -2500,4 +2633,3 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
-

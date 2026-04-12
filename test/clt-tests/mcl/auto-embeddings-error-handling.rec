@@ -8,7 +8,7 @@ Test 1: KNN_DIMS cannot be used with MODEL_NAME (auto-dims conflict)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_dims (
     title TEXT,
-    vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' KNN_DIMS='384'
+    vec FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='384' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM='title'
 )" 2>&1
@@ -59,16 +59,15 @@ mysql -h0 -P9306 -e "CREATE TABLE test_no_from (
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'vec'
 ––– comment –––
-Test 6: Empty FROM parameter (not allowed)
+Test 6: Empty FROM parameter (all text/string fields)
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_empty_from (
     title TEXT,
     vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2'
     FROM=''
-)" 2>&1
+)"
 ––– output –––
-ERROR 1064 (42000) at line 1: error adding table 'test_empty_from': 'from' setting empty for KNN attribute 'vec'
 ––– comment –––
 === INVALID MODEL CONFIGURATIONS ===
 ––– comment –––
@@ -245,19 +244,19 @@ echo "Row-wise (default):"
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_rowwise\G" | grep -E "vec.*float_vector"
 ––– output –––
 Row-wise (default):
-vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' FROM='content'
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content' api_timeout='10'
 ––– input –––
 echo "Vec columnar only:"
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_vec_columnar\G" | grep -E "vec.*float_vector"
 ––– output –––
 Vec columnar only:
-vec float_vector engine='columnar' knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' FROM='content'
+vec float_vector engine='columnar' knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content' api_timeout='10'
 ––– input –––
 echo "Full columnar:"
 mysql -h0 -P9306 -e "SHOW CREATE TABLE test_full_columnar\G" | grep -E "(vec.*float_vector|engine='columnar')"
 ––– output –––
 Full columnar:
-vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' FROM='content'
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content' api_timeout='10'
 ) engine='columnar'
 ––– comment –––
 Test 19: Non-existent field

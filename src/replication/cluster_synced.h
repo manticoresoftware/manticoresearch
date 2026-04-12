@@ -19,6 +19,7 @@
 struct ClusterSyncedRequest_t : ClusterRequest_t
 {
 	Wsrep::GlobalTid_t m_tGtid; // GTID received
+	int64_t m_iClusterEpoch = 0;
 	StrVec_t m_dIndexes;		// index list received
 	bool m_bSendFilesSuccess = true;
 	CSphString m_sMsg;

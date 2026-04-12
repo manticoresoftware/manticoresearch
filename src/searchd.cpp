@@ -33,6 +33,7 @@
 #include "secondarylib.h"
 #include "knnlib.h"
 #include "knnmisc.h"
+#include "attr_embedding.h"
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
@@ -109,6 +110,8 @@ static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
+static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
+static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
 
@@ -2985,7 +2988,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
 	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
 
-	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
+	dStatus.MatchTupletf ( "time", "%.3F", tMeta.GetQueryTimeMs() );
 
 	if ( tMeta.m_iMultiplier>1 )
 		dStatus.MatchTupletf ( "multiplier", "%d", tMeta.m_iMultiplier );
@@ -7469,15 +7472,19 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
 		const char * sReqIndex = dIndexNames[iIdx].cstr();
+		int64_t tmStartReq = sphMicroTimer();
+		int iSuccessesReq = 0;
+		int iUpdatedReq = 0;
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
 			int64_t tmStartIdx = sphMicroTimer();
 			int iUpdatedIdx = 0;
 
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pLocked );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
 
 			iUpdated += iUpdatedIdx;
+			iUpdatedReq += iUpdatedIdx;
 			pLocked->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 
 		} else if ( dDistributed[iIdx] )
@@ -7492,9 +7499,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
 
 				iUpdated += iUpdatedIdx;
+				iUpdatedReq += iUpdatedIdx;
 				if ( pServed )
 					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 			}
@@ -7512,9 +7520,15 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			// validation happens on remote side; errors will be returned via dFails
 			if ( !dAgents.IsEmpty() )
 			{
+				int iUpdatedRemote = 0;
+				int iWarnsRemote = 0;
 				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
-				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns, dFails, &sWarning );
-				iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdatedRemote, iWarnsRemote, dFails, &sWarning );
+				int iSuccessesRemote = PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
+				iSuccessesReq += iSuccessesRemote;
+				iUpdated += iUpdatedRemote;
+				iUpdatedReq += iUpdatedRemote;
+				iWarns += iWarnsRemote;
 
 				// collect errors from failed agents
 				for ( const AgentConn_t * pAgent : dAgents )
@@ -7533,6 +7547,14 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 						dFails.Submit ( pAgent->m_tDesc.m_sIndexes, sReqIndex, sError );
 					}
 			}
+		}
+
+		iSuccesses += iSuccessesReq;
+		if ( dDistributed[iIdx] && iSuccessesReq )
+		{
+			auto pDist = GetDistr ( sReqIndex );
+			if ( pDist )
+				pDist->m_tStats.AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedReq, tmStartReq );
 		}
 	}
 
@@ -7724,8 +7746,8 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 
 	StringBuilder_c sMeta;
 	// since we have us precision, printing 0 will output '0us', which is not necessary true.
-	if ( tMeta.m_iQueryTime > 0 )
-		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, (int64_t)tMeta.m_iQueryTime * 1000 );
+	if ( tMeta.GetQueryTimeUs() > 0 )
+		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, tMeta.GetQueryTimeUs() );
 	else
 		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
 	return (CSphString)sMeta;
@@ -8413,7 +8435,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			// fix up overall query time
 			for ( auto& tResult : tHandler.m_dAggrResults )
 			{
-				tLastMeta.m_iQueryTime += tResult.m_iQueryTime;
+				tLastMeta.AddQueryTimeUs ( tResult.GetQueryTimeUs() );
 				tLastMeta.m_iCpuTime += tResult.m_iCpuTime;
 				tLastMeta.m_iAgentCpuTime += tResult.m_iAgentCpuTime;
 			}
@@ -8450,7 +8472,9 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 				bMoreResultsFollow = false;
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
-			gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tRes.m_iQueryTime * 1000 );
+			
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tRes.GetQueryTimeUs() );
 			break;
 		}
 		case STMT_SHOW_WARNINGS:
@@ -8844,6 +8868,20 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 			g_iAutoOptimizeCutoffMultiplier = iSetValue;
 		else
 			sError = "Only VIP connections can change global auto_optimize value";
+		return true;
+	}
+
+	if ( sName == "parallel_chunk_merges" )
+	{
+		g_iParallelChunkMerges = Max ( 1, iSetValue );
+		sphInfo ( "set global parallel_chunk_merges=%d", g_iParallelChunkMerges );
+		return true;
+	}
+
+	if ( sName == "merge_chunks_per_job" )
+	{
+		g_iMergeChunksPerJob = Max ( 2, iSetValue );
+		sphInfo ( "set global merge_chunks_per_job=%d", g_iMergeChunksPerJob );
 		return true;
 	}
 
@@ -9285,6 +9323,14 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphStri
 		tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
+static bool WaitOptimize ( RowBuffer_i & tOut, const CSphString & sIndex )
+{
+	if ( PollOptimizeRunning ( sIndex ) )
+		return true;
+
+	tOut.Error ( "RT table went away during waiting" );
+	return false;
+}
 
 void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
@@ -9303,18 +9349,57 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
-	auto bOptimizeStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	const bool bHasCutoff = ( tTask.m_iCutoff>0 );
+	const bool bSync = tStmt.m_tQuery.m_bSync;
+	if ( bHasCutoff )
+		RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
 
-	if ( tStmt.m_tQuery.m_bSync && !bOptimizeStarted )
+	bool bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+
+	if ( !bSync )
+	{
+		tOut.Ok ();
+		return;
+	}
+
+	if ( !bStarted )
 	{
 		tOut.Error ( "Can't optimize frozen table" );
 		return;
 	}
 
-	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
-		tOut.Error ( "RT table went away during waiting" );
-	else
-		tOut.Ok ();
+	if ( !WaitOptimize ( tOut, sIndex ) )
+		return;
+
+	if ( bHasCutoff )
+	{
+		CSphIndexStatus tStatus;
+		RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+		if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+		{
+			if ( bHasCutoff )
+				RIdx_T<RtIndex_i *> ( pIndex )->ManualOptimizeCutoff ( tTask.m_iCutoff );
+
+			bStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( tTask );
+			if ( !bStarted )
+			{
+				tOut.Error ( "Can't optimize frozen table" );
+				return;
+			}
+
+			if ( !WaitOptimize ( tOut, sIndex ) )
+				return;
+
+			RIdx_T<RtIndex_i *> ( pIndex )->GetStatus ( &tStatus );
+			if ( tStatus.m_iNumChunks>tTask.m_iCutoff )
+			{
+				tOut.ErrorEx ( "OPTIMIZE TABLE did not reach the requested cutoff %d, got %d disk chunks", tTask.m_iCutoff, tStatus.m_iNumChunks );
+				return;
+			}
+		}
+	}
+
+	tOut.Ok ();
 }
 
 static CSphString GetLastInsertId ( const ClientSession_c * pSession )
@@ -9597,6 +9682,8 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		auto pVars = session::Info().GetClientSession();
 		dTable.MatchTuplet ( "autocommit", pVars->m_bAutoCommit ? "1" : "0" );
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
+		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
+		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
 		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
@@ -10017,6 +10104,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.HeadColumn ( "disk_mapped_hitlists", MYSQL_COL_LONGLONG );
 	tOut.HeadColumn ( "disk_mapped_cached_hitlists", MYSQL_COL_LONGLONG );
 	tOut.HeadColumn ( "killed_documents", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "optimizing", MYSQL_COL_LONG );
 	if ( !tOut.HeadEnd () )
 		return;
 
@@ -10037,7 +10125,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		bool bKeepIteration = true;
 		while ( bKeepIteration )
 		{
-			pRtIndex->ProcessDiskChunk (iChunk,[&bKeepIteration, &tOut] (const CSphIndex* pChunk) {
+			pRtIndex->ProcessDiskChunkEx ( iChunk, [&bKeepIteration, &tOut] ( const CSphIndex* pChunk, bool bOptimizing ) {
 				if ( !pChunk )
 				{
 					bKeepIteration = false;
@@ -10045,6 +10133,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 				}
 				tOut.PutNumAsString ( pChunk->m_iChunk );
 				PutIndexStatus ( tOut, pChunk );
+				tOut.PutNumAsString ( bOptimizing ? 1 : 0 );
 				if ( !tOut.Commit () )
 				{
 					bKeepIteration = false;
@@ -10056,6 +10145,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	} else {
 		tOut.PutNumAsString ( 0 ); // dummy 'chunk' of non-rt
 		PutIndexStatus ( tOut, pIndex );
+		tOut.PutNumAsString ( 0 );
 		tOut.Commit ();
 	}
 	tOut.Eof();
@@ -10267,79 +10357,6 @@ void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool
 }
 
 
-static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphString & sError, bool bModify )
-{
-	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
-	sAttrToAdd.ToLower();
-
-	bool bIndexed = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED;
-	bool bStored = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
-	bool bAttribute = tStmt.m_uFieldFlags & CSphColumnInfo::FIELD_IS_ATTRIBUTE; // beware, m.b. true only for strings
-
-	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
-	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
-	const bool bInt2Bigint = pHasAttr
-			&& pHasAttr->m_eAttrType==SPH_ATTR_INTEGER
-			&& pHasAttr->m_eEngine==AttrEngine_e::DEFAULT
-			&& tStmt.m_eAlterColType==SPH_ATTR_BIGINT
-			&& tStmt.m_eEngine==AttrEngine_e::DEFAULT;
-
-	if ( !bIndexed && pHasAttr )
-	{
-		if ( !bModify || !bInt2Bigint )
-		{
-			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
-			return;
-		}
-	}
-
-	if ( bModify )
-	{
-		if ( !pHasAttr )
-		{
-			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
-			return;
-		}
-		if ( !bInt2Bigint )
-		{
-			sError.SetSprintf ( "attribute '%s': only alter from rowise int to bigint supported", sAttrToAdd.cstr () );
-			return;
-		}
-	}
-
-	if ( bIndexed && bHasField )
-	{
-		sError.SetSprintf ( "'%s' field already in schema", sAttrToAdd.cstr() );
-		return;
-	}
-
-	if ( !bIndexed && bHasField && tStmt.m_eAlterColType!=SPH_ATTR_STRING )
-	{
-		sError.SetSprintf ( "cannot add attribute that shadows '%s' field", sAttrToAdd.cstr () );
-		return;
-	}
-
-	AttrAddRemoveCtx_t tCtx;
-	tCtx.m_sName = sAttrToAdd;
-	tCtx.m_eType = tStmt.m_eAlterColType;
-	tCtx.m_iBits = tStmt.m_iBits;
-	tCtx.m_uFlags = tStmt.m_uAttrFlags;
-	tCtx.m_eEngine = tStmt.m_eEngine;
-	tCtx.m_tKNN = tStmt.m_tAlterKNN;
-	tCtx.m_tKNNModel = tStmt.m_tAlterKNNModel;
-	tCtx.m_sKNNFrom = tStmt.m_sAlterKnnFrom;
-
-	if ( bIndexed || bStored )
-	{
-		pIdx->AddRemoveField ( true, sAttrToAdd, tStmt.m_uFieldFlags, sError );
-		if ( bAttribute )
-			pIdx->AddRemoveAttribute ( true, tCtx, sError );
-	}
-	else
-		pIdx->AddRemoveAttribute ( true, tCtx, sError );
-}
-
-
 static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphString& sError )
 {
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
@@ -10384,10 +10401,13 @@ enum class Alter_e
 	ModifyColumn,
 	RebuildSI,
 	RebuildKNN,
-	ApiKey
+	RebuildEmbeddings,
+	ApiKey,
+	ApiUrl,
+	ApiTimeout
 };
 
-static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
+static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction, CSphString & sWarning )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -10395,6 +10415,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
+	StrVec_t dWarnings;
 
 	if ( eAction==Alter_e::AddColumn && tStmt.m_eAlterColType==SPH_ATTR_NONE )
 	{
@@ -10443,6 +10464,22 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		switch ( eAction )
 		{
 		case Alter_e::AddColumn:
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+
+				CSphString sAlterWarning;
+				if ( !HandleAlterAddColumn ( tStmt, pServed, sAlterWarning, sAlterError ) && sAlterError.IsEmpty() )
+					sAlterError = "ALTER ADD COLUMN failed";
+				if ( !sAlterWarning.IsEmpty() )
+					dWarnings.Add ( sAlterWarning );
+				break;
+			}
+
 		case Alter_e::ModifyColumn:
 			{
 				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
@@ -10451,7 +10488,7 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
 					break;
 				}
-				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, eAction == Alter_e::ModifyColumn );
+				AddAttrToIndex ( tStmt, WIdx_c ( pServed ), sAlterError, true );
 				break;
 			}
 
@@ -10475,8 +10512,37 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 			WIdx_c(pServed)->AlterKNN(sAlterError);
 			break;
 
+		case Alter_e::RebuildEmbeddings:
+			{
+				Threads::Coro::ScopedWriteTable_c tWriting { pServed->Locker() };
+				if ( !tWriting.CanWrite() )
+				{
+					dErrors.SubmitEx ( sName, nullptr, "is locked, ALTER is not supported for locked tables" );
+					break;
+				}
+
+				CSphString sAlterWarning;
+				if ( !HandleAlterRebuildEmbeddings ( tStmt.m_sAlterAttr, pServed, sAlterWarning, sAlterError ) && sAlterError.IsEmpty() )
+					sAlterError = "REBUILD EMBEDDINGS is not supported for this table";
+				if ( !sAlterWarning.IsEmpty() )
+					dWarnings.Add ( sAlterWarning );
+				break;
+			}
+
 		case Alter_e::ApiKey:
 			WIdx_c(pServed)->AlterApiKey ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiUrl:
+			WIdx_c(pServed)->AlterApiUrl ( tStmt.m_sAlterAttr, tStmt.m_sAlterOption, sAlterError );
+			break;
+
+		case Alter_e::ApiTimeout:
+			{
+				int iTimeout = 0;
+				if ( ValidateEmbeddingsAPITimeout ( tStmt.m_sAlterOption, iTimeout, sAlterError ) )
+					WIdx_c(pServed)->AlterApiTimeout ( tStmt.m_sAlterAttr, iTimeout, sAlterError );
+			}
 			break;
 		}
 
@@ -10491,7 +10557,9 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		tOut.Error ( sReport.cstr() );
 		return;
 	}
-	tOut.Ok();
+
+	sWarning = ConcatWarnings ( dWarnings );
+	tOut.Ok ( 0, dWarnings.GetLength() );
 }
 
 
@@ -11409,7 +11477,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
 				auto uMatches = SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
-				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, (uint64_t)tLast.m_iQueryTime * 1000 );
+
+				if ( !session::GetBuddy() )
+					gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tLast.GetQueryTimeUs() );
 			}
 
 			// save meta for SHOW META (profile is saved elsewhere)
@@ -11660,27 +11730,48 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_ALTER_ADD:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::AddColumn, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_MODIFY:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ModifyColumn );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ModifyColumn, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_DROP:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::DropColumn );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::DropColumn, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_REBUILD_SI:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_REBUILD_KNN:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_REBUILD_EMBEDDINGS:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildEmbeddings, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_ALTER_EMBEDDINGS_API_KEY:
-		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey );
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiKey, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_URL:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiUrl, m_tLastMeta.m_sWarning );
+		return true;
+
+	case STMT_ALTER_EMBEDDINGS_API_TIMEOUT:
+		m_tLastMeta.m_sWarning = "";
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::ApiTimeout, m_tLastMeta.m_sWarning );
 		return true;
 
 	case STMT_SHOW_PLAN:
@@ -11761,6 +11852,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_CLUSTER_DELETE:
 		m_tLastMeta = CSphQueryResultMeta();
 		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
+			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
+		else
+			tOut.Error ( m_tLastMeta.m_sError.cstr() );
+		return true;
+
+	case STMT_CLUSTER_EXIT:
+		m_tLastMeta = CSphQueryResultMeta();
+		if ( ClusterExit ( pStmt->m_sCluster, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -13948,6 +14047,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iMaxConnection = hSearchd.GetInt ( "max_connections", g_iMaxConnection );
 	auto iThreads = hSearchd.GetInt ( "threads", GetNumLogicalCPUs() );
 	SetMaxChildrenThreads ( iThreads );
+	int iDefaultParallelMerges = Max ( 1, Min ( 2, iThreads / 2 ) );
+	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
+	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");

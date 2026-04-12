@@ -242,7 +242,23 @@ enum ESphBigram : BYTE
 	SPH_BIGRAM_NONE			= 0,	///< no bigrams
 	SPH_BIGRAM_ALL			= 1,	///< index all word pairs
 	SPH_BIGRAM_FIRSTFREQ	= 2,	///< only index pairs where one of the words is in a frequent words list
-	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
+	SPH_BIGRAM_BOTHFREQ		= 3,	///< only index pairs where both words are in a frequent words list
+	SPH_BIGRAM_SECONDNUMERIC = 4,	///< only index pairs where second token contains ASCII digits only
+	SPH_BIGRAM_SECONDHASDIGIT = 5	///< only index pairs where second token contains at least one ASCII digit
+};
+
+bool BigramNeedsFreq ( ESphBigram eMode ) noexcept;
+bool BigramHasDigit ( const BYTE * pWord, int iLen ) noexcept;
+bool BigramIsDigitsOnly ( const BYTE * pWord, int iLen ) noexcept;
+bool BigramIsSecondDigit ( ESphBigram eMode, const BYTE * pSecond, int iLen ) noexcept;
+
+enum class BigramDelimiter_e : BYTE
+{
+	NONE = 0,		///< store concatenated bigram only
+	DELIMITED,	///< store internal delimited bigram only
+	BOTH,		///< store both internal and concatenated bigrams
+
+	DEFAULT = DELIMITED
 };
 
 enum class JiebaMode_e
@@ -272,6 +288,7 @@ public:
 	KillListTargets_c m_tKlistTargets;	///< list of indexes to apply killlist to
 
 	ESphBigram		m_eBigramIndex = SPH_BIGRAM_NONE;
+	BigramDelimiter_e m_eBigramDelimiter = BigramDelimiter_e::DEFAULT;
 	CSphString		m_sBigramWords;
 	StrVec_t		m_dBigramWords;
 
@@ -399,6 +416,7 @@ struct CreateTableAttr_t
 	bool					m_bStringHash = true;
 	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
+	bool					m_bKNNFromSet = false;
 	knn::IndexSettings_t	m_tKNN;
 	knn::ModelSettings_t	m_tKNNModel;
 	CSphString				m_sKNNFrom;

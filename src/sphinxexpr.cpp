@@ -26,6 +26,7 @@
 #include "conversion.h"
 #include "geodist.h"
 #include "knnmisc.h"
+#include "hybridexecutor.h"
 #include <time.h>
 #include <math.h>
 
@@ -3567,6 +3568,7 @@ enum Tokh_e : BYTE
 	FUNC_CRC32,
 	FUNC_FIBONACCI,
 	FUNC_KNN_DIST,
+	FUNC_HYBRID_SCORE,
 
 	FUNC_DAY,
 	FUNC_WEEK,
@@ -3718,6 +3720,7 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "crc32",			FUNC_CRC32			},
 	{ "fibonacci",		FUNC_FIBONACCI		},
 	{ "knn_dist",		FUNC_KNN_DIST		},
+	{ "hybrid_score",	FUNC_HYBRID_SCORE	},
 
 	{ "day",			FUNC_DAY			},
 	{ "week",			FUNC_WEEK			},
@@ -3862,53 +3865,52 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 
 	const static BYTE dAsso[] =
 	{
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 10, 10,
-		27, 49, 9, 6, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 29, 64, 14, 5, 5,
-		31, 25, 64, 6, 167, 14, 41, 7, 7, 38,
-		16, 16, 20, 13, 6, 36, 75, 58, 35, 32,
-		15, 167, 167, 167, 167, 49, 167, 29, 64, 14,
-		5, 5, 31, 25, 64, 6, 167, 14, 41, 7,
-		7, 38, 16, 16, 20, 13, 6, 36, 75, 58,
-		35, 32, 15, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
-		167, 167, 167, 167, 167, 167
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 14, 14,
+		36, 36, 12, 4, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 14, 38, 7, 1, 1,
+		29, 26, 49, 27, 157, 52, 15, 3, 7, 43,
+		34, 49, 15, 10, 2, 42, 47, 47, 37, 22,
+		18, 157, 157, 157, 157, 49, 157, 14, 38, 7,
+		1, 1, 29, 26, 49, 27, 157, 52, 15, 3,
+		7, 43, 34, 49, 15, 10, 2, 42, 47, 47,
+		37, 22, 18, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157, 157, 157, 157, 157,
+		157, 157, 157, 157, 157, 157,
 	};
 
 	const static short dIndexes[] =
 	{
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, 37, -1, -1, -1, -1,
-		104, 106, 102, -1, 29, 63, 34, 62, -1, 70,
-		4, 93, -1, 87, 65, 41, 12, 94, 99, 33,
-		9, 80, 100, 5, 52, 45, 73, 46, 44, 10,
-		6, 61, 60, 88, 76, 69, 64, 68, 1, 57,
-		101, 24, 91, 95, 58, 48, 36, -1, 96, -1,
-		49, 50, 16, 56, 105, -1, 25, 39, 59, 85,
-		30, 40, 83, 77, 15, 89, 72, 38, 71, 18,
-		81, 8, 28, 43, 55, 17, 75, 79, 26, 92,
-		42, 97, 47, 22, 27, 19, 2, 11, -1, 13,
-		-1, -1, 66, -1, 74, -1, 53, -1, -1, 78,
-		-1, -1, 90, -1, 7, 21, 0, -1, 67, 84,
-		-1, -1, 3, 51, 107, 31, -1, -1, 98, 86,
-		82, -1, -1, 54, 23, -1, -1, -1, 14, -1,
-		35, -1, -1, -1, 20, -1, -1, -1, 103, -1,
-		-1, -1, -1, -1, -1, -1, 32
+		-1, -1, -1, -1, -1, -1, -1, -1, 105, 64,
+		35, 63, -1, 71, 103, 94, -1, 88, -1, 101,
+		30, 95, 66, 100, 6, 12, 89, 4, 81, 47,
+		5, 62, 61, 10, 45, 74, 38, 1, 65, 107,
+		46, 70, 86, 69, -1, 42, 56, 75, 17, 39,
+		72, 57, 53, 37, 92, 51, 108, 58, 34, 25,
+		102, 76, 106, 97, 73, 77, 19, 26, 2, 59,
+		20, 40, 9, 93, 8, 78, 80, 90, 43, 41,
+		31, 87, 96, 85, 82, 22, 91, -1, 54, 79,
+		28, 13, 60, -1, 36, 49, 48, 84, 104, 11,
+		29, -1, -1, 55, 0, -1, -1, 67, 98, 21,
+		83, 23, 52, 44, -1, 16, 50, 7, 15, -1,
+		-1, -1, -1, -1, -1, 24, -1, 27, -1, -1,
+		-1, 32, -1, -1, -1, 3, -1, -1, -1, -1,
+		99, -1, -1, -1, -1, 68, 14, -1, -1, -1,
+		-1, -1, 33, -1, -1, -1, 18,
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -4006,7 +4008,8 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"sint",			*/		1,	TOK_FUNC,		/*FUNC_SINT,			*/	SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
 	{ /*"crc32",		*/		1,	TOK_FUNC,		/*FUNC_CRC32,			*/	SPH_ATTR_INTEGER },
 	{ /*"fibonacci",	*/		1,	TOK_FUNC,		/*FUNC_FIBONACCI,		*/	SPH_ATTR_INTEGER },
-	{ /*"knn_dist"",	*/		0,	TOK_FUNC,		/*FUNC_KNN_DIST,		*/	SPH_ATTR_FLOAT },
+	{ /*"knn_dist",		*/		0,	TOK_FUNC,		/*FUNC_KNN_DIST,		*/	SPH_ATTR_FLOAT },
+	{ /*"hybrid_score"	*/		0,	TOK_FUNC,		/*FUNC_HYBRID_SCORE,	*/	SPH_ATTR_FLOAT },
 
 	{ /*"day",			*/		1,	TOK_FUNC_DAY,	/*FUNC_DAY,				*/	SPH_ATTR_INTEGER },
 	{ /*"week",			*/		-1,	TOK_FUNC_WEEK,	/*FUNC_WEEK,			*/	SPH_ATTR_INTEGER },
@@ -4110,7 +4113,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 
 	static const char * dNames[FUNC_FUNCS_COUNT] =
 		{ "now", "abs", "ceil", "floor", "sin", "cos", "ln", "log2", "log10", "exp", "sqrt", "bigint"
-		, "sint", "crc32", "fibonacci", "knn_dist", "day", "week", "month", "year", "yearmonth"
+		, "sint", "crc32", "fibonacci", "knn_dist", "hybrid_score", "day", "week", "month", "year", "yearmonth"
 		, "yearmonthday", "yearweek", "hour", "minute", "second", "dayofweek", "dayofyear", "quarter"
 		, "min", "max", "pow", "idiv", "if", "madd", "mul3", "interval", "in", "bitdot", "remap"
 		, "geodist", "exist", "poly2d", "geopoly2d", "contains", "zonespanlist", "concat", "to_string"
@@ -6965,6 +6968,17 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 		return new Expr_GetFloat_c ( pAttr->m_tLocator, GetKnnDistAttrName() );
 	}
 
+	case FUNC_HYBRID_SCORE:
+	{
+		const CSphColumnInfo * pAttr = m_pSchema->GetAttr ( GetHybridScoreAttrName() );
+		if ( !pAttr )
+		{
+			m_sCreateError = "HYBRID_SCORE() attribute not available in this context";
+			return nullptr;
+		}
+		return new Expr_GetFloat_c ( pAttr->m_tLocator, GetHybridScoreAttrName() );
+	}
+
 	case FUNC_DAY:			return CreateExprDay ( dArgs[0] );
 	case FUNC_WEEK:			return CreateExprWeek ( dArgs[0], dArgs.GetLength()>1 ? dArgs[1] : nullptr );
 	case FUNC_MONTH:		return CreateExprMonth ( dArgs[0] );
@@ -7231,6 +7245,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_USER:
 		case FUNC_VERSION:
 		case FUNC_KNN_DIST:
+		case FUNC_HYBRID_SCORE:
 		case FUNC_RANGE:
 		case FUNC_HISTOGRAM:
 		case FUNC_DATE_RANGE:

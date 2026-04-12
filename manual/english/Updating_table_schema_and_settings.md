@@ -5,7 +5,7 @@
 <!-- example ALTER -->
 
 ```sql
-ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP}] [engine='columnar']
+ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON [secondary_index='1']|STRING|TEXT [INDEXED [ATTRIBUTE]]|TIMESTAMP|FLOAT_VECTOR [KNN options]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
 
@@ -26,12 +26,16 @@ This feature only supports adding one field at a time for RT tables or the expan
 * `text indexed` / `string indexed` - full-text indexed field, indexed only (the original value is not stored in docstore)
 * `text indexed attribute` / `string indexed attribute` - full text indexed field + string attribute (not storing the original value in docstore)
 * `text stored` / `string stored` - the value will be only stored in docstore, not full-text indexed, not a string attribute
+* `float_vector` - vector attribute. You can use the same KNN and auto-embedding options as in [`CREATE TABLE`](Creating_a_table/Data_types.md#Float-vector)
 * adding `engine='columnar'` to any attribute (except for json) will make it stored in the [columnar storage](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
 
 #### Important notes:
 * ❗It's recommended to **backup table files** before `ALTER`ing it to avoid data corruption in case of a sudden power interruption or other similar issues.
 * Querying a table is impossible while a column is being added.
-* Newly created attribute's values are set to 0.
+* Newly created scalar attributes are set to `0`.
+* Newly added `float_vector` columns without `MODEL_NAME` are initialized with zero vectors.
+* If you add a `float_vector` column with `MODEL_NAME` and `FROM`, existing rows are embedded automatically during `ALTER TABLE ... ADD COLUMN`.
+* When `MODEL_NAME` is specified, `FROM` is required. Use `FROM=''` to embed from all `text` fields and `string` attributes.
 * `ALTER` will not work for distributed tables and tables without any attributes.
 * You can't delete the `id` column.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
@@ -324,20 +328,62 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## Updating attribute API key (for embeddings generation) in RT mode
+## Rebuilding embeddings
+
+<!-- example ALTER REBUILD EMBEDDINGS -->
+```sql
+ALTER TABLE table REBUILD EMBEDDINGS column_name
+```
+
+This command regenerates embeddings for one target `float_vector` column that has `MODEL_NAME` and `FROM` configured.
+
+Use it when you want to rebuild vectors for an existing embedding column, for example when you want to reprocess rows after adding the column later with `ALTER TABLE ... ADD COLUMN`, or when you want to force regeneration for all rows.
+
+Important behavior:
+* The column name is mandatory. The command rebuilds one embedding column at a time.
+* It regenerates embeddings for all rows in that column, not only rows with zero vectors.
+* It also overwrites rows whose vectors were inserted manually, and rows where `()` was used to skip generation and store a zero vector.
+* The target column must be an indexed `float_vector` with an embedding model configured.
+* `FROM=''` is allowed and means "use all `text` fields and `string` attributes".
+
+Manticore does not persist whether the current vector in that column was generated automatically, provided explicitly by the user, or created from `()`. If you run `REBUILD EMBEDDINGS`, the stored values are regenerated from the configured `FROM` source for every row in the column, including rows whose current value is an all-zero vector.
+
+<!-- request Example -->
+```sql
+ALTER TABLE products ADD COLUMN embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title';
+ALTER TABLE products REBUILD EMBEDDINGS embedding;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Updating attribute API parameters (for embeddings generation) in RT mode
 
 <!-- example api_key -->
 
-`ALTER` can be used to modify an API key when a remote model is used for auto-embeddings:
+`ALTER` can be used to modify API parameters when a remote model is used for auto-embeddings:
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
 ```
+
+**Notes:**
+- `API_KEY`: The new API key is validated during the ALTER operation by making a real API request.
+- `API_URL`: Set to an empty string (`''`) to revert to the default provider endpoint.
+- `API_TIMEOUT`: Set to `'0'` to use the default timeout (10 seconds). Must be a non-negative integer.
 
 <!-- end -->
 
@@ -360,4 +406,3 @@ ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remot
 
 <!-- end -->
 <!-- proofread -->
-

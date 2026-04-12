@@ -970,6 +970,7 @@ table products {
 
 ### 自然语言处理特定设置
 以下设置受支持。它们都在 [自然语言处理和分词](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md) 部分中描述。
+* [bigram_delimiter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter)
 * [bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 * [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
 * [blend_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)

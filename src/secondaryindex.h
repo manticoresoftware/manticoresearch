@@ -48,7 +48,7 @@ public:
 	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }
 	void		Reset() { m_dIndexes.Reset(); }
 
-	void		ColumnUpdated ( const CSphString & sAttr );
+	bool		ColumnUpdated ( const CSphString & sAttr );
 	bool		SaveMeta ( CSphString & sError ) const;
 	bool		CreateIterators ( std::vector<common::BlockIterator_i *> & dIterators, const common::Filter_t & tFilter, const common::RowidRange_t * pBounds, uint32_t uMaxValues, int64_t iRsetSize, int iCutoff, bool bUseSICache, CSphString & sWarning, CSphString & sError ) const;
 	int64_t		GetCountDistinct ( const CSphString & sAttr ) const;

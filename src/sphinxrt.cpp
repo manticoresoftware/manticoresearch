@@ -44,6 +44,8 @@
 #include "knnmisc.h"
 #include "knnlib.h"
 #include "jsonsi.h"
+#include "attr_embedding.h"
+#include "embeddingutils.h"
 #include "std/sys.h"
 #include "dict/infix/infix_builder.h"
 
@@ -150,6 +152,18 @@ volatile int &AutoOptimizeCutoffMultiplier() noexcept
 {
 	static int iAutoOptimizeCutoffMultiplier = 1;
 	return iAutoOptimizeCutoffMultiplier;
+}
+
+volatile int &ParallelChunkMergesLimit() noexcept
+{
+	static int iParallelChunkMerges = 1;
+	return iParallelChunkMerges;
+}
+
+volatile int &MergeChunksPerJob() noexcept
+{
+	static int iMergeChunksPerJob = 2;
+	return iMergeChunksPerJob;
 }
 
 volatile int AutoOptimizeCutoff() noexcept
@@ -1359,6 +1373,8 @@ struct ExternalFilesCacheEntry_t
 	CSphString	m_sJieba;
 };
 
+struct RtMergeTimings_t;
+
 using ExtFiles_h = OpenHashTable_T<uint64_t, ExternalFilesCacheEntry_t, IdentityHash_fn>;
 
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
@@ -1371,6 +1387,7 @@ public:
 	virtual bool		AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
+	bool				PreCommit ( RtAccum_t * pAccExt, CSphString & sError ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	bool				CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError );
 	void				ForceRamFlush ( const char * szReason ) final;
@@ -1390,9 +1407,11 @@ public:
 	int					ProgressiveOptimize ( int iCutoff );
 	int					CommonOptimize ( OptimizeTask_t tTask );
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
+	void				DropDiskChunks ( IntVec_t& dChunks, int* pAffected=nullptr ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool				CompressOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				DedupOneChunk ( int iChunk, int* pAffected = nullptr );
-	bool				MergeTwoChunks ( int iA, int iB, int* pAffected, CSphString* sLog = nullptr );
+	bool				MergeTwoChunks ( int iA, int iB, int* pAffected, StringBuilder_c* sLog = nullptr );
+	bool				MergeNChunks ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, int* pAffected, StringBuilder_c* sLog, RtMergeTimings_t & tTimings );
 	bool				MergeCanRun () const;
 	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAffected = nullptr );
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int* pAffected = nullptr );
@@ -1404,11 +1423,15 @@ public:
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
 
 	// helpers
-	ConstDiskChunkRefPtr_t	MergeDiskChunks (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
+	ConstDiskChunkRefPtr_t	ChangeDiskChunk (  const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunk, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters );
+	ConstDiskChunkRefPtr_t	MergeDiskChunksN ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress & tProgress, RtMergeTimings_t & tTimings );
+	ConstDiskChunkRefPtr_t MergeChunkPrealloc ( const CSphIndex & tChunkA, const char * szParentAction );
+
 	bool				PublishMergedChunks ( const char * szParentAction,std::function<bool ( int, DiskChunkVec_c & )> && fnPusher) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	bool 				RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char * szParentAction );
 	bool				SkipOrDrop ( int iChunk, const CSphIndex& dChunk, bool bCheckAlive, int* pAffected = nullptr );
 	void				ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const final;
+	void				ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const final;
 	template <typename VISITOR>
 	void				ProcessDiskChunkByID ( int iChunkID, VISITOR&& fnVisitor ) const;
 	template <typename VISITOR>
@@ -1503,6 +1526,7 @@ private:
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM { 0 };
 
 	std::atomic<bool>			m_bOptimizeStop { false };
+	std::atomic<int>			m_iManualOptimizeCutoff { 0 };
 	Coro::Waitable_T<int>		m_tOptimizeRuns {0};
 	friend class OptimizeGuard_c;
 
@@ -1608,7 +1632,7 @@ private:
 	bool						AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 	void						AddRemoveRowwiseAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
-	bool						Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString& sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 
 	void						GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const FilenameBuilder_i* = nullptr ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, const InsertDocData_c & tDoc, CSphSource_StringVector & tSrc, CSphVector<CSphVector<BYTE>> & dTmpAttrStorage ) const;
@@ -1670,6 +1694,8 @@ private:
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
 	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
+	bool						AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError ) override;
+	bool						AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const;
@@ -1683,6 +1709,14 @@ private:
 	bool						AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError );
 	bool						AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError );
 	bool						InitExtCache ( const FilenameBuilder_i * pDstFilenameBuilder, ExtFiles_h & hExtCache, CSphString & sError ) const;
+
+	bool						ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) override;
+	bool						InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError ) override;
+	bool						GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const override;
+	bool						ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) override;
+	void						FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) override;
+
+	virtual void				ManualOptimizeCutoff ( int iCutoff );
 };
 
 
@@ -1804,6 +1838,18 @@ void RtIndex_c::ProcessDiskChunk ( int iChunk, VisitChunk_fn&& fnVisitor ) const
 		fnVisitor ( nullptr );
 	else
 		fnVisitor ( &( *pDiskChunks )[iChunk]->Cidx() );
+}
+
+void RtIndex_c::ProcessDiskChunkEx ( int iChunk, VisitChunkEx_fn&& fnVisitor ) const
+{
+	auto pDiskChunks = m_tRtChunks.DiskChunks();
+	if ( iChunk < 0 || iChunk >= pDiskChunks->GetLength() )
+		fnVisitor ( nullptr, false );
+	else
+	{
+		const auto & tChunk = ( *pDiskChunks )[iChunk];
+		fnVisitor ( &tChunk->Cidx(), tChunk->m_bOptimizing.load ( std::memory_order_relaxed ) );
+	}
 }
 
 template<typename VISITOR>
@@ -2092,7 +2138,7 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 
 		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
 		{
-			if ( !bDefault && iNumValues!=0 )
+			if ( !bDefault && iNumValues && iNumValues!=tAttr.m_tKNN.m_iDims )
 			{
 				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
 				return false;
@@ -3077,6 +3123,13 @@ static void CleanupHitDuplicates ( CSphTightVector<CSphWordHit> & dHits )
 	dHits.Resize ( iDst );
 }
 
+static void PreCommitAcc ( RtAccum_t & tAcc, int iRowSize )
+{
+	tAcc.CleanupDuplicates ( iRowSize );
+	tAcc.Sort();
+	CleanupHitDuplicates ( tAcc.m_dAccum );
+}
+
 bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 {
 	TRACE_CONN ( "conn", "RtIndex_c::Commit" );
@@ -3105,18 +3158,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	// phase 0, build a new segment
 	// accum and segment are thread local; so no locking needed yet
 	// segment might be NULL if we're only killing rows this txn
-	pAcc->CleanupDuplicates ( m_tSchema.GetRowSize() );
-	pAcc->Sort();
-	CleanupHitDuplicates ( pAcc->m_dAccum );
-
-	CSphString sError;
-	if ( !pAcc->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
-	{
-		if ( pError )
-			*pError = sError;
-
-		return false;
-	}
+	if ( !pAcc->IsPreparedForCommit() )
+		PreCommitAcc ( *pAcc, m_tSchema.GetRowSize() );
 
 	CSphString sCreateError;
 	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords, sCreateError ) };
@@ -3141,6 +3184,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->m_dAccumKlist.Uniq (false);
 
 	// now on to the stuff that needs locking and recovery
+	CSphString sError;
 	int iKilled = 0;
 	if ( !CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes, iKilled, sError ) )
 	{
@@ -3158,6 +3202,20 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	// reset accumulated warnings
 	CSphString sWarning;
 	pAcc->GrabLastWarning ( sWarning );
+	return true;
+}
+
+bool RtIndex_c::PreCommit ( RtAccum_t * pAccExt, CSphString & sError )
+{
+	if ( !pAccExt || ( !pAccExt->m_uAccumDocs && pAccExt->m_dAccumKlist.IsEmpty() ) )
+		return true;
+
+	PreCommitAcc ( *pAccExt, m_tSchema.GetRowSize() );
+
+	if ( !pAccExt->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
+		return false;
+
+	pAccExt->MarkPreparedForCommit();
 	return true;
 }
 
@@ -3602,6 +3660,7 @@ bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString 
 		return false;
 
 	// !COMMIT should handle case when uDoc what inserted in current txn here
+	pAcc->ResetPreparedForCommit();
 	pAcc->m_dAccumKlist.Append ( dDocs );
 
 	return true;
@@ -5154,79 +5213,55 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
-static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
+static bool PrepareEmbeddingModelsForSchema ( CSphSchema & tSchema, std::unique_ptr<TableEmbeddings_c> & pEmbeddings, CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError )
 {
-	StrVec_t dFrom;
-	sphSplit ( dFrom, sFrom.cstr(), " \t," );
-
-	for ( const auto & i : dFrom )
-	{
-		int iAttrId = tSchema.GetAttrIndex ( i.cstr() );
-		int iFieldId = tSchema.GetFieldIndex ( i.cstr() );
-
-		if ( iFieldId==-1 && iAttrId==-1 )
-		{
-			sError.SetSprintf ( "embedding source '%s' not found", i.cstr() );
-			return false;
-		}
-
-		if ( iAttrId!=-1 && tSchema.GetAttr(iAttrId).m_eAttrType!=SPH_ATTR_STRING )
-		{
-			sError.SetSprintf ( "embedding source attribute '%s' is not a string", i.cstr() );
-			return false;
-		}
-
-		tAttrWithModel.m_dFrom.Add ( { iFieldId==-1 ? iAttrId : iFieldId, iFieldId!=-1 } );
-	}
-
-	return true;
-}
-
-
-bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
-{
-	if ( m_pEmbeddings )
-		return true;
+	pEmbeddings.reset();
+	dAttrsWithModels.Reset();
 
 	bool bHaveModels = false;
-	for ( int i = 0 ; i < m_tSchema.GetAttrsCount(); i++ )
-		bHaveModels |= !m_tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+	for ( int i = 0 ; i < tSchema.GetAttrsCount(); i++ )
+		bHaveModels |= !tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
 
 	if ( !bHaveModels )
 		return true;
 
-	m_dAttrsWithModels.Resize ( m_tSchema.GetAttrsCount() );
-
-	m_pEmbeddings = std::make_unique<TableEmbeddings_c>();
-	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	dAttrsWithModels.Resize ( tSchema.GetAttrsCount() );
+	pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
-		const auto & tAttr = m_tSchema.GetAttr(i);
-		m_dAttrsWithModels[i].m_pModel = nullptr;
+		const auto & tAttr = tSchema.GetAttr(i);
+		dAttrsWithModels[i].m_pModel = nullptr;
 
 		if ( tAttr.m_tKNNModel.m_sModelName.empty() )
 			continue;
 
-		if ( !ParseKNNFrom ( m_dAttrsWithModels[i], tAttr.m_sKNNFrom, m_tSchema, sError ) )
-		{
-			m_pEmbeddings.reset();
+		if ( !ParseEmbeddingSources ( dAttrsWithModels[i].m_dFrom, tAttr.m_sKNNFrom, tSchema, sError ) )
 			return false;
-		}
 
-		if ( !m_pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
-		{
-			m_pEmbeddings.reset();
+		if ( !pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
 			return false;
-		}
 
-		auto pModel = m_pEmbeddings->GetModel ( tAttr.m_sName );
+		auto pModel = pEmbeddings->GetModel ( tAttr.m_sName );
 		assert(pModel);
 
-		m_dAttrsWithModels[i].m_pModel = pModel;
+		dAttrsWithModels[i].m_pModel = pModel;
 
 		// fixme! modifying the schema
 		const_cast<CSphColumnInfo&>(tAttr).m_tKNN.m_iDims = pModel->GetDims();
 	}
 
+	return true;
+}
+
+bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
+{
+	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+	if ( !PrepareEmbeddingModelsForSchema ( m_tSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
+		return false;
+
+	m_pEmbeddings = std::move ( pPreparedEmbeddings );
+	m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
 	return true;
 }
 
@@ -5673,7 +5708,7 @@ void RtIndex_c::PostSetup()
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
-	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && m_tSettings.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( m_tSettings.m_eBigramIndex ) )
 	{
 		m_pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( m_tSettings.m_sBigramWords.cstr() ), m_tSettings.m_sBigramWords.Length() );
 
@@ -5686,7 +5721,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_eBigramDelimiter, m_tSettings.m_sBigramWords, m_sLastError );
 
 	// hitless
 	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
@@ -7470,8 +7505,8 @@ public:
 
 	bool HasSegments () const							{ return ( m_iSeg==0 || m_dSegments.BitCount()>0 );	}
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch ( pMatch ); }
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
-	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );	}
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch ( pMatch ); } ); }
+	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && ( i.m_pExpr->IsColumnar() || i.m_pExpr->PrefersRowIdOrder() ); } );	}
 
 private:
 	const CSphQueryContext &	m_tCtx;
@@ -8181,62 +8216,73 @@ ConstRtData FilterReaderChunks ( ConstRtData tOrigin, const VecTraits_T<int64_t>
 
 const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSphQuery & tUpdatedQuery, const ISphSchema & tMatchSchema, CSphString & sError ) const
 {
-	auto & tKNN = tQuery.m_tKnnSettings;
-	if ( !m_pEmbeddings && tKNN.m_sEmbStr )
+	// check if any KNN entry needs auto-embeddings
+	bool bNeedsEmb = tQuery.m_dKnnSettings.any_of ( [] ( const auto & t ) { return !!t.m_sEmbStr; } );
+	if ( !m_pEmbeddings && bNeedsEmb )
 	{
 		sError = "Embeddings generation string specified, but embeddings are not loaded";
 		return nullptr;
 	}
 
-	if ( !m_pEmbeddings || tKNN.m_sAttr.IsEmpty() || !tKNN.m_sEmbStr )
+	if ( !m_pEmbeddings || !bNeedsEmb )
 		return &tQuery;
-
-	auto pAttr = m_tSchema.GetAttr ( tKNN.m_sAttr.cstr() );
-	if ( !pAttr )
-	{
-		sError.SetSprintf ( "KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
-		return nullptr;
-	}
-
-	knn::TextToEmbeddings_i * pModel = m_pEmbeddings->GetModel ( tKNN.m_sAttr );
-	if ( !pModel )
-	{
-		sError.SetSprintf ( "No model loaded for auto embeddings attribute '%s'", tKNN.m_sAttr.cstr() );
-		return nullptr;
-	}
 
 	tUpdatedQuery = tQuery;
 
-	std::vector<std::vector<float>> dEmbeddings;
-	std::vector<std::string_view> dTexts;
-	dTexts.push_back( tKNN.m_sEmbStr->cstr() );
-
-	std::string sConvertError;
-	if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )
+	for ( auto & tKNN : tUpdatedQuery.m_dKnnSettings )
 	{
-		sError.SetSprintf ( "Error generating embeddings for attribute '%s' : %s", tKNN.m_sAttr.cstr(), sConvertError.c_str() );
-		return nullptr;
+		if ( !tKNN.m_sEmbStr || tKNN.m_sAttr.IsEmpty() )
+			continue;
+
+		auto pAttr = m_tSchema.GetAttr ( tKNN.m_sAttr.cstr() );
+		if ( !pAttr )
+		{
+			sError.SetSprintf ( "KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
+			return nullptr;
+		}
+
+		knn::TextToEmbeddings_i * pModel = m_pEmbeddings->GetModel ( tKNN.m_sAttr );
+		if ( !pModel )
+		{
+			sError.SetSprintf ( "No model loaded for auto embeddings attribute '%s'", tKNN.m_sAttr.cstr() );
+			return nullptr;
+		}
+
+		std::vector<std::vector<float>> dEmbeddings;
+		std::vector<std::string_view> dTexts;
+		dTexts.push_back( tKNN.m_sEmbStr->cstr() );
+
+		std::string sConvertError;
+		if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )
+		{
+			sError.SetSprintf ( "Error generating embeddings for attribute '%s' : %s", tKNN.m_sAttr.cstr(), sConvertError.c_str() );
+			return nullptr;
+		}
+
+		if ( dEmbeddings.size()!=1 )
+		{
+			sError.SetSprintf ( "Error generating embeddings for attribute '%s'", tKNN.m_sAttr.cstr() );
+			return nullptr;
+		}
+
+		int iEmbDim = dEmbeddings[0].size();
+		if ( iEmbDim!=pAttr->m_tKNN.m_iDims )
+		{
+			sError.SetSprintf ( "Auto generated embedding dimension mismatch: expected %d, got %d", pAttr->m_tKNN.m_iDims, iEmbDim );
+			return nullptr;
+		}
+
+		tKNN.m_dVec.Resize(iEmbDim);
+		memcpy ( tKNN.m_dVec.Begin(), dEmbeddings[0].data(), iEmbDim*sizeof(float) );
 	}
 
-	if ( dEmbeddings.size()!=1 )
+	// update expressions that depend on KNN vec (use first KNN entry's vec for backward compat)
+	if ( tUpdatedQuery.HasKnn() )
 	{
-		sError.SetSprintf ( "Error generating embeddings for attribute '%s'", tKNN.m_sAttr.cstr() );
-		return nullptr;
+		for ( int i = 0; i < tMatchSchema.GetAttrsCount(); i++ )
+			if ( tMatchSchema.GetAttr(i).m_pExpr )
+				tMatchSchema.GetAttr(i).m_pExpr->Command ( SPH_EXPR_SET_KNN_VEC, &tUpdatedQuery.SingleKnnSettings().m_dVec );
 	}
-
-	int iEmbDim = dEmbeddings[0].size();
-	if ( iEmbDim!=pAttr->m_tKNN.m_iDims )
-	{
-		sError.SetSprintf ( "Auto generated embedding dimension mismatch: expected %d, got %d", pAttr->m_tKNN.m_iDims, iEmbDim );
-		return nullptr;
-	}
-
-	tUpdatedQuery.m_tKnnSettings.m_dVec.Resize(iEmbDim);
-	memcpy ( tUpdatedQuery.m_tKnnSettings.m_dVec.Begin(), dEmbeddings[0].data(), iEmbDim*sizeof(float) );
-
-	for ( int i = 0; i < tMatchSchema.GetAttrsCount(); i++ )
-		if ( tMatchSchema.GetAttr(i).m_pExpr )
-			tMatchSchema.GetAttr(i).m_pExpr->Command ( SPH_EXPR_SET_KNN_VEC, &tUpdatedQuery.m_tKnnSettings.m_dVec );
 
 	return &tUpdatedQuery;
 }
@@ -8259,7 +8305,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )
 	{
-		tMeta.m_iQueryTime = 0;
+		tMeta.SetQueryTimeUs ( 0 );
 		return false;
 	}
 
@@ -8268,7 +8314,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	MEMORY ( MEM_RT_QUERY );
 
 	// start counting
-	tMeta.m_iQueryTime = 0;
+	tMeta.SetQueryTimeUs ( 0 );
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer();
 	QueryProfile_c * pProfiler = tMeta.m_pProfile;
@@ -8435,7 +8481,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 			tSSTransform.Transform ( i, tGuard );
 
 		tResult.m_pDocstore = m_tSchema.HasStoredFields () || m_tSchema.HasStoredAttrs() ? this : nullptr;
-		tMeta.m_iQueryTime = 0;
+		tMeta.SetQueryTimeUs ( 0 );
 		return true;
 	}
 
@@ -8478,7 +8524,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		tSSTransform.Transform ( i, tGuard );
 
 	tResult.m_pDocstore = m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ? this : nullptr;
-	tMeta.m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
+	tMeta.SetQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	return true;
 }
@@ -8744,12 +8790,11 @@ void RtSegment_t::MaybeAddPostponedUpdate ( const RowsToUpdate_t& dRows, const U
 	});
 }
 
-bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_t& dDiskChunks, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t & tUpd, const DiskChunkSlice_t & dDiskChunks, CSphString & sError, CSphString & sWarning ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::Update_DiskChunks" );
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 	bool bCritical = false;
-	CSphString sWarning;
 
 	bool bEnabled = m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 	bool bNeedWait = !bEnabled;
@@ -8780,8 +8825,6 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 
 		// FIXME! need to handle critical failures here (chunk is unusable at this point)
 		assert ( !bCritical );
-
-		// FIXME! maybe emit a warning to client as well?
 		if ( iRes<0 )
 			return false;
 
@@ -8874,14 +8917,15 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 			break;
 	}
 
-	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError ) ) // fixme!
+	if ( !Update_DiskChunks ( tUpd, tGuard.m_dDiskChunks, sError, sWarning ) ) // fixme!
 		sphWarn ( "INTERNAL ERROR: table %s update failure: %s", GetName(), sError.cstr() );
 
 	// bump the counter, binlog the update!
 	CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
 	iUpdated = tUpd.m_uAffected - iUpdated;
-	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
+
+	if ( !tCtx.HandleWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
 	// all done
@@ -9099,6 +9143,8 @@ void RtIndex_c::AlterSave ( bool bSaveRam )
 	QcacheClearByIndexId ( GetIndexId() );
 }
 
+static bool IsModelBackedEmbedding ( const AttrAddRemoveCtx_t & tCtx );
+
 bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx, CSphString & sError )
 {
 	if ( !m_tRtChunks.DiskChunks()->IsEmpty() && !m_tSchema.GetAttrsCount() )
@@ -9134,10 +9180,32 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	if ( !Alter_AddRemoveFromSchema ( tNewSchema, tNewCtx, bAdd, sError ) )
 		return false;
 
+	auto tGuard = RtGuard();
+
+	std::unique_ptr<TableEmbeddings_c> pPreparedEmbeddings;
+	CSphVector<AttrWithModel_t> dPreparedAttrsWithModels;
+
+	const bool bModelBackedEmbedding = ( bAdd && IsModelBackedEmbedding ( tNewCtx ) );
+	if ( bModelBackedEmbedding )
+	{
+		if ( !PrepareEmbeddingModelsForSchema ( tNewSchema, pPreparedEmbeddings, dPreparedAttrsWithModels, sError ) )
+			return false;
+
+		const CSphColumnInfo * pAttr = tNewSchema.GetAttr ( tNewCtx.m_sName.cstr() );
+		assert ( pAttr );
+		if ( !pAttr )
+		{
+			sError.SetSprintf ( "attribute '%s' not found", tNewCtx.m_sName.cstr() );
+			return false;
+		}
+
+		tNewCtx.m_tKNN = pAttr->m_tKNN;
+		tNewCtx.m_tKNNModel = pAttr->m_tKNNModel;
+		tNewCtx.m_sKNNFrom = pAttr->m_sKNNFrom;
+	}
+
 	m_tSchema = tNewSchema;
 	m_iStride = m_tSchema.GetRowSize();
-
-	auto tGuard = RtGuard();
 
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
@@ -9154,6 +9222,12 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		AddRemoveRowwiseAttr ( tGuard, bAdd, tNewCtx.m_sName, tNewCtx.m_eType, tOldSchema, tNewSchema, sError );
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
+
+	if ( bModelBackedEmbedding )
+	{
+		m_pEmbeddings = std::move ( pPreparedEmbeddings );
+		m_dAttrsWithModels.SwapData ( dPreparedAttrsWithModels );
+	}
 
 	// fixme: we can't rollback at this point
 	AlterSave ( true );
@@ -9620,23 +9694,21 @@ struct ChunkAndSize_t
 	int64_t m_iSize;
 };
 
-static ChunkAndSize_t GetNextSmallestChunkByID ( const DiskChunkVec_c& dDiskChunks, int iChunkID )
+static CSphVector<ChunkAndSize_t> GetSmallestChunksByID ( const DiskChunkVec_c& dDiskChunks )
 {
-	int iRes = -1;
-	int64_t iLastSize = INT64_MAX;
+	CSphVector<ChunkAndSize_t> dResult;
+	dResult.Reserve ( dDiskChunks.GetLength() );
 	for ( const auto& pDiskChunk : dDiskChunks )
 	{
 		if ( pDiskChunk->m_bOptimizing.load(std::memory_order_relaxed) )
 			continue;
 		const CSphIndex& dDiskChunk = pDiskChunk->Cidx();
-		int64_t iSize = GetChunkSize ( dDiskChunk );
-		if ( iSize < iLastSize && iChunkID != dDiskChunk.m_iChunk )
-		{
-			iLastSize = iSize;
-			iRes = dDiskChunk.m_iChunk;
-		}
+		const int iChunk = dDiskChunk.m_iChunk;
+		const int64_t iSize = GetChunkSize ( dDiskChunk );
+		dResult.Add ( { iChunk, iSize } );
 	}
-	return { iRes, iLastSize };
+	dResult.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iSize < b.m_iSize; } ) );
+	return dResult;
 }
 
 static int GetNumOfOptimizingNow ( const DiskChunkVec_c& dDiskChunks )
@@ -9719,7 +9791,7 @@ int64_t RtIndex_c::GetCount() const
 	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
 		return { 0, 1 };
 
-	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_tKnnSettings.m_sAttr.IsEmpty(); } );	 
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return tQuery.HasKnn(); } );	 
 
 	auto tGuard = RtGuard();
 	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();
@@ -9752,27 +9824,56 @@ void RtIndex_c::DropDiskChunk ( int iChunkID, int* pAffected )
 		++*pAffected;
 }
 
-// perform merge, preload result, rename to final chunk and return preallocated result scheduled to dispose
-ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunkA, const ConstDiskChunkRefPtr_t& pChunkB, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters )
+void RtIndex_c::DropDiskChunks ( IntVec_t& dChunks, int* pAffected ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
-	TRACE_CORO ( "rt", "RtIndex_c::MergeDiskChunks" );
+	if ( dChunks.IsEmpty() )
+		return;
+
+	dChunks.Uniq();
+
+	RTDLOG << "Optimize: drop chunks (" << dChunks.GetLength() << ")";
+	TRACE_SCHED ( "rt", "RtIndex_c::DropDiskChunks" );
+	sphLogDebug( "rt optimize: table %s: drop disk chunks (%d)", GetName(), dChunks.GetLength() );
+
+	{
+		auto tChangeset = RtWriter();
+		tChangeset.InitDiskChunks ( RtWriter_c::empty );
+		auto pChunks = m_tRtChunks.RtData().m_pChunks;
+		for ( auto& pChunk : *pChunks )
+			if ( dChunks.BinarySearch ( pChunk->Cidx().m_iChunk ) )
+				pChunk->m_bFinallyUnlink = true;
+			else
+				tChangeset.m_pNewDiskChunks->Add ( pChunk );
+	}
+	SaveMeta();
+	if ( pAffected )
+		*pAffected+=dChunks.GetLength();
+}
+
+// perform merge, preload result, rename to final chunk and return preallocated result scheduled to dispose
+ConstDiskChunkRefPtr_t RtIndex_c::ChangeDiskChunk ( const char* szParentAction, const ConstDiskChunkRefPtr_t& pChunk, CSphIndexProgress& tProgress, VecTraits_T<CSphFilterSettings> dFilters )
+{
+	TRACE_CORO ( "rt", "RtIndex_c::ChangeDiskChunk" );
 	CSphString sError;
 
-	const CSphIndex& tChunkA = pChunkA->Cidx();
-	const CSphIndex& tChunkB = pChunkB->Cidx();
-
-	ConstDiskChunkRefPtr_t pChunk;
+	const CSphIndex& tChunk = pChunk->Cidx();
 
 	// note: klist for merged chunk will be attached during merge at the moment of copying alive rows.
-	if ( !sphMerge ( &tChunkA, &tChunkB, dFilters, tProgress, sError ) )
+	if ( !sphMerge ( &tChunk, &tChunk, dFilters, tProgress, sError ) )
 	{
 		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
 			sError = "interrupted because of shutdown";
-		sphWarning ( "rt %s: table %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", tChunkA.GetFilebase(), sError.cstr() );
-		return pChunk;
+		sphWarning ( "rt %s: table %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", tChunk.GetFilebase(), sError.cstr() );
+		return {};
 	}
 
 //	PauseCheck ( "postmerge" );
+	return MergeChunkPrealloc ( tChunk, szParentAction );
+}
+
+ConstDiskChunkRefPtr_t RtIndex_c::MergeChunkPrealloc ( const CSphIndex & tChunk, const char * szParentAction )
+{
+	ConstDiskChunkRefPtr_t pChunk;
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
@@ -9780,18 +9881,51 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 		pFilenameBuilder = fnFnameBuilder ( GetName() );
 
 	// prealloc new (optimized) chunk
-	CSphString sChunk = tChunkA.GetFilename ( "tmp" );
+	CSphString sChunk = tChunk.GetFilename ( "tmp" );
 
+	CSphString sError;
 	StrVec_t dWarnings;
-	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk, tChunkA.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunkA.GetName() ) );
+	pChunk = DiskChunk_c::make ( PreallocDiskChunk ( sChunk, tChunk.m_iChunk, pFilenameBuilder.get(), dWarnings, sError, tChunk.GetName() ) );
 	dWarnings.for_each ( [] ( const auto& sWarning ) { sphWarning ( "PreallocDiskChunk warning: %s", sWarning.cstr() ); } );
 
 	if ( pChunk )
 		pChunk->m_bFinallyUnlink = true; // on destroy files will be deleted. Caller must explicitly reset this flag if chunk is usable
 	else
-		sphWarning ( "rt %s: table %s: failed to prealloc", szParentAction, GetName() );
+		sphWarning ( "rt %s: table %s: failed to prealloc: %s", szParentAction, GetName(), sError.cstr() );
 
 	return pChunk;
+}
+
+struct RtMergeTimings_t : MergeTimings_t
+{
+	int64_t m_tmBuild = 0;
+	int64_t m_tmPublish = 0;
+};
+
+ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunksN ( const char* szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, CSphIndexProgress& tProgress, RtMergeTimings_t& tTimings )
+{
+	TRACE_CORO ( "rt", "RtIndex_c::MergeDiskChunksN" );
+	CSphString sError;
+
+	if ( dChunks.IsEmpty() )
+		return {};
+
+	CSphFixedVector<const CSphIndex*> dIndexes ( dChunks.GetLength() );
+	ARRAY_FOREACH ( i, dChunks )
+		dIndexes[i] = &dChunks[i]->Cidx();
+
+	ConstDiskChunkRefPtr_t pChunk;
+	if ( !sphMergeN ( dIndexes, tProgress, sError, &tTimings ) )
+	{
+		if ( sError.IsEmpty() && tProgress.GetMergeCb().NeedStop() )
+			sError = "interrupted because of shutdown";
+		sphWarning ( "rt %s: table %s: failed to merge %s (%s)", szParentAction, GetName(), dChunks[0]->Cidx().GetFilebase(), sError.cstr() );
+		return pChunk;
+	}
+
+	// Use the last chunk for prealloc since DoMergeN writes files using pDstIndex (last chunk)
+	const CSphIndex & tChunkDst = dChunks.Last()->Cidx();
+	return MergeChunkPrealloc ( tChunkDst, szParentAction );
 }
 
 bool RtIndex_c::RenameOptimizedChunk ( const ConstDiskChunkRefPtr_t& pChunk, const char* szParentAction )
@@ -10019,6 +10153,42 @@ bool RtIndex_c::SkipOrDrop ( int iChunkID, const CSphIndex& dChunk, bool bCheckA
 	return false;
 }
 
+class MergeGuardMulti_c
+{
+	CSphVector<ConstDiskChunkRefPtr_t> m_dUsedChunks;
+
+	void SetOptimize() const noexcept
+	{
+		for ( const auto & pChunk : m_dUsedChunks )
+			if ( pChunk )
+				pChunk->m_bOptimizing.store ( true, std::memory_order_relaxed );
+	}
+
+public:
+	MergeGuardMulti_c () = default;
+	explicit MergeGuardMulti_c ( const VecTraits_T<ConstDiskChunkRefPtr_t> & dChunks )
+	{
+		m_dUsedChunks.Reserve ( dChunks.GetLength() );
+		for ( const auto & pChunk : dChunks )
+			m_dUsedChunks.Add ( pChunk );
+
+		SetOptimize();
+	}
+
+	void Add ( const ConstDiskChunkRefPtr_t & pChunk ) noexcept
+	{
+		m_dUsedChunks.Add ( pChunk );
+		SetOptimize();
+	}
+
+	virtual ~MergeGuardMulti_c()
+	{
+		for ( const auto & pChunk : m_dUsedChunks )
+			if ( pChunk )
+				pChunk->m_bOptimizing.store ( false, std::memory_order_relaxed );
+	}
+};
+
 bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::CompressOneChunk" );
@@ -10034,13 +10204,13 @@ bool RtIndex_c::CompressOneChunk ( int iChunkID, int* pAffected )
 
 	sphLogDebug ( "compress %d (%d kb)", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ) );
 
-	pVictim->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizing = AtScopeExit ( [pVictim] { pVictim->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	MergeGuardMulti_c tOptimizingGuard;
+	tOptimizingGuard.Add (pVictim);
 
 	// merge data to disk ( data is constant during that phase )
 	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
 	CSphIndexProgress tProgress ( &tMonitor );
-	auto pCompressed = MergeDiskChunks ( "compress", pVictim, pVictim, tProgress, { nullptr, 0 } );
+	auto pCompressed = ChangeDiskChunk ( "compress", pVictim, tProgress, { nullptr, 0 } );
 
 	auto tFinallyStopCollectingUpdates = AtScopeExit ( [pVictim] { pVictim->CastIdx().ResetPostponedUpdates(); } );
 
@@ -10179,8 +10349,8 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	CSphIndex& tVictim = pVictim->CastIdx(); // non-const need to invoke 'merge'
 	sphLogDebug ( "split %d (%d kb) with %s", iChunkID, (int)( GetChunkSize ( tVictim ) / 1024 ), szUvarFilter );
 
-	pVictim->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizing = AtScopeExit ( [pVictim] { pVictim->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	MergeGuardMulti_c tOptimizingGuard;
+	tOptimizingGuard.Add (pVictim);
 
 	const UservarIntSet_c pUservar = Uservars ( szUvarFilter );
 	assert ( pUservar ); // detailed check already performed in splitOneChunkFast
@@ -10201,7 +10371,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	auto iOriginallyAlive = NumAliveDocs ( tVictim );
 
 	// get 1-st chunk - one which doesn't match filter the filter
-	auto pChunkE = MergeDiskChunks ( "1-st part of split", pVictim, pVictim, tProgress, dFilters );
+	auto pChunkE = ChangeDiskChunk ( "1-st part of split", pVictim, tProgress, dFilters );
 
 	auto tFinallyStopCollectingUpdatesE = AtScopeExit ( [pVictim] { pVictim->CastIdx().ResetPostponedUpdates();	} );
 
@@ -10230,7 +10400,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 
 	// prepare <I>ncluded chunk - one with included docs, it will be placed instead of original one
 	dFilter.m_bExclude = false;
-	auto pChunkI = MergeDiskChunks ( "2-nd part of split", pVictim, pVictim, tProgress, dFilters );
+	auto pChunkI = ChangeDiskChunk ( "2-nd part of split", pVictim, tProgress, dFilters );
 
 	// check forced exit after long operation (that is - after merge)
 	if ( !pChunkI || tMonitor.NeedStop() )
@@ -10292,7 +10462,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	return true;
 }
 
-bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString* sLog )
+bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, StringBuilder_c* sLog )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::MergeTwoChunks" );
 
@@ -10310,34 +10480,48 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		return false;
 	}
 
-	pA->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizingA = AtScopeExit ( [pA] { pA->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
-	pB->m_bOptimizing.store ( true, std::memory_order_relaxed );
-	auto tResetOptimizingB = AtScopeExit ( [pB] { pB->m_bOptimizing.store ( false, std::memory_order_relaxed ); } );
+	MergeGuardMulti_c tOptimizingGuard;
+	tOptimizingGuard.Add (pA);
+	tOptimizingGuard.Add (pB);
 
-	sphLogDebug ( "common merge - merging %d (%d kb) with %d (%d kb)",
+	const char * szActionName = "common merge";
+
+	sphLogDebug ( "%s - merging %d (%d kb) with %d (%d kb)", szActionName,
 			iAID,
 			(int)( GetChunkSize ( pA->Cidx() ) / 1024 ),
 			iBID,
 			(int)( GetChunkSize ( pB->Cidx() ) / 1024 ) );
 
+	CSphFixedVector<ConstDiskChunkRefPtr_t> dChunks ( 2 );
+	dChunks[0] = pA;
+	dChunks[1] = pB;
+
+	RtMergeTimings_t tFoo;
+	return MergeNChunks ( szActionName, dChunks, pAffected, sLog, tFoo );
+}
+
+bool RtIndex_c::MergeNChunks ( const char * szParentAction, VecTraits_T<ConstDiskChunkRefPtr_t> dChunks, int* pAffected, StringBuilder_c* pLog, RtMergeTimings_t& tTimings )
+{
 	// merge data to disk ( data is constant during that phase )
 	RTMergeCb_c tMonitor ( &m_bOptimizeStop, this );
 	CSphIndexProgress tProgress ( &tMonitor );
 
-	// get 1-st chunk - one which doesn't match filter the filter
-	auto pMerged = MergeDiskChunks ( "common merge", pA, pB, tProgress, { nullptr, 0 } );
+	const auto tmBuild = sphMicroTimer();
+	auto pMerged = MergeDiskChunksN ( szParentAction, dChunks, tProgress, tTimings );
+	tTimings.m_tmBuild = sphMicroTimer() - tmBuild;
 
-	auto tFinallyStopCollectingUpdates = AtScopeExit ( [pA, pB] {
-		pA->CastIdx().ResetPostponedUpdates();
-		pB->CastIdx().ResetPostponedUpdates();
+// finalize
+	auto fnFinalize = AtScopeExit ( [&tTimings, tmFinalize = sphMicroTimer()] {tTimings.m_tmPublish = sphMicroTimer()-tmFinalize;});
+	auto tFinallyStopCollectingUpdates = AtScopeExit ( [&dChunks] {
+		for ( const auto & pChunk : dChunks )
+			pChunk->CastIdx().ResetPostponedUpdates();
 	} );
 
 	// check forced exit after long operation (that is - after merge)
 	if ( !pMerged || tMonitor.NeedStop() )
 		return false;
 
-	if ( !RenameOptimizedChunk ( pMerged, "common merge" ) )
+	if ( !RenameOptimizedChunk ( pMerged, szParentAction ) )
 		return false;
 
 	CSphIndex& tMerged = pMerged->CastIdx(); // const breakage is ok since we don't yet published the index
@@ -10349,8 +10533,8 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 	END_CORO ("wait" );
 
 	// reset kill hook explicitly to override default order of destruction
-	SetKillHookFor ( nullptr, iAID );
-	SetKillHookFor ( nullptr, iBID );
+	for ( const auto & pChunk : dChunks )
+		SetKillHookFor ( nullptr, pChunk->Cidx().m_iChunk );
 
 	// apply collected kill-list before including chunks to the set
 	// as we are in serial worker, that is safe here; no new kills may arrive.
@@ -10359,29 +10543,39 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		iKilled = tMerged.KillMulti ( tMonitor.GetKilled() );
 
 	// and also apply collected updates
-	CSphVector<ConstDiskChunkRefPtr_t> tUpdated;
-	tUpdated.Add ( pA );
-	tUpdated.Add ( pB );
-	auto dUpdates = GatherUpdates::FromChunksOrSegments ( tUpdated );
+	auto dUpdates = GatherUpdates::FromChunksOrSegments ( dChunks );
 	if ( !dUpdates.IsEmpty() )
 	{
 		tMerged.UpdateAttributesOffline ( dUpdates );
 		dUpdates.Reset();
 	}
 
-	if ( !PublishMergedChunks ( "optimize", [iAID, iBID, pMerged] ( int iChunk, DiskChunkVec_c& tRes ) {
-			 if ( iChunk == iBID )
-				 tRes.Add ( pMerged );
-			 return ( iChunk == iAID || iChunk == iBID );
-		 } ) )
+	auto fnFilter = [&dChunks, pMerged] ( int iChunk, DiskChunkVec_c& tRes ) {
+		if ( iChunk==dChunks.Last()->Cidx().m_iChunk )
+			tRes.Add ( pMerged );
+		return dChunks.any_of ( [iChunk] ( const auto & tChunk ) { return tChunk->Cidx().m_iChunk==iChunk; } );
+	};
+
+	if ( !PublishMergedChunks ( szParentAction, fnFilter ) )
 		return false;
 
-	sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d", pA->Cidx().GetFilebase(), pB->Cidx().GetFilebase(), tMerged.GetFilebase(), iKilled );
-	if ( sLog )
-		sLog->SetSprintf ("%s and %s to %s", pA->Cidx ().GetFilebase(), pB->Cidx ().GetFilebase (), tMerged.GetFilebase ());
+	if ( pLog )
+	{
+		auto& sLog = *pLog;
+		{
+			ScopedComma_c comma {sLog, ", "};
+			dChunks.for_each ( [&sLog] (const auto& tChunk) { sLog << tChunk->Cidx().GetFilebase();} );
+		}
+		sLog << " to " << tMerged.GetFilebase();
+		sphLogDebug ( "optimized %s chunks to %s, killed=%d", sLog.cstr(), tMerged.GetFilebase(), iKilled );
+	} else
+	{
+		sphLogDebug ( "optimized %d chunks to %s, killed=%d", dChunks.GetLength(), tMerged.GetFilebase(), iKilled );
+	}
 
-	pA->m_bFinallyUnlink = true;
-	pB->m_bFinallyUnlink = true;
+
+	for ( const auto & pChunk : dChunks )
+		pChunk->m_bFinallyUnlink = true;
 	pMerged->m_bFinallyUnlink = false;
 	SaveMeta();
 	Preread();
@@ -10503,7 +10697,8 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 	RTDLOG << "Optimize checked with " << tTask;
 
-	if ( OptimizesRunning() > 0 )
+	const int iParallelMerges = Max ( 1, ParallelChunkMergesLimit() );
+	if ( OptimizesRunning() >= iParallelMerges )
 	{
 		RTDLOG << "Escape optimize as " << OptimizesRunning() << " tasks is already running";
 		sphLogDebug ( "Escape optimize as %d tasks is already running", OptimizesRunning() );
@@ -10545,12 +10740,20 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
+void RtIndex_c::ManualOptimizeCutoff ( int iCutoff )
+{
+	m_iManualOptimizeCutoff.store ( iCutoff, std::memory_order_relaxed );
+}
+
 int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;
-	else
-		return bKNN ? MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN : MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
+
+	if ( bKNN )
+		return MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN;
+
+	return MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
 }
 
 int RtIndex_c::ProgressiveOptimize ( int iCutoff )
@@ -10561,45 +10764,86 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 	if ( !iCutoff )
 		iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
+	const int iMergeChunksPerJob = Max ( 2, MergeChunksPerJob() );
+	const char * szActionName = "progressive optimize";
+
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )
 	{
+		int iRequestedCutoff = m_iManualOptimizeCutoff.exchange ( 0, std::memory_order_acq_rel );
+		if ( iRequestedCutoff>0 )
+			iCutoff = Min ( iCutoff, iRequestedCutoff );
+
 		auto pChunks = m_tRtChunks.DiskChunks();
-		if ( ( pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks ) ) <= iCutoff )
+		const int iFinallyRemainigChunks = pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks );
+		if ( iFinallyRemainigChunks <= iCutoff )
 			break;
+
+		const int iJobSize = Min ( iMergeChunksPerJob, iFinallyRemainigChunks - iCutoff + 1 );
+
+		CSphVector<ConstDiskChunkRefPtr_t> dChosenChunks;
+		dChosenChunks.Reserve ( iJobSize );
+
+		CSphVector<ChunkAndSize_t> dSmallest;
+		dSmallest.Reserve ( pChunks->GetLength() );
+		{
+			ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+			dSmallest = GetSmallestChunksByID ( *pChunks );
+			if ( dSmallest.IsEmpty() )
+				break;
+
+			IntVec_t dEmptyChunks;
+			ARRAY_FOREACH ( i, dSmallest )
+			if ( !dSmallest[i].m_iSize )
+			{
+				dEmptyChunks.Add (dSmallest[i].m_iId);
+				dSmallest.RemoveFast ( i-- );
+			}
+
+			// need to resort because of RemoveFast() above
+			dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iSize < b.m_iSize; } ) );
+
+			if (dSmallest.GetLength()>iJobSize)
+				dSmallest.Resize ( iJobSize );
+
+			// we need to make sure that A is the oldest one
+			// indexes go from oldest to newest so A must-go before B (A is always older than B)
+			// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
+			dSmallest.Sort ( Lesser ( [] ( const auto& a, const auto& b ) { return a.m_iId < b.m_iId; } ) );
+
+			for ( const auto& tNext : dSmallest ) {
+				auto pChunk = m_tRtChunks.DiskChunkByID ( tNext.m_iId );
+				if ( !pChunk )
+				{
+					bWork = false;
+					break;
+				}
+				dChosenChunks.Add ( pChunk );
+			}
+
+			if ( !bWork || dChosenChunks.GetLength()<2 )
+				break;
+
+			// mark them 'optimizing' from serial worker, so no concurrency with another optimizing jobs possible.
+			for ( const auto & pChunk : dChosenChunks )
+				pChunk->m_bOptimizing.store ( true, std::memory_order_relaxed );
+
+			DropDiskChunks ( dEmptyChunks, &iAffected );
+		} // serial fiber scope
+
+		RTDLOG << "Optimize: merge chunks " << dChosenChunks.GetLength();
 
 		auto tmStart = sphMicroTimer();
-		// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
-		// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
 
-		auto chA = GetNextSmallestChunkByID ( *pChunks, -1 );
-		if ( !chA.m_iSize ) // empty chunk - just remove
-		{
-			RTDLOG << "Optimize: drop chunk " << chA.m_iId;
-			DropDiskChunk ( chA.m_iId, &iAffected );
-			continue;
-		}
+		MergeGuardMulti_c tGuard { dChosenChunks };
 
-		auto chB = GetNextSmallestChunkByID ( *pChunks, chA.m_iId );
-		if ( chA.m_iId < 0 || chB.m_iId < 0 )
-		{
-			//	sphWarning ( "Couldn't find smallest chunk" );
-			break;
-		}
-
-		// we need to make sure that A is the oldest one
-		// indexes go from oldest to newest so A must go before B (A is always older than B)
-		// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
-		if ( chA.m_iId > chB.m_iId )
-			Swap ( chB, chA );
-
-		RTDLOG << "Optimize: merge chunks " << chA.m_iId << " and " << chB.m_iId;
-
-		CSphString sLog;
-		bWork &= MergeTwoChunks ( chA.m_iId, chB.m_iId, &iAffected, &sLog );
+		StringBuilder_c sLog;
+		RtMergeTimings_t tTimings;
+		bWork &= MergeNChunks ( szActionName, dChosenChunks, &iAffected, &sLog, tTimings );
 
 		auto tmPass = sphMicroTimer() - tmStart;
-		LogInfo ( "rt: table %s: merged chunks %s in %t (progressive mode). Remaining chunk count: %d", GetName (), sLog.cstr(), tmPass, m_tRtChunks.GetDiskChunksCount () );
+		LogInfo ( "rt: table %s: merged chunks %s in %t (build %t: attrs %t, words %t, finalize %t; publish %t). Remaining chunk count: %d",
+			GetName(), sLog.cstr(), tmPass, tTimings.m_tmBuild, tTimings.m_tmAttrs, tTimings.m_tmWords, tTimings.m_tmFinalize, tTimings.m_tmPublish, m_tRtChunks.GetDiskChunksCount() );
 	}
 
 	RTDLOG << "Optimize: start compressing pass for the rest of " << m_tRtChunks.GetDiskChunksCount() << " chunks.";
@@ -10610,6 +10854,9 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 		const CSphIndex& tVictim = pVictim->Cidx();
 		SkipOrDrop ( tVictim.m_iChunk, tVictim, false, &iAffected );
 	}
+
+	// A late async request might arrive after the last loop iteration and should not leak into a future optimize run.
+	m_iManualOptimizeCutoff.store ( 0, std::memory_order_relaxed );
 	return iAffected;
 }
 
@@ -10746,7 +10993,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	Tokenizer::AddToMultiformFilterTo ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
-	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
+	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && BigramNeedsFreq ( tSettings.m_tIndex.m_eBigramIndex ) )
 	{
 		pTokenizer->SetBuffer ( (BYTE*)const_cast<char*> ( tSettings.m_tIndex.m_sBigramWords.cstr() ), tSettings.m_tIndex.m_sBigramWords.Length() );
 
@@ -10885,7 +11132,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	Tokenizer::AddBigramFilterTo ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_eBigramDelimiter, m_tSettings.m_sBigramWords, m_sLastError );
 
 	AlterSave ( false );
 	RaiseAlterGeneration();
@@ -10949,6 +11196,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( &tSettings.m_eHitless, sizeof(tSettings.m_eHitless), uHash );
 	uHash = sphFNV64 ( tSettings.m_sHitlessFiles.cstr(), tSettings.m_sHitlessFiles.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_eBigramIndex, sizeof(tSettings.m_eBigramIndex), uHash );
+	uHash = sphFNV64 ( &tSettings.m_eBigramDelimiter, sizeof(tSettings.m_eBigramDelimiter), uHash );
 	uHash = sphFNV64 ( tSettings.m_sBigramWords.cstr(), tSettings.m_sBigramWords.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_uAotFilterMask, sizeof(tSettings.m_uAotFilterMask), uHash );
 	uHash = sphFNV64 ( &tSettings.m_ePreprocessor, sizeof(tSettings.m_ePreprocessor), uHash );
@@ -11417,6 +11665,98 @@ bool RtIndex_c::AlterApiKey ( const CSphString & sAttr, const CSphString & sKey,
 	return true;
 }
 
+
+bool RtIndex_c::AlterApiUrl ( const CSphString & sAttr, const CSphString & sUrl, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	std::string sOldUrl = pAttr->m_tKNNModel.m_sAPIUrl;
+	bool bWasCustomUrl = !sOldUrl.empty();
+	bool bIsRemovingCustomUrl = bWasCustomUrl && sUrl.IsEmpty();
+	
+	// Allow empty string to remove/reset API_URL (use default URL)
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sUrl.cstr();
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIUrl = sOldUrl;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+
+		const char * szError = sError.cstr();
+		if ( bIsRemovingCustomUrl && szError && ( strstr ( szError, "Invalid API key" ) || strstr ( szError, "API key" ) ) )
+			sError.SetSprintf ( "cannot remove API_URL: API key validation failed for the default endpoint. The API key may be invalid, expired, or not authorized for the default provider endpoint. To remove API_URL, first update the API key to a valid key that works with the default endpoint, or keep using a custom API_URL" );
+
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
+}
+
+
+bool RtIndex_c::AlterApiTimeout ( const CSphString & sAttr, int iTimeout, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	if ( iTimeout < 0 )
+	{
+		sError = GetAPITimeoutErrorMsg();
+		return false;
+	}
+
+	// 0 means use default timeout (10 seconds), positive value is timeout in seconds
+	int iOldTimeout = pAttr->m_tKNNModel.m_iAPITimeout;
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iAPITimeout = iTimeout;
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_iAPITimeout = iOldTimeout;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
+}
+
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )
 {
 	m_sGlobalIDFPath = sPath;
@@ -11825,4 +12165,289 @@ bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFile
 		assert ( tDictSettings.m_dWordforms.GetLength()==pDict->GetWordformsFileInfos().GetLength() );
 	}
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Embedding 
+//////////////////////////////////////////////////////////////////////////
+
+bool RtIndex_c::ReserveEmbeddingSpace ( int64_t /*iDocsToFill*/, int iDims, CSphString & sError )
+{
+	// Reserve is a write-path preparation step, so serialize and block optimize races.
+	OptimizeGuard_c tStopOptimize ( *this );
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", "reserve-embedding-space" );
+	WaitRAMSegmentsUnlocked();
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto & pChunk : *pChunks )
+	{
+		const int64_t iDocsToFill = pChunk->Cidx().GetCount();
+		if ( iDocsToFill<=0 )
+			continue;
+
+		CSphString sChunkError;
+		if ( !pChunk->CastIdx().ReserveEmbeddingSpace ( iDocsToFill, iDims, sChunkError ) )
+		{
+			sError.SetSprintf ( "failed to reserve .spb for chunk %d: %s", pChunk->Cidx().m_iChunk, sChunkError.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool RtIndex_c::InitUpdateEmbeddingState ( const CSphString & sAttr, EmbeddingPopulate_e eMode, ExtUpdState_t & tState, CSphString & sError )
+{
+	FinishUpdateEmbeddingState ( tState );
+
+	TRACE_SCHED ( "rt", "init-update-embedding-state" );
+
+	if ( sAttr.IsEmpty() )
+	{
+		sError = "attribute for embedding update must not be empty";
+		return false;
+	}
+
+	if ( !LoadEmbeddingModels ( sError ) )
+		return false;
+
+	const int iAttrIdx = m_tSchema.GetAttrIndex ( sAttr.cstr() );
+	if ( iAttrIdx<0 )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( iAttrIdx );
+	if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
+	{
+		sError.SetSprintf ( "attribute '%s' is not indexed float_vector", sAttr.cstr() );
+		return false;
+	}
+
+	if ( tAttr.IsColumnar() )
+	{
+		sError.SetSprintf ( "attribute '%s' is columnar, embedding populate is supported for blob-stored float_vector only", sAttr.cstr() );
+		return false;
+	}
+
+	if ( iAttrIdx>=m_dAttrsWithModels.GetLength() || !m_dAttrsWithModels[iAttrIdx].m_pModel )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	const AttrWithModel_t & tAttrWithModel = m_dAttrsWithModels[iAttrIdx];
+
+	const int iDims = tAttrWithModel.m_pModel->GetDims();
+	if ( iDims<=0 )
+	{
+		sError.SetSprintf ( "attribute '%s' has invalid embedding dims=%d", sAttr.cstr(), iDims );
+		return false;
+	}
+
+	tState.m_tPreviousOptimizeStopState = StopOptimize();
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+
+	// Force current RAM segments to disk so the populate loop runs against disk chunks only.
+	if ( !SaveDiskChunk ( true ) )
+	{
+		sError = m_sLastError;
+		if ( sError.IsEmpty() )
+			sError = "failed to flush RAM segments to disk before embedding populate";
+		return false;
+	}
+
+	WaitRAMSegmentsUnlocked();
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	const int iNumDiskChunks = pChunks->GetLength();
+
+	tState.m_sAttr = sAttr;
+	tState.m_iAttrIdx = iAttrIdx;
+	tState.m_iDims = iDims;
+	tState.m_eMode = eMode;
+	tState.m_dDiskChunks.Reset ( iNumDiskChunks );
+	for ( int i = 0; i < iNumDiskChunks; i++ )
+	{
+		tState.m_dDiskChunks[i] = { ( *pChunks )[i]->Cidx().m_iChunk, 0 };
+	}
+	tState.m_iUpdatedRows = 0;
+	tState.m_iSkippedRows = 0;
+	tState.m_iAlterGenerationAtInit = GetAlterGeneration();
+
+	return true;
+}
+
+bool RtIndex_c::GetUpdateEmbedding ( ExtUpdState_t & tState, AttrUpdateSharedPtr_t & pUpdate, CSphString & sError ) const
+{
+	static constexpr int EMBEDDING_COLLECT_CAP = 1000;
+
+	pUpdate = nullptr;
+	if ( sphInterrupted() )
+	{
+		sError = "operation interrupted";
+		return false;
+	}
+
+	if ( tState.m_iAlterGenerationAtInit<0 )
+	{
+		sError = "embedding update state is not initialized";
+		return false;
+	}
+
+	if ( GetAlterGeneration()!=tState.m_iAlterGenerationAtInit )
+	{
+		sError = "table altered during embedding populate; please retry";
+		return false;
+	}
+
+	if ( tState.m_iAttrIdx<0 || tState.m_iAttrIdx>=m_tSchema.GetAttrsCount() )
+	{
+		sError = "internal error: invalid embedding attribute id";
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tState.m_iAttrIdx );
+	if ( tAttr.m_sName!=tState.m_sAttr )
+	{
+		sError = "table schema changed during embedding populate; please retry";
+		return false;
+	}
+
+	if ( tState.m_iAttrIdx>=m_dAttrsWithModels.GetLength() || !m_dAttrsWithModels[tState.m_iAttrIdx].m_pModel )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const AttrWithModel_t & tAttrWithModel = m_dAttrsWithModels[tState.m_iAttrIdx];
+
+	const int iCurrentDims = tAttrWithModel.m_pModel->GetDims();
+	if ( iCurrentDims<=0 || iCurrentDims!=tState.m_iDims )
+	{
+		sError.SetSprintf ( "embedding dims changed for attribute '%s'; please retry", tState.m_sAttr.cstr() );
+		return false;
+	}
+
+	const int iNumDiskChunks = tState.m_dDiskChunks.GetLength();
+	if ( iNumDiskChunks<=0 )
+		return true;
+
+	CSphVector<DocID_t> dDocids;
+	CSphVector<CSphString> dFromTexts;
+	for ( int iChunk = 0; iChunk < iNumDiskChunks && dDocids.GetLength() < EMBEDDING_COLLECT_CAP; iChunk++ )
+	{
+		auto & tChunkState = tState.m_dDiskChunks[iChunk];
+		const int iChunkID = tChunkState.first;
+		auto pChunk = m_tRtChunks.DiskChunkByID ( iChunkID );
+		if ( !pChunk )
+		{
+			sError.SetSprintf ( "disk chunk %d is no longer available during embedding populate; please retry", iChunkID );
+			return false;
+		}
+
+		SccRL_t rLock ( pChunk->m_tLock );
+		if ( !pChunk->CastIdx().CollectDocsForEmbedding ( tState, tAttrWithModel.m_dFrom, dDocids, dFromTexts, sError, EMBEDDING_COLLECT_CAP, tChunkState.second ) )
+			return false;
+	}
+
+	if ( dDocids.IsEmpty() )
+		return true;
+
+	std::vector<std::vector<float>> dEmbeddings;
+	if ( !ConvertEmbeddings ( tAttrWithModel.m_pModel, tState.m_sAttr, dFromTexts, dEmbeddings, sError ) )
+		return false;
+
+	pUpdate = CreateFloatVectorAttrUpdate ( tState.m_sAttr, dDocids, dEmbeddings, tState.m_iDims );
+	return true;
+}
+
+bool RtIndex_c::ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError )
+{
+	if ( tState.m_eMode!=EmbeddingPopulate_e::Empty || tUpd.AllApplied() )
+		return true;
+
+	if ( tState.m_iAlterGenerationAtInit<0 )
+	{
+		sError = "embedding update state is not initialized";
+		return false;
+	}
+
+	if ( GetAlterGeneration()!=tState.m_iAlterGenerationAtInit )
+	{
+		sError = "table altered during embedding populate; please retry";
+		return false;
+	}
+
+	const CSphColumnInfo * pBlobLoc = m_tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLoc )
+		return true;
+
+	if ( tState.m_iAttrIdx<0 || tState.m_iAttrIdx>=m_tSchema.GetAttrsCount() )
+	{
+		sError = "internal error: invalid embedding attribute id";
+		return false;
+	}
+
+	const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( tState.m_iAttrIdx );
+	UpdateContext_t tCtx ( tUpd, m_tSchema );
+	auto tGuard = RtGuard();
+
+	for ( const auto & pRamSeg : tGuard.m_dRamSegs )
+	{
+		auto dRamRows = CollectUpdatableRows ( tCtx, pRamSeg );
+		if ( dRamRows.IsEmpty() )
+			continue;
+
+		SccRL_t rLock ( pRamSeg->m_tLock );
+		const BYTE * pBlobBase = pRamSeg->m_dBlobs.Begin();
+		for ( const auto & tRow : dRamRows )
+		{
+			const CSphRowitem * pRow = pRamSeg->GetDocinfoByRowID ( tRow.m_tRow );
+			if ( !pRow )
+				continue;
+
+			const SphAttr_t tBlobOff = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+			const BYTE * pBlobRow = pBlobBase + tBlobOff;
+			ByteBlob_t tVecBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+			if ( IsBlobAttrZero ( tVecBlob, tState.m_iDims ) )
+				continue;
+
+			tUpd.MarkUpdated ( tRow.m_iIdx );
+		}
+	}
+
+	for ( const auto & pChunk : tGuard.m_dDiskChunks )
+	{
+		if ( tUpd.AllApplied() )
+			break;
+
+		if ( !pChunk->CastIdx().ValidateUpdateEmbedding ( tState, tUpd, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+void RtIndex_c::FinishUpdateEmbeddingState ( ExtUpdState_t & tState )
+{
+	if ( tState.m_tPreviousOptimizeStopState.has_value() )
+		m_bOptimizeStop.store ( *tState.m_tPreviousOptimizeStopState, std::memory_order_relaxed );
+
+	tState.m_sAttr = "";
+	tState.m_iAttrIdx = -1;
+	tState.m_iDims = 0;
+	tState.m_eMode = EmbeddingPopulate_e::Empty;
+	tState.m_dDiskChunks.Reset ( 0 );
+	tState.m_iUpdatedRows = 0;
+	tState.m_iSkippedRows = 0;
+	tState.m_iAlterGenerationAtInit = -1;
+	tState.m_tPreviousOptimizeStopState.reset();
+}
+
+bool IsModelBackedEmbedding ( const AttrAddRemoveCtx_t & tCtx )
+{
+	return ( tCtx.m_eType==SPH_ATTR_FLOAT_VECTOR && !!( tCtx.m_uFlags & CSphColumnInfo::ATTR_INDEXED_KNN ) && !tCtx.m_tKNNModel.m_sModelName.empty() );
 }

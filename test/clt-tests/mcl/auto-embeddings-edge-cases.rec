@@ -197,7 +197,7 @@ mysql -h0 -P9306 -E -e "SHOW CREATE TABLE test_auto_dims"
 Create Table: CREATE TABLE test_auto_dims (
 id bigint,
 content_text text,
-vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' FROM='content_text'
+vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='content_text' api_timeout='10'
 ) engine='columnar'
 ––– comment –––
 Create table for REPLACE operations testing
@@ -407,7 +407,7 @@ knn_dist(): 0.31627#!/[0-9]{3}/!#
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.33028#!/[0-9]{3}/!#
+knn_dist(): 0.33028#!/[0-9]{0,3}/!#
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043
@@ -515,7 +515,7 @@ knn_dist(): 0.31627#!/[0-9]{3}/!#
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.33028#!/[0-9]{3}/!#
+knn_dist(): 0.33028#!/[0-9]{0,3}/!#
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043

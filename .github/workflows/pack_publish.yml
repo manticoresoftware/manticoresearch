@@ -203,8 +203,8 @@ jobs:
       cmake_command: |
         mkdir build
         cd build
-        cmake -DPACK=1 ..
-        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
+        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*deb"
@@ -231,8 +231,8 @@ jobs:
         cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0_0
         mkdir build
         cd build
-        cmake -DPACK=1 ..
-        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
+        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
@@ -253,12 +253,14 @@ jobs:
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      HOMEBREW_PREFIX: /opt/homebrew
+      HOMEBREW_PREFIX: ${{ matrix.arch == 'arm64' && '/opt/homebrew' || '/usr/local' }}
       cmake_command: |
         mkdir build
         cd build
-        cmake -DPACK=1 ..
-        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/osx.cmake
+        export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
+        cmake -DPACK=1 -DPACK_BUNDLE=1 -DDL_CURL=1 \
+          -DCURL_LIBRARY=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib \
+          -DCURL_LIBRARY_RELEASE=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"
@@ -279,8 +281,8 @@ jobs:
       cmake_command: |
         mkdir build
         cd build
-        cmake -DPACK=1 ..
-        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows.cmake
+        export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
+        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
         cmake --build . --target package
       cache_key: pack_windows_x64
       artifact_list: "build/manticore*exe build/manticore*zip"

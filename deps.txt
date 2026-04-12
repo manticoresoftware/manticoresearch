@@ -1,11 +1,11 @@
-backup 1.9.6+25070510-5247d066
-buddy 3.43.0+26030216-12ae76e4-dev
-mcl 11.1.0+26022620-8b0838e3-dev
-executor 1.4.0+26012715-d7a66c60
+backup 1.10.0+26032519-c42465e9-dev
+buddy 3.44.2+26040515-97dbd018-dev
+mcl 13.2.2+26041022-dd09b287
+executor 1.4.3+26033010-390b6e66-dev
 tzdata 1.0.1 250714 7eebffa
 load 1.24.0+25122422-e5db1c82-dev
+galera 3.37
 ---
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.
-You can find proper values for each dep on https://repo.manticoresearch.com
 You can find proper values for each dep on https://repo.manticoresearch.com

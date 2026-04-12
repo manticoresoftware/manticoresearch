@@ -149,9 +149,12 @@ enum SqlStmt_e : BYTE
 	STMT_ALTER_KLIST_TARGET,
 	STMT_ALTER_INDEX_SETTINGS,
 	STMT_ALTER_EMBEDDINGS_API_KEY,
+	STMT_ALTER_EMBEDDINGS_API_URL,
+	STMT_ALTER_EMBEDDINGS_API_TIMEOUT,
 	STMT_JOIN_CLUSTER,
 	STMT_CLUSTER_CREATE,
 	STMT_CLUSTER_DELETE,
+	STMT_CLUSTER_EXIT,
 	STMT_CLUSTER_ALTER_ADD,
 	STMT_CLUSTER_ALTER_DROP,
 	STMT_CLUSTER_ALTER_UPDATE,
@@ -166,6 +169,7 @@ enum SqlStmt_e : BYTE
 	STMT_SHOW_SCROLL,
 	STMT_SHOW_TABLE_INDEXES,
 	STMT_ALTER_REBUILD_KNN,
+	STMT_ALTER_REBUILD_EMBEDDINGS,
 	STMT_LOCK_TABLES,
 	STMT_UNLOCK_TABLES,
 
@@ -185,9 +189,9 @@ constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
 	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"alter_index_settings", "alter_embeddings_api_key", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
+	"alter_index_settings", "alter_embeddings_api_key", "alter_embeddings_api_url", "alter_embeddings_api_timeout", "join_cluster", "cluster_create", "cluster_delete", "cluster_exit", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", 
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn", "alter_rebuild_embeddings", "lock_tables", "unlock_tables",
 	};
 	return dNames[eStmt];
 }
@@ -305,6 +309,7 @@ public:
 	knn::IndexSettings_t	m_tAlterKNN;
 	knn::ModelSettings_t	m_tAlterKNNModel;
 	CSphString				m_sAlterKnnFrom;
+	bool					m_bAlterKnnFromSet = false;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

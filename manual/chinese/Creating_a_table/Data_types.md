@@ -2549,13 +2549,14 @@ let search_res = search_api.search(search_req).await;
 在创建带有自动嵌入的表时，指定以下附加参数：
 - `MODEL_NAME`：用于自动向量生成的嵌入模型
 - `FROM`：用于生成嵌入的字段（空字符串表示所有文本/字符串字段）
+- `API_KEY`：远程模型（OpenAI、Voyage、Jina）必需。在创建表时通过实际 API 请求验证 API 密钥。
+- `API_URL`：可选。自定义 API 端点 URL。如果未指定，使用默认提供者端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
+- `API_TIMEOUT`：可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建时的验证请求和插入操作时的嵌入生成。
 
 **支持的嵌入模型：**
 - **Sentence Transformers**：任何 [适合的 BERT 基础 Hugging Face 模型](https://huggingface.co/sentence-transformers/models)（例如，`sentence-transformers/all-MiniLM-L6-v2`）——无需 API 密钥。Manticore 在创建表时下载模型。
 - **Qwen 本地嵌入**：Qwen 嵌入模型，如 `Qwen/Qwen3-Embedding-0.6B`——不需要 API 密钥。Manticore 在您创建表时下载模型。
-- **OpenAI**：OpenAI 嵌入模型，如 `openai/text-embedding-ada-002` - 需要 `API_KEY='<OPENAI_API_KEY>'` 参数
-- **Voyage**：Voyage AI 嵌入模型 - 需要 `API_KEY='<VOYAGE_API_KEY>'` 参数
-- **Jina**：Jina AI 嵌入模型 - 需要 `API_KEY='<JINA_API_KEY>'` 参数
+- **OpenAI、Voyage、Jina**：远程嵌入模型（例如，`openai/text-embedding-ada-002`，`voyage/voyage-3.5-lite`，`jina/jina-embeddings-v2-base-en`）- 需要 `API_KEY='<API_KEY>'` 参数。可选地指定 `API_URL='<CUSTOM_URL>'` 以使用自定义 API 端点，并指定 `API_TIMEOUT='<SECONDS>'` 以配置 HTTP 超时（默认为 10 秒）。
 
 <!-- intro -->
 ##### SQL：
@@ -2591,6 +2592,17 @@ CREATE TABLE products_openai (
 );
 ```
 
+使用 OpenAI 与自定义 API URL 和超时（可选）
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
 使用所有文本字段进行嵌入（FROM 为空）
 ```sql
 CREATE TABLE products_all_fields (
@@ -2611,11 +2623,16 @@ CREATE TABLE products_all_fields (
 - **特定字段**：`FROM='title'` - 仅使用标题字段
 - **多个字段**：`FROM='title,description'` - 将标题和描述字段连接并使用
 - **所有文本字段**：`FROM=''`（空）- 表中的所有 `text`（全文字段）和 `string`（字符串属性）字段用于嵌入生成
-- **空向量**：仍然可以使用 `()` 插入空向量以排除文档从向量搜索
+- **手动覆盖**：即使配置了 `MODEL_NAME`，你仍然可以在 `INSERT`/`REPLACE` 中提供自己的向量
+- **空向量**：你可以插入 `()` 以跳过该行的嵌入生成；Manticore 会存储一个全零向量，其维度与模型相同
 
 #### 使用自动嵌入插入数据
 
-使用自动嵌入时，**不要在 INSERT 语句中指定向量字段**。嵌入会自动从指定的文本字段生成：
+使用自动嵌入时，你有三种插入模式：
+
+- 省略向量列，让 Manticore 从 `FROM` 中列出的字段生成嵌入
+- 显式提供自己的向量以覆盖该行的自动生成
+- 提供 `()` 以跳过生成并存储一个全零向量
 
 ```sql
 -- Insert text data - embeddings generated automatically
@@ -2623,10 +2640,16 @@ INSERT INTO products (title, description) VALUES
 ('smartphone', 'latest mobile device with camera'),
 ('laptop computer', 'portable workstation for developers');
 
--- Insert with empty vector (excluded from vector search)
+-- Insert with a user-provided vector - no auto generation for this row
+INSERT INTO products (title, embedding_vector) VALUES
+('machine learning artificial intelligence', (0.653448,0.192478,0.017971,0.339821));
+
+-- Insert with empty vector - no auto generation, stores a zero vector
 INSERT INTO products (title, description, embedding_vector) VALUES
 ('no-vector item', 'this item has no embedding', ());
 ```
+
+`()` 在你希望保留某行但不立即生成嵌入时很有用。内部存储为零填充向量，因此应将其视为“尚未生成有意义的嵌入”，而不是语义向量。如果你之后运行 `ALTER TABLE ... REBUILD EMBEDDINGS`，该行也会被重建；`REBUILD EMBEDDINGS` 不会跳过仅因为当前向量全为零的行。
 <!-- end -->
 
 <!-- example manual -->
@@ -2650,6 +2673,44 @@ INSERT INTO products VALUES
 (1, 'yellow bag', (0.653448,0.192478,0.017971,0.339821)),
 (2, 'white bag', (-0.148894,0.748278,0.091892,-0.095406));
 ```
+
+<!-- end -->
+
+<!-- example alter_embedding_column -->
+#### 方法 3：在批量加载后添加嵌入列
+
+如果初始摄入速度比即时向量搜索更重要，你可以首先加载没有嵌入列的表，然后稍后添加基于模型的 `float_vector` 列。
+
+这种方法在希望批量插入操作尽可能快速完成，并且愿意随后运行嵌入生成作为独立的、可能耗时较长的 `ALTER` 操作时非常有用。
+
+工作原理：
+- 仅创建包含源 `text` 字段和 `string` 属性的表
+- 插入或导入所有数据
+- 后续使用 `ALTER TABLE ... ADD COLUMN` 添加嵌入列
+
+当你使用 `MODEL_NAME` 和 `FROM` 添加 `float_vector` 列时，Manticore 会在 `ALTER` 过程中为现有行生成嵌入。如果之后需要重新生成它们，请使用 `ALTER TABLE ... REBUILD EMBEDDINGS column_name`。
+
+请注意 `REBUILD EMBEDDINGS`：它会为每一行重新生成目标列。这包括当前向量是手动插入的行，以及使用 `()` 存储零向量的行。在数据提交后，Manticore 不会保留存储的向量是自动生成的、由用户提供的还是从 `()` 创建的，并且 `REBUILD EMBEDDINGS` 不会将零向量视为特殊的“跳过此行”标记。
+
+限制：
+- 此方法仅适用于本地 RT 表。对于属于复制集群的表不可用，因为集群表不支持 `ALTER`。
+
+```sql
+CREATE TABLE products (
+    title TEXT,
+    description TEXT
+);
+
+INSERT INTO products (id, title, description) VALUES
+(1, 'smartphone', 'latest mobile device with camera'),
+(2, 'laptop computer', 'portable workstation for developers');
+
+ALTER TABLE products
+ADD COLUMN embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title,description';
+```
+
+有关详细信息，请参见 [更新表结构](../Updating_table_schema_and_settings.md#Rebuilding-embeddings)。
 
 <!-- end -->
 

@@ -864,14 +864,31 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
-// Check if a result set contains "knn" in the query (case insensitive)
-function HasKnnInQuery ( $result_set )
+function HasKnnInQuery ( $query_or_result )
 {
-	if ( isset ( $result_set['sphinxql'] ) )
-		return stripos($result_set['sphinxql'], 'knn') !== false;
-	if ( isset ( $result_set['http_request'] ) )
-		return stripos($result_set['http_request'], 'knn') !== false;
-	return false;
+	$query = null;
+	if ( is_array ( $query_or_result ) )
+	{
+		if ( isset ( $query_or_result['sphinxql'] ) )
+			$query = $query_or_result['sphinxql'];
+		else if ( isset ( $query_or_result['http_request'] ) )
+			$query = $query_or_result['http_request'];
+	}
+	else if ( is_string ( $query_or_result ) )
+		$query = $query_or_result;
+
+	if ( !is_string ( $query ) || $query==='' )
+		return false;
+
+	$query = strtolower ( $query );
+	return strpos ( $query, 'knn(' )!==false
+		|| strpos ( $query, 'knn_dist(' )!==false
+		|| strpos ( $query, 'hybrid_score(' )!==false
+		|| strpos ( $query, 'hybrid_match(' )!==false
+		|| strpos ( $query, '_knn_dist' )!==false
+		|| strpos ( $query, '_hybrid_score' )!==false
+		|| strpos ( $query, '"knn"' )!==false
+		|| strpos ( $query, '"hybrid"' )!==false;
 }
 
 function RandomWords ( $n, $seed )
@@ -883,7 +900,126 @@ function RandomWords ( $n, $seed )
 	return join ( " ", $words );
 }
 
-function RoundFloatValues ( &$values, $roundoff )
+function IsFloatVector ( $str )
+{
+	if ( strpos ( $str, ',' ) === false || strpos ( $str, '.' ) === false )
+		return false;
+
+	$parts = explode ( ',', $str );
+	if ( count ( $parts ) < 2 )
+		return false;
+
+	foreach ( $parts as $part )
+	{
+		if ( !is_numeric ( trim ( $part ) ) )
+			return false;
+	}
+
+	return true;
+}
+
+
+function RoundFloatVector ( $str, $roundoff )
+{
+	$parts = explode ( ',', $str );
+	foreach ( $parts as &$part )
+	{
+		$trimmed = trim ( $part );
+		if ( is_numeric ( $trimmed ) && strpos ( $trimmed, '.' ) !== false )
+			$part = (string)round ( floatval ( $trimmed ), $roundoff );
+	}
+
+	return implode ( ',', $parts );
+}
+
+
+function IsFloatArray ( $arr )
+{
+	if ( !is_array($arr) || count($arr) < 2 )
+		return false;
+
+	// check if it's a sequential array of numbers (not associative)
+	if ( array_keys($arr) !== range(0, count($arr) - 1) )
+		return false;
+
+	foreach ( $arr as $v )
+	{
+		if ( !is_float($v) && !is_int($v) )
+			return false;
+	}
+
+	return true;
+}
+
+
+// Compare two float vectors (comma-separated strings) with epsilon tolerance
+// Returns true if all components are within epsilon of each other
+function FloatVectorsEqual ( $str1, $str2, $epsilon )
+{
+	$parts1 = explode ( ',', $str1 );
+	$parts2 = explode ( ',', $str2 );
+
+	if ( count($parts1) !== count($parts2) )
+		return false;
+
+	for ( $i = 0; $i < count($parts1); $i++ )
+	{
+		$v1 = floatval ( trim ( $parts1[$i] ) );
+		$v2 = floatval ( trim ( $parts2[$i] ) );
+		$scale = max ( abs($v1), abs($v2), 1.0 );
+		if ( abs ( $v1 - $v2 ) > $epsilon * $scale )
+			return false;
+	}
+
+	return true;
+}
+
+
+// Recursively compare two values with epsilon tolerance for floats and float vectors
+// Returns true if structurally identical, with floats/float-vectors matching within epsilon
+function JsonValuesEqualWithTolerance ( $v1, $v2, $epsilon )
+{
+	if ( $v1 === $v2 )
+		return true;
+
+	// both numeric (floats, ints, or numeric strings with decimals): compare with epsilon
+	if ( is_numeric($v1) && is_numeric($v2) )
+	{
+		$s1 = is_string($v1) ? $v1 : (string)$v1;
+		$s2 = is_string($v2) ? $v2 : (string)$v2;
+		if ( strpos($s1, '.') !== false || strpos($s2, '.') !== false )
+		{
+			$a = floatval($v1);
+			$b = floatval($v2);
+			$scale = max ( abs($a), abs($b), 1.0 );
+			return abs ( $a - $b ) <= $epsilon * $scale;
+		}
+	}
+
+	// string float vectors (SphinxQL path: comma-separated floats)
+	if ( is_string($v1) && is_string($v2) && IsFloatVector($v1) && IsFloatVector($v2) )
+		return FloatVectorsEqual ( $v1, $v2, $epsilon );
+
+	// both arrays: recurse
+	if ( is_array($v1) && is_array($v2) )
+	{
+		if ( count($v1) !== count($v2) )
+			return false;
+		if ( array_keys($v1) !== array_keys($v2) )
+			return false;
+		foreach ( $v1 as $k => $val1 )
+		{
+			if ( !JsonValuesEqualWithTolerance ( $val1, $v2[$k], $epsilon ) )
+				return false;
+		}
+		return true;
+	}
+
+	return false;
+}
+
+
+function RoundFloatValues ( &$values, $roundoff, $vector_roundoff=0, $skip_vectors=false )
 {
 	if ( !is_array ( $values ) )
 		return;
@@ -893,11 +1029,18 @@ function RoundFloatValues ( &$values, $roundoff )
 		if ( is_float ( $value ) )
 			$value = round ( $value, $roundoff );
 		else if ( is_string ( $value ) && is_numeric ( $value ) && strpos ( $value, '.' ) !== false )
-			// Handle numeric strings (e.g., from MySQL results)
 			$value = (string)round ( floatval ( $value ), $roundoff );
+		else if ( !$skip_vectors && is_string ( $value ) && IsFloatVector ( $value ) )
+			$value = RoundFloatVector ( $value, $vector_roundoff > 0 ? $vector_roundoff : $roundoff );
 
 		if ( is_array ( $value ) )
-			RoundFloatValues ( $value, $roundoff );
+		{
+			if ( !$skip_vectors && $vector_roundoff > 0 && IsFloatArray ( $value ) )
+				foreach ( $value as &$v )
+					$v = round ( $v, $vector_roundoff );
+			else
+				RoundFloatValues ( $value, $roundoff, $vector_roundoff, $skip_vectors );
+		}
 	}
 }
 
@@ -933,10 +1076,8 @@ function CompareColumns ( $a, $b )
 }
 
 
-function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
+function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $vector_roundoff=0 )
 {
-	$has_knn = HasKnnInQuery($set);
-	
 	if ( isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
@@ -951,7 +1092,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		{
 			foreach ( $rows["hits"]["hits"] as &$hit )
 			{
-				RoundFloatValues ( $hit, $has_knn ? 5 : 6 );
+				RoundFloatValues ( $hit, $has_knn ? 5 : 6, $vector_roundoff );
 				if ( isset ( $hit["_source"] ) )
 					ksort ( $hit["_source"] );
 			}
@@ -2345,7 +2486,7 @@ class SphinxConfig
         if ( !array_key_exists ( 'rows', $query_result ) )
             return true;
 
-        $has_knn = HasKnnInQuery($query_result);
+        $has_knn = $this->Requires("knn") && HasKnnInQuery ( $query_result );
 
         if ( $keep_json_ctrls )
         {
@@ -2553,8 +2694,6 @@ class SphinxConfig
 
 	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time, $ignore_rows )
 	{
-		global $g_disable_float_tolerance;
-
 	    $raw_result["sphinxql"] = $query;
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
@@ -2582,10 +2721,8 @@ class SphinxConfig
             $raw_result["total_rows"] = mysqli_num_rows($result);
 			$query_result["total_rows"] = $raw_result["total_rows"];
 			
-			// Check if query contains "knn" (case insensitive) to determine if we should round floats
-			$has_knn = (stripos($query, 'knn') !== false);
-			$round_knn = $has_knn && !$g_disable_float_tolerance;
-			
+			$round_knn = $this->Requires("knn") && HasKnnInQuery ( $query );
+
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
                 $raw_result["rows"][] = $row;
@@ -3307,7 +3444,7 @@ class SphinxConfig
 
 		// fixup floats in json via http
 		if ( isset ( $set["http"] ) && $set["http"]==1 )
-			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls );
+			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls, HasKnnInQuery ( $set ) );
 		else
 			SqlRsetFixup ( $set, IsColumnar() );
 
@@ -3367,8 +3504,6 @@ class SphinxConfig
 
 	function CompareResultSets ( $set1, $set2 )
 	{
-		global $g_disable_float_tolerance;
-
 		$roundoff = 0;
 		if ( isset($set1["roundoff"]) ) $roundoff = $set1["roundoff"];
 		if ( isset($set2["roundoff"]) ) $roundoff = $set2["roundoff"];
@@ -3376,23 +3511,33 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
-		$has_knn = HasKnnInQuery($set1) || HasKnnInQuery($set2);
-		$round_knn = $has_knn && !$g_disable_float_tolerance;
+		$round_knn = $this->Requires("knn") && ( HasKnnInQuery ( $set1 ) || HasKnnInQuery ( $set2 ) );
 
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );
 
-		// Round float values in both sets if query contains "knn" (ensures both are rounded to same precision)
-		// Use 5 decimal places to handle architecture differences in 6th-8th decimal places
-		if ( $round_knn )
+		// For <knn/> tests, use epsilon comparison instead of rounding
+		// (rounding always has boundary issues; epsilon comparison does not)
+		if ( $round_knn && isset($set1["rows"]) && isset($set2["rows"]) )
 		{
-			if ( isset ( $set1["rows"] ) )
-				RoundFloatValues ( $set1["rows"], 5 );
-			if ( isset ( $set2["rows"] ) )
-				RoundFloatValues ( $set2["rows"], 5 );
+			$rows1 = $set1["rows"];
+			$rows2 = $set2["rows"];
+
+			// HTTP/JSON path: rows is a JSON string; parse it for comparison
+			$is_json = is_string($rows1) && is_string($rows2);
+			if ( $is_json )
+			{
+				$rows1 = json_decode ( $rows1, true );
+				$rows2 = json_decode ( $rows2, true );
+			}
+
+			$epsilon = $this->Requires("embeddings") ? 1e-4 : 1e-5;
+			if ( is_array($rows1) && is_array($rows2) && JsonValuesEqualWithTolerance ( $rows1, $rows2, $epsilon ) )
+			{
+				$set1["rows"] = $set2["rows"];
+			}
 		}
 
-		// Use strict comparison (KNN rounding handles the tolerance when enabled)
 		return $set1 === $set2;
 	}
 

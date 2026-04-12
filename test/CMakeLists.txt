@@ -246,4 +246,3 @@ endforeach ()
 
 add_subdirectory(indextool)
 
-

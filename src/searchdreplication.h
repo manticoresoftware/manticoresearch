@@ -56,6 +56,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 
 // cluster deletes
 bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
+bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 
 // Return actual nodes list at cluster
 StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );
@@ -79,6 +80,7 @@ bool AssignClusterToIndex ( const CSphString & sIndex, const CSphString & sClust
 bool AssignClusterToIndexes ( const VecTraits_T<CSphString> & dIndexes, const CSphString & sCluster );
 
 bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
+int64_t ClusterGetRemoteEpoch ( const CSphString & sCluster );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );

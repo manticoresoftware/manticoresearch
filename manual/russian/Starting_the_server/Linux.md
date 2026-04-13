@@ -32,7 +32,7 @@ sudo systemctl disable manticore
 sudo systemctl enable manticore
 ```
 
-Процесс `searchd` записывает информацию о запуске в журнал `systemd`. Если ведение журнала systemd включено, вы можете просмотреть записанную информацию с помощью следующей команды:
+Процесс `searchd`, управляемый через systemd, ведет журнал в `systemd` журнале. Если журналирование `systemd` включено, вы можете просмотреть записанную информацию следующей командой:
 
 ```shell
 sudo journalctl -u manticore

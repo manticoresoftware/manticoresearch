@@ -553,19 +553,19 @@ std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilderUpdate ( const ISphSche
 
 //////////////////////////////////////////////////////////////////////////
 
-static int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
+static FORCE_INLINE int64_t GetBlobRowOffset ( const CSphRowitem * pDocinfo, int iBlobRowOffset )
 {
 	return sphUnalignedRead ( *( (const int64_t*)pDocinfo + iBlobRowOffset ) );
 }
 
-static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
+static FORCE_INLINE int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
 {
 	// blob row locator NEEDS to be 1st or 2nd attribute after docid (see tLocator.m_iBlobRowOffset)
 	return GetBlobRowOffset ( tLocator.m_bDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic, tLocator.m_iBlobRowOffset );
 }
 
 template <typename T>
-static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
+static FORCE_INLINE const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
 {
 	T uLen1 = sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId ) );
 	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *( (const T*)pRow + iBlobAttrId - 1 ) ) : 0;
@@ -576,7 +576,7 @@ static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * 
 }
 
 
-static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs, int & iLengthBytes )
+static FORCE_INLINE const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs, int & iLengthBytes )
 {
 	switch ( *pRow )
 	{
@@ -593,7 +593,7 @@ static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobA
 
 // same as above, but returns pair instead of confusing result-by-ref.
 template <typename T>
-static ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow )
+static FORCE_INLINE ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow )
 {
 	auto pTRow = (const T*)pRow;
 	T uLen1 = sphUnalignedRead ( pTRow[iBlobAttrId] );
@@ -605,7 +605,7 @@ static ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pR
 }
 
 
-static ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs )
+static FORCE_INLINE ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs )
 {
 	switch ( *pRow )
 	{

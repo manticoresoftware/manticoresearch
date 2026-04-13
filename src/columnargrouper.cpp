@@ -60,6 +60,7 @@ public:
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { assert(0); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
 	CSphGrouper *	Clone() const final { return new GrouperColumnarInt_c(*this); }
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final {}
 
 private:
 	CSphString		m_sAttrName;
@@ -103,6 +104,7 @@ public:
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const final { assert(0); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
 	CSphGrouper *	Clone() const final;
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final {}
 
 private:
 	CSphString		m_sAttrName;
@@ -173,6 +175,7 @@ public:
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final;
 	CSphGrouper *	Clone() const final { return new GrouperColumnarMVA_T(*this); }
 	bool			IsMultiValue() const final { return true; }
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final {}
 
 private:
 	CSphString		m_sAttrName;
@@ -203,6 +206,7 @@ public:
 	void			GetLocator ( CSphAttrLocator & ) const final { assert(0); }
 	ESphAttr		GetResultType() const final { return SPH_ATTR_BIGINT; }
 	bool			IsMultiValue() const final;
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final {}
 
 private:
 	CSphVector<CSphColumnInfo>		m_dAttrs;

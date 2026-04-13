@@ -1045,9 +1045,11 @@ Distributed tables consisting only of local tables are supported on both the lef
 
 When using JOINs in Manticore Search, keep the following points in mind:
 
-1. **Field selection**: When selecting fields from two tables in a JOIN, do not prefix fields from the left table, but do prefix fields from the right table. For example:
+1. **Field selection**: When selecting fields from two tables in a JOIN, prefix fields from the right table with the table name. Left table fields can be used with or without the table prefix. For example:
    ```sql
    SELECT field_name, right_table.field_name FROM ...
+   -- or with left table prefix:
+   SELECT left_table.field_name, right_table.field_name FROM ...
    ```
 
 2. **JOIN conditions**: Always explicitly specify the table names in your JOIN conditions:

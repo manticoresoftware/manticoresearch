@@ -7712,7 +7712,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			CSphString sError;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
-			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, nullptr, sError, tExprArgs )};
+			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, sError, tExprArgs )};
 
 			if ( !pExpr || !pExpr->IsConst() )
 				eAttrType = SPH_ATTR_NONE;
@@ -9503,7 +9503,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			ESphAttr eAttrType;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
-			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, nullptr, sError, tExprArgs ) };
+			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, sError, tExprArgs ) };
 			if ( pExpr )
 			{
 				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, tItem.m_sAlias.cstr() } );

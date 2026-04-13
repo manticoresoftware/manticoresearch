@@ -6,7 +6,6 @@
 <requires>
 	<force-rt/>
 	<knn/>
-	<knn_float_tolerance/>
 	<embeddings/>
 </requires>
 

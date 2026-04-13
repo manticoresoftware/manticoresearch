@@ -69,6 +69,8 @@ POST /search
 
 This runs the text search and KNN search as independent parallel sub-queries, then fuses the results using RRF. Without `fusion_method='rrf'`, the query runs as a regular KNN search filtered by the text match (pre-hybrid behavior).
 
+In that pre-hybrid mode, KNN ranking still takes precedence. If `knn_dist()` is available and you do not explicitly sort by it, Manticore prepends `knn_dist() ASC` to the sort order. In practice, `ORDER BY weight() DESC` becomes a secondary tie-breaker rather than a global BM25 sort.
+
 ### Available functions
 
 - [`hybrid_score()`](../Functions/Other_functions.md#HYBRID_SCORE%28%29) - the RRF fusion score (only available in hybrid queries)
@@ -169,6 +171,8 @@ POST /search
 ## Sorting
 
 By default, results are sorted by `hybrid_score() DESC`. You can override this:
+
+This section applies to true hybrid queries, i.e. queries using `OPTION fusion_method='rrf'`. Without `fusion_method='rrf'`, a query that includes `KNN(...)` is not fused and remains KNN-first, so `ORDER BY weight() DESC` does not produce a globally weight-sorted result set.
 
 <!-- example hybrid_sorting -->
 

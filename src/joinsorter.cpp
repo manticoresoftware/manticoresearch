@@ -1686,12 +1686,11 @@ bool JoinSorter_c::ValidateLeftTableNotPrefixedInFilters ( CSphString & sError )
 	sLeftPrefix.SetSprintf ( "%s.", sLeftTableName.cstr() );
 	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
 	{
-		const auto & tFilter = m_tQuery.m_dFilters[i];
+		auto & tFilter = m_tQuery.m_dFilters[i];
 		if ( tFilter.m_sAttrName.Begins ( sLeftPrefix.cstr() ) )
 		{
-			CSphString sAttrName = tFilter.m_sAttrName.SubString ( sLeftPrefix.Length(), tFilter.m_sAttrName.Length() - sLeftPrefix.Length() );
-			sError.SetSprintf ( "table %s: unknown column: %s (do not prefix left table attributes in JOIN queries, use '%s' instead of '%s')", sLeftTableName.cstr(), sAttrName.cstr(), sAttrName.cstr(), tFilter.m_sAttrName.cstr() );
-			return false;
+			// Allow left table prefix: strip it so the rest of the pipeline sees bare attribute names
+			tFilter.m_sAttrName = tFilter.m_sAttrName.SubString ( sLeftPrefix.Length(), tFilter.m_sAttrName.Length() - sLeftPrefix.Length() );
 		}
 	}
 
@@ -1716,6 +1715,7 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 		tCtx.m_pIndexSchema	= &m_pIndex->GetMatchSchema();
 		tCtx.m_bScan		= m_tQuery.m_sQuery.IsEmpty();
 		tCtx.m_sJoinIdx		= GetJoinedIndexName();
+		tCtx.m_sJoinIdxLeft	= m_pIndex->GetName();
 		tCtx.m_eJoinType	= m_tQuery.m_eJoinType;
 		if ( !sphCreateFilters ( tCtx, sError, sError ) )
 		{

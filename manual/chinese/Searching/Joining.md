@@ -996,9 +996,11 @@ POST /search
 
 在 Manticore Search 中使用 JOIN 时，请记住以下几点：
 
-1. **字段选择**：在 JOIN 中选择两个表的字段时，不要为左表的字段添加前缀，但需要为右表的字段添加前缀。例如：
+1. **字段选择**：在 JOIN 中从两个表选择字段时，右表的字段需以表名作为前缀。左表的字段可以使用或不使用表名前缀。例如：
    ```sql
    SELECT field_name, right_table.field_name FROM ...
+   -- or with left table prefix:
+   SELECT left_table.field_name, right_table.field_name FROM ...
    ```
 
 2. **JOIN 条件**：始终在 JOIN 条件中明确指定表名：

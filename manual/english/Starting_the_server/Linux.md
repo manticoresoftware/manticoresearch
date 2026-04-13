@@ -32,7 +32,7 @@ To make Manticore start at boot, run:
 sudo systemctl enable manticore
 ```
 
-`searchd` process logs startup information in `systemd` journal. If `systemd` logging is enabled you can view the logged information with the following command:
+`searchd` process under systemd management logs to `systemd` journal. If `systemd` logging is enabled you can view the logged information with the following command:
 
 ```shell
 sudo journalctl -u manticore

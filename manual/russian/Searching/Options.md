@@ -323,12 +323,24 @@ Manticore может увеличить `max_matches` для повышения 
 `none` позволяет заменять все термины запроса их точными формами, если таблица была построена с включенной опцией [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words). Это полезно для предотвращения стемминга или лемматизации терминов запроса.
 
 ### not_terms_only_allowed
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
+-->
+
 <!-- example not_terms_only_allowed -->
 `0` или `1` разрешает автономное [отрицание](../Searching/Full_text_matching/Operators.md#Negation-operator) для запроса. По умолчанию 0. См. также соответствующую [глобальную настройку](../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select * from tbl where match('-donald');
+MySQL [(none)]> select * from t where match('-donald');
 ERROR 1064 (42000): index t: query error: query is non-computable (single NOT operator)
 MySQL [(none)]> select * from t where match('-donald') option not_terms_only_allowed=1;
 +---------------------+-----------+
@@ -337,6 +349,50 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql -d "select * from t where match('-d')"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      },
+      {
+        "_id": 5912226830793834497,
+        "_score": 2500,
+        "_source": {
+          "f1": "c",
+          "f2": 3"
+        }
+      },
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 ### rank_constant
@@ -439,6 +495,13 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```bash
 mysql -P9306 -h0 --comments
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+```
+
 <!-- end -->
 
 <!-- proofread -->

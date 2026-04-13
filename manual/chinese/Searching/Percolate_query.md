@@ -2287,6 +2287,15 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 
 此选项仅适用于通过 SQL 调用 `CALL PQ`。
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, color string) type='pq';
+INSERT INTO products(query, filters) VALUES ('@title shoes', 'color IN ("blue", "green")');
+INSERT INTO products(query, tags) VALUES ('@title bag', 'Louis Vuitton');
+-->
+
 <!-- intro -->
 ##### SQL:
 
@@ -2305,6 +2314,70 @@ CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"
 | 1657852401006149666 | 123       | @title shoes |      | color IN ('blue, 'green') |
 +---------------------+-----------+--------------+------+---------------------------+
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs)"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "documents": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149664,
+        "documents": 456,
+        "query": "@title bag",
+        "tags": "",
+        "filters": ""
+      },
+      {
+        "id": 1657852401006149666,
+        "documents": 123,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": "color IN ('blue, 'green')"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example invalid_json -->
@@ -2340,6 +2413,70 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 +---------------------+
 | 1657852401006149635 |
 +---------------------+
+```
+
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```JSON
+POST /pq/products/search
+{
+  "query": {
+    "percolate": {
+      "documents": [
+        {"title": "nice pair of shoes", "color": "blue"},
+        {"title": "beautiful bag"}
+      ]
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149646,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -3226,6 +3363,20 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 <!-- example sharded -->
 现在，如果你在 `CALL PQ` 中添加 `'sharded' as mode`，它会将文档发送到所有代理的表（在这个例子中，只是本地表，但它们也可以是远程的，以利用外部硬件）。这种模式不通过 JSON 接口提供。
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS products_distributed;
+DROP TABLE IF EXISTS products1;
+DROP TABLE IF EXISTS products2;
+CREATE TABLE products1(title text, color string) type='pq';
+CREATE TABLE products2(title text, color string) type='pq';
+CREATE TABLE products_distributed type='distributed' local='products1' local='products2';
+INSERT INTO products1(query) values('@title bag');
+INSERT INTO products1(query,filters) values('@title shoes', 'color=\'red\'');
+INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
+-->
+
 <!-- intro -->
 SQL：
 <!-- request SQL -->
@@ -3242,6 +3393,59 @@ CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue
 | 1657852401006149639 | @title bag   |      |                           |
 | 1657852401006149643 | @title shoes |      | color IN ('blue, 'green') |
 +---------------------+--------------+------+---------------------------+
+```
+
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "tags": {
+          "type": "string"
+        }
+      },
+      {
+        "filters": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": 1657852401006149639,
+        "query": "@title bag",
+        "tags": "",
+        "filters": ""
+      },
+      {
+        "id": 1657852401006149643,
+        "query": "@title shoes",
+        "tags": "",
+        "filters": "color IN ('blue, 'green')"
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

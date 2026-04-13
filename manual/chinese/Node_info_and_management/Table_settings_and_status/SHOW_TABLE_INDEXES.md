@@ -18,6 +18,16 @@ SHOW TABLE table_name INDEXES
 
 > **注意：** 对于 RT 表，二级索引仅为磁盘块创建，而不为 RAM 段中的数据创建。初次插入 RT 表中的数据时，数据保存在 RAM 中，此时不会显示二级索引。索引只有在数据刷新到磁盘块后才会可见，默认情况下，当表变为活动状态（同时接收插入和搜索）时，自动发生此刷新。
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(j json);
+INSERT INTO test(j) VALUES
+( '{"addresses": {"a1":{"id":"1","name":"a"},"a2":{"id":"2","name":"b"},"a3":{"id":"3","name":"c"},"a4":{"id":"4","name":"d"},"a5":{"id":"5","name":"e"},"a6":{"id":"6","name":"f"}},"factor":2,"int_arr":[1,2,3],"tags": ["1":{},"2":{},"3":{}],"arr":"a","str":"a","price":1.0 }' );
+FLUSH RAMCHUNK test;
+--> 
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
@@ -64,5 +74,224 @@ SHOW TABLE test INDEXES;
 +------------------------------+--------+---------+---------+
 29 rows in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE test INDEXES"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Name": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Enabled": {
+          "type": "string"
+        }
+      },
+      {
+        "Percent": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Name": "j['addresses']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['factor']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['int_arr']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']",
+        "Type": "uint32",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "id",
+        "Type": "int64",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['price']",
+        "Type": "float",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a1']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a2']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a3']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a4']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a5']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['id']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['addresses']['a6']['name']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['arr']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['str']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['1']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['2']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      },
+      {
+        "Name": "j['tags']['3']",
+        "Type": "string",
+        "Enabled": "1",
+        "Percent": 100
+      }
+    ],
+    "total": 29,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+,
 <!-- end -->
 

@@ -701,6 +701,23 @@ CREATE TABLE products (title text indexed, description text stored, author text,
 * "title" 被索引，但未存储。
 * "description" 被存储，但未索引。
 * "author" 既被存储又被索引。
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text, price float) morphology='stem_en'"
+```
+
+这创建了名为 "products" 的表，包含两个字段："title"（全文本）和 "price"（浮点数），并设置 "morphology" 为 "stem_en"。
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text indexed, description text stored, author text, price float)"
+```
+这创建了名为 "products" 的表，包含三个字段：
+* "title" 被索引，但未被存储。
+* "description" 被存储，但未被索引。
+* "author" 既被存储又被索引。
+
 <!-- end -->
 
 

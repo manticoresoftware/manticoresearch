@@ -513,6 +513,18 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ##### SQL:
 <!-- request SQL -->
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS forum;
+CREATE TABLE forum(title text, content text);
+INSERT INTO forum(id,title,content) VALUES
+(711651,'wayne title','hey content'),
+(711652,'ways title','hey content'),
+(711653,'wayyy title','hey content'),
+(711654,'way title','hey content');
+-->
+
 ```sql
 SET profiling=1;
 
@@ -1201,6 +1213,43 @@ Variable: transformed_tree
             AND(fields=(title), KEYWORD(running, querypos=1, morphed))))
   AND(fields=(body), KEYWORD(dog, querypos=2, morphed)))
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY forum '@title a'"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "AND(fields=(title), KEYWORD(a, querypos=1))"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+
+```
+
 <!-- end -->
 
 <!-- Example Explain_query_dot -->
@@ -1236,6 +1285,89 @@ Variable: transformed_tree
 4 [shape=record label="me | { querypos=2 }"]
 }
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "EXPLAIN QUERY tbl '@title a' option format=dot"
+```
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable": "transformed_tree",
+        "Value": "digraph \"transformed_tree\" {\n\n0 [shape=record,style=filled label=\"AND | { fields=(title) }\"]\n0 -> 1\n1 [shape=record label=\"a | { qp=1 }\"]\n}"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test1;
+CREATE TABLE test1(title text);
+INSERT INTO test1(title) VALUES ('test one');
+-->
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test1",
+  "_source": ["id", "packedfactors()"],
+  "query": {
+    "match": {"*": "test one"}
+  },
+  "expressions": {
+    "packedfactors()": "PACKEDFACTORS()"
+  },
+  "options": {
+    "ranker": "expr('1')"
+  }
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "packedfactors()": "bm25=500, bm25a=0.500000, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.000000, min_idf=0.000000, max_idf=0.000000, sum_idf=0.000000, min_hit_pos=1, min_best_span_pos=1, exact_hit=1, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.000000, atc=0.000000), word0=(tf=1, idf=0.000000)"
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 ## 查看匹配因子值

@@ -40,6 +40,23 @@ create table test ( title text, image_vector float_vector knn_type='hnsw' knn_di
 Query OK, 0 rows affected (0.01 sec)
 ```
 
+<!-- request JSON -->
+```json
+POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' )"
+```
+
+<!-- response JSON -->
+
+```json
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- intro -->
 ##### Обычный режим (с использованием файла конфигурации) - Ручные векторы:
 
@@ -199,6 +216,15 @@ table products_all {
 
 ##### Вставка данных с автоматическими эмбеддингами
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+DROP TABLE IF EXISTS products_openai;
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+-->
+
 <!-- example inserting_embeddings -->
 
 При использовании автоматических эмбеддингов вы можете:
@@ -238,6 +264,26 @@ INSERT INTO products_openai (title, description) VALUES
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+Вставить только текстовые данные — эмбеддинги генерируются автоматически
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
+```
+
+Вставить несколько полей — оба используются для эмбеддинга, если FROM='title,description'  
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
+```
+
+Вставить пустой вектор (документ исключается из векторного поиска)
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('no embedding item', ())"
 ```
 
 <!-- end -->
@@ -537,6 +583,27 @@ create table test ( title text, image_vector float_vector knn_type='hnsw' knn_di
 ```sql
 Query OK, 0 rows affected (0.01 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```json
+POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit')"
+```
+
+<!-- response JSON -->
+
+```json
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- Example knn_similar_docs -->

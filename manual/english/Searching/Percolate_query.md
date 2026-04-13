@@ -3363,6 +3363,20 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 <!-- example sharded -->
 Now, if you add `'sharded' as mode` to `CALL PQ`, it will send the documents to all the agent's tables (in this case, just local tables, but they can be remote to utilize external hardware). This mode is not available via the JSON interface.
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products_distributed;
+DROP TABLE IF EXISTS products1;
+DROP TABLE IF EXISTS products2;
+CREATE TABLE products1(title text, color string) type='pq';
+CREATE TABLE products2(title text, color string) type='pq';
+CREATE TABLE products_distributed type='distributed' local='products1' local='products2';
+INSERT INTO products1(query) values('@title bag');
+INSERT INTO products1(query,filters) values('@title shoes', 'color=\'red\'');
+INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
+-->
+
 <!-- intro -->
 SQL:
 <!-- request SQL -->

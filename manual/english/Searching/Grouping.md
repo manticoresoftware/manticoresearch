@@ -610,10 +610,6 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 <!-- request JSON -->
 ```JSON
 POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
-
-POST /search
-{
-}
 ```
 <!-- response JSON -->
 ```JSON

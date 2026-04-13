@@ -19,6 +19,14 @@ Issuing a `FLUSH TABLE` command not only forces the RAM chunk contents to be wri
 
 <!-- request SQL -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(id,title) VALUES (1,'doc');
+-->
+
 ```sql
 FLUSH TABLE rt;
 ```

@@ -248,7 +248,7 @@ SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 
 <!-- request JSON -->
 ```JSON
-POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
+POST /sql -d "SELECT * FROM tbl WHERE MATCH('joe') FACET age"
 ```
 
 <!-- response JSON -->
@@ -257,19 +257,13 @@ POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
   "took": 0,
   "timed_out": false,
   "hits": {
-    "total": 2,
+    "total": 1,
     "total_relation": "eq",
     "hits": [
       {
         "_score": 2500,
         "_source": {
-          "f1": "b"
-        }
-      },
-      {
-        "_score": 2500,
-        "_source": {
-          "f1": "b"
+          "name": "joe"
         }
       }
     ]
@@ -278,8 +272,8 @@ POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
     "rating": {
       "buckets": [
         {
-          "key": 2,
-          "doc_count": 2
+          "key": 1,
+          "doc_count": 1
         }
       ]
     }

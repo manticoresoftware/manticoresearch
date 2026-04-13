@@ -31,6 +31,14 @@ POST /search
 <!-- intro -->
 SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -56,11 +64,19 @@ POST /search
 {
     "table" : "test",
     "query": {
-      "match": {
-        "title": "hello"
-      },
-      "match": {
-        "body": "world"
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "title": "hello"
+            }
+          },
+          {
+            "match": {
+              "body": "world"
+            }
+          }  
+        ]
       }
     },
     "options":

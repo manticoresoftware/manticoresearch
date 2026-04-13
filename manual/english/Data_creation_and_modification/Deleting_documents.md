@@ -579,12 +579,12 @@ POST /delete
               "should": [
                 {
                   "range": {
-                    "mval": { "gt": 206 }
+                    "mva1": { "gt": 206 }
                   }
                 },
                 {
                   "in": {
-                    "mval": [100, 103]
+                    "mva1": [100, 103]
                   }
                 }
               ]

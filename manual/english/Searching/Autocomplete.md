@@ -53,6 +53,28 @@ POST /autocomplete
 - `expansion_len`: Number of characters to expand in the last word. Default: `10`
 - `force_bigrams`: Boolean (0/1 in SQL). Forces the use of bigrams (2-character n-grams) instead of trigrams for all word lengths, which can improve matching for words with transposition errors. Default: `0` (use trigrams for words ≥6 characters)
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS comment;
+CREATE TABLE comment(content text) min_infix_len='2';
+INSERT INTO comment(id,content) VALUES
+(1,'hello'),
+(2,'helio'),
+(3,'hell'),
+(4,'shell'),
+(5,'nushell'),
+(6,'powershell'),
+(7,'well'),
+(8,'help'),
+(9,'hello world'),
+(10,'hello wrld');
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(name text) min_infix_len='2';
+INSERT INTO products(id,name) VALUES (1,'iphone');
+-->
+
 <!-- request SQL -->
 
 ```sql

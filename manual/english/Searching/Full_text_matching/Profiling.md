@@ -513,6 +513,18 @@ In some instances, the evaluated query tree may significantly differ from the or
 ##### SQL:
 <!-- request SQL -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS forum;
+CREATE TABLE forum(title text, content text);
+INSERT INTO forum(id,title,content) VALUES
+(711651,'wayne title','hey content'),
+(711652,'ways title','hey content'),
+(711653,'wayyy title','hey content'),
+(711654,'way title','hey content');
+-->
+
 ```sql
 SET profiling=1;
 
@@ -1205,7 +1217,7 @@ Variable: transformed_tree
 <!-- request JSON -->
 
 ```JSON
-POST /sql?mode=raw -d "EXPLAIN QUERY t '@title a'"
+POST /sql?mode=raw -d "EXPLAIN QUERY forum '@title a'"
 ```
 <!-- response JSON -->
 
@@ -1327,7 +1339,7 @@ POST /search
     "match": {"*": "test one"}
   },
   "expressions": {
-    "PACKEDFACTORS()": "PACKEDFACTORS()"
+    "packedfactors()": "PACKEDFACTORS()"
   },
   "options": {
     "ranker": "expr('1')"

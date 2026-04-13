@@ -15,7 +15,7 @@ Creating a FEDERATED-compatible MySQL table:
 <!-- intro -->
 ##### SQL:
 
-<!-- request SQL -->
+<!-- request Example -->
 
 ```sql
 CREATE TABLE t1
@@ -29,11 +29,13 @@ CREATE TABLE t1
 DEFAULT CHARSET=utf8
 CONNECTION='mysql://FEDERATED@127.0.0.1:9306/DB/movies';
 ```
-<!-- response SQL-->
+<!-- response Example-->
 
 ```sql
 Query OK, 0 rows affected (0.00 sec)
 ```
+
+
 <!-- end -->
 
 <!-- example select federated -->

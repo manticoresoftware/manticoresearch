@@ -51,6 +51,32 @@ The aggregation requires setting a `size` for the group's result set size.
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS films;
+CREATE TABLE films(title text, release_year int, rental_rate float);
+INSERT INTO films(title, release_year, rental_rate) VALUES
+('ALICE FANTASIA', 2009, 4.99),
+('ALIEN CENTER', 2009, 4.99),
+('AMADEUS HOLY', 2008, 4.99),
+('ANACONDA CONFESSIONS', 2008, 4.99),
+('ANGELS LIFE', 2007, 4.99),
+('ARACHNOPHOBIA ROLLERCOASTER', 2007, 4.99),
+('AMERICAN CIRCUS', 2009, 4.99),
+('ANTHEM LUKE', 2009, 4.99),
+('ATTACKS HATE', 2008, 4.99),
+('ALADDIN CALENDAR', 2008, 4.99),
+('AIRPLANE SIERRA', 2007, 4.99),
+('BETA TEST', 2006, 3.99),
+('CHARLIE TEST', 2005, 2.99),
+('DELTA TEST', 2004, 1.99),
+('ECHO TEST', 2003, 1.49),
+('FOXTROT TEST', 2002, 0.99),
+('GOLF TEST', 2001, 2.49),
+('HOTEL TEST', 2000, 3.49);
+-->
+
 <!-- example group1 -->
 ### Just Grouping
 Grouping is quite simple - just add "GROUP BY smth" to the end of your `SELECT` query. The something can be:
@@ -79,6 +105,63 @@ SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 |         2000 |
 +--------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table" : "films",
+  "limit": 0,
+  "aggs": {
+    "release_year": {
+      "terms":  {
+        "field": "release_year",
+        "size": 5
+      }
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "release_year": {
+      "buckets": [
+        {
+          "key": 2004,
+          "doc_count": 108
+        },
+        {
+          "key": 2002,
+          "doc_count": 108
+        },
+        {
+          "key": 2001,
+          "doc_count": 91
+        },
+        {
+          "key": 2005,
+          "doc_count": 119
+        },
+        {
+          "key": 2000,
+          "doc_count": 97
+        }
+      ]
+    }
+  }
+}
+```
+
 <!-- end -->
 <!-- example group2 -->
 In most cases, however, you'll want to obtain some aggregated data for each group, such as:
@@ -523,6 +606,56 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 |         2004 |      108 |
 +--------------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2000,
+        "count(*)": 97
+      },
+      {
+        "release_year": 2001,
+        "count(*)": 91
+      },
+      {
+        "release_year": 2002,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2003,
+        "count(*)": 106
+      },
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example sort2 -->
 Alternatively, you can sort by the aggregation:
@@ -567,6 +700,57 @@ SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER
 |         2008 | 2.99000049 |
 +--------------+------------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2004,
+        "count(*)": 108
+      },
+      {
+        "release_year": 2003,
+        "count(*)": 106
+      },
+      {
+        "release_year": 2006,
+        "count(*)": 103
+      },
+      {
+        "release_year": 2008,
+        "count(*)": 102
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group3 -->
@@ -710,6 +894,61 @@ SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_y
 |         2007 | ARACHNOPHOBIA ROLLERCOASTER |
 +--------------+-----------------------------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2009,
+        "title": "ALICE FANTASIA"
+      },
+      {
+        "release_year": 2009,
+        "title": "ALIEN CENTER"
+      },
+      {
+        "release_year": 2008,
+        "title": "AMADEUS HOLY"
+      },
+      {
+        "release_year": 2008,
+        "title": "ANACONDA CONFESSIONS"
+      },
+      {
+        "release_year": 2007,
+        "title": "ANGELS LIFE"
+      },
+      {
+        "release_year": 2007,
+        "title": "ARACHNOPHOBIA ROLLERCOASTER"
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group5 -->
@@ -741,6 +980,66 @@ SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN 
 |         2005 | AIRPLANE SIERRA  |    4.990000 |
 +--------------+------------------+-------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "title": {
+          "type": "string"
+        }
+      },
+      {
+        "rental_rate": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2009,
+        "title": "AMERICAN CIRCUS",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2009,
+        "title": "ANTHEM LUKE",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2008,
+        "title": "ATTACKS HATE",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2008,
+        "title": "ALADDIN CALENDAR",
+        "rental_rate": 4.990000
+      },
+      {
+        "release_year": 2007,
+        "title": "AIRPLANE SIERRA",
+        "rental_rate": 4.990000
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example group6 -->
@@ -765,6 +1064,52 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 |         2006 | 3.26184368 |
 +--------------+------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "avg": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2002,
+        "avg": 3.08259249
+      },
+      {
+        "release_year": 2001,
+        "avg": 3.09989142
+      },
+      {
+        "release_year": 2000,
+        "avg": 3.17556739
+      },
+      {
+        "release_year": 2006,
+        "avg": 3.26184368
+      }
+    ],
+    "total": 4,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 **Note:** The `total_found` value in [search query meta info](../Node_info_and_management/SHOW_META.md#SHOW-META) reflects the number of groups that match the `HAVING` condition. This enables proper pagination when using `HAVING` clauses with `GROUP BY`.
@@ -793,6 +1138,44 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 |         2000 |       97 |
 +--------------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002)"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "release_year": {
+          "type": "long"
+        }
+      },
+      {
+        "count": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "release_year": 2002,
+        "count": 108
+      },
+      {
+        "release_year": 2000,
+        "count": 97
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example mva -->
 ##### Grouping by MVA (multi-value attributes)
@@ -1496,6 +1879,20 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ## Aggregation functions
 Besides `COUNT(*)`, which returns the number of elements in each group, you can use various other aggregation functions:
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int, major string);
+INSERT INTO students values
+(0,'John',21,'arts'),
+(0,'William',22,'business'),
+(0,'Richard',21,'cs'),
+(0,'Rebecca',22,'cs'),
+(0,'Monica',21,'arts');
+-->
+
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
 While `COUNT(*)` returns the number of all elements in the group, `COUNT(DISTINCT field)` returns the number of unique values of the field in the group, which may be completely different from the total count. For instance, you can have 100 elements in the group, but all with the same value for a certain field. `COUNT(DISTINCT field)` helps to determine that. To demonstrate this, let's create a table "students" with the student's name, age, and major:
@@ -1552,6 +1949,56 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 | cs       |        2 |                   2 |
 +----------+----------+---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "major": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(distinct age)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "major": "arts",
+        "count(*)": 2,
+        "count(distinct age)": 1
+      },
+      {
+        "major": "business",
+        "count(*)": 1,
+        "count(distinct age)": 1
+      },
+      {
+        "major": "cs",
+        "count(*)": 2,
+        "count(distinct age)": 2
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example concat -->
@@ -1578,6 +2025,64 @@ SELECT major, count(*), count(distinct age), group_concat(age) FROM students GRO
 | cs       |        2 |                   2 | 21,22             |
 +----------+----------+---------------------+-------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age), group_concat(age) FROM students GROUP BY major"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "major": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      },
+      {
+        "count(distinct age)": {
+          "type": "long long"
+        }
+      },
+      {
+        "group_concat(age)": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "major": "arts",
+        "count(*)": 2,
+        "count(distinct age)": 1,
+        "group_concat(age)": 21,21
+      },
+      {
+        "major": "business",
+        "count(*)": 1,
+        "count(distinct age)": 1,
+        "group_concat(age)": 22
+      },
+      {
+        "major": "cs",
+        "count(*)": 2,
+        "count(distinct age)": 2,
+        "group_concat(age)": 21,22
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- example sum -->
 ##### SUM(), MIN(), MAX(), AVG()
@@ -1602,6 +2107,86 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 | 2004 | 300.920044 | 0.990000 | 4.990000 | 2.78629661 |
 +------+------------+----------+----------+------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg FROM films GROUP BY release_year ORDER BY year asc LIMIT 5"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "sum": {
+          "type": "long long"
+        }
+      },
+      {
+        "min": {
+          "type": "long long"
+        }
+      },
+      {
+        "max": {
+          "type": "long long"
+        }
+      },
+      {
+        "avg": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2000,
+        "sum": 308.030029,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 3.17556739
+      },
+      {
+        "year": 2001,
+        "sum": 282.090118,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 3.09989142
+      },
+      {
+        "year": 2002,
+        "sum": 332.919983,
+        "min": 0.99,
+        "max": 4.990000,
+        "avg": 3.08259249
+      },
+      {
+        "year": 2003,
+        "sum": 310.940063,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 2.93339682
+      },
+      {
+        "year": 2004,
+        "sum": 300.920044,
+        "min": 0.990000,
+        "max": 4.990000,
+        "avg": 2.78629661
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example accuracy -->
@@ -1655,6 +2240,143 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 | 2001 |       91 |
 +------+----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 108
+      },
+      {
+        "year": 2002,
+        "count(*)": 108
+      },
+      {
+        "year": 2001,
+        "count(*)": 91
+      },
+      {
+        "year": 2005,
+        "count(*)": 93
+      },
+      {
+        "year": 2000,
+        "count(*)": 97
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=1;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 76
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=2;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 76
+      },
+      {
+        "year": 2002,
+        "count(*)": 74
+      }
+    ],
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=3;"
+[
+  {
+    "columns": [
+      {
+        "year": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year": 2004,
+        "count(*)": 108
+      },
+      {
+        "year": 2002,
+        "count(*)": 108
+      },
+      {
+        "year": 2001,
+        "count(*)": 91
+      }
+    ],
+    "total": 3,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
 

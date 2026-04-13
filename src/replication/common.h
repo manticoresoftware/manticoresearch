@@ -15,7 +15,8 @@
 
 // Update nodes list at cluster from actual nodes list
 enum class NODES_E : bool { VIEW, BOTH };
-bool ClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, StrVec_t* pNodes = nullptr );
+bool ClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes );
+bool ClusterExitUpdateNodes ( const CSphString& sCluster, const CSphString& sLeavingNode, int64_t iWaitTimeoutMs );
 
 // command at remote node for CLUSTER_DELETE to delete cluster
 bool ClusterDelete ( const CSphString& sCluster );

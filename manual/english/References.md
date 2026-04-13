@@ -69,6 +69,7 @@
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster
 * [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Adds/deletes a table to a replication cluster
+* [EXIT CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - Detaches the current node from a replication cluster
 * [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - Changes replication cluster settings
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - Deletes a replication cluster
 

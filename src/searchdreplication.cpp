@@ -78,6 +78,7 @@ public:
 	ScopedPort_c	m_tPort;
 
 	bool m_bUserRequest { false }; // indicates, if cluster is joining by user request (i.e. stmt 'join ...')
+	std::atomic<bool>		m_bExiting { false };
 
 	// state variables cached from Galera
 	int64_t					m_iConfID = 0;
@@ -113,6 +114,9 @@ public:
 	ClusterState_e WaitReady();
 
 	bool IsHealthy() const;
+	bool IsExiting() const noexcept { return m_bExiting.load ( std::memory_order_acquire ); }
+	void MarkExiting() noexcept { m_bExiting.store ( true, std::memory_order_release ); }
+
 	bool Init();
 	bool Connect ( BOOTSTRAP_E eBootStrap );
 	void StartListen();
@@ -122,6 +126,12 @@ public:
 	StrVec_t FilterViewNodesByProto ( Proto_e eProto = Proto_e::SPHINX, bool bResolve = true ) const EXCLUDES ( m_tViewNodesLock );
 	StrVec_t GetViewNodes() const EXCLUDES ( m_tViewNodesLock );
 	void SetViewNodes ( StrVec_t&& dNodes );
+	uint64_t GetViewVersion() const noexcept { return m_tViewVersion.GetValue(); }
+	bool WaitViewChangeUntil ( uint64_t uViewVersion, int64_t tmDeadlineUs ) const
+	{
+		return m_tViewVersion.WaitVoidUntil ( [this, uViewVersion] () { return m_tViewVersion.GetValue()!=uViewVersion; }, tmDeadlineUs );
+	}
+
 	StrVec_t GetIndexes() const noexcept EXCLUDES ( m_tIndexLock );
 	const CSphString & GetNodeName () const { return m_sNodeName; }
 
@@ -222,6 +232,7 @@ private:
 
 	// nodes at cluster
 	// raw nodes addresses (API and replication) from whole cluster
+	Threads::Coro::Waitable_T<uint64_t> m_tViewVersion { 0 };
 	mutable Threads::Coro::RWLock_c m_tViewNodesLock;
 	StrVec_t m_dViewNodes GUARDED_BY ( m_tViewNodesLock );
 
@@ -310,6 +321,7 @@ static bool IsSameVector ( StrVec_t & dSrc, StrVec_t & dDst );
 static bool g_bReplicationEnabled = false;
 static CSphString g_sReplicationStartError;
 static bool g_bReplicationStarted = false;
+static constexpr int64_t g_iClusterExitUpdateNodesWaitMs = 10 * 1000;
 
 bool ReplicationEnabled()
 {
@@ -1213,6 +1225,10 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 
 		return TlsMsg::Err ( "cluster '%s' can not replicate: %s", tCmdCluster.m_sCluster.cstr(), g_sReplicationStartError.cstr() );
 	}
+
+	if ( pCluster->IsExiting() )
+		return TlsMsg::Err ( "cluster '%s' is exiting", tCmdCluster.m_sCluster.cstr() );
+
 	if ( !pCluster->IsHealthy() )
 		return false;
 
@@ -1456,6 +1472,12 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 
 	sph::StringSet hIndexes ( dIndexes );
 
+	StrVec_t hCurrentIndexes ( pCluster->GetIndexes() );
+	StrVec_t dStaleIndexes;
+	for ( const auto & sIndex : hCurrentIndexes )
+		if ( !hIndexes[sIndex] )
+			dStaleIndexes.Add ( sIndex );
+
 	// scope for check of cluster data
 	{
 		Threads::SccRL_t rLock( g_tClustersLock );
@@ -1482,7 +1504,8 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 		}
 	}
 
-	bool bOk = AssignClusterToIndexes ( dIndexes, sCluster );
+	bool bOk = AssignClusterToIndexes ( dStaleIndexes, "" );
+	bOk &= AssignClusterToIndexes ( dIndexes, sCluster );
 
 	// need to enable back local index write
 	for ( const CSphString & sIndex : dIndexes )
@@ -1494,10 +1517,10 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 	pCluster->WithWlockedIndexes([&] ( auto & hIndexes, auto & hIndexesLoaded )
 	{
 		hIndexes.Reset();
-		dIndexes.for_each ( [&hIndexes, &hIndexesLoaded] ( const auto & sIndex )
+		hIndexesLoaded.Reset();
+		dIndexes.for_each ( [&hIndexes] ( const auto & sIndex )
 		{
 			hIndexes.Add ( sIndex );
-			hIndexesLoaded.Delete ( sIndex );
 		});
 
 		pCluster->m_iClusterEpoch = iClusterEpoch;
@@ -1975,8 +1998,11 @@ StrVec_t ReplicationCluster_t::GetViewNodes() const
 
 void ReplicationCluster_t::SetViewNodes ( StrVec_t&& dNodes )
 {
-	Threads::SccWL_t tNodesWLock ( m_tViewNodesLock );
-	m_dViewNodes = std::move ( dNodes );
+	{
+		Threads::SccWL_t tNodesWLock ( m_tViewNodesLock );
+		m_dViewNodes = std::move ( dNodes );
+	}
+	m_tViewVersion.ModifyValueAndNotifyAll ( [] ( uint64_t & uViewVersion ) { ++uViewVersion; } );
 }
 
 StrVec_t ReplicationCluster_t::GetIndexes() const noexcept
@@ -2014,37 +2040,61 @@ void ReportClusterError ( const CSphString & sCluster, const CSphString & sError
 }
 
 // command at remote node for CLUSTER_DELETE to delete cluster
-bool ClusterDelete ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+static void ClusterDetachLocal ( const ReplicationClusterRefPtr_c & pCluster ) EXCLUDES ( g_tClustersLock )
 {
-	// erase cluster from all hashes
-	ReplicationClusterRefPtr_c pCluster;
+	assert ( pCluster );
+	const CSphString & sCluster = pCluster->m_sName;
+	pCluster->MarkExiting();
+	sphLogDebugRpl ( "local detach cluster %s", sCluster.cstr() );
+
+	pCluster->DisconnectAndDeleteProvider();
+	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
+
 	{
 		Threads::SccWL_t tLock ( g_tClustersLock );
-		if ( !g_hClusters.Exists ( sCluster ) )
-			return TlsMsg::Err ( "unknown cluster '%s'", sCluster.cstr() );
-
-		pCluster = g_hClusters[sCluster];
 		g_hClusters.Delete ( sCluster );
 	}
 
-	sphLogDebugRpl ( "remote delete cluster %s", sCluster.cstr() );
-	// remove cluster from cache without delete of cluster itself
-	pCluster->DisconnectAndDeleteProvider();
-	
 	StrVec_t dClusterIndexes = pCluster->GetIndexes();
 	pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { for_each ( hIndexes, [] ( const auto& tIndex ) { AssignClusterToIndex ( tIndex.first, "" ); } ); } );
 	RplBinlog()->OnClusterDelete ( sCluster, dClusterIndexes );
+}
 
+static bool ClusterDeleteUnlocked ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+		return false;
+
+	ClusterDetachLocal ( pCluster );
 	return true;
+}
+
+bool ClusterDelete ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+{
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
+	return ClusterDeleteUnlocked ( sCluster );
 }
 
 /////////////////////////////////////////////////////////////////////////////
 // cluster deletes
 /////////////////////////////////////////////////////////////////////////////
 
+static void AppendWarning ( CSphString & sWarning, const CSphString & sMore )
+{
+	if ( sMore.IsEmpty() )
+		return;
+
+	if ( sWarning.IsEmpty() )
+		sWarning = sMore;
+	else
+		sWarning.SetSprintf ( "%s; %s", sWarning.cstr(), sMore.cstr() );
+}
+
 // cluster delete every node, than itself
 bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError ) EXCLUDES (g_tClustersLock)
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::Err();
 	if ( !g_bReplicationStarted )
 	{
@@ -2061,11 +2111,88 @@ bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError ) 
 
 	auto dNodes = pCluster->FilterViewNodesByProto();
 	SendClusterDeleteToNodes ( dNodes, sCluster );
-	bool bOk = ClusterDelete ( sCluster );
+	bool bOk = ClusterDeleteUnlocked ( sCluster );
 	bOk &= SaveConfigInt ( sError );
 
 	TlsMsg::MoveError ( sError );
 	return bOk;
+}
+
+bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning ) EXCLUDES ( g_tClustersLock )
+{
+	TlsMsg::ResetErr();
+
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+	{
+		TlsMsg::MoveError ( sError );
+		return false;
+	}
+
+	if ( pCluster->IsExiting() )
+	{
+		sError.SetSprintf ( "can not exit cluster '%s': cluster is already exiting", sCluster.cstr() );
+		return false;
+	}
+
+	const auto eInitialState = pCluster->GetState();
+	if ( eInitialState==ClusterState_e::JOINING || eInitialState==ClusterState_e::DONOR )
+	{
+		sError.SetSprintf ( "can not exit cluster '%s': current state is %s", sCluster.cstr(), szNodeState ( eInitialState ) );
+		return false;
+	}
+
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
+
+	pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+	{
+		TlsMsg::MoveError ( sError );
+		return false;
+	}
+
+	if ( pCluster->IsExiting() )
+	{
+		sError.SetSprintf ( "can not exit cluster '%s': cluster is already exiting", sCluster.cstr() );
+		return false;
+	}
+
+	if ( !pCluster->IsPrimary() )
+	{
+		sError.SetSprintf ( "can not exit cluster '%s': cluster is not primary", sCluster.cstr() );
+		return false;
+	}
+
+	const auto eState = pCluster->GetState();
+	if ( eState!=ClusterState_e::SYNCED )
+	{
+		sError.SetSprintf ( "can not exit cluster '%s': current state is %s", sCluster.cstr(), szNodeState ( eState ) );
+		return false;
+	}
+
+	pCluster->MarkExiting();
+
+	StrVec_t dPeers = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+	const CSphString sLeavingNode = szIncomingProto();
+
+	ClusterDetachLocal ( pCluster );
+
+	TLS_MSG_STRING ( sSaveError );
+	if ( !SaveConfigInt ( sSaveError ) )
+		AppendWarning ( sWarning, SphSprintf ( "cluster '%s' exited locally but local config was not saved: %s", sCluster.cstr(), sSaveError.cstr() ) );
+
+	if ( !SendClusterExitUpdateNodes ( sCluster, sLeavingNode, g_iClusterExitUpdateNodesWaitMs, dPeers ) )
+	{
+		CSphString sCleanupError = TlsMsg::MoveToString();
+		CSphString sCleanupWarning;
+		if ( sCleanupError.IsEmpty() )
+			sCleanupWarning.SetSprintf ( "cluster '%s' exited locally but remaining nodes may still need manual ALTER CLUSTER %s UPDATE nodes", sCluster.cstr(), sCluster.cstr() );
+		else
+			sCleanupWarning.SetSprintf ( "cluster '%s' exited locally but remaining nodes cleanup failed: %s; run ALTER CLUSTER %s UPDATE nodes on a surviving node if needed", sCluster.cstr(), sCleanupError.cstr(), sCluster.cstr() );
+		AppendWarning ( sWarning, sCleanupWarning );
+	}
+
+	return true;
 }
 
 bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState ) EXCLUDES ( g_tClustersLock )
@@ -2551,6 +2678,7 @@ StrVec_t ClusterGetAllNodes ( const CSphString & sCluster ) EXCLUDES ( g_tCluste
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError )
 {
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	auto bOk = DoClusterAlterUpdate ( sCluster, sUpdate, NODES_E::VIEW );
 	TlsMsg::MoveError ( sError );
@@ -2571,7 +2699,8 @@ bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpd
 	StrVec_t dNodes;
 
 	// local nodes update
-	bool bOk = ClusterUpdateNodes ( sCluster, eNodes, &dNodes );
+	bool bOk = ClusterUpdateNodes ( sCluster, eNodes );
+	dNodes = pCluster->m_dClusterNodes;
 
 	if ( dNodes.IsEmpty() )
 		return false;
@@ -2586,8 +2715,67 @@ bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpd
 	return bOk;
 }
 
+static uint64_t CalcNodesHash ( const StrVec_t & dNodes )
+{
+	uint64_t uRes = SPH_FNV64_SEED;
+	dNodes.for_each ( [&uRes] ( const auto & sNode ) { uRes = sphFNV64cont ( sNode.cstr(), uRes ); } );
+	return uRes;
+}
+
+static bool ApplyClusterNodesSnapshot ( ReplicationCluster_t * pCluster, StrVec_t dNodes, bool bSaveAlways )
+{
+	assert ( pCluster );
+
+	TlsMsg::ResetErr();
+
+	uint64_t uWasNodes = CalcNodesHash ( pCluster->m_dClusterNodes );
+	pCluster->m_dClusterNodes = FilterNodesByProto ( dNodes, Proto_e::SPHINX );
+	if ( TlsMsg::HasErr() )
+		return TlsMsg::Err ( "cluster '%s', invalid nodes, error: %s", pCluster->m_sName.cstr(), TlsMsg::szError() );
+
+	bool bSaveConf = ( bSaveAlways || ( uWasNodes!=CalcNodesHash ( pCluster->m_dClusterNodes ) ) );
+	if ( !bSaveConf )
+		return true;
+
+	TLS_MSG_STRING ( sError );
+	if ( SaveConfigInt ( sError ) )
+		return true;
+
+	return TlsMsg::Err ( "cluster '%s', failed to save config: %s", pCluster->m_sName.cstr(), sError.cstr() );
+}
+
+static bool HasViewNode ( ReplicationCluster_t * pCluster, const CSphString & sNode )
+{
+	assert ( pCluster );
+
+	StrVec_t dViewNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+	return dViewNodes.any_of ( [&sNode] ( const auto & sViewNode ) { return sViewNode==sNode; } );
+}
+
+static bool WaitUntilNodeLeavesView ( ReplicationCluster_t * pCluster, const CSphString & sNode, int64_t iWaitTimeoutMs )
+{
+	assert ( pCluster );
+	assert ( iWaitTimeoutMs>0 );
+
+	int64_t tmDeadline = sphMicroTimer() + iWaitTimeoutMs * 1000;
+	while ( true )
+	{
+		uint64_t uViewVersion = pCluster->GetViewVersion();
+		if ( !HasViewNode ( pCluster, sNode ) )
+			return true;
+
+		if ( sphMicroTimer()>=tmDeadline )
+			break;
+
+		if ( !pCluster->WaitViewChangeUntil ( uViewVersion, tmDeadline ) )
+			break;
+	}
+
+	return !HasViewNode ( pCluster, sNode );
+}
+
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
-bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t * pNodes ) EXCLUDES ( g_tClustersLock )
+bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes ) EXCLUDES ( g_tClustersLock )
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster || !pCluster->IsHealthy() )
@@ -2601,36 +2789,36 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 		return false;
 	}
 
-	auto fnNodesHash = [](const StrVec_t dNodes) {
-		uint64_t uRes = SPH_FNV64_SEED;
-		dNodes.for_each ( [&uRes] ( auto& sNode ) { uRes = sphFNV64cont ( sNode.cstr(), uRes ); } );
-		return uRes;
-	};
-
-	TlsMsg::ResetErr();
-
 	StrVec_t dNodes = pCluster->GetViewNodes();
 	if ( eNodes==NODES_E::BOTH )
 		dNodes.Append ( pCluster->m_dClusterNodes );
 
-	uint64_t uWasNodes = fnNodesHash ( pCluster->m_dClusterNodes );
-	pCluster->m_dClusterNodes = FilterNodesByProto ( dNodes, Proto_e::SPHINX );
-	bool bSaveConf = uWasNodes != fnNodesHash ( pCluster->m_dClusterNodes );
+	return ApplyClusterNodesSnapshot ( pCluster.Ptr(), std::move ( dNodes ), false );
+}
 
-	if ( TlsMsg::HasErr() )
-		return TlsMsg::Err ( "cluster '%s', invalid nodes, error: %s", sCluster.cstr(), TlsMsg::szError() );
+bool ClusterExitUpdateNodes ( const CSphString & sCluster, const CSphString & sLeavingNode, int64_t iWaitTimeoutMs ) EXCLUDES ( g_tClustersLock )
+{
+	TlsMsg::ResetErr();
 
-	if ( pNodes )
-		*pNodes = pCluster->m_dClusterNodes;
-	else
-		bSaveConf = true;
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster || !pCluster->IsHealthy() )
+		return false;
 
-	TLS_MSG_STRING ( sError );
-	auto bOk = true;
-	if ( bSaveConf )
-		bOk = SaveConfigInt ( sError );
+	if ( !WaitUntilNodeLeavesView ( pCluster.Ptr(), sLeavingNode, iWaitTimeoutMs ) )
+		return TlsMsg::Err ( "cluster '%s', timeout waiting for node '%s' to leave local view", sCluster.cstr(), sLeavingNode.cstr() );
 
-	return bOk;
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
+
+	pCluster = ClusterByName ( sCluster );
+	if ( !pCluster || !pCluster->IsHealthy() )
+		return false;
+
+	// Revalidate the exact view snapshot we are about to persist after the unlocked wait above.
+	StrVec_t dViewNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+	if ( dViewNodes.any_of ( [&sLeavingNode] ( const auto & sViewNode ) { return sViewNode==sLeavingNode; } ) )
+		return TlsMsg::Err ( "cluster '%s', node '%s' is still present in local view", sCluster.cstr(), sLeavingNode.cstr() );
+
+	return ApplyClusterNodesSnapshot ( pCluster.Ptr(), std::move ( dViewNodes ), true );
 }
 
 void ReplicationCluster_t::OnSeqnoCommited ( const ReplicatedCommand_t & tCmd, int64_t iSeqNo )

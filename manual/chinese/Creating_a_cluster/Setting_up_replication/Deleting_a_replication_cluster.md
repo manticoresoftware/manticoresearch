@@ -3,6 +3,8 @@
 <!-- example deleting a replication cluster  1 -->
 `DELETE CLUSTER` 语句会删除指定的集群及其 [名称](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name)。一旦删除集群，它将从所有节点中移除，但其表保持完整并成为活动的本地非复制表。
 
+如果只需分离当前节点并让集群的其余部分继续运行，请改用 `EXIT CLUSTER`。请参阅 [管理复制节点](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)。
+
 
 
 <!-- intro -->
@@ -100,4 +102,3 @@ utils_api.Sql("DELETE CLUSTER click_query", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
-

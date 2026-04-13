@@ -7505,8 +7505,8 @@ public:
 
 	bool HasSegments () const							{ return ( m_iSeg==0 || m_dSegments.BitCount()>0 );	}
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch ( pMatch ); }
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
-	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );	}
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch ( pMatch ); } ); }
+	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && ( i.m_pExpr->IsColumnar() || i.m_pExpr->PrefersRowIdOrder() ); } );	}
 
 private:
 	const CSphQueryContext &	m_tCtx;

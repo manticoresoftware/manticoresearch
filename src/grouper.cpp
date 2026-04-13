@@ -26,6 +26,7 @@ public:
 	ESphAttr		GetResultType() const override								{ return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; }
 	SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const override	{ return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); }
 	void			MultipleKeysFromMatch ( const CSphMatch & tMatch, CSphVector<SphGroupKey_t> & dKeys ) const override { assert(0); }
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema ); }
 
 protected:
 	CSphAttrLocator m_tLocator;
@@ -132,6 +133,13 @@ public:
 	SphGroupKey_t	KeyFromValue ( SphAttr_t ) const final				{ assert(0); return SphGroupKey_t(); }
 	CSphGrouper *	Clone() const final									{ return new CSphGrouperJsonField (*this); }
 
+	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final
+	{
+		sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema );
+		if ( m_pExpr )
+			m_pExpr->FixupLocator ( pOldSchema, pNewSchema );
+	}
+
 protected:
 	CSphGrouperJsonField ( const CSphGrouperJsonField & rhs )
 		: m_tLocator ( rhs.m_tLocator )
@@ -172,6 +180,12 @@ public:
 
 	CSphGrouper *	Clone() const final { return new GrouperStringExpr_T(*this); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final { m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
+
+	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final
+	{
+		if ( m_pExpr )
+			m_pExpr->FixupLocator ( pOldSchema, pNewSchema );
+	}
 
 protected:
 	GrouperStringExpr_T (const GrouperStringExpr_T& rhs)
@@ -237,6 +251,7 @@ public:
 	void			GetLocator ( CSphAttrLocator & ) const final { assert(0); }
 	ESphAttr		GetResultType() const final { return SPH_ATTR_BIGINT; }
 	bool			IsMultiValue() const final;
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final;
 
 private:
 	CSphVector<CSphColumnInfo>	m_dAttrs;
@@ -330,6 +345,29 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::SetColumnar ( const columnar::Columna
 	for ( auto & i : m_dMultiKeyGroupers )
 		if ( i )
 			i->SetColumnar ( pColumnar );
+}
+
+template <class PRED, bool HAVE_COLUMNAR>
+void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	for ( auto & tAttr : m_dAttrs )
+	{
+		sphFixupLocator ( tAttr.m_tLocator, pOldSchema, pNewSchema );
+		if ( tAttr.m_pExpr )
+			tAttr.m_pExpr->FixupLocator ( pOldSchema, pNewSchema );
+	}
+
+	for ( auto & i : m_dJsonKeys )
+		if ( i )
+			i->FixupLocator ( pOldSchema, pNewSchema );
+
+	for ( auto & i : m_dSingleKeyGroupers )
+		if ( i )
+			i->FixupLocators ( pOldSchema, pNewSchema );
+
+	for ( auto & i : m_dMultiKeyGroupers )
+		if ( i )
+			i->FixupLocators ( pOldSchema, pNewSchema );
 }
 
 template <class PRED, bool HAVE_COLUMNAR>
@@ -477,6 +515,7 @@ public:
 	ESphAttr		GetResultType () const override;
 	CSphGrouper *	Clone() const override { return new GrouperMVA_T ( m_tLocator ); }
 	bool			IsMultiValue() const override { return true; }
+	void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema ); }
 
 private:
 	CSphAttrLocator	m_tLocator;

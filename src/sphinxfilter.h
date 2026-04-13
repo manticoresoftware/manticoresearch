@@ -86,6 +86,7 @@ struct CreateFilterContext_t
 	const SIContainer_c *		m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
 	CSphString					m_sJoinIdx;
+	CSphString					m_sJoinIdxLeft;	///< left table name in JOIN (for resolving table.attr in expressions)
 	JoinType_e					m_eJoinType = JoinType_e::NONE;
 	bool						m_bAddKNNDistFilter = false;
 };

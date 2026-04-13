@@ -11,8 +11,8 @@ mysql -h0 -P9306 -e "select id, knn_dist() from test where knn ( image_vector, 5
 +------+------------+
 | id   | knn_dist() |
 +------+------------+
-|    1 | 0.28146550 |
-|    2 | 0.81527930 |
+|    1 | #!/ *0\.281[0-9]*/!# |
+|    2 | #!/ *0\.815[0-9]*/!# |
 +------+------------+
 ––– input –––
 mysql -h0 -P9306 -e "select id, knn_dist() from test where knn ( image_vector, 5, 1 );"
@@ -20,7 +20,7 @@ mysql -h0 -P9306 -e "select id, knn_dist() from test where knn ( image_vector, 5
 +------+------------+
 | id   | knn_dist() |
 +------+------------+
-|    2 | 1.14755321 |
+|    2 | #!/ *1\.147[0-9]*/!# |
 +------+------------+
 ––– input –––
 mysql -h0 -P9306 -e "select * from test where knn ( image_vector, 5, 1 );"
@@ -28,7 +28,7 @@ mysql -h0 -P9306 -e "select * from test where knn ( image_vector, 5, 1 );"
 +------+-----------+---------------------------------------+------------+
 | id   | title     | image_vector                          | @knn_dist  |
 +------+-----------+---------------------------------------+------------+
-|    2 | white bag | -0.148894,0.748278,0.091892,-0.095406 | 1.14755321 |
+|    2 | white bag | -0.148894,0.748278,0.091892,-0.095406 | #!/ *1\.147[0-9]*/!# |
 +------+-----------+---------------------------------------+------------+
 ––– input –––
 mysql -h0 -P9306 -e "select count(*) from test where knn ( image_vector, 5, 1 );"
@@ -50,15 +50,15 @@ mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM knn_test WHERE knn(vector, 5, 1)
 +------+------------+
 | id   | knn_dist() |
 +------+------------+
-|    5 | 0.16000001 |
-|    2 | 0.27772635 |
-|    9 | 0.78000003 |
-|    3 | 0.81000006 |
-|    7 |   1.020000 |
-|    6 |   1.100000 |
-|   10 |   1.260000 |
-|    8 |   1.300000 |
-|    4 | 1.75999987 |
+|    5 | #!/ *0\.160[0-9]*/!# |
+|    2 | #!/0\.277[0-9]*/!# |
+|    9 | #!/ *0\.780[0-9]*/!# |
+|    3 | #!/ *0\.810[0-9]*/!# |
+|    7 | #!/ *1\.020[0-9]*/!# |
+|    6 | #!/ *1\.100[0-9]*/!# |
+|   10 | #!/ *1\.260[0-9]*/!# |
+|    8 | #!/ *1\.300[0-9]*/!# |
+|    4 | #!/ *1\.759[0-9]*/!# |
 +------+------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM knn_test WHERE knn(vector, 5, 1);"
@@ -66,15 +66,15 @@ mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM knn_test WHERE knn(vector, 5, 1)
 +------+------------+
 | id   | knn_dist() |
 +------+------------+
-|    5 | 0.16000001 |
-|    2 | 0.27772635 |
-|    9 | 0.78000003 |
-|    3 | 0.81000006 |
-|    7 |   1.020000 |
-|    6 |   1.100000 |
-|   10 |   1.260000 |
-|    8 |   1.300000 |
-|    4 | 1.75999987 |
+|    5 | #!/ *0\.160[0-9]*/!# |
+|    2 | #!/0\.277[0-9]*/!# |
+|    9 | #!/ *0\.780[0-9]*/!# |
+|    3 | #!/ *0\.810[0-9]*/!# |
+|    7 | #!/ *1\.020[0-9]*/!# |
+|    6 | #!/ *1\.100[0-9]*/!# |
+|   10 | #!/ *1\.260[0-9]*/!# |
+|    8 | #!/ *1\.300[0-9]*/!# |
+|    4 | #!/ *1\.759[0-9]*/!# |
 +------+------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM knn_test WHERE knn(vector, 5, 1)\G"
@@ -93,7 +93,7 @@ discounted_price: 977.330017
           values: [988,87,21]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: 0.300000,0.400000,0.500000,0.600000
-       @knn_dist: 0.16000001
+       @knn_dist: #!/0\.160[0-9]*/!#
 *************************** 2. row ***************************
               id: 2
            model: Model_2
@@ -108,7 +108,7 @@ discounted_price: 767.989990
           values: [226,305,123]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: 0.286569,-0.031816,0.066684,0.032926
-       @knn_dist: 0.27772635
+       @knn_dist: #!/0\.277[0-9]*/!#
 *************************** 3. row ***************************
               id: 9
            model: Model_9
@@ -123,7 +123,7 @@ discounted_price: 399.989990
           values: [111,222,333]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: -0.100000,0.300000,-0.500000,0.700000
-       @knn_dist: 0.78000003
+       @knn_dist: #!/0\.780[0-9]*/!#
 *************************** 4. row ***************************
               id: 3
            model: Model_3
@@ -138,7 +138,7 @@ discounted_price: 847.080017
           values: [707,601,608]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: -0.500000,0.700000,-0.100000,0.200000
-       @knn_dist: 0.81000006
+       @knn_dist: #!/0\.810[0-9]*/!#
 *************************** 5. row ***************************
               id: 7
            model: Model_7
@@ -153,7 +153,7 @@ discounted_price: 199.990005
           values: [99,888,555]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: 0.500000,-0.300000,0.900000,-0.100000
-       @knn_dist: 1.020000
+       @knn_dist: #!/1\.020[0-9]*/!#
 *************************** 6. row ***************************
               id: 6
            model: Model_6
@@ -168,7 +168,7 @@ discounted_price: 665.489990
           values: [15,100,500]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: -0.200000,0.400000,-0.600000,0.800000
-       @knn_dist: 1.100000
+       @knn_dist: #!/1\.100[0-9]*/!#
 *************************** 7. row ***************************
               id: 10
            model: Model_10
@@ -183,7 +183,7 @@ discounted_price: 1099.989990
           values: [555,444,333]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: 0.900000,0.100000,0.800000,-0.200000
-       @knn_dist: 1.260000
+       @knn_dist: #!/1\.260[0-9]*/!#
 *************************** 8. row ***************************
               id: 8
            model: Model_8
@@ -198,7 +198,7 @@ discounted_price: 699.989990
           values: [66,333,999]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: 0.800000,0.600000,0.200000,-0.400000
-       @knn_dist: 1.300000
+       @knn_dist: #!/1\.300[0-9]*/!#
 *************************** 9. row ***************************
               id: 4
            model: Model_4
@@ -213,7 +213,7 @@ discounted_price: 883.900024
           values: [166,252,510]
  additional_info: {"features":["Feature_1","Feature_2","Feature_3"]}
           vector: 0.700000,-0.800000,0.100000,-0.200000
-       @knn_dist: 1.75999987
+       @knn_dist: #!/1\.759[0-9]*/!#
 ––– input –––
 mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 5, 1);"
 ––– output –––

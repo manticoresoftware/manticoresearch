@@ -15,6 +15,7 @@
 int		GetNumLogicalCPUs();
 int		GetNumPhysicalCPUs();	// may return -1 if fails
 bool	IsSSE42Supported();
+bool	IsAVX512Supported();
 bool	IsAVX2Supported();
 bool	IsPOPCNTSupported();
 int		GetMemPageSize();

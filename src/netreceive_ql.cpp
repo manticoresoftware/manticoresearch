@@ -906,7 +906,7 @@ public:
 		static WORD uExtraCapabilities = 0;
 		if ( !bExtraCapabilitiesSet )
 		{
-			uExtraCapabilities = dwval_from_env ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES", 0 );
+			uExtraCapabilities = env_ulong ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES" ).value_or(0);
 			bExtraCapabilitiesSet = true;
 		}
 		m_uCapabilities |= uExtraCapabilities;

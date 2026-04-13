@@ -125,11 +125,11 @@ static void SetTightConcurrencyLimits()
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
 
 // ops for save RAM segments as disk chunk
-static bool LOG_LEVEL_RTSAVEDIAG = val_from_env ( "MANTICORE_LOG_RTSAVEDIAG", false );
+static const bool LOG_LEVEL_RTSAVEDIAG = env_exists ( "MANTICORE_LOG_RTSAVEDIAG" );
 #define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 
-static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static const bool LOG_LEVEL_RTSPLIT_QUERY = env_exists ( "MANTICORE_LOG_RTSPLIT_QUERY" ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_RTQUERYINFO __LINE__ << " "
 #define RTQUERYINFO LOGINFO ( RTSPLIT_QUERY, RTQUERYINFO )
 
@@ -1731,10 +1731,10 @@ RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSche
 	SetSchema ( std::move ( tSchema ) );
 	SetMemLimit ( iRamSize );
 
-	auto iTrack = val_from_env ( "MANTICORE_TRACK_RT_ERRORS",-1 );
-	if ( iTrack>0 )
+	auto iTrack = env_long ( "MANTICORE_TRACK_RT_ERRORS" );
+	if ( iTrack.has_value() )
 	{
-		m_iTrackFailedRamActions = iTrack;
+		m_iTrackFailedRamActions = iTrack.value();
 		sphInfo ( "MANTICORE_TRACK_RT_ERRORS env provided; up to %d insert/merge errors will be reported", m_iTrackFailedRamActions );
 	}
 

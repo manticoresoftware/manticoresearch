@@ -49,7 +49,7 @@ static const char * const g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
 static const char * const g_sGcommPrefix = "gcomm://";
 
 // verbose logging of replcating transactions, ruled by this env variable
-static const bool LOG_LEVEL_RPL_TNX = val_from_env ( "MANTICORE_LOG_RPL_TNX", false );
+static const bool LOG_LEVEL_RPL_TNX = env_exists ( "MANTICORE_LOG_RPL_TNX" );
 #define LOG_COMPONENT_RPL_TNX ""
 #define RPL_TNX LOGMSG ( RPL_DEBUG, RPL_TNX, RPL_TNX )
 

@@ -68,7 +68,7 @@ int64_t sphMicroTimer()
 }
 
 /// monotonic microsecond precision timestamp
-int64_t MonoMicroTimer()
+uint64_t MonoMicroTimer()
 {
 #if _WIN32
 	return winMicroTimer();
@@ -77,9 +77,12 @@ int64_t MonoMicroTimer()
 	// UNIX time query
 	struct timespec tp;
 	if ( clock_gettime ( CLOCK_MONOTONIC, &tp ) )
-		return 0;
+		return 0ULL;
 
-	return tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
+	if (tp.tv_sec < 0 || tp.tv_nsec < 0 || (uint64_t) tp.tv_sec > (UINT64_MAX - tp.tv_nsec / 1000ULL) / 1000000ULL)
+		return 0ULL;
+
+	return (uint64_t) tp.tv_sec * 1000000ULL + (uint64_t) tp.tv_nsec / 1000ULL;
 #endif
 }
 

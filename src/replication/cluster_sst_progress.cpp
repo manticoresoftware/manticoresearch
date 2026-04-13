@@ -19,13 +19,13 @@
 
 #include "replication/cluster_sst_progress.h"
 
-static const int g_iSstPushIntervalMs = val_from_env ( "MANTICORE_SST_PUSH_INTERVAL", 1 ) * 1000;
+static const int g_iSstPushIntervalMs = env_long ( "MANTICORE_SST_PUSH_INTERVAL" ).value_or(1) * 1000;
 
 static const float ESTIMATED_DIFF_RATIO = 0.20f;
 static const float g_dStageWeights[(int)SstStage_e::TOTAL] = { 0.01f, 1.0f, 1.0f, 2.5f, 0.5f };
 
-static const bool LOG_LEVEL_SST_DBG = val_from_env ( "MANTICORE_LOG_SST_PROGRESS", false );
-static const int LOG_SST_PROGRESS_INTERVAL_MS = val_from_env ( "MANTICORE_LOG_SST_PROGRESS_INTEVAL", 1000 );
+static const bool LOG_LEVEL_SST_DBG = env_exists ( "MANTICORE_LOG_SST_PROGRESS" );
+static const int LOG_SST_PROGRESS_INTERVAL_MS = env_long ( "MANTICORE_LOG_SST_PROGRESS_INTEVAL" ).value_or (1000);
 #define LOG_COMPONENT_SST_DBG ""
 #define SST_DBG LOGMSG ( RPL_DEBUG, SST_DBG, SST_DBG )
 

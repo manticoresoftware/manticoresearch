@@ -37,17 +37,19 @@ Query OK, 0 rows affected (0.00 sec)
 <!-- request JSON -->
 
 ```JSON
-POST /cli -d "CREATE TABLE products(title text, price float)  morphology='stem_en'"
+POST /sql?mode=raw -d "CREATE TABLE products(title text, price float)  morphology='stem_en'"
 ```
 
 <!-- response JSON -->
 
 ```json
-{
-"total":0,
-"error":"",
-"warning":""
-}
+[
+  {
+    "total":0,
+    "error":"",
+    "warning":""
+  }
+]
 ```
 
 <!-- intro -->

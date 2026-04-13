@@ -18,6 +18,18 @@ SQL-запрос `SHOW PLAN` и опция JSON-интерфейса `"plan": N`
 ##### SQL:
 <!-- request SQL -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(comment_text text);
+INSERT INTO hn_small(id,comment_text) VALUES
+(1,'dog story'),
+(2,'cat story'),
+(3,'dog and cat'),
+(4,'bird story');
+-->
+
 ```sql
 set profiling=1;
 
@@ -108,6 +120,18 @@ POST /search
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS forum;
+CREATE TABLE forum(title text, content text);
+INSERT INTO forum(id,title,content) VALUES
+(711651,'wayne story','hey there'),
+(711652,'ways to code','hey there'),
+(711653,'wayyy forward','hey there'),
+(711654,'way point','hey there');
+-->
 
 ```sql
 SET profiling=1;

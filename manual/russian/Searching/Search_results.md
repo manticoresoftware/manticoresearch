@@ -83,7 +83,7 @@ POST /search
 <!-- end -->
 
 <!--
-data for the following example:
+data for the following examples:
 
 DROP TABLE IF EXISTS hn_small;
 CREATE TABLE hn_small(story_author string, comment_author string);
@@ -94,6 +94,13 @@ INSERT INTO hn_small(story_author, comment_author) VALUES
 ('joe', 'SwellJoe'),
 ('joe', 'samb'),
 ('joe', 'jsjenkins168');
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
 --> 
 
 <!-- example sql2 -->
@@ -241,7 +248,7 @@ SELECT * FROM tbl WHERE MATCH('joe') FACET age;
 
 <!-- request JSON -->
 ```JSON
-POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
+POST /sql -d "SELECT * FROM tbl WHERE MATCH('joe') FACET age"
 ```
 
 <!-- response JSON -->
@@ -250,19 +257,13 @@ POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
   "took": 0,
   "timed_out": false,
   "hits": {
-    "total": 2,
+    "total": 1,
     "total_relation": "eq",
     "hits": [
       {
         "_score": 2500,
         "_source": {
-          "f1": "b"
-        }
-      },
-      {
-        "_score": 2500,
-        "_source": {
-          "f1": "b"
+          "name": "joe"
         }
       }
     ]
@@ -271,8 +272,8 @@ POST /sql -d "SELECT * FROM tbl WHERE MATCH('b') FACET f2"
     "rating": {
       "buckets": [
         {
-          "key": 2,
-          "doc_count": 2
+          "key": 1,
+          "doc_count": 1
         }
       ]
     }

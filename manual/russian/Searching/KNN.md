@@ -216,6 +216,15 @@ table products_all {
 
 ##### Вставка данных с автоматическими эмбеддингами
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+DROP TABLE IF EXISTS products_openai;
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+-->
+
 <!-- example inserting_embeddings -->
 
 При использовании автоматических эмбеддингов вы можете:

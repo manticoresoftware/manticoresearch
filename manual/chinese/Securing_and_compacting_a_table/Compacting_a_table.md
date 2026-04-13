@@ -6,6 +6,16 @@
 
 ## OPTIMIZE TABLE
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
 <!-- example optimize -->
 ```sql
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
@@ -120,6 +130,13 @@ POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
 
 <!-- end -->
 <!-- example cluster_manual_optimize -->
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
 优化表：
 <!-- request SQL -->
 ```sql

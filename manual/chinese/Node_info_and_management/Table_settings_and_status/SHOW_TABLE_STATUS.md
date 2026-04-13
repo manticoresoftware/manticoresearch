@@ -1,5 +1,17 @@
 # SHOW TABLE STATUS
 
+<!--
+以下示例的数据：
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f text);
+INSERT INTO t(f) VALUES
+('first'),
+('second'),
+('third'),
+('fourth'),
+('fifth');
+-->
+
 <!-- example SHOW TABLE STATUS -->
 
 `SHOW TABLE STATUS` 是一个 SQL 语句，用于显示每个表的各种统计信息。

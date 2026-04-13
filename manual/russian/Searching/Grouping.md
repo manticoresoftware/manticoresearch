@@ -51,6 +51,32 @@ where_condition: {aggregation expression alias | COUNT(*)}
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS films;
+CREATE TABLE films(title text, release_year int, rental_rate float);
+INSERT INTO films(title, release_year, rental_rate) VALUES
+('ALICE FANTASIA', 2009, 4.99),
+('ALIEN CENTER', 2009, 4.99),
+('AMADEUS HOLY', 2008, 4.99),
+('ANACONDA CONFESSIONS', 2008, -1),
+('ANGELS LIFE', 2007, 4.99),
+('ARACHNOPHOBIA ROLLERCOASTER', 2007, 4.99),
+('AMERICAN CIRCUS', 2009, 4.99),
+('ANTHEM LUKE', 2009, 4.99),
+('ATTACKS HATE', 2008, 4.99),
+('ALADDIN CALENDAR', 2008, 4.99),
+('AIRPLANE SIERRA', 2007, 4.99),
+('BETA TEST', 2006, 3.99),
+('CHARLIE TEST', 2005, 2.99),
+('DELTA TEST', 2004, 1.99),
+('ECHO TEST', 2003, 1.49),
+('FOXTROT TEST', 2002, 0.99),
+('GOLF TEST', 2001, 2.49),
+('HOTEL TEST', 2000, 3.49);
+-->
+
 <!-- example group1 -->
 ### Просто группировка
 Группировка довольно проста - просто добавьте "GROUP BY что-то" в конец вашего `SELECT` запроса. Этим "что-то" может быть:
@@ -584,10 +610,6 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 <!-- request JSON -->
 ```JSON
 POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
-
-POST /search
-{
-}
 ```
 <!-- response JSON -->
 ```JSON
@@ -1857,6 +1879,20 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ## Агрегационные функции
 Помимо `COUNT(*)`, которая возвращает количество элементов в каждой группе, вы можете использовать различные другие агрегационные функции:
+
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int, major string);
+INSERT INTO students values
+(0,'John',21,'arts'),
+(0,'William',22,'business'),
+(0,'Richard',21,'cs'),
+(0,'Rebecca',22,'cs'),
+(0,'Monica',21,'arts');
+-->
+
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
 В то время как `COUNT(*)` возвращает количество всех элементов в группе, `COUNT(DISTINCT field)` возвращает количество уникальных значений поля в группе, что может существенно отличаться от общего количества. Например, в группе может быть 100 элементов, но у всех одинаковое значение для определённого поля. `COUNT(DISTINCT field)` помогает это определить. Чтобы продемонстрировать это, создадим таблицу "students" с именем студента, возрастом и специальностью:
@@ -1916,7 +1952,7 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
+POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
 ```
 <!-- response JSON -->
 ```JSON
@@ -2242,7 +2278,7 @@ POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY ye
       {
         "year": 2000,
         "count(*)": 97
-      },
+      }
     ],
     "total": 5,
     "error": "",

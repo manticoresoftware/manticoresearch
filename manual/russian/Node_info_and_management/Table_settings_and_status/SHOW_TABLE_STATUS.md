@@ -1,5 +1,17 @@
 # SHOW TABLE STATUS
 
+<!--
+data for the following example:
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f text);
+INSERT INTO t(f) VALUES
+('first'),
+('second'),
+('third'),
+('fourth'),
+('fifth');
+-->
+
 <!-- example SHOW TABLE STATUS -->
 
 `SHOW TABLE STATUS` — это оператор SQL, который отображает различные статистические данные для каждой таблицы.

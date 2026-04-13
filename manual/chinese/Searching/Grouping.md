@@ -51,6 +51,32 @@ JSON 查询格式目前支持基本的分组，可以检索聚合值及其 count
 
 <!-- end -->
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS films;
+CREATE TABLE films(title text, release_year int, rental_rate float);
+INSERT INTO films(title, release_year, rental_rate) VALUES
+('ALICE FANTASIA', 2009, 4.99),
+('ALIEN CENTER', 2009, 4.99),
+('AMADEUS HOLY', 2008, 4.99),
+('ANACONDA CONFESSIONS', 2008, 4.99),
+('ANGELS LIFE', 2007, 4.99),
+('ARACHNOPHOBIA ROLLERCOASTER', 2007, 4.99),
+('AMERICAN CIRCUS', 2009, 4.99),
+('ANTHEM LUKE', 2009, 4.99),
+('ATTACKS HATE', 2008, 4.99),
+('ALADDIN CALENDAR', 2008, 4.99),
+('AIRPLANE SIERRA', 2007, 4.99),
+('BETA TEST', 2006, 3.99),
+('CHARLIE TEST', 2005, 2.99),
+('DELTA TEST', 2004, 1.99),
+('ECHO TEST', 2003, 1.49),
+('FOXTROT TEST', 2002, 0.99),
+('GOLF TEST', 2001, 2.49),
+('HOTEL TEST', 2000, 3.49);
+-->
+
 <!-- example group1 -->
 ### 只分组
 分组非常简单 - 只需在 `SELECT` 查询的末尾添加 "GROUP BY smth"。smth 可以是：
@@ -584,10 +610,6 @@ SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_
 <!-- request JSON -->
 ```JSON
 POST /sql?mode=raw -d "SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5"
-
-POST /search
-{
-}
 ```
 <!-- response JSON -->
 ```JSON
@@ -1857,6 +1879,20 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ## 聚合函数
 除了返回每组元素数量的 `COUNT(*)`，你还可以使用各种其他聚合函数：
+
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int, major string);
+INSERT INTO students values
+(0,'John',21,'arts'),
+(0,'William',22,'business'),
+(0,'Richard',21,'cs'),
+(0,'Rebecca',22,'cs'),
+(0,'Monica',21,'arts');
+-->
+
 <!-- example distinct -->
 ##### COUNT(DISTINCT field)
 虽然 `COUNT(*)` 返回组中所有元素的数量，`COUNT(DISTINCT field)` 返回组中特定字段的唯一值数量，这可能与总数完全不同。例如，你可以在组中有100个元素，但某字段的值全都相同。`COUNT(DISTINCT field)` 能帮助确定这一点。为演示此功能，我们创建一个名为 "students" 的表，包含学生姓名、年龄和专业：
@@ -1916,7 +1952,7 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 
 <!-- request JSON -->
 ```JSON
-POST /sql?mode=raw - d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
+POST /sql?mode=raw -d "SELECT major, count(*), count(distinct age) FROM students GROUP BY major"
 ```
 <!-- response JSON -->
 ```JSON
@@ -2242,7 +2278,7 @@ POST /sql?mode=raw -d "SELECT release_year year, count(*) FROM films GROUP BY ye
       {
         "year": 2000,
         "count(*)": 97
-      },
+      }
     ],
     "total": 5,
     "error": "",

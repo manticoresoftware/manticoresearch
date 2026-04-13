@@ -214,13 +214,13 @@ data for the following example:
 
 DROP TABLE IF EXISTS records;
 CREATE TABLE records(content text, channel_id int);
-INSERT INTO records(story_author, channel_id) VALUES
+INSERT INTO records(content, channel_id) VALUES
 ('record one', 4),
 ('record two', 1),
 ('record three', 3),
 ('record four', 4),
 ('record twenty one', 2),
-('record twenty two', 2),
+('record twenty two', 2);
 -->
 
 <!-- example show meta iostats cpustats -->
@@ -923,8 +923,8 @@ CREATE TABLE facetdemo(title text, brand_name string, brand_id int, categories m
 INSERT INTO facetdemo(title, brand_name, brand_id, categories, price, j, property) VALUES
 ('Product Ten Three', 'Brand One', 1, (1,2), 100,  '{"prop1":66,"prop2":91,"prop3":"One"}', 'Six_Ten'),
 ('Product Ten Four', 'Brand One', 1, (2,3), 100,  '{"prop1":67,"prop2":92,"prop3":"Two"}', 'Six_Ten'),
-('Product Ten Nine', 'Brand Two', 2), (1,2), 120,  '{"prop1":67,"prop2":93,"prop3":"Nine"}', 'Six_Nine'),
-('Product Ten Ten', 'Brand Two', 2), (1,2), 150,  '{"prop1":66,"prop2":94,"prop3":"Ten"}', 'Six_Nine');
+('Product Ten Nine', 'Brand Two', 2, (1,2), 120,  '{"prop1":67,"prop2":93,"prop3":"Nine"}', 'Six_Nine'),
+('Product Ten Ten', 'Brand Two', 2, (1,2), 150,  '{"prop1":66,"prop2":94,"prop3":"Ten"}', 'Six_Nine');
 --> 
 
 <!-- example show meta facets -->
@@ -1107,6 +1107,16 @@ POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET pri
 
 ## SHOW META 和查询优化器
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS taxi1;
+CREATE TABLE taxi1(tip_amount int);
+INSERT INTO taxi1(tip_amount) VALUES
+(5),
+(10),
+(15);
+-->
 <!-- example of show meta vs query optimizer -->
 
 当[基于成本的查询优化器](../Searching/Cost_based_optimizer.md)选择使用 `DocidIndex`、`ColumnarScan` 或 `SecondaryIndex` 替代简单过滤时，这可以从 `SHOW META` 命令中反映出来。
@@ -1139,6 +1149,7 @@ SHOW META;
 
 <!-- intro -->
 ##### JSON:
+
 <!-- request JSON -->
 
 ```JSON

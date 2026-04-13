@@ -31,6 +31,14 @@ POST /search
 <!-- intro -->
 SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -56,11 +64,19 @@ POST /search
 {
     "table" : "test",
     "query": {
-      "match": {
-        "title": "hello"
-      },
-      "match": {
-        "body": "world"
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "title": "hello"
+            }
+          },
+          {
+            "match": {
+              "body": "world"
+            }
+          }  
+        ]
       }
     },
     "options":
@@ -377,7 +393,7 @@ POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1
         "_score": 2500,
         "_source": {
           "f1": "c",
-          "f2": 3"
+          "f2": 3
         }
       },
       {
@@ -487,6 +503,17 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```
 
 <!-- end -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int);
+INSERT INTO students(name, age) VALUES
+('Alice', 20),
+('Bob', 22),
+('Carol', 25);
+-->
 
 <!-- example comments -->
 При использовании клиента MySQL/MariaDB убедитесь, что включен флаг `--comments`, чтобы активировать подсказки в ваших запросах.

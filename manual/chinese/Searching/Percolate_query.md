@@ -3363,6 +3363,20 @@ INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\',
 <!-- example sharded -->
 现在，如果你在 `CALL PQ` 中添加 `'sharded' as mode`，它会将文档发送到所有代理的表（在这个例子中，只是本地表，但它们也可以是远程的，以利用外部硬件）。这种模式不通过 JSON 接口提供。
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS products_distributed;
+DROP TABLE IF EXISTS products1;
+DROP TABLE IF EXISTS products2;
+CREATE TABLE products1(title text, color string) type='pq';
+CREATE TABLE products2(title text, color string) type='pq';
+CREATE TABLE products_distributed type='distributed' local='products1' local='products2';
+INSERT INTO products1(query) values('@title bag');
+INSERT INTO products1(query,filters) values('@title shoes', 'color=\'red\'');
+INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
+-->
+
 <!-- intro -->
 SQL：
 <!-- request SQL -->

@@ -768,12 +768,12 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 以下示例的数据：
 
 DROP TABLE IF EXISTS facetdemo;
-CREATE TABLE facetdemo(price float, brand_id int, title text, brand_name string, brand_id int, j json, categories multi);
-INSERT INTO facetdemo(price, brand_id, title, brand_name, brand_id, j, categories) VALUES
-(306, 1, 'Product Ten Three', 'Brand One', 'Six_Ten', {"prop1":66,"prop2":91,"prop3":"One"}, (10,11)),
-(400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', {"prop1":69,"prop2":19,"prop3":"One"}, (13,14)),
-(855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', {"prop1":63,"prop2":78,"prop3":"One"}, (10,11,12)),
-(31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', {"prop1":79,"prop2":42,"prop3":"One"}, '(12,13,14));
+CREATE TABLE facetdemo(price float, brand_id int, title text, brand_name string, property string, j json, categories multi);
+INSERT INTO facetdemo(price, brand_id, title, brand_name, property, j, categories) VALUES
+(306, 1, 'Product Ten Three', 'Brand One', 'Six_Ten', '{"prop1":66,"prop2":91,"prop3":"One"}', (10,11)),
+(400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', '{"prop1":69,"prop2":19,"prop3":"One"}', (13,14)),
+(855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', '{"prop1":63,"prop2":78,"prop3":"One"}', (10,11,12)),
+(31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', '{"prop1":79,"prop2":42,"prop3":"One"}', (12,13,14));
 --> 
 
 <!-- intro -->

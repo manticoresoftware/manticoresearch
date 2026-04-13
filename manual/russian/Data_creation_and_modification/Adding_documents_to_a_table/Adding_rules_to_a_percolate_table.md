@@ -439,6 +439,7 @@ POST /sql -d "SELECT * FROM pq"
         }
       }
     ]
+  }
 }
 ```
 

@@ -16,6 +16,17 @@
 
 控制台客户端的这种行为有时会令人困惑，因为您可能会注意到相同的命令序列在 MySQL 客户端控制台中与 SQL-over-HTTP 等其他协议的行为有所不同。这是因为 MySQL 控制台客户端本身使用分号来划分查询，但其他协议可能会将整个序列作为一个批处理发送。
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float);
+INSERT INTO products(title, price) VALUES
+('remove hair cream', 20.50),
+('remove hair gel', 18.00),
+('hair brush', 5.25);
+-->
+
 <!-- example multi-query 1 -->
 您可以使用 SQL 通过分号分隔多个搜索查询。当 Manticore 从客户端接收到格式为这样的查询时，所有语句间的优化都将被应用。
 
@@ -39,6 +50,16 @@ SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; S
 DELIMITER _
 SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC_
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC"
+```
+
 <!-- end -->
 
 ## 多查询优化

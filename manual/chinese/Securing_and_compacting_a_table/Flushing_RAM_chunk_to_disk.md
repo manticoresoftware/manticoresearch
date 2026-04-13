@@ -19,6 +19,14 @@ FLUSH TABLE rt_table
 
 <!-- request SQL -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(id,title) VALUES (1,'doc');
+-->
+
 ```sql
 FLUSH TABLE rt;
 ```
@@ -26,6 +34,26 @@ FLUSH TABLE rt;
 ```sql
 Query OK, 0 rows affected (0.05 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "FLUSH TABLE rt"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- proofread -->

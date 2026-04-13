@@ -16,6 +16,14 @@ Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_mo
 ##### SQL:
 <!-- request SQL -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float, enabled int);
+INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
+-->
+
 ```sql
 UPDATE products SET enabled=0 WHERE id=10;
 ```
@@ -733,6 +741,13 @@ Updating other data types or changing property type in a JSON attribute requires
 ##### SQL:
 <!-- request SQL -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, data json);
+-->
+
 ```sql
 insert into products values (1,'title','{"tags":[1,2,3]}');
 
@@ -777,6 +792,14 @@ POST /update
 
 <!-- response JSON -->
 ```JSON
+{
+  "table":"products",
+  "_id":1,
+  "created":true,
+  "result":"created",
+  "status":201
+}
+
 {
   "table":"products",
   "updated":1
@@ -1468,6 +1491,14 @@ The server will respond with a JSON object stating if the operation was successf
 <!-- intro -->
 ##### JSON:
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, gid int, price float);
+INSERT INTO test(id,title,gid,price) VALUES (1,'green apple',10,10.5),(2,'banana',20,20.5);
+-->
+
 <!-- request JSON -->
 
 ```JSON
@@ -1523,7 +1554,7 @@ POST /update
 
 ```json
 {
-  "table":"products",
+  "table":"test",
   "updated":1
 }
 ```

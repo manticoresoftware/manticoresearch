@@ -92,6 +92,22 @@ Manticore Search 支持两种类型的连接：
 
 1. **INNER JOIN**：仅返回在两个表中都有匹配的行。例如，查询在`orders`和`customers`表之间执行INNER JOIN，仅包括匹配的订单。
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS customers;
+CREATE TABLE customers(name text, email string, address text);
+CREATE TABLE orders(product text, quantity int, customer_id int);
+INSERT INTO customers(id,name,email,address) VALUES
+(1,'Alice Johnson','alice@example.com','123 Maple St'),
+(2,'Bob Smith','bob@example.com','456 Oak Ave');
+INSERT INTO orders(id,product,quantity,customer_id) VALUES
+(1,'Laptop',1,1),
+(2,'Phone',2,2),
+(3,'Tablet',1,1);
+-->
+
 <!-- request SQL -->
 ```sql
 SELECT product, customers.email, customers.name, customers.address
@@ -365,6 +381,17 @@ Manticore Search 中表连接的一个强大功能是能够在连接的两个表
 <!-- example fulltext_basic -->
 
 您可以为 JOIN 查询中的每个表单独使用 `MATCH()` 函数。查询根据两个表中的文本内容过滤结果。
+
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS t1;
+DROP TABLE IF EXISTS t2;
+CREATE TABLE t1(f text);
+CREATE TABLE t2(f text);
+INSERT INTO t1(id,f) VALUES (1,'hello there'),(2,'hello world');
+INSERT INTO t2(id,f) VALUES (2,'goodbye world'),(3,'goodbye there');
+-->
 
 <!-- request SQL -->
 ```sql
@@ -689,6 +716,25 @@ drop table if exists customers; drop table if exists orders; create table custom
 
 该查询演示了在 `customers` 和 `orders` 表上进行全文匹配，并结合范围过滤和分面功能。它搜索名为 "Alice" 或 "Bob" 的客户及其包含 "laptop"、"phone" 或 "tablet" 且价格高于 $500 的订单。结果按订单 ID 排序，并按保修条款进行分面。
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS orders;
+CREATE TABLE customers(name text, email text, address text);
+CREATE TABLE orders(product text, customer_id int, quantity int, order_date string, tags multi, details json);
+INSERT INTO customers(id, name, email, address) VALUES
+(1, 'Alice Johnson', 'alice@example.com', '123 Maple St'),
+(2, 'Bob Smith', 'bob@example.com', '456 Oak St'),
+(3, 'Carol White', 'carol@example.com', '789 Pine St'),
+(4, 'John Smith', 'john@example.com', '15 Barclays St');
+INSERT INTO orders(id, product, customer_id, quantity, order_date, tags, details) VALUES
+(1, 'Laptop Computer', 1, 1, '2023-01-01', (101,102), '{\"price\":1200,\"warranty\":\"2 years\"}'),
+(2, 'Smart Phone', 2, 2, '2023-01-02', (103), '{\"price\":800,\"warranty\":\"1 year\"}'),
+(3, 'Tablet Device', 1, 1, '2023-01-03', (101,104), '{\"price\":450,\"warranty\":\"1 year\"}'),
+(4, 'Monitor Display', 3, 1, '2023-01-04', (105), '{\"price\":300,\"warranty\":\"1 year\"}');
+-->
+
 <!-- request SQL -->
 ```sql
 SELECT orders.product, name, orders.details.price, orders.tags
@@ -709,13 +755,16 @@ POST /search
   "query":  {
       "bool": {
           "must": [
-          {
+            {
               "range": {
                   "orders.details.price": {
                       "gt": 500
                   }
-               },
+               }
+             },
+             {
                "query_string": "alice | bob"
+             }
           ]
       }
   },

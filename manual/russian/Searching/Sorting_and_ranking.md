@@ -20,6 +20,15 @@ SELECT ... ORDER BY
 {attribute_name | expr_alias | weight() | random() } [ASC | DESC]
 ```
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(a int, b int, f text);
+INSERT INTO test (a, b, f) VALUES
+(2, 3, 'document');
+-->
+
 <!-- example alias -->
 
 В предложении сортировки можно использовать любую комбинацию до 5 столбцов, каждый из которых может сопровождаться `asc` или `desc`. Функции и выражения не допускаются в качестве аргументов для предложения сортировки, за исключением функций `weight()` и `random()` (последняя может использоваться только через SQL в виде `ORDER BY random()`). Однако вы можете использовать любое выражение в списке SELECT и сортировать по его псевдониму.
@@ -36,6 +45,42 @@ select *, a + b alias from test order by alias desc;
 +------+------+------+----------+-------+
 |    1 |    2 |    3 | document |     5 |
 +------+------+------+----------+-------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test",
+  "expressions": {
+    "alias": "a+b"
+  },
+  "sort": {"alias":"desc"}
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->

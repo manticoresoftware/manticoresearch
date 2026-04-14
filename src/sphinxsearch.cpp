@@ -4090,6 +4090,9 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 					continue;
 				assert ( tAttr.IsColumnar() );
 
+				// if ( m_dFieldLenIters.IsEmpty ()) /// no need to check, as Resize will not do anything if size is not actually changed
+					m_dFieldLenIters.Resize ( m_iFields );
+
 				std::string sError;
 				const auto * pColumnar = (const columnar::Columnar_i*)*ppResult;
 				m_dFieldLenIters[iField] = CreateColumnarIterator ( pColumnar, tAttr.m_sName.cstr(), sError );

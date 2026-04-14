@@ -114,6 +114,10 @@ void			sphDoneIOStats();
 
 CSphIOStats *	GetIOStats();
 
+/// always accounted global written bytes (came from writethrottled/writenonthrottled)
+void			GlobalWrite ( int iWritten ) noexcept;
+uint64_t		GlobalWritten () noexcept;
+
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 

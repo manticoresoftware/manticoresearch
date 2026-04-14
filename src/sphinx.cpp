@@ -139,7 +139,7 @@ static BuildBufferSettings_t g_tMergeSettings;
 
 static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
 
-static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static const bool LOG_LEVEL_SPLIT_QUERY = env_exists ( "MANTICORE_LOG_SPLIT_QUERY" ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_QUERYINFO __LINE__ << " "
 #define QUERYINFO LOGINFO ( SPLIT_QUERY, QUERYINFO )
 

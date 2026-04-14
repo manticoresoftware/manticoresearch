@@ -92,6 +92,22 @@ Manticore Search поддерживает два типа объединений
 
 1. **INNER JOIN**: Возвращает только те строки, где есть совпадение в обеих таблицах. Например, запрос выполняет INNER JOIN между таблицами `orders` и `customers`, включая только заказы, у которых есть соответствующие клиенты.
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS customers;
+CREATE TABLE customers(name text, email string, address text);
+CREATE TABLE orders(product text, quantity int, customer_id int);
+INSERT INTO customers(id,name,email,address) VALUES
+(1,'Alice Johnson','alice@example.com','123 Maple St'),
+(2,'Bob Smith','bob@example.com','456 Oak Ave');
+INSERT INTO orders(id,product,quantity,customer_id) VALUES
+(1,'Laptop',1,1),
+(2,'Phone',2,2),
+(3,'Tablet',1,1);
+-->
+
 <!-- request SQL -->
 ```sql
 SELECT product, customers.email, customers.name, customers.address
@@ -365,6 +381,17 @@ POST /search
 <!-- example fulltext_basic -->
 
 Вы можете использовать отдельные функции `MATCH()` для каждой таблицы в запросе JOIN. Запрос фильтрует результаты на основе текстового содержимого в обеих таблицах.
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS t1;
+DROP TABLE IF EXISTS t2;
+CREATE TABLE t1(f text);
+CREATE TABLE t2(f text);
+INSERT INTO t1(id,f) VALUES (1,'hello there'),(2,'hello world');
+INSERT INTO t2(id,f) VALUES (2,'goodbye world'),(3,'goodbye there');
+-->
 
 <!-- request SQL -->
 ```sql
@@ -689,6 +716,25 @@ drop table if exists customers; drop table if exists orders; create table custom
 
 Этот запрос демонстрирует полнотекстовый поиск по таблицам `customers` и `orders`, объединенный с фильтрацией по диапазону и фасетированием. Он ищет клиентов с именами "Alice" или "Bob" и их заказы, содержащие "laptop", "phone" или "tablet" с ценой выше $500. Результаты упорядочены по ID заказа и сфасетированы по условиям гарантии.
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS orders;
+CREATE TABLE customers(name text, email text, address text);
+CREATE TABLE orders(product text, customer_id int, quantity int, order_date string, tags multi, details json);
+INSERT INTO customers(id, name, email, address) VALUES
+(1, 'Alice Johnson', 'alice@example.com', '123 Maple St'),
+(2, 'Bob Smith', 'bob@example.com', '456 Oak St'),
+(3, 'Carol White', 'carol@example.com', '789 Pine St'),
+(4, 'John Smith', 'john@example.com', '15 Barclays St');
+INSERT INTO orders(id, product, customer_id, quantity, order_date, tags, details) VALUES
+(1, 'Laptop Computer', 1, 1, '2023-01-01', (101,102), '{\"price\":1200,\"warranty\":\"2 years\"}'),
+(2, 'Smart Phone', 2, 2, '2023-01-02', (103), '{\"price\":800,\"warranty\":\"1 year\"}'),
+(3, 'Tablet Device', 1, 1, '2023-01-03', (101,104), '{\"price\":450,\"warranty\":\"1 year\"}'),
+(4, 'Monitor Display', 3, 1, '2023-01-04', (105), '{\"price\":300,\"warranty\":\"1 year\"}');
+-->
+
 <!-- request SQL -->
 ```sql
 SELECT orders.product, name, orders.details.price, orders.tags
@@ -709,13 +755,16 @@ POST /search
   "query":  {
       "bool": {
           "must": [
-          {
+            {
               "range": {
                   "orders.details.price": {
                       "gt": 500
                   }
-               },
+               }
+             },
+             {
                "query_string": "alice | bob"
+             }
           ]
       }
   },

@@ -275,10 +275,18 @@ public:
 	}
 
 	/// get bool option value by key and default value
-	bool GetBool ( const char * sKey, bool bDefault = true ) const
+	bool GetBool ( const char * szKey, bool bDefault = true ) const noexcept
 	{
-		CSphVariant * pEntry = ( *this ) ( sKey );
-		return pEntry ? (pEntry->intval ()!=0) : bDefault;
+		return OptBool (szKey).value_or(bDefault);
+	}
+
+	/// get bool option value by key, if any
+	std::optional<bool> OptBool ( const char * sKey ) const noexcept
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval()>0;
 	}
 
 	/// get size option (plain int, or with K/M suffix) value by key and default value

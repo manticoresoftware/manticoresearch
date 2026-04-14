@@ -20,6 +20,15 @@ SELECT ... ORDER BY
 {attribute_name | expr_alias | weight() | random() } [ASC | DESC]
 ```
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(a int, b int, f text);
+INSERT INTO test (a, b, f) VALUES
+(2, 3, 'document');
+-->
+
 <!-- example alias -->
 
 在排序子句中，可以使用最多5列的任意组合，每列后跟`asc`或`desc`。排序子句不允许使用函数和表达式作为参数，除非是`weight()`和`random()`函数（后者只能通过SQL以`ORDER BY random()`的形式使用）。但是，可以在SELECT列表中使用任何表达式并按其别名排序。
@@ -36,6 +45,42 @@ select *, a + b alias from test order by alias desc;
 +------+------+------+----------+-------+
 |    1 |    2 |    3 | document |     5 |
 +------+------+------+----------+-------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test",
+  "expressions": {
+    "alias": "a+b"
+  },
+  "sort": {"alias":"desc"}
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->

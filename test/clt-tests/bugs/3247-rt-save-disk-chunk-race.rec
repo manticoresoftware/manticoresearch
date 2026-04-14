@@ -34,13 +34,11 @@ mysql -h0 -P2306 -e "join cluster test at '127.0.0.1:1312';"
 timeout 30 bash -c 'while ! mysql -h0 -P2306 -e "SHOW TABLES;" 2>/dev/null | grep -q "t2"; do sleep 1; done'
 ––– output –––
 ––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES;"
+mysql -h0 -P2306 -e "SHOW TABLES\G"
 ––– output –––
-+-------+------+
-| Table | Type |
-+-------+------+
-| t2    | rt   |
-+-------+------+
+*************************** 1. row ***************************
+Table: t2
+ Type: rt
 ––– input –––
 mysql -h0 -P1306 -e "insert into test:t2(id,idd,tag,f1) values(900000001,900000001,777,'join-cluster-sst-ok')"
 ––– output –––
@@ -48,11 +46,10 @@ mysql -h0 -P1306 -e "insert into test:t2(id,idd,tag,f1) values(900000001,9000000
 timeout 30 bash -c "while ! mysql -N -h0 -P2306 -e \"select count(*) from t2 where idd=900000001\" 2>/dev/null | grep -qx 1; do sleep 1; done"
 ––– output –––
 ––– input –––
-mysql -sN -h0 -P2306 -e "select count(*) from t2 where idd=900000001"
+mysql -sN -h0 -P2306 -e "select count(*) from t2 where idd=900000001\G"
 ––– output –––
-+------+
-|    1 |
-+------+
+*************************** 1. row ***************************
+1
 ––– input –––
 pkill -f manticore-load
 ––– output –––

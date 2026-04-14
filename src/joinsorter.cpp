@@ -148,6 +148,8 @@ bool SplitJoinedAttrName ( const CSphString & sJoinedAttr, CSphString & sTable, 
 	sTable = dAttr[0];
 	sAttr = Vec2Str ( dAttr.Slice ( 1, dAttr.GetLength()-1 ), "." );
 
+	sTable.ToLower();
+
 	if ( !sAttr.Length() )
 	{
 		if ( pError )

@@ -1780,6 +1780,9 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	{
 		ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
 		FixupSystemTableW ( dIdxNames, tQuery );
+		for ( auto & sIndex : dIdxNames )
+			CanonicalizeIndexName ( sIndex );
+		CanonicalizeIndexName ( tQuery.m_sJoinIdx );
 	}
 
 	const int iQueries = m_dNQueries.GetLength ();

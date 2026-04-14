@@ -974,6 +974,7 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 	}
 
 	tStmt.m_sIndex = tIndex.StrVal();
+	tStmt.m_sIndex.ToLower();
 	tStmt.m_tQuery.m_sIndexes = tStmt.m_sIndex;
 
 	const char * sIndexStart = strchr ( tStmt.m_sIndex.cstr(), ':' );

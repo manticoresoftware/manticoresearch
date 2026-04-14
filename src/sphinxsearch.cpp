@@ -4081,8 +4081,6 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 				return true;
 
 			// Rebind field-length iterators for the currently active columnar storage before ranking matches.
-			m_dFieldLenIters.Resize ( m_iFields );
-
 			for ( int iAttr = 0, iField = 0; iAttr < m_pSchema->GetAttrsCount() && iField < m_iFields; iAttr++ )
 			{
 				const auto & tAttr = m_pSchema->GetAttr(iAttr);

@@ -199,13 +199,15 @@ protected:
 	CSphVector<float>	m_dAnchor;
 	CSphColumnInfo		m_tAttr;
 	bool				m_bUseAttribute = false;
+	const BYTE *		m_pBlobPool = nullptr;
+	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 
 	float				CalcDist ( const CSphMatch & tMatch ) const;
 
 private:
 	std::unique_ptr<knn::Distance_i>	m_pDistCalc;
-	const BYTE *						m_pBlobPool = nullptr;
-	std::unique_ptr<columnar::Iterator_i> m_pIterator;
+	knn::Distance_i::DistFunc_fn		m_fnDistFunc = nullptr;
+	void *								m_pDistFuncParam = nullptr;
 
 	util::Span_T<const  knn::DocDist_t>	m_dData;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
@@ -221,6 +223,9 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 	tDistSettings.m_eQuantization = knn::Quantization_e::NONE; // we operate on non-quantized data
 	CSphString sError; // fixme! report it
 	m_pDistCalc = CreateKNNDistanceCalc ( tDistSettings, sError );
+	assert ( m_pDistCalc );
+	m_fnDistFunc = m_pDistCalc->GetDistFunc();
+	m_pDistFuncParam = m_pDistCalc->GetDistFuncParam();
 
 	SetAnchor(dAnchor);
 }
@@ -299,11 +304,12 @@ float Expr_KNNDist_c::CalcDist ( const CSphMatch & tMatch ) const
 	else
 		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
-	VecTraits_T<float> dData ( (float*)tRes.first, tRes.second / sizeof(float) );
-	if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
+	size_t uDim = tRes.second / sizeof(float);
+	if ( (int)uDim!=m_tAttr.m_tKNN.m_iDims )
 		return FLT_MAX;
 
-	return m_pDistCalc->CalcDist ( { dData.Begin(), (size_t)dData.GetLength() }, { m_dAnchor.Begin(), (size_t)m_dAnchor.GetLength() } );
+	assert ( m_fnDistFunc );
+	return m_fnDistFunc ( tRes.first, m_dAnchor.Begin(), (size_t)-1, (size_t)-1, m_pDistFuncParam );
 }
 
 
@@ -325,6 +331,7 @@ public:
 	float		Eval ( const CSphMatch & tMatch ) const override	{ return CalcDist(tMatch); }
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
 	bool		IsColumnar ( bool * pStored ) const final			{ return m_tAttr.IsColumnar(); }
+	bool		PrefersRowIdOrder() const final						{ return true; }
 
 protected:
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;

@@ -1,5 +1,5 @@
 –––– comment –––
-Test verifies that RT table locking functions wait for active disk chunk write completion and prevent changes after table lock
+Test verifies the actual issue 3247 reproducer: joining a cluster while heavy RT writes are in flight must succeed, create the table on the joiner, and keep replication usable.
 
 ––– input –––
 export INSTANCE=1
@@ -42,27 +42,17 @@ mysql -h0 -P2306 -e "SHOW TABLES;"
 | t2    | rt   |
 +-------+------+
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLE t2 STATUS\G" | grep -A1 -E "ram_bytes|disk_bytes"
+mysql -h0 -P1306 -e "insert into test:t2(id,idd,tag,f1) values(900000001,900000001,777,'join-cluster-sst-ok')"
 ––– output –––
-Variable_name: ram_bytes
-        Value: %{NUMBER}
---
-Variable_name: disk_bytes
-        Value: %{NUMBER}
---
-Variable_name: ram_bytes_retired
-        Value: %{NUMBER}
 ––– input –––
-mysql -h0 -P2306 -e "SHOW TABLE t2 STATUS\G" | grep -A1 -E "ram_bytes|disk_bytes"
+timeout 30 bash -c "while ! mysql -N -h0 -P2306 -e \"select count(*) from t2 where idd=900000001\" 2>/dev/null | grep -qx 1; do sleep 1; done"
 ––– output –––
-Variable_name: ram_bytes
-        Value: %{NUMBER}
---
-Variable_name: disk_bytes
-        Value: %{NUMBER}
---
-Variable_name: ram_bytes_retired
-        Value: 0
+––– input –––
+mysql -sN -h0 -P2306 -e "select count(*) from t2 where idd=900000001"
+––– output –––
++------+
+|    1 |
++------+
 ––– input –––
 pkill -f manticore-load
 ––– output –––

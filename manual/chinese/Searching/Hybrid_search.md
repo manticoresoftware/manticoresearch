@@ -69,6 +69,8 @@ POST /search
 
 这会将文本搜索和 KNN 搜索作为独立的并行子查询运行，然后使用 RRF 融合结果。如果没有 `fusion_method='rrf'`，查询会作为常规 KNN 搜索运行，仅通过文本匹配进行过滤（预混合行为）。
 
+在该预混合模式下，KNN 排名仍优先。如果 `knn_dist()` 可用且未显式按其排序，Manticore 会在排序顺序前添加 `knn_dist() ASC`。实际上，`ORDER BY weight() DESC` 成为次要的平局打破者，而非全局 BM25 排序。
+
 ### 可用函数
 
 - [`hybrid_score()`](../Functions/Other_functions.md#HYBRID_SCORE%28%29) - RRF 融合分数（仅在混合查询中可用）
@@ -169,6 +171,8 @@ POST /search
 ## 排序
 
 默认情况下，结果按 `hybrid_score() DESC` 排序。您可以覆盖此设置：
+
+本节适用于真正的混合查询，即使用 `OPTION fusion_method='rrf'` 的查询。没有 `fusion_method='rrf'`，包含 `KNN(...)` 的查询不会被融合，仍保持 KNN 优先，因此 `ORDER BY weight() DESC` 不会产生全局按权重排序的结果集。
 
 <!-- example hybrid_sorting -->
 

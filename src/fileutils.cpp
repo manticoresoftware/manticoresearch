@@ -187,6 +187,26 @@ CSphIOStats * GetIOStats()
 
 //////////////////////////////////////////////////////////////////////////
 
+namespace
+{
+	std::atomic<uint64_t> m_uGlobalWritten {0};
+}
+
+void GlobalWrite ( int iWritten ) noexcept
+{
+	if ( !iWritten )
+		return;
+
+	m_uGlobalWritten.fetch_add ( iWritten, std::memory_order_relaxed );
+}
+
+uint64_t GlobalWritten () noexcept
+{
+	return m_uGlobalWritten.load ( std::memory_order_relaxed );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 bool CSphSavedFile::Collect ( const char * szFilename, CSphString * pError )
 {
 	if ( !szFilename || !*szFilename )

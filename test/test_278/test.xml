@@ -48,6 +48,9 @@ select * from join2 order by id asc;
 <!-- plain join -->
 select id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by id asc;
 
+<!-- plain join with left table prefix in SELECT (allowed) -->
+select join1.id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by join1.id asc;
+
 <!-- plain join -->
 select id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
 

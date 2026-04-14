@@ -61,6 +61,28 @@ batch=50
 Query OK, 2 rows affected (0.02 sec)
 ```
 
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CREATE SOURCE kafka (id bigint, term text, abbrev '$abbrev' text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='2' batch=50"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 #### Options
@@ -96,6 +118,28 @@ CREATE TABLE destination_kafka
 
 ```
 Query OK, 0 rows affected (0.02 sec)
+```
+
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi)"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->
@@ -181,6 +225,40 @@ SHOW SOURCES
 +-------+
 ```
 
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW SOURCES"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "name": "kafka"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example kafka_create_source -->
@@ -212,6 +290,46 @@ SHOW SOURCE kafka;
 +--------+-------------------------------------------------------------------+
 ```
 
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW SOURCE kafka"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Source": {
+          "type": "string"
+        }
+      },
+      {
+        "Create Table": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Source": "kafka",
+        "Create Table": "CREATE SOURCE kafka \n(id bigint, term text, abbrev '' text, GlossDef json)\ntype='kafka'\nbroker_list='kafka:9092'\ntopic_list='my-data'\nconsumer_group='manticore'\nnum_consumers='2'\n batch=50"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 <!-- example kafka_view -->
@@ -234,6 +352,40 @@ SHOW MVS
 +------------+
 | view_table |
 +------------+
+```
+
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW MVS"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "name": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "name": "view_table"
+      }
+    ]
+  }
+]
 ```
 
 <!-- end -->
@@ -262,6 +414,52 @@ SHOW MV view_table
 +------------+--------------------------------------------------------------------------------------------------------+-----------+
 ```
 
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW MV view_table"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "View": {
+          "type": "string"
+        }
+      },
+      {
+        "Create Table": {
+          "type": "string"
+        }
+      },
+      {
+        "suspended": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "View": "view_table",
+        "Create Table": "CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka",
+        "suspended": 0
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 ### Altering materialized views
@@ -288,6 +486,28 @@ ALTER MATERIALIZED VIEW view_table suspended=1
 
 ```sql
 Query OK (0.02 sec)
+```
+
+<!-- intro -->
+
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "ALTER MATERIALIZED VIEW view_table suspended=1"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- end -->

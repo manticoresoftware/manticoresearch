@@ -132,7 +132,15 @@ The options available to `searchd` in all operating systems are:
 
 * `--safetrace` forces `searchd` to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
 
-* `--nodetach` switch (Linux only) tells `searchd` not to detach into the background. This will also cause log entries to be printed out to the console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a Docker container to capture its output.
+*   `--nodetach` (Linux only): Prevents `searchd` from detaching into the background. In this mode, log entries are printed directly to the console. Query processing remains unaffected. This option is intended for debugging or for capturing output when running Manticore in a Docker container.
+
+*   `--watchdog` (Linux only): Enables the internal [watchdog](Server_settings/Searchd.md#watchdog), overriding any settings in the configuration file. Note that `--watchdog` is incompatible with foreground mode; if `--console` or `--nodetach` is used, the watchdog is implicitly disabled, and a warning is issued.
+
+*   `--no-watchdog` (Linux only): Disables the internal [watchdog](Server_settings/Searchd.md#watchdog). This overrides any settings in the configuration file and is equivalent to setting `watchdog=0` in the config.
+
+*   `--systemd` (Linux only): Forces `searchd` to operate as if it were managed by systemd. By default, `searchd` checks whether it can notify systemd of its state; if communication is possible, it assumes systemd management. In this mode, the watchdog is disabled (unless explicitly enabled) and the `pid_file` configuration is not strictly required. This option explicitly forces systemd management mode.
+
+*   `--no-systemd` (Linux only): Disables systemd management mode and prevents `searchd` from assuming any external management. Consequently, the process runs with the watchdog enabled (unless explicitly disabled) and writes its PID to the file specified by the `pid_file` option in the configuration.
 
 ### Windows options
 

@@ -15098,9 +15098,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// check port and listen arguments early
 	if ( !g_bOptNoDetach && ( bOptPort || bOptListen ) )
 	{
-		sphWarning ( "--listen and --port are only allowed in --console debug mode; switch ignored" );
+		sphWarning ( "--listen and --port are only allowed in --nodetach or --console debug mode; switch ignored" );
 		bOptPort = bOptListen = false;
 	}
+
+	if ( g_bOptNoDetach && g_tWatchdog.value_or ( false ) )
+		sphWarning ( "--watchdog is not allowed in foreground mode (--console, --nodetach); switch ignored" );
 
 	if ( bOptPort )
 	{

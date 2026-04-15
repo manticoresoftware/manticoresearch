@@ -14950,6 +14950,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bOptStopWait = false;
 	bool			bOptStatus = false;
 	bool			bOptPIDFile = false;
+	bool			bNeedPIDFile = false; // if daemon explicitly run with --pid-file cmdline option
 	bool			bHasPIDFile = false;
 	StrVec_t		dOptIndexes; // indexes explicitly pointed in cmdline options
 
@@ -14995,7 +14996,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
-		OPT1 ( "--pidfile" )		bOptPIDFile = true;
+		OPT1 ( "--pidfile" )		bNeedPIDFile = true;
 		OPT1 ( "--iostats" )		SetIOStats();
 		OPT1 ( "--cpustats" )		SetCPUStats();
 		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
@@ -15158,7 +15159,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( g_bSystemd )
 		sphInfo ( "Systemd assistance: yes" );
 
-	ConfigureSearchd ( hConf, bOptPIDFile && !g_bSystemd, bTestMode );
+	ConfigureSearchd ( hConf, bNeedPIDFile || ( bOptPIDFile && !g_bSystemd ), bTestMode );
+	bOptPIDFile |= bNeedPIDFile;
 	g_sExePath = sphGetCwd();
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();

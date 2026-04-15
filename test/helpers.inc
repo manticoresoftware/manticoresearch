@@ -648,7 +648,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	$no_pseudo_sharding = isset ($requirements["no_pseudo_sharding"]) && $requirements["no_pseudo_sharding"];
 
 	if ( !$use_watchdog )
-		$extra_params .= ' --test-mode';
+		$extra_params .= ' --test';
 
 	if ( !$no_pseudo_sharding )
 		$extra_params .= ' --force-pseudo-sharding';

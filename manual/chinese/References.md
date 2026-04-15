@@ -546,6 +546,7 @@ searchd [OPTIONS]
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止Manticore服务器
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - 优雅地停止Manticore服务器
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - 从表中引用的所有文件名中删除路径名
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - 检查配置文件并退出
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - 显示版本信息
 
 ##### Searchd 环境变量

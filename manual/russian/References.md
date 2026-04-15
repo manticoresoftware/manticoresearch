@@ -546,6 +546,7 @@ searchd [OPTIONS]
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Останавливает сервер Manticore
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Корректно останавливает сервер Manticore
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Удаляет имена путей из всех имен файлов, на которые ссылается таблица
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - Проверяет файл конфигурации и завершает работу
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Отображает информацию о версии
 
 ##### Переменные окружения searchd

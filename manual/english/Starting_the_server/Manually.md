@@ -18,6 +18,7 @@ The options available to `searchd` in all operating systems are:
 * `--version` (`-v` for short) shows Manticore Search version information.
 * `--quiet` (`-q` for short) suppresses startup output except errors (banner and precache messages).
 * `--config <file>` (`-c <file>` for short) tells `searchd` to use the specified file as its configuration.
+* `--check` checks the configuration file, verifies that the server can start with it, then exits. It prints `OK` and exits with code 0 if the check succeeds. If the check fails, it exits with code 1 and prints the same error that `searchd` would print during a regular startup.
 * `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
 
     ```bash

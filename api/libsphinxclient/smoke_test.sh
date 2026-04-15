@@ -40,7 +40,7 @@ cmd "make" "make failed"
 
 
 cmd "../../src/indexer -c smoke_test.conf --all" "indexing failed"
-cmd "../../src/searchd -c smoke_test.conf --test-mode" "searchd start failed"
+cmd "../../src/searchd -c smoke_test.conf --test" "searchd start failed"
 cmd "sleep 1s"
 cmd "./test --smoke --port 10312>$RES" "test --smoke --port 10312 failed"
 cmd "../../src/searchd -c smoke_test.conf --stop" "searchd stop failed"

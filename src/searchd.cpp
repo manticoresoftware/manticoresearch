@@ -13678,6 +13678,7 @@ void ShowHelp ()
 		"-q, --quiet\t\tonly print errors on startup\n"
 		"-c, --config <file>\tread configuration from specified file\n"
 		"\t\t\t(default is manticore.conf)\n"
+		"--test\t\t\tcheck config and exit\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
 		"--status\t\tget ant print status variables\n"
@@ -13729,7 +13730,7 @@ void ShowHelp ()
 static bool HasQuietFlag ( int argc, char ** argv )
 {
 	for ( int i = 1; i < argc; ++i )
-		if ( !strcmp ( argv[i], "-q" ) || !strcmp ( argv[i], "--quiet" ) )
+		if ( !strcmp ( argv[i], "-q" ) || !strcmp ( argv[i], "--quiet" ) || !strcmp ( argv[i], "--test" ) )
 			return true;
 
 	return false;
@@ -14958,6 +14959,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CSphString		sOptListen;
 	bool			bOptListen = false;
 	bool			bTestMode = false;
+	bool			bConfigTest = false;
 	bool			bOptDebugQlog = true;
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
@@ -15012,7 +15014,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
 		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
-		OPT1 ( "--test" )			{ bTestMode = true; } // internal option, do NOT document
+		OPT1 ( "--test" )			{ bConfigTest = true; bTestMode = true; g_bOptNoDetach = true; }
+		OPT1 ( "--test-mode" )		{ bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
@@ -15571,6 +15574,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 		if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
 			sphSetSockTFO ( dListener.m_iSock );
+	}
+
+	if ( bConfigTest )
+	{
+		fprintf ( stdout, "OK\n" );
+		fflush ( stdout );
+		Shutdown();
+		return 0;
 	}
 
 	g_pTickPoolThread = MakeThreadPool ( g_iNetWorkers, "TickPool" );

@@ -14110,7 +14110,7 @@ static void ConfigureMerge ( const CSphConfigSection & hSearchd )
 }
 
 
-void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode ) REQUIRES ( MainThread )
+void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestMode ) REQUIRES ( MainThread )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
@@ -14118,7 +14118,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 	sphCheckDuplicatePaths ( hConf );
 
-	if ( bOptPIDFile )
+	if ( bNeedPIDFile )
 		if ( !hSearchd ( "pid_file" ) )
 			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
 
@@ -14950,6 +14950,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bOptStopWait = false;
 	bool			bOptStatus = false;
 	bool			bOptPIDFile = false;
+	bool			bHasPIDFile = false;
 	StrVec_t		dOptIndexes; // indexes explicitly pointed in cmdline options
 
 	int				iOptPort = 0;
@@ -15153,7 +15154,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
-	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+	g_bSystemd = 1==sd::status("Starting...");
+	if ( g_bSystemd )
+		sphInfo ( "Systemd assistance: yes" );
+
+	ConfigureSearchd ( hConf, bOptPIDFile && !g_bSystemd, bTestMode );
 	g_sExePath = sphGetCwd();
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();
@@ -15170,9 +15175,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	bool bVisualLoad = true;
 	bool bWatched = false;
-	g_bSystemd = 1==sd::status("Starting...");
-	if ( g_bSystemd )
-		sphInfo ( "Systemd assistance: yes" );
+
 
 #if !_WIN32
 	// Let us start watchdog right now, on foreground first.
@@ -15195,8 +15198,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 
 	// here we either since plain startup, either being resurrected (forked) by watchdog.
-	// create the pid
 	if ( bOptPIDFile )
+		bHasPIDFile = !!hSearchdpre("pid_file");
+
+	// create the pid
+	if ( bHasPIDFile )
 	{
 		g_sPidFile = hSearchdpre["pid_file"].cstr();
 		FixPathAbsolute ( g_sPidFile );
@@ -15205,7 +15211,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		if ( g_iPidFD<0 )
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile.scstr(), strerrorm(errno) );
 	}
-	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
+	if ( bHasPIDFile && !sphLockEx ( g_iPidFD, false ) )
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile.scstr(), strerrorm(errno) );
 
 	g_bPidIsMine = true;
@@ -15230,7 +15236,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				sphFatal ( "%s", sError.cstr() );
 
 			sphInfo ( "Reconfigure the daemon" );
-			ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+			ConfigureSearchd ( hConf, bHasPIDFile, bTestMode );
 		}
 	}
 
@@ -15428,7 +15434,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 	}
 
-	if ( bOptPIDFile && !bWatched )
+	if ( bHasPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
 	Binlog::Configure ( hSearchd, uReplayFlags );
@@ -15437,7 +15443,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	InitSkipCache ( g_iSkipCache );
 	InitParserOption();
 
-	if ( bOptPIDFile )
+	if ( bHasPIDFile )
 	{
 #if !_WIN32
 		// re-lock pid

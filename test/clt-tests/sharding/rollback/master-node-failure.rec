@@ -1,0 +1,66 @@
+Test that cluster survives node failure and maintains quorum (rollback/HA behavior)
+
+––– comment –––
+Start 3-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Create table with RF=2 (each shard has 2 copies) - auto-sharding creates cluster c
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE c:data (id bigint, value string) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– input –––
+sleep 5; mysql -h0 -P1306 -e "INSERT INTO data (id, value) VALUES (1, 'test_value')"; echo $?
+––– output –––
+0
+––– comment –––
+Kill node 1
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 killed"
+––– output –––
+Node 1 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+Verify remaining 2 nodes are still synced after failure
+––– input –––
+for port in 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: synced"; done
+––– output –––
+Port 2306: synced
+Port 3306: synced
+––– comment –––
+Restart killed node
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for node 1 to rejoin
+––– input –––
+sleep 15; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_status'\\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_c_status
+  Value: primary
+––– comment –––
+Verify all 3 nodes synced again after recovery
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: synced"; done
+––– output –––
+Port 1306: synced
+Port 2306: synced
+Port 3306: synced

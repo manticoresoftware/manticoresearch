@@ -1,0 +1,40 @@
+Test that cluster maintains RF when creating tables on multi-node cluster
+
+––– comment –––
+Start 3-node cluster with RF=2
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Create table with RF=2 on 3-node cluster
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE c:items (id bigint, name string) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO items (id, name) VALUES (1, 'Item1'), (2, 'Item2'), (3, 'Item3')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify all 3 nodes still synced after table creation
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: synced"; done
+––– output –––
+Port 1306: synced
+Port 2306: synced
+Port 3306: synced
+––– comment –––
+Verify shards distributed to nodes (2 shards with RF=2 means 4 total copies)
+––– input –––
+mysql -h0 -P1306 -e "show tables from system\\G" | grep -E 'items_s[0-9]' | wc -l
+––– output –––
+2

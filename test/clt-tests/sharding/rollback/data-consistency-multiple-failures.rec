@@ -1,0 +1,149 @@
+Test data consistency after multiple sequential node failures - validates rollback preserves data integrity
+
+––– comment –––
+Start 3-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create table with RF=2 for data consistency test
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:${TABLE_NAME} (id bigint, account string, amount float, ts int) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert initial batch of data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${TABLE_NAME} (id, account, amount, ts) VALUES (1, 'ACC001', 100.50, 1000), (2, 'ACC002', 200.75, 2000), (3, 'ACC003', 150.25, 3000), (4, 'ACC001', 300.00, 4000), (5, 'ACC002', 250.50, 5000)"; echo $?
+––– output –––
+0
+––– comment –––
+Record initial data state
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
+––– output –––
+5	1002.000000
+––– comment –––
+Kill node 1 - first failure
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 killed"
+––– output –––
+Node 1 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{2,3}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Verify remaining nodes 2+3 maintain quorum
+––– input –––
+for i in 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Insert more data during failure state
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO ${TABLE_NAME} (id, account, amount, ts) VALUES (6, 'ACC003', 175.00, 6000), (7, 'ACC001', 225.75, 7000)"; echo $?
+––– output –––
+0
+––– comment –––
+Restart node 1
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for node 1 to rejoin
+––– input –––
+sleep 2
+––– output –––
+––– comment –––
+Check that cluster is synced
+––– input –––
+for i in 1 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Kill node 2 - second failure (quorum maintained by nodes 1+3)
+––– input –––
+export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 2 killed"
+––– output –––
+Node 2 killed
+––– comment –––
+Wait to be sure port is gone
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+If grep fails due to missing string or timeout, return non-zero
+––– input –––
+timeout 10 grep -qm1 'becoming master' <(tail -n 1000 -f /var/log/manticore-{1,3}/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Verify nodes 1+3 maintain quorum
+––– input –––
+for i in 1 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+Restart node 2
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for node 2 to rejoin and verify all nodes synced
+––– input –––
+sleep 2
+––– output –––
+––– comment –––
+Check that cluster is synced
+––– input –––
+for i in 1 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+CRITICAL: Verify data consistency - all records present, no data loss
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"
+––– output –––
+7	1402.75
+––– comment –––
+Verify data consistency across all nodes
+––– input –––
+for port in 1306 2306 3306; do echo "Node $port:"; mysql -h0 -P$port -sN -e "SELECT COUNT(*), SUM(amount) FROM ${TABLE_NAME}"; done
+––– output –––
+Node 1306:
+7	1402.75
+Node 2306:
+7	1402.75
+Node 3306:
+7	1402.75
+––– comment –––
+Cleanup
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS ${TABLE_NAME}"; echo $?
+––– output –––
+0
+

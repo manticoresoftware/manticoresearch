@@ -449,6 +449,22 @@ timeout 300 bash /tmp/grafana-single-test.sh 12.4
 ✓ WHERE clause works
 ✓ Grafana version 12.4 tested successfully
 ––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 13.0
+––– output –––
+>>> Testing Grafana version: 13.0
+✓ Manticore Search available
+✓ Grafana 13.0 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 13.0 tested successfully
+––– input –––
 rm -f /tmp/grafana-single-test.sh
 ––– output –––
 ––– comment –––

@@ -3,18 +3,71 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
-  workflow_run:
-    workflows: 
-      - 📖 Trigger doc check
-    types:
-      - completed
+    inputs:
+      repo:
+        description: Repository to check out for docs validation
+        required: false
+        type: string
+      ref:
+        description: Ref to check out for docs validation
+        required: false
+        type: string
+      run_translation:
+        description: Whether to run translation before docs checks
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Repository to check out for docs validation
+        required: true
+        type: string
+      ref:
+        description: Ref to check out for docs validation
+        required: true
+        type: string
+      run_translation:
+        description: Whether to run translation before docs checks
+        required: false
+        default: true
+        type: boolean
 
 jobs:
-  translate_docs:
+  resolve_target:
     runs-on: ubuntu-24.04
     outputs:
       repo: ${{ steps.repo-check.outputs.repo }}
       ref: ${{ steps.repo-check.outputs.ref }}
+      run_translation: ${{ steps.translation-check.outputs.run_translation }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check origin repository
+        id: repo-check
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            repo="${{ inputs.repo }}"
+            ref="${{ inputs.ref }}"
+          elif [ -n "${{ inputs.repo }}" ]; then
+            repo="${{ inputs.repo }}"
+            ref="${{ inputs.ref }}"
+          else
+            repo="${{ github.repository }}"
+            ref="${{ github.head_ref || github.ref_name }}"
+          fi
+          echo "repo=$repo" >> $GITHUB_OUTPUT
+          echo "ref=$ref" >> $GITHUB_OUTPUT
+      - name: Decide whether to run translation
+        id: translation-check
+        run: |
+          echo "run_translation=${{ inputs.run_translation != false }}" >> $GITHUB_OUTPUT
+
+  translate_docs:
+    needs: resolve_target
+    if: needs.resolve_target.outputs.run_translation == 'true'
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       pull-requests: read
@@ -22,35 +75,14 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Download an artifact with PR repo name
-        if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-          name: pr_repo
-          path: .
-      - name: Check origin repository
-        id: repo-check
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            PR_REPO=$(cat ./pr_repo.txt)
-            repo=$(head -n 1 <<< "$PR_REPO")
-            ref=$(tail -n 1 <<< "$PR_REPO")
-          else
-            repo="${{ github.repository }}"
-            ref="${{ github.head_ref }}"
-          fi
-          echo "repo=$repo" >> $GITHUB_OUTPUT
-          echo "ref=$ref" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          repository: ${{ steps.repo-check.outputs.repo }}
+          repository: ${{ needs.resolve_target.outputs.repo }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
-          ref: ${{ steps.repo-check.outputs.ref }}
+          ref: ${{ needs.resolve_target.outputs.ref }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -88,7 +120,8 @@ jobs:
           fi
 
   docs_check:
-    needs: translate_docs
+    needs: [resolve_target, translate_docs]
+    if: always() && (needs.translate_docs.result == 'success' || needs.translate_docs.result == 'skipped')
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -107,30 +140,14 @@ jobs:
         GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
 
     steps:
-      - name: Check origin repository
-        id: repo-check
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            repo="${{ needs.translate_docs.outputs.repo }}"
-            ref="${{ needs.translate_docs.outputs.ref }}"
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            repo="${{ github.event.pull_request.head.repo.full_name }}"
-            ref="${{ github.head_ref }}"
-          else
-            repo="${{ github.repository }}"
-            ref="${{ github.head_ref || github.ref_name }}"
-          fi
-          echo "repo=$repo" >> $GITHUB_OUTPUT
-          echo "ref=$ref" >> $GITHUB_OUTPUT
-
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          repository: ${{ steps.repo-check.outputs.repo }}
+          repository: ${{ needs.resolve_target.outputs.repo }}
           token: ${{ secrets.GITHUB_TOKEN }}
           submodules: true
-          ref: ${{ steps.repo-check.outputs.ref }}
+          ref: ${{ needs.resolve_target.outputs.ref }}
 
       - name: Fetch master and get changed files
         id: changed-files

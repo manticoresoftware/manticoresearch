@@ -91,6 +91,12 @@ When creating a table for auto embeddings, specify:
 - `API_URL`: Optional. Custom API endpoint URL. If not specified, uses the default provider endpoint (e.g., `https://api.openai.com/v1/embeddings` for OpenAI).
 - `API_TIMEOUT`: Optional. HTTP timeout in seconds for API requests. Default is 10 seconds. Set to `'0'` to use the default timeout. Applies to both validation requests during table creation and embedding generation during INSERT operations.
 
+For remote models, `MODEL_NAME` can be written in two forms:
+- Legacy provider-prefixed form: `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v4`
+- Explicit provider-signal form for custom endpoints: `openai:text-embedding-ada-002`, `openai:openai/text-embedding-ada-002`, `voyage:custom-model`, `jina:custom-model`
+
+When you use the `provider:model` form together with `API_URL`, the part before `:` only selects the request format. The part after `:` is sent to the remote endpoint unchanged. This is useful for OpenAI-compatible gateways such as OpenRouter or LiteLLM.
+
 **Supported embedding models:**
 | Model Type | Example | API Key Required | Notes |
 |------------|---------|-----------------|-------|
@@ -99,9 +105,9 @@ When creating a table for auto embeddings, specify:
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | No | Local Llama family models |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | No | Local Mistral family models |
 | **Gemma** | `h2oai/embeddinggemma-300m` | No | Local Gemma family models |
-| **OpenAI** | `openai/text-embedding-ada-002` | Yes | `API_KEY='<OPENAI_API_KEY>'` |
-| **Voyage** | Voyage AI models | Yes | `API_KEY='<VOYAGE_API_KEY>'` |
-| **Jina** | Jina AI models | Yes | `API_KEY='<JINA_API_KEY>'` |
+| **OpenAI** | `openai/text-embedding-ada-002` or `openai:text-embedding-ada-002` | Yes | `API_KEY='***'` |
+| **Voyage** | `voyage/voyage-3.5-lite` or `voyage:voyage-3.5-lite` | Yes | `API_KEY='***'` |
+| **Jina** | `jina/jina-embeddings-v4` or `jina:jina-embeddings-v4` | Yes | `API_KEY='***'` |
 
 **Local model format requirements:**
 - Must be saved in `safetensors` format (single-file only)
@@ -145,15 +151,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
 ```
-
 Using OpenAI with custom API URL and timeout (optional)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
-    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Using an OpenAI-compatible gateway that expects a provider-qualified model ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

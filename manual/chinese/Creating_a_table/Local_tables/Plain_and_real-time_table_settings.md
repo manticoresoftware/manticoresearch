@@ -502,11 +502,13 @@ knn = {"attrs":[{"name":"embedding_vector","type":"hnsw","hnsw_similarity":"L2",
 - `hnsw_ef_construction`：构建时间/准确性权衡（默认：200）
 
 **自动嵌入参数**（当使用 `model_name` 时）：
-- `model_name`：使用的嵌入模型（例如，`"sentence-transformers/all-MiniLM-L6-v2"`、`"openai/text-embedding-ada-002"`）。指定后，`dims` 必须省略，因为模型会自动确定维度。
+- `model_name`：使用的嵌入模型（例如，`"sentence-transformers/all-MiniLM-L6-v2"`、`"openai/text-embedding-ada-002"`、`"openai:text-embedding-ada-002"`）。当指定时，必须省略`dims`，因为模型会自动确定维度。
 - `from`：用于生成嵌入的字段名称列表（逗号分隔），或空字符串 `""` 表示使用所有文本/字符串字段。当指定 `model_name` 时，此参数是必需的。
 - `api_key`：基于 API 的模型（OpenAI、Voyage、Jina）的 API 密钥。仅在使用基于 API 的嵌入服务时需要。
 - `cache_path`：下载模型的缓存路径（用于 sentence-transformers 模型）。
 - `use_gpu`：可选布尔值，如果可用则启用 GPU 加速。
+
+对于自定义远程端点，您可以在`model_name`中使用`provider:model`语法。在这种格式中，冒号前的部分选择请求格式，冒号后的部分原样发送到远程端点。
 
 **重要：** 在同一配置中不能同时指定 `dims` 和 `model_name`，它们是互斥的。使用 `dims` 进行手动向量插入，或使用 `model_name` 进行自动嵌入。使用 `dims` 进行手动向量插入，或使用 `model_name` 进行自动嵌入。
 

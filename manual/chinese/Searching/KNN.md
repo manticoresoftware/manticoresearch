@@ -91,6 +91,12 @@ table test_vec {
 - `API_URL`: 可选。自定义 API 端点 URL。如果未指定，则使用默认提供程序端点（例如，OpenAI 的 `https://api.openai.com/v1/embeddings`）。
 - `API_TIMEOUT`: 可选。API 请求的 HTTP 超时时间（以秒为单位）。默认为 10 秒。设置为 `'0'` 以使用默认超时。适用于表创建期间的验证请求和插入操作期间的嵌入生成。
 
+对于远程模型，`MODEL_NAME` 可以写为两种形式：
+- 传统提供者前缀形式：`openai/text-embedding-ada-002`，`voyage/voyage-3.5-lite`，`jina/jina-embeddings-v4`
+- 用于自定义端点的显式提供者信号形式：`openai:text-embedding-ada-002`，`openai:openai/text-embedding-ada-002`，`voyage:custom-model`，`jina:custom-model`
+
+当您使用 `provider:model` 形式与 `API_URL` 一起时，冒号前的部分仅选择请求格式。冒号后的内容会原样发送到远程端点。这对于 OpenAI 兼容的网关（如 OpenRouter 或 LiteLLM）很有用。
+
 **支持的嵌入模型：**
 | 模型类型 | 示例 | 需要 API 密钥 | 说明 |
 |------------|---------|-----------------|-------|
@@ -99,9 +105,9 @@ table test_vec {
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | 否 | 本地 Llama 家族模型 |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | 否 | 本地 Mistral 家族模型 |
 | **Gemma** | `h2oai/embeddinggemma-300m` | 否 | 本地 Gemma 家族模型 |
-| **OpenAI** | `openai/text-embedding-ada-002` | 是 | `API_KEY='<OPENAI_API_KEY>'` |
-| **Voyage** | Voyage AI 模型 | 是 | `API_KEY='<VOYAGE_API_KEY>'` |
-| **Jina** | Jina AI 模型 | 是 | `API_KEY='<JINA_API_KEY>'` |
+| **OpenAI** | `openai/text-embedding-ada-002` 或 `openai:text-embedding-ada-002` | 是 | `API_KEY='***'` |
+| **Voyage** | `voyage/voyage-3.5-lite` 或 `voyage:voyage-3.5-lite` | 是 | `API_KEY='***'` |
+| **Jina** | `jina/jina-embeddings-v4` 或 `jina:jina-embeddings-v4` | 是 | `API_KEY='***'` |
 
 **本地模型格式要求：**
 - 必须以 `safetensors` 格式保存（仅单文件）
@@ -145,15 +151,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
 ```
-
 使用 OpenAI 与自定义 API URL 和超时（可选）
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
-    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+使用兼容 OpenAI 的网关，该网关期望提供者限定的模型 ID
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

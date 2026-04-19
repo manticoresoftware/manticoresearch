@@ -288,28 +288,33 @@ void operator<< ( JsonEscapedBuilder& tOut, const AgentConfigDesc_t& tAgent )
 	tOut.NamedVal ( "persistent", tAgent.m_bPersistent );
 }
 
+static void SaveDist ( JsonEscapedBuilder& tOut, const IndexDescDistr_t& tDesc )
+{
+	if ( !tDesc.m_dLocals.IsEmpty() )
+	{
+		tOut.Named ( "locals" );
+		auto _ = tOut.Array();
+		for_each ( tDesc.m_dLocals, [&tOut] ( const auto& sNode ) { tOut.String ( sNode ); } );
+	}
+	if ( !tDesc.m_dAgents.IsEmpty() )
+	{
+		tOut.Named ( "agents" );
+		auto _ = tOut.Array();
+		for_each ( tDesc.m_dAgents, [&tOut] ( const auto& sNode ) { tOut << sNode; } );
+	}
+
+	tOut.NamedValNonDefault ( "agent_connect_timeout", tDesc.m_iAgentConnectTimeout, 0 );
+	tOut.NamedValNonDefault ( "agent_query_timeout", tDesc.m_iAgentQueryTimeout, 0 );
+	tOut.NamedValNonDefault ( "agent_retry_count", tDesc.m_iAgentRetryCount, 0 );
+	tOut.NamedVal ( "divide_remote_ranges", tDesc.m_bDivideRemoteRanges );
+	tOut.NamedStringNonDefault ( "ha_strategy", tDesc.m_sHaStrategy, {} );
+}
+
 void IndexDescDistr_t::Save ( JsonEscapedBuilder& tOut ) const
 {
 	auto _0 = tOut.ObjectW();
 	tOut.NamedString ( "type", GetIndexTypeName ( IndexType_e::DISTR ) );
-	if ( !m_dLocals.IsEmpty() )
-	{
-		tOut.Named ( "locals" );
-		auto _ = tOut.Array();
-		for_each ( m_dLocals, [&tOut] ( const auto& sNode ) { tOut.String ( sNode ); } );
-	}
-	if ( !m_dAgents.IsEmpty() )
-	{
-		tOut.Named ( "agents" );
-		auto _ = tOut.Array();
-		for_each ( m_dAgents, [&tOut] ( const auto& sNode ) { tOut << sNode; } );
-	}
-
-	tOut.NamedValNonDefault ( "agent_connect_timeout", m_iAgentConnectTimeout, 0 );
-	tOut.NamedValNonDefault ( "agent_query_timeout", m_iAgentQueryTimeout, 0 );
-	tOut.NamedValNonDefault ( "agent_retry_count", m_iAgentRetryCount, 0 );
-	tOut.NamedVal ( "divide_remote_ranges", m_bDivideRemoteRanges );
-	tOut.NamedStringNonDefault ( "ha_strategy", m_sHaStrategy, {} );
+	SaveDist ( tOut, *this );
 }
 
 
@@ -359,11 +364,20 @@ bool IndexDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, CS
 	if ( m_eType == IndexType_e::ERROR_ )
 		return TlsMsg::Err ( "type '%s' is invalid", sType.cstr() );
 
-	if ( m_eType != IndexType_e::DISTR )
+	if ( m_eType != IndexType_e::DISTR && m_eType != IndexType_e::SHARD )
 	{
 		m_sPath = String ( tBson.ChildByName ( "path" ) );
 		MakeRelativePath ( m_sPath );
 		return true;
+	}
+
+	if ( m_eType == IndexType_e::SHARD )
+	{
+		auto tPath = tBson.ChildByName ( "path" );
+		m_sPath = String ( tPath );
+		if ( IsNullNode ( tPath ) || m_sPath.IsEmpty() )
+			return TlsMsg::Err ( "table %s: path is missing", m_sName.cstr() );
+		MakeRelativePath ( m_sPath );
 	}
 
 	bool bParseOk = m_tDistr.Parse ( tBson, sWarning );
@@ -386,6 +400,8 @@ void IndexDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 	tOut.NamedString ("type", GetIndexTypeName ( m_eType ) );
 	CSphString sPath = m_sPath;
 	tOut.NamedString ( "path", StripPath ( sPath ) );
+	if ( m_eType == IndexType_e::SHARD )
+		SaveDist ( tOut, m_tDistr );
 }
 
 
@@ -395,6 +411,11 @@ void IndexDesc_t::Save ( CSphConfigSection & hIndex ) const
 
 	if ( m_eType==IndexType_e::DISTR )
 		m_tDistr.Save (hIndex);
+	else if ( m_eType==IndexType_e::SHARD )
+	{
+		hIndex.Add ( CSphVariant ( m_sPath.cstr() ), "path" );
+		m_tDistr.Save ( hIndex );
+	}
 	else
 	{
 		hIndex.Add ( CSphVariant ( m_sPath.cstr() ), "path" );
@@ -464,7 +485,7 @@ static bool ConfigRead ( const CSphString& sConfigPath, CSphVector<ClusterDesc_t
 			sphWarning ( "table '%s'(%d) warning: %s", sName.cstr(), dIndexes.GetLength(), sWarning.cstr() );
 
 		int iExists = dIndexes.GetFirst ( [&] ( const IndexDesc_t& tItem ) {
-			return ( tItem.m_sName == tIndex.m_sName || ( ( tItem.m_eType == IndexType_e::PLAIN || tItem.m_eType == IndexType_e::RT ) && tItem.m_sPath == tIndex.m_sPath ) );
+			return tItem.m_sName == tIndex.m_sName || ( !tItem.m_sPath.IsEmpty() && !tIndex.m_sPath.IsEmpty() && tItem.m_sPath == tIndex.m_sPath );
 		} );
 
 		if ( iExists != -1 )
@@ -628,7 +649,11 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 
 	SmallStringHash_T<IndexDesc_t*> hConfigLocal;
 	SccRL_t tCfgRLock { g_tCfgIndexesLock };
-	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc ) { if (tDesc.m_eType!=IndexType_e::DISTR) hConfigLocal.Add ( &tDesc, tDesc.m_sName ); } );
+	for_each ( g_dCfgIndexes, [&hConfigLocal] ( IndexDesc_t& tDesc )
+	{
+		if ( tDesc.m_eType!=IndexType_e::DISTR && tDesc.m_eType!=IndexType_e::SHARD )
+			hConfigLocal.Add ( &tDesc, tDesc.m_sName );
+	});
 	for_each ( *hLocals, [&hConfigLocal] ( auto& tIt ) { hConfigLocal.Delete ( tIt.first ); } );
 
 	// keep indexes loaded from JSON but disabled due to errors
@@ -648,8 +673,10 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 	{
 		IndexDesc_t & tIndex = dIndexes.Add();
 		tIndex.m_sName = tIt.first;
-		tIndex.m_eType = IndexType_e::DISTR;
+		tIndex.m_eType = tIt.second->GetType();
 		tIndex.m_tDistr = GetDistributedDesc ( *tIt.second );
+		if ( auto pShard = AsShard ( tIt.second.Ptr() ) )
+			tIndex.m_sPath = pShard->m_sIndexPath;
 	}
 }
 
@@ -1227,7 +1254,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
 	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit", "knn", "json_secondary_indexes" };
-	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
+	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed", "shard" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
 	{
@@ -1263,11 +1290,8 @@ static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTabl
 }
 
 
-CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr )
+static void AppendCreateTableTopology ( StringBuilder_c & sRes, const DistributedIndex_t & tDistr )
 {
-	StringBuilder_c sRes(" ");
-	sRes << "CREATE TABLE" << sName << "type='distributed'";
-
 	for ( const auto & i : tDistr.m_dLocal )
 	{
 		CSphString sLocal;
@@ -1307,7 +1331,27 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 
 	if ( tDistr.m_eHaStrategy!=pDefault->m_eHaStrategy )
 		sRes << sOpt.SetSprintf ( "ha_strategy='%s'", HAStrategyToStr ( tDistr.m_eHaStrategy ).cstr() );
+}
 
+
+CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr )
+{
+	StringBuilder_c sRes(" ");
+	sRes << "CREATE TABLE" << sName << "type='distributed'";
+	AppendCreateTableTopology ( sRes, tDistr );
+	return sRes.cstr();
+}
+
+CSphString BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt )
+{
+	StringBuilder_c sRes ( " " );
+	const MutableIndexSettings_c & tMutableDefaults = MutableIndexSettings_c::GetDefaults();
+
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sName.cstr() );
+	sRes << BuildCreateTable ( sName, tShard.m_tSchema, tShard.m_tSettings, tShard.m_tFieldFilterSettings, tShard.m_tTokenizerSettings, tShard.m_tDictSettings, tMutableDefaults, eExt, pFilenameBuilder.get() ).cstr();
+	sRes << "type='shard'";
+
+	AppendCreateTableTopology ( sRes, tShard );
 	return sRes.cstr();
 }
 
@@ -1361,6 +1405,32 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFil
 				::unlink ( sName.cstr() );
 		}
 	}
+}
+
+static bool DeleteShardFiles ( const CSphString & sIndex, CSphString & sError )
+{
+	CSphString sDir = GetPathForNewIndex ( sIndex );
+	if ( !sphDirExists ( sDir.cstr() ) )
+		return true;
+
+	CSphString sMask = SphSprintf ( "%s/*", sDir.cstr() );
+	StrVec_t dFiles = FindFiles ( sMask.cstr(), false );
+	for ( const auto & sFile : dFiles )
+	{
+		if ( ::unlink ( sFile.cstr() ) )
+		{
+			sError.SetSprintf ( "failed to remove '%s': %s", sFile.cstr(), strerror ( errno ) );
+			return false;
+		}
+	}
+
+	if ( ::rmdir ( sDir.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to remove directory '%s': %s", sDir.cstr(), strerror ( errno ) );
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -1432,7 +1502,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 
 	ESphAddIndex eAdd;
 	ServedIndexRefPtr_c pDesc;
-	std::tie ( eAdd, pDesc ) = AddIndex ( sIndex.cstr(), hCfg, true, true, &dWarnings, sError );
+	std::tie ( eAdd, pDesc ) = AddIndex ( sIndex.cstr(), hCfg, true, true, false, &dWarnings, sError );
 	switch ( eAdd )
 	{
 	case ADD_ERROR: return false;
@@ -1457,6 +1527,17 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 		break;
 	}
 
+	if ( auto pShard = AsShard ( GetDistr ( sIndex ).Ptr() ) )
+	{
+		if ( !SaveShardMeta ( sIndex.cstr(), *pShard, sError ) )
+		{
+			g_pDistIndexes->Delete ( sIndex );
+			if ( !DeleteShardFiles ( sIndex, sError ) )
+				sphWarning ( "table '%s': %s", sIndex.cstr(), sError.cstr() );
+			return false;
+		}
+	}
+
 	if ( SaveConfigInt ( sError ) )
 	{
 		pSettingsContainer->ResetCleanup();
@@ -1467,7 +1548,12 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	if ( pServed )
 		RemoveAndDeleteRtIndex ( sIndex );
 	else
+	{
+		bool bShard = AsShard ( GetDistr ( sIndex ).Ptr() );
 		g_pDistIndexes->Delete ( sIndex );
+		if ( bShard )
+			DeleteShardFiles ( sIndex, sError );
+	}
 	return false;
 }
 
@@ -1525,7 +1611,7 @@ static bool DropDistrIndex ( const CSphString & sIndex, bool bForce, CSphString 
 	auto pDistr = GetDistr(sIndex);
 	if ( !pDistr )
 	{
-		sError.SetSprintf ( "DROP TABLE failed: unknown distributed table '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "DROP TABLE failed: unknown table '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -1541,6 +1627,9 @@ static bool DropDistrIndex ( const CSphString & sIndex, bool bForce, CSphString 
 		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster table '%s'", sIndex.cstr() );
 		return false;
 	}
+
+	if ( pDistr->GetType()==IndexType_e::SHARD && !DeleteShardFiles ( sIndex, sError ) )
+		return false;
 
 	g_pDistIndexes->Delete(sIndex);
 
@@ -1752,4 +1841,249 @@ bool IsDistrTableHasSystem ( const DistributedIndex_t & tDistr, bool bForce )
 	}
 
 	return false;
+}
+
+static bool WriteShardMeta ( const CSphString & sFilename, const CSphString & sJson, CSphString & sError )
+{
+	CSphString sFilenameNew = SphSprintf ( "%s.new", sFilename.cstr() );
+
+	CSphWriterNonThrottled tWriter;
+	if ( !tWriter.OpenFile ( sFilenameNew, sError ) )
+		return false;
+
+	tWriter.PutBytes ( sJson.cstr(), sJson.Length() );
+	tWriter.CloseFile();
+	if ( tWriter.IsError() )
+		return false;
+
+	if ( sph::rename ( sFilenameNew.cstr(), sFilename.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to rename shard meta (src=%s, dst=%s, errno=%d, error=%s)", sFilenameNew.cstr(), sFilename.cstr(), errno, strerrorm(errno) );
+		return false;
+	}
+
+	return true;
+}
+
+static CSphString GetShardFilename ( const CSphString & sIndexPath )
+{
+	return SphSprintf ( "%s.meta", sIndexPath.cstr() );
+}
+
+bool SaveShardMeta ( const char * szIndexName, const ShardIndex_c & tShard, CSphString & sError )
+{
+	assert ( szIndexName );
+
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndexName );
+
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tShard.m_tTokenizerSettings, nullptr, pFilenameBuilder.get(), dWarnings, sError );
+	if ( !pTokenizer )
+		return false;
+
+	for ( const auto & sWarning : dWarnings )
+		sphWarning ( "table '%s': %s", szIndexName, sWarning.cstr() );
+
+	DictRefPtr_c pDict = sphCreateDictionaryCRC ( tShard.m_tDictSettings, nullptr, pTokenizer, szIndexName, false, tShard.m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder.get(), sError );
+	if ( !pDict )
+		return false;
+
+	Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms() );
+
+	JsonEscapedBuilder sNewMeta;
+	sNewMeta.ObjectWBlock();
+	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
+	sNewMeta.NamedVal ( "meta_version", 1 );
+	sNewMeta.NamedVal ( "schema", tShard.m_tSchema );
+	sNewMeta.NamedVal ( "index_settings", tShard.m_tSettings );
+	sNewMeta.Named ( "tokenizer_settings" );
+	SaveTokenizerSettings ( sNewMeta, pTokenizer, tShard.m_tSettings.m_iEmbeddedLimit );
+	sNewMeta.Named ( "dictionary_settings" );
+	SaveDictionarySettings ( sNewMeta, pDict, tShard.m_tDictSettings.m_bWordDict, tShard.m_tSettings.m_iEmbeddedLimit );
+	if ( !tShard.m_tFieldFilterSettings.m_dRegexps.IsEmpty() )
+		sNewMeta.NamedVal ( "field_filter_settings", tShard.m_tFieldFilterSettings );
+
+	sNewMeta.FinishBlocks();
+
+	CSphString sMeta = sNewMeta.cstr();
+	assert ( bson::ValidateJson ( sMeta.cstr() ) );
+	if ( !WriteShardMeta ( GetShardFilename ( tShard.m_sIndexPath ), sMeta, sError ) )
+		return false;
+
+	return true;
+}
+
+bool LoadShardMeta ( const char * szIndexName, const CSphString & sIndexPath, ShardIndex_c & tShard, StrVec_t & dWarnings, CSphString & sError )
+{
+	using namespace bson;
+
+	tShard.m_sIndexPath = sIndexPath;
+
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndexName );
+
+	CSphVector<BYTE> dData;
+	CSphString sMeta = GetShardFilename ( sIndexPath );
+	if ( !sphJsonParse ( dData, sMeta, sError ) )
+		return false;
+
+	Bson_c tBson ( dData );
+	if ( tBson.IsEmpty() || !tBson.IsAssoc() )
+	{
+		sError = "Something wrong read from shard meta - it is either empty, either not root object.";
+		return false;
+	}
+
+	ReadSchemaJson ( tBson.ChildByName ( "schema" ), tShard.m_tSchema );
+	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), tShard.m_tSettings );
+
+	CSphEmbeddedFiles tEmbeddedFiles;
+	CSphString sWarning;
+	if ( !tShard.m_tTokenizerSettings.Load ( pFilenameBuilder.get(), tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, sWarning ) )
+	{
+		sError = sWarning.IsEmpty() ? "failed to load tokenizer settings" : sWarning;
+		return false;
+	}
+
+	if ( !sWarning.IsEmpty() )
+		dWarnings.Add ( sWarning );
+
+	sWarning = "";
+	tShard.m_tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder.get(), sWarning );
+	if ( !sWarning.IsEmpty() )
+		dWarnings.Add ( sWarning );
+
+	auto tFieldFilterNode = tBson.ChildByName ( "field_filter_settings" );
+	if ( !IsNullNode ( tFieldFilterNode ) )
+		Bson_c ( tFieldFilterNode ).ForEach ( [&tShard] ( const NodeHandle_t & tNode ) { tShard.m_tFieldFilterSettings.m_dRegexps.Add ( String ( tNode ) ); } );
+
+	return true;
+}
+
+const ShardIndex_c * AsShard ( const DistributedIndex_t * pIndex )
+{
+	return pIndex && pIndex->GetType()==IndexType_e::SHARD ? ( const ShardIndex_c * )( pIndex ) : nullptr;
+}
+
+ShardIndex_c * AsShard ( DistributedIndex_t * pIndex )
+{
+	return pIndex && pIndex->GetType()==IndexType_e::SHARD ? ( ShardIndex_c * )( pIndex ) : nullptr;
+}
+
+
+int ParseShardRouteOrderId ( const CSphString & sName )
+{
+	const char * sSuffix = strrchr ( sName.cstr(), '_' );
+	if ( !sSuffix )
+		return -1;
+
+	return (int)strtol ( sSuffix + 1, nullptr, 10 );
+}
+
+static bool ResolveSingleShardAgentTarget ( const char * szIndexName, const MultiAgentDescRefPtr_c & pAgent, CSphString & sTargetName, CSphString & sError )
+{
+	if ( !pAgent || !pAgent->GetLength() )
+	{
+		sError.SetSprintf ( "table '%s': invalid empty shard remote target", szIndexName );
+		return false;
+	}
+
+	const CSphString & sAgentCfg = pAgent->GetConfigStr();
+	for ( const auto & tMirror : *pAgent )
+	{
+		if ( tMirror.m_bBlackhole )
+		{
+			sError.SetSprintf ( "table '%s': shard remote target '%s' can not be blackhole", szIndexName, sAgentCfg.cstr() );
+			return false;
+		}
+
+		StrVec_t dIndexes;
+		ParseIndexList ( tMirror.m_sIndexes, dIndexes );
+		if ( dIndexes.GetLength() != 1 )
+		{
+			sError.SetSprintf ( "table '%s': shard remote target '%s' must name exactly one remote table", szIndexName, sAgentCfg.cstr() );
+			return false;
+		}
+
+		if ( sTargetName.IsEmpty() )
+			sTargetName = dIndexes[0];
+		else if ( sTargetName != dIndexes[0] )
+		{
+			sError.SetSprintf ( "table '%s': shard remote target '%s' must name the same remote table on every mirror", szIndexName, sAgentCfg.cstr() );
+			return false;
+		}
+	}
+
+	if ( sTargetName.IsEmpty() )
+	{
+		sError.SetSprintf ( "table '%s': invalid shard remote target '%s'", szIndexName, sAgentCfg.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+bool BuildShardRouteTargets ( const char * szIndexName, ShardIndex_c & tShard, CSphString & sError )
+{
+	tShard.m_dRouteTargets.Resize ( 0 );
+	tShard.m_dRouteTargets.Reserve ( tShard.m_dLocal.GetLength() + tShard.m_dAgents.GetLength() );
+
+	int iMaxOrderId = -1;
+	for ( const auto & sLocal : tShard.m_dLocal )
+	{
+		auto & tTarget = tShard.m_dRouteTargets.Add();
+		tTarget.m_sName = sLocal;
+		tTarget.m_iOrderId = ParseShardRouteOrderId ( sLocal );
+		tTarget.m_bLocal = true;
+		iMaxOrderId = Max ( iMaxOrderId, tTarget.m_iOrderId );
+	}
+
+	for ( const auto & pAgent : tShard.m_dAgents )
+	{
+		if ( !pAgent || !pAgent->GetLength() )
+			continue;
+
+		CSphString sTargetName;
+		if ( !ResolveSingleShardAgentTarget ( szIndexName, pAgent, sTargetName, sError ) )
+			return false;
+
+		auto & tTarget = tShard.m_dRouteTargets.Add();
+		tTarget.m_sName = sTargetName;
+		tTarget.m_pAgent = pAgent;
+		tTarget.m_bLocal = false;
+		tTarget.m_iOrderId = ParseShardRouteOrderId ( tTarget.m_sName );
+		iMaxOrderId = Max ( iMaxOrderId, tTarget.m_iOrderId );
+	}
+
+	int iNextOrderId = iMaxOrderId + 1;
+	for ( auto & tTarget : tShard.m_dRouteTargets )
+	{
+		if ( tTarget.m_iOrderId >= 0 )
+			continue;
+
+		tTarget.m_iOrderId = iNextOrderId++;
+	}
+
+	tShard.m_dRouteTargets.Sort ( Lesser ( [] ( const ShardIndex_c::RouteTarget_t & a, const ShardIndex_c::RouteTarget_t & b ) {
+		return a.m_iOrderId < b.m_iOrderId;
+	} ) );
+
+	for ( int i = 1; i < tShard.m_dRouteTargets.GetLength(); ++i )
+	{
+		if ( tShard.m_dRouteTargets[i-1].m_iOrderId != tShard.m_dRouteTargets[i].m_iOrderId )
+			continue;
+
+		sError.SetSprintf ( "table '%s': duplicate shard suffix order %d for targets '%s' and '%s'", szIndexName, tShard.m_dRouteTargets[i].m_iOrderId, tShard.m_dRouteTargets[i-1].m_sName.cstr(), tShard.m_dRouteTargets[i].m_sName.cstr() );
+		return false;
+	}
+
+	if ( tShard.m_dRouteTargets.IsEmpty() )
+	{
+		sError.SetSprintf ( "table '%s': no valid shard route targets", szIndexName );
+		return false;
+	}
+
+	for ( int i = 0; i < tShard.m_dRouteTargets.GetLength(); ++i )
+		tShard.m_dRouteTargets[i].m_iRouteId = i;
+
+	return true;
 }

@@ -1,0 +1,70 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_ok; DROP TABLE IF EXISTS shard_remote_ok_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_ok_s_1; CREATE TABLE shard_remote_ok_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_ok_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_ok(id bigint, title text, gid uint) type='shard' local='shard_remote_ok_s_0' agent='127.0.0.1:2312:shard_remote_ok_s_1';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_remote_ok (id, title, gid) VALUES (1, 'local-1', 10), (3, 'remote-3', 30), (4, 'remote-4', 40);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM shard_remote_ok_s_0;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+––– output –––
+1
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) FROM shard_remote_ok_s_1;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+––– output –––
+2
+––– input –––
+mysql -h0 -P1306 -e "BEGIN; INSERT INTO shard_remote_ok (id, title, gid) VALUES (6, 'local-6', 60), (7, 'remote-7', 70); COMMIT; REPLACE INTO shard_remote_ok (id, title, gid) VALUES (3, 'r3-upd', 300);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_ok ORDER BY id ASC;" | awk -F'|' 'BEGIN{OFS="\t"} /^[|]/{for(i=2;i<=4;i++) gsub(/^ +| +$/,"",$i); if ($2!="" && $2!="id") print $2,$3,$4} /^[0-9]+\t/{print $0}'
+––– output –––
+1	local-1	10
+3	r3-upd	300
+4	remote-4	40
+6	local-6	60
+7	remote-7	70
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_ok_s_1 ORDER BY id ASC;" | awk -F'|' 'BEGIN{OFS="\t"} /^[|]/{for(i=2;i<=4;i++) gsub(/^ +| +$/,"",$i); if ($2!="" && $2!="id") print $2,$3,$4} /^[0-9]+\t/{print $0}'
+––– output –––
+3	r3-upd	300
+4	remote-4	40
+7	remote-7	70
+––– input –––
+mysql --force -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_bad_multi; CREATE TABLE shard_remote_bad_multi(id bigint, title text) type='shard' agent='127.0.0.1:2312:bad_multi_a,bad_multi_b';" 2>&1 | grep -F "must name exactly one remote table" | sed -E "s/.*(table 'shard_remote_bad_multi'.*)/\\1/"
+––– output –––
+table 'shard_remote_bad_multi': shard remote target '127.0.0.1:2312:bad_multi_a,bad_multi_b' must name exactly one remote table
+––– input –––
+mysql --force -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_bad_mirror; CREATE TABLE shard_remote_bad_mirror(id bigint, title text) type='shard' agent='127.0.0.1:2312:bad_mirror_a|127.0.0.1:2312:bad_mirror_b';" 2>&1 | grep -F "must name the same remote table on every mirror" | sed -E "s/.*(table 'shard_remote_bad_mirror'.*)/\\1/"
+––– output –––
+table 'shard_remote_bad_mirror': shard remote target '127.0.0.1:2312:bad_mirror_a|127.0.0.1:2312:bad_mirror_b' must name the same remote table on every mirror
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_logical;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_logical_dist; DROP TABLE IF EXISTS shard_remote_logical_rt; CREATE TABLE shard_remote_logical_rt(id bigint, title text, gid uint); CREATE TABLE shard_remote_logical_dist type='distributed' local='shard_remote_logical_rt';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_logical(id bigint, title text, gid uint) type='shard' agent='127.0.0.1:2312:shard_remote_logical_dist';"
+––– output –––
+––– input –––
+mysql --force -h0 -P1306 -e "INSERT INTO shard_remote_logical (id, title, gid) VALUES (3, 'bad-logical', 30);" 2>&1 | grep -F "must be a concrete real-time table" | sed -E "s/.*(remote table 'shard_remote_logical_dist' must be a concrete real-time table).*/\\1/"
+––– output –––
+remote table 'shard_remote_logical_dist' must be a concrete real-time table
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) FROM shard_remote_logical_rt;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+––– output –––
+0

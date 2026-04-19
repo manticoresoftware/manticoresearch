@@ -1,0 +1,35 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_lastid_fail; DROP TABLE IF EXISTS shard_remote_lastid_fail_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_lastid_fail_dist_1; DROP TABLE IF EXISTS shard_remote_lastid_fail_rt; CREATE TABLE shard_remote_lastid_fail_rt(id bigint, title text, gid uint); CREATE TABLE shard_remote_lastid_fail_dist_1 type='distributed' local='shard_remote_lastid_fail_rt';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_lastid_fail_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_lastid_fail(id bigint, title text, gid uint) type='shard' local='shard_remote_lastid_fail_s_0' agent='127.0.0.1:2312:shard_remote_lastid_fail_dist_1';"
+––– output –––
+––– input –––
+printf '%s\n' \
+  "SET autocommit=0;" \
+  "INSERT INTO shard_remote_lastid_fail (id, title, gid) VALUES (1, 'local-1', 10), (3, 'remote-3', 30);" \
+  "SET autocommit=1;" \
+  "SELECT @@session.last_insert_id;" \
+| mysql --force -h0 -P1306 2>&1 \
+| awk -F'|' '/^[0-9]+$/{ print; next } /^[|]/{ v=$2; gsub(/^ +| +$/,"",v); if (v ~ /^[0-9]+$/) print v }'
+––– output –––
+1
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM shard_remote_lastid_fail_s_0;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+––– output –––
+1
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) FROM shard_remote_lastid_fail_rt;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+––– output –––
+0

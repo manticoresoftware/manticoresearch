@@ -9123,6 +9123,7 @@ bool RtIndex_c::AddRemoveField ( bool bAdd, const CSphString & sFieldName, DWORD
 		RemoveFieldFromRamchunk ( sFieldName, tOldSchema, tNewSchema );
 
 	// fixme: we can't rollback at this point
+	RaiseAlterGeneration();
 	AlterSave ( true );
 
 	return true;
@@ -9230,6 +9231,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 	}
 
 	// fixme: we can't rollback at this point
+	RaiseAlterGeneration();
 	AlterSave ( true );
 	return true;
 }

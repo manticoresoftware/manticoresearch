@@ -2531,32 +2531,9 @@ static CSphString FormatCreateTableField ( const CSphColumnInfo & tField, const 
 }
 
 
-CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
+template <typename DUMP_SETTINGS>
+static CSphString BuildCreateTableImpl ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, DUMP_SETTINGS && fnDumpSettings )
 {
-	assert ( pIndex );
-
-	CSphFieldFilterSettings tFieldFilterSettings;
-	pIndex->GetFieldFilterSettings ( tFieldFilterSettings );
-
-	CSphTokenizerSettings tTokenizerSettings;
-	if ( auto pTokenizer = pIndex->GetTokenizer() )
-		tTokenizerSettings = pTokenizer->GetSettings();
-
-	CSphDictSettings tDictSettings;
-	if ( auto pDict = pIndex->GetDictionary() )
-		tDictSettings = pDict->GetSettings();
-
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
-	if ( g_fnCreateFilenameBuilder )
-		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
-
-	return BuildCreateTable ( sName, tSchema, pIndex->GetSettings(), tFieldFilterSettings, tTokenizerSettings, tDictSettings, pIndex->GetMutableSettings(), eExt, pFilenameBuilder.get() );
-}
-
-
-CSphString BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder )
-{
-
 	auto& tSess = session::Info();
 	bool bQuote = tSess.GetSqlQuoteShowCreate();
 
@@ -2603,13 +2580,31 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphSchema & tSche
 	sRes << "\n)";
 
 	StringBuilder_c tBuf;
-	DumpCreateTable ( tBuf, tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, pFilenameBuilder, eExt );
+	fnDumpSettings ( tBuf );
 
 	if ( tBuf.GetLength() )
 		sRes << " " << tBuf.cstr();
 
 	CSphString sResult = sRes.cstr();
 	return sResult;
+}
+
+
+CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema, ExtFilesFormat_e eExt )
+{
+	assert ( pIndex );
+
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;
+	if ( g_fnCreateFilenameBuilder )
+		pFilenameBuilder = g_fnCreateFilenameBuilder ( pIndex->GetName() );
+
+	return BuildCreateTableImpl ( sName, tSchema, pIndex->GetSettings(), [&] ( StringBuilder_c & tBuf ) { DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.get(), eExt ); } );
+}
+
+
+CSphString BuildCreateTable ( const CSphString & sName, const CSphSchema & tSchema, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, ExtFilesFormat_e eExt, FilenameBuilder_i * pFilenameBuilder )
+{
+	return BuildCreateTableImpl ( sName, tSchema, tSettings, [&] ( StringBuilder_c & tBuf ) { DumpCreateTable ( tBuf, tSettings, tFieldFilterSettings, tTokenizerSettings, tDictSettings, tMutableSettings, pFilenameBuilder, eExt ); } );
 }
 
 

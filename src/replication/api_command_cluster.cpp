@@ -148,6 +148,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveClusterUpdateNodes ( tOut, tBuf, sCluster );
 		break;
 
+	case E_CLUSTER::EXIT_UPDATE_NODES:
+		ReceiveClusterExitUpdateNodes ( tOut, tBuf, sCluster );
+		break;
+
 	case E_CLUSTER::INDEX_ADD_DIST:
 		ReceiveDistIndex ( tOut, tBuf, sCluster );
 		break;

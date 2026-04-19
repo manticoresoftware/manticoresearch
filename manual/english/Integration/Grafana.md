@@ -7,7 +7,7 @@
 1. **Monitoring Manticore Performance**: Using Prometheus to collect metrics from Manticore and visualize them in Grafana dashboards. This approach focuses on system health, performance monitoring, and alerting for the search engine itself.
 2. **Visualizing Search Data**: Connecting via the MySQL connector to query and display data stored in Manticore tables, similar to how Kibana is used for Elasticsearch data visualization. This is ideal for analyzing trends, aggregations, and custom visualizations based on your indexed data.
 
-Currently, Grafana versions 10.0-12.4 are tested and supported.
+Currently, Grafana versions 10.0-13.0 are tested and supported.
 
 ## Monitoring Manticore with Prometheus and Grafana
 

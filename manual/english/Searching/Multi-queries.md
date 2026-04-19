@@ -16,6 +16,17 @@ Note: If you use a console MySQL client, by default it interprets the semicolon 
 
 This aside behavior of the console client can often be confusing because you might notice that one and the same sequence of commands behaves differently in the MySQL client console compared to another protocol like SQL-over-HTTP. This is exactly because the MySQL console client itself divides queries using semicolons, but other protocols may send an entire sequence as a single batch.
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float);
+INSERT INTO products(title, price) VALUES
+('remove hair cream', 20.50),
+('remove hair gel', 18.00),
+('hair brush', 5.25);
+-->
+
 <!-- example multi-query 1 -->
 You can run multiple search queries with SQL by separating them with a semicolon. When Manticore receives a query formatted like this from a client, all inter-statement optimizations will be applied.
 
@@ -39,6 +50,16 @@ From a console MySQL/MariaDB client:
 DELIMITER _
 SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC_
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price DESC; SELECT id, price FROM products WHERE MATCH('remove hair') ORDER BY price ASC"
+```
+
 <!-- end -->
 
 ## Multi-queries optimizations

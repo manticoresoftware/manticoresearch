@@ -69,6 +69,10 @@ searchd
 	drop table system.test1;
 	drop table system.test2;
 	drop table system.test3;
+
+	<!-- irregular 'system' name - should fail -->
+	create table sYstEm.test1;
+	create table `systEM`.test2;
 </sphinxql>
 </queries>
 

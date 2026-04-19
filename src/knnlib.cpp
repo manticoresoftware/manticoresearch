@@ -116,7 +116,10 @@ bool InitKNN ( CSphString & sError )
 	assert ( !g_pKNNLib );
 
 	CSphString sLibfile;
-	if ( IsAVX2Supported() )
+	if ( IsAVX512Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION, "_avx512" );
+
+	if ( sLibfile.IsEmpty() && IsAVX2Supported() )
 		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION, "_avx2" );
 
 	if ( sLibfile.IsEmpty() )
@@ -163,13 +166,13 @@ bool InitKNN ( CSphString & sError )
 	{
 		std::string sErrorSTL;
 		g_pEmbeddingsLib = std::unique_ptr<knn::EmbeddingsLib_i> ( g_fnLoadEmbeddingsLib ( sEmbeddingsLibFile, sErrorSTL ) );
-		if ( !g_pEmbeddingsLib )
-			return false;
+		if ( !sErrorSTL.empty() )
+			sError = sErrorSTL.c_str();
 	}
 
 	g_pKNNLib = tHandle.Leak();
 
-	return true;
+	return !!g_pEmbeddingsLib;
 }
 
 void ShutdownKNN()
@@ -215,4 +218,3 @@ bool IsKNNEmbeddingsLibLoaded()
 {
 	return !!g_pEmbeddingsLib;
 }
-

@@ -69,6 +69,7 @@
 ##### 复制
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - 加入复制集群
 * [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - 向复制集群添加/删除表
+* [退出集群](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - 将当前节点从复制集群分离
 * [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - 更改复制集群设置
 * [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - 删除复制集群
 
@@ -545,6 +546,10 @@ searchd [OPTIONS]
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止Manticore服务器
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - 优雅地停止Manticore服务器
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - 从表中引用的所有文件名中删除路径名
+* [--watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - 强制内部看门狗
+* [--no-watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - 禁用内部看门狗
+* [--systemd](Starting_the_server/Manually.md#searchd-command-line-options) - 强制systemd模式
+* [--no-systemd](Starting_the_server/Manually.md#searchd-command-line-options) - 强制独立模式（忽略systemd）
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - 显示版本信息
 
 ##### Searchd 环境变量

@@ -645,6 +645,7 @@ enum class Option_e : BYTE
 	RANK_CONSTANT,
 	WINDOW_SIZE,
 	FUSION_WEIGHTS,
+	TOPOLOGY,
 
 	INVALID_OPTION
 };
@@ -660,7 +661,7 @@ void InitParserOption()
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
-		"fusion_method", "rank_constant", "window_size", "fusion_weights" };
+		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -705,7 +706,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 
 	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
 
-	static Option_e dSystemOptions[] = { Option_e::FORCE };
+	static Option_e dSystemOptions[] = { Option_e::FORCE, Option_e::TOPOLOGY };
 	static Option_e dCreateTableOptions[] = { Option_e::FORCE, Option_e::FORMAT_OUTPUT_WORDS };
 
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
@@ -1127,6 +1128,10 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 
 	case Option_e::FORCE:
 		m_pStmt->m_bForce = ( tValue.GetValueInt()==1 );
+		break;
+
+	case Option_e::TOPOLOGY:
+		m_pStmt->m_bDescTopo = ( tValue.GetValueInt()!=0 );
 		break;
 
 	case Option_e::FORMAT_OUTPUT_WORDS:

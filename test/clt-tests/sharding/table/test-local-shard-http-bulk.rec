@@ -1,0 +1,173 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_local; DROP TABLE IF EXISTS shard_http_bulk_local_s_0; DROP TABLE IF EXISTS shard_http_bulk_local_s_1; CREATE TABLE shard_http_bulk_local_s_0(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_local_s_1(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_local(id bigint, title text, gid uint) type='shard' local='shard_http_bulk_local_s_0' local='shard_http_bulk_local_s_1'; SHOW TABLES LIKE 'shard_http_bulk_local';"
+––– output –––
++-----------------------+-------+
+| Table                 | Type  |
++-----------------------+-------+
+| shard_http_bulk_local | shard |
++-----------------------+-------+
+––– input –––
+BULK_INSERT_CREATE=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"shard_http_bulk_local","id":1,"doc":{"title":"bulk-insert-1","gid":10}}}
+{"create":{"index":"shard_http_bulk_local","id":2,"doc":{"title":"bulk-create-2","gid":20}}}
+') ; printf '%s\n' "$BULK_INSERT_CREATE" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"deleted":\([0-9][0-9]*\).*"updated":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/created=\1 deleted=\2 updated=\3 errors=\4/p'
+––– output –––
+created=2 deleted=0 updated=0 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local ORDER BY id ASC;"
+––– output –––
++------+---------------+------+
+| id   | title         | gid  |
++------+---------------+------+
+|    1 | bulk-insert-1 |   10 |
+|    2 | bulk-create-2 |   20 |
++------+---------------+------+
+––– input –––
+BULK_INDEX_REPLACE=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"index":{"index":"shard_http_bulk_local","id":1,"doc":{"title":"bulk-index-1","gid":11}}}
+{"replace":{"index":"shard_http_bulk_local","id":2,"doc":{"title":"bulk-replace-2","gid":21}}}
+') ; printf '%s\n' "$BULK_INDEX_REPLACE" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"deleted":\([0-9][0-9]*\).*"result":"\([^"]*\)".*"errors":\([^,}]*\).*/created=\1 deleted=\2 result=\3 errors=\4/p'
+––– output –––
+created=2 deleted=2 result=updated errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    1 | bulk-index-1   |   11 |
+|    2 | bulk-replace-2 |   21 |
++------+----------------+------+
+––– input –––
+BULK_DELETE_ID=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"delete":{"index":"shard_http_bulk_local","id":1}}
+') ; printf '%s\n' "$BULK_DELETE_ID" | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/deleted=\1 errors=\2/p'
+––– output –––
+deleted=1 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    2 | bulk-replace-2 |   21 |
++------+----------------+------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_local (id, title, gid) VALUES (3, 'bulk-delete-a', 30), (4, 'bulk-delete-b', 40);"
+––– output –––
+––– input –––
+BULK_DELETE_IDS=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"delete":{"index":"shard_http_bulk_local","id":[2,3]}}
+') ; printf '%s\n' "$BULK_DELETE_IDS" | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/deleted=\1 errors=\2/p'
+––– output –––
+deleted=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local ORDER BY id ASC;"
+––– output –––
++------+---------------+------+
+| id   | title         | gid  |
++------+---------------+------+
+|    4 | bulk-delete-b |   40 |
++------+---------------+------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_local (id, title, gid) VALUES (5, 'bulk-query-a', 50), (6, 'bulk-query-b', 60);"
+––– output –––
+––– input –––
+BULK_DELETE_QUERY=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"delete":{"index":"shard_http_bulk_local","query":{"range":{"gid":{"gte":50}}}}}
+') ; printf '%s\n' "$BULK_DELETE_QUERY" | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/deleted=\1 errors=\2/p'
+––– output –––
+deleted=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local ORDER BY id ASC;"
+––– output –––
++------+---------------+------+
+| id   | title         | gid  |
++------+---------------+------+
+|    4 | bulk-delete-b |   40 |
++------+---------------+------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_local (id, title, gid) VALUES (7, 'bulk-update-id', 70);"
+––– output –––
+––– input –––
+BULK_UPDATE_ID=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"update":{"index":"shard_http_bulk_local","id":7,"doc":{"gid":71}}}
+') ; printf '%s\n' "$BULK_UPDATE_ID" | tr -d '\n' | sed -n 's/.*"updated":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/updated=\1 errors=\2/p'
+––– output –––
+updated=1 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local WHERE id=7;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    7 | bulk-update-id |   71 |
++------+----------------+------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_bulk_local (id, title, gid) VALUES (8, 'bulk-update-query-a', 80), (9, 'bulk-update-query-b', 81);"
+––– output –––
+––– input –––
+BULK_UPDATE_QUERY=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"update":{"index":"shard_http_bulk_local","doc":{"gid":99},"query":{"range":{"gid":{"gte":80}}}}}
+') ; printf '%s\n' "$BULK_UPDATE_QUERY" | tr -d '\n' | sed -n 's/.*"updated":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/updated=\1 errors=\2/p'
+––– output –––
+updated=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local WHERE id IN (8,9) ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|    8 | bulk-update-query-a |   99 |
+|    9 | bulk-update-query-b |   99 |
++------+---------------------+------+
+––– input –––
+BULK_INSERT_DELETE=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"shard_http_bulk_local","id":10,"doc":{"title":"bulk-mixed-delete","gid":100}}}
+{"delete":{"index":"shard_http_bulk_local","id":10}}
+') ; printf '%s\n' "$BULK_INSERT_DELETE" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"deleted":\([0-9][0-9]*\).*"result":"\([^"]*\)".*"errors":\([^,}]*\).*/created=\1 deleted=\2 result=\3 errors=\4/p'
+––– output –––
+created=1 deleted=0 result=created errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_http_bulk_local WHERE id=10;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '\''{"insert":{"index":"shard_http_bulk_local","id":11,"doc":{"title":"bulk-mixed-update","gid":110}}}
+{"update":{"index":"shard_http_bulk_local","id":11,"doc":{"gid":111}}}
+'\'' | tr -d '\''\n'\''); items=$(printf "%s" "$out" | grep -o "\"bulk\"" | wc -l | tr -d " "); echo "$out" | grep -F "\"created\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"updated\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":false" >/dev/null || { echo "$out"; exit 1; }; echo "items=$items created=1 updated=1 errors=false";'
+––– output –––
+items=2 created=1 updated=1 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local WHERE id=11;"
+––– output –––
++------+-------------------+------+
+| id   | title             | gid  |
++------+-------------------+------+
+|   11 | bulk-mixed-update |  111 |
++------+-------------------+------+
+––– input –––
+bash -c 'payload=$(printf "%s\n%s" "{\"insert\":{\"index\":\"shard_http_bulk_local\",\"id\":12,\"doc\":{\"title\":\"bulk-mixed-update-fail\",\"gid\":120}}}" "{\"update\":{\"index\":\"shard_http_bulk_local\",\"id\":12,\"doc\":{\"missing_attr\":1}}}"); out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" --data-binary "$payload" | tr -d '\''\n'\''); echo "$out" | grep -F "\"bulk\":{\"table\":\"shard_http_bulk_local\"" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"update\":{\"error\"" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"created\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"status\":409" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"current_line\":2" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"skipped_lines\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":true" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "missing_attr" >/dev/null || { echo "$out"; exit 1; }; echo "mixed update failure kept prior insert committed";'
+––– output –––
+mixed update failure kept prior insert committed
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_bulk_local WHERE id=12;"
+––– output –––
++------+------------------------+------+
+| id   | title                  | gid  |
++------+------------------------+------+
+|   12 | bulk-mixed-update-fail |  120 |
++------+------------------------+------+
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '\''{"update":{"index":"shard_http_bulk_local","id":11,"doc":{"missing_attr":1}}}
+'\'' | tr -d '\''\n'\''); echo "$out" | grep -F "\"update\":{\"error\"" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"status\":409" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"current_line\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"skipped_lines\":1" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "\"errors\":true" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "missing_attr" >/dev/null || { echo "$out"; exit 1; }; echo "local bulk update failure surfaced";'
+––– output –––
+local bulk update failure surfaced

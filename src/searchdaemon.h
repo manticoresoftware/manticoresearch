@@ -157,6 +157,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_CLUSTER		= 0x10E,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x102,
+	VER_COMMAND_SHARD_WRITE	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -1131,7 +1132,7 @@ public:
 using ResultAndIndex_t = std::pair<ESphAddIndex, ServedIndexRefPtr_c>;
 
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
-ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, bool bShardLoadMeta, StrVec_t * pWarnings, CSphString & sError );
 bool PreallocNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx

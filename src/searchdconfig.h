@@ -21,6 +21,7 @@ enum class IndexType_e
 	RT,
 	PERCOLATE,
 	DISTR,
+	SHARD,
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
@@ -109,7 +110,11 @@ bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();
 
 struct DistributedIndex_t;
+struct ShardIndex_c;
 CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr );
+CSphString	BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt );
+bool		SaveShardMeta ( const char * szIndexName, const ShardIndex_c & tShard, CSphString & sError );
+bool		LoadShardMeta ( const char * szIndexName, const CSphString & sIndexPath, ShardIndex_c & tShard, StrVec_t & dWarnings, CSphString & sError );
 
 bool		CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
 bool		AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError );
@@ -123,5 +128,8 @@ enum RunIdx_e : int {
 	DISTR,
 };
 RunIdx_e		IndexIsServed ( const CSphString& sName );
+
+int ParseShardRouteOrderId ( const CSphString & sName );
+bool BuildShardRouteTargets ( const char * szIndexName, ShardIndex_c & tShard, CSphString & sError );
 
 #endif // _searchdconfig_

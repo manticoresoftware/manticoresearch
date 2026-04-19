@@ -2635,18 +2635,23 @@ bool ClusterSynced ( const ClusterSyncedRequest_t & tCmd ) EXCLUDES ( g_tCluster
 }
 
 // validate that SphinxQL statement could be run for this cluster:index 
-bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP )
+bool ValidateClusterStatement ( const CSphString & sIndexName, const CSphString & sIndexCluster, const CSphString & sStmtCluster, bool bHTTP )
 {
-	if ( tDesc.m_sCluster==sStmtCluster )
+	if ( sIndexCluster==sStmtCluster )
 		return true;
 
-	if ( tDesc.m_sCluster.IsEmpty() )
+	if ( sIndexCluster.IsEmpty() )
 		return TlsMsg::Err ( "table '%s' is not in any cluster, use just '%s'", sIndexName.cstr(), sIndexName.cstr() );
 
 	if ( !bHTTP )
-		return TlsMsg::Err ( "table '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+		return TlsMsg::Err ( "table '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), sIndexCluster.cstr(), sIndexCluster.cstr(), sIndexName.cstr() );
 
-	return TlsMsg::Err( R"(table '%s' is a part of cluster '%s', use "cluster":"%s" and "table":"%s" properties)", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+	return TlsMsg::Err( R"(table '%s' is a part of cluster '%s', use "cluster":"%s" and "table":"%s" properties)", sIndexName.cstr(), sIndexCluster.cstr(), sIndexCluster.cstr(), sIndexName.cstr() );
+}
+
+bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP )
+{
+	return ValidateClusterStatement ( sIndexName, tDesc.m_sCluster, sStmtCluster, bHTTP );
 }
 
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )

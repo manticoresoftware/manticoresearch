@@ -1,0 +1,176 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_local_semantics; DROP TABLE IF EXISTS shard_local_semantics_s_0; DROP TABLE IF EXISTS shard_local_semantics_s_1; DROP TABLE IF EXISTS shard_local_semantics_s_2; CREATE TABLE shard_local_semantics_s_0(id bigint, title text, gid uint); CREATE TABLE shard_local_semantics_s_1(id bigint, title text, gid uint); CREATE TABLE shard_local_semantics_s_2(id bigint, title text, gid uint); CREATE TABLE shard_local_semantics(id bigint, title text, gid uint) type='shard' local='shard_local_semantics_s_0' local='shard_local_semantics_s_1' local='shard_local_semantics_s_2'; SHOW TABLES LIKE 'shard_local_semantics';"
+––– output –––
++-----------------------+-------+
+| Table                 | Type  |
++-----------------------+-------+
+| shard_local_semantics | shard |
++-----------------------+-------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_local_semantics (id, title, gid) VALUES (101, 'autocommit-1', 1), (102, 'autocommit-2', 2); SELECT COUNT(*) AS c FROM shard_local_semantics WHERE id IN (101,102);"
+––– output –––
++------+
+| c    |
++------+
+|    2 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "BEGIN; INSERT INTO shard_local_semantics (id, title, gid) VALUES (103, 'commit-row', 3); COMMIT;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_semantics WHERE id=103;"
+––– output –––
++------+------------+------+
+| id   | title      | gid  |
++------+------------+------+
+|  103 | commit-row |    3 |
++------+------------+------+
+––– input –––
+mysql -h0 -P1306 -e "BEGIN; INSERT INTO shard_local_semantics (id, title, gid) VALUES (104, 'rollback-row', 4); ROLLBACK;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_local_semantics WHERE id=104;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "SET autocommit=0; INSERT INTO shard_local_semantics (id, title, gid) VALUES (105, 'flush-on-autocommit', 5); SET autocommit=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_local_semantics WHERE id IN (101,102,103,105);"
+––– output –––
++------+
+| c    |
++------+
+|    4 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_semantics WHERE id=105;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|  105 | flush-on-autocommit |    5 |
++------+---------------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_local_update; DROP TABLE IF EXISTS shard_local_update_s_0; DROP TABLE IF EXISTS shard_local_update_s_1; CREATE TABLE shard_local_update_s_0(id bigint, title text, gid uint); CREATE TABLE shard_local_update_s_1(id bigint, title text, gid uint); CREATE TABLE shard_local_update(id bigint, title text, gid uint) type='shard' local='shard_local_update_s_0' local='shard_local_update_s_1'; INSERT INTO shard_local_update (id, title, gid) VALUES (1, 'local-1', 10), (2, 'local-2', 20), (3, 'remote-3', 30), (4, 'remote-4', 40), (5, 'remote-5', 50), (6, 'local-6', 60);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "UPDATE shard_local_update SET gid=700 WHERE id IN (1,2,3,4,5,6);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_update_s_0 WHERE id IN (1,2,3,4,5,6,7) ORDER BY id ASC; SELECT id, title, gid FROM shard_local_update_s_1 WHERE id IN (1,2,3,4,5,6,7) ORDER BY id ASC;"
+––– output –––
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    1 | local-1 |  700 |
+|    2 | local-2 |  700 |
+|    6 | local-6 |  700 |
++------+---------+------+
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |  700 |
+|    4 | remote-4 |  700 |
+|    5 | remote-5 |  700 |
++------+----------+------+
+––– input –––
+mysql -h0 -P1306 -e "SET autocommit=0; UPDATE shard_local_update SET gid=701 WHERE id IN (1); ROLLBACK; SET autocommit=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_update WHERE id IN (1) ORDER BY id ASC;"
+––– output –––
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    1 | local-1 |  701 |
++------+---------+------+
+––– input –––
+mysql -h0 -P1306 -e "SET autocommit=0; INSERT INTO shard_local_update (id, title, gid) VALUES (7, 'pending-7', 70); UPDATE shard_local_update SET gid=799 WHERE id IN (1); SET autocommit=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_update WHERE id IN (1,7) ORDER BY id ASC; SELECT id, title, gid FROM shard_local_update_s_0 WHERE id IN (1,7) ORDER BY id ASC; SELECT id, title, gid FROM shard_local_update_s_1 WHERE id IN (1,7) ORDER BY id ASC;"
+––– output –––
++------+-----------+------+
+| id   | title     | gid  |
++------+-----------+------+
+|    1 | local-1   |  799 |
+|    7 | pending-7 |   70 |
++------+-----------+------+
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    1 | local-1 |  799 |
++------+---------+------+
++------+-----------+------+
+| id   | title     | gid  |
++------+-----------+------+
+|    7 | pending-7 |   70 |
++------+-----------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_local_guard; DROP TABLE IF EXISTS shard_local_guard_s_0; CREATE TABLE shard_local_guard_s_0(id bigint, title text, gid uint); CREATE TABLE shard_local_guard(id bigint, title text, gid uint) type='shard' local='shard_local_guard_s_0'; INSERT INTO shard_local_guard (id, title, gid) VALUES (1, 'before-alter', 10); SELECT id, title, gid FROM shard_local_guard_s_0 ORDER BY id ASC;"
+––– output –––
++------+--------------+------+
+| id   | title        | gid  |
++------+--------------+------+
+|    1 | before-alter |   10 |
++------+--------------+------+
+––– input –––
+mysql -h0 -P1306 -e "ALTER TABLE shard_local_guard_s_0 ADD COLUMN extra uint;"
+––– output –––
+––– input –––
+bash -c 'out=$(mysql -h0 -P1306 -e "INSERT INTO shard_local_guard (id, title, gid) VALUES (2, '\''after-alter'\'', 20);" 2>&1 || true); echo "$out" | grep -F "local table '\''shard_local_guard_s_0'\'' for shard table '\''shard_local_guard'\'' changed, reload shard table" >/dev/null || { echo "$out"; exit 1; }; echo "guard failure surfaced";'
+––– output –––
+guard failure surfaced
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_guard_s_0 ORDER BY id ASC;"
+––– output –––
++------+--------------+------+
+| id   | title        | gid  |
++------+--------------+------+
+|    1 | before-alter |   10 |
++------+--------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_meta_roundtrip_copy; DROP TABLE IF EXISTS shard_meta_roundtrip; DROP TABLE IF EXISTS shard_meta_roundtrip_s_0; DROP TABLE IF EXISTS shard_meta_roundtrip_s_1; CREATE TABLE shard_meta_roundtrip_s_0(id bigint, title text, gid uint) min_infix_len='2' morphology='stem_en'; CREATE TABLE shard_meta_roundtrip_s_1(id bigint, title text, gid uint) min_infix_len='2' morphology='stem_en'; CREATE TABLE shard_meta_roundtrip(id bigint, title text, gid uint) type='shard' min_infix_len='2' morphology='stem_en' local='shard_meta_roundtrip_s_0' local='shard_meta_roundtrip_s_1'; INSERT INTO shard_meta_roundtrip (id, title, gid) VALUES (1, 'before-restart', 10);"
+––– output –––
+––– input –––
+bash -c 'out=$(mysql -h0 -P1306 -e "SHOW CREATE TABLE shard_meta_roundtrip" | tr -d "\r"); echo "$out" | grep -F "type='\''shard'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "min_infix_len='\''2'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "morphology='\''stem_en'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "local='\''shard_meta_roundtrip_s_0'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "local='\''shard_meta_roundtrip_s_1'\''" >/dev/null || { echo "$out"; exit 1; }; echo "show create before restart ok";'
+––– output –––
+show create before restart ok
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+bash -c 'out=$(mysql -h0 -P1306 -e "SHOW TABLES LIKE '\''shard_meta_roundtrip'\''" | tr -d "\r"); echo "$out" | grep -F "shard_meta_roundtrip" >/dev/null || { echo "$out"; exit 1; }; echo "shard reloaded after restart";'
+––– output –––
+shard reloaded after restart
+––– input –––
+bash -c 'out=$(mysql -h0 -P1306 -e "SHOW CREATE TABLE shard_meta_roundtrip" | tr -d "\r"); echo "$out" | grep -F "type='\''shard'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "min_infix_len='\''2'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "morphology='\''stem_en'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "local='\''shard_meta_roundtrip_s_0'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "local='\''shard_meta_roundtrip_s_1'\''" >/dev/null || { echo "$out"; exit 1; }; echo "show create after restart ok";'
+––– output –––
+show create after restart ok
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_meta_roundtrip (id, title, gid) VALUES (2, 'after-restart', 20); SELECT id, title, gid FROM shard_meta_roundtrip ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    1 | before-restart |   10 |
+|    2 | after-restart  |   20 |
++------+----------------+------+
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_meta_roundtrip_copy LIKE shard_meta_roundtrip;"
+––– output –––
+––– input –––
+bash -c 'out=$(mysql -h0 -P1306 -e "SHOW CREATE TABLE shard_meta_roundtrip_copy" | tr -d "\r"); echo "$out" | grep -F "type='\''shard'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "min_infix_len='\''2'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "morphology='\''stem_en'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "local='\''shard_meta_roundtrip_s_0'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "local='\''shard_meta_roundtrip_s_1'\''" >/dev/null || { echo "$out"; exit 1; }; echo "create like from restarted shard ok";'
+––– output –––
+create like from restarted shard ok

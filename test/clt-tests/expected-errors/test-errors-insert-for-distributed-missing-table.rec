@@ -5,30 +5,31 @@ sed -i '/^searchd/a\    buddy_path =' /etc/manticoresearch/manticore.conf
 rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index2006(f text, s string); insert into index2006 values(3,'ghi','string');"
+mysql -h0 -P9306 -e "CREATE TABLE dist_table_s_0(f text, s string); insert into dist_table_s_0 values(3,'ghi','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE index2007(f text, s string); insert into index2007 values(4,'jkl','string');"
+mysql -h0 -P9306 -e "CREATE TABLE dist_table_s_1(f text, s string); insert into dist_table_s_1 values(4,'jkl','string');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index2006' local='index2007';"
+mysql -h0 -P9306 -e "CREATE TABLE dist_table(f text, s string) type='shard' local='dist_table_s_0' local='dist_table_s_1';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; DESC dist_table"
 ––– output –––
-+------------+-------------+
-| Table      | Type        |
-+------------+-------------+
-| dist_table | distributed |
-| index2006  | rt          |
-| index2007  | rt          |
-+------------+-------------+
-+-----------+-------+
-| Agent     | Type  |
-+-----------+-------+
-| index2006 | local |
-| index2007 | local |
-+-----------+-------+
++----------------+-------+
+| Table          | Type  |
++----------------+-------+
+| dist_table     | shard |
+| dist_table_s_0 | rt    |
+| dist_table_s_1 | rt    |
++----------------+-------+
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| f     | text   | indexed stored |
+| s     | string |                |
++-------+--------+----------------+
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO dist_table (id, column1, column2) VALUES (1, 'value1', 'value2'), (2, 'value3', 'value4');"
 ––– output –––

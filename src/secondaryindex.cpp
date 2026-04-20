@@ -1273,6 +1273,14 @@ bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 }
 
 
+void SIContainer_c::RenameFile ( const CSphString & sOldFile, const CSphString & sNewFile )
+{
+	for ( auto & tIndex : m_dIndexes )
+		if ( tIndex.m_sFile==sOldFile )
+			tIndex.m_sFile = sNewFile;
+}
+
+
 bool SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
 {
 	bool bUpdated = false;

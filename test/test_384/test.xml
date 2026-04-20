@@ -181,9 +181,17 @@ searchd
 <!-- _bulk cluster:name format -->
 <bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
 { "index" : { "_index" : "test:rt1", "_id" : "301" } }
-{ "gid" : "301" }
+{ "gid" : "310" }
 
 </bulk>
+
+<!-- _bulk _cluster property -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "rt1", "_cluster":"test", "_id" : "401" } }
+{ "gid" : "311" }
+
+</bulk>
+
 <query endpoint="json/search">
 { "table": "rt1", "query": { "match_all": {} } }
 </query>

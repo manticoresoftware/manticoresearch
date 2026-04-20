@@ -1277,7 +1277,10 @@ void SIContainer_c::RenameFile ( const CSphString & sOldFile, const CSphString &
 {
 	for ( auto & tIndex : m_dIndexes )
 		if ( tIndex.m_sFile==sOldFile )
+		{
 			tIndex.m_sFile = sNewFile;
+			tIndex.m_pIndex->UpdateFilename ( sNewFile.cstr() );
+		}
 }
 
 

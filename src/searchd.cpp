@@ -13727,16 +13727,6 @@ void ShowHelp ()
 		);
 }
 
-static bool HasQuietFlag ( int argc, char ** argv )
-{
-	for ( int i = 1; i < argc; ++i )
-		if ( !strcmp ( argv[i], "-q" ) || !strcmp ( argv[i], "--quiet" ) || !strcmp ( argv[i], "--check" ) )
-			return true;
-
-	return false;
-}
-
-
 void InitSharedBuffer ()
 {
 	static CSphLargeBuffer<SharedData_t, true> g_dShared;
@@ -14849,10 +14839,10 @@ static void InitBanner()
 }
 
 
-static void CheckSSL()
+static void CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners )
 {
 	// check for SSL inited well
-	for ( const auto & tListener : g_dListeners )
+	for ( const auto & tListener : dListeners )
 	{
 		CSphString sError;
 		if ( tListener.m_eProto==Proto_e::HTTPS )
@@ -14910,30 +14900,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool bKNNError = !InitKNN ( sKNNError );
 	sphCollationInit ();
 
-	InitBanner();
-
-	g_bOptQuiet = HasQuietFlag ( argc, argv );
 	ESphLogLevel eQuietRestoreLevel = g_eLogLevel;
-	if ( g_bOptQuiet )
-		g_eLogLevel = SPH_LOG_FATAL;
-
-	if ( !WinService() && !g_bOptQuiet )
-		fprintf ( stdout, "%s",  g_sBanner.cstr() );
-
-	if ( bColumnarError )
-		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
-
-	if ( bSecondaryError )
-		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
-
-	if ( bKNNError )
-		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
-
-	if ( !sError.IsEmpty() )
-		sError = "";
-
-	if ( !sKNNError.IsEmpty() )
-		sKNNError = "";
 
 	CSphString sTZWarning;
 	{
@@ -14967,15 +14934,16 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
 	bool			bMeasureStack = false;
+	bool			bQuietRequested = false;
 
 	DWORD			uReplayFlags = 0;
 
 	#define OPT(_a1,_a2)	else if ( !strcmp(argv[i],_a1) || !strcmp(argv[i],_a2) )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
-	auto UpdateLogLevel = [&eQuietRestoreLevel] ( ESphLogLevel eLevel )
+	auto UpdateLogLevel = [&eQuietRestoreLevel, &bQuietRequested, &bConfigTest] ( ESphLogLevel eLevel )
 	{
-		if ( g_bOptQuiet )
+		if ( bQuietRequested || bConfigTest )
 			eQuietRestoreLevel = Max ( eQuietRestoreLevel, eLevel );
 		else
 			g_eLogLevel = Max ( g_eLogLevel, eLevel );
@@ -14990,8 +14958,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )		{ ShowHelp(); return 0; }
-		OPT ( "-v", "--version" )	{ return 0; }
-		OPT ( "-q", "--quiet" )		g_bOptQuiet = true;
+		OPT ( "-v", "--version" )	{ InitBanner(); fprintf ( stdout, "%s", g_sBanner.cstr() ); return 0; }
+		OPT ( "-q", "--quiet" )		bQuietRequested = true;
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
@@ -15014,7 +14982,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
 		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
-		OPT1 ( "--check" )			{ bConfigTest = true; bTestMode = true; g_bOptNoDetach = true; }
+		OPT1 ( "--check" )			bConfigTest = true;
 		OPT1 ( "--test" )			{ bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
@@ -15049,6 +15017,31 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
+
+	InitBanner();
+
+	g_bOptQuiet = bQuietRequested || bConfigTest;
+
+	if ( g_bOptQuiet )
+		g_eLogLevel = SPH_LOG_FATAL;
+
+	if ( !WinService() && !g_bOptQuiet )
+		fprintf ( stdout, "%s",  g_sBanner.cstr() );
+
+	if ( bColumnarError )
+		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
+
+	if ( bSecondaryError )
+		sphWarning ( "Error initializing secondary index: %s", g_sSecondaryError.cstr() );
+
+	if ( bKNNError )
+		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
+
+	if ( !sError.IsEmpty() )
+		sError = "";
+
+	if ( !sKNNError.IsEmpty() )
+		sKNNError = "";
 
 	StringBuilder_c sStack;
 	DetermineNodeItemStackSize ( sStack );
@@ -15170,6 +15163,43 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>10485760 )
 		sphFatal ( "max_filter_values out of bounds (1..10485760)" );
+
+	if ( bConfigTest )
+	{
+		CSphVector<ListenerDesc_t> dConfigTestListeners;
+
+		if ( bOptListen )
+			dConfigTestListeners.Add ( ParseListener ( sOptListen.cstr() ) );
+		else if ( bOptPort )
+			dConfigTestListeners.Add ( MakeAnyListener ( iOptPort ) );
+		else
+		{
+			for ( CSphVariant * v = hSearchdpre ( "listen" ); v; v = v->m_pNext )
+				dConfigTestListeners.Add ( ParseListener ( v->cstr() ) );
+
+			if ( dConfigTestListeners.IsEmpty() )
+			{
+				dConfigTestListeners.Add ( MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX ) );
+				dConfigTestListeners.Add ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
+			}
+		}
+
+		if ( !ValidateListenerRanges ( dConfigTestListeners, sError ) )
+			sphFatal ( "%s", sError.cstr() );
+
+		CSphString sSslCert ( hSearchdpre.GetStr ( "ssl_cert" ) );
+		CSphString sSslKey ( hSearchdpre.GetStr ( "ssl_key" ) );
+		CSphString sSslCa ( hSearchdpre.GetStr ( "ssl_ca" ) );
+		FixPathAbsolute ( sSslCert );
+		FixPathAbsolute ( sSslKey );
+		FixPathAbsolute ( sSslCa );
+		SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
+		CheckSSL ( dConfigTestListeners );
+
+		fprintf ( stdout, "OK\n" );
+		fflush ( stdout );
+		return 0;
+	}
 
 	bool bVisualLoad = true;
 	bool bWatched = false;
@@ -15337,7 +15367,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	FixPathAbsolute ( sSslKey );
 	FixPathAbsolute ( sSslCa );
 	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-	CheckSSL();
+	CheckSSL ( dListenerDescs );
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
@@ -15574,14 +15604,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 		if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
 			sphSetSockTFO ( dListener.m_iSock );
-	}
-
-	if ( bConfigTest )
-	{
-		fprintf ( stdout, "OK\n" );
-		fflush ( stdout );
-		Shutdown();
-		return 0;
 	}
 
 	g_pTickPoolThread = MakeThreadPool ( g_iNetWorkers, "TickPool" );

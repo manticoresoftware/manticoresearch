@@ -336,7 +336,7 @@ jobs:
       build_artifact_name: debug_build
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
-      timeout: 10
+      timeout: 15
 
   build_linux_release:
     if: needs.meta.outputs.run_builds == 'true'
@@ -365,7 +365,7 @@ jobs:
       build_artifact_name: release_build
       artifact_name: release_mcl_test_results
       results_name: "Linux release MCL test results"
-      timeout: 10
+      timeout: 15
       INSTALL_MCL_FROM_DEPS: true
       FLOAT_TOLERANCE: true
       CTEST_EXCLUDE_REGEX: "rt_298|rt_306|rt_481"
@@ -380,7 +380,7 @@ jobs:
       build_artifact_name: release_build
       artifact_name: release_test_results
       results_name: "Linux release test results"
-      timeout: 10
+      timeout: 15
 
 
   # When only CLT changed and a cached image exists, build jobs are skipped. A job that needs

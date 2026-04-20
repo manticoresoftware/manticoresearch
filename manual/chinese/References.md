@@ -520,6 +520,7 @@ index_converter {--config /path/to/config|--path}
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - 检查配置文件并退出
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - 指定配置文件的路径
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器以控制台模式运行
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 在崩溃时启用核心转储保存
@@ -546,7 +547,10 @@ searchd [OPTIONS]
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止Manticore服务器
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - 优雅地停止Manticore服务器
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - 从表中引用的所有文件名中删除路径名
-* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - 检查配置文件并退出
+* [--watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - 强制内部看门狗
+* [--no-watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - 禁用内部看门狗
+* [--systemd](Starting_the_server/Manually.md#searchd-command-line-options) - 强制systemd模式
+* [--no-systemd](Starting_the_server/Manually.md#searchd-command-line-options) - 强制独立模式（忽略systemd）
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - 显示版本信息
 
 ##### Searchd 环境变量

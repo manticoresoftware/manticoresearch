@@ -10088,6 +10088,9 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 	if ( sNewBase == GetFilebase() )
 		return RE_OK;
 
+	CSphString sOldSPIDX = GetFilename ( SPH_EXT_SPIDX );
+	CSphString sOldSPJIDX = GetFilename ( SPH_EXT_SPJIDX );
+
 	IndexFiles_c dFiles ( GetFilebase(), nullptr, m_uVersion );
 	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
@@ -10102,6 +10105,8 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 	}
 
 	SetFilebase ( std::move ( sNewBase ) );
+	m_tSI.RenameFile ( sOldSPIDX, GetFilename ( SPH_EXT_SPIDX ) );
+	m_tSI.RenameFile ( sOldSPJIDX, GetFilename ( SPH_EXT_SPJIDX ) );
 
 	return RE_OK;
 }

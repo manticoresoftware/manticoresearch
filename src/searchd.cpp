@@ -6252,8 +6252,13 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	return sProps.cstr();
 }
 
+struct DescFlavour_t
+{
+	std::function<void (const char*)> fnAddProperties;
+	ESphAttr eSkipAttr = SPH_ATTR_NONE;
+};
 
-static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema )
+static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema, const DescFlavour_t& tFlavour )
 {
 	if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
 		return;
@@ -6277,107 +6282,69 @@ static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, con
 			sProperties << sProps;
 	}
 
-	dOut.Add ( sProperties.cstr () );
+	tFlavour.fnAddProperties ( sProperties.cstr () );
 }
 
 
-static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema )
+static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema, const DescFlavour_t& tFlavour )
 {
 	if ( sphIsInternalAttr ( tAttr ) )
+		return;
+
+	if ( tFlavour.eSkipAttr == tAttr.m_eAttrType )
 		return;
 
 	if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
 		return; // already described it as a field property
 
-	if ( dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
-	{
-		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
-		{
-			StringBuilder_c sName;
-			sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
-			dOut.Add ( sName.cstr() );
-		} else
-			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+	if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
+		return;
 
-		dOut.Add ( DescribeAttributeProperties(tAttr) );
-	}
+	if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
+	{
+		StringBuilder_c sName;
+		sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
+		dOut.Add ( sName.cstr() );
+	} else
+		dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+
+	tFlavour.fnAddProperties ( DescribeAttributeProperties(tAttr).cstr() );
 }
 
-
-void ShowFields ( VectorLike& dOut, const CSphSchema& tSchema )
+void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bShowFields )
 {
-	// result set header packet
-	dOut.SetColNames ( { "Field", "Type", "Null", "Key", "Default", "Extra" } );
-
-	auto Tail = [&dOut](const auto& tCol) { dOut.Add (tCol); dOut.Add ( "NO" ); dOut.Add ( "" ); dOut.Add ( "" ); dOut.Add ( "" ); };
-
-	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
-	const auto& tId = tSchema.GetAttr ( 0 );
-	if ( dOut.MatchAdd ( tId.m_sName.cstr() ) )
-		Tail ( sphTypeName ( tId.m_eAttrType ) );
-
-	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
-	{
-		const auto& tField = tSchema.GetField ( i );
-		if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
-			continue;
-
-		const CSphColumnInfo* pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
-		Tail ( pAttr ? "string" : "text" );
+	DescFlavour_t tFlavour;
+	if ( bShowFields ) {
+		dOut.SetColNames ( { "Field", "Type", "Null", "Key", "Default", "Extra" } );
+		tFlavour.fnAddProperties = [&dOut](const char*) { dOut.Add ( "NO" ); dOut.Add ( "" ); dOut.Add ( "" ); dOut.Add ( "" ); };
+		tFlavour.eSkipAttr = SPH_ATTR_TOKENCOUNT;
+	} else {
+		dOut.SetColNames ( { "Field", "Type", "Properties" } );
+		tFlavour.fnAddProperties = [&dOut](const char* szAttr) { dOut.Add ( szAttr ); };
 	}
 
-	for ( int i = 1; i < tSchema.GetAttrsCount(); ++i ) // from 1, as 0 is docID and already emerged
-	{
-		const auto& tAttr = tSchema.GetAttr ( i );
-		if ( sphIsInternalAttr ( tAttr ) )
+	for ( int i = 0; i<tSchema.GetAttrsCount (); ++i ) {
+		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema, tFlavour );
+		if ( i>0 )
 			continue;
 
-		if ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-			continue;
-
-		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
-			continue; // already described it as a field property
-
-		if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
-			continue;
-
-		if ( tAttr.m_eAttrType == SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount != ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount > 0 )
-			Tail ( SphSprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount ) );
-		else
-			Tail ( sphTypeName ( tAttr.m_eAttrType ) );
+		assert ( i==0 && tSchema.GetAttr(0).m_sName==sphGetDocidName() );
+		for ( int j = 0; j<tSchema.GetFieldsCount (); ++j )
+			AddFieldDesc ( dOut, tSchema.GetField(j), tSchema, tFlavour );
 	}
 }
 
-void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bIsTemplate, bool bShowFields )
-{
-	if ( bShowFields )
-		return ShowFields ( dOut, tSchema );
 
-	// result set header packet
-	dOut.SetColNames ( { "Field", "Type", "Properties" } );
-
-	// id comes before fields
-	if ( !bIsTemplate )
-	{
-		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		AddAttributeDesc ( dOut, tSchema.GetAttr(0), tSchema );
-	}
-
-	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-		AddFieldDesc ( dOut, tSchema.GetField(i), tSchema );
-
-	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
-		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema );
-}
-
-
-bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce )
+bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce, bool bShowFields )
 {
 	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
 		return false;
 
 	// result set header packet
 	dOut.SetColNames ( { "Agent", "Type" } );
+
+	if ( bShowFields )
+		return true;
 
 	for ( const auto & sIdx : pDistr->m_dLocal )
 		dOut.MatchTuplet( sIdx.cstr (), "local" );
@@ -6418,6 +6385,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 	FixupSystemTableName (&tStmt);
 	auto sName = tStmt.m_sIndex;
 	auto pServed = GetServed ( sName );
+	const bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
 	if ( pServed )
 	{
 		// data
@@ -6430,8 +6398,6 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 		if ( tStmt.m_dStringSubkeys.GetLength()==1 && tStmt.m_dStringSubkeys[0].EqN(".table") )
 			bNeedInternal = true;
 
-		bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
-
 		if ( bNeedInternal && ServedDesc_t::IsMutable ( pServed ) && !bShowFields )
 		{
 			RIdx_T<const RtIndex_i*> pRtIndex { pServed };
@@ -6440,7 +6406,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 
 		const CSphSchema &tSchema = *pSchema;
 		assert ( pServed->m_eType==IndexType_e::TEMPLATE || tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		DescribeLocalSchema ( dOut, tSchema, pServed->m_eType==IndexType_e::TEMPLATE, bShowFields );
+		DescribeLocalSchema ( dOut, tSchema, bShowFields );
 	} else
 	{
 		auto pDistr = GetDistr ( sName );
@@ -6451,7 +6417,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 		}
 
 		CSphString sError;
-		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce ) )
+		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
 		{
 			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 			return;

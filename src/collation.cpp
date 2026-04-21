@@ -375,7 +375,7 @@ uint64_t Utf8CIHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 		const BYTE * pCur = pStr++;
 		int iCode = sphUTF8Decode ( pCur );
 		iCode = CollateUTF8CI ( iCode );
-		uAcc = sphFNV64 ( &iCode, 4, uAcc );
+		uAcc = sphFNV64 ( iCode, uAcc );
 	}
 
 	return uAcc;

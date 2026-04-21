@@ -1585,12 +1585,12 @@ uint64_t CSphFilterSettings::GetHash() const
 		case SPH_FILTER_VALUES:
 			{
 				int t = m_dValues.GetLength();
-				h = sphFNV64 ( &t, sizeof(t), h );
+				h = sphFNV64 ( t, h );
 				h = sphFNV64 ( m_dValues.Begin(), t*sizeof(SphAttr_t), h );
 				break;
 			}
 		case SPH_FILTER_RANGE:
-			h = sphFNV64 ( &m_iMaxValue, sizeof(m_iMaxValue), sphFNV64 ( &m_iMinValue, sizeof(m_iMinValue), h ) );
+			h = sphFNV64 ( m_iMaxValue, sphFNV64 ( m_iMinValue, h ) );
 			break;
 		case SPH_FILTER_FLOATRANGE:
 			h = sphFNV64 ( &m_fMaxValue, sizeof(m_fMaxValue), sphFNV64 ( &m_fMinValue, sizeof(m_fMinValue), h ) );
@@ -1620,9 +1620,9 @@ bool FilterTreeItem_t::operator == ( const FilterTreeItem_t & rhs ) const
 
 uint64_t FilterTreeItem_t::GetHash() const
 {
-	uint64_t uHash = sphFNV64 ( &m_iLeft, sizeof(m_iLeft) );
-	uHash = sphFNV64 ( &m_iRight, sizeof(m_iRight), uHash );
-	uHash = sphFNV64 ( &m_iFilterItem, sizeof(m_iFilterItem), uHash );
+	uint64_t uHash = sphFNV64 ( m_iLeft );
+	uHash = sphFNV64 ( m_iRight, uHash );
+	uHash = sphFNV64 ( m_iFilterItem, uHash );
 	uHash = sphFNV64 ( &m_bOr, sizeof(m_bOr), uHash );
 	return uHash;
 }

@@ -1118,7 +1118,7 @@ static void AddSharedKeys ( const uint64_t uIndex, const VecTraits_T<DocID_t> & 
 	ARRAY_FOREACH ( i, dKeys )
 	{
 		DocID_t iDocid = dDocids[i];
-		dKeys[i] = sphFNV64 ( &iDocid, sizeof ( iDocid ), uIndex );
+		dKeys[i] = sphFNV64 ( iDocid, uIndex );
 	}
 }
 

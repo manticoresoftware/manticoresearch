@@ -153,15 +153,15 @@ uint64_t ISphTokenizer::GetSettingsFNV() const noexcept
 		uFlags |= 1 << 1;
 	if ( m_bShortTokenFilter )
 		uFlags |= 1 << 2;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
-	uHash = sphFNV64 ( &m_uBlendVariants, sizeof ( m_uBlendVariants ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
+	uHash = sphFNV64 ( m_uBlendVariants, uHash );
 
-	uHash = sphFNV64 ( &m_tSettings.m_iType, sizeof ( m_tSettings.m_iType ), uHash );
-	uHash = sphFNV64 ( &m_tSettings.m_iMinWordLen, sizeof ( m_tSettings.m_iMinWordLen ), uHash );
-	uHash = sphFNV64 ( &m_tSettings.m_iNgramLen, sizeof ( m_tSettings.m_iNgramLen ), uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iType, uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iMinWordLen, uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iNgramLen, uHash );
 
 	if ( !m_tSynFileInfo.m_sFilename.IsEmpty() )
-		uHash = sphFNV64 ( &m_tSynFileInfo.m_uCRC32, sizeof ( m_tSynFileInfo.m_uCRC32 ), uHash );
+		uHash = sphFNV64 ( m_tSynFileInfo.m_uCRC32, uHash );
 
 	return uHash;
 }

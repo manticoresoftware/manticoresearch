@@ -4798,7 +4798,7 @@ uint64_t ExtQuorum_c::GetWordID() const
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		uint64_t uCur = m_dChildren[i].m_pTerm->GetWordID();
-		uHash = sphFNV64 ( &uCur, sizeof(uCur), uHash );
+		uHash = sphFNV64 ( uCur, uHash );
 	}
 
 	return uHash;
@@ -5340,7 +5340,7 @@ uint64_t ExtOrder_c::GetWordID () const
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
 		uint64_t uCur = m_dChildren[i]->GetWordID();
-		uHash = sphFNV64 ( &uCur, sizeof(uCur), uHash );
+		uHash = sphFNV64 ( uCur, uHash );
 	}
 
 	return uHash;

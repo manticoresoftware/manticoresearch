@@ -2190,13 +2190,13 @@ POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(renta
 <!-- end -->
 
 <!-- example elasticaggrs -->
-##### Elasticsearch风格的指标聚合
+##### PERCENTILES(), PERCENTILE_RANKS(), MEDIAN_ABSOLUTE_DEVIATION()
 
-Manticore还支持基于`t-digest`的数值字段Elasticsearch风格指标聚合：
+Manticore 还支持以下针对数字字段的统计函数：
 
-- `percentiles(field[, {values='...',compression=N}])`
-- `percentile_ranks(field, {values='...',compression=N})`
-- `median_absolute_deviation(field[, {compression=N}])`
+- `percentiles(field[, {values='...',compression=N}])` - 返回数字字段的估计百分位值（例如 p50、p95、p99）。
+- `percentile_ranks(field, {values='...',compression=N})` - 返回每个输入值小于或等于的文档百分比估计值。
+- `median_absolute_deviation(field[, {compression=N}])` - 返回估计的中位数绝对偏差（MAD），这是围绕中位数的稳健分布度量。
 
 这些函数设计为近似计算，当需要内存使用有限的稳健分布统计时非常有用。可选的`compression`参数控制精度/内存的权衡：较低值更快更轻但可能产生更多近似误差；默认值为`200`。
 

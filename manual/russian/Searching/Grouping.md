@@ -2190,13 +2190,13 @@ POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(renta
 <!-- end -->
 
 <!-- example elasticaggrs -->
-##### Метрические агрегации в стиле Elasticsearch
+##### PERCENTILES(), PERCENTILE_RANKS(), MEDIAN_ABSOLUTE_DEVIATION()
 
-Manticore также поддерживает метрические агрегации в стиле Elasticsearch на основе `t-digest` для числовых полей:
+Manticore также поддерживает следующие статистические функции для числовых полей:
 
-- `percentiles(field[, {values='...',compression=N}])`
-- `percentile_ranks(field, {values='...',compression=N})`
-- `median_absolute_deviation(field[, {compression=N}])`
+- `percentiles(field[, {values='...',compression=N}])` - возвращает оценки значений процентилей (например, p50, p95, p99) для числового поля.
+- `percentile_ranks(field, {values='...',compression=N})` - возвращает оценку процента документов со значениями меньше или равными каждому входному значению.
+- `median_absolute_deviation(field[, {compression=N}])` - возвращает оценку медианного абсолютного отклонения (MAD), устойчивый показатель разброса вокруг медианы.
 
 Эти функции являются приблизительными по своей сути и полезны, когда вам нужна надежная статистика распределения с ограниченным использованием памяти. Необязательный параметр `compression` управляет компромиссом между точностью и памятью: меньшие значения работают быстрее и легче, но могут давать большую погрешность аппроксимации; значение по умолчанию — `200`.
 

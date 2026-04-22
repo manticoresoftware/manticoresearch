@@ -364,9 +364,6 @@ jobs:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       artifact_name: mcl_package_jammy_x86_64
-      version: 0.0.0
-      package_version: 0.0.0
-      rpm_package_version: 0.0.0
       embeddings_artifact: embeddings_linux_x86_64
       distr: jammy
       arch: x86_64

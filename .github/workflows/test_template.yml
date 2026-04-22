@@ -122,9 +122,15 @@ jobs:
           set -euo pipefail
 
           export DEBIAN_FRONTEND=noninteractive
-          printf '%s\n' 'deb http://azure.archive.ubuntu.com/ubuntu jammy main' 'deb http://azure.archive.ubuntu.com/ubuntu jammy-updates main' > /etc/apt/sources.list && rm -f /etc/apt/sources.list.d/* && apt-get update
+          cat >/etc/apt/sources.list <<'EOF'
+          deb http://archive.ubuntu.com/ubuntu jammy main
+          deb http://archive.ubuntu.com/ubuntu jammy-updates main
+          deb http://security.ubuntu.com/ubuntu jammy-security main
+          EOF
+          rm -f /etc/apt/sources.list.d/*
+          apt-get -o Acquire::Retries=3 update || apt-get -o Acquire::Retries=3 update
           apt-get -y remove 'manticore-repo' || true
-          apt-get -y install wget curl python3
+          apt-get -o Acquire::Retries=3 -y install wget curl python3
           curl -fsSL https://repo.manticoresearch.com/manticore-repo.noarch.deb -o /tmp/manticore-repo.noarch.deb
           dpkg -i /tmp/manticore-repo.noarch.deb
 

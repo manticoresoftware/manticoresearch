@@ -1095,11 +1095,14 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 		return;
 	}
 
-	tSqlOut.HeadBegin(std::move(sName));
-
 	// data
 	const CSphSchema * pSchema = &RIdx_c ( pServed )->GetMatchSchema();
 	const CSphSchema & tSchema = *pSchema;
+
+	if ( tSchema.GetAttrsCount()==0 )
+		return;
+
+	tSqlOut.HeadBegin(std::move(sName));
 	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
 	const auto & tId = tSchema.GetAttr ( 0 );
 

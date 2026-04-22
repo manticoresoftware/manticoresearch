@@ -119,6 +119,10 @@ jobs:
           sed -i "s/0\.0\.0/${{ inputs.version }}/g" CMakeLists.txt
           cat CMakeLists.txt
 
+      - name: Mark repository as safe for semver
+        if: ${{ inputs.package_version == '' }}
+        run: git config --global --add safe.directory "$PWD"
+
       - name: Calculate MCL package version
         if: ${{ inputs.package_version == '' }}
         id: semver

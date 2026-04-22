@@ -93,7 +93,7 @@ CALL CONVERSATIONAL_RAG(
 );
 EOF
 ––– output –––
-ERROR 1064 (42000) at line 1: content_fields parameter is required (position 4)
+ERROR 1064 (42000) at line 1: RAG model '' not found
 ––– comment –––
 Test 9: DROP non-existent RAG MODEL
 ––– input –––

@@ -174,29 +174,29 @@ property: updated_at
 Test CALL CONVERSATIONAL_RAG - basic query without conversation UUID
 This should succeed with OPENAI_API_KEY set
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is vector search?', 'docs', 'test_assistant', 'content')\G"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is vector search?', 'docs', 'test_assistant')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
        user_query: What is vector search?
-     search_query: #!/(?i)^.*\bvector search\b.*\bmachine learning\b.*$|^.*\bmachine learning\b.*\bvector search\b.*$/!#
+     search_query: What is vector search?
          response: #!/.*[Vv]ector.*[Ss]earch.*/!#
           sources: [{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
 ––– comment –––
 Test CALL CONVERSATIONAL_RAG - with multiple content fields
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG', 'docs', 'test_assistant', 'title,content')\G"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG', 'docs', 'test_assistant')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
        user_query: Tell me about RAG
      search_query: #!/.*RAG.*/!#
          response: #!/.+/!#
-          sources: [{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
+          sources: [{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
 ––– comment –––
 Test CALL CONVERSATIONAL_RAG - with conversation UUID for context tracking (should fail)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Can you explain more?', 'docs', 'test_assistant', 'content', 'test-conv-12345678-1234-1234-1234-123456789abc')\G"
+mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc

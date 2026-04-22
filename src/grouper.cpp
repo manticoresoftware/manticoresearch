@@ -301,8 +301,9 @@ SphGroupKey_t CSphGrouperMulti<PRED,HAVE_COLUMNAR>::KeyFromMatch ( const CSphMat
 
 		switch ( m_dAttrs[i].m_eAttrType )
 		{
-		case SPH_ATTR_STRING:
-		case SPH_ATTR_STRINGPTR:
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_STRINGPTR:
+	case SPH_ATTR_TDIGEST_PTR:
 			tKey = FetchStringKey ( tMatch, m_dAttrs[i].m_tLocator, tKey );
 			break;
 
@@ -778,7 +779,8 @@ DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSph
 	switch ( eType )
 	{
 	case SPH_ATTR_STRING:
-	case SPH_ATTR_STRINGPTR:		return new DistinctFetcherString_c(tLocator);
+case SPH_ATTR_STRINGPTR:
+case SPH_ATTR_TDIGEST_PTR:		return new DistinctFetcherString_c(tLocator);
 	case SPH_ATTR_JSON_FIELD:		return new DistinctFetcherJsonField_c(tLocator);
 	case SPH_ATTR_JSON_FIELD_PTR:	return new DistinctFetcherJsonFieldPtr_c(tLocator);
 	case SPH_ATTR_UINT32SET:

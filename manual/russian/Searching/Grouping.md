@@ -2189,6 +2189,108 @@ POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(renta
 
 <!-- end -->
 
+<!-- example elasticaggrs -->
+##### PERCENTILES(), PERCENTILE_RANKS(), MEDIAN_ABSOLUTE_DEVIATION()
+
+Manticore также поддерживает следующие статистические функции для числовых полей:
+
+- `percentiles(field[, {values='...',compression=N}])` - возвращает оценки значений процентилей (например, p50, p95, p99) для числового поля.
+- `percentile_ranks(field, {values='...',compression=N})` - возвращает оценку процента документов со значениями меньше или равными каждому входному значению.
+- `median_absolute_deviation(field[, {compression=N}])` - возвращает оценку медианного абсолютного отклонения (MAD), устойчивый показатель разброса вокруг медианы.
+
+Эти функции являются приблизительными по своей сути и полезны, когда вам нужна надежная статистика распределения с ограниченным использованием памяти. Необязательный параметр `compression` управляет компромиссом между точностью и памятью: меньшие значения работают быстрее и легче, но могут давать большую погрешность аппроксимации; значение по умолчанию — `200`.
+
+<!-- intro -->
+##### Пример:
+
+<!-- request SQL -->
+```sql
+SELECT
+	percentiles(latency) AS p_default,
+	percentiles(latency, {values='5,50,95',compression=200}) AS p_custom,
+	percentile_ranks(latency, {values='10,150,1500',compression=200}) AS r_custom,
+	median_absolute_deviation(latency, {compression=200}) AS mad
+FROM agg_td;
+```
+
+<!-- response SQL -->
+```sql
++--------------------------------------------------------------+-------------------------------+------------------------------+-------------------------------------+
+| p_default                                                    | p_custom                      | r_custom                       | mad                                 |
++--------------------------------------------------------------+-------------------------------+------------------------------+-------------------------------------+
+| {"1":10,"5":10,"25":20,"50":30,"75":40,"95":50,"99":50}      | {"5":10,"50":30,"95":50}      | {"10":20,"150":100,"1500":100} | {"value":10,"value_as_string":"10"} |
++--------------------------------------------------------------+-------------------------------+------------------------------+-------------------------------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /json/search
+{
+  "table": "agg_td",
+  "size": 0,
+  "aggs": {
+    "latency_percentiles": {
+      "percentiles": {
+        "field": "latency",
+        "values": [5, 50, 95],
+        "keyed": true
+      }
+    },
+    "latency_ranks": {
+      "percentile_ranks": {
+        "field": "latency",
+        "values": [10, 150, 1500],
+        "keyed": true
+      }
+    },
+    "latency_mad": {
+      "median_absolute_deviation": {
+        "field": "latency",
+        "tdigest": {
+          "compression": 200
+        }
+      }
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "aggregations": {
+    "latency_percentiles": {
+      "values": {
+        "5.0": 10,
+        "50.0": 30,
+        "95.0": 50
+      }
+    },
+    "latency_ranks": {
+      "values": {
+        "10.0": 20,
+        "150.0": 100,
+        "1500.0": 100
+      }
+    },
+    "latency_mad": {
+      "value": 10,
+      "value_as_string": "10"
+    }
+  },
+  "hits": {
+    "total": 5,
+    "hits": []
+  }
+}
+```
+
+<!-- end -->
+
+Для JSON API `keyed=true` возвращает объект с ключами, соответствующими значениям процентилей/рангов, а `keyed=false` возвращает массив. Эти метрические агрегации требуют числовых исходных значений.
+
 <!-- example accuracy -->
 ## Точность группировки
 

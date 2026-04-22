@@ -1810,12 +1810,28 @@ void SelectParser_t::AutoAlias ( CSphQueryItem & tItem, YYSTYPE * pStart, YYSTYP
 		tItem.m_sAlias = tItem.m_sExpr;
 }
 
+static Aggr_e ToExtendedAggr ( ESphAggrFunc eAggrFunc )
+{
+	switch ( eAggrFunc )
+	{
+	case SPH_AGGR_MIN: return Aggr_e::MIN;
+	case SPH_AGGR_MAX: return Aggr_e::MAX;
+	case SPH_AGGR_SUM: return Aggr_e::SUM;
+	case SPH_AGGR_AVG: return Aggr_e::AVG;
+	case SPH_AGGR_PERCENTILES: return Aggr_e::PERCENTILES;
+	case SPH_AGGR_PERCENTILE_RANKS: return Aggr_e::PERCENTILE_RANKS;
+	case SPH_AGGR_MAD: return Aggr_e::MAD;
+	default: return Aggr_e::NONE;
+	}
+}
+
 void SelectParser_t::AddItem ( YYSTYPE * pExpr, ESphAggrFunc eAggrFunc, YYSTYPE * pStart, YYSTYPE * pEnd )
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
 	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
+	tItem.m_tAggrSettings.m_eAggrFunc = ToExtendedAggr ( eAggrFunc );
 	AutoAlias ( tItem, pStart, pEnd );
 }
 

@@ -77,6 +77,7 @@
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
+%token	TOK_MEDIAN_ABSOLUTE_DEVIATION
 %token	TOK_HINT_SECONDARY
 %token	TOK_HINT_NO_SECONDARY
 %token	TOK_HINT_DOCID
@@ -125,6 +126,8 @@
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
 %token	TOK_PLAN
+%token	TOK_PERCENTILES
+%token	TOK_PERCENTILE_RANKS
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
 %token	TOK_QUARTER
@@ -270,6 +273,7 @@ reserved_tokens_without_option:
 	| TOK_INT | TOK_INTEGER | TOK_INTO
 	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
 	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
+	| TOK_PERCENTILES | TOK_PERCENTILE_RANKS
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
 	| TOK_REMAP | TOK_REPLACE
 	| TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
@@ -277,7 +281,7 @@ reserved_tokens_without_option:
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
-	| TOK_INTERVAL | TOK_REGEX
+	| TOK_INTERVAL | TOK_REGEX | TOK_MEDIAN_ABSOLUTE_DEVIATION
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
 	| TOK_LOCKS | TOK_SCROLL
 	;
@@ -647,6 +651,12 @@ select_expr:
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
 	| TOK_SUM '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_SUM, &$1, &$4 ); }
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
+	| TOK_PERCENTILES '(' expr ')'		{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_PERCENTILES '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILES, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
+	| TOK_PERCENTILE_RANKS '(' expr ')'	{ if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_PERCENTILE_RANKS '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_PERCENTILE_RANKS, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
+	| TOK_MEDIAN_ABSOLUTE_DEVIATION '(' expr ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_MAD, &$1, &$4, nullptr ) ) YYERROR; }
+	| TOK_MEDIAN_ABSOLUTE_DEVIATION '(' expr ',' '{' named_const_list '}' ')' { if ( !pParser->AddExtendedAggrItem ( &$3, SPH_AGGR_MAD, &$1, &$8, &( pParser->GetNamedVec ( $6.GetValueInt() ) ) ) ) YYERROR; }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }

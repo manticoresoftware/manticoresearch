@@ -191,11 +191,23 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
-	for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+	for ( const auto & tScrollAttr : m_tScroll.m_dAttrs )
 	{
-		const auto & tAttr = pSchema->GetAttr(i);
-		if ( tAttr.IsDataPtr() )
-			sphDeallocatePacked ( (BYTE*)m_tRefMatch.GetAttr ( tAttr.m_tLocator ) );
+		if ( tScrollAttr.m_sSortAttr=="weight()" )
+			continue;
+
+		const CSphColumnInfo * pAttr = pSchema->GetAttr ( tScrollAttr.m_sSortAttr.cstr() );
+		if ( !pAttr || !sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
+			continue;
+
+		auto * pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
+		if ( !pData )
+			continue;
+
+		if ( pAttr->m_eAttrType==SPH_ATTR_TDIGEST_PTR )
+			sphDeallocatePackedTdigest ( pData );
+		else
+			sphDeallocatePacked ( pData );
 	}
 
 	m_tRefMatch.ResetDynamic();
@@ -228,7 +240,8 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		SPH_ATTR_TOKENCOUNT,
 		SPH_ATTR_DOUBLE,
 		SPH_ATTR_UINT64,
-		SPH_ATTR_STRINGPTR
+		SPH_ATTR_STRINGPTR,
+		SPH_ATTR_TDIGEST_PTR
 	};
 
 	for ( const auto & i : tScroll.m_dAttrs )

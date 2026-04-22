@@ -108,6 +108,9 @@ jobs:
     name: Windows tests summary and report
     needs: test_windows
     runs-on: ubuntu-22.04
+    permissions:
+      checks: write
+      contents: read
     container:
       image: manticoresearch/ubertests_public:331
     steps:

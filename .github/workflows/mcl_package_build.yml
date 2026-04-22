@@ -45,7 +45,7 @@ on:
           mkdir build
           cd build
           if [ -n "${{ inputs.embeddings_artifact }}" ]; then
-            cmake -DPACK=1 ..
+            cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=OFF ..
           else
             cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=ON ..
           fi

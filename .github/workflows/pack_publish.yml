@@ -71,7 +71,14 @@ jobs:
           else
             files=$(git ls-tree -r --name-only "$head")
           fi
+          repo_has_mcl_pkg=false
+          if python3 dist/resolve_repo_package.py --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl.outputs.mcl_sha }}" --extensions .deb >/dev/null 2>&1; then
+            repo_has_mcl_pkg=true
+          fi
+
           if echo "$files" | grep -Eq '^(mcl|mcl/|\.gitmodules$)'; then
+            echo "mcl_changed=true" >> $GITHUB_OUTPUT
+          elif [[ "$repo_has_mcl_pkg" != true ]]; then
             echo "mcl_changed=true" >> $GITHUB_OUTPUT
           else
             echo "mcl_changed=false" >> $GITHUB_OUTPUT

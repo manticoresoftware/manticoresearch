@@ -115,7 +115,8 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 
 Если вы столкнулись с непредвиденными SST или хотите, чтобы таблицы на всех узлах кластера были бинарно идентичными, вам нужно:
 1. Отключить [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
-2. Оптимизировать таблицы вручную:
+2. Вручную оптимизировать таблицы
+
 <!-- example cluster_manual_drop -->
 На одном из узлов удалить таблицу из кластера:
 <!-- request SQL -->

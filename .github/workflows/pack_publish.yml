@@ -30,6 +30,9 @@ concurrency:
   group: pack_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   check_branch:
     name: Resolve MCL metadata

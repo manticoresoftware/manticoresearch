@@ -577,6 +577,9 @@ jobs:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests
     needs: [build_windows, win_bundle, meta]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/win_test_template.yml
     with:
       CTEST_START: 1

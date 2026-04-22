@@ -2190,13 +2190,13 @@ POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(renta
 <!-- end -->
 
 <!-- example elasticaggrs -->
-##### Elasticsearch-like metric aggregations
+##### PERCENTILES(), PERCENTILE_RANKS(), MEDIAN_ABSOLUTE_DEVIATION()
 
-Manticore also supports Elasticsearch-style metric aggregations based on `t-digest` for numeric fields:
+Manticore also supports the following statistical functions for numeric fields:
 
-- `percentiles(field[, {values='...',compression=N}])`
-- `percentile_ranks(field, {values='...',compression=N})`
-- `median_absolute_deviation(field[, {compression=N}])`
+- `percentiles(field[, {values='...',compression=N}])` - returns estimated percentile values (for example, p50, p95, p99) for a numeric field.
+- `percentile_ranks(field, {values='...',compression=N})` - returns the estimated percentage of documents with values less than or equal to each input value.
+- `median_absolute_deviation(field[, {compression=N}])` - returns an estimated median absolute deviation (MAD), a robust measure of spread around the median.
 
 These functions are approximate by design and are useful when you need robust distribution statistics with bounded memory usage. The optional `compression` controls the accuracy/memory trade-off: lower values are faster and lighter but can produce more approximation error; the default value is `200`.
 

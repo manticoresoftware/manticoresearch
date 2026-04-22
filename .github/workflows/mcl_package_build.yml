@@ -1,0 +1,217 @@
+name: MCL package build
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+      arch:
+        required: false
+        type: string
+        default: x86_64
+      DISTR:
+        required: false
+        type: string
+        default: jammy
+      CTEST_CMAKE_GENERATOR:
+        required: false
+        type: string
+        default: Ninja
+      CTEST_CONFIGURATION_TYPE:
+        required: false
+        type: string
+        default: RelWithDebInfo
+      version:
+        required: false
+        type: string
+        default: ""
+      package_version:
+        required: false
+        type: string
+        default: ""
+      rpm_package_version:
+        required: false
+        type: string
+        default: ""
+      cmake_command:
+        required: false
+        type: string
+        default: |
+          mkdir build
+          cd build
+          if [ -n "${{ inputs.embeddings_artifact }}" ]; then
+            cmake -DPACK=1 ..
+          else
+            cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=ON ..
+          fi
+          cmake --build . --target package
+      cache_key:
+        required: false
+        type: string
+        default: build_linux_x86_64
+      boost:
+        required: false
+        type: string
+        default: boost_nov22
+      embeddings_artifact:
+        required: false
+        type: string
+        default: ""
+      artifact_list:
+        required: false
+        type: string
+        default: "build/manticore-columnar-lib* build/columnar/* build/secondary/* build/knn/*"
+      HOMEBREW_PREFIX:
+        required: false
+        type: string
+        default: ""
+      skip_avx2_move:
+        required: false
+        type: boolean
+        default: false
+      artifact_name:
+        required: true
+        type: string
+
+jobs:
+  build:
+    if: ${{ inputs.enabled }}
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    container:
+      image: manticoresearch/external_toolchain:clang16_cmake3263
+      env:
+        CACHEB: "../cache"
+        VERBOSE: 1
+        DIAGNOSTIC: 1
+        NO_TESTS: 1
+        DISTR: ${{ inputs.DISTR }}
+        boost: ${{ inputs.boost }}
+        sysroot: roots_nov22
+        arch: ${{ inputs.arch }}
+        CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
+        CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
+        SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
+        HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
+        PACKAGE_VERSION: ${{ inputs.package_version }}
+        RPM_PACKAGE_VERSION: ${{ inputs.rpm_package_version }}
+    steps:
+      - name: Checkout MCL repository
+        uses: actions/checkout@v4
+        with:
+          repository: manticoresoftware/columnar
+          ref: ${{ inputs.mcl_full_sha }}
+          fetch-depth: 0
+          set-safe-directory: true
+
+      - name: Determine branch name for cache
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "branch_name=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Patch version
+        if: inputs.version != ''
+        run: |
+          sed -i "s/0\.0\.0/${{ inputs.version }}/g" CMakeLists.txt
+          cat CMakeLists.txt
+
+      - name: Calculate MCL package version
+        if: ${{ inputs.package_version == '' }}
+        id: semver
+        uses: manticoresoftware/semver-tagger-action@main
+        with:
+          github_token: ${{ github.token }}
+          conventional_commits_authors: alexey@manticoresearch.com
+          ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
+
+      - name: Download embeddings lib
+        if: ${{ inputs.embeddings_artifact != '' }}
+        uses: manticoresoftware/download_artifact_with_retries@v4
+        continue-on-error: true
+        with:
+          name: ${{ inputs.embeddings_artifact }}
+          path: ./embeddings-lib/
+
+      - name: Initialization
+        run: |
+          bash /sysroot/root/entry_point.sh
+          git config --global --add safe.directory "$PWD"
+          if [[ -n "${{ inputs.embeddings_artifact }}" ]]; then
+            mkdir -p embeddings/target/release
+            mv ./embeddings-lib/build/* embeddings/target/release/
+            rm -fr ./embeddings-lib
+          fi
+          if [[ -z "${PACKAGE_VERSION}" && -n "${{ steps.semver.outputs.version_full }}" ]]; then
+            export PACKAGE_VERSION='${{ steps.semver.outputs.version_full }}'
+            echo "PACKAGE_VERSION=${{ steps.semver.outputs.version_full }}" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${RPM_PACKAGE_VERSION}" && -n "${{ steps.semver.outputs.version_rpm }}" ]]; then
+            export RPM_PACKAGE_VERSION='${{ steps.semver.outputs.version_rpm }}'
+            echo "RPM_PACKAGE_VERSION=${{ steps.semver.outputs.version_rpm }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Check out main cache before building
+        uses: actions/cache@v4
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: ${{ inputs.cache_key }}_${{ steps.branch.outputs.branch_name }}
+          restore-keys: |
+            ${{ inputs.cache_key }}_master
+
+      - name: Check out deps cache before building
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/cache
+          enableCrossOsArchive: true
+          key: ${{ inputs.cache_key }}_deps_${{ steps.branch.outputs.branch_name }}
+          restore-keys: |
+            ${{ inputs.cache_key }}_deps_master
+
+      - name: Build
+        run: ${{ inputs.cmake_command }}
+
+      - name: Move AVX2/AVX-512-optimized libraries
+        if: success() && inputs.skip_avx2_move != true
+        run: |
+          if [ -d build/avx2/share/manticore/modules ]; then
+            mv build/avx2/share/manticore/modules/lib_manticore_columnar_avx2.so build/columnar/ || true
+            mv build/avx2/share/manticore/modules/lib_manticore_secondary_avx2.so build/secondary/ || true
+            mv build/avx2/share/manticore/modules/lib_manticore_knn_avx2.so build/knn/ || true
+          fi
+          if [ -d build/avx512/share/manticore/modules ]; then
+            mv build/avx512/share/manticore/modules/lib_manticore_columnar_avx512.so build/columnar/ || true
+            mv build/avx512/share/manticore/modules/lib_manticore_secondary_avx512.so build/secondary/ || true
+            mv build/avx512/share/manticore/modules/lib_manticore_knn_avx512.so build/knn/ || true
+          fi
+          if [ -d build/avx2/share/modules ]; then
+            mkdir -p build/columnar/Debug build/secondary/Debug build/knn/Debug
+            mv build/avx2/share/modules/lib_manticore_columnar_avx2.dll build/columnar/Debug/ || true
+            mv build/avx2/share/modules/lib_manticore_secondary_avx2.dll build/secondary/Debug/ || true
+            mv build/avx2/share/modules/lib_manticore_knn_avx2.dll build/knn/Debug/ || true
+          fi
+          if [ -d build/avx512/share/modules ]; then
+            mkdir -p build/columnar/Debug build/secondary/Debug build/knn/Debug
+            mv build/avx512/share/modules/lib_manticore_columnar_avx512.dll build/columnar/Debug/ || true
+            mv build/avx512/share/modules/lib_manticore_secondary_avx512.dll build/secondary/Debug/ || true
+            mv build/avx512/share/modules/lib_manticore_knn_avx512.dll build/knn/Debug/ || true
+          fi
+
+      - name: Upload build artifacts
+        if: success()
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact_list }}

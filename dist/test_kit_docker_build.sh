@@ -76,6 +76,23 @@ download_package() {
 	exit 1
 }
 
+
+download_package_by_sha() {
+    package="$1"
+    sha="$2"
+    url=$(python3 ../dist/resolve_repo_package.py --repo-type dev --distr jammy --arch amd64 --package "$package" --sha "$sha" --extensions .deb)
+    file_name="${url##*/}"
+    mkdir -p ../build
+    wget -q -O "../build/${file_name}" "$url"
+}
+
+
+find_local_mcl_package() {
+    if [ -d ../mcl-package ]; then
+        find ../mcl-package -maxdepth 1 -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1
+    fi
+}
+
 # Read deps.txt line by line
 while read -r line
 do
@@ -167,6 +184,17 @@ do
 		download_package "${package}" "${version}" "${date}" "${commit}" "${arch}"
 	fi
 done < ../deps.txt
+
+LOCAL_MCL_PACKAGE=$(find_local_mcl_package)
+if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+    echo "Using local MCL package artifact: $LOCAL_MCL_PACKAGE"
+    mkdir -p ../build
+    cp "$LOCAL_MCL_PACKAGE" ../build/
+else
+    MCL_COMMIT_SHA=$(git -C ../mcl rev-parse --short=8 HEAD)
+    echo "Downloading MCL package for submodule sha: $MCL_COMMIT_SHA"
+    download_package_by_sha "manticore-columnar-lib" "$MCL_COMMIT_SHA"
+fi
 
 # we want to build the image based on specific packages, copying them from a directory coming from an artifact of a previous job
 deb_dir=$(realpath ../build/)

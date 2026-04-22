@@ -36,8 +36,10 @@ jobs:
     name: Meta
     runs-on: ubuntu-22.04
     outputs:
-      columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
-      branch_name: ${{ steps.check_branch.outputs.branch_name }}
+      branch_name: ${{ steps.branch_info.outputs.branch_name }}
+      mcl_sha: ${{ steps.mcl_sha.outputs.mcl_sha }}
+      mcl_full_sha: ${{ steps.mcl_sha.outputs.mcl_full_sha }}
+      mcl_changed: ${{ steps.detect.outputs.mcl }}
       branch_tag: ${{ steps.sanitize_branch.outputs.branch_tag }}
       source_hash: ${{ steps.source_hash.outputs.source_hash }}
       image_exists: ${{ steps.image_check.outputs.image_exists }}
@@ -58,6 +60,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
       - name: Commit info
         run: |
           echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
@@ -65,24 +68,15 @@ jobs:
           echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
           echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
-      - name: Check if branch exists in manticoresoftware/columnar
-        id: check_branch
+      - name: Resolve branch info
+        id: branch_info
         run: |
-          # Extract the actual branch name for pull requests
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           else
             BRANCH_NAME="${{ github.ref_name }}"
           fi
-
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
-          if [ "$HTTP_STATUS" -eq "200" ]; then
-            echo "branch_exists=true" >> $GITHUB_OUTPUT
-            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          else
-            echo "branch_exists=false" >> $GITHUB_OUTPUT
-            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          fi
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
       - name: Sanitize branch name for tags
         id: sanitize_branch
         run: |
@@ -92,19 +86,22 @@ jobs:
             name=$(echo "$name" | sed 's/[^a-zA-Z0-9_.-]//g')
             echo "$name"
           }
-          branch_name="${{ steps.check_branch.outputs.branch_name }}"
+          branch_name="${{ steps.branch_info.outputs.branch_name }}"
           branch_tag=$(sanitize_tag "$branch_name")
           echo "branch_tag=$branch_tag" >> $GITHUB_OUTPUT
       - name: Calculate source hash
         id: source_hash
         run: |
           set -euo pipefail
-          if [[ "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            git clone --depth 1 --branch "${{ steps.check_branch.outputs.branch_name }}"               https://github.com/manticoresoftware/columnar.git columnar
-            rm -rf columnar/.git
-          fi
-          HASH=$(find . -type f             ! -path "./test/clt-tests/*"             ! -path "./columnar/test/clt-tests/*"             ! -path "./.git/*"             -print0             | sort -z             | xargs -0 md5sum             | md5sum             | awk '{print $1}')
+          HASH=$(find . -type f ! -path "./test/clt-tests/*" ! -path "*/.git/*" ! -name .git -print0 | sort -z | xargs -0 md5sum | md5sum | awk '{print $1}')
           echo "source_hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Resolve MCL submodule SHA
+        id: mcl_sha
+        run: |
+          set -euo pipefail
+          echo "mcl_sha=$(git -C mcl rev-parse --short=8 HEAD)" >> $GITHUB_OUTPUT
+          echo "mcl_full_sha=$(git -C mcl rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Check for existing test kit image
         id: image_check
         env:
@@ -126,14 +123,6 @@ jobs:
             echo "image_source_hash=" >> $GITHUB_OUTPUT
           fi
           echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
-      - name: Set Columnar Locator
-        id: set_locator
-        run: |
-          if [[ "${{ github.ref_name }}" != "master" && "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${{ steps.check_branch.outputs.branch_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "columnar_locator=" >> $GITHUB_OUTPUT
-          fi
       - name: Detect changed files and categories
         id: detect
         shell: bash
@@ -202,9 +191,11 @@ jobs:
                   source = True
           output = os.environ["GITHUB_OUTPUT"]
           with open(output, "a", encoding="utf-8") as fh:
+              mcl = any(path == "mcl" or path.startswith("mcl/") for path in files)
               fh.write(f"source={'true' if source else 'false'}\n")
               fh.write(f"test={'true' if test else 'false'}\n")
               fh.write(f"clt={'true' if clt else 'false'}\n")
+              fh.write(f"mcl={'true' if mcl else 'false'}\n")
           PY
       - name: Check related PRs for branch
         id: related_prs
@@ -212,7 +203,7 @@ jobs:
           set -euo pipefail
           reason=""
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            for repo in columnar manticoresearch-buddy; do
+            for repo in manticoresearch-buddy; do
               response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls?state=open&head=${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }}&per_page=1" || true) | tr -d '[:space:]')"
               if [[ "$response" != "[]" && "$response" != "" ]]; then
                 reason+="$repo: open PR for ${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }} | "
@@ -319,7 +310,6 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       artifact_name: debug_build
       cache_key: build_linux_debug_x86_64
       cmake_command: |
@@ -332,7 +322,6 @@ jobs:
     needs: [build_linux_debug, meta]
     uses: ./.github/workflows/test_template.yml
     with:
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       build_artifact_name: debug_build
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
@@ -345,7 +334,6 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       artifact_name: release_build
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       cache_key: build_linux_release_x86_64
       artifact_list: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno build/manticore*deb"
       cmake_command: |
@@ -355,18 +343,30 @@ jobs:
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
         cmake --build build --target package
 
+  mcl_package_jammy:
+    name: MCL jammy package
+    needs: [meta]
+    uses: ./.github/workflows/mcl_package_build.yml
+    with:
+      enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      artifact_name: mcl_package_jammy_x86_64
+      distr: jammy
+      arch: x86_64
+
   test_linux_release_mcl:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests (MCL)
-    needs: [build_linux_release, meta]
+    needs: [build_linux_release, meta, mcl_package_jammy]
     uses: ./.github/workflows/test_template.yml
     with:
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       build_artifact_name: release_build
       artifact_name: release_mcl_test_results
       results_name: "Linux release MCL test results"
       timeout: 15
-      INSTALL_MCL_FROM_DEPS: true
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.meta.outputs.mcl_changed == 'true' && 'mcl_package_jammy_x86_64' || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_changed != 'true' && needs.meta.outputs.mcl_sha || '' }}
+      MCL_REPO_TYPE: dev
       FLOAT_TOLERANCE: true
       CTEST_EXCLUDE_REGEX: "rt_298|rt_306|rt_481"
 
@@ -376,7 +376,6 @@ jobs:
     needs: [build_linux_release, meta]
     uses: ./.github/workflows/test_template.yml
     with:
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       build_artifact_name: release_build
       artifact_name: release_test_results
       results_name: "Linux release test results"
@@ -395,6 +394,8 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: Reuse cached test kit image
         env:
           REPO_OWNER: ${{ github.repository_owner }}
@@ -425,11 +426,19 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: release_build
           path: .
+      - name: Download local MCL package artifact
+        if: ${{ needs.meta.outputs.mcl_changed == 'true' }}
+        uses: manticoresoftware/download_artifact_with_retries@v4
+        with:
+          name: mcl_package_jammy_x86_64
+          path: ./mcl-package
       # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
       # - run: |
       #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
@@ -509,7 +518,6 @@ jobs:
     # Use -VV instead of -V below for more verbose output
     with:
       arch: aarch64
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       cmake_command: |
         mkdir build
         cd build
@@ -524,7 +532,6 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: freebsd13
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       boost_url_key: none
       cmake_command: |
         mkdir build
@@ -547,7 +554,6 @@ jobs:
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
       artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/indexer.pdb build/src/Debug/searchd.exe build/src/Debug/searchd.pdb build/src/gtests/Debug/gmanticoretest.exe build/src/gtests/Debug/gmanticoretest.pdb build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
 
   test_windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
@@ -557,7 +563,6 @@ jobs:
     with:
       CTEST_START: 1
       CTEST_END: 999999
-      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
       artifact_name: windows_test_results
 
   final_status:

@@ -1,0 +1,145 @@
+name: MCL pack matrix
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+
+jobs:
+  metadata:
+    if: ${{ inputs.enabled }}
+    runs-on: ubuntu-22.04
+    outputs:
+      version_full: ${{ steps.semver.outputs.version_full }}
+      version_rpm: ${{ steps.semver.outputs.version_rpm }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: manticoresoftware/columnar
+          ref: ${{ inputs.mcl_full_sha }}
+          fetch-depth: 0
+          set-safe-directory: true
+      - name: Calculate MCL package version
+        id: semver
+        uses: manticoresoftware/semver-tagger-action@main
+        with:
+          github_token: ${{ github.token }}
+          conventional_commits_authors: alexey@manticoresearch.com
+          ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
+
+  embeddings_builds:
+    if: ${{ inputs.enabled }}
+    needs: metadata
+    uses: ./.github/workflows/mcl_embeddings_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distr: linux
+            arch: x86_64
+          - distr: linux
+            arch: aarch64
+          - distr: macos
+            arch: x86_64
+          - distr: macos
+            arch: arm64
+          - distr: windows
+            arch: x86_64
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      distr: ${{ matrix.distr }}
+      arch: ${{ matrix.arch }}
+
+  pack_debian_ubuntu:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        arch: [x86_64, aarch64]
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
+      artifact_name: ${{ format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) }}
+      distr: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+
+  pack_rhel:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [rhel7, rhel8, rhel9, rhel10]
+        arch: [x86_64, aarch64]
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
+      artifact_name: ${{ format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) }}
+      distr: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      boost: boost_rhel_feb17
+      cmake_command: |
+        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        mkdir build
+        cd build
+        CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX=/builds_manticoresearch_dev_usr_src_debug_manticore_component cmake -DPACK=1 ..
+        cmake --build . --target package
+
+  pack_macos:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64]
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: ${{ format('embeddings_macos_{0}', matrix.arch) }}
+      artifact_name: ${{ format('mcl_pkg_macos_{0}', matrix.arch) }}
+      distr: macos
+      arch: ${{ matrix.arch }}
+      HOMEBREW_PREFIX: /opt/homebrew
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 -DDL_CURL=1           -DCURL_LIBRARY=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib           -DCURL_LIBRARY_RELEASE=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib ..
+        cmake --build . --target package
+
+  pack_windows:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: embeddings_windows_x86_64
+      artifact_name: mcl_pkg_windows_x64
+      distr: windows
+      arch: x64
+      skip_avx2_move: true
+      CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+      CTEST_CONFIGURATION_TYPE: Debug

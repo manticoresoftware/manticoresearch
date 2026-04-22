@@ -435,6 +435,7 @@ jobs:
     name: Test Kit docker image
     needs:
       - build_linux_release
+      - mcl_package_jammy
       - meta
     if: needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists != 'true'
     runs-on: ubuntu-22.04
@@ -451,7 +452,7 @@ jobs:
           name: release_build
           path: .
       - name: Download local MCL package artifact
-        if: ${{ needs.meta.outputs.mcl_changed == 'true' }}
+        if: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' }}
         uses: manticoresoftware/download_artifact_with_retries@v4
         with:
           name: mcl_package_jammy_x86_64

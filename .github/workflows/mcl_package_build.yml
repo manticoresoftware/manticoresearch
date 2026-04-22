@@ -148,7 +148,7 @@ jobs:
         run: |
           bash /sysroot/root/entry_point.sh
           git config --global --add safe.directory "$PWD"
-          if [[ -n "${{ inputs.embeddings_artifact }}" ]]; then
+          if [[ -n "${{ inputs.embeddings_artifact }}" ]] && compgen -G "./embeddings-lib/build/*" >/dev/null; then
             mkdir -p embeddings/target/release
             mv ./embeddings-lib/build/* embeddings/target/release/
             rm -fr ./embeddings-lib

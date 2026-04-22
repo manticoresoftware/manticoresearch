@@ -41,15 +41,7 @@ on:
       cmake_command:
         required: false
         type: string
-        default: |
-          mkdir build
-          cd build
-          if [ -n "${{ inputs.embeddings_artifact }}" ]; then
-            cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=OFF ..
-          else
-            cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=ON ..
-          fi
-          cmake --build . --target package
+        default: ""
       cache_key:
         required: false
         type: string
@@ -184,7 +176,19 @@ jobs:
             ${{ inputs.cache_key }}_deps_master
 
       - name: Build
-        run: ${{ inputs.cmake_command }}
+        run: |
+          if [[ -n "${{ inputs.cmake_command }}" ]]; then
+            eval "${{ inputs.cmake_command }}"
+          else
+            mkdir build
+            cd build
+            if [[ -n "${{ inputs.embeddings_artifact }}" ]]; then
+              cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=OFF ..
+            else
+              cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=ON ..
+            fi
+            cmake --build . --target package
+          fi
 
       - name: Move AVX2/AVX-512-optimized libraries
         if: success() && inputs.skip_avx2_move != true

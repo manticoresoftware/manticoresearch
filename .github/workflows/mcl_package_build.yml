@@ -152,6 +152,9 @@ jobs:
             mkdir -p embeddings/target/release
             mv ./embeddings-lib/build/* embeddings/target/release/
             rm -fr ./embeddings-lib
+          elif ! command -v cargo >/dev/null 2>&1; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc
           fi
           if [[ -z "${PACKAGE_VERSION}" && -n "${{ steps.semver.outputs.version_full }}" ]]; then
             export PACKAGE_VERSION='${{ steps.semver.outputs.version_full }}'

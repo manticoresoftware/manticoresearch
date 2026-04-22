@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: Download build artifacts
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
@@ -111,6 +113,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: Download test report artifacts
         uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true

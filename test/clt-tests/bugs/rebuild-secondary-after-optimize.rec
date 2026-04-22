@@ -12,8 +12,7 @@ mysql -h0 -P9306 -NBe "SHOW TABLE rebuild_si STATUS LIKE 'disk_chunks'\G"
 disk_chunks
 1
 ––– comment –––
-SI disabled by an attribute update after OPTIMIZE chunk rename should be saved to the renamed .spidx file.
-This currently documents the unfixed MCL behavior: the disabled state is lost after restart because SI meta is saved through the stale pre-rename path.
+SI disabled by an attribute update after OPTIMIZE chunk rename must be saved to the renamed .spidx file.
 ––– input –––
 mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS rebuild_si_meta; CREATE TABLE rebuild_si_meta(tag int) optimize_cutoff='1'; INSERT INTO rebuild_si_meta VALUES(1,1); FLUSH RAMCHUNK rebuild_si_meta; INSERT INTO rebuild_si_meta VALUES(2,2); FLUSH RAMCHUNK rebuild_si_meta; OPTIMIZE TABLE rebuild_si_meta OPTION sync=1; UPDATE rebuild_si_meta SET tag=3 WHERE id=1; SHOW WARNINGS;"
 ––– output –––
@@ -45,6 +44,6 @@ mysql -h0 -P9306 -e "SHOW TABLE rebuild_si_meta INDEXES;"
 +------+--------+---------+---------+
 | Name | Type   | Enabled | Percent |
 +------+--------+---------+---------+
-| tag  | uint32 | 1       | 100     |
+| tag  | uint32 | 0       | 100     |
 | id   | int64  | 1       | 100     |
 +------+--------+---------+---------+

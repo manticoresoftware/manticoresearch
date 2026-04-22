@@ -432,6 +432,37 @@ select * from JoIn1 left join jOiN2 on jOiN1.id = JoiN2.id where jOIn2.name = 'n
 }
 </query>
 
+<!-- mixed-case table names in JSON join -->
+<query endpoint="json/search">
+{
+  "table": "JoIn1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "jOiN2",
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "JOIN1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "Join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
 <query endpoint="json/search">
 {
   "table": "join1",

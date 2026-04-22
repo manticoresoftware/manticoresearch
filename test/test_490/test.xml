@@ -41,6 +41,29 @@ searchd
 	select id, knn_dist() from t where hybrid_match('neural networks', vec) order by knn_dist() asc;
 	select id, weight() w from t where hybrid_match('neural networks', vec) order by w desc;
 	drop table t;
+
+	<!-- regression for hybrid vs knn_dist/hybrid_score filters -->
+	create table test (title TEXT, category STRING, vec FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='title');
+	insert into test (id, title, category) values (1, 'wireless noise canceling headphones', 'audio');
+	insert into test (id, title, category) values (2, 'bluetooth over ear headphones', 'audio');
+	insert into test (id, title, category) values (3, 'test microphone for podcasting', 'audio');
+	insert into test (id, title, category) values (4, 'test speaker system surround sound', 'audio');
+	insert into test (id, title, category) values (5, 'running shoes lightweight trail', 'footwear');
+	insert into test (id, title, category) values (6, 'test kitchen blender high speed', 'appliance');
+	insert into test (id, title, category) values (7, 'test smartphone waterproof case', 'accessories');
+	insert into test (id, title, category) values (8, 'mechanical keyboard with test switches', 'peripherals');
+	flush ramchunk test;
+
+	select id from test where knn(vec, 'test') and knn_dist()&lt;1.5;
+	select id, knn_dist() dist from test where knn(vec, 'test') and dist&lt;1.5;
+	select knn_dist() from test where match('test') as keyword and knn(vec, 'test') option fusion_method='rrf';
+	select id, knn_dist() from test where match('test') as keyword and knn(vec, 'test') option fusion_method='rrf';
+	select id, title, knn_dist(), hybrid_score() from test where match('test') and knn(vec, 'test') option fusion_method='rrf';
+	select knn_dist() as dist from test where match('test') as keyword and knn(vec, 'test') and dist&lt;0.12 option fusion_method='rrf';
+	select id, title, knn_dist() as dist from test where match('test') and knn(vec, 'test') and dist&lt;1.5 option fusion_method='rrf';
+	select id, title, knn_dist() from test where match('test') and knn(vec, 'test') and knn_dist()&lt;1.5 option fusion_method='rrf';
+	select hybrid_score() as score from test where match('test') as keyword and knn(vec, 'test') and score&lt;0.015 option fusion_method='rrf';
+	drop table test;
 </sphinxql>
 </queries>
 

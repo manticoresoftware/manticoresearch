@@ -13,6 +13,7 @@
 #include "queuecreator.h"
 #include "attribute.h"
 #include "sphinxexpr.h"
+#include "sphinxfilter.h"
 #include "coroutine.h"
 #include "knnmisc.h"
 #include "sphinxquery/xqparser.h"
@@ -200,6 +201,96 @@ static void BuildAttrRemap ( const ISphSchema * pSrcSchema, const ISphSchema * p
 }
 
 
+static SphQueueSettings_t CreateHybridSubQueryQueueSettings ( const SphQueueSettings_t & tSrc )
+{
+	SphQueueSettings_t tDst ( tSrc.m_tSchema, tSrc.m_pProfiler, tSrc.m_pSqlRowBuffer, tSrc.m_ppOpaque1, tSrc.m_ppOpaque2 );
+	tDst.m_bComputeItems = tSrc.m_bComputeItems;
+	tDst.m_pCollection = tSrc.m_pCollection;
+	tDst.m_pHook = tSrc.m_pHook;
+	tDst.m_pAggrFilter = tSrc.m_pAggrFilter;
+	tDst.m_iMaxMatches = tSrc.m_iMaxMatches;
+	tDst.m_bNeedDocids = true; // fusion keys subquery matches by docid even when id is not projected
+	tDst.m_bGrouped = tSrc.m_bGrouped;
+	tDst.m_fnGetCountDistinct = tSrc.m_fnGetCountDistinct;
+	tDst.m_fnGetCountFilter = tSrc.m_fnGetCountFilter;
+	tDst.m_fnGetCount = tSrc.m_fnGetCount;
+	tDst.m_bEnableFastDistinct = tSrc.m_bEnableFastDistinct;
+	tDst.m_bForceSingleThread = tSrc.m_bForceSingleThread;
+	tDst.m_dCreateSchema = tSrc.m_dCreateSchema;
+	if ( tSrc.m_pJoinArgs )
+		tDst.m_pJoinArgs = std::make_unique<JoinArgs_t> ( tSrc.m_pJoinArgs->m_tJoinedSchema, tSrc.m_pJoinArgs->m_sIndex1, tSrc.m_pJoinArgs->m_sIndex2 );
+
+	return tDst;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class QueryFilterNameSet_c
+{
+public:
+			QueryFilterNameSet_c ( const CSphVector<CSphQueryItem> & dItems, std::initializer_list<const char *> dExprs );
+
+	bool	HasFilterTreeReferences ( const CSphQuery & tQuery ) const;
+	bool	MatchFilter ( const CSphFilterSettings & tFilter ) const { return m_hNames[tFilter.m_sAttrName]; }
+	void	RemoveFilters ( CSphVector<CSphFilterSettings> & dFilters ) const;
+	void	ExtractFilters ( CSphVector<CSphFilterSettings> & dSrc, CSphVector<CSphFilterSettings> & dDst ) const;
+
+private:
+	sph::StringSet m_hNames;
+};
+
+
+QueryFilterNameSet_c::QueryFilterNameSet_c ( const CSphVector<CSphQueryItem> & dItems, std::initializer_list<const char *> dExprs )
+{
+	for ( auto * szExpr : dExprs )
+		m_hNames.Add ( szExpr );
+
+	for ( const auto & tItem : dItems )
+		for ( auto * szExpr : dExprs )
+			if ( tItem.m_sExpr==szExpr )
+			{
+				if ( !tItem.m_sAlias.IsEmpty() )
+					m_hNames.Add ( tItem.m_sAlias );
+				break;
+			}
+}
+
+
+bool QueryFilterNameSet_c::HasFilterTreeReferences ( const CSphQuery & tQuery ) const
+{
+	if ( tQuery.m_dFilterTree.IsEmpty() )
+		return false;
+
+	CSphFixedVector<bool> dMatched ( tQuery.m_dFilters.GetLength() );
+	for ( int i = 0; i < tQuery.m_dFilters.GetLength(); ++i )
+		dMatched[i] = m_hNames[tQuery.m_dFilters[i].m_sAttrName];
+
+	for ( const auto & tNode : tQuery.m_dFilterTree )
+		if ( tNode.m_iFilterItem>=0 && tNode.m_iFilterItem<dMatched.GetLength() && dMatched[tNode.m_iFilterItem] )
+			return true;
+
+	return false;
+}
+
+
+void QueryFilterNameSet_c::RemoveFilters ( CSphVector<CSphFilterSettings> & dFilters ) const
+{
+	ARRAY_FOREACH ( i, dFilters )
+		if ( MatchFilter ( dFilters[i] ) )
+			dFilters.Remove(i--);
+}
+
+
+void QueryFilterNameSet_c::ExtractFilters ( CSphVector<CSphFilterSettings> & dSrc, CSphVector<CSphFilterSettings> & dDst ) const
+{
+	ARRAY_FOREACH ( i, dSrc )
+		if ( MatchFilter ( dSrc[i] ) )
+		{
+			dDst.Add ( dSrc[i] );
+			dSrc.Remove(i--);
+		}
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class HybridExecutor_c
@@ -210,10 +301,12 @@ public:
 	bool	Execute ( CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );
 
 private:
+	void	SetupPostFilters ( const CSphQuery & tQuery );
 	void	SetupKnnQueries ( const CSphQuery & tQuery );
 	void	SetupTextQuery ( const CSphQuery & tQuery );
 	void	SetupSubQueryLimits();
 	bool	ResolveKnnAttrs();
+	bool	CreatePostFilter ( const ISphSchema * pSchema );
 	bool	RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const char * szPhase, SubQueryResult_t & tResult );
 	void	PushFusedMatches ( ISphMatchSorter * pSorter, const CSphVector<RRFEntry_t> & dFused );
 	void	SetMinKnnDist ( CSphMatch & tMatch, const RRFEntry_t & tEntry, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs );
@@ -222,24 +315,31 @@ private:
 	int		ResolveSubQueryIdx ( const CSphQuery & tQuery, const CSphString & sName ) const;
 	void	PreserveJoinOnAttrsForTransform ( ISphMatchSorter * pSorter ) const;
 
-	const CSphIndex *			m_pIndex;
-	CSphVector<CSphQuery>		m_dKnnQueries;		///< one per KNN entry
-	CSphQuery					m_tTextQuery;
-	HybridSearchSettings_t		m_tHybridSettings;
-	CSphVector<float>			m_dWeights;			///< positional RRF weights resolved from m_tHybridSettings.m_dNamedWeights
-	CSphVector<SubQueryResult_t>	m_dSubResults;	///< [0]=text, [1..N]=KNN sub-query results
-	const SphQueueSettings_t &	m_tQueueSettings;
-	CSphString					m_sError;
-	std::unique_ptr<QueryParser_i>	m_pTextQueryParser;		///< plain parser for text sub-query (used when original is JSON)
+	const CSphIndex *				m_pIndex;
+	CSphVector<CSphQuery>			m_dKnnQueries;		///< one per KNN entry
+	CSphQuery						m_tTextQuery;
+	QueryFilterNameSet_c			m_tHybridScoreNames;
+	QueryFilterNameSet_c			m_tKnnDistNames;
+	HybridSearchSettings_t			m_tHybridSettings;
+	CSphVector<float>				m_dWeights;			///< positional RRF weights resolved from m_tHybridSettings.m_dNamedWeights
+	CSphVector<SubQueryResult_t>	m_dSubResults;		///< [0]=text, [1..N]=KNN sub-query results
+	const SphQueueSettings_t &		m_tQueueSettings;
+	CSphString						m_sError;
+	std::unique_ptr<QueryParser_i>	m_pTextQueryParser;	///< plain parser for text sub-query (used when original is JSON)
+	CSphVector<CSphFilterSettings>	m_dPostFilters;
+	std::unique_ptr<ISphFilter>		m_pPostFilter;
 };
 
 
 HybridExecutor_c::HybridExecutor_c ( const CSphIndex * pIndex, const CSphQuery & tQuery, const SphQueueSettings_t & tQueueSettings )
 	: m_pIndex ( pIndex )
 	, m_tTextQuery ( tQuery )
+	, m_tHybridScoreNames ( tQuery.m_dItems, { GetHybridScoreAttrName(), "hybrid_score()" } )
+	, m_tKnnDistNames ( tQuery.m_dItems, { GetKnnDistAttrName(), "knn_dist()" } )
 	, m_tHybridSettings ( tQuery.m_tHybridSettings )
 	, m_tQueueSettings ( tQueueSettings )
 {
+	SetupPostFilters(tQuery);
 	SetupKnnQueries(tQuery);
 	SetupTextQuery(tQuery);
 	ResolveKnnAttrs();
@@ -261,11 +361,33 @@ void HybridExecutor_c::SetupKnnQueries ( const CSphQuery & tQuery )
 		tKnnQuery.m_eSort = SPH_SORT_EXTENDED;
 		tKnnQuery.m_sSortBy = "@weight desc";
 		RemoveQueryItems ( tKnnQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName() } );
+		m_tHybridScoreNames.RemoveFilters ( tKnnQuery.m_dFilters );
 
 		// each KNN sub-query gets exactly one KNN entry
 		tKnnQuery.m_dKnnSettings.Reset();
 		tKnnQuery.m_dKnnSettings.Add ( tQuery.m_dKnnSettings[i] );
 	}
+}
+
+
+void HybridExecutor_c::SetupPostFilters ( const CSphQuery & tQuery )
+{
+	if ( m_tHybridScoreNames.HasFilterTreeReferences(m_tTextQuery) )
+	{
+		m_sError = "hybrid search does not support hybrid_score() filters in filter trees";
+		return;
+	}
+
+	if ( m_tKnnDistNames.HasFilterTreeReferences(m_tTextQuery) )
+	{
+		m_sError = "hybrid search does not support knn_dist() filters in filter trees";
+		return;
+	}
+
+	m_tHybridScoreNames.ExtractFilters ( m_tTextQuery.m_dFilters, m_dPostFilters );
+	for ( const auto & tFilter : m_tTextQuery.m_dFilters )
+		if ( m_tKnnDistNames.MatchFilter(tFilter) )
+			m_dPostFilters.Add(tFilter);
 }
 
 
@@ -276,6 +398,7 @@ void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 	m_tTextQuery.m_eSort = SPH_SORT_EXTENDED;
 	m_tTextQuery.m_sSortBy = "@weight desc";
 	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()" } );
+	m_tKnnDistNames.RemoveFilters ( m_tTextQuery.m_dFilters );
 
 	// when the original query uses a JSON parser but m_sQuery contains plain text
 	// (e.g. from "hybrid" shorthand), the JSON parser treats it as fullscan because
@@ -287,6 +410,34 @@ void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 		m_pTextQueryParser = sphCreatePlainQueryParser();
 		m_tTextQuery.m_pQueryParser = m_pTextQueryParser.get();
 	}
+}
+
+
+bool HybridExecutor_c::CreatePostFilter ( const ISphSchema * pSchema )
+{
+	m_pPostFilter.reset();
+	if ( m_dPostFilters.IsEmpty() )
+		return true;
+
+	CreateFilterContext_t tCtx;
+	tCtx.m_pMatchSchema = pSchema;
+	tCtx.m_eCollation = SPH_COLLATION_DEFAULT;
+
+	CSphString sWarning;
+	for ( const auto & tFilter : m_dPostFilters )
+	{
+		CSphString sError;
+		auto pFilter = sphCreateFilter ( tFilter, tCtx, sError, sWarning );
+		if ( !pFilter )
+		{
+			m_sError.SetSprintf ( "failed to create post-fusion hybrid filter: %s", sError.cstr() );
+			return false;
+		}
+
+		m_pPostFilter = sphJoinFilters ( std::move ( m_pPostFilter ), std::move ( pFilter ) );
+	}
+
+	return true;
 }
 
 
@@ -350,7 +501,8 @@ bool HybridExecutor_c::RunSubQuery ( const CSphQuery & tQuery, const CSphMultiQu
 {
 	SphQueueRes_t tQueueRes;
 	CSphString sError;
-	tSubResult.m_pSorter.reset ( sphCreateQueue ( m_tQueueSettings, tQuery, sError, tQueueRes ) );
+	SphQueueSettings_t tQueueSettings = CreateHybridSubQueryQueueSettings ( m_tQueueSettings );
+	tSubResult.m_pSorter.reset ( sphCreateQueue ( tQueueSettings, tQuery, sError, tQueueRes ) );
 	if ( !tSubResult.m_pSorter )
 	{
 		tSubResult.m_sError.SetSprintf ( "hybrid %s phase: %s", szPhase, sError.cstr() );
@@ -399,8 +551,7 @@ void HybridExecutor_c::SetMinKnnDist ( CSphMatch & tMatch, const RRFEntry_t & tE
 		}
 	}
 
-	if ( fMinDist < FLT_MAX )
-		tMatch.SetAttrFloat ( pDstKnnDist->m_tLocator, fMinDist );
+	tMatch.SetAttrFloat ( pDstKnnDist->m_tLocator, fMinDist );
 }
 
 
@@ -454,6 +605,12 @@ void HybridExecutor_c::PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMat
 		SetMinKnnDist ( tNewMatch, tEntry, pDstKnnDist, dKnnDistAttrs );
 
 	EvalDependentExprs ( dExprs, tNewMatch );
+	if ( m_pPostFilter && !m_pPostFilter->Eval(tNewMatch) )
+	{
+		pDstSchema->FreeDataPtrs ( tNewMatch );
+		tNewMatch.ResetDynamic();
+		return;
+	}
 
 	pSorter->Push ( tNewMatch );
 	pDstSchema->FreeDataPtrs ( tNewMatch );
@@ -489,6 +646,7 @@ void HybridExecutor_c::PushFusedMatches ( ISphMatchSorter * pSorter, const CSphV
 
 	CSphVector<ExprEval_t> dExprs;
 	CollectDependentExprs ( pDstSchema, GetHybridScoreAttrName(), dExprs );
+	CollectDependentExprs ( pDstSchema, GetKnnDistAttrName(), dExprs );
 
 	for ( auto & tEntry : dFused )
 		PushSingleFusedMatch ( tEntry, pSorter, iDynSize, dRemaps, tScoreLoc, pDstKnnDist, dKnnDistAttrs, dExprs );
@@ -644,6 +802,12 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 	pOutputSorter->TransformPooled2StandalonePtrs ( [] ( const CSphMatch * ) -> const BYTE * { return nullptr; }, [] ( const CSphMatch * ) -> columnar::Columnar_i * { return nullptr; }, false );
 	if ( !RefreshJoinSorterAfterHybridTransform ( pOutputSorter, tMeta.m_sError ) )
 		return false;
+
+	if ( !CreatePostFilter ( pOutputSorter->GetSchema() ) )
+	{
+		tMeta.m_sError = m_sError;
+		return false;
+	}
 
 	CSphVector<RRFEntry_t> dFused;
 	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused );

@@ -141,12 +141,12 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Update version
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing

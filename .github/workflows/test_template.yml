@@ -129,8 +129,11 @@ jobs:
           dpkg -i /tmp/manticore-repo.noarch.deb
 
           if [[ -n "${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}" ]]; then
-            pkg=$(find ./mcl-package -maxdepth 1 -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
-            [[ -n "$pkg" ]] || { echo 'built MCL artifact not found'; exit 1; }
+            if [[ -f ./mcl-package/artifact.tar ]]; then
+              tar -xf ./mcl-package/artifact.tar -C ./mcl-package
+            fi
+            pkg=$(find ./mcl-package -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
+            [[ -n "$pkg" ]] || { echo 'built MCL artifact not found'; find ./mcl-package -maxdepth 3 -type f | sort; exit 1; }
             echo "Installing $pkg"
             dpkg -i "$pkg"
             exit 0

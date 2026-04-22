@@ -89,7 +89,10 @@ download_package_by_sha() {
 
 find_local_mcl_package() {
     if [ -d ../mcl-package ]; then
-        find ../mcl-package -maxdepth 1 -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1
+        if [ -f ../mcl-package/artifact.tar ]; then
+            tar -xf ../mcl-package/artifact.tar -C ../mcl-package
+        fi
+        find ../mcl-package -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1
     fi
 }
 

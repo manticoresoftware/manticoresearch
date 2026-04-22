@@ -3,4 +3,4 @@
 	url = https://github.com/manticoresoftware/translator.git
 [submodule "mcl"]
 	path = mcl
-	url = https://github.com/manticoresoftware/columnar.git
+	url = git@github.com:sanikolaev/columnar.git

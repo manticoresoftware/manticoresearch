@@ -1867,6 +1867,16 @@ static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CS
 }
 
 
+bool HasKNNDistFilter ( const CSphQuery & tQuery )
+{
+	if ( tQuery.m_dFilterTree.GetLength() )
+		return false;
+
+	return tQuery.m_dFilters.any_of ( [] ( auto & tFilter ) { return IsKnnDist ( tFilter.m_sAttrName ); } )
+		|| tQuery.m_dFilters.any_of ( [&tQuery] ( auto & tFilter ) { return tQuery.m_dItems.any_of ( [&tFilter] ( const CSphQueryItem & tItem ) { return tItem.m_sAlias==tFilter.m_sAttrName && IsKnnDist ( tItem.m_sExpr ); } ); } );
+}
+
+
 static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree )
 {
 	if ( tCtx.m_sJoinIdx.IsEmpty() )
@@ -2837,4 +2847,3 @@ void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const V
 	else
 		tBuf << LogFilterTree ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
-

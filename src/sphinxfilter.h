@@ -104,6 +104,7 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );
 
 CSphString FilterType2Str ( ESphFilter eFilterType );
+bool HasKNNDistFilter ( const CSphQuery & tQuery );
 
 void SetFilterStackItemSize ( std::pair<int,int> );
 int GetFilterStackItemSize();

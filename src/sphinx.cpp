@@ -8704,6 +8704,7 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
+	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && HasKNNDistFilter(tQuery);
 
 	// may modify eval stages in schema; needs to be before SetupCalc
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )

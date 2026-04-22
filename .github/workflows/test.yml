@@ -323,6 +323,9 @@ jobs:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux debug mode tests
     needs: [build_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/test_template.yml
     with:
       build_artifact_name: debug_build
@@ -372,6 +375,9 @@ jobs:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests (MCL)
     needs: [build_linux_release, meta, mcl_package_jammy]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/test_template.yml
     with:
       build_artifact_name: release_build
@@ -388,6 +394,9 @@ jobs:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests
     needs: [build_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/test_template.yml
     with:
       build_artifact_name: release_build

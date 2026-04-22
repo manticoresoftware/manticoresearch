@@ -36,6 +36,8 @@ permissions:
 jobs:
   check_branch:
     name: Resolve MCL metadata
+    needs: [pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     outputs:
       mcl_sha: ${{ steps.mcl.outputs.mcl_sha }}

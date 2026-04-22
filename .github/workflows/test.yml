@@ -277,7 +277,7 @@ jobs:
   win_bundle:
     # Skip build jobs for PRs targeting 'update-buddy-version' branch (buddy version updates don't need full builds)
     if: needs.meta.outputs.run_builds == 'true'
-    needs: [meta]
+    needs: [meta, mcl_embeddings_jammy_x86_64]
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:
@@ -343,14 +343,25 @@ jobs:
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
         cmake --build build --target package
 
+  mcl_embeddings_jammy_x86_64:
+    name: MCL embeddings jammy x86_64
+    needs: [meta]
+    uses: ./.github/workflows/mcl_embeddings_build.yml
+    with:
+      enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
+      mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      distr: linux
+      arch: x86_64
+
   mcl_package_jammy:
     name: MCL jammy package
-    needs: [meta]
+    needs: [meta, mcl_embeddings_jammy_x86_64]
     uses: ./.github/workflows/mcl_package_build.yml
     with:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       artifact_name: mcl_package_jammy_x86_64
+      embeddings_artifact: embeddings_linux_x86_64
       distr: jammy
       arch: x86_64
 

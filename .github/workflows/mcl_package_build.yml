@@ -14,7 +14,7 @@ on:
         required: false
         type: string
         default: x86_64
-      DISTR:
+      distr:
         required: false
         type: string
         default: jammy
@@ -93,7 +93,7 @@ jobs:
         VERBOSE: 1
         DIAGNOSTIC: 1
         NO_TESTS: 1
-        DISTR: ${{ inputs.DISTR }}
+        DISTR: ${{ inputs.distr }}
         boost: ${{ inputs.boost }}
         sysroot: roots_nov22
         arch: ${{ inputs.arch }}

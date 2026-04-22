@@ -1394,6 +1394,8 @@ static bool ParseOnCond ( const JsonObj_c & tRoot, CSphString & sIdx, CSphString
 	if ( !tRoot.FetchStrItem ( sIdx, "table", sError ) ) return false;
 	if ( !tRoot.FetchStrItem ( sAttr, "field", sError ) ) return false;
 	if ( !tRoot.FetchStrItem ( sType, "type", sError, true ) ) return false;
+	CanonicalizeIndexName ( sIdx );
+	sphColumnToLowercase ( const_cast<char*>( sAttr.cstr() ) );
 
 	if ( !sType.IsEmpty() )
 	{
@@ -1481,6 +1483,7 @@ static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString 
 
 		if ( !tJoinItem.FetchStrItem ( tQuery.m_sJoinIdx, "table", sError ) )
 			return false;
+		CanonicalizeIndexName ( tQuery.m_sJoinIdx );
 
 		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
 		if ( tMatchQuery )

@@ -157,20 +157,27 @@ jobs:
         run: |
           case ${{ inputs.distr }} in
             linux)
-              target="unknown-linux-gnu"
+              target_arch="${{ inputs.arch }}"
+              target_suffix="unknown-linux-gnu"
               ;;
             macos)
-              target="apple-darwin"
+              if [[ "${{ inputs.arch }}" == "arm64" ]]; then
+                target_arch="aarch64"
+              else
+                target_arch="${{ inputs.arch }}"
+              fi
+              target_suffix="apple-darwin"
               ;;
             windows)
-              target="pc-windows-msvc"
+              target_arch="${{ inputs.arch }}"
+              target_suffix="pc-windows-msvc"
               ;;
             *)
               echo "Unsupported distribution type: ${{ inputs.distr }}"
               exit 1
               ;;
           esac
-          target="${{ inputs.arch }}-${target}"
+          target="${target_arch}-${target_suffix}"
           echo "target=${target}" >> $GITHUB_OUTPUT
 
           lib_dir="./embeddings/target/${target}/release"

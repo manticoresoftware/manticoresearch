@@ -84,13 +84,6 @@ jobs:
             echo "mcl_changed=false" >> $GITHUB_OUTPUT
           fi
 
-  mcl_pack_matrix:
-    needs: [check_branch]
-    uses: ./.github/workflows/mcl_pack_publish.yml
-    with:
-      enabled: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
-      mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
-
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -198,6 +191,14 @@ jobs:
 #          echo "GitHub Workflow: ${{ github.workflow }}"
 #          echo "GitHub Event JSON:"
 #          echo '${{ toJSON(github.event) }}'
+
+  mcl_pack_matrix:
+    needs: [check_branch, pack]
+    if: needs.pack.outputs.should_continue == 'true'
+    uses: ./.github/workflows/mcl_pack_publish.yml
+    with:
+      enabled: ${{ needs.check_branch.outputs.mcl_changed == 'true' && needs.pack.outputs.should_continue == 'true' }}
+      mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
 
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions

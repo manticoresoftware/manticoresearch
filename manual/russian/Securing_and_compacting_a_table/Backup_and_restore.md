@@ -133,8 +133,8 @@ Manticore versions:
 
 | Argument | Описание |
 |-|-|
-| `--backup-dir=path` | Это путь к каталогу резервного копирования, где будет храниться резервная копия. Каталог должен уже существовать. Этот аргумент обязателен и не имеет значения по умолчанию. При каждом запуске резервного копирования manticore-backup создаст подкаталог в указанном каталоге с временной меткой в названии (`backup-[datetime]`) и скопирует в него все необходимые таблицы. Таким образом, `--backup-dir` является контейнером для всех ваших резервных копий, и безопасно запускать скрипт несколько раз.|
-| `--restore[=backup]` | Восстановить из `--backup-dir`. Просто `--restore` выведет список доступных резервных копий. `--restore=backup` восстановит из `<--backup-dir>/backup`. |
+| `--backup-dir=path` | Путь к директории резервного копирования, где будет храниться резервная копия. Директория должна уже существовать. Этот аргумент обязателен и не имеет значения по умолчанию. При каждом запуске резервного копирования `manticore-backup` создаст поддиректорию в указанной директории с меткой времени в имени (`backup-[дата-время]`) и скопирует в неё все необходимые таблицы. Таким образом, `--backup-dir` является контейнером для всех ваших резервных копий, и можно безопасно запускать скрипт несколько раз. Поддерживает URL-адреса S3 в формате `s3://bucket/prefix` — подробности см. в разделе [Поддержка хранилища S3](../Securing_and_compacting_a_table/Backup_and_restore.md#S3-storage-support).|
+| `--restore[=backup]` | Восстановить из `--backup-dir`. Просто `--restore` выводит список доступных резервных копий. `--restore=backup` восстановит из `<--backup-dir>/backup`. Работает как с локальными путями, так и с URL-адресами S3. |
 | `--force` | Пропустить проверку версий при восстановлении и выполнить восстановление без ошибок. |
 | `--disable-telemetry` | Укажите этот флаг, если хотите отключить отправку анонимизированных метрик в Manticore. Можно также использовать переменную окружения TELEMETRY=0 |
 | `--config=/path/to/manticore.conf` | Путь к конфигурационному файлу Manticore. Необязательно. Если не указан, будет использована конфигурация по умолчанию для вашей операционной системы. Используется для определения хоста и порта для связи с демоном Manticore. Инструмент `manticore-backup` поддерживает [динамические настройки](../Server_settings/Scripted_configuration.md). Можно указать опцию `--config` несколько раз, если конфигурация разбросана по нескольким файлам. |
@@ -143,6 +143,65 @@ Manticore versions:
 | `--unlock` | В редких случаях, когда что-то идет не так, таблицы могут остаться заблокированными. Используйте этот аргумент для их разблокировки. |
 | `--version` | Показать текущую версию. |
 | `--help` | Показать эту справку. |
+
+
+## Поддержка хранилища S3
+
+`manticore-backup` поддерживает сохранение и восстановление резервных копий напрямую в/из S3-совместимого хранилища, включая AWS S3, MinIO, Wasabi, Cloudflare R2 и другие. Просто передайте URL-адрес `s3://bucket/prefix` в качестве `--backup-dir`.
+
+### Конфигурация
+
+Установите следующие переменные окружения перед запуском `manticore-backup`:
+
+| Переменная | Обязательно | Описание |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | Да | Ключ доступа AWS (или `AWS_ACCESS_KEY`) |
+| `AWS_SECRET_ACCESS_KEY` | Да | Секретный ключ AWS (или `AWS_SECRET_KEY`) |
+| `AWS_REGION` | Нет | Регион AWS (по умолчанию: `us-east-1`) |
+| `AWS_ENDPOINT_URL` | Нет | Пользовательская S3-совместимая конечная точка — **только URL сервера, без имени бакета** (например, `http://localhost:9000`) |
+| `AWS_S3_ENCRYPTION` | Нет | Включить шифрование на стороне сервера SSE-S3 (по умолчанию: `1` для AWS S3; установите `0` для MinIO, R2 или других пользовательских конечных точек) |
+
+> ⚠️ `AWS_ENDPOINT_URL` не должен включать имя бакета. Бакет берётся из аргумента `s3://bucket/prefix`. Включение бакета в URL конечной точки приводит к его дублированию в каждом запросе и вызывает ошибки.
+>
+> ```
+> # Неправильно — бакет "mybucket" продублирован в пути URL
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com/mybucket
+>
+> # Правильно — конечная точка это только сервер
+> AWS_ENDPOINT_URL=https://account.r2.cloudflarestorage.com
+> ```
+
+### Примеры использования
+
+```bash
+# Backup to AWS S3 (SSE-S3 encryption enabled by default)
+export AWS_ACCESS_KEY_ID=your_key
+export AWS_SECRET_ACCESS_KEY=your_secret
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Restore from S3
+manticore-backup --restore --backup-dir=s3://my-bucket/backups
+manticore-backup --restore=backup-20221004171839 --backup-dir=s3://my-bucket/backups
+
+# Use with MinIO (disable encryption)
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ENDPOINT_URL=http://localhost:9000
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+
+# Use with Cloudflare R2
+export AWS_ACCESS_KEY_ID=your_r2_access_key
+export AWS_SECRET_ACCESS_KEY=your_r2_secret_key
+export AWS_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+export AWS_REGION=auto
+export AWS_S3_ENCRYPTION=0
+manticore-backup --backup-dir=s3://my-bucket/backups
+```
+
+### Необходимые разрешения S3
+
+Для резервного копирования требуется `s3:PutObject`, для восстановления — `s3:GetObject`, а для вывода списка доступных точек восстановления — `s3:ListBucket`.
 
 ## Команда SQL BACKUP
 

@@ -32,7 +32,7 @@ sudo systemctl disable manticore
 sudo systemctl enable manticore
 ```
 
-`searchd` 进程将启动信息记录在 `systemd` 日志中。如果启用了 `systemd` 日志记录，你可以使用以下命令查看日志信息：
+在 systemd 管理下，`searchd` 进程会将日志记录到 `systemd` 日志中。如果启用了 `systemd` 日志记录，您可以使用以下命令查看日志信息：
 
 ```shell
 sudo journalctl -u manticore

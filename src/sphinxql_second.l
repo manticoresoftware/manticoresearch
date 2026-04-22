@@ -96,6 +96,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 "COMPRESS"			{ STORE_BOUNDS; return TOK_COMPRESS; }
 "DELETE"			{ STORE_BOUNDS; return TOK_DELETE; }
 "DROP"				{ STORE_BOUNDS; return TOK_DROP; }
+"EXIT"				{ STORE_BOUNDS; return TOK_EXIT; }
 "FLUSH"             { STORE_BOUNDS; return TOK_FLUSH; }
 "FREEZE"			{ STORE_BOUNDS; return TOK_FREEZE; }
 "FROM"              { STORE_BOUNDS; return TOK_FROM; }

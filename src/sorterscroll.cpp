@@ -260,7 +260,7 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		if ( i.m_eType==SPH_ATTR_STRINGPTR && eCheckType==SPH_ATTR_STRING )
 		{
 			CSphString sRemappedName;
-			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			sRemappedName.SetSprintf ( "%s%s", GetInternalAttrPrefix(), i.m_sSortAttr.cstr() );
 			auto pRemapped = tSchema.GetAttr ( sRemappedName.cstr() );
 			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
 				eCheckType = SPH_ATTR_STRINGPTR;

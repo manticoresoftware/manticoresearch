@@ -3,6 +3,8 @@
 <!-- example deleting a replication cluster  1 -->
 The `DELETE CLUSTER` statement removes the specified cluster with its  [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name). Once the cluster is deleted, it is removed from all nodes, but its tables remain intact and become active local non-replicated tables.
 
+If you only need to detach the current node and leave the rest of the cluster running, use `EXIT CLUSTER` instead. See [Managing replication nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md).
+
 
 
 <!-- intro -->
@@ -100,4 +102,3 @@ utils_api.Sql("DELETE CLUSTER click_query", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
-

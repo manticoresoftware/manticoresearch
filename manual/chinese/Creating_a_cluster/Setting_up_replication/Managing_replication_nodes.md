@@ -119,5 +119,16 @@ utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
 3. 在集群中的其他节点上运行 `ALTER CLUSTER cluster_name UPDATE nodes`。
 
 完成这些步骤后，其他节点将忘记已分离的节点，而已分离的节点将忘记集群。此操作不会影响集群中的表或已分离节点上的表。
-<!-- proofread -->
 
+## EXIT CLUSTER
+
+`EXIT CLUSTER <cluster_name>` 是上述手动脱离流程的在线等效操作。它会将本地节点从复制集群中移除，保留本地表作为常规本地表，保存本地配置，然后要求其他存活节点使用现有的 `ALTER CLUSTER ... UPDATE nodes` 机制刷新其持久化的节点列表。
+
+```sql
+EXIT CLUSTER posts
+```
+
+当您只想脱离当前节点时，请使用 `EXIT CLUSTER`。当您想从每个节点移除集群时，请使用 `DELETE CLUSTER`。
+
+`EXIT CLUSTER` 仅允许在主集群中的健康本地节点上执行。如果命令返回警告，本地脱离已成功，但可能仍需要后续操作。在这种情况下，在任何存活节点上运行 `ALTER CLUSTER <cluster_name> UPDATE nodes` 以完成刷新剩余集群元数据的操作。
+<!-- proofread -->

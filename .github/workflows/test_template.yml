@@ -139,9 +139,8 @@ jobs:
 
           echo "Installing ${PACKAGE_URL}"
           export DEBIAN_FRONTEND=noninteractive
+          printf '%s\n' 'deb http://azure.archive.ubuntu.com/ubuntu jammy main' 'deb http://azure.archive.ubuntu.com/ubuntu jammy-updates main' > /etc/apt/sources.list && rm -f /etc/apt/sources.list.d/* && apt-get update
           apt-get -y remove 'manticore-repo'
-          rm /etc/apt/sources.list.d/manticoresearch.list
-          apt-get update
           apt-get -y install wget
           curl -fsSL https://repo.manticoresearch.com/manticore-repo.noarch.deb -o /tmp/manticore-repo.noarch.deb
           dpkg -i /tmp/manticore-repo.noarch.deb

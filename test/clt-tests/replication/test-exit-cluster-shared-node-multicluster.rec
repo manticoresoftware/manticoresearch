@@ -1,0 +1,113 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_A_NAME=exit_cluster_shared_a
+export CLUSTER_B_NAME=exit_cluster_shared_b
+––– output –––
+––– input –––
+mkdir -p /var/log/manticore-1/${CLUSTER_A_NAME}_node1 /var/log/manticore-2/${CLUSTER_A_NAME}_node2 /var/log/manticore-2/${CLUSTER_B_NAME}_node2 /var/log/manticore-3/${CLUSTER_B_NAME}_node3
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER ${CLUSTER_A_NAME} '${CLUSTER_A_NAME}_node1' AS path;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "JOIN CLUSTER ${CLUSTER_A_NAME} AT '127.0.0.1:1312' '${CLUSTER_A_NAME}_node2' AS path;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE exit_rt_shared_a (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_A_NAME} ADD exit_rt_shared_a;" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_A_NAME}:exit_rt_shared_a VALUES (1,'cluster a before exit');"
+––– output –––
+––– input –––
+sleep 2; mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_shared_a;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "CREATE CLUSTER ${CLUSTER_B_NAME} '${CLUSTER_B_NAME}_node2' AS path;"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "JOIN CLUSTER ${CLUSTER_B_NAME} AT '127.0.0.1:2312' '${CLUSTER_B_NAME}_node3' AS path;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "CREATE TABLE exit_rt_shared_b (id bigint, title text);" && mysql -h0 -P2306 -e "ALTER CLUSTER ${CLUSTER_B_NAME} ADD exit_rt_shared_b;" && mysql -h0 -P2306 -e "INSERT INTO ${CLUSTER_B_NAME}:exit_rt_shared_b VALUES (1,'cluster b before exit');"
+––– output –––
+––– input –––
+sleep 2; mysql -h0 -P3306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_shared_b;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_A_NAME}_status'\G" && mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_B_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_shared_a_status
+  Value: primary
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_shared_b_status
+  Value: primary
+––– input –––
+mysql -h0 -P2306 -e "EXIT CLUSTER ${CLUSTER_A_NAME};"
+––– output –––
+––– input –––
+bash -c 'out=$(mysql -h0 -P2306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_A_NAME}_status'\''\\G" 2>&1 || true); [ -z "$out" ] && echo "cluster A status absent" || { echo "$out"; exit 1; }'
+––– output –––
+cluster A status absent
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_B_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_shared_b_status
+  Value: primary
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM exit_rt_shared_a ORDER BY id ASC;"
+––– output –––
++------+-----------------------+
+| id   | title                 |
++------+-----------------------+
+|    1 | cluster a before exit |
++------+-----------------------+
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO exit_rt_shared_a VALUES (2,'cluster a local after exit');" && mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_shared_a;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+bash -c 'end=$((SECONDS+120)); while [ $SECONDS -lt $end ]; do view=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_A_NAME}_nodes_view'\''\\G" 2>/dev/null || true); setv=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_${CLUSTER_A_NAME}_nodes_set'\''\\G" 2>/dev/null || true); echo "$view" | grep -q "Counter: cluster_${CLUSTER_A_NAME}_nodes_view" || { sleep 1; continue; }; echo "$setv" | grep -q "Counter: cluster_${CLUSTER_A_NAME}_nodes_set" || { sleep 1; continue; }; echo "$view" | grep -q "2306" && { sleep 1; continue; }; echo "$setv" | grep -q "2306" && { sleep 1; continue; }; echo "Cluster A survivor converged"; echo "$view" | grep "Value:"; echo "$setv" | grep "Value:"; exit 0; done; echo "Timeout waiting for cluster A survivor cleanup"; exit 1'
+––– output –––
+Cluster A survivor converged
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication
+  Value: 127.0.0.1:1312
+––– input –––
+mysql -h0 -P3306 -e "INSERT INTO ${CLUSTER_B_NAME}:exit_rt_shared_b VALUES (2,'cluster b after cluster a exit');" && mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_shared_b;" && mysql -h0 -P3306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_shared_b;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_A_NAME};" && mysql -h0 -P2306 -e "DELETE CLUSTER ${CLUSTER_B_NAME};" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS exit_rt_shared_a;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS exit_rt_shared_a;" && mysql -h0 -P3306 -e "DROP TABLE IF EXISTS exit_rt_shared_a;" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS exit_rt_shared_b;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS exit_rt_shared_b;" && mysql -h0 -P3306 -e "DROP TABLE IF EXISTS exit_rt_shared_b;"
+––– output –––

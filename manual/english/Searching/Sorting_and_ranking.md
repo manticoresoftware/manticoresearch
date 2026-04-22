@@ -20,6 +20,15 @@ SELECT ... ORDER BY
 {attribute_name | expr_alias | weight() | random() } [ASC | DESC]
 ```
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(a int, b int, f text);
+INSERT INTO test (a, b, f) VALUES
+(2, 3, 'document');
+-->
+
 <!-- example alias -->
 
 In the sort clause, you can use any combination of up to 5 columns, each followed by `asc` or `desc`. Functions and expressions are not allowed as arguments for the sort clause, except for the `weight()` and `random()` functions (the latter can only be used via SQL in the form of `ORDER BY random()`). However, you can use any expression in the SELECT list and sort by its alias.
@@ -36,6 +45,42 @@ select *, a + b alias from test order by alias desc;
 +------+------+------+----------+-------+
 |    1 |    2 |    3 | document |     5 |
 +------+------+------+----------+-------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test",
+  "expressions": {
+    "alias": "a+b"
+  },
+  "sort": {"alias":"desc"}
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -1026,7 +1071,7 @@ SELECT ... OPTION ranker=sph04;
 | ----------------------- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
 | max_lcs                 | query     | int   | maximum possible LCS value for the current query                                                                   |
 | bm25                    | document  | int   | quick estimate of BM25(1.2, 0)                                                                                     |
-| bm25a(k1, b)            | document  | int   | precise BM25() value with configurable K1, B constants and syntax support                                         |
+| bm25a(k1, b[, avgdl])   | document  | int   | precise BM25() value with configurable K1, B constants and optional average document length override               |
 | bm25f(k1, b, {field=weight, ...}) | document | int   | precise BM25F() value with extra configurable field weights                                                       |
 | field_mask              | document  | int   | bit mask of matched fields                                                                                         |
 | query_word_count        | document  | int   | number of unique inclusive keywords in a query                                                                     |
@@ -1141,4 +1186,3 @@ Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we a
 IDF flags can be mixed; `plain` and `normalized` are mutually exclusive;`tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.
 
 <!-- proofread -->
-

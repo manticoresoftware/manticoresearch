@@ -941,6 +941,7 @@ bool sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* 
 			pIOStats->m_iWriteOps++;
 			pIOStats->m_iWriteBytes += iWritten;
 		}
+		GlobalWrite ( iWritten );
 		if ( sphInterrupted() && iWritten != iToWrite )
 		{
 			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );
@@ -982,7 +983,7 @@ bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 		if ( pIOStats )
 			tmTimer = sphMicroTimer ();
 
-		auto iToWrite = (int) Min ( iCount, 1UL << 30 );
+		auto iToWrite = (int) Min ( iCount, 1UL << 28 ); // chunks by 256Mb are quire reliable
 		auto iWritten = (int) ::write ( iFD, &p[iTotalWritten], iToWrite );
 
 		if ( pIOStats )
@@ -991,6 +992,7 @@ bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 			pIOStats->m_iWriteOps++;
 			pIOStats->m_iWriteBytes += iWritten;
 		}
+		GlobalWrite ( iWritten );
 		if ( sphInterrupted () && iWritten!=iToWrite )
 		{
 			sError.SetSprintf ( "%s: write interrupted: %d of %d bytes written", sName, iWritten, iToWrite );

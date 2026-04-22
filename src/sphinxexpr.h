@@ -148,6 +148,9 @@ public:
 	/// was this expression spawned in place of a columnar attr?
 	virtual bool IsColumnar ( bool * pStored = nullptr ) const { return false; }
 
+	/// does this expression benefit from rowid-ordered final processing?
+	virtual bool PrefersRowIdOrder() const { return false; }
+
 	/// was this expression spawned in place of a columnar expression?
 	virtual bool IsStored() const { return false; }
 
@@ -350,6 +353,8 @@ struct ExprParseArgs_t
 	ESphEvalStage *		m_pEvalStage = nullptr;
 	DWORD *				m_pStoredField = nullptr;
 	bool *				m_pNeedDocIds = nullptr;
+	const CSphString *	m_pJoinIdx = nullptr;
+	const CSphString *	m_pJoinIdxLeft = nullptr;
 };
 
 struct JoinArgs_t
@@ -373,7 +378,7 @@ private:
 };
 
 struct CommonFilterSettings_t;
-ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, const CSphString * pJoinIdx, CSphString & sError, ExprParseArgs_t & tArgs );
+ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation );
 ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation );
@@ -390,4 +395,3 @@ CSphString& MySQLVersion();
 }
 
 #endif // _sphinxexpr_
-

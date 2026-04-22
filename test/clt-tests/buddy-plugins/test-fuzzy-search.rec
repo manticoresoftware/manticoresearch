@@ -572,49 +572,15 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('mi', 'name', 0 AS append, 1 AS prepend);
 ––– output –––
 +--------+
 | cami   |
-| darci  |
-| joan   |
-| jody   |
-| joe    |
-| joel   |
-| joey   |
-| john   |
-| johnie |
-| johnny |
-| joi    |
-| jon    |
-| jonas  |
-| jordan |
-| jorge  |
-| jose   |
-| joseph |
-| joshi  |
-| joshua |
-| joy    |
-| joyce  |
-| kaci   |
 | kami   |
 | kimi   |
-| laci   |
-| luci   |
-| marci  |
 | mi     |
-| nanci  |
 | naomi  |
 | neomi  |
 | nohemi |
-| ricci  |
-| staci  |
 | tami   |
 | tammi  |
-| tobias |
-| todd   |
-| toi    |
-| tom    |
-| tomas  |
 | tomi   |
-| toney  |
-| traci  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
@@ -622,6 +588,11 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expans
 | chang |
 | chong |
 | chung |
+––– comment –––
+Validating that default behaviour for autocomplete is none layouts specified
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name');" | tail -n +4 | sort
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
@@ -985,11 +956,6 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1', 1 AS fuzziness);"
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('3*', 'idx1', 1 AS fuzziness);"
 ––– output –––
-+-------+
-| query |
-+-------+
-| 340   |
-+-------+
 ––– input –––
 echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9312\nlisten = 9308:http\nlog = /tmp/searchd.log\nquery_log = /tmp/query.log\npid_file = /tmp/searchd.pid\n}\n\nsource src_idx {\ntype = tsvpipe\ntsvpipe_command = cat /tmp/data.tsv\ntsvpipe_field_string = f\ntsvpipe_attr_bigint = id\n}\n\nindex idx_plain {\ntype = plain\nsource = src_idx\npath = /tmp/idx_plain\nmin_infix_len = 2\n}" > /tmp/manticore_idx.conf; echo $?
 ––– output –––

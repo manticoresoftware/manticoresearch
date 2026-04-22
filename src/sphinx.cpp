@@ -139,7 +139,7 @@ static BuildBufferSettings_t g_tMergeSettings;
 
 static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
 
-static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static const bool LOG_LEVEL_SPLIT_QUERY = env_exists ( "MANTICORE_LOG_SPLIT_QUERY" ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_QUERYINFO __LINE__ << " "
 #define QUERYINFO LOGINFO ( SPLIT_QUERY, QUERYINFO )
 
@@ -804,7 +804,7 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 				if ( iUpdAttrId>=0 )
 				{
 					ExprParseArgs_t tExprArgs;
-					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, nullptr, sError, tExprArgs );
+					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, sError, tExprArgs );
 				}
 			}
 		}
@@ -7964,8 +7964,9 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 	bool ProcessInRowIdOrder() const final
 	{
 		// columnar expressions don't like random access, they are optimized for sequental access
-		// that's why if we have a columnar expression, we need to call Process it ascending RowId order
-		return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );
+		// that's why if we have a columnar expression, or another expression that explicitly
+		// prefers sequential access, we need to call Process in ascending RowId order
+		return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && ( i.m_pExpr->IsColumnar() || i.m_pExpr->PrefersRowIdOrder() ); } );
 	}
 
 	void Process ( CSphMatch * pMatch ) final
@@ -10103,6 +10104,9 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 	if ( sNewBase == GetFilebase() )
 		return RE_OK;
 
+	CSphString sOldSPIDX = GetFilename ( SPH_EXT_SPIDX );
+	CSphString sOldSPJIDX = GetFilename ( SPH_EXT_SPJIDX );
+
 	IndexFiles_c dFiles ( GetFilebase(), nullptr, m_uVersion );
 	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
@@ -10117,6 +10121,8 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 	}
 
 	SetFilebase ( std::move ( sNewBase ) );
+	m_tSI.RenameFile ( sOldSPIDX, GetFilename ( SPH_EXT_SPIDX ) );
+	m_tSI.RenameFile ( sOldSPJIDX, GetFilename ( SPH_EXT_SPJIDX ) );
 
 	return RE_OK;
 }

@@ -54,6 +54,7 @@
 #include "tdigest_aggr_utils.h"
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
+#include "daemon/notifier.h"
 
 // services
 #include "taskping.h"
@@ -105,7 +106,8 @@ int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec, ql interactive clients
 int						g_iClientQlWaitTimeoutS	= 28800;	// sec, ql non-interactive clients
 static int				g_iMaxConnection	= 0; // unlimited
-static bool				g_bWatchdog			= true;
+static std::optional<bool>	g_tWatchdog;
+static std::optional<bool> 	g_bSystemd;			// if we can send messages to systemd - assume, we're managed by systemd.
 static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
@@ -157,10 +159,10 @@ CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
 static CSphString		g_sBuddyPath;
-static bool				g_bTelemetry = val_from_env ( "MANTICORE_TELEMETRY", true );
+static bool				g_bTelemetry = env_bool ( "MANTICORE_TELEMETRY" ).value_or ( true );
 static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
-static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
+static bool				g_bNoChangeCwd = env_exists ( "MANTICORE_NO_CHANGE_CWD" );
 static bool				g_bCwdChanged = false;
 static CSphString		g_sKbnVersion;
 static bool				g_bAttrAutoconvStrict = false;
@@ -172,7 +174,7 @@ ThreadRole HandlerThread; // thread which serves clients
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
-static bool				LOG_LEVEL_SHUTDOWN = val_from_env("MANTICORE_TRACK_DAEMON_SHUTDOWN",false); // verbose logging when daemon shutdown, ruled by this env variable
+static const bool		LOG_LEVEL_SHUTDOWN = env_exists ("MANTICORE_TRACK_DAEMON_SHUTDOWN"); // verbose logging when daemon shutdown, ruled by this env variable
 static CSphString		g_sConfigPath; // for resolve paths to absolute
 static CSphString		g_sExePath;
 
@@ -227,6 +229,8 @@ static ExpMeter_c							g_tSecStat15m { 12*15 }; // once a 15 minutes
 int64_t g_iNextExpMeterTimestamp = sphMicroTimer() + g_iExpMeterPeriod;
 
 static CSphString							g_sClusterUser { "cluster" }; // user with this name will see cluster:table in show tables
+static std::optional<uint64_t>				g_tWatchdogTimeout;
+int64_t g_iNextSystemdWatchdogTick = -1;
 
 /// command names
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
@@ -301,12 +305,16 @@ static CSphString GetNamedPipeName ( int iPid )
 /////////////////////////////////////////////////////////////////////////////
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
+	sd::stopping();
+
 	// force even long time searches to shut
 	SHUTINFO << "Trigger g_bInterruptNow ...";
 	sphInterruptNow ();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown curl query subsystem ...";
 	ShutdownCurl();
+	sd::extend30s();
 
 #if !_WIN32
 	int fdStopwait = -1;
@@ -327,10 +335,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #endif
 
 	int64_t tmShutStarted = sphMicroTimer ();
+	sd::extend30s();
 
 	// release all planned/scheduled tasks
 	SHUTINFO << "Shut down mini timer ...";
 	sph::ShutdownMiniTimer();
+	sd::extend30s();
 
 	SHUTINFO << "Shut down flushing mutable ...";
 	ShutdownFlushingMutable();
@@ -338,10 +348,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// stop search threads; up to shutdown_timeout seconds
 	SHUTINFO << "Wait preread (if any) finished ...";
 	WaitPrereadFinished ( g_iShutdownTimeoutUs );
+	sd::extend30s();
 
 	// save attribute updates for all local indexes
 	SHUTINFO << "Finally save tables ...";
 	bAttrsSaveOk = FinallySaveIndexes();
+	sd::extend30s();
 
 	// right before unlock loop
 	if ( g_bJsonConfigLoadedOk )
@@ -349,6 +361,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		CSphString sError;
 		SHUTINFO << "Save json config ...";
 		SaveConfigInt(sError);
+		sd::extend30s();
 	}
 
 	// stop netloop processing
@@ -357,12 +370,14 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		pNetLoop->StopNetLoop ();
 		SafeRelease ( pNetLoop );
+		sd::extend30s();
 	}
 
 	// stop netloop threads
 	SHUTINFO << "Stop netloop pool ...";
 	if ( g_pTickPoolThread )
 		g_pTickPoolThread->StopAll ();
+	sd::extend30s();
 
 	// call scheduled callbacks:
 	// shutdown replication,
@@ -370,10 +385,14 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// shutdown tick threads,
 	SHUTINFO << "Invoke shutdown callbacks ...";
 	searchd::FireShutdownCbs ();
+	sd::extend30s();
 
 	SHUTINFO << "Waiting clients to finish ... (" << myinfo::CountClients() << ")";
 	while ( ( myinfo::CountClients ()>0 ) && ( sphMicroTimer ()-tmShutStarted )<g_iShutdownTimeoutUs )
+	{
+		sd::extend30s();
 		sphSleepMsec ( 50 );
+	}
 
 	if ( myinfo::CountClients ()>0 )
 	{
@@ -390,20 +409,34 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 			RWIdx_c ( tIt.second )->Unlock();
 	}
 
-	CallCoroutine ( [] {
+	auto fnHandler = [] {
 		SHUTINFO << "Abandon local tables list ...";
 		g_pLocalIndexes->ReleaseAndClear();
 
 		// unlock Distr indexes automatically done by d-tr
 		SHUTINFO << "Abandon distr tables list ...";
 		g_pDistIndexes->ReleaseAndClear();
-	} );
+	};
+
+	std::atomic<bool> bIsDone { false };
+	auto dWaiter = Waiter_t ( nullptr, [&bIsDone] ( void * ) { bIsDone = true; } );
+	StartCall ( std::move ( fnHandler ), std::move ( dWaiter ) );
+	auto uLastWritten = GlobalWritten ();
+	while ( !bIsDone ) {
+		sphSleepMsec ( 50 );
+		const auto uNowWritten = GlobalWritten ();
+		if ( uNowWritten != std::exchange ( uLastWritten, uNowWritten ) )
+			sd::extend30s();
+	}
 
 	SHUTINFO << "Shutdown alone threads (if any) ...";
+	Detached::SetNotifier ( &sd::extend30s );
 	Detached::ShutdownAllAlones();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown main work pool ...";
 	StopGlobalWorkPool();
+	sd::extend30s();
 
 	SHUTINFO << "Remove local tables list ...";
 	g_pLocalIndexes.reset();
@@ -414,31 +447,43 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// clear shut down of rt indexes + binlog
 	SHUTINFO << "Finish IO stats collecting ...";
 	sphDoneIOStats();
+	sd::extend30s();
 
 	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
+	sd::extend30s();
+
+	SHUTINFO << "Finish replication binlog serving ...";
 	ReplicationBinlogStop();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown skip cache ...";
 	ShutdownSkipCache();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown global IDFs ...";
 	sph::ShutdownGlobalIDFs ();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown aot ...";
 	sphAotShutdown ();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown columnar ...";
 	ShutdownColumnar();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown secondary ...";
 	ShutdownSecondary();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown knn ...";
 	ShutdownKNN();
+	sd::extend30s();
 
 	SHUTINFO << "Shutdown listeners ...";
 	for ( auto& dListener : g_dListeners )
@@ -447,6 +492,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Close persistent sockets ...";
 	ClosePersistentSockets();
+	sd::extend30s();
 
 	// close pid
 	SHUTINFO << "Release (close) pid file ...";
@@ -460,17 +506,20 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Shutdown hazard pointers ...";
 	hazard::Shutdown ();
+	sd::extend30s();
 
 	// wordforms till there might be referenced from accum (rt-index), which, in turn, is part of client session.
 	// so, shutdown them before will probably fail.
 	// after hazard shutdown, all sessions are surely done, so wordforms is good to be destroyed at this point.
 	SHUTINFO << "Shutdown wordforms ...";
 	sphShutdownWordforms();
+	sd::extend30s();
 
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );
 
 	Threads::Done ( GetDaemonLogFD() );
+	sd::extend30s();
 
 #if _WIN32
 	CloseWinPipe();
@@ -1108,6 +1157,14 @@ inline static void FixupSystemTableName ( SqlStmt_t * pStmt ) noexcept
 
 	if ( ApplyClusterName ( pStmt->m_tQuery.m_sIndexes ).EqN ( "system" ) && bNameFromQuery )
 		pStmt->m_tQuery.m_sIndexes = sName;
+}
+
+void CanonicalizeIndexName ( CSphString & sName ) noexcept
+{
+	if ( g_pLocalIndexes->Contains ( sName ) || ( g_pDistIndexes && g_pDistIndexes->Contains ( sName ) ))
+		return;
+
+	sName.ToLower();
 }
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
@@ -4879,12 +4936,28 @@ void MaybeFixupIndexNameFromMysqldump ( SqlStmt_t & tStmt )
 	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) )
 		return;
 
+	auto sLowerIndex = tStmt.m_sIndex;
+	sLowerIndex.ToLower();
+
+	if ( g_pLocalIndexes->Contains ( sLowerIndex ) )
+	{
+		tStmt.m_sIndex = std::move(sLowerIndex);
+		return;
+	}
+
 	auto dParts = sphSplit ( tStmt.m_sIndex.cstr (), ":" );
 	if ( dParts.GetLength ()!=2 )
 		return;
 
 	tStmt.m_sCluster = dParts[0];
 	tStmt.m_sIndex = dParts[1];
+	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) )
+		return;
+
+	sLowerIndex = tStmt.m_sIndex;
+	sLowerIndex.ToLower();
+	if ( g_pLocalIndexes->Contains ( sLowerIndex ) )
+		tStmt.m_sIndex = std::move(sLowerIndex);
 }
 
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
@@ -6185,8 +6258,13 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	return sProps.cstr();
 }
 
+struct DescFlavour_t
+{
+	std::function<void (const char*)> fnAddProperties;
+	ESphAttr eSkipAttr = SPH_ATTR_NONE;
+};
 
-static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema )
+static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema, const DescFlavour_t& tFlavour )
 {
 	if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
 		return;
@@ -6210,107 +6288,69 @@ static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, con
 			sProperties << sProps;
 	}
 
-	dOut.Add ( sProperties.cstr () );
+	tFlavour.fnAddProperties ( sProperties.cstr () );
 }
 
 
-static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema )
+static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema, const DescFlavour_t& tFlavour )
 {
 	if ( sphIsInternalAttr ( tAttr ) )
+		return;
+
+	if ( tFlavour.eSkipAttr == tAttr.m_eAttrType )
 		return;
 
 	if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
 		return; // already described it as a field property
 
-	if ( dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
-	{
-		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
-		{
-			StringBuilder_c sName;
-			sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
-			dOut.Add ( sName.cstr() );
-		} else
-			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+	if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
+		return;
 
-		dOut.Add ( DescribeAttributeProperties(tAttr) );
-	}
+	if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
+	{
+		StringBuilder_c sName;
+		sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
+		dOut.Add ( sName.cstr() );
+	} else
+		dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+
+	tFlavour.fnAddProperties ( DescribeAttributeProperties(tAttr).cstr() );
 }
 
-
-void ShowFields ( VectorLike& dOut, const CSphSchema& tSchema )
+void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bShowFields )
 {
-	// result set header packet
-	dOut.SetColNames ( { "Field", "Type", "Null", "Key", "Default", "Extra" } );
-
-	auto Tail = [&dOut](const auto& tCol) { dOut.Add (tCol); dOut.Add ( "NO" ); dOut.Add ( "" ); dOut.Add ( "" ); dOut.Add ( "" ); };
-
-	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
-	const auto& tId = tSchema.GetAttr ( 0 );
-	if ( dOut.MatchAdd ( tId.m_sName.cstr() ) )
-		Tail ( sphTypeName ( tId.m_eAttrType ) );
-
-	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
-	{
-		const auto& tField = tSchema.GetField ( i );
-		if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
-			continue;
-
-		const CSphColumnInfo* pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
-		Tail ( pAttr ? "string" : "text" );
+	DescFlavour_t tFlavour;
+	if ( bShowFields ) {
+		dOut.SetColNames ( { "Field", "Type", "Null", "Key", "Default", "Extra" } );
+		tFlavour.fnAddProperties = [&dOut](const char*) { dOut.Add ( "NO" ); dOut.Add ( "" ); dOut.Add ( "" ); dOut.Add ( "" ); };
+		tFlavour.eSkipAttr = SPH_ATTR_TOKENCOUNT;
+	} else {
+		dOut.SetColNames ( { "Field", "Type", "Properties" } );
+		tFlavour.fnAddProperties = [&dOut](const char* szAttr) { dOut.Add ( szAttr ); };
 	}
 
-	for ( int i = 1; i < tSchema.GetAttrsCount(); ++i ) // from 1, as 0 is docID and already emerged
-	{
-		const auto& tAttr = tSchema.GetAttr ( i );
-		if ( sphIsInternalAttr ( tAttr ) )
+	for ( int i = 0; i<tSchema.GetAttrsCount (); ++i ) {
+		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema, tFlavour );
+		if ( i>0 )
 			continue;
 
-		if ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-			continue;
-
-		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
-			continue; // already described it as a field property
-
-		if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
-			continue;
-
-		if ( tAttr.m_eAttrType == SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount != ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount > 0 )
-			Tail ( SphSprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount ) );
-		else
-			Tail ( sphTypeName ( tAttr.m_eAttrType ) );
+		assert ( i==0 && tSchema.GetAttr(0).m_sName==sphGetDocidName() );
+		for ( int j = 0; j<tSchema.GetFieldsCount (); ++j )
+			AddFieldDesc ( dOut, tSchema.GetField(j), tSchema, tFlavour );
 	}
 }
 
-void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bIsTemplate, bool bShowFields )
-{
-	if ( bShowFields )
-		return ShowFields ( dOut, tSchema );
 
-	// result set header packet
-	dOut.SetColNames ( { "Field", "Type", "Properties" } );
-
-	// id comes before fields
-	if ( !bIsTemplate )
-	{
-		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		AddAttributeDesc ( dOut, tSchema.GetAttr(0), tSchema );
-	}
-
-	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-		AddFieldDesc ( dOut, tSchema.GetField(i), tSchema );
-
-	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
-		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema );
-}
-
-
-bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce )
+bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce, bool bShowFields )
 {
 	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
 		return false;
 
 	// result set header packet
 	dOut.SetColNames ( { "Agent", "Type" } );
+
+	if ( bShowFields )
+		return true;
 
 	for ( const auto & sIdx : pDistr->m_dLocal )
 		dOut.MatchTuplet( sIdx.cstr (), "local" );
@@ -6351,6 +6391,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 	FixupSystemTableName (&tStmt);
 	auto sName = tStmt.m_sIndex;
 	auto pServed = GetServed ( sName );
+	const bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
 	if ( pServed )
 	{
 		// data
@@ -6363,8 +6404,6 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 		if ( tStmt.m_dStringSubkeys.GetLength()==1 && tStmt.m_dStringSubkeys[0].EqN(".table") )
 			bNeedInternal = true;
 
-		bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
-
 		if ( bNeedInternal && ServedDesc_t::IsMutable ( pServed ) && !bShowFields )
 		{
 			RIdx_T<const RtIndex_i*> pRtIndex { pServed };
@@ -6373,7 +6412,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 
 		const CSphSchema &tSchema = *pSchema;
 		assert ( pServed->m_eType==IndexType_e::TEMPLATE || tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		DescribeLocalSchema ( dOut, tSchema, pServed->m_eType==IndexType_e::TEMPLATE, bShowFields );
+		DescribeLocalSchema ( dOut, tSchema, bShowFields );
 	} else
 	{
 		auto pDistr = GetDistr ( sName );
@@ -6384,7 +6423,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 		}
 
 		CSphString sError;
-		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce ) )
+		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
 		{
 			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 			return;
@@ -7718,7 +7757,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			CSphString sError;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
-			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, nullptr, sError, tExprArgs )};
+			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, sError, tExprArgs )};
 
 			if ( !pExpr || !pExpr->IsConst() )
 				eAttrType = SPH_ATTR_NONE;
@@ -9651,7 +9690,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			ESphAttr eAttrType;
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
-			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, nullptr, sError, tExprArgs ) };
+			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, sError, tExprArgs ) };
 			if ( pExpr )
 			{
 				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, tItem.m_sAlias.cstr() } );
@@ -11552,8 +11591,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	if ( eStmt!=STMT_SHOW_META )
 		m_eLastStmt = eStmt;
 
+	for ( auto& tStmt : dStmt ) {
+		FixupSystemTableName ( &tStmt );
+		CanonicalizeIndexName ( tStmt.m_sIndex );
+	}
 	SqlStmt_t * pStmt = dStmt.Begin();
-	FixupSystemTableName ( pStmt );
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( SqlStmt2Str(eStmt) );
@@ -12001,6 +12043,14 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_CLUSTER_DELETE:
 		m_tLastMeta = CSphQueryResultMeta();
 		if ( GloballyDeleteCluster ( pStmt->m_sIndex, m_tLastMeta.m_sError ) )
+			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
+		else
+			tOut.Error ( m_tLastMeta.m_sError.cstr() );
+		return true;
+
+	case STMT_CLUSTER_EXIT:
+		m_tLastMeta = CSphQueryResultMeta();
+		if ( ClusterExit ( pStmt->m_sCluster, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -13605,10 +13655,12 @@ static void CheckIndexesForSeamlessAndStartRotation ( VecOfServed_c dDeferredInd
 static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainThread )
 {
 	assert ( !g_bSeamlessRotate );
+	sd::reloading();
 	ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
 
 	for ( auto& dDeferredIndex :  dDeferredIndexes )
 	{
+		sd::reloading();
 		const CSphString& sDeferredIndex = dDeferredIndex.first;
 		ServedIndexRefPtr_c& pDeferredIndex = dDeferredIndex.second;
 		assert ( pDeferredIndex );
@@ -13660,6 +13712,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 	g_bInRotate = false;
 	RotateGlobalIdf ();
 	sphInfo ( "rotating finished" );
+	sd::ready();
 }
 
 
@@ -13769,6 +13822,10 @@ void ShowHelp ()
 		"-t, --table <table>\tonly serve given table(s)\n"
 #if !_WIN32
 		"--nodetach\t\tdo not detach into background\n"
+		"--watchdog\t\tforce using watchdog (overrides config/systemd setting)\n"
+		"--no-watchdog\t\tdisable watchdog (overrides config setting)\n"
+		"--systemd\t\tforce systemd mode (overrides implicit detection)\n"
+		"--no-systemd\t\tdisable systemd mode (overrides implicit detection)\n"
 #endif
 		"--logdebug, --logdebugv, --logdebugvv\n"
 		"\t\t\tenable additional debug information logging\n"
@@ -14011,7 +14068,7 @@ void CheckSignals () REQUIRES ( MainThread )
 #endif
 }
 
-static bool g_bLoadInfo = val_from_env ( "MANTICORE_TRACE_LOAD", false );
+static bool g_bLoadInfo = env_exists ( "MANTICORE_TRACE_LOAD" );
 
 
 void TickHead () REQUIRES ( MainThread )
@@ -14033,8 +14090,9 @@ void TickHead () REQUIRES ( MainThread )
 	int tmSleep = 500;
 #endif
 	sphSleepMsec ( tmSleep );
+	const auto sphMicroNow = sphMicroTimer();
 
-	if ( sphMicroTimer() > g_iNextExpMeterTimestamp )
+	if ( sphMicroNow > g_iNextExpMeterTimestamp )
 	{
 		g_iNextExpMeterTimestamp += g_iExpMeterPeriod;
 		auto tSample = GlobalWorkPool()->Tasks();
@@ -14051,6 +14109,13 @@ void TickHead () REQUIRES ( MainThread )
 		g_tStat15m.Tick ( tSample.iPri + tSample.iSec + tCurrent);
 		if ( g_bLoadInfo )
 			sphInfo("Sample: %d, %d, %d; Load average: %0.2f, %0.2f, %0.2f, sec: %0.2f, %0.2f, %0.2f, pri: %0.2f, %0.2f, %0.2f", tCurrent, tSample.iSec, tSample.iPri, g_tStat1m.Value(), g_tStat5m.Value(), g_tStat15m.Value(), g_tSecStat1m.Value(), g_tSecStat5m.Value(), g_tSecStat15m.Value(), g_tPriStat1m.Value(), g_tPriStat5m.Value(), g_tPriStat15m.Value());
+	}
+
+	// notify systemd watchdog, if necessary
+	if ( g_tWatchdogTimeout.has_value() && sphMicroNow > g_iNextSystemdWatchdogTick )
+	{
+		g_iNextSystemdWatchdogTick = sphMicroNow + g_tWatchdogTimeout.value()/2;
+		sd::keep_alive();
 	}
 }
 
@@ -14162,7 +14227,7 @@ static void ConfigureMerge ( const CSphConfigSection & hSearchd )
 }
 
 
-void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode ) REQUIRES ( MainThread )
+void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestMode ) REQUIRES ( MainThread )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
@@ -14170,7 +14235,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 	sphCheckDuplicatePaths ( hConf );
 
-	if ( bOptPIDFile )
+	if ( bNeedPIDFile )
 		if ( !hSearchd ( "pid_file" ) )
 			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
 
@@ -14616,6 +14681,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 // ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t& dWarnings, CSphString& sError )
 {
+	sd::statusf("preloading index %s", szIndexName);
 	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
@@ -14744,7 +14810,7 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 			fprintf ( stdout, "precached %d tables in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }
 
-// if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
+// if data_dir changes cwd then paths at sections searchd and common should be fixed from relative into absolute
 void FixPathAbsolute ( CSphString & sPath )
 {
 	if ( !g_bCwdChanged )
@@ -15001,6 +15067,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bOptStopWait = false;
 	bool			bOptStatus = false;
 	bool			bOptPIDFile = false;
+	bool			bNeedPIDFile = false; // if daemon explicitly run with --pid-file cmdline option
+	bool			bHasPIDFile = false;
 	StrVec_t		dOptIndexes; // indexes explicitly pointed in cmdline options
 
 	int				iOptPort = 0;
@@ -15045,7 +15113,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
-		OPT1 ( "--pidfile" )		bOptPIDFile = true;
+		OPT1 ( "--pidfile" )		bNeedPIDFile = true;
 		OPT1 ( "--iostats" )		SetIOStats();
 		OPT1 ( "--cpustats" )		SetCPUStats();
 		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
@@ -15055,13 +15123,17 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--ntservice" )		{} // it's valid but handled elsewhere
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
+		OPT1 ( "--watchdog" )		g_tWatchdog = true;
+		OPT1 ( "--no-watchdog" )	g_tWatchdog = false;
+		OPT1 ( "--systemd" )		g_bSystemd = true;
+		OPT1 ( "--no-systemd" )		g_bSystemd = false;
 #endif
 		OPT1 ( "--logdebug" )		UpdateLogLevel ( SPH_LOG_DEBUG );
 		OPT1 ( "--logdebugv" )		UpdateLogLevel ( SPH_LOG_VERBOSE_DEBUG );
 		OPT1 ( "--logdebugvv" )		UpdateLogLevel ( SPH_LOG_VERY_VERBOSE_DEBUG );
 		OPT1 ( "--logreplication" )	UpdateLogLevel ( SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		CrashLogger::SetSafeTrace ( true );
-		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
+		OPT1 ( "--test" )			{ bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
@@ -15141,9 +15213,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// check port and listen arguments early
 	if ( !g_bOptNoDetach && ( bOptPort || bOptListen ) )
 	{
-		sphWarning ( "--listen and --port are only allowed in --console debug mode; switch ignored" );
+		sphWarning ( "--listen and --port are only allowed in --nodetach or --console debug mode; switch ignored" );
 		bOptPort = bOptListen = false;
 	}
+
+	if ( g_bOptNoDetach && g_tWatchdog.value_or ( false ) )
+		sphWarning ( "--watchdog is not allowed in foreground mode (--console, --nodetach); switch ignored" );
 
 	if ( bOptPort )
 	{
@@ -15202,13 +15277,21 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( !LoadConfigInt ( hConf, g_sConfigFile, sError ) )
 		sphFatal ( "%s", sError.cstr() );
 
-	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+	if ( g_bSystemd.has_value() )
+		sphInfo ( "Systemd assistance: explicitly set to %s", g_bSystemd?"yes":"no" );
+	else {
+		g_bSystemd = 1==sd::status("Starting...");
+		if ( *g_bSystemd )
+			sphInfo ( "Systemd assistance: yes" );
+	}
+	assert ( g_bSystemd.has_value() );
+
+	ConfigureSearchd ( hConf, bNeedPIDFile || ( bOptPIDFile && !*g_bSystemd ), bTestMode );
+	bOptPIDFile |= bNeedPIDFile;
 	g_sExePath = sphGetCwd();
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();
 	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
-
-	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
@@ -15221,10 +15304,19 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	bool bVisualLoad = true;
 	bool bWatched = false;
+
+
 #if !_WIN32
 	// Let us start watchdog right now, on foreground first.
+
+	if ( g_bOptNoDetach || bTestMode )
+		g_tWatchdog = false;
+	else
+		if ( !g_tWatchdog ) // value may be already set via cmdline
+			g_tWatchdog = hSearchdpre.OptBool ( "watchdog" );
+
 	int iDevNull = open ( "/dev/null", O_RDWR );
-	if ( g_bWatchdog && !g_bOptNoDetach )
+	if ( g_tWatchdog.value_or ( !*g_bSystemd ) )
 	{
 		bWatched = true;
 		if ( !g_bOptNoLock )
@@ -15235,8 +15327,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 
 	// here we either since plain startup, either being resurrected (forked) by watchdog.
-	// create the pid
 	if ( bOptPIDFile )
+		bHasPIDFile = !!hSearchdpre("pid_file");
+
+	// create the pid
+	if ( bHasPIDFile )
 	{
 		g_sPidFile = hSearchdpre["pid_file"].cstr();
 		FixPathAbsolute ( g_sPidFile );
@@ -15245,7 +15340,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		if ( g_iPidFD<0 )
 			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile.scstr(), strerrorm(errno) );
 	}
-	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
+	if ( bHasPIDFile && !sphLockEx ( g_iPidFD, false ) )
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile.scstr(), strerrorm(errno) );
 
 	g_bPidIsMine = true;
@@ -15270,7 +15365,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				sphFatal ( "%s", sError.cstr() );
 
 			sphInfo ( "Reconfigure the daemon" );
-			ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
+			ConfigureSearchd ( hConf, bHasPIDFile, bTestMode );
 		}
 	}
 
@@ -15316,12 +15411,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 #endif
 
+	sd::mainpid(getpid());
 	LogTimeZoneStartup(sTZWarning);
 
 	// init before workpool, as last checks binlog
 	ModifyDaemonPaths ( hSearchd, FixPathAbsolute );
 	sphRTInit ( hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR ),
-		hSearchd.GetBool ( "binlog_common", val_from_env ( "MANTICORE_BINLOG_COMMON", false ) ),
+		hSearchd.GetBool ( "binlog_common", env_exists ( "MANTICORE_BINLOG_COMMON" ) ),
 		hConf("common") ? hConf["common"]("common") : nullptr );
 	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();
@@ -15467,7 +15563,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 #endif
 	}
 
-	if ( bOptPIDFile && !bWatched )
+	if ( bHasPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
 
 	Binlog::Configure ( hSearchd, uReplayFlags );
@@ -15476,7 +15572,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	InitSkipCache ( g_iSkipCache );
 	InitParserOption();
 
-	if ( bOptPIDFile )
+	if ( bHasPIDFile )
 	{
 #if !_WIN32
 		// re-lock pid
@@ -15555,6 +15651,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				hIndexes.Add ( RWIdx_c ( tIt.second ), tIt.first );
 		}
 
+		sd::status("Replaying binlogs...");
 		Binlog::Replay ( hIndexes, DumpMemStat );
 	} );
 
@@ -15644,6 +15741,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );
+	sd::status("healthy");
+	sd::ready();
 
 	// disable startup logging to stdout
 	if ( !g_bOptNoDetach )
@@ -15651,6 +15750,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( g_bOptQuiet )
 		g_eLogLevel = eQuietRestoreLevel;
+
+	g_tWatchdogTimeout = sd::WatchdogTimeout();
+	if (g_tWatchdogTimeout.has_value())
+		g_iNextSystemdWatchdogTick = sphMicroTimer() + g_tWatchdogTimeout.value()/2;
 
 	while (true)
 	{

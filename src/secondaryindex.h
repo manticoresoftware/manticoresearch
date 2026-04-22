@@ -45,6 +45,7 @@ class SIContainer_c
 public:
 	bool		Load ( const CSphString & sFile, CSphString & sError );
 	bool		Drop ( const CSphString & sFile, CSphString & sError );
+	void		RenameFile ( const CSphString & sOldFile, const CSphString & sNewFile );
 	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }
 	void		Reset() { m_dIndexes.Reset(); }
 

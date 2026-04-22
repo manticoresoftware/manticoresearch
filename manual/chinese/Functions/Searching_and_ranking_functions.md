@@ -1,7 +1,7 @@
 # 搜索和排名函数
 
 ### BM25A()
-`BM25A(k1,b)` 返回精确的 `BM25A()` 值。需要 `expr` 排序器并且启用了 `index_field_lengths`。参数 `k1` 和 `b` 必须是浮点数。
+`BM25A(k1,b)` 返回精确的 `BM25A()` 值。`BM25A(k1,b,avgdl)` 还允许覆盖公式中使用的平均文档长度。它需要启用 `expr` 排序器和 `index_field_lengths`。参数 `k1`、`b` 和可选的 `avgdl` 必须是浮点数。
 
 ### BM25F()
 `BM25F(k1, b, {field=weight, ...})` 返回精确的 `BM25F()` 值，并且需要启用 `index_field_lengths`。还需要 `expr` 排序器。参数 `k1` 和 `b` 必须是浮点数。
@@ -186,4 +186,3 @@ mysql> SHOW META;
 表函数是一种用于查询后结果集处理的机制。表函数接收任意结果集作为输入，并返回一个新的、经过处理的结果集作为输出。第一个参数应为输入结果集，但表函数可以选择性地接受和处理更多参数。表函数可以完全改变结果集，包括其模式。目前，仅支持内置表函数。表函数适用于外部`SELECT`和[嵌套SELECT](../Searching/Sub-selects.md)。
 
 <!-- proofread -->
-

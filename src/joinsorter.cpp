@@ -148,6 +148,8 @@ bool SplitJoinedAttrName ( const CSphString & sJoinedAttr, CSphString & sTable, 
 	sTable = dAttr[0];
 	sAttr = Vec2Str ( dAttr.Slice ( 1, dAttr.GetLength()-1 ), "." );
 
+	sTable.ToLower();
+
 	if ( !sAttr.Length() )
 	{
 		if ( pError )
@@ -604,7 +606,16 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class JoinSorter_c : public ISphMatchSorter
+class HybridTransformJoinRefresh_i : public ISphMatchSorter
+{
+public:
+	virtual			~HybridTransformJoinRefresh_i() = default;
+	virtual bool	RefreshAfterHybridTransform ( CSphString & sError ) = 0;
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class JoinSorter_c : public HybridTransformJoinRefresh_i
 {
 public:
 				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, const CSphString & sRightIndexSchemaName, std::shared_ptr<ISphMatchSorter> pSorter, bool bJoinedGroupSort, int iBatchSize );
@@ -645,6 +656,7 @@ public:
 
 	bool		GetErrorFlag() const												{ return m_bErrorFlag; }
 	const CSphString & GetErrorMessage() const										{ return m_sErrorMessage; }
+	bool		RefreshAfterHybridTransform ( CSphString & sError ) override;
 
 protected:
 	bool							m_bCanBatch = true;
@@ -950,6 +962,23 @@ void JoinSorter_c::SetupAggregates()
 
 bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 {
+	m_pAttrNullBitmask = nullptr;
+	m_pNullMask.reset();
+	m_uNullMask = 0;
+	m_dFilterRemap.Reset();
+	m_dIntFilters.Resize ( 0 );
+	m_dStrFilters.Resize ( 0 );
+	m_dJoinOnFilterValues.Resize ( 0 );
+	m_dJoinOnFilterStrings.Resize ( 0 );
+	m_dCalcPrefilter.Reset();
+	m_dCalcPresort.Reset();
+	m_dAggregates.Reset();
+	m_dCalcPrefilterPtrAttrs.Resize ( 0 );
+	m_dCalcPresortPtrAttrs.Resize ( 0 );
+	m_tMixedFilter = FilterEval_c();
+	m_bNeedToSetupRemap = true;
+	m_bSorterSchemaHasDataPtrs = false;
+
 	m_pJoinQueryParser = std::unique_ptr<QueryParser_i>( m_tQuery.m_pQueryParser->Clone() );
 
 	m_tJoinQuery = m_tJoinQuerySettings;
@@ -959,7 +988,9 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 	m_tJoinQuery.m_iCutoff		= 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;
 
+	m_tMatch.ResetDynamic();
 	m_tMatch.Reset ( iDynamicSize );
+
 	SetupSorterSchema();
 	SetupJoinSelectList();
 	if ( !SetupRightFilters(sError) )	return false;
@@ -974,6 +1005,16 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 	m_iDynamicSize = iDynamicSize;
 
 	return true;
+}
+
+
+bool JoinSorter_c::RefreshAfterHybridTransform ( CSphString & sError )
+{
+	m_bErrorFlag = !SetupJoinQuery ( m_pSorter->GetSchema()->GetDynamicSize(), sError );
+	if ( m_bErrorFlag )
+		m_sErrorMessage = sError;
+
+	return !m_bErrorFlag;
 }
 
 
@@ -1686,12 +1727,11 @@ bool JoinSorter_c::ValidateLeftTableNotPrefixedInFilters ( CSphString & sError )
 	sLeftPrefix.SetSprintf ( "%s.", sLeftTableName.cstr() );
 	ARRAY_FOREACH ( i, m_tQuery.m_dFilters )
 	{
-		const auto & tFilter = m_tQuery.m_dFilters[i];
+		auto & tFilter = m_tQuery.m_dFilters[i];
 		if ( tFilter.m_sAttrName.Begins ( sLeftPrefix.cstr() ) )
 		{
-			CSphString sAttrName = tFilter.m_sAttrName.SubString ( sLeftPrefix.Length(), tFilter.m_sAttrName.Length() - sLeftPrefix.Length() );
-			sError.SetSprintf ( "table %s: unknown column: %s (do not prefix left table attributes in JOIN queries, use '%s' instead of '%s')", sLeftTableName.cstr(), sAttrName.cstr(), sAttrName.cstr(), tFilter.m_sAttrName.cstr() );
-			return false;
+			// Allow left table prefix: strip it so the rest of the pipeline sees bare attribute names
+			tFilter.m_sAttrName = tFilter.m_sAttrName.SubString ( sLeftPrefix.Length(), tFilter.m_sAttrName.Length() - sLeftPrefix.Length() );
 		}
 	}
 
@@ -1716,6 +1756,7 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 		tCtx.m_pIndexSchema	= &m_pIndex->GetMatchSchema();
 		tCtx.m_bScan		= m_tQuery.m_sQuery.IsEmpty();
 		tCtx.m_sJoinIdx		= GetJoinedIndexName();
+		tCtx.m_sJoinIdxLeft	= m_pIndex->GetName();
 		tCtx.m_eJoinType	= m_tQuery.m_eJoinType;
 		if ( !sphCreateFilters ( tCtx, sError, sError ) )
 		{
@@ -2231,7 +2272,7 @@ void JoinSorter_c::IncreaseJoinedMaxMatches ( int iTotalCount )
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Holds multiple join sorters, each works with its own right table. All push to the same sorter
-class JoinSorterN_c : public ISphMatchSorter
+class JoinSorterN_c : public HybridTransformJoinRefresh_i
 {
 public:
 				JoinSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, const char * szRightParent, ISphMatchSorter * pSorter, int iBatchSize );
@@ -2272,6 +2313,7 @@ public:
 
 	bool		GetErrorFlag() const;
 	const CSphString & GetErrorMessage() const;
+	bool		RefreshAfterHybridTransform ( CSphString & sError ) override;
 
 protected:
 	CSphVector<std::unique_ptr<JoinSorter_c>>	m_dJoinSorters;
@@ -2428,6 +2470,16 @@ void JoinSorterN_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnB
 }
 
 
+bool JoinSorterN_c::RefreshAfterHybridTransform ( CSphString & sError )
+{
+	bool bOk = true;
+	for ( auto & i : m_dJoinSorters )
+		bOk &= i->RefreshAfterHybridTransform ( sError );
+
+	return bOk;
+}
+
+
 void JoinSorterN_c::SetRandom ( bool bRandom )
 {
 	for ( auto & i : m_dJoinSorters )
@@ -2469,6 +2521,16 @@ const CSphString & JoinSorterN_c::GetErrorMessage() const
 			return i->GetErrorMessage();
 
 	return m_dJoinSorters[0]->GetErrorMessage();
+}
+
+
+bool RefreshJoinSorterAfterHybridTransform ( ISphMatchSorter * pSorter, CSphString & sError )
+{
+	if ( !pSorter || !pSorter->IsJoin() )
+		return true;
+
+	auto * pJoinSorter = static_cast<HybridTransformJoinRefresh_i *>( pSorter );
+	return pJoinSorter->RefreshAfterHybridTransform(sError);
 }
 
 

@@ -668,10 +668,14 @@ ISphMatchSorter * CreateCollectQueue ( int iMaxMatches, CSphVector<BYTE> & tColl
 
 void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTraits_T<int>& dOrder )
 {
+	const int iFirstFieldLen = tSchema.GetAttrId_FirstFieldLen();
+	const int iLastFieldLen = tSchema.GetAttrId_LastFieldLen();
+
 	pRows->HeadBegin ();
 	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& tCol = tSchema.GetAttr ( dOrder[i] );
+		const int iAttr = dOrder[i];
+		const CSphColumnInfo& tCol = tSchema.GetAttr ( iAttr );
 		if ( sphIsInternalAttr ( tCol ) )
 			continue;
 		if ( i == 0 )
@@ -680,7 +684,7 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
 			continue;
 		}
-		if ( tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( ( iFirstFieldLen>=0 && iAttr>=iFirstFieldLen && iAttr<=iLastFieldLen ) || tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
 		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
 	}
@@ -692,13 +696,16 @@ using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t
 
 void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tMatch, const BYTE* pBlobPool, const VecTraits_T<int>& dOrder, bool bDynamicDocid )
 {
+	const int iFirstFieldLen = tSchema.GetAttrId_FirstFieldLen();
+	const int iLastFieldLen = tSchema.GetAttrId_LastFieldLen();
 	auto& dRows = *pRows;
 	ARRAY_CONSTFOREACH ( i, dOrder )
 	{
-		const CSphColumnInfo& dAttr = tSchema.GetAttr ( dOrder[i] );
+		const int iAttr = dOrder[i];
+		const CSphColumnInfo& dAttr = tSchema.GetAttr ( iAttr );
 		if ( sphIsInternalAttr ( dAttr ) )
 			continue;
-		if ( dAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( ( iFirstFieldLen>=0 && iAttr>=iFirstFieldLen && iAttr<=iLastFieldLen ) || dAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
 
 		CSphAttrLocator tLoc = dAttr.m_tLocator;

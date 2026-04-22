@@ -6,6 +6,16 @@ Beginning with Manticore 4, this process occurs [automatically by default](../Se
 
 ## OPTIMIZE TABLE
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
 <!-- example optimize -->
 ```sql
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
@@ -21,6 +31,16 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
+```
+
 <!-- end -->
 
 ### Number of optimized disk chunks
@@ -45,6 +65,16 @@ Additional options include:
 ```sql
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
+```
+
 <!-- end -->
 
 ### Running in foreground
@@ -61,6 +91,16 @@ When using `OPTION sync=1` (0 by default), the command will wait for the optimiz
 ```sql
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
+```
+
 <!-- end -->
 
 ### Throttling the IO impact
@@ -75,20 +115,40 @@ As long as [auto_optimize](../Server_settings/Searchd.md#auto_optimize) is not d
 
 If you are experiencing unexpected SSTs or want tables across all nodes of the cluster to be binary identical, you need to:
 1. Disable [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
-2. Manually optimize tables:
+2. Manually optimize tables
+
 <!-- example cluster_manual_drop -->
 On one of the nodes, drop the table from the cluster:
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster DROP myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_optimize -->
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
 Optimize the table:
 <!-- request SQL -->
 ```sql
 OPTIMIZE TABLE myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_add -->
 Add back the table to the cluster:
@@ -96,6 +156,12 @@ Add back the table to the cluster:
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex"
+```
+
 <!-- end -->
 When the table is added back, the new files created by the optimization process will be replicated to the other nodes in the cluster.
 Any local changes made to the table on other nodes will be lost.

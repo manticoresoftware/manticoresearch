@@ -112,6 +112,11 @@ In most cases, the above is sufficient when there is a single replication cluste
 ```sql
 JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path"
+```
 <!-- end -->
 
 A node joins a cluster by obtaining data from a specified node and, if successful, updates the node lists across all other cluster nodes in the same way as if it was done manually through [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md). This list is used to re-join nodes to the cluster upon restart.

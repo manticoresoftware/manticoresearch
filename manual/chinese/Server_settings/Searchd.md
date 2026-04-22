@@ -1099,10 +1099,18 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file 是 Manticore 搜索中必填的配置选项，指定存储 `searchd` 服务器进程ID的文件路径。
+`pid_file` 是一个配置选项，指定存储 `searchd` 服务器进程 ID (PID) 的文件路径。
 
-searchd 进程ID文件在启动时会被重新创建并锁定，并在服务器运行时包含主服务器进程ID。服务器关闭时会解除链接。
-此文件的目的是让 Manticore 执行各种内部任务，例如检查是否已经有运行中的 `searchd` 实例，停止 `searchd`，并通知它应该轮换表。该文件也可用于外部自动化脚本。
+PID 文件在启动时创建并锁定，包含服务器运行时的主进程 ID。服务器关闭时，该文件会被删除。此文件允许 Manticore 执行内部任务，例如：
+
+* 验证是否已有 `searchd` 实例在运行。
+* 停止 `searchd` 进程。
+* 触发表轮转。
+
+外部自动化脚本也可以使用此 PID 文件。
+
+**要求：**
+如果 `searchd` 使用 `--console`、`--nodetach` 或 `--systemd` 选项运行，或者系统自动检测到 systemd 管理，则 `pid_file` 是可选的。在所有其他情况下，此设置是强制性的。如果使用了 `--pidfile` 命令行选项，此设置也是必需的。
 
 
 <!-- intro -->
@@ -1770,7 +1778,7 @@ unlink_old = 0
 <!-- example conf watchdog -->
 线程服务器看门狗。可选，缺省值为1（启用看门狗）。
 
-当Manticore查询崩溃时，可能会导致整个服务器崩溃。启用看门狗功能后，`searchd`还会维护一个独立的轻量级进程，监控主服务器进程，并在发生异常终止时自动重新启动它。看门狗默认是启用的。
+当 Manticore 查询崩溃时，可能导致整个服务器崩溃。启用看门狗功能后，`searchd` 还会维护一个独立的轻量级进程，用于监控主服务器进程，并在发生异常终止时自动重新启动它。
 
 <!-- request Example -->
 

@@ -193,7 +193,7 @@ class CreateExprStackSize_c final : public StackMeasurer_c
 		tParams.m_sExpr = m_sExpr.cstr();
 
 		Threads::MockCallCoroutine ( m_dMockStack, [&tParams] {
-			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
+			tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
 		} );
 
 		tParams.m_bSuccess = !!tParams.m_pExprBase;
@@ -265,7 +265,7 @@ class EvalExprStackSize_c final : public StackMeasurer_c
 		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
 			CSphFixedVector<BYTE> dSafeStack { iStack };
 			Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
-				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
+				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
 			});
 			tParams.m_bSuccess = !!tParams.m_pExprBase;
 			assert ( tParams.m_pExprBase );
@@ -342,7 +342,7 @@ class DeleteExprStackSize_c final : public StackMeasurer_c
 		{ // parse in dedicated coro (hope, 100K frame per level should fit any arch)
 			CSphFixedVector<BYTE> dSafeStack { iStack };
 			Threads::MockCallCoroutine ( dSafeStack, [&tParams] {	// do in coro as for fat expr it might already require dedicated stack
-				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, nullptr, tParams.m_sError, tParams.m_tArgs );
+				tParams.m_pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
 			});
 		}
 
@@ -591,7 +591,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_" << szEnv;
-		tNewSize.m_iEval = val_from_env ( sName.cstr(), 0 );
+		tNewSize.m_iEval = env_long ( sName.cstr() ).value_or(0);
 
 		if ( !tNewSize.m_iEval )
 		{
@@ -618,7 +618,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 	{
 		StringBuilder_c sName;
 		sName << "MANTICORE_START_" << szEnv;
-		tNewSize.m_iCreate = val_from_env ( sName.cstr(), tNewSize.m_iCreate );
+		tNewSize.m_iCreate = env_long ( sName.cstr() ).value_or ( tNewSize.m_iCreate );
 
 		if ( !bMocked && !tNewSize.m_iCreate )
 		{

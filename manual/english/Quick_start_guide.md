@@ -256,6 +256,13 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float) morphology='stem_en';
+-->
+
 <!-- example create -->
 ## Create a table
 

@@ -9,6 +9,7 @@
 //
 
 #include "hybridexecutor.h"
+#include "joinsorter.h"
 #include "queuecreator.h"
 #include "attribute.h"
 #include "sphinxexpr.h"
@@ -40,6 +41,21 @@ const char * GetHybridScoreAttrName()
 {
 	static const char * szName = "@hybrid_score";
 	return szName;
+}
+
+
+static void ClearHybridScoreInternalExpr ( ISphMatchSorter * pSorter )
+{
+	auto * pSchema = const_cast<ISphSchema *>( pSorter ? pSorter->GetSchema() : nullptr );
+	if ( !pSchema )
+		return;
+
+	CSphString sInternalHybridScore;
+	sInternalHybridScore.SetSprintf ( "%shybrid_score()", GetInternalAttrPrefix() );
+
+	auto * pAttr = const_cast<CSphColumnInfo *>( pSchema->GetAttr ( sInternalHybridScore.cstr() ) );
+	if ( pAttr )
+		pAttr->m_pExpr = nullptr;
 }
 
 
@@ -204,6 +220,7 @@ private:
 	void	PushSingleFusedMatch ( const RRFEntry_t & tEntry, ISphMatchSorter * pSorter, int iDynSize, const CSphVector<CSphVector<int>> & dRemaps, const CSphAttrLocator & tScoreLoc, const CSphColumnInfo * pDstKnnDist, const CSphVector<const CSphColumnInfo *> & dKnnDistAttrs, const CSphVector<ExprEval_t> & dExprs );
 	void	ResolveWeights ( const CSphQuery & tQuery );
 	int		ResolveSubQueryIdx ( const CSphQuery & tQuery, const CSphString & sName ) const;
+	void	PreserveJoinOnAttrsForTransform ( ISphMatchSorter * pSorter ) const;
 
 	const CSphIndex *			m_pIndex;
 	CSphVector<CSphQuery>		m_dKnnQueries;		///< one per KNN entry
@@ -543,6 +560,35 @@ void HybridExecutor_c::ResolveWeights ( const CSphQuery & tQuery )
 }
 
 
+void HybridExecutor_c::PreserveJoinOnAttrsForTransform ( ISphMatchSorter * pSorter ) const
+{
+	if ( m_tTextQuery.m_eJoinType==JoinType_e::NONE || !m_tTextQuery.m_dOnFilters.GetLength() )
+		return;
+
+	// When SELECT * is used, the sorter has no filtered attr list and
+	// TransformPooled2StandalonePtrs will keep all attrs automatically.
+	// Calling SetFilteredAttrs here would incorrectly restrict the schema
+	// to just the join ON-clause attrs, stripping hybrid_score etc.
+	bool bHaveStar = m_tTextQuery.m_dItems.any_of ( [] ( const CSphQueryItem & t ) { return t.m_sExpr=="*"; } );
+	if ( bHaveStar )
+		return;
+
+	sph::StringSet hJoinAttrs;
+	const CSphString & sLeft = m_pIndex->GetName();
+	const CSphString & sRight = m_tTextQuery.m_sJoinIdx;
+
+	for ( const auto & i : m_tTextQuery.m_dOnFilters )
+	{
+		if ( i.m_sIdx1==sLeft && i.m_sIdx2==sRight )
+			hJoinAttrs.Add ( i.m_sAttr1 );
+		else if ( i.m_sIdx2==sLeft && i.m_sIdx1==sRight )
+			hJoinAttrs.Add ( i.m_sAttr2 );
+	}
+
+	pSorter->SetFilteredAttrs ( hJoinAttrs, false );
+}
+
+
 bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs )
 {
 	auto & tMeta = *tResult.m_pMeta;
@@ -592,12 +638,22 @@ bool HybridExecutor_c::Execute ( CSphQueryResult & tResult, const VecTraits_T<IS
 			return false;
 		}
 
+	PreserveJoinOnAttrsForTransform ( pOutputSorter );
+
 	// move the output sorter to standalone schema (it's empty, so this just transforms the schema)
 	pOutputSorter->TransformPooled2StandalonePtrs ( [] ( const CSphMatch * ) -> const BYTE * { return nullptr; }, [] ( const CSphMatch * ) -> columnar::Columnar_i * { return nullptr; }, false );
+	if ( !RefreshJoinSorterAfterHybridTransform ( pOutputSorter, tMeta.m_sError ) )
+		return false;
 
 	CSphVector<RRFEntry_t> dFused;
 	FuseRRF ( m_dSubResults, m_tHybridSettings.m_iRankConstant, m_dWeights, dFused );
 	PushFusedMatches ( pOutputSorter, dFused );
+
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
+		return false;
+
+	// remove m_pExpr from internal hybrid score sort attr, otherwise it will appear in the final frontend schema
+	ClearHybridScoreInternalExpr ( pOutputSorter );
 
 	for ( int i = 0; i < iTotalSubQueries; i++ )
 		tMeta.MergeWordStats ( m_dSubResults[i].m_tMeta );

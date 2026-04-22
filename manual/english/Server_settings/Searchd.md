@@ -1099,10 +1099,18 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file is a mandatory configuration option in Manticore search that specifies the path of the file where the process ID of the `searchd` server is stored.
+`pid_file` is a configuration option that specifies the path to the file storing the `searchd` server's process ID (PID).
 
-The searchd process ID file is re-created and locked on startup, and contains the head server process ID while the server is running. It is unlinked on server shutdown.
-The purpose of this file is to enable Manticore to perform various internal tasks, such as checking whether there is already a running instance of `searchd`, stopping `searchd`, and notifying it that it should rotate the tables. The file can also be used for external automation scripts.
+The PID file is created and locked upon startup and contains the main server process ID while the server is running. The file is removed when the server shuts down. This file allows Manticore to perform internal tasks, such as:
+
+* Verifying if a `searchd` instance is already running.
+* Stopping the `searchd` process.
+* Triggering table rotations.
+
+The PID file can also be used by external automation scripts.
+
+**Requirements:**
+The `pid_file` is optional if `searchd` is run with the `--console`, `--nodetach`, or `--systemd` options, or if systemd management is automatically detected. In all other cases, this setting is mandatory. It is also required if the `--pidfile` command-line option is used.
 
 
 <!-- intro -->
@@ -1770,7 +1778,7 @@ unlink_old = 0
 <!-- example conf watchdog -->
 Threaded server watchdog. Optional, default is 1 (watchdog enabled).
 
-When a Manticore query crashes, it can take down the entire server. With the watchdog feature enabled, `searchd` also maintains a separate lightweight process that monitors the main server process and automatically restarts it in case of abnormal termination. The watchdog is enabled by default.
+When a Manticore query crashes, it can take down the entire server. With the watchdog feature enabled, `searchd` also maintains a separate lightweight process that monitors the main server process and automatically restarts it in case of abnormal termination.
 
 <!-- request Example -->
 

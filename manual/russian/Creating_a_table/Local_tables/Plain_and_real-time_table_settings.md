@@ -701,6 +701,23 @@ CREATE TABLE products (title text indexed, description text stored, author text,
 * "title" индексируется, но не хранится.
 * "description" хранится, но не индексируется.
 * "author" и хранится, и индексируется.
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text, price float) morphology='stem_en'"
+```
+
+Это создает таблицу "products" с двумя полями: "title" (полнотекстовый) и "price" (с плавающей точкой), и устанавливает "morphology" в "stem_en".
+
+```JSON
+POST /sql?mode=raw -d "CREATE TABLE products (title text indexed, description text stored, author text, price float)"
+```
+Это создает таблицу "products" с тремя полями:
+* "title" индексируется, но не хранится.
+* "description" хранится, но не индексируется.
+* "author" и хранится, и индексируется.
+
 <!-- end -->
 
 

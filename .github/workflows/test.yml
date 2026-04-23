@@ -417,7 +417,7 @@ jobs:
       arch: x86_64
 
   test_linux_release_mcl:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests (MCL)
     needs: [build_linux_release, meta, mcl_package_jammy, mcl_test_package_cache_probe]
     permissions:
@@ -488,8 +488,9 @@ jobs:
     needs:
       - build_linux_release
       - mcl_package_jammy
+      - mcl_test_package_cache_probe
       - meta
-    if: needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists != 'true'
+    if: always() && needs.meta.outputs.run_image_build == 'true' && needs.meta.outputs.image_exists != 'true'
     runs-on: ubuntu-22.04
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
@@ -509,6 +510,12 @@ jobs:
         with:
           name: mcl_package_jammy_x86_64
           path: ./mcl-package
+      - name: Restore cached MCL package
+        if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ./mcl-package
+          key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
       # - run: |
       #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip

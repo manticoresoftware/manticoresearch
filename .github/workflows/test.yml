@@ -407,6 +407,7 @@ jobs:
           path: .mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       - name: Prepare cached MCL package artifact
+        shell: bash
         run: |
           set -euo pipefail
           find .mcl-package-cache -maxdepth 1 -type f | sort

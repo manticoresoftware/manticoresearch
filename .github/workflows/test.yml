@@ -109,7 +109,7 @@ jobs:
         if: ${{ steps.mcl_sha.outputs.mcl_full_sha != '' }}
         uses: actions/cache@v4
         with:
-          path: .cache/mcl-test-package
+          path: .mcl-package-cache
           key: mcl-test-pkg-jammy-amd64-${{ steps.mcl_sha.outputs.mcl_full_sha }}
           lookup-only: true
       - name: Export cached MCL test package metadata

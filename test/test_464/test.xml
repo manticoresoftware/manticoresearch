@@ -94,6 +94,21 @@ select count(*) from test1;
 <sphinxql>
 show index test1 status like '%documents';
 select count(*) from test1;
+
+<!-- issue 4513 - damaged source index after attach -->
+create table test2 ( title text, tag integer );
+insert into test2 (id, title, tag) values (3, 'test2 abc', 13);
+flush ramchunk test2;
+show index test2 status like '%documents';
+select count(*) from test2;
+ATTACH TABLE test1 TO TABLE test2;
+select count(*) from test1;
+</sphinxql>
+	<sphinxql system="kill-daemon"/>
+	<sphinxql system="start-agent"/>
+<sphinxql>
+select count(*) from test1;
+drop table test2;
 drop table test1;
 </sphinxql></queries>
 

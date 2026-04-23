@@ -44,7 +44,7 @@ show index test1 status like '%documents';
 select count(*) from test1;
 
 <!-- issue 4513 - damaged source index after attach -->
-insert into test2 (id, title, tag) values (3, 'test2 abc', 13), (13,'test2 12 abc', 22),(14,'test2 12 abc',	22),(15,'test2 12 abc', 22), (16,'test2 12 abc', 22);
+insert into test2 (id, title, tag) values (1,'test1 1 abc', 11),(3, 'test2 abc', 13), (13,'test2 12 abc', 22),(14,'test2 12 abc',	22),(15,'test2 12 abc', 22), (16,'test2 12 abc', 22);
 flush ramchunk test2;
 show index test2 status like '%documents';
 select count(*) from test2;
@@ -54,6 +54,8 @@ show index test1 status like '%documents';
 select count(*) from test1;
 <!-- issue 4515 - fix wrong kill by already killed on attach -->
 select count(*) from test2;
+<!-- issue 4516 - fix wrong indexed_documents counter after attach -->
+show index test2 status like '%documents';
 </sphinxql>
 	<sphinxql system="kill-daemon"/>
 	<sphinxql system="start-agent"/>

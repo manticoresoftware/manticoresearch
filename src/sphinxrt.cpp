@@ -9331,6 +9331,7 @@ bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString 
 bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	int iTotalKilled = 0;
+	DWORD uAliveDocuments = 0;
 
 	// attach to non-empty RT: apply upcoming index'es docs as k-list.
 	if ( !m_tRtChunks.IsEmpty() )
@@ -9342,8 +9343,10 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 			return false;
 		}
 
+		uAliveDocuments = dIndexDocs.GetLength();
 		iTotalKilled = ApplyKillList ( dIndexDocs );
-	}
+	} else
+		uAliveDocuments = pIndex->GetStats().m_iTotalDocuments;
 
 	// rename that source index to our last chunk
 	int iChunk = m_tChunkID.MakeChunkId ( m_tRtChunks );
@@ -9360,7 +9363,7 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 	}
 
 	m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
-	m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments-iTotalKilled;
+	m_tStats.m_iTotalDocuments += uAliveDocuments-iTotalKilled;
 
 	pIndex->SetName ( SphSprintf ( "%s_%d", GetName(), iChunk ) ); // idx name is cosmetic thing
 	pIndex->SetBinlog ( false );

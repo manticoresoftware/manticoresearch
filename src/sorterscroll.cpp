@@ -13,6 +13,7 @@
 #include "std/base64.h"
 #include "sortcomp.h"
 #include "sphinxjson.h"
+#include "hybridexecutor.h"
 
 template <typename COMP>
 class ScrollSorter_T : public ISphMatchSorter 
@@ -112,6 +113,8 @@ void ScrollSorter_T<COMP>::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch
 {
 	FreeDataPtrAttrs();
 	m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters );
+	m_tState = m_pSorter->GetState();
+	SetupRefMatch();
 }
 
 template <typename COMP>
@@ -304,6 +307,32 @@ ISphMatchSorter * CreateScrollSorter ( ISphMatchSorter * pSorter, const ISphSche
 }
 
 
+CSphFilterSettings CreateScrollRangeFilter ( const ScrollAttr_t & tFirst, bool bOnlyId, const CSphString & sAttrName )
+{
+	CSphFilterSettings tFilter;
+	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
+	tFilter.m_sAttrName = sAttrName;
+	tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !bOnlyId;
+
+	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_fMaxValue = tFirst.m_fValue;
+		else
+			tFilter.m_fMinValue = tFirst.m_fValue;
+	}
+	else
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_iMaxValue = tFirst.m_tValue;
+		else
+			tFilter.m_iMinValue = tFirst.m_tValue;
+	}
+
+	return tFilter;
+}
+
+
 bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError )
 {
 	CSphString sDecoded;
@@ -366,27 +395,12 @@ static void AddScrollFilter ( CSphQuery & tQuery )
 	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
 		return;
 
+	if ( tQuery.m_bHybridSearch && IsHybridPostFusionAttr ( tFirst.m_sSortAttr ) )
+		return;
+
 	bool bOnlyId = tQuery.m_tScrollSettings.m_dAttrs.GetLength()==1;
-
-	CSphFilterSettings tFilter;
-	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
-	tFilter.m_sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
-	tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !bOnlyId;
-
-	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
-	{
-		if ( tFirst.m_bDesc )
-			tFilter.m_fMaxValue = tFirst.m_fValue;
-		else
-			tFilter.m_fMinValue = tFirst.m_fValue;
-	}
-	else
-	{
-		if ( tFirst.m_bDesc )
-			tFilter.m_iMaxValue = tFirst.m_tValue;
-		else
-			tFilter.m_iMinValue = tFirst.m_tValue;
-	}
+	CSphString sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
+	CSphFilterSettings tFilter = CreateScrollRangeFilter ( tFirst, bOnlyId, sAttrName );
 
 	if ( tQuery.m_dFilterTree.GetLength() )
 	{

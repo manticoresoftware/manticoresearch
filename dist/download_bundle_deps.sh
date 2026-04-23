@@ -409,10 +409,10 @@ process_package_file() {
 find_local_mcl_package() {
   [[ -n "$MCL_PACKAGE_DIR" && -d "$MCL_PACKAGE_DIR" ]] || return 1
   case "$pkg_fmt" in
-    deb) find "$MCL_PACKAGE_DIR" -maxdepth 1 -type f -name 'manticore-columnar-lib_*.'"$pkg_fmt" 2>/dev/null | grep -v dbgsym | head -n 1 ;;
-    rpm) find "$MCL_PACKAGE_DIR" -maxdepth 1 -type f -name 'manticore-columnar-lib-*.'"$pkg_fmt" 2>/dev/null | grep -v debuginfo | head -n 1 ;;
-    tar.gz) find "$MCL_PACKAGE_DIR" -maxdepth 1 -type f -name 'manticore-columnar-lib-*.'"$pkg_fmt" 2>/dev/null | grep -v dbgsymbols | head -n 1 ;;
-    zip) find "$MCL_PACKAGE_DIR" -maxdepth 1 -type f -name 'manticore-columnar-lib-*.zip' 2>/dev/null | grep '\-libs\.zip$' | head -n 1 ;;
+    deb) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib_*.'"$pkg_fmt" 2>/dev/null | grep -v dbgsym | head -n 1 ;;
+    rpm) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib-*.'"$pkg_fmt" 2>/dev/null | grep -v debuginfo | head -n 1 ;;
+    tar.gz) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib-*.'"$pkg_fmt" 2>/dev/null | grep -v dbgsymbols | head -n 1 ;;
+    zip) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib-*.zip' 2>/dev/null | grep '\-libs\.zip$' | head -n 1 ;;
   esac
 }
 

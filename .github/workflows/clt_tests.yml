@@ -38,6 +38,10 @@ jobs:
   discover:
     name: Discover CLT tests
     runs-on: ubuntu-22.04
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
     steps:
@@ -50,10 +54,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          python3 - <<'PY2'
           import json
           import os
           import pathlib
+
+          has_api_keys = any(
+              os.environ.get(name)
+              for name in ("OPENAI_API_KEY", "VOYAGE_API_KEY", "JINA_API_KEY")
+          )
 
           roots = [
               "test/clt-tests/buddy",
@@ -63,7 +72,6 @@ jobs:
               "test/clt-tests/data-manipulation",
               "test/clt-tests/expected-errors",
               "test/clt-tests/fulltext-search",
-              "test/clt-tests/mcl",
               "test/clt-tests/http-interface",
               "test/clt-tests/indexer",
               "test/clt-tests/join",
@@ -79,6 +87,11 @@ jobs:
               "test/clt-tests/test-configuration",
               "test/clt-tests/vector-knn",
           ]
+
+          if has_api_keys:
+              roots.insert(7, "test/clt-tests/ae")
+          else:
+              print("Skipping auto-embeddings tests - no API keys available")
 
           tests = []
           for root in roots:
@@ -110,7 +123,7 @@ jobs:
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as fh:
               fh.write(f"matrix={json.dumps(matrix)}\n")
-          PY
+          PY2
 
   clt:
     name: CLT
@@ -125,7 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
-              
+
     steps:
       - uses: manticoresoftware/clt@0.7.8
         with:

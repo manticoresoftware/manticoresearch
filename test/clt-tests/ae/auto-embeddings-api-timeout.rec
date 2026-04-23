@@ -7,8 +7,8 @@ MOCK SERVER SETUP FOR API_TIMEOUT TESTING
 
 To test API_TIMEOUT parameter with a local mock server:
 
-Start mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
-For delay testing: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+Start mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
+For delay testing: php test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
 Use delay=N in input text to override delay per request (e.g., "test delay=6.0")
 The mock server returns deterministic random embeddings seeded by input text
 API Key Validation: All keys are valid except "wrong" (returns 401 error)
@@ -20,7 +20,7 @@ MOCK SERVER STARTUP
 ––– comment –––
 Start mock server for OpenAI provider on port 8080 (normal speed)
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
 MOCK_PID_8080=$!
 echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
 sleep 1
@@ -29,7 +29,7 @@ Mock server started on port 8080 (PID: #!/[0-9]+/!#)
 ––– comment –––
 Start slow mock server for timeout testing on port 8084 (6 second delay)
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0 > /tmp/mock-server-8084.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0 > /tmp/mock-server-8084.log 2>&1 &
 MOCK_PID_8084=$!
 echo "Slow mock server started on port 8084 (PID: $MOCK_PID_8084)"
 sleep 1
@@ -112,7 +112,7 @@ API_TIMEOUT Very Small (1 second)
 Test: CREATE TABLE ... API_TIMEOUT='1'
 Expected: Table creation succeeds, timeout set to 1 second, SHOW CREATE TABLE displays api_timeout='1'
 Verify: Works with fast responses, fails with slow responses (>1s)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_small (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='1')" 2>&1; echo $?
 ––– output –––
@@ -133,7 +133,7 @@ embedding float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='openai/t
 API_TIMEOUT Normal Value (30 seconds)
 Test: CREATE TABLE ... API_TIMEOUT='30'
 Expected: Table creation succeeds, timeout set to 30 seconds, SHOW CREATE TABLE displays api_timeout='30'
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_normal (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='30')" 2>&1; echo $?
 ––– output –––
@@ -161,7 +161,7 @@ API_TIMEOUT Very Large (3600 seconds)
 Test: CREATE TABLE ... API_TIMEOUT='3600'
 Expected: Table creation succeeds, timeout set to 3600 seconds, SHOW CREATE TABLE displays api_timeout='3600'
 Verify: Works correctly (though impractical)
-Setup: Requires mock server running: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Setup: Requires mock server running: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_api_timeout_large (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME='openai/text-embedding-ada-002' FROM='title' API_KEY='test-key' API_URL='http://localhost:8080/v1/embeddings' API_TIMEOUT='3600')" 2>&1; echo $?
 ––– output –––
@@ -185,7 +185,7 @@ Test: CREATE TABLE ... API_TIMEOUT='5' with mock server delay=6.0
 Expected: Table creation fails with timeout error
 Verify: Clear timeout error message
 Test Method: Use delay=N in input text or --delay command line option
-Setup: Start server with 6 second delay: php test/clt-tests/mcl/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
+Setup: Start server with 6 second delay: php test/clt-tests/ae/mock-embeddings-server.php --port 8084 --provider openai --delay 6.0
 Alternative: Use "delay=6.0" in input text to override delay per request
 
 Test Case 1: Create table with 5 second timeout (should fail with 6s delay)

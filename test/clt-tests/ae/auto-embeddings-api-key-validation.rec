@@ -7,7 +7,7 @@ MOCK SERVER SETUP FOR API_KEY VALIDATION TESTING
 
 To test API_KEY validation with a local mock server:
 
-Start mock server: php test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai
+Start mock server: php test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai
 The mock server validates API keys: all keys are valid except "wrong" (returns 401 error)
 IMPORTANT: API key validation now uses real API requests instead of format checks
 When creating a table, the system makes a minimal test API request to validate the key
@@ -21,7 +21,7 @@ MOCK SERVER STARTUP
 ––– comment –––
 Start mock server for OpenAI provider on port 8080
 ––– input –––
-php /manticore/test/clt-tests/mcl/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
+php /manticore/test/clt-tests/ae/mock-embeddings-server.php --port 8080 --provider openai > /tmp/mock-server-8080.log 2>&1 &
 MOCK_PID_8080=$!
 echo "Mock server started on port 8080 (PID: $MOCK_PID_8080)"
 sleep 1

@@ -429,7 +429,7 @@ jobs:
       artifact_name: release_mcl_test_results
       results_name: "Linux release MCL test results"
       timeout: 15
-      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' && 'mcl_package_jammy_x86_64' || '' }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' && needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' && 'mcl_package_jammy_x86_64' || '' }}
       MCL_PACKAGE_CACHE_KEY: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_changed != 'true' && needs.meta.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: dev
@@ -505,7 +505,7 @@ jobs:
           name: release_build
           path: .
       - name: Download local MCL package artifact
-        if: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' }}
+        if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' && needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' }}
         uses: manticoresoftware/download_artifact_with_retries@v4
         with:
           name: mcl_package_jammy_x86_64

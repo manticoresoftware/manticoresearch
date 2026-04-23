@@ -9,10 +9,20 @@ SELECT id, attr1, myudf (attr2, attr3+attr4) ...
 You can dynamically load and unload UDFs into `searchd` without having to restart the server, and use them in expressions when searching, ranking, etc. A quick summary of the UDF features is as follows:
 
 * UDFs can take integer (both 32-bit and 64-bit), float, string, MVA, or `PACKEDFACTORS()` arguments.
-* UDFs can return integer, float, or string values.
+* UDFs can return integer, float, string, or MVA values (MULTI, MULTI64, FLOAT_VECTOR).
 * UDFs can check the argument number, types, and names during the query setup phase, and raise errors.
 
 We do not yet support aggregation functions. In other words, your UDFs will be called for just a single document at a time and are expected to return some value for that document. Writing a function that can compute an aggregate value like AVG() over the entire group of documents that share the same GROUP BY key is not yet possible. However, you can use UDFs within the built-in aggregate functions: that is, even though MYCUSTOMAVG() is not supported yet, AVG(MYCUSTOMFUNC()) should work just fine!
+
+## MVA Return Types
+
+UDFs can also return Multi-Value Attributes (MVA) in addition to scalar values. The supported MVA return types are:
+
+* **MULTI**: Arrays of 32-bit unsigned integers
+* **MULTI64**: Arrays of 64-bit signed integers  
+* **FLOAT_VECTOR**: Arrays of floating-point numbers
+
+MVA UDFs are created using the same `CREATE FUNCTION` syntax with the appropriate return type, and can be used in SELECT statements just like scalar UDFs.
 
 UDFs offer a wide range of applications, such as:
 

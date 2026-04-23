@@ -296,7 +296,7 @@ jobs:
         run: |
           ort_version="1.24.2"
           if [[ "${{ inputs.distr }}" == "macos" ]]; then
-            if [[ "${{ inputs.arch }}" == "aarch64" ]]; then
+            if [[ "${{ inputs.arch }}" == "arm64" ]]; then
               ort_name="onnxruntime-osx-arm64-static_lib-${ort_version}"
             else
               ort_name="onnxruntime-osx-x86_64-static_lib-${ort_version}"

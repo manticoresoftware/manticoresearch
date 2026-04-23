@@ -94,11 +94,11 @@ jobs:
     name: OK to pack?
     runs-on: ubuntu-22.04
     outputs:
-      version: ${{ steps.semver-tagger.outputs.version || steps.pack-publish-version.outputs.version }}
-      version_full: ${{ steps.semver-tagger.outputs.version_full || steps.pack-publish-version.outputs.version_full }}
-      version_rpm: ${{ steps.semver-tagger.outputs.version_rpm || steps.pack-publish-version.outputs.version_rpm }}
-      version_deb: ${{ steps.semver-tagger.outputs.version_deb || steps.pack-publish-version.outputs.version_deb }}
-      target: ${{ steps.semver-tagger.outputs.target || steps.pack-publish-version.outputs.target }}
+      version: ${{ steps.semver-tagger.outputs.version }}
+      version_full: ${{ steps.semver-tagger.outputs.version_full }}
+      version_rpm: ${{ steps.semver-tagger.outputs.version_rpm }}
+      version_deb: ${{ steps.semver-tagger.outputs.version_deb }}
+      target: ${{ steps.semver-tagger.outputs.target }}
       should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
     if: |
       (
@@ -145,41 +145,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Update version
-        if: ${{ !contains(github.ref, 'refs/tags/pack_publish') }}
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
           github_token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
-
-      - name: Derive version for pack_publish tag
-        if: ${{ contains(github.ref, 'refs/tags/pack_publish') }}
-        id: pack-publish-version
-        run: |
-          set -euo pipefail
-          latest_tag=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
-          if [[ -z "$latest_tag" ]]; then
-            echo "No semantic version tag found"
-            exit 1
-          fi
-          commit_hash=$(git rev-parse --short=8 HEAD)
-          timestamp=$(git log -1 --format=%cd --date=format:'%y%m%d%H' HEAD)
-          version_full="${latest_tag}+${timestamp}-${commit_hash}-dev"
-          version_rpm=$(echo "$version_full" | tr '-' '.')
-          echo "version=${latest_tag}" >> "$GITHUB_OUTPUT"
-          echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
-          echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
-          echo "version_deb=${version_full}" >> "$GITHUB_OUTPUT"
-          echo "target=dev" >> "$GITHUB_OUTPUT"
       - name: Check if we should continue packing
         id: check-should-continue
         run: |
           # Continue if version was updated, if we have the "pack" label on PR, or if target is "release"
-          if [[ "${{ contains(github.ref, 'refs/tags/pack_publish') }}" == "true" ]]; then
-            echo "Continuing because commit has 'pack_publish' tag"
-            echo "should_continue=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ steps.semver-tagger.outputs.version_updated }}" == "true" ]]; then
+          if [[ "${{ steps.semver-tagger.outputs.version_updated }}" == "true" ]]; then
             echo "Continuing because version was updated"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           elif [[ "${{ steps.semver-tagger.outputs.target }}" == "release" ]]; then
@@ -187,6 +163,9 @@ jobs:
             echo "should_continue=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ contains(github.ref, 'refs/tags/pack_publish') }}" == "true" ]]; then
+            echo "Continuing because commit has 'pack_publish' tag"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           else
             echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label or tag"

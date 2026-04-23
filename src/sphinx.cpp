@@ -7783,16 +7783,14 @@ CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 	}
 
 	int iStride = m_tSchema.GetRowSize();
-	dResult.Resize ( m_iDocinfo );
+	dResult.Resize ( GetCount() );
+	int j = 0;
 
 	const CSphRowitem * pRow = m_tAttr.GetReadPtr();
-	for ( SphAttr_t & tDst : dResult )
-	{
-		tDst = sphGetDocID ( pRow );
-		pRow += iStride;
-	}
+	for ( DWORD uRow=0; uRow < m_iDocinfo; ++uRow, pRow += iStride )
+		if (!m_tDeadRowMap.IsSet (uRow))
+			dResult[j++] = sphGetDocID ( pRow );
 
-	dResult.Uniq();
 	return dResult;
 }
 

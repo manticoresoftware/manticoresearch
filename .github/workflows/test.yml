@@ -367,25 +367,51 @@ jobs:
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
         cmake --build build --target package
 
+  mcl_test_package_cache_probe:
+    name: MCL test package cache probe
+    needs: [meta]
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:clang16_cmake3263
+    outputs:
+      cache_key: ${{ steps.meta.outputs.cache_key }}
+      cache_hit: ${{ steps.meta.outputs.cache_hit }}
+    steps:
+      - name: Prepare probe path
+        run: mkdir -p .mcl-package-cache
+      - name: Probe exact-SHA MCL package cache
+        id: probe
+        if: ${{ needs.meta.outputs.mcl_full_sha != '' }}
+        uses: actions/cache@v4
+        with:
+          path: .mcl-package-cache
+          key: mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}
+          lookup-only: true
+      - name: Export cache probe metadata
+        id: meta
+        run: |
+          echo "cache_key=mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
+          echo "cache_hit=${{ steps.probe.outputs['cache-hit'] == 'true' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+
   mcl_embeddings_jammy_x86_64:
     name: MCL embeddings jammy x86_64
-    needs: [meta]
+    needs: [meta, mcl_test_package_cache_probe]
     uses: ./.github/workflows/mcl_embeddings_quick_build.yml
     with:
-      enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
+      enabled: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       distr: linux
       arch: x86_64
 
   mcl_package_jammy:
     name: MCL jammy package
-    needs: [meta, mcl_embeddings_jammy_x86_64]
+    needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe]
     uses: ./.github/workflows/mcl_package_build.yml
     with:
-      enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
+      enabled: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       artifact_name: mcl_package_jammy_x86_64
-      package_cache_key: ${{ needs.meta.outputs.mcl_test_pkg_cache_key }}
+      package_cache_key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       embeddings_artifact: embeddings_linux_x86_64
       distr: jammy
       arch: x86_64
@@ -393,7 +419,7 @@ jobs:
   test_linux_release_mcl:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests (MCL)
-    needs: [build_linux_release, meta, mcl_package_jammy]
+    needs: [build_linux_release, meta, mcl_package_jammy, mcl_test_package_cache_probe]
     permissions:
       checks: write
       contents: read
@@ -404,7 +430,7 @@ jobs:
       results_name: "Linux release MCL test results"
       timeout: 15
       MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.meta.outputs.mcl_changed == 'true' && 'mcl_package_jammy_x86_64' || '' }}
-      MCL_PACKAGE_CACHE_KEY: ${{ needs.meta.outputs.mcl_test_pkg_cache_key }}
+      MCL_PACKAGE_CACHE_KEY: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_changed != 'true' && needs.meta.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: dev
       FLOAT_TOLERANCE: true

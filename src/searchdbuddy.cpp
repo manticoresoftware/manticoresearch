@@ -377,7 +377,8 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 #if _WIN32
 	BuddyWindow_t tWnd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
+	auto tPipeRedirect = ( boost::process::std_out & boost::process::std_err ) > *g_pPipe;
+	pBuddy.reset ( new boost::process::child ( sCmd, tPipeRedirect, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
 #else
 	PreservedStd_t tPreserveStd;
 	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd ) );

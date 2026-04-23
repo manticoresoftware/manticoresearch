@@ -63,7 +63,7 @@ $TZDATA_PACKAGE_NAME $TZDATA_VERSION $TZDATA_COMMIT_SHA $TZDATA_DATE"
 
 find_local_windows_mcl_package() {
   if [ -d ./mcl-package ]; then
-    find ./mcl-package -maxdepth 1 -type f -name 'manticore-columnar-lib-*.zip' | grep '\-libs\.zip$' | head -n 1
+    find ./mcl-package -type f -name 'manticore-columnar-lib-*.zip' | grep '\-libs\.zip$' | head -n 1
   fi
 }
 
@@ -112,9 +112,6 @@ for DESTINATION in "${DESTINATION_REPOS[@]}"; do
     break
   else
     echo "Some packages are missing in $DESTINATION repo / deps.txt"
-    BUDDY_PACKAGE_NAME=""
-    MCL_PACKAGE_NAME=""
-    TZDATA_PACKAGE_NAME=""
   fi
 done
 

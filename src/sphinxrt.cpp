@@ -5350,6 +5350,15 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
+	// maybe fixup document's counter. It may be damaged, say, if you delete some documents and then shut down daemon without saving the index.
+	// in this case meta will show previous number of indexed documents, but actually part of them already killed.
+	// (binlog also will not help, as kill-map is mmapped, and is not transactional, i.e. on replay it will detect the documents as already killed)
+	const auto iCount = GetCount();
+	if ( m_tStats.m_iTotalDocuments!=iCount) {
+		sphWarning ( "Detected wrong count of indexed documents: " INT64_FMT " in meta vs " INT64_FMT " actually", m_tStats.m_iTotalDocuments, iCount );
+		m_tStats.m_iTotalDocuments = iCount;
+	}
+
 	// neet to set m_iSoftRamLimit more than iUsedRam to prevent flush of disk chunk right after index load
 	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
 	RecalculateRateLimit ( iUsedRam, 1, false );

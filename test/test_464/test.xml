@@ -79,6 +79,22 @@ attach table test1 to table test2;
 drop table test1;
 drop table test2;
 
+<!-- issue 4512 - wrong count of indexed documents after restart -->
+create table test1 ( title text, tag integer );
+insert into test1 (id, title, tag) values (1,'test1 1 abc', 11),(2,'test1 2 abc', 12), (11,'test1 11 abc', 21), (12,'test1 12 abc', 22),(13,'test1 12 abc',	22),(14,'test1 12 abc', 22),(15,'test1 12 abc', 22), (16,'test1 12 abc', 22),(17,'test1 12 abc', 22),(18,'test1 12	abc', 22),(19,'test1 12 abc', 22),(20,'test2 12 abc', 22);
+flush ramchunk test1;
+show index test1 status like '%documents';
+select count(*) from test1;
+delete from test1 where id>12;
+show index test1 status like '%documents';
+select count(*) from test1;
+</sphinxql>
+<sphinxql system="kill-daemon"/>
+<sphinxql system="start-agent"/>
+<sphinxql>
+show index test1 status like '%documents';
+select count(*) from test1;
+drop table test1;
 </sphinxql></queries>
 
 </test>

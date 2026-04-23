@@ -78,6 +78,10 @@ on:
         required: false
         type: string
         default: "dev"
+      ref:
+        required: false
+        type: string
+        default: ""
   
 jobs:
   build:
@@ -113,6 +117,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           set-safe-directory: true
           submodules: recursive
 

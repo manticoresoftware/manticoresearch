@@ -9484,6 +9484,10 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 
 	auto pHeadChunk = tNewSet.m_pNewDiskChunks->First();
 	tNewSet.m_pNewDiskChunks->Remove(0);
+
+	assert ( pHeadChunk );
+	const auto iCount = pHeadChunk->Cidx().GetCount();
+	m_tStats.m_iTotalDocuments -= iCount;
 	return pHeadChunk;
 }
 

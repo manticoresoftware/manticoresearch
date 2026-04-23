@@ -49,6 +49,8 @@ flush ramchunk test2;
 show index test2 status like '%documents';
 select count(*) from test2;
 ATTACH TABLE test1 TO TABLE test2;
+<!-- issue 4514 - wrong N of indexed documents after attach -->
+show index test1 status like '%documents';
 select count(*) from test1;
 </sphinxql>
 	<sphinxql system="kill-daemon"/>

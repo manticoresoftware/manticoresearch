@@ -9451,6 +9451,8 @@ bool RtIndex_c::AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError )
 
 	// FIXME? what about copying m_TID etc?
 	// resave header file
+	m_iTID = Max ( m_iTID, pSrcRtIndex->m_iTID );
+	pSrcRtIndex->SaveMeta();
 	SaveMeta();
 
 	// FIXME? do something about binlog too?

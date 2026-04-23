@@ -120,13 +120,6 @@ jobs:
           name: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
           path: ./.mcl-package-cache
 
-      - name: Restore cached MCL package
-        if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME == '' && inputs.MCL_PACKAGE_CACHE_KEY != '' }}
-        uses: actions/cache@v4
-        with:
-          path: ./.mcl-package-cache
-          key: ${{ inputs.MCL_PACKAGE_CACHE_KEY }}
-
       - name: Install manticore-columnar-lib
         if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' || inputs.MCL_PACKAGE_CACHE_KEY != '' || inputs.MCL_PACKAGE_SHA != '' }}
         run: |
@@ -145,10 +138,10 @@ jobs:
           curl -fsSL https://repo.manticoresearch.com/manticore-repo.noarch.deb -o /tmp/manticore-repo.noarch.deb
           dpkg -i /tmp/manticore-repo.noarch.deb
 
-          if [[ -f ./.mcl-package-cache/artifact.tar ]]; then
-            tar -xf ./.mcl-package-cache/artifact.tar -C ./.mcl-package-cache
+          if [[ -f ./mcl-package/artifact.tar ]]; then
+            tar -xf ./mcl-package/artifact.tar -C ./.mcl-package-cache
           fi
-          pkg=$(find ./.mcl-package-cache -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
+          pkg=$(find ./mcl-package -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
           if [[ -n "$pkg" ]]; then
             echo "Installing $pkg"
             dpkg -i "$pkg"
@@ -156,7 +149,7 @@ jobs:
           fi
 
           if [[ -n "${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}" || -n "${{ inputs.MCL_PACKAGE_CACHE_KEY }}" ]]; then
-            echo 'built/cached MCL package not found'; find ./.mcl-package-cache -maxdepth 4 -type f | sort || true
+            echo 'built/cached MCL package not found'; find ./mcl-package -maxdepth 4 -type f | sort || true
           fi
 
           PACKAGE_URL=$(python3 dist/resolve_repo_package.py --repo-type "${{ inputs.MCL_REPO_TYPE }}" --distr jammy --arch amd64 --sha "${{ inputs.MCL_PACKAGE_SHA }}" --extensions .deb)

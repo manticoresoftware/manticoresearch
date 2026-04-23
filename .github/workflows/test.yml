@@ -393,6 +393,31 @@ jobs:
           echo "cache_key=mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
           echo "cache_hit=${{ steps.probe.outputs['cache-hit'] == 'true' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
 
+  mcl_cached_package_jammy:
+    name: MCL jammy cached package
+    needs: [meta, mcl_test_package_cache_probe]
+    if: needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true'
+    runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/external_toolchain:clang16_cmake3263
+    steps:
+      - name: Restore exact-SHA MCL package cache
+        uses: actions/cache@v4
+        with:
+          path: .mcl-package-cache
+          key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
+      - name: Prepare cached MCL package artifact
+        run: |
+          set -euo pipefail
+          find .mcl-package-cache -maxdepth 1 -type f | sort
+          tar -cf artifact.tar -C .mcl-package-cache .
+          ls -la artifact.tar
+      - name: Upload cached MCL package artifact
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: mcl_package_jammy_x86_64
+          path: artifact.tar
+
   mcl_embeddings_jammy_x86_64:
     name: MCL embeddings jammy x86_64
     needs: [meta, mcl_test_package_cache_probe]
@@ -405,7 +430,7 @@ jobs:
 
   mcl_package_jammy:
     name: MCL jammy package
-    needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe]
+    needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe, mcl_cached_package_jammy]
     uses: ./.github/workflows/mcl_package_build.yml
     with:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' }}
@@ -429,7 +454,7 @@ jobs:
       artifact_name: release_mcl_test_results
       results_name: "Linux release MCL test results"
       timeout: 15
-      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' && needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' && 'mcl_package_jammy_x86_64' || '' }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.meta.outputs.mcl_changed == 'true' && 'mcl_package_jammy_x86_64' || '' }}
       MCL_PACKAGE_CACHE_KEY: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_changed != 'true' && needs.meta.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: dev
@@ -505,23 +530,11 @@ jobs:
           name: release_build
           path: .
       - name: Download local MCL package artifact
-        if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' && needs.meta.outputs.mcl_changed == 'true' && needs.mcl_package_jammy.result == 'success' }}
+        if: ${{ needs.meta.outputs.mcl_changed == 'true' }}
         uses: manticoresoftware/download_artifact_with_retries@v4
         with:
           name: mcl_package_jammy_x86_64
           path: ./mcl-package
-      - name: Restore cached MCL package
-        if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
-        uses: actions/cache@v4
-        with:
-          path: ./.mcl-package-cache
-          key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
-      - name: Stage cached MCL package for docker build
-        if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
-        run: |
-          rm -rf ./mcl-package
-          mkdir -p ./mcl-package
-          cp -a ./.mcl-package-cache/. ./mcl-package/
       # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
       # - run: |
       #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip

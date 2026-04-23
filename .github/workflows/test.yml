@@ -40,6 +40,8 @@ jobs:
       mcl_sha: ${{ steps.mcl_sha.outputs.mcl_sha }}
       mcl_full_sha: ${{ steps.mcl_sha.outputs.mcl_full_sha }}
       mcl_changed: ${{ steps.detect.outputs.mcl }}
+      mcl_test_pkg_cache_key: ${{ steps.mcl_test_pkg_cache_meta.outputs.cache_key }}
+      mcl_test_pkg_cached: ${{ steps.mcl_test_pkg_cache_meta.outputs.cache_hit }}
       branch_tag: ${{ steps.sanitize_branch.outputs.branch_tag }}
       source_hash: ${{ steps.source_hash.outputs.source_hash }}
       image_exists: ${{ steps.image_check.outputs.image_exists }}
@@ -102,6 +104,20 @@ jobs:
           set -euo pipefail
           echo "mcl_sha=$(git -C mcl rev-parse --short=8 HEAD)" >> $GITHUB_OUTPUT
           echo "mcl_full_sha=$(git -C mcl rev-parse HEAD)" >> $GITHUB_OUTPUT
+      - name: Probe cached MCL test package
+        id: mcl_test_pkg_cache
+        if: ${{ steps.mcl_sha.outputs.mcl_full_sha != '' }}
+        uses: actions/cache@v4
+        with:
+          path: .cache/mcl-test-package
+          key: mcl-test-pkg-jammy-amd64-${{ steps.mcl_sha.outputs.mcl_full_sha }}
+          lookup-only: true
+      - name: Export cached MCL test package metadata
+        if: ${{ steps.mcl_sha.outputs.mcl_full_sha != '' }}
+        run: |
+          echo "cache_key=mcl-test-pkg-jammy-amd64-${{ steps.mcl_sha.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
+          echo "cache_hit=${{ steps.mcl_test_pkg_cache.outputs['cache-hit'] == 'true' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+        id: mcl_test_pkg_cache_meta
       - name: Check for existing test kit image
         id: image_check
         env:
@@ -197,7 +213,9 @@ jobs:
               fh.write(f"clt={'true' if clt else 'false'}\n")
               fh.write(f"mcl={'true' if mcl else 'false'}\n")
           PY
-          if [[ "${{ steps.mcl_sha.outputs.mcl_sha }}" != "" ]] && ! python3 dist/resolve_repo_package.py --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl_sha.outputs.mcl_sha }}" --extensions .deb >/dev/null 2>&1; then
+          if [[ "${{ steps.mcl_sha.outputs.mcl_sha }}" != "" ]] \
+            && ! python3 dist/resolve_repo_package.py --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl_sha.outputs.mcl_sha }}" --extensions .deb >/dev/null 2>&1 \
+            && [[ "${{ steps.mcl_test_pkg_cache_meta.outputs.cache_hit }}" != "true" ]]; then
             echo "mcl=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Check related PRs for branch
@@ -367,6 +385,7 @@ jobs:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
       artifact_name: mcl_package_jammy_x86_64
+      package_cache_key: ${{ needs.meta.outputs.mcl_test_pkg_cache_key }}
       embeddings_artifact: embeddings_linux_x86_64
       distr: jammy
       arch: x86_64
@@ -385,6 +404,7 @@ jobs:
       results_name: "Linux release MCL test results"
       timeout: 15
       MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.meta.outputs.mcl_changed == 'true' && 'mcl_package_jammy_x86_64' || '' }}
+      MCL_PACKAGE_CACHE_KEY: ${{ needs.meta.outputs.mcl_test_pkg_cache_key }}
       MCL_PACKAGE_SHA: ${{ needs.meta.outputs.mcl_changed != 'true' && needs.meta.outputs.mcl_sha || '' }}
       MCL_REPO_TYPE: dev
       FLOAT_TOLERANCE: true

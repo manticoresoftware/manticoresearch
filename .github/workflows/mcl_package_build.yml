@@ -69,6 +69,10 @@ on:
       artifact_name:
         required: true
         type: string
+      package_cache_key:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -219,6 +223,22 @@ jobs:
             mv build/avx512/share/modules/lib_manticore_secondary_avx512.dll build/secondary/Debug/ || true
             mv build/avx512/share/modules/lib_manticore_knn_avx512.dll build/knn/Debug/ || true
           fi
+
+      - name: Prepare MCL package cache payload
+        if: success() && inputs.package_cache_key != ''
+        run: |
+          set -euo pipefail
+          rm -rf .mcl-package-cache
+          mkdir -p .mcl-package-cache
+          find build -maxdepth 1 -type f -name 'manticore-columnar-lib*' -exec cp {} .mcl-package-cache/ \;
+          find .mcl-package-cache -maxdepth 1 -type f | sort
+
+      - name: Save MCL package to exact-SHA cache
+        if: success() && inputs.package_cache_key != ''
+        uses: actions/cache@v4
+        with:
+          path: .mcl-package-cache
+          key: ${{ inputs.package_cache_key }}
 
       - name: Upload build artifacts
         if: success()

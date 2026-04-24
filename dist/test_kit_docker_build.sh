@@ -87,13 +87,28 @@ download_package_by_sha() {
 }
 
 
+extract_mcl_artifacts() {
+    local base_dir="$1"
+    [ -d "$base_dir" ] || return 0
+
+    while IFS= read -r artifact; do
+        tar -xf "$artifact" -C "$(dirname "$artifact")"
+    done < <(find "$base_dir" -type f -name 'artifact.tar' | sort)
+}
+
 find_local_mcl_package() {
-    if [ -d ../mcl-package ]; then
-        if [ -f ../mcl-package/artifact.tar ]; then
-            tar -xf ../mcl-package/artifact.tar -C ../mcl-package
+    local candidate_dirs=(../mcl-package ../.mcl-package-cache)
+    local dir
+
+    for dir in "${candidate_dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        extract_mcl_artifacts "$dir"
+        pkg=$(find "$dir" -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
+        if [ -n "$pkg" ]; then
+            echo "$pkg"
+            return 0
         fi
-        find ../mcl-package -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1
-    fi
+    done
 }
 
 LOCAL_MCL_PACKAGE=$(find_local_mcl_package)

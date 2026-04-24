@@ -543,6 +543,13 @@ jobs:
         with:
           name: release_build
           path: .
+      - name: Restore exact-SHA MCL package cache
+        if: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ./.mcl-package-cache
+          key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
+
       - name: Download local MCL package artifact
         if: ${{ needs.meta.outputs.mcl_changed == 'true' }}
         uses: manticoresoftware/download_artifact_with_retries@v4

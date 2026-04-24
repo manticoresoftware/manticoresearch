@@ -422,13 +422,11 @@ jobs:
         run: |
           set -euo pipefail
           find .mcl-package-cache -maxdepth 1 -type f | sort
-          tar -cf artifact.tar -C .mcl-package-cache .
-          ls -la artifact.tar
       - name: Upload cached MCL package artifact
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: mcl_package_jammy_x86_64
-          path: artifact.tar
+          path: .mcl-package-cache
 
   mcl_embeddings_jammy_x86_64:
     name: MCL embeddings jammy x86_64

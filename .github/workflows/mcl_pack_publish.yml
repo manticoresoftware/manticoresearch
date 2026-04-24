@@ -40,6 +40,7 @@ jobs:
             exit 1
           fi
           source_remote="$(git -C daemon-src/mcl remote get-url origin)"
+          git config --global --add safe.directory "$PWD"
           git clone --no-local daemon-src/mcl mcl-src
           shopt -s dotglob nullglob
           mv mcl-src/* .

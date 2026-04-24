@@ -444,7 +444,7 @@ jobs:
 
   mcl_package_jammy:
     name: MCL jammy package
-    needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe, mcl_cached_package_jammy]
+    needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe]
     uses: ./.github/workflows/mcl_package_build.yml
     with:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' }}

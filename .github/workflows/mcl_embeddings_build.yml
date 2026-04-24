@@ -20,6 +20,10 @@ on:
       mcl_full_sha:
         required: true
         type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   # Quality check job - runs tests and clippy before build
@@ -33,10 +37,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: manticoresoftware/columnar
-          ref: ${{ inputs.mcl_full_sha }}
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
+          submodules: recursive
           set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          git fetch --tags --force --prune || true
+          git config --global --add safe.directory "$PWD"
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -185,10 +205,26 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: manticoresoftware/columnar
-          ref: ${{ inputs.mcl_full_sha }}
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
+          submodules: recursive
           set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          git fetch --tags --force --prune || true
+          git config --global --add safe.directory "$PWD"
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1

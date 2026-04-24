@@ -10,6 +10,10 @@ on:
       mcl_full_sha:
         required: true
         type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   metadata:
@@ -21,10 +25,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: manticoresoftware/columnar
-          ref: ${{ inputs.mcl_full_sha }}
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
+          submodules: recursive
           set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          git fetch --tags --force --prune || true
+          git config --global --add safe.directory "$PWD"
       - name: Calculate MCL package version
         id: semver
         uses: manticoresoftware/semver-tagger-action@main
@@ -54,6 +74,7 @@ jobs:
     with:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
       distr: ${{ matrix.distr }}
       arch: ${{ matrix.arch }}
 
@@ -69,6 +90,7 @@ jobs:
     with:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
@@ -88,6 +110,7 @@ jobs:
     with:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
@@ -114,6 +137,7 @@ jobs:
     with:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: ${{ format('embeddings_macos_{0}', matrix.arch) }}
@@ -134,6 +158,7 @@ jobs:
     with:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
       package_version: ${{ needs.metadata.outputs.version_full }}
       rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
       embeddings_artifact: embeddings_windows_x86_64

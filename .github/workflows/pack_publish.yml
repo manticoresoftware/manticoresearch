@@ -206,6 +206,7 @@ jobs:
     with:
       enabled: ${{ needs.check_branch.outputs.mcl_changed == 'true' && needs.pack.outputs.should_continue == 'true' }}
       mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
+      source_ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions

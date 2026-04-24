@@ -437,6 +437,7 @@ jobs:
     with:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
       distr: linux
       arch: x86_64
 
@@ -447,6 +448,7 @@ jobs:
     with:
       enabled: ${{ needs.meta.outputs.mcl_changed == 'true' && needs.mcl_test_package_cache_probe.outputs.cache_hit != 'true' }}
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
+      source_ref: ${{ github.sha }}
       artifact_name: mcl_package_jammy_x86_64
       package_cache_key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
       embeddings_artifact: embeddings_linux_x86_64

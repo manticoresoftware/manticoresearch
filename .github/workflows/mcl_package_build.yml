@@ -164,7 +164,7 @@ jobs:
         id: semver
         run: |
           set -euo pipefail
-          base_version="0.0.0"
+          base_version="8.0.0"
           commit_hash="$(git rev-parse --short=8 HEAD)"
           timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
           if git tag --points-at HEAD | grep -Eq '^release'; then

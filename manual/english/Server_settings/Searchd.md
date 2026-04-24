@@ -76,6 +76,99 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 ```
 <!-- end -->
 
+### auth
+
+<!-- example conf auth -->
+Enables [authentication and authorization](../Security/Authentication_and_authorization.md). Optional, default is empty, which disables authentication.
+
+In [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), use `auth = 1` to enable authentication. Manticore stores authentication data in `auth.json` under [data_dir](../Server_settings/Searchd.md#data_dir). Use `auth = 0` or omit the setting to disable authentication.
+
+In [plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), set `auth` to the authentication file path.
+
+When authentication is enabled, the daemon creates the authentication file if it is missing and validates it on startup.
+
+<!-- intro -->
+##### RT mode:
+
+<!-- request RT mode -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 1
+}
+```
+
+<!-- request Disable -->
+```ini
+searchd {
+    data_dir = /var/lib/manticore
+    auth = 0
+}
+```
+
+<!-- intro -->
+##### Plain mode:
+
+<!-- request Plain mode -->
+```ini
+searchd {
+    auth = /path/to/auth.json
+}
+```
+<!-- end -->
+
+### auth_log_level
+
+<!-- example conf auth_log_level -->
+Controls authentication log verbosity. Optional, default is `info`.
+
+Authentication events are written to a separate log file next to the daemon log. If [log](../Server_settings/Searchd.md#log) is `/var/log/manticore/searchd.log`, the authentication log is `/var/log/manticore/searchd.log.auth`.
+
+Supported values:
+
+* `disabled` - do not log authentication events.
+* `error` - log permission denials and critical failures.
+* `warning` - log errors and failed authentication attempts.
+* `info` - log warnings and successful authentication management changes.
+* `all` - log `info` events and successful authentication events.
+
+<!-- request Example -->
+```ini
+auth_log_level = warning
+```
+<!-- end -->
+
+### auth_password_policy
+
+<!-- example conf auth_password_policy -->
+Controls password validation for authentication users. Optional, default is `LOW`.
+
+Supported values:
+
+* `LOW` - require a non-empty password that satisfies [auth_password_min_length](../Server_settings/Searchd.md#auth_password_min_length).
+* `MEDIUM` - require `LOW` plus at least one lowercase letter, one uppercase letter, one digit, and one non-alphanumeric character.
+
+The policy applies to `searchd --auth`, `CREATE USER`, and `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_policy = MEDIUM
+```
+<!-- end -->
+
+### auth_password_min_length
+
+<!-- example conf auth_password_min_length -->
+Defines the minimum password length for authentication users. Optional, default is `8`.
+
+The minimum length applies to `searchd --auth`, `CREATE USER`, and `SET PASSWORD`.
+
+<!-- request Example -->
+```ini
+auth_password_min_length = 12
+```
+<!-- end -->
+
 ### auto_optimize
 
 <!-- example conf auto_optimize -->

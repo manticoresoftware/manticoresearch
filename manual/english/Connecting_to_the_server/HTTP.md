@@ -23,7 +23,14 @@ searchd {
 
 All HTTP endpoints return `application/json` content type. For the most part, endpoints use JSON payloads for requests. However, there are some exceptions that use NDJSON or simple URL-encoded payloads.
 
-Currently, there is no user authentication. Therefore, make sure that the HTTP interface is not accessible to anyone outside your network. As Manticore functions like any other web server, you can use a reverse proxy, such as Nginx, to implement HTTP authentication or caching.
+If [authentication and authorization](../Security/Authentication_and_authorization.md) is enabled, HTTP/HTTPS clients must send either a Basic authentication header or a bearer token:
+
+```bash
+curl -u admin:StrongPass#2026 http://127.0.0.1:9308/sql -d "query=SELECT 1"
+curl -H "Authorization: Bearer 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" http://127.0.0.1:9308/sql -d "query=SELECT 1"
+```
+
+Use HTTPS when sending credentials or bearer tokens over a network.
 
 <!-- example HTTPS -->
 The HTTP protocol also supports [SSL encryption](../Security/SSL.md):

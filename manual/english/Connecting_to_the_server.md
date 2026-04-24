@@ -7,6 +7,8 @@ With default configuration, Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for HTTP/HTTPS, and connections from other Manticore nodes and clients based on Manticore binary API
 
+If [authentication and authorization](Security/Authentication_and_authorization.md) is enabled, MySQL clients must connect with a Manticore user name and password, and HTTP/HTTPS clients must use Basic authentication or a bearer token.
+
 <!-- intro -->
 ##### Connect via MySQL:
 
@@ -140,4 +142,3 @@ docker run --name manticore -d manticoresearch/manticore && docker exec -it mant
 ```
 <!-- end -->
 <!-- proofread -->
-

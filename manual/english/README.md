@@ -146,6 +146,7 @@
     * [• Flushing hostnames](Securing_and_compacting_a_table/Flushing_hostnames.md)
 * [≫ Security]
     * [• SSL](Security/SSL.md)
+    * [• Authentication and authorization](Security/Authentication_and_authorization.md)
     * [• Read-only](Security/Read_only.md)
 * [≫ Logging]
     * [• Query logging](Logging/Query_logging.md)
@@ -211,4 +212,3 @@
 * [📖 References](References.md)
     * [• Previous versions](References.md#Documentation-for-old-Manticore-versions)
 <!-- proofread -->
-

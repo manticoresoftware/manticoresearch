@@ -232,6 +232,10 @@ jobs:
           mkdir -p .mcl-package-cache
           find build -maxdepth 1 -type f -name 'manticore-columnar-lib*' -exec cp {} .mcl-package-cache/ \;
           find .mcl-package-cache -maxdepth 1 -type f | sort
+          if ! find .mcl-package-cache -maxdepth 1 -type f -name 'manticore-columnar-lib_*' | grep -q .; then
+            echo 'No manticore-columnar-lib package found to save into exact-SHA cache' >&2
+            exit 1
+          fi
 
       - name: Save MCL package to exact-SHA cache
         if: success() && inputs.package_cache_key != ''

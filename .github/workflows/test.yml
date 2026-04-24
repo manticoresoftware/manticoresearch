@@ -379,19 +379,30 @@ jobs:
     steps:
       - name: Prepare probe path
         run: mkdir -p .mcl-package-cache
-      - name: Probe exact-SHA MCL package cache
+      - name: Restore exact-SHA MCL package cache
         id: probe
         if: ${{ needs.meta.outputs.mcl_full_sha != '' }}
         uses: actions/cache@v4
         with:
           path: .mcl-package-cache
           key: mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}
-          lookup-only: true
+      - name: Validate restored MCL package cache
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find .mcl-package-cache -maxdepth 2 -type f -name 'manticore-columnar-lib_*_amd64.deb' | grep -q .; then
+            echo "cache_payload_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache_payload_ok=false" >> "$GITHUB_OUTPUT"
+            echo "Cached MCL package payload missing; treating cache as miss"
+            find .mcl-package-cache -maxdepth 4 -type f | sort || true
+          fi
       - name: Export cache probe metadata
         id: meta
         run: |
           echo "cache_key=mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}" >> "$GITHUB_OUTPUT"
-          echo "cache_hit=${{ steps.probe.outputs['cache-hit'] == 'true' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+          echo "cache_hit=${{ steps.probe.outputs['cache-hit'] == 'true' && steps.validate.outputs.cache_payload_ok == 'true' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
 
   mcl_cached_package_jammy:
     name: MCL jammy cached package

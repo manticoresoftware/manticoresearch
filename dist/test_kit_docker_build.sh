@@ -96,6 +96,13 @@ find_local_mcl_package() {
     fi
 }
 
+LOCAL_MCL_PACKAGE=$(find_local_mcl_package)
+if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+    echo "Using local MCL package artifact: $LOCAL_MCL_PACKAGE"
+    mkdir -p ../build
+    cp "$LOCAL_MCL_PACKAGE" ../build/
+fi
+
 # Read deps.txt line by line
 while read -r line
 do
@@ -164,6 +171,10 @@ do
 			arch="all"
 			;;
 		mcl)
+			if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+				echo "Skipping repo download for mcl because local package artifact is present"
+				continue
+			fi
 			package="manticore-columnar-lib"
 			arch="amd64"
 			;;
@@ -188,12 +199,7 @@ do
 	fi
 done < ../deps.txt
 
-LOCAL_MCL_PACKAGE=$(find_local_mcl_package)
-if [ -n "$LOCAL_MCL_PACKAGE" ]; then
-    echo "Using local MCL package artifact: $LOCAL_MCL_PACKAGE"
-    mkdir -p ../build
-    cp "$LOCAL_MCL_PACKAGE" ../build/
-else
+if [ -z "$LOCAL_MCL_PACKAGE" ]; then
     MCL_COMMIT_SHA=$(git -C ../mcl rev-parse --short=8 HEAD)
     echo "Downloading MCL package for submodule sha: $MCL_COMMIT_SHA"
     download_package_by_sha "manticore-columnar-lib" "$MCL_COMMIT_SHA"

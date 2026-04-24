@@ -2392,6 +2392,7 @@ bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString 
 	pCluster->MarkExiting();
 
 	StrVec_t dPeers = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+	const CSphString sClusterUser = pCluster->m_sUser;
 	const CSphString sLeavingNode = szIncomingProto();
 
 	ClusterDetachLocal ( pCluster );
@@ -2400,7 +2401,7 @@ bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString 
 	if ( !SaveConfigInt ( sSaveError ) )
 		AppendWarning ( sWarning, SphSprintf ( "cluster '%s' exited locally but local config was not saved: %s", sCluster.cstr(), sSaveError.cstr() ) );
 
-	if ( !SendClusterExitUpdateNodes ( sCluster, sLeavingNode, g_iClusterExitUpdateNodesWaitMs, dPeers ) )
+	if ( !SendClusterExitUpdateNodes ( sCluster, sClusterUser, sLeavingNode, g_iClusterExitUpdateNodesWaitMs, dPeers ) )
 	{
 		CSphString sCleanupError = TlsMsg::MoveToString();
 		CSphString sCleanupWarning;

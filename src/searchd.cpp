@@ -15406,7 +15406,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphFatal ( "%s", sError.cstr() );
 
 	////////////////////////////////
-	// auth bootstrap after fonfigless \ data_dir setup
+	// auth bootstrap after configless / data_dir setup
 
 	if ( bOptAuth )
 		return AuthBootstrap ( hSearchdpre, g_sConfigFile, bOptAuthNonInteractive );

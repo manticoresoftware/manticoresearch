@@ -113,10 +113,23 @@ jobs:
       - name: Check code formatting
         run: cargo fmt --check --manifest-path ./embeddings/Cargo.toml
 
+      - name: Download ONNX Runtime for unit tests
+        run: |
+          set -euo pipefail
+          ort_version="1.24.2"
+          ort_name="onnxruntime-linux-x64-static_lib-${ort_version}-glibc2_17"
+          curl --fail --show-error --location             --retry 5 --retry-all-errors --retry-delay 2             "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v${ort_version}/${ort_name}.zip"             -o /tmp/ort-unit-tests.zip
+          rm -rf /tmp/ort-unit-tests
+          unzip -q /tmp/ort-unit-tests.zip -d /tmp/ort-unit-tests
+          echo "ORT_LIB_PATH=/tmp/ort-unit-tests/${ort_name}/lib" >> "$GITHUB_ENV"
+          echo "ORT_STRATEGY=system" >> "$GITHUB_ENV"
+
       - name: Run unit tests
         run: cargo test --lib --verbose --manifest-path ./embeddings/Cargo.toml
         env:
           RUST_BACKTRACE: 1
+          ORT_LIB_PATH: ${{ env.ORT_LIB_PATH }}
+          ORT_STRATEGY: ${{ env.ORT_STRATEGY }}
 
       - name: Run OpenAI integration tests (if API key available)
         run: |

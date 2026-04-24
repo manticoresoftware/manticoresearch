@@ -298,7 +298,7 @@ jobs:
   win_bundle:
     # Skip build jobs for PRs targeting 'update-buddy-version' branch (buddy version updates don't need full builds)
     if: needs.meta.outputs.run_builds == 'true'
-    needs: [meta, mcl_embeddings_jammy_x86_64]
+    needs: [meta]
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:

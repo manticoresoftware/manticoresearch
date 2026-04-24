@@ -1067,7 +1067,10 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		int iUpd = -1;
 		CSphString sWarning;
 		CommitMonitor_c tCommit ( tAcc, &sWarning, &iUpd );
-		return tCommit.UpdateTOI() && ( sWarning.IsEmpty() || TlsMsg::Err ( "%s", sWarning.cstr() ) );
+		bool bOk = tCommit.UpdateTOI();
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "%s", sWarning.cstr() );
+		return bOk;
 
 		// FIXME!!! make update trx
 	}

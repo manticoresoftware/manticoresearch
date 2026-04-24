@@ -1,0 +1,30 @@
+KNN startup should tolerate a missing embeddings library path while still reporting real embeddings loader errors.
+
+––– comment –––
+Start with a valid KNN library and a missing embeddings library path. KNN should remain loaded, embeddings should be absent, and there should be no KNN init warning.
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null 2>&1 || true; LIB_MANTICORE_KNN=/usr/share/manticore/modules/lib_manticore_knn.so LIB_MANTICORE_KNN_EMBEDDINGS=/tmp/missing/lib_manticore_knn_embeddings.so stdbuf -oL searchd > /tmp/knn-missing-embeddings.out 2>&1; if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections'; else echo 'Timeout or failed'; cat /tmp/knn-missing-embeddings.out; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Accepting connections
+––– input –––
+if grep -q 'Error initializing knn index' /tmp/knn-missing-embeddings.out /var/log/manticore/searchd.log; then grep 'Error initializing knn index' /tmp/knn-missing-embeddings.out /var/log/manticore/searchd.log; else echo 'No KNN init warning'; fi
+––– output –––
+No KNN init warning
+––– input –––
+banner=$(grep 'starting daemon version' /var/log/manticore/searchd.log | tail -n1); case "$banner" in *"(knn "*) echo 'KNN present';; *) echo 'KNN missing'; echo "$banner";; esac
+––– output –––
+KNN present
+––– input –––
+banner=$(grep 'starting daemon version' /var/log/manticore/searchd.log | tail -n1); case "$banner" in *"(embeddings "*) echo 'Embeddings present'; echo "$banner";; *) echo 'Embeddings absent';; esac
+––– output –––
+Embeddings absent
+––– comment –––
+An existing but invalid embeddings library path should still produce a clear loader warning.
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null 2>&1 || true; mkdir -p /tmp/gh159; printf 'not-a-so' > /tmp/gh159/bad.so; LIB_MANTICORE_KNN=/usr/share/manticore/modules/lib_manticore_knn.so LIB_MANTICORE_KNN_EMBEDDINGS=/tmp/gh159/bad.so stdbuf -oL searchd > /tmp/knn-bad-embeddings.out 2>&1; if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections'; else echo 'Timeout or failed'; cat /tmp/knn-bad-embeddings.out; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Accepting connections
+––– input –––
+if grep -q 'WARNING: Error initializing knn index: dlopen() failed: /tmp/gh159/bad.so:' /tmp/knn-bad-embeddings.out /var/log/manticore/searchd.log; then echo 'Bad embeddings warning present'; else echo 'Bad embeddings warning missing'; cat /tmp/knn-bad-embeddings.out; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Bad embeddings warning present

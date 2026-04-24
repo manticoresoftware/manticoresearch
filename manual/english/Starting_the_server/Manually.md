@@ -18,6 +18,8 @@ The options available to `searchd` in all operating systems are:
 * `--version` (`-v` for short) shows Manticore Search version information.
 * `--quiet` (`-q` for short) suppresses startup output except errors (banner and precache messages).
 * `--config <file>` (`-c <file>` for short) tells `searchd` to use the specified file as its configuration.
+* `--auth` runs interactive [authentication bootstrap](../Security/Authentication_and_authorization.md#Creating-the-first-administrator) mode. Use it after starting `searchd` with authentication enabled to create the first administrator.
+* `--auth-non-interactive` runs authentication bootstrap mode with the administrator name, password, and password confirmation read from stdin.
 * `--stop` is used to asynchronously stop `searchd`, using the details of the PID file as specified in the Manticore configuration file. Therefore, you may also need to confirm to `searchd` which configuration file to use with the `--config` option. Example:
 
     ```bash

@@ -6,7 +6,7 @@ However, the SQL dialect is different and implements only a subset of the SQL co
 
 Manticore Search supports server-side [prepared statements](../Connecting_to_the_server/MySQL_protocol.md#Prepared-statements) over the MySQL protocol. Client-side prepared statements can also be used. It is important to note that Manticore implements the multi-value (MVA) and `float_vector` data types, which have no equivalents in MySQL or libraries implementing prepared statements. In these cases, values must be crafted in the raw query as comma-separated list of numbers.
 
-Some MySQL clients/connectors require values for user/password and/or database name. Since Manticore Search does not have the concept of databases and there is no user access control implemented, these values can be set arbitrarily as Manticore will simply ignore them.
+If [authentication and authorization](../Security/Authentication_and_authorization.md) is enabled, MySQL clients must connect with a Manticore user name and password. The supported MySQL authentication mode is `mysql_native_password`. If authentication is disabled, user and password values supplied by clients are ignored.
 
 ## Configuration
 
@@ -22,7 +22,7 @@ searchd {
 }
 ```
 
-Keep in mind that Manticore doesn't have user authentication, so make sure that the MySQL port is not accessible to anyone outside of your network.
+If authentication is not enabled, make sure that the MySQL port is not accessible to anyone outside of your network.
 
 ### VIP connection
 A separate MySQL port can be used for performing "VIP" connections. When connecting to this port, the thread pool is bypassed, and a new dedicated thread is always created. This is useful in cases of severe overload, where the server would either stall or prevent a connection through the regular port.
@@ -41,6 +41,12 @@ The easiest way to connect to Manticore is by using a standard MySQL client:
 
 ```shell
 mysql -P9306 -h0
+```
+
+When authentication is enabled, specify a user and password:
+
+```shell
+MYSQL_PWD=StrongPass#2026 mysql -P9306 -h0 -uadmin
 ```
 
 ## Secured MySQL connection

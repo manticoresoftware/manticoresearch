@@ -5,6 +5,8 @@ The `DELETE CLUSTER` statement removes the specified cluster with its  [name](..
 
 If you only need to detach the current node and leave the rest of the cluster running, use `EXIT CLUSTER` instead. See [Managing replication nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md).
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, `DELETE CLUSTER` uses the stored cluster user. That user must have `replication` permission on the cluster target.
+
 
 
 <!-- intro -->

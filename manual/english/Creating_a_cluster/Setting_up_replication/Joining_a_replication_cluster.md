@@ -105,6 +105,17 @@ utils_api.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'", Some(true)).await;
 
 <!-- end -->
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, the effective replication user must have `replication` permission. You can specify that user in the `JOIN CLUSTER` statement:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+JOIN CLUSTER posts AT '10.12.1.35:9312' 'repl_user' AS user;
+```
+
+If no user is specified, the current session user is used for the join operation. After a successful join, the stored cluster user is taken from the donor cluster metadata.
+
+> NOTE: Joining a cluster can replace local authentication data with the donor cluster's authentication data.
+
 <!-- example joining a replication cluster 1_1 -->
 In most cases, the above is sufficient when there is a single replication cluster. However, if you are creating multiple replication clusters, you must also set the [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) and ensure that the directory is available.
 
@@ -234,4 +245,3 @@ The `JOIN CLUSTER` command works synchronously and completes as soon as the node
 
 The `JOIN CLUSTER` operation can fail with an error message indicating a duplicate [server_id](../../Server_settings/Searchd.md#server_id). This occurs when the joining node has the same `server_id` as an existing node in the cluster. To resolve this issue, ensure that each node in the replication cluster has a unique [server_id](../../Server_settings/Searchd.md#server_id). You can change the default [server_id](../../Server_settings/Searchd.md#server_id) in the "searchd" section of your configuration file to a unique value before attempting to join the cluster.
 <!-- proofread -->
-

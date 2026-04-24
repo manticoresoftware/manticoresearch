@@ -1,0 +1,69 @@
+––– comment –––
+GH-4460: replicated UPDATE that disables secondary indexes must not break the cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=gh4460
+––– output –––
+––– input –––
+cluster_state() { mysql -h0 -P$1 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_node_state'" 2>/dev/null | grep "cluster_${CLUSTER_NAME}_node_state" | tr -s ' ' | cut -d' ' -f4; }; wait_synced() { port=$1; for i in `seq 1 60`; do [ "$(cluster_state $port)" = synced ] && return 0; sleep 0.5; done; return 1; }; index_enabled() { mysql -h0 -P$1 -e "SHOW TABLE products_gh4460 INDEXES" | grep '| *active ' | tr -s ' ' | cut -d' ' -f6; }
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306 3306; do wait_synced ${port} && echo "port ${port} synced" || { echo "port ${port} not synced"; false; }; done
+––– output –––
+port 1306 synced
+port 2306 synced
+port 3306 synced
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE products_gh4460 (id bigint, product_id int, category_id int, active bool, price float, title text indexed) min_infix_len='3'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD products_gh4460"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:products_gh4460 (id, product_id, category_id, active, price, title) VALUES (1,101,10,1,9.99,'alpha product'),(2,102,10,1,19.99,'beta product'),(3,103,11,1,29.99,'gamma product')"; echo $?
+––– output –––
+0
+––– input –––
+for port in 1306 2306 3306; do mysql -h0 -P${port} -e "FLUSH RAMCHUNK products_gh4460; OPTIMIZE TABLE products_gh4460 OPTION sync=1, cutoff=1" >/dev/null || exit 1; done; echo "optimized"
+––– output –––
+optimized
+––– input –––
+for port in 1306 2306 3306; do echo "port ${port} active_si=$(index_enabled ${port})"; done
+––– output –––
+port 1306 active_si=1
+port 2306 active_si=1
+port 3306 active_si=1
+––– input –––
+printf '%s\n' '{"update":{"cluster":"gh4460","index":"products_gh4460","id":1,"doc":{"active":false,"category_id":12,"price":10.5}}}' | curl -s -H "Content-Type: application/x-ndjson" --data-binary @- http://127.0.0.1:1308/bulk | grep -q '"errors":false' && echo "bulk update accepted" || { echo "bulk update failed"; false; }
+––– output –––
+bulk update accepted
+––– input –––
+for port in 1306 2306 3306; do wait_synced ${port} && echo "port ${port} synced" || { echo "port ${port} not synced"; for inst in 1 2 3; do grep -E 'secondary index disabled|Failed to apply trx|Node consistency compromised|FATAL|committed 0' /var/log/manticore-${inst}/searchd.log || true; done; false; }; done
+––– output –––
+port 1306 synced
+port 2306 synced
+port 3306 synced
+––– input –––
+for port in 1306 2306 3306; do count=$(mysql -h0 -P${port} -e "SELECT COUNT(*) FROM products_gh4460" | grep '| *[0-9][0-9]* *|' | tr -d ' |'); echo "port ${port} count=${count}"; done
+––– output –––
+port 1306 count=3
+port 2306 count=3
+port 3306 count=3

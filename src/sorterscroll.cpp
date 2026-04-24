@@ -13,6 +13,7 @@
 #include "std/base64.h"
 #include "sortcomp.h"
 #include "sphinxjson.h"
+#include "hybridexecutor.h"
 
 template <typename COMP>
 class ScrollSorter_T : public ISphMatchSorter 
@@ -112,6 +113,8 @@ void ScrollSorter_T<COMP>::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch
 {
 	FreeDataPtrAttrs();
 	m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters );
+	m_tState = m_pSorter->GetState();
+	SetupRefMatch();
 }
 
 template <typename COMP>
@@ -191,11 +194,23 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 	const ISphSchema * pSchema = m_pSorter->GetSchema();
 	assert(pSchema);
 
-	for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+	for ( const auto & tScrollAttr : m_tScroll.m_dAttrs )
 	{
-		const auto & tAttr = pSchema->GetAttr(i);
-		if ( tAttr.IsDataPtr() )
-			sphDeallocatePacked ( (BYTE*)m_tRefMatch.GetAttr ( tAttr.m_tLocator ) );
+		if ( tScrollAttr.m_sSortAttr=="weight()" )
+			continue;
+
+		const CSphColumnInfo * pAttr = pSchema->GetAttr ( tScrollAttr.m_sSortAttr.cstr() );
+		if ( !pAttr || !sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
+			continue;
+
+		auto * pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );
+		if ( !pData )
+			continue;
+
+		if ( pAttr->m_eAttrType==SPH_ATTR_TDIGEST_PTR )
+			sphDeallocatePackedTdigest ( pData );
+		else
+			sphDeallocatePacked ( pData );
 	}
 
 	m_tRefMatch.ResetDynamic();
@@ -228,7 +243,8 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		SPH_ATTR_TOKENCOUNT,
 		SPH_ATTR_DOUBLE,
 		SPH_ATTR_UINT64,
-		SPH_ATTR_STRINGPTR
+		SPH_ATTR_STRINGPTR,
+		SPH_ATTR_TDIGEST_PTR
 	};
 
 	for ( const auto & i : tScroll.m_dAttrs )
@@ -247,7 +263,7 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 		if ( i.m_eType==SPH_ATTR_STRINGPTR && eCheckType==SPH_ATTR_STRING )
 		{
 			CSphString sRemappedName;
-			sRemappedName.SetSprintf ( "@int_attr_%s", i.m_sSortAttr.cstr() );
+			sRemappedName.SetSprintf ( "%s%s", GetInternalAttrPrefix(), i.m_sSortAttr.cstr() );
 			auto pRemapped = tSchema.GetAttr ( sRemappedName.cstr() );
 			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
 				eCheckType = SPH_ATTR_STRINGPTR;
@@ -288,6 +304,32 @@ ISphMatchSorter * CreateScrollSorter ( ISphMatchSorter * pSorter, const ISphSche
 	}
 
 	return pSorter;
+}
+
+
+CSphFilterSettings CreateScrollRangeFilter ( const ScrollAttr_t & tFirst, bool bOnlyId, const CSphString & sAttrName )
+{
+	CSphFilterSettings tFilter;
+	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
+	tFilter.m_sAttrName = sAttrName;
+	tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !bOnlyId;
+
+	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_fMaxValue = tFirst.m_fValue;
+		else
+			tFilter.m_fMinValue = tFirst.m_fValue;
+	}
+	else
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_iMaxValue = tFirst.m_tValue;
+		else
+			tFilter.m_iMinValue = tFirst.m_tValue;
+	}
+
+	return tFilter;
 }
 
 
@@ -353,27 +395,12 @@ static void AddScrollFilter ( CSphQuery & tQuery )
 	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
 		return;
 
+	if ( tQuery.m_bHybridSearch && IsHybridPostFusionAttr ( tFirst.m_sSortAttr ) )
+		return;
+
 	bool bOnlyId = tQuery.m_tScrollSettings.m_dAttrs.GetLength()==1;
-
-	CSphFilterSettings tFilter;
-	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
-	tFilter.m_sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
-	tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !bOnlyId;
-
-	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
-	{
-		if ( tFirst.m_bDesc )
-			tFilter.m_fMaxValue = tFirst.m_fValue;
-		else
-			tFilter.m_fMinValue = tFirst.m_fValue;
-	}
-	else
-	{
-		if ( tFirst.m_bDesc )
-			tFilter.m_iMaxValue = tFirst.m_tValue;
-		else
-			tFilter.m_iMinValue = tFirst.m_tValue;
-	}
+	CSphString sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
+	CSphFilterSettings tFilter = CreateScrollRangeFilter ( tFirst, bOnlyId, sAttrName );
 
 	if ( tQuery.m_dFilterTree.GetLength() )
 	{

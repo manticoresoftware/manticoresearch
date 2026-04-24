@@ -139,7 +139,7 @@ static BuildBufferSettings_t g_tMergeSettings;
 
 static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
 
-static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static const bool LOG_LEVEL_SPLIT_QUERY = env_exists ( "MANTICORE_LOG_SPLIT_QUERY" ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_QUERYINFO __LINE__ << " "
 #define QUERYINFO LOGINFO ( SPLIT_QUERY, QUERYINFO )
 
@@ -804,7 +804,7 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 				if ( iUpdAttrId>=0 )
 				{
 					ExprParseArgs_t tExprArgs;
-					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, nullptr, sError, tExprArgs );
+					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), m_tSchema, sError, tExprArgs );
 				}
 			}
 		}
@@ -1222,7 +1222,10 @@ public:
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool			MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, VecTraits_T<RowID_t> dDstRows, VecTraits_T<RowID_t> dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress);
+	template <class QWORD>
+	static bool			MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const VecTraits_T<CSphFixedVector<RowID_t>> & dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress );
 	static bool			DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, bool bSrcSettings, bool bSupressDstDocids );
+	static bool			DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings );
 	std::unique_ptr<ISphFilter>		CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const;
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
@@ -1403,13 +1406,13 @@ private:
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const;
-	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const;
+	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
 	CSphVector<SecondaryIndexInfo_t> GetEnabledIndexes ( const CSphQuery & tQuery, bool bFT, float & fCost, int iThreads ) const;
 
-	bool						SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
+	bool						SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<const ISphSchema *> & dSorterSchemas, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
 
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
@@ -1807,12 +1810,28 @@ void SelectParser_t::AutoAlias ( CSphQueryItem & tItem, YYSTYPE * pStart, YYSTYP
 		tItem.m_sAlias = tItem.m_sExpr;
 }
 
+static Aggr_e ToExtendedAggr ( ESphAggrFunc eAggrFunc )
+{
+	switch ( eAggrFunc )
+	{
+	case SPH_AGGR_MIN: return Aggr_e::MIN;
+	case SPH_AGGR_MAX: return Aggr_e::MAX;
+	case SPH_AGGR_SUM: return Aggr_e::SUM;
+	case SPH_AGGR_AVG: return Aggr_e::AVG;
+	case SPH_AGGR_PERCENTILES: return Aggr_e::PERCENTILES;
+	case SPH_AGGR_PERCENTILE_RANKS: return Aggr_e::PERCENTILE_RANKS;
+	case SPH_AGGR_MAD: return Aggr_e::MAD;
+	default: return Aggr_e::NONE;
+	}
+}
+
 void SelectParser_t::AddItem ( YYSTYPE * pExpr, ESphAggrFunc eAggrFunc, YYSTYPE * pStart, YYSTYPE * pEnd )
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
 	tItem.m_sExpr.SetBinary ( m_pStart + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
+	tItem.m_tAggrSettings.m_eAggrFunc = ToExtendedAggr ( eAggrFunc );
 	AutoAlias ( tItem, pStart, pEnd );
 }
 
@@ -1939,6 +1958,9 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitl
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
 		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
+
+	if ( tQuery.HasMultipleKnn() && !tQuery.m_bHybridSearch )
+		LOC_ERROR ( "multiple KNN clauses require hybrid fusion (set fusion_method='rrf')" );
 
 	#undef LOC_ERROR
 }
@@ -2148,7 +2170,7 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & 
 	if ( !tQuery.m_sQuery.IsEmpty() )
 		return false;
 
-	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+	if ( tQuery.HasKnn() )
 		return false;
 
 	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
@@ -3315,7 +3337,7 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		if ( bFulltext )
 			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
-		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
+		if ( tQuery.HasKnn() )
 			iThreadCap = 1;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
@@ -6462,7 +6484,8 @@ namespace QwordIteration
 			if ( tQword.m_tDoc.m_tRowID==INVALID_ROWID )
 				return false;
 
-			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			if ( tQword.m_bHasHitlist )
+				tQword.SeekHitlist ( tQword.m_iHitlistPos );
 			return true;
 		}
 	}
@@ -6477,9 +6500,17 @@ namespace QwordIteration
 				return false;
 
 			if ( dRows[tQword.m_tDoc.m_tRowID]==INVALID_ROWID )
+			{
+				if ( tQword.m_bHasHitlist )
+				{
+					tQword.SeekHitlist ( tQword.m_iHitlistPos );
+					while ( tQword.m_bHasHitlist && tQword.GetNextHit()!=EMPTY_HIT );
+				}
 				continue;
+			}
 
-			tQword.SeekHitlist ( tQword.m_iHitlistPos );
+			if ( tQword.m_bHasHitlist )
+				tQword.SeekHitlist ( tQword.m_iHitlistPos );
 			return true;
 		}
 	}
@@ -6713,6 +6744,186 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// next word
 			bDstWord = tDstReader.Read();
 			bSrcWord = tSrcReader.Read();
+		}
+	}
+
+	tProgress.m_iWords += iWords;
+	tProgress.Show();
+
+	if ( iHitlistsDiscarded )
+		sphWarning ( "discarded hitlists for %u words", iHitlistsDiscarded );
+
+	return true;
+}
+
+template <typename QWORD>
+bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const VecTraits_T<CSphFixedVector<RowID_t>> & dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
+{
+	auto& tMonitor = tProgress.GetMergeCb();
+	assert ( dIndexes.GetLength()==dRowMaps.GetLength() );
+
+	const int iSources = dIndexes.GetLength();
+	if ( iSources<2 )
+		return false;
+
+	// Use last index for file paths to match DoMergeN which uses pDstIndex (last index)
+	const CSphIndex_VLN * pDstIndex = dIndexes.Last();
+	CSphAutofile tDummy;
+	pHitBuilder->CreateIndexFiles ( pDstIndex->GetTmpFilename ( SPH_EXT_SPD ), pDstIndex->GetTmpFilename ( SPH_EXT_SPP ), pDstIndex->GetTmpFilename ( SPH_EXT_SPE ), false, 0, tDummy );
+
+	struct Source_t
+	{
+		const CSphIndex_VLN *						m_pIndex = nullptr;
+		CSphDictReader<QWORD::is_worddict::value>	m_tReader;
+		QWORD										m_tQword;
+		DataReaderFactoryPtr_c						m_tDocs;
+		DataReaderFactoryPtr_c						m_tHits;
+		bool										m_bHasWord = false;
+
+		explicit Source_t ( int iSkiplistBlockSize, int64_t iIndexId )
+			: m_tReader ( iSkiplistBlockSize )
+			, m_tQword ( false, false, iIndexId )
+		{}
+	};
+
+	CSphVector<std::unique_ptr<Source_t>> dSources;
+	dSources.Reserve ( iSources );
+
+	for ( int i = 0; i < iSources; ++i )
+	{
+		const auto * pIndex = dIndexes[i];
+		dSources.Add ( std::make_unique<Source_t> ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->GetIndexId() ) );
+		auto * pSrc = dSources.Last().get();
+		pSrc->m_pIndex = pIndex;
+
+		if ( !pSrc->m_tReader.Setup ( pIndex->GetFilename ( SPH_EXT_SPI ), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
+			return false;
+
+		pSrc->m_tDocs = NewProxyReader ( pIndex->GetFilename ( SPH_EXT_SPD ), sError,
+			DataReaderFactory_c::DOCS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
+		if ( !pSrc->m_tDocs )
+			return false;
+
+		pSrc->m_tHits = NewProxyReader ( pIndex->GetFilename ( SPH_EXT_SPP ), sError,
+			DataReaderFactory_c::HITS, pIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
+		if ( !pSrc->m_tHits )
+			return false;
+
+		if ( !sError.IsEmpty () || tMonitor.NeedStop () )
+			return false;
+
+		QwordIteration::ConfigureQword<QWORD> ( pSrc->m_tQword, pSrc->m_tHits, pSrc->m_tDocs, pIndex->m_tSchema.GetDynamicSize() );
+		pSrc->m_bHasWord = pSrc->m_tReader.Read();
+	}
+
+	CSphMerger tMerger(pHitBuilder);
+
+	auto fnCmpReaders = [] ( const CSphDictReader<QWORD::is_worddict::value> & tA, const CSphDictReader<QWORD::is_worddict::value> & tB )
+	{
+		if_const ( QWORD::is_worddict::value )
+			return strcmp ( (const char *)tA.GetWord(), (const char *)tB.GetWord() );
+		return ( tA.m_uWordID < tB.m_uWordID ) ? -1 : ( tA.m_uWordID == tB.m_uWordID ? 0 : 1 );
+	};
+
+	tProgress.PhaseBegin ( CSphIndexProgress::PHASE_MERGE );
+	tProgress.Show();
+
+	int iWords = 0;
+	int iHitlistsDiscarded = 0;
+	CSphVector<int> dSame;
+	dSame.Reserve ( iSources );
+
+	for ( ;; ++iWords )
+	{
+		if ( iWords==1000 )
+		{
+			tProgress.m_iWords += 1000;
+			tProgress.Show();
+			iWords = 0;
+		}
+
+		if ( tMonitor.NeedStop () || !sError.IsEmpty () )
+			return false;
+
+		int iMin = -1;
+		for ( int i = 0; i < iSources; ++i )
+		{
+			if ( !dSources[i]->m_bHasWord )
+				continue;
+			if ( iMin<0 || fnCmpReaders ( dSources[i]->m_tReader, dSources[iMin]->m_tReader ) < 0 )
+				iMin = i;
+		}
+
+		if ( iMin<0 )
+			break;
+
+		dSame.Resize ( 0 );
+		for ( int i = 0; i < iSources; ++i )
+			if ( dSources[i]->m_bHasWord && fnCmpReaders ( dSources[i]->m_tReader, dSources[iMin]->m_tReader )==0 )
+				dSame.Add ( i );
+
+		if ( dSame.GetLength()==1 )
+		{
+			const int iSrc = dSame[0];
+			auto * pSrc = dSources[iSrc].get();
+			QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader );
+			tMerger.TransferData<QWORD> ( pSrc->m_tQword, pSrc->m_tReader.m_uWordID, pSrc->m_tReader.GetWord(), pSrc->m_pIndex, dRowMaps[iSrc], tMonitor );
+		} else
+		{
+			bool bBaseHasHitlist = dSources[dSame[0]]->m_tReader.m_bHasHitlist;
+			bool bHitless = !bBaseHasHitlist;
+			bool bMismatch = false;
+			for ( int i = 1; i < dSame.GetLength(); ++i )
+			{
+				if ( dSources[dSame[i]]->m_tReader.m_bHasHitlist!=bBaseHasHitlist )
+					bMismatch = true;
+			}
+			if ( bMismatch )
+			{
+				++iHitlistsDiscarded;
+				bHitless = true;
+			}
+
+			for ( int i = 0; i < dSame.GetLength(); ++i )
+			{
+				auto * pSrc = dSources[dSame[i]].get();
+				QwordIteration::PrepareQword<QWORD> ( pSrc->m_tQword, pSrc->m_tReader );
+			}
+
+			AggregateHit_t tHit;
+			tHit.m_uWordID = dSources[iMin]->m_tReader.m_uWordID;
+			tHit.m_szKeyword = dSources[iMin]->m_tReader.GetWord();
+			tHit.m_dFieldMask.UnsetAll();
+
+			for ( int i = 0; i < dSame.GetLength(); ++i )
+			{
+				auto * pSrc = dSources[dSame[i]].get();
+				const auto & dRowMap = dRowMaps[dSame[i]];
+				while ( QwordIteration::NextDocument ( pSrc->m_tQword, pSrc->m_pIndex, dRowMap ) )
+				{
+					if ( tMonitor.NeedStop () || !sError.IsEmpty () )
+						return false;
+
+					if ( bHitless )
+					{
+						while ( pSrc->m_tQword.m_bHasHitlist && pSrc->m_tQword.GetNextHit()!=EMPTY_HIT );
+
+						tHit.m_tRowID = dRowMap[pSrc->m_tQword.m_tDoc.m_tRowID];
+						tHit.m_dFieldMask = pSrc->m_tQword.m_dQwordFields;
+						tHit.SetAggrCount ( pSrc->m_tQword.m_uMatchHits );
+						pHitBuilder->cidxHit ( &tHit );
+					} else
+					{
+						tMerger.TransferHits ( pSrc->m_tQword, tHit, dRowMap );
+					}
+				}
+			}
+		}
+
+		for ( int i = 0; i < dSame.GetLength(); ++i )
+		{
+			auto * pSrc = dSources[dSame[i]].get();
+			pSrc->m_bHasWord = pSrc->m_tReader.Read();
 		}
 	}
 
@@ -6964,6 +7175,185 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	return true;
 }
 
+bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings )
+{
+	TRACE_CORO ( "sph", "CSphIndex_VLN::DoMergeN" );
+	auto & tMonitor = tProgress.GetMergeCb();
+
+	int64_t tmTotalStart = sphMicroTimer();
+
+	const int iIndexes = dIndexes.GetLength();
+	if ( iIndexes<2 )
+	{
+		sError = "need at least 2 indexes for N-way merge";
+		return false;
+	}
+
+	const CSphIndex_VLN * pBaseIndex = dIndexes[0];
+	assert ( pBaseIndex );
+	const CSphIndex_VLN * pDstIndex = dIndexes.Last();
+	assert ( pDstIndex );
+
+	const CSphSchema & tBaseSchema = pBaseIndex->m_tSchema;
+	const bool bBaseWordDict = pBaseIndex->m_pDict->GetSettings().m_bWordDict;
+	const ESphHitless eBaseHitless = pBaseIndex->m_tSettings.m_eHitless;
+
+	for ( int i = 1; i < iIndexes; ++i )
+	{
+		const CSphIndex_VLN * pIndex = dIndexes[i];
+		assert ( pIndex );
+
+		if ( !tBaseSchema.CompareTo ( pIndex->m_tSchema, sError ) )
+			return false;
+
+		if ( eBaseHitless!=pIndex->m_tSettings.m_eHitless )
+		{
+			sError = "hitless settings must be the same on merged tables";
+			return false;
+		}
+
+		if ( bBaseWordDict!=pIndex->m_pDict->GetSettings().m_bWordDict )
+		{
+			sError.SetSprintf ( "dictionary types must be the same (base dict=%s, other dict=%s )",
+				bBaseWordDict ? "keywords" : "crc",
+				pIndex->m_pDict->GetSettings().m_bWordDict ? "keywords" : "crc" );
+			return false;
+		}
+	}
+
+	RawVector_T<CSphFixedVector<RowID_t>> dRowMaps;
+	dRowMaps.Reserve_static  ( iIndexes );
+	CSphVector<DWORD> dAliveCounts;
+	dAliveCounts.Resize ( iIndexes );
+
+	int64_t iTotalDocs = 0;
+	for ( int i = 0; i < iIndexes; ++i )
+	{
+		const CSphIndex_VLN * pIndex = dIndexes[i];
+		dRowMaps.Emplace_back ( pIndex->m_iDocinfo );
+		dRowMaps[i].Fill ( INVALID_ROWID );
+
+		int64_t iPrevDocs = iTotalDocs;
+		tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pIndex->m_iChunk );
+
+		for ( RowID_t uRow = 0; uRow < dRowMaps[i].GetULength(); ++uRow )
+		{
+			if ( pIndex->m_tDeadRowMap.IsSet(uRow) )
+				continue;
+
+			dRowMaps[i][uRow] = (RowID_t)iTotalDocs++;
+		}
+
+		tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pIndex->m_iChunk );
+		dAliveCounts[i] = DWORD ( iTotalDocs - iPrevDocs );
+	}
+
+	if ( iTotalDocs >= INVALID_ROWID )
+		return false; // too many docs in merged segment (>4G even with filtered/killed), abort.
+
+	BuildHeader_t tBuildHeader ( pDstIndex->m_tStats );
+
+	StrVec_t dDeleteOnInterrupt;
+	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
+	{
+		dDeleteOnInterrupt.for_each ( [] ( const auto & sFile )
+		{
+			if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
+				::unlink ( sFile.cstr() );
+		} );
+	} );
+
+	{
+		int64_t tmAttrsStart = sphMicroTimer();
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
+		if ( !tAttrMerger.Prepare ( pBaseIndex, pDstIndex ) )
+			return false;
+
+		for ( int i = 0; i < iIndexes; ++i )
+			if ( !tAttrMerger.AnalyzeAttributes ( *dIndexes[i], dRowMaps[i], dAliveCounts[i] ) )
+				return false;
+
+		for ( int i = 0; i < iIndexes; ++i )
+			if ( !tAttrMerger.CopyAttributes ( *dIndexes[i], dRowMaps[i], dAliveCounts[i] ) )
+				return false;
+
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
+			return false;
+		if ( pTimings )
+			pTimings->m_tmAttrs = sphMicroTimer() - tmAttrsStart;
+	}
+
+	const CSphIndex_VLN * pSettings = pDstIndex;
+	CSphAutofile tDict ( pDstIndex->GetTmpFilename ( SPH_EXT_SPI ), SPH_O_NEW, sError, true );
+
+	if ( !sError.IsEmpty() || tDict.GetFD()<0 || tMonitor.NeedStop() )
+		return false;
+
+	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
+
+	CSphVector<SphWordID_t> dDummy;
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
+
+	int iInfixCodepointBytes = 0;
+	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().m_bWordDict )
+		iInfixCodepointBytes = pSettings->m_pTokenizer->GetMaxCodepointLength();
+
+	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
+
+	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists (N-way)" );
+	int64_t tmWordsStart = sphMicroTimer();
+	const bool bWordDict = pDict->GetSettings().m_bWordDict;
+	if ( bWordDict )
+		WITH_QWORD ( pBaseIndex, false, Qword,
+			if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
+				return false;
+		);
+	else
+		WITH_QWORD ( pBaseIndex, true, Qword,
+			if ( !CSphIndex_VLN::MergeWordsN<Qword> ( dIndexes, dRowMaps, &tHitBuilder, sError, tProgress ) )
+				return false;
+		);
+	if ( pTimings )
+		pTimings->m_tmWords = sphMicroTimer() - tmWordsStart;
+	END_CORO ( "sph" );
+
+	if ( tMonitor.NeedStop () || !sError.IsEmpty() )
+		return false;
+
+	AggregateHit_t tFlush;
+	tFlush.m_tRowID = INVALID_ROWID;
+	tFlush.m_uWordID = 0;
+	tFlush.m_szKeyword = (const BYTE*)"";
+	tFlush.m_iWordPos = EMPTY_HIT;
+	tFlush.m_dFieldMask.UnsetAll();
+	tHitBuilder.cidxHit ( &tFlush );
+
+	int iMinInfixLen = pSettings->m_tSettings.m_iMinInfixLen;
+	int64_t tmFinalizeStart = sphMicroTimer();
+	if ( !tHitBuilder.cidxDone ( g_tMergeSettings.m_iBufferDict, iMinInfixLen, pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+		return false;
+
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &pSettings->m_tSettings;
+	tWriteHeader.m_pSchema = &pSettings->m_tSchema;
+	tWriteHeader.m_pTokenizer = pSettings->m_pTokenizer;
+	tWriteHeader.m_pDict = pSettings->m_pDict;
+	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter.get();
+	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
+
+	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
+	if ( pTimings )
+	{
+		pTimings->m_tmFinalize = sphMicroTimer() - tmFinalizeStart;
+		pTimings->m_tmTotal = sphMicroTimer() - tmTotalStart;
+	}
+
+	tDict.SetPersistent();
+	dDeleteOnInterrupt.Reset();
+
+	return true;
+}
+
 
 bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError )
 {
@@ -6973,6 +7363,23 @@ bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSph
 
 	std::unique_ptr<ISphFilter> pFilter = pDstIndex->CreateMergeFilters ( dFilters );
 	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, pFilter.get(), sError, tProgress, dFilters.IsEmpty(), false );
+}
+
+bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, CSphIndexProgress & tProgress, CSphString& sError, MergeTimings_t * pTimings )
+{
+	TRACE_CORO ( "sph", "sphMergeN" );
+	if ( dIndexes.GetLength()<2 )
+	{
+		sError = "need at least 2 indexes for N-way merge";
+		return false;
+	}
+
+	CSphVector<const CSphIndex_VLN *> dVlnIndexes;
+	dVlnIndexes.Reserve ( dIndexes.GetLength() );
+	for ( const auto * pIndex : dIndexes )
+		dVlnIndexes.Add ( (const CSphIndex_VLN *)pIndex );
+
+	return CSphIndex_VLN::DoMergeN ( dVlnIndexes, sError, tProgress, pTimings );
 }
 
 template < typename QWORD >
@@ -7557,8 +7964,9 @@ struct SphFinalMatchCalc_t final : MatchProcessor_i, ISphNoncopyable
 	bool ProcessInRowIdOrder() const final
 	{
 		// columnar expressions don't like random access, they are optimized for sequental access
-		// that's why if we have a columnar expression, we need to call Process it ascending RowId order
-		return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );
+		// that's why if we have a columnar expression, or another expression that explicitly
+		// prefers sequential access, we need to call Process in ascending RowId order
+		return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && ( i.m_pExpr->IsColumnar() || i.m_pExpr->PrefersRowIdOrder() ); } );
 	}
 
 	void Process ( CSphMatch * pMatch ) final
@@ -8089,29 +8497,79 @@ static int CalcRemovedOptionalFilters ( const CSphVector<CSphFilterSettings> & d
 }
 
 
-static void RemoveOptionalFilters ( const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, CSphVector<CSphFilterSettings> & dModifiedFilters )
+static bool RestoreJsonSISchemaStages ( const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, ISphSchema & tSchema )
 {
-	int iNumOptional = 0;
-	dModifiedFilters.Resize(0);
-	for ( auto & i : dFilters )
-		if ( i.m_bOptional )
-			iNumOptional++;
-		else
-			dModifiedFilters.Add(i);
+	bool bRestored = false;
+	for ( const auto & tTransform : dJsonSITransforms )
+		for ( const auto & tStage : tTransform.m_dStages )
+		{
+			const CSphColumnInfo * pAttr = tSchema.GetAttr ( tStage.m_sAttr.cstr() );
+			if ( !pAttr )
+				continue;
 
-	if ( iNumOptional )
+			(const_cast<CSphColumnInfo *>(pAttr))->m_eStage = tStage.m_eStage;
+			bRestored = true;
+		}
+
+	return bRestored;
+}
+
+
+static bool HasJsonSISchemaStages ( const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms )
+{
+	return dJsonSITransforms.any_of ( [] ( const auto & tTransform ) { return !tTransform.m_dStages.IsEmpty(); } );
+}
+
+
+static bool RecreateFallbackFilters ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, bool bRemoveOptional, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphVector<CSphFilterSettings> & dModifiedFilters )
+{
+	CSphVector<CSphFilterSettings> dRestoredFilters = dFilters;
+	for ( const auto & tTransform : dJsonSITransforms )
 	{
-		tCtx.m_pFilter.reset();
-		tFlx.m_pFilters = &dModifiedFilters;
-		tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+		if ( tTransform.m_iFilter>=0 && tTransform.m_iFilter<dRestoredFilters.GetLength() )
+			dRestoredFilters[tTransform.m_iFilter] = tTransform.m_tOriginal;
 	}
+
+	bool bHasFilterTree = tFlx.m_pFilterTree && tFlx.m_pFilterTree->GetLength();
+	bool bCanRemoveOptional = bRemoveOptional && !bHasFilterTree;
+
+	dModifiedFilters.Resize(0);
+	for ( const auto & tFilter : dRestoredFilters )
+	{
+		if ( !bCanRemoveOptional || !tFilter.m_bOptional )
+			dModifiedFilters.Add ( tFilter );
+	}
+
+	if ( HasJsonSISchemaStages ( dJsonSITransforms ) )
+	{
+		std::unique_ptr<ISphSchema> pFallbackSchema ( tFlx.m_pMatchSchema->CloneMe() );
+		RestoreJsonSISchemaStages ( dJsonSITransforms, *pFallbackSchema );
+		pModifiedMatchSchema = std::move ( pFallbackSchema );
+		tFlx.m_pMatchSchema = pModifiedMatchSchema.get();
+		if ( !tCtx.SetupCalc ( tMeta, *tFlx.m_pMatchSchema, *tFlx.m_pIndexSchema, tFlx.m_pBlobPool, tFlx.m_pColumnar, dSorterSchemas ) )
+			return false;
+	}
+
+	tCtx.ResetFilters();
+	tFlx.m_pFilter.reset();
+	tFlx.m_pWeightFilter.reset();
+	tFlx.m_dUserVals.Reset();
+	tFlx.m_pFilters = &dModifiedFilters;
+	if ( bCanRemoveOptional )
+		tFlx.m_pFilterTree = nullptr;
+
+	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 }
 
 
 bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
 {
+	(void)tCtx;
+	(void)tFlx;
+	(void)dModifiedFilters;
+
 	StrVec_t dWarnings;
-	bool bKNN = !tQuery.m_tKnnSettings.m_sAttr.IsEmpty();
+	bool bKNN = tQuery.HasKnn();
 	float fBestCost = FLT_MAX;
 
 	if ( bKNN )
@@ -8119,7 +8577,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
-		int iRequestedKNNDocs = Min ( tQuery.m_tKnnSettings.GetRequestedDocs(), m_iDocinfo );
+		int iRequestedKNNDocs = Min ( tQuery.SingleKnnSettings().GetRequestedDocs(), m_iDocinfo );
 		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 	}
@@ -8138,11 +8596,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		{
 			bool bRes = SelectIteratorsFT ( tQuery, dFilters, tMaxSorterSchema, pRanker, dSIInfo, iCutoff, iThreads, dWarnings );
 			if ( !bRes )
-			{
-				// if we did not spawn any iterators, we need to remove optional filters (as they assume they will be replaced by iterators)
-				RemoveOptionalFilters ( dFilters, tCtx, tFlx, tMeta, dModifiedFilters );
 				return false;
-			}
 		}
 	}
 
@@ -8153,16 +8607,16 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 }
 
 
-std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
+std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
-	if ( tQuery.m_tKnnSettings.m_bPrefilter && tCtx.m_pFilter )
+	if ( tQuery.HasKnn() && tQuery.SingleKnnSettings().m_bPrefilter && tCtx.m_pFilter )
 		pKNNFilterWrapper = CreateKNNPrefilter ( tCtx, m_tAttr.GetReadPtr(), m_tSchema.GetRowSize(), tMaxSorterSchema.GetDynamicSize(), EstimateFilterSelectivity ( dFilters, tFlx.m_pFilterTree, tFlx ) );
 
 	if ( !dFilters.GetLength() )
 	{
-		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
-			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
+		if ( tQuery.HasKnn() )
+			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.SingleKnnSettings().m_eTerminationPolicy, tMeta.m_pProfile, tMeta.m_sError );
 
 		return { nullptr, false };
 	}
@@ -8170,13 +8624,18 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	// using g_iPseudoShardingThresh==0 check so that iterators are still spawned in test suite (when g_iPseudoShardingThresh=0)
 	if ( m_iDocinfo < SMALL_INDEX_THRESH && g_iPseudoShardingThresh > 0 )
 	{
-		dModifiedFilters = dFilters;
+		if ( !RecreateFallbackFilters ( dFilters, dJsonSITransforms, false, tCtx, tFlx, tMeta, dSorterSchemas, pModifiedMatchSchema, dModifiedFilters ) )
+			return { nullptr, true };
 		return { nullptr, false };
 	}
 
 	CSphVector<SecondaryIndexInfo_t> dSIInfo;
 	if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker ) )
+	{
+		if ( !RecreateFallbackFilters ( dFilters, dJsonSITransforms, true, tCtx, tFlx, tMeta, dSorterSchemas, pModifiedMatchSchema, dModifiedFilters ) )
+			return { nullptr, true };
 		return { nullptr, false };
+	}
 
 	RowIteratorsWithEstimates_t dSIIterators, dLookupIterators, dAnalyzerIterators, dKNNIterators;
 
@@ -8184,7 +8643,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 
 	// knn iterators (may be skipped when brute-force over filtered rows is cheaper than HNSW)
 	bool bError = false;
-	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.m_tKnnSettings.m_eTerminationPolicy, tMeta.m_pProfile, bError, tMeta.m_sError );
+	dKNNIterators = CreateKNNIterators ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, pKNNFilterWrapper.get(), tQuery.HasKnn() ? tQuery.SingleKnnSettings().m_eTerminationPolicy : knn::HNSWTerminationPolicy_e::QUANTILE, tMeta.m_pProfile, bError, tMeta.m_sError );
 	if ( bError )
 		return { nullptr, true };
 
@@ -8233,7 +8692,8 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	switch ( dFinalIterators.GetLength() )
 	{
 	case 0:
-		RemoveOptionalFilters ( dFilters, tCtx, tFlx, tMeta, dModifiedFilters );
+		if ( !RecreateFallbackFilters ( dFilters, dJsonSITransforms, true, tCtx, tFlx, tMeta, dSorterSchemas, pModifiedMatchSchema, dModifiedFilters ) )
+			return { nullptr, true };
 		return { nullptr, false };
 
 	case 1:
@@ -8273,12 +8733,12 @@ static bool AreAllFiltersExpressions ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
-bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
+bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<const ISphSchema *> & dSorterSchemas, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// select the sorter with max schema
 	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
 	pMaxSorterSchema = dSorters[iMaxSchemaIndex]->GetSchema();
-	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
+	dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
 
 	auto & tQuery = tCtx.m_tQuery;
 
@@ -8296,9 +8756,10 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_iTotalDocs	= m_iDocinfo;
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 	tFlx.m_eJoinType	= tQuery.m_eJoinType;
+	tFlx.m_bAddKNNDistFilter = tQuery.HasKnn() && HasKNNDistFilter(tQuery);
 
 	// may modify eval stages in schema; needs to be before SetupCalc
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError, &dJsonSITransforms ) )
 		return false;
 
 	if ( pModifiedMatchSchema )
@@ -8363,20 +8824,22 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	CSphQueryContext tCtx(tQuery);
 	CreateFilterContext_t tFlx;
 	const ISphSchema * pMaxSorterSchema = nullptr;
+	CSphVector<const ISphSchema *> dSorterSchemas;
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	CSphVector<JsonSIFilterTransform_t> dJsonSITransforms;
 	std::unique_ptr<ISphSchema> pModifiedMatchSchema; // may contain same schema but with modified eval stages
-	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, dSorters, tArgs ) )
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dSorterSchemas, dTransformedFilters, dTransformedFilterTree, dJsonSITransforms, pModifiedMatchSchema, dSorters, tArgs ) )
 		return false;
 
-	assert(pMaxSorterSchema);
+	assert ( pMaxSorterSchema );
 	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tMeta.m_pProfile, tArgs.m_bModifySorterSchemas );
 
-		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+		tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 		return true;
 	}
@@ -8390,15 +8853,6 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	// prepare to work them rows
 	bool bRandomize = dSorters[0]->IsRandom();
-
-	CSphMatch tMatch;
-	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
-	tMatch.m_iWeight = tArgs.m_iIndexWeight;
-	// fixme! tag also used over bitmask | 0x80000000,
-	// which marks that match comes from remote.
-	// using -1 might be also interpreted as 0xFFFFFFFF in such context!
-	// Does it intended?
-	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
 	auto & tSess = session::Info();
 	tSess.m_pSessionOpaque1 = (void*)(const DocstoreReader_i*)this;
@@ -8423,11 +8877,22 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 		tCtx.m_pFilter.reset();
 	else
 	{
-		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr );
+		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
 			return false;
 	}
+
+	// SpawnIterators() can rebuild fallback filters and rerun SetupCalc(),
+	// so m_dCalcFinal must be checked after iterator planning.
+	CSphMatch tMatch;
+	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
+	tMatch.m_iWeight = tArgs.m_iIndexWeight;
+	// fixme! tag also used over bitmask | 0x80000000,
+	// which marks that match comes from remote.
+	// using -1 might be also interpreted as 0xFFFFFFFF in such context!
+	// Does it intended?
+	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 	
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );
 
@@ -8505,7 +8970,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.get();
 
-	tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+	tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 	return true;
@@ -9658,11 +10123,11 @@ void CSphIndex_VLN::Preread()
 {
 	MEMORY ( MEM_INDEX_DISK );
 
-	sphLogDebug ( "CSphIndex_VLN::Preread invoked '%s'(%s)", GetName(), GetFilebase() );
-
 	assert ( m_bPassedAlloc );
 	if ( m_bPassedRead )
 		return;
+
+	sphLogDebug ( "CSphIndex_VLN::Preread invoked '%s'(%s)", GetName(), GetFilebase() );
 
 	///////////////////
 	// read everything
@@ -9696,6 +10161,9 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 	if ( sNewBase == GetFilebase() )
 		return RE_OK;
 
+	CSphString sOldSPIDX = GetFilename ( SPH_EXT_SPIDX );
+	CSphString sOldSPJIDX = GetFilename ( SPH_EXT_SPJIDX );
+
 	IndexFiles_c dFiles ( GetFilebase(), nullptr, m_uVersion );
 	if ( !dFiles.TryRenameBase ( sNewBase ) )
 	{
@@ -9710,6 +10178,8 @@ CSphIndex::RenameResult_e CSphIndex_VLN::RenameEx ( CSphString sNewBase )
 	}
 
 	SetFilebase ( std::move ( sNewBase ) );
+	m_tSI.UpdateFilename ( sOldSPIDX, GetFilename ( SPH_EXT_SPIDX ) );
+	m_tSI.UpdateFilename ( sOldSPJIDX, GetFilename ( SPH_EXT_SPJIDX ) );
 
 	return RE_OK;
 }
@@ -11330,13 +11800,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	CSphQueryContext tCtx(tQuery);
 	CreateFilterContext_t tFlx;
 	const ISphSchema * pMaxSorterSchema = nullptr;
+	CSphVector<const ISphSchema *> dSorterSchemas;
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	CSphVector<JsonSIFilterTransform_t> dJsonSITransforms;
 	std::unique_ptr<ISphSchema> pModifiedMatchSchema; // may contain same schema but with modified eval stages
-	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, dSorters, tArgs ) )
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dSorterSchemas, dTransformedFilters, dTransformedFilterTree, dJsonSITransforms, pModifiedMatchSchema, dSorters, tArgs ) )
 		return false;
 
-	assert(pMaxSorterSchema);
+	assert ( pMaxSorterSchema );
 	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 
 	// set blob pool for string on_sort expression fix up
@@ -11425,7 +11897,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
-		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+		tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 		tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 		return true;
 	}
@@ -11457,7 +11929,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !bIsCacheRanker )
 	{
 		// Not using cache - spawn SI iterators if needed
-		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
+		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get() );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
 			return false;
@@ -11557,7 +12029,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
-	tMeta.m_iQueryTime += (int)( tmWall/1000 );
+	tMeta.AddQueryTimeUs ( tmWall );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << dSorters[0]->GetTotalCount();

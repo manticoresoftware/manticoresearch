@@ -83,12 +83,12 @@ This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_tabl
 
 By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
 * 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
-* 1 to explicitly enable it
-* to enable it while multiplying the optimization threshold by 2.
+* 1 to enable automatic table compaction with the default threshold
+* any integer greater than 1 to enable automatic table compaction while multiplying the threshold by that value
 
-By default, OPTIMIZE runs until the number of disk chunks is less than or equal to the number of logical CPU cores multiplied by 2.
+By default, the threshold is the number of logical CPU cores multiplied by 2.
 
-However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+However, if the table has attributes with KNN indexes, the default threshold is different. In this case, it is set to the number of physical CPU cores divided by 2, with a minimum value of 1, to improve KNN search performance.
 
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
@@ -103,6 +103,55 @@ auto_optimize = 0 # disable automatic OPTIMIZE
 <!-- request Throttle -->
 ```ini
 auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
+```
+
+<!-- end -->
+
+### parallel_chunk_merges
+
+<!-- example conf parallel_chunk_merges -->
+This setting controls how many disk chunk merge jobs the server is allowed to run in parallel during [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) for real-time tables.
+
+This affects only disk chunk merging (compaction), not query parallelism.
+
+Set it to `1` to disable parallel chunk merging (merge jobs will run one-by-one). Higher values may speed up compaction on systems with fast storage, but will increase concurrent disk I/O.
+
+By default, Manticore uses the value of the [threads](../Server_settings/Searchd.md#threads) setting for this calculation; if `threads` is not configured, it defaults to the number of logical CPUs. The resulting default for `parallel_chunk_merges` is `1` when `threads` is `1`, `2`, or `3`, and `2` when `threads` is `4` or higher (that is, `max(1, min(2, threads/2))` using integer division).
+
+This value can be changed at runtime using `SET GLOBAL parallel_chunk_merges = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Disable -->
+```ini
+parallel_chunk_merges = 1
+```
+
+<!-- request Increase -->
+```ini
+parallel_chunk_merges = 4
+```
+
+<!-- end -->
+
+### merge_chunks_per_job
+
+<!-- example conf merge_chunks_per_job -->
+This setting controls how many RT disk chunks are merged in a single OPTIMIZE job (N-way merge). If fewer than this number are available, the job will merge what it can (minimum 2).
+
+Lower values allow more jobs to be scheduled in parallel; higher values reduce the number of jobs but increase the size of each merge.
+
+Default is `2`.
+
+This value can be changed at runtime using `SET GLOBAL merge_chunks_per_job = N` and inspected via `SHOW VARIABLES`.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Increase -->
+```ini
+merge_chunks_per_job = 4
 ```
 
 <!-- end -->
@@ -1050,10 +1099,18 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file is a mandatory configuration option in Manticore search that specifies the path of the file where the process ID of the `searchd` server is stored.
+`pid_file` is a configuration option that specifies the path to the file storing the `searchd` server's process ID (PID).
 
-The searchd process ID file is re-created and locked on startup, and contains the head server process ID while the server is running. It is unlinked on server shutdown.
-The purpose of this file is to enable Manticore to perform various internal tasks, such as checking whether there is already a running instance of `searchd`, stopping `searchd`, and notifying it that it should rotate the tables. The file can also be used for external automation scripts.
+The PID file is created and locked upon startup and contains the main server process ID while the server is running. The file is removed when the server shuts down. This file allows Manticore to perform internal tasks, such as:
+
+* Verifying if a `searchd` instance is already running.
+* Stopping the `searchd` process.
+* Triggering table rotations.
+
+The PID file can also be used by external automation scripts.
+
+**Requirements:**
+The `pid_file` is optional if `searchd` is run with the `--console`, `--nodetach`, or `--systemd` options, or if systemd management is automatically detected. In all other cases, this setting is mandatory. It is also required if the `--pidfile` command-line option is used.
 
 
 <!-- intro -->
@@ -1721,7 +1778,7 @@ unlink_old = 0
 <!-- example conf watchdog -->
 Threaded server watchdog. Optional, default is 1 (watchdog enabled).
 
-When a Manticore query crashes, it can take down the entire server. With the watchdog feature enabled, `searchd` also maintains a separate lightweight process that monitors the main server process and automatically restarts it in case of abnormal termination. The watchdog is enabled by default.
+When a Manticore query crashes, it can take down the entire server. With the watchdog feature enabled, `searchd` also maintains a separate lightweight process that monitors the main server process and automatically restarts it in case of abnormal termination.
 
 <!-- request Example -->
 
@@ -1730,4 +1787,3 @@ watchdog = 0 # disable watchdog
 ```
 <!-- end -->
 <!-- proofread -->
-

@@ -31,6 +31,14 @@ POST /search
 <!-- intro -->
 SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -56,11 +64,19 @@ POST /search
 {
     "table" : "test",
     "query": {
-      "match": {
-        "title": "hello"
-      },
-      "match": {
-        "body": "world"
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "title": "hello"
+            }
+          },
+          {
+            "match": {
+              "body": "world"
+            }
+          }  
+        ]
       }
     },
     "options":
@@ -231,6 +247,25 @@ The supported values are:
 
 Refer to [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) for more details on options.
 
+### fusion_method
+String. Enables [hybrid search](../Searching/Hybrid_search.md) result fusion. Currently the only supported value is `'rrf'` (Reciprocal Rank Fusion). When set, `MATCH(...)` and `KNN(...)` run as independent sub-queries whose results are fused by rank.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
+### fusion_weights
+Named float list. Per-sub-query weights for [hybrid search](../Searching/Hybrid_search.md) RRF scoring. Requires `fusion_method='rrf'`. Sub-queries must be given explicit aliases using `AS` in SQL or `"name"` in JSON. Unspecified aliases default to weight 1.0.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AS text
+  AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) AS dense
+OPTION fusion_method='rrf', fusion_weights=(text=0.7, dense=0.3);
+```
+
 ### field_weights
 Named integer list (per-field user weights for ranking).
 
@@ -304,12 +339,24 @@ Sets the maximum search query time in milliseconds. Must be a non-negative integ
 `none` allows replacing all query terms with their exact forms if the table was built with [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) enabled. This is useful for preventing stemming or lemmatizing query terms.
 
 ### not_terms_only_allowed
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
+-->
+
 <!-- example not_terms_only_allowed -->
 `0` or `1` allows standalone [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) for the query. The default is 0. See also the corresponding [global setting](../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select * from tbl where match('-donald');
+MySQL [(none)]> select * from t where match('-donald');
 ERROR 1064 (42000): index t: query error: query is non-computable (single NOT operator)
 MySQL [(none)]> select * from t where match('-donald') option not_terms_only_allowed=1;
 +---------------------+-----------+
@@ -318,7 +365,60 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql -d "select * from t where match('-d')"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      },
+      {
+        "_id": 5912226830793834497,
+        "_score": 2500,
+        "_source": {
+          "f1": "c",
+          "f2": 3
+        }
+      },
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
+
+### rank_constant
+Integer. Default is 60. Smoothing constant for [hybrid search](../Searching/Hybrid_search.md) RRF ranking. Each document's score from a sub-query is `weight / (rank_constant + rank)`, where `rank` is its 1-based position in that sub-query's results. A lower value (e.g. 10) makes top positions count much more than lower ones; a higher value (e.g. 100) flattens the difference between positions. Requires `fusion_method='rrf'`.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', rank_constant=10;
+```
 
 ### ranker
 Choose from the following options:
@@ -352,6 +452,23 @@ String. A scroll token for paginating results using the [Scroll pagination appro
 * `pq` - priority queue, set by default
 * `kbuffer` - provides faster sorting for already pre-sorted data, e.g., table data sorted by id
 The result set is the same in both cases; choosing one option or the other may simply improve (or worsen) performance.
+
+### window_size
+Integer. Default is 0 (auto). Controls how many results each sub-query (text and every KNN) retrieves before [hybrid search](../Searching/Hybrid_search.md) RRF fusion. A larger window feeds more candidates into fusion, improving recall at the cost of performance. Requires `fusion_method='rrf'`.
+
+When set to 0 (auto), the window is computed as the **maximum** of:
+- the largest KNN requested-docs count across all KNN sub-queries (which is `k * oversampling` when rescoring is enabled, or just `k` otherwise), and
+- the query's `LIMIT`.
+
+For example, with `LIMIT 20` and `knn(vec, 10, ...)` (default oversampling 3.0, rescoring on), auto window = max(10*3, 20) = 30. Both the text sub-query and KNN sub-query will each retrieve up to 30 results before fusion.
+
+When set explicitly, that value overrides the automatic calculation and is used as the limit for all sub-queries.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', window_size=50;
+```
 
 ### threads
 Limits the max number of threads used for current query processing. Default - no limit (the query can occupy all [threads](../Server_settings/Searchd.md#threads) as defined globally).
@@ -387,6 +504,17 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 
 <!-- end -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int);
+INSERT INTO students(name, age) VALUES
+('Alice', 20),
+('Bob', 22),
+('Carol', 25);
+-->
+
 <!-- example comments -->
 When using a MySQL/MariaDB client, make sure to include the `--comments` flag to enable the hints in your queries.
 
@@ -394,6 +522,13 @@ When using a MySQL/MariaDB client, make sure to include the `--comments` flag to
 ```bash
 mysql -P9306 -h0 --comments
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+```
+
 <!-- end -->
 
 <!-- proofread -->

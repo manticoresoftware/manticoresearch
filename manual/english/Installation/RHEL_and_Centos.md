@@ -18,7 +18,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 
 Then install Manticore Search:
 ```bash
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
 If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:

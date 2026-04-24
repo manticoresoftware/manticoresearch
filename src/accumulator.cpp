@@ -914,6 +914,8 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 				if ( iRowSize )
 					memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
 
+				m_dPerDocHitsCount[iDstRow] = m_dPerDocHitsCount[i];
+
 				// remove duplicate docstore
 				if ( m_pDocstore )
 					m_pDocstore->SwapRows ( iDstRow, i );
@@ -926,6 +928,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	}
 
 	m_dAccumRows.Resize ( iDstRow * iRowSize );
+	m_dPerDocHitsCount.Resize ( iDstRow );
 	m_uAccumDocs = iDstRow;
 	if ( m_pDocstore )
 		m_pDocstore->DropTail ( iDstRow );

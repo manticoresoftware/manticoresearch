@@ -183,6 +183,44 @@ You should have received a copy of the GNU General Public License
 
 License: [GPLv2 with FOSS Exception](./libmysqlclient-license).
 
+## libcurl / curl
+https://curl.se/ , https://github.com/curl/curl
+
+Source files: Manticore Search project does not modify or redistribute any source
+files from this component. However, its header files are used during the
+compilation process, and Manticore Search binaries may dynamically link to or
+dynamically load and use the library at runtime, depending on the build
+configuration.
+
+Relevant source files:
+- `./src/netfetch.cpp`
+
+Copyright:
+```
+Copyright (c) 1996 - 2026, Daniel Stenberg, <daniel@haxx.se>, and many
+contributors, see the THANKS file.
+
+All rights reserved.
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall not
+be used in advertising or otherwise to promote the sale, use or other dealings
+in this Software without prior written authorization of the copyright holder.
+```
+
+License: [curl license](./curl-license).
+
 ## ./cmake/FindMysql.cmake
 Source files:
 - `./cmake/FindMysql.cmake`

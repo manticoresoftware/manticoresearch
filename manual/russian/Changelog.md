@@ -1,29 +1,98 @@
 # Журнал изменений
 
+## Версия 25.0.0
+**Выпуск**: 30 марта 2026 года
+
+Этот выпуск включает комплексную переработку пакетов, новые параметры `API_URL` и `API_TIMEOUT` для автоматического встраивания моделей, гибридный поиск, поддержку резервного копирования и восстановления в S3-совместимых системах, более быструю обслуживание RT таблиц с N-путевыми слияниями и параллельным `OPTIMIZE`, префильтрацию KNN, а также подготовленные запросы, совместимые с MySQL.
+
+## Критические изменения
+* ⚠️ [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #123](https://github.com/manticoresoftware/columnar/pull/123) **Критическое изменение**: обновлена **MCL** до версии 13.0.0, добавлены [`API_URL`](Searching/KNN.md#Creating-a-table-with-auto-embeddings) и [`API_TIMEOUT`](Searching/KNN.md#Creating-a-table-with-auto-embeddings) для [**автоматического встраивания моделей**](Searching/KNN.md#Auto-Embeddings-%28Recommended%29). Это затрагивает вас, если вы используете [**автоматическое встраивание моделей**](Searching/KNN.md#Auto-Embeddings-%28Recommended%29) или управляете **MCL** отдельно от демона, потому что Manticore 25.0.0 требует **MCL 13.0.0** и не совместима с более старыми версиями MCL; обновите демон и MCL вместе, и безопасный возврат к предыдущей версии возможен только если вы также восстановите соответствующую более старую версию MCL.
+* ⚠️ [v24.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.0) [ Issue #4343](https://github.com/manticoresoftware/manticoresearch/issues/4343) **Критическое изменение**: версия внутреннего **протокола репликации** увеличена, и добавлено отслеживание эпохи кластера, чтобы восстановляющиеся узлы могли определить, когда состав таблицы кластера менялся во время их отсутствия, и использовать SST вместо сбоя во время восстановления IST. Это затрагивает вас только если вы используете **кластеры репликации**: кластеры репликации с смешанными версиями не совместимы при этом изменении, поэтому обновите узлы кластера вместе, и безопасный возврат к предыдущей версии возможен только до того, как новый протокол репликации будет использоваться в кластере.
+* ⚠️ [v23.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.0) [ Issue #4364](https://github.com/manticoresoftware/manticoresearch/issues/4364) **Критическое изменение**: **версия формата индекса 69** добавлена для поддержки новых вариантов токенизации биграмм, включая режимы [`bigram_delimiter`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_delimiter) и режимы [`bigram_index`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index), учитывающие цифры. Это затрагивает вас, если вы используете эти варианты биграмм или если вы перестраиваете индексы и позже необходимо открыть переписанные индексы с более старой версией Manticore: существующие старые индексы остаются читаемыми, но индексы, перестроенные или впервые записанные в формате 69, не совместимы с более старыми версиями Manticore, поэтому безопасный возврат к предыдущей версии возможен только до того, как такие индексы будут переписаны.
+* ⚠️ [v22.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/22.0.0) [ Issue #4301](https://github.com/manticoresoftware/manticoresearch/issues/4301) **Критическое изменение**: **генерация встраивания для RT таблиц** перемещена из фазы фиксации и реплицируется как векторные данные. Это затрагивает вас, если вы используете **кластеры репликации** с RT таблицами, имеющими `model_name`: это сохраняет векторы, предоставленные пользователем, предотвращает реплики от перегенерации различных встраиваний, и улучшает производительность **автоматического встраивания** при использовании с репликацией, но кластеры репликации с смешанными версиями не совместимы при этом изменении. Обновите узлы кластера вместе; безопасный возврат к предыдущей версии возможен только до того, как новый протокол репликации будет использоваться в кластере.
+* ⚠️ [v21.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.0) [ PR #138](https://github.com/manticoresoftware/columnar/pull/138) **Критическое изменение**: обновлена **MCL** до версии 12.0.0 и увеличено требуемая версия **KNN API** для поддержки адаптивного [**KNN раннего завершения**](Searching/KNN.md#Early-termination) во время обхода HNSW. Это затрагивает вас, если вы управляете **MCL** отдельно от демона или запускаете **KNN запросы**, которые зависят от предыдущего поведения кандидатного поиска или пограничного выбора результатов: Manticore 21.0.0 требует **MCL 12.0.0** с новым интерфейсом KNN, и с этой библиотекой поиск KNN может завершиться раньше после того, как найдено достаточное количество кандидатов, что может повлиять на какие кандидаты исследуются и возвращаются. Существующие данные остаются совместимыми и специальной миграции не требуется, но обновите демон и MCL вместе; безопасный возврат к предыдущей версии возможен только если вы также восстановите соответствующую более старую версию MCL.
+* ⚠️ [v19.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.0) [ Issue #4103](https://github.com/manticoresoftware/manticoresearch/issues/4103) **Критическое изменение**: добавлена [**префильтрация KNN**](Searching/KNN.md#Filtering-strategies:-prefilter-vs.-postfilter). Это затрагивает вас, если вы запускаете **KNN запросы** вместе с фильтрами по атрибутам, потому что фильтры теперь могут применяться во время поиска KNN, вместо применения только после выбора кандидатов. Это изменяет поведение выбора результатов для фильтрованных KNN запросов путем приоритизации фильтрованных ближайших соседей; специальной миграции не требуется, но запросы, зависящие от предыдущего поведения результатов с постфильтрацией, могут возвращать разные результаты после обновления. Возврат к предыдущей версии возможен, поскольку этот функционал не вносит изменений в формат индекса или протокола.
+* ⚠️ [v18.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.0) [ Issue #4261](https://github.com/manticoresoftware/manticoresearch/issues/4261) **Критическое изменение**: **версия формата индекса 68** добавлена для исправления обработки структуры словаря [`hitless_words`](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words). Это затрагивает вас, если вы перестраиваете или впервые записываете индексы и позже необходимо открыть их с более старой версией Manticore: существующие старые индексы остаются читаемыми, но любые индексы, перестроенные или впервые записанные в новом формате, не совместимы с более старыми версиями Manticore, поэтому безопасный возврат к предыдущей версии возможен только до того, как такие индексы будут переписаны.
+
+### Изменения, связанные с упаковкой
+* 🆕 [v25.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/25.0.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) Изменение упаковки: `manticore` теперь является пакетом-сборкой для deb и rpm. Он включает демон, инструменты, конвертер, заголовки для разработки, данные ICU, пакеты зависимостей (`manticore-columnar-lib`, `manticore-backup`, `manticore-buddy`, `manticore-executor`, `manticore-load`, `manticore-galera` и `manticore-tzdata`, где применимо), а также встроенные языковые пакеты для немецкого, английского и русского языков вместе с поддержкой Jieba. Украинский лемматизатор не включен; установите его отдельно, следуя инструкциям для [Debian/Ubuntu](Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) или [RHEL/CentOS](Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer).
+  При обновлении с предыдущей структуры пакетов обычно можно просто установить пакет `manticore`. Если старые разделенные пакеты вызывают конфликты, удалите их с помощью `apt remove 'manticore*'` или `yum remove 'manticore*'`, а затем установите `manticore`. Эта очистка не удалит ваши существующие данные или конфигурацию.
+
+## Новые возможности и улучшения
+* 🆕 [v24.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.4.0) [ PR #4091](https://github.com/manticoresoftware/manticoresearch/pull/4091) Улучшено сжатие RT-таблиц за счет добавления N-путевых слияний дисковых чанков и параллельных заданий `OPTIMIZE`, что сокращает время, необходимое для слияния многих дисковых чанков, и представляет новые настройки [`merge_chunks_per_job`](Server_settings/Searchd.md#merge_chunks_per_job) и [`parallel_chunk_merges`](Server_settings/Searchd.md#parallel_chunk_merges).
+* 🆕 [v24.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.3.0) [ PR #133](https://github.com/manticoresoftware/manticoresearch-backup/pull/133) Обновлен Manticore Backup до версии 1.10.0, добавлена поддержка резервного копирования и восстановления в S3-совместимых хранилищах, включая AWS S3, MinIO, Wasabi и Cloudflare R2.
+* 🆕 [v24.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.0) [ Issue #2079](https://github.com/manticoresoftware/manticoresearch/issues/2079) Добавлен [гибридный поиск](Searching/Hybrid_search.md) с Reciprocal Rank Fusion (`fusion_method='rrf'`), позволяющий SQL- и JSON-запросам комбинировать полнотекстовые и KNN-результаты, ранжировать их с помощью `hybrid_score()` и поддерживать несколько KNN-подзапросов в одном объединенном наборе результатов.
+* 🆕 [v24.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.0) [ PR #141](https://github.com/manticoresoftware/columnar/pull/141) Обновлен MCL до версии 12.4.1, добавлена поддержка квантованных локальных моделей эмбеддингов GGUF, моделей энкодера T5 и моделей Hugging Face с доступом по токену через аутентифицированные загрузки.
+* 🆕 [v23.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.2.0) [ PR #4372](https://github.com/manticoresoftware/manticoresearch-buddy/pull/648) Обновлен Buddy до версии 3.44.0, добавлена поддержка нечеткого поиска для запросов, затрагивающих несколько таблиц.
+* 🆕 [v23.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.1.0) [ PR #4357](https://github.com/manticoresoftware/manticoresearch/pull/4357) Добавлен новый пакет-сборка Manticore для deb и rpm, заменяющий предыдущий метапакет для упрощения установки и распространения входящих компонентов.
+* 🆕 [v21.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.1.0) [ PR #4352](https://github.com/manticoresoftware/columnar/pull/140) Обновлен MCL до версии 12.1.0, улучшена производительность раннего завершения KNN и добавлено более эффективное кодирование 64-битных значений.
+* 🆕 [v19.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.0) [ PR #4306](https://github.com/manticoresoftware/manticoresearch/pull/4306) Обновлен MCL до версии 11.1.0, добавлена поддержка кэша кодеков.
+* 🆕 [v19.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.1.0) [ PR #4271](https://github.com/manticoresoftware/manticoresearch-buddy/pull/644) Обновлен Buddy до версии 3.43.0, включая улучшенную обработку метрик.
+* 🆕 [v19.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.3) [ Issue #4303](https://github.com/manticoresoftware/manticoresearch/issues/4303) Добавлена отдельная обработка [`interactive_timeout`](Server_settings/Setting_variables_online.md#SET) и [`wait_timeout`](Server_settings/Setting_variables_online.md#SET) для SQL-соединений, чтобы интерактивные и неинтерактивные клиенты могли использовать разные таймауты простоя, как в MySQL.
+* 🆕 [v17.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.0) [ Issue #1124](https://github.com/manticoresoftware/manticoresearch/issues/1124) Добавлена поддержка подготовленных выражений, совместимых с MySQL, включая обработку подготовки/выполнения по бинарному протоколу и проверку связанных параметров.
+
+## Исправления ошибок
+* 🪲 [v24.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.3) [ Issue #4375](https://github.com/manticoresoftware/manticoresearch/issues/4375) Исправлены ложные срабатывания полнотекстового поиска, когда `max_query_time` прерывал запросы с операторами такими как `NOTNEAR`, `MAYBE` или отрицанием, теперь поиски с тайм-аутом не возвращают строки, которые фактически не удовлетворяют запросу.
+* 🪲 [v24.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.2) [ Issue #4398](https://github.com/manticoresoftware/manticoresearch/issues/4398) Исправлена статистика времени запросов, чтобы журнал запросов, глобальные счетчики и время в `SHOW STATUS` по таблицам оставались согласованными, а внутренние запросы Buddy больше не искажают статистику демона, видимую пользователю.
+* 🪲 [v24.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.2.1) [ PR #653](https://github.com/manticoresoftware/manticoresearch-buddy/pull/653) Обновлен Buddy до версии 3.44.1, исправлена некорректная обработка пустых тел запросов по умолчанию.
+* 🪲 [v24.1.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.3) [ PR #4396](https://github.com/manticoresoftware/manticoresearch/pull/4396) Исправлен ручной запуск `searchd` на macOS, теперь SQL-команды через Buddy не падают из-за загрузки старой системной `libcurl`; поиск библиотеки во время выполнения теперь автоматически предпочитает Homebrew curl, при этом `MANTICORE_CURL_LIB` доступен для явного переопределения.
+* 🪲 [v24.1.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.2) [ PR #4394](https://github.com/manticoresoftware/manticoresearch/pull/4394) Исправлены сборки для macOS, теперь SQL-команды через Buddy не падают из-за того, что `searchd` ссылается на несовместимую `libcurl`; пакет теперь предпочитает Homebrew curl и поддерживает переопределение `MANTICORE_CURL_LIB` во время выполнения.
+* 🪲 [v24.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.1.1) [ Issue #4388](https://github.com/manticoresoftware/manticoresearch/issues/4388) Исправлена репликация в кластерах при транзакциях с дублирующимися ID документов, теперь реплики не теряют строки, а донор корректно удаляет дубликаты.
+* 🪲 [v24.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/24.0.1) [ Issue #4354](https://github.com/manticoresoftware/manticoresearch/issues/4354) Исправлена обработка `UPDATE`, когда измененный атрибут должен также отключить свой вторичный индекс, предотвращая некорректные предупреждения и несогласованное состояние вторичного индекса.
+* 🪲 [v23.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.2) [ PR #4370](https://github.com/manticoresoftware/columnar/issues/125) Обновлен MCL до 12.1.1, исправлены сбои при автоматической генерации эмбеддингов, когда текст содержит недопустимый UTF-8, включая вставки в таблицы с `html_strip=1`.
+* 🪲 [v23.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/23.0.1) [ PR #4371](https://github.com/manticoresoftware/manticoresearch/pull/4371) Исправлена отсутствующая блокировка сегментов RT при проверке эмбеддингов, предотвращая сбои и состояния гонки в операциях с эмбеддингами.
+* 🪲 [v21.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.3) [ Issue #4315](https://github.com/manticoresoftware/manticoresearch/issues/4315) Исправлены вставки в таблицы с колонками автоэмбеддингов, теперь значения MVA сохраняются, а не записываются пустыми.
+* 🪲 [v21.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.2) [ PR #4277](https://github.com/manticoresoftware/manticoresearch-buddy/pull/649) Обновлен Buddy до 3.43.1, исправлена обработка автозаполнения и нечеткого поиска для терминов с числовыми префиксами и подстановочными символами.
+* 🪲 [v21.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/21.0.1) [ PR #4349](https://github.com/manticoresoftware/manticoresearch/pull/4349) Исправлен сбой при генерации эмбеддингов для таблиц с колоночным хранением.
+* 🪲 [v19.2.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.5) [ PR #4333](https://github.com/manticoresoftware/executor/pull/81) Обновлен Executor до 1.4.1, переключен источник загрузки PHP с php.net на GitHub для обхода CAPTCHA-защищенных ссылок, а также обновлен встроенный PHP до 8.4.18.
+* 🪲 [v19.2.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.4) [ Issue #4314](https://github.com/manticoresoftware/manticoresearch/issues/4314) Исправлены колонки `float_vector` с поддержкой модели, теперь поддерживается явный пустой `FROM=''`, что корректно означает «использовать все текстовые/строковые поля».
+* 🪲 [v19.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.3) [ Issue #4315](https://github.com/manticoresoftware/manticoresearch/issues/4315) Исправлены вставки в таблицы с автоэмбеддингами `float_vector`, теперь значения MVA сохраняются, а не записываются пустыми.
+* 🪲 [v19.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.2) [ Issue #4297](https://github.com/manticoresoftware/manticoresearch/issues/4297) Исправлен `IMPORT TABLE` для корректного копирования внешних файлов, включая `hitless_words`, теперь импортированные таблицы не ссылаются на отсутствующие внешние файлы после импорта.
+* 🪲 [v19.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.2.1) [ Issue #4229](https://github.com/manticoresoftware/manticoresearch/issues/4229) Исправлены результаты `LEFT JOIN`, теперь они возвращают правильные значения MySQL `NULL` вместо строки `NULL`, улучшая совместимость с нативными клиентами и драйверами MySQL.
+* 🪲 [v19.0.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.4) [ Issue #4308](https://github.com/manticoresoftware/manticoresearch/issues/4308) Исправлены сбои демона, вызванные фильтрацией по сохранённым/полнотекстовым полям, например `WHERE title='test'`; теперь такие запросы возвращают ошибку вместо сбоя.
+* 🪲 [v19.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.2) [ PR #4311](https://github.com/manticoresoftware/manticoresearch/issues/4307) Исправлены сбои в HTTP-запросах `/sql?mode=raw` с несколькими выражениями, использующими `.@files` и последующим `SHOW META`.
+* 🪲 [v19.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/19.0.1) [ Issue #4103](https://github.com/manticoresoftware/manticoresearch/issues/4103) Обновлен MCL до 11.0.0 для поддержки KNN-предфильтрации.
+* 🪲 [v18.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/18.0.1) [ Issue #4293](https://github.com/manticoresoftware/manticoresearch/issues/4293) Исправлен `ALTER TABLE ... ADD COLUMN` для колонок автоэмбеддингов `float_vector`, теперь `model_name` и `FROM` сохраняются корректно, а не заменяются на `knn_dims='0'`.
+* 🪲 [v17.6.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.6) [ Issue #4264](https://github.com/manticoresoftware/manticoresearch/issues/4264) Исправлена обработка EOF в kqueue на macOS, предотвращая ложные предупреждения HTTP о приёме данных, такие как `Resource temporarily unavailable` во время обработки запросов.
+* 🪲 [v17.6.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.5) [ PR #4296](https://github.com/manticoresoftware/manticoresearch/pull/4296) Исправлен подсчет количества документов и оценка стоимости для полнотекстовых узлов `AND`, улучшая решения планировщика запросов для пересекающихся полнотекстовых условий.
+* 🪲 [v17.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.4) [ Issue #4274](https://github.com/manticoresoftware/manticoresearch/issues/4274) Исправлен сбой `indextool --check` при открытии файлов `hitless_words` дисковых чанков, теперь пути разрешаются относительно директории индекса.
+* 🪲 [v17.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.3) [ Issue #4284](https://github.com/manticoresoftware/manticoresearch/issues/4284) Исправлены сбои на репликах при вставках в кластерные таблицы с автоэмбеддингами, теперь сохраняется исходный текст, необходимый для генерации эмбеддингов во время реплицируемых коммитов.
+* 🪲 [v17.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.2) [ Issue #4257](https://github.com/manticoresoftware/manticoresearch/issues/4257) Исправлено обнаруженное Valgrind некорректное чтение при выполнении подготовленных выражений, теперь буфер ввода парсера корректно завершается.
+* 🪲 [v17.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.6.1) [ Issue #4207](https://github.com/manticoresoftware/manticoresearch/issues/4207) Добавлено исправление регрессии и покрытие тестами для гонки сохранения дискового чанка RT, которая могла приводить к потере удалений документов и дублированию строк после слияний.
+* 🪲 [v17.5.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.10) [ Issue #4207](https://github.com/manticoresoftware/columnar/issues/133) Обновлен MCL до 10.2.2, исправлены сбои при выполнении поисков во время вставок данных в таблицы с локальными моделями эмбеддингов, добавлена защита от одновременного доступа к локальной модели.
+* 🪲 [v17.5.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.9) [ PR #4247](https://github.com/manticoresoftware/manticoresearch/pull/4247) Исправлена гонка при сохранении дискового чанка RT, которая могла приводить к потере удалений документов и дублированию строк после слияний или сохранений.
+* 🪲 [v17.5.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.8) [ PR #4241](https://github.com/manticoresoftware/manticoresearch/pull/4247) Исправлена некорректная оценка атрибутов после ограничения в объединённых таблицах, включая запросы `LEFT JOIN` после сброса RAM-чанков на диск.
+* 🪲 [v17.5.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.7) [ PR #4239](https://github.com/manticoresoftware/manticoresearch/pull/4239) Уточнены определения времени запроса и реального времени в документации по логированию и статусу.
+* 🪲 [v17.5.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.6) [ PR #4245](https://github.com/manticoresoftware/manticoresearch/pull/4245) Исправлено завышение глобальных метрик `search_stats_ms_*` из-за двойного подсчёта локального времени выполнения; теперь статистика соответствует фактическому времени выполнения запроса.
+* 🪲 [v17.5.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.5) [ Issue #858](https://github.com/manticoresoftware/manticoresearch/issues/858) Исправлены `HIGHLIGHT()` и генерация сниппетов для текста на CJK, которые добавляли лишние пробелы между словами; теперь выделенные фрагменты сохраняют исходные пробелы текста, а не токенизированные.
+* 🪲 [v17.5.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.4) [ Issue #1166](https://github.com/manticoresoftware/manticoresearch/issues/1166) Исправлен сбой при вставке после `TRUNCATE TABLE ... WITH RECONFIGURE` для RT-таблиц с `index_field_lengths=1`, особенно при смешении полей и строковых атрибутов; атрибуты длины поля теперь корректно настраиваются при переконфигурации.
+* 🪲 [v17.5.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.3) Исправлено повреждение содержимого документации Wordforms в руководстве.
+* 🪲 [v17.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.2) [ Issue #3213](https://github.com/manticoresoftware/manticoresearch/issues/3213) Исправлены запросы JOIN с фильтрацией по выражениям, построенным из псевдонимов колонок объединённых таблиц, например `SELECT t2.i al, (al*0.1) pct ... WHERE pct > 0`, которые могли завершаться ошибкой `incoming-schema expression missing evaluator`; теперь такие фильтры корректно вычисляются после объединения.
+
 ## Версия 17.5.1
-**Выпущена**: 7 февраля 2026 г.
+**Выпущена**: 7 февраля 2026
 
 ### Рекомендуемые библиотеки
 - Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 10.2.0
 - Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.41.0
 
-Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не нужно об этом беспокоиться.
+Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не нужно беспокоиться об этом.
 
-❤️ Мы хотели бы поблагодарить [@pakud](https://github.com/pakud) за их работу над [PR #4075](https://github.com/manticoresoftware/manticoresearch/pull/4075).
+❤️ Мы хотели бы выразить благодарность [@pakud](https://github.com/pakud) за работу над [PR #4075](https://github.com/manticoresoftware/manticoresearch/pull/4075).
 
 ## Критические изменения
-* ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ Issue #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) MCL 10.0.0: Добавлена поддержка `DROP CACHE`. Это обновляет интерфейс между демоном и MCL. Более старые версии Manticore Search не поддерживают новую MCL.
-* ⚠️ [v16.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.0) [ Issue #4019](https://github.com/manticoresoftware/manticoresearch/issues/4019) JSON-ответы на перколяционные запросы теперь возвращают `_id` и `_score` совпадений как числа вместо строк, соответствуя обычному поиску; это критическое изменение для клиентов, которые полагались на строковый тип для этих полей.
+* ⚠️ [v17.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.0) [ Issue #4120](https://github.com/manticoresoftware/manticoresearch/issues/4120) MCL 10.0.0: Добавлена поддержка `DROP CACHE`. Это обновляет интерфейс между демоном и MCL. Старые версии Manticore Search не поддерживают новую MCL.
+* ⚠️ [v16.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.0) [ Issue #4019](https://github.com/manticoresoftware/manticoresearch/issues/4019) JSON ответы перколяционных запросов теперь возвращают `_id` и `_score` как числа вместо строк, соответствуя обычному поиску; это критическое изменение для клиентов, которые зависели от типа строки для этих полей.
 
-## Новые возможности и улучшения
-* 🆕 [v17.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.0) [ PR #130](https://github.com/manticoresoftware/columnar/pull/130) MCL обновлена до версии 10.2.0: Исправлена поддержка модели QWEN и добавлена поддержка дополнительных моделей.
-* 🆕 [v17.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.3.0) [ PR #4186](https://github.com/manticoresoftware/manticoresearch/pull/4186) Executor обновлен до версии 1.4.0, включая обновленную версию PHP и расширение llm-php-ext.
-* 🆕 [v17.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.0) [ PR #4195](https://github.com/manticoresoftware/manticoresearch/pull/4195) Обновлена MCL до версии 10.1.0; Добавлена поддержка локальных моделей эмбеддингов Qwen.
-* 🆕 [v17.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.1.0) [ Issue #3826](https://github.com/manticoresoftware/manticoresearch/issues/3826) Экземпляры морфологии Jieba теперь используются совместно между таблицами с одинаковой конфигурацией (режим, флаг HMM, путь к пользовательскому словарю), что значительно снижает использование памяти, когда многие таблицы используют Jieba (например, многие пустые таблицы больше не вызывают использование ~20 ГБ).
-* 🆕 [v17.0.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.7) [ Issue #2046](https://github.com/manticoresoftware/manticoresearch/issues/2046) В режиме RT стоп-слова, словоформы, исключения и hitless_words теперь можно задавать непосредственно в `CREATE TABLE` (значения, разделенные точкой с запятой; словоформы/исключения используют `>` или `=>` для пар, с экранированием через `\`), что позволяет создавать таблицы без внешних файлов; `SHOW CREATE TABLE` возвращает эти встроенные значения.
-* 🆕 [v16.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.3.0) Поиск KNN теперь по умолчанию использует oversampling=3 и rescore=1, а также поддерживает опускание k, так что лимит запроса используется в качестве эффективного k; это уменьшает ненужное передискретизирование и улучшает поведение при использовании `SELECT *` с KNN на колоночных таблицах.
-* 🆕 [v16.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.2.0) [ PR #4088](https://github.com/manticoresoftware/manticoresearch/pull/4088) Добавлен флаг `--quiet` (`-q`) для searchd, чтобы подавлять вывод при запуске (баннер и сообщения о предварительном кэшировании), выводя только ошибки; полезно при запуске и остановке searchd в цикле или из скриптов.
-* 🆕 [v16.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.1) [ Issue #3336](https://github.com/manticoresoftware/manticoresearch/issues/3336) HTTP-соединения теперь по умолчанию являются постоянными при использовании HTTP/1.1: клиентам больше не нужно явно отправлять заголовок `Keep-Alive`, что снижает случайные сбои соединений в API-клиентах (например, PHP, Go). Чтобы закрыть соединение, клиент отправляет `Connection: close`. HTTP/1.0 по-прежнему требует `Connection: keep-alive` для постоянства соединения.
+## Новые функции и улучшения
+* 🆕 [v17.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.0) [ PR #130](https://github.com/manticoresoftware/columnar/pull/130) MCL обновлена до 10.2.0: исправлена поддержка модели QWEN и добавлена поддержка дополнительных моделей.
+* 🆕 [v17.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.3.0) [ PR #4186](https://github.com/manticoresoftware/manticoresearch/pull/4186) Executor обновлен до 1.4.0, включая обновленную версию PHP и расширение llm-php-ext.
+* 🆕 [v17.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.2.0) [ PR #4195](https://github.com/manticoresoftware/manticoresearch/pull/4195) MCL обновлена до 10.1.0; добавлена поддержка локальных моделей эмбеддингов Qwen.
+* 🆕 [v17.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.1.0) [ Issue #3826](https://github.com/manticoresoftware/manticoresearch/issues/3826) Экземпляры морфологии Jieba теперь разделяются между таблицами с одинаковой конфигурацией (режим, флаг HMM, путь к пользовательскому словарю), значительно сокращая использование памяти, когда многие таблицы используют Jieba (например, многие пустые таблицы теперь не вызывают использование ~20 GB).
+* 🆕 [v17.0.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.0.7) [ Issue #2046](https://github.com/manticoresoftware/manticoresearch/issues/2046) В режиме RT стоп-слова, wordforms, исключения и hitless_words могут быть заданы внутри `CREATE TABLE` (значения, разделенные семиколоном; wordforms/исключения используют `>` или `=>` для пар, с экранированием `\`), поэтому таблицы могут создаваться без внешних файлов; `SHOW CREATE TABLE` возвращает эти внутренние значения.
+* 🆕 [v16.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.3.0) KNN поиск теперь использует по умолчанию oversampling=3 и rescore=1, и поддерживает исключение k, так что limit запроса используется как эффективный k; это уменьшает чрезмерное оверсемплирование и улучшает поведение при использовании `SELECT *` с KNN на колонковых таблицах.
+* 🆕 [v16.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.2.0) [ PR #4088](https://github.com/manticoresoftware/manticoresearch/pull/4088) Добавлен флаг searchd `--quiet` (`-q`) для подавления выходных данных запуска (баннера и сообщений предварительной загрузки), выводя только ошибки; полезно при запуске и остановке searchd в цикле или из скриптов.
+* 🆕 [v16.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/16.0.1) [ Issue #3336](https://github.com/manticoresoftware/manticoresearch/issues/3336) HTTP соединения теперь постоянны по умолчанию при использовании HTTP/1.1: клиенты теперь не нуждаются в явной отправке заголовка `Keep-Alive`, уменьшая случайные сбои соединений в API клиентах (например, PHP, Go). Чтобы закрыть соединение, клиент отправляет `Connection: close`. HTTP/1.0 все еще требует `Connection: keep-alive` для постоянности.
 
 ## Исправления ошибок
 * 🪲 [v17.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/17.5.1) [ Issue #3498](https://github.com/manticoresoftware/manticoresearch/issues/3498) Исправлены результаты JOIN, возвращающие пустые или дублированные значения, когда столбец был одновременно строковым атрибутом и хранимым полем; теперь значение атрибута возвращается корректно.
@@ -75,25 +144,25 @@
 * 🪲 [v15.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.1) [ Issue #4009](https://github.com/manticoresoftware/manticoresearch/issues/4009) Исправлены некорректные результаты с подсказкой SecondaryIndex и кэшем запросов, сделав SI и кэш запросов взаимоисключающими для каждого запроса и добавив предупреждение, когда принудительный SI игнорируется из-за попадания в кэш.
 
 ## Версия 15.1.0
-**Выпущено**: 7 декабря 2025
+**Выпущена**: 7 декабря 2025 г.
 
 ### Рекомендуемые библиотеки
 - Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 9.0.0
 - Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.40.2
 
-Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
+Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не нужно об этом беспокоиться.
 
-## Несовместимые изменения
-* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Обновлено требование к MCL до версии 9.0.0, добавлено хранение с плавающей точкой без сжатия для векторов, изменение размера блока для KNN-векторов и небуферизованное чтение. Это обновление изменяет формат данных. Старые версии MCL не смогут читать новые данные, но новая версия может без проблем читать ваши существующие колоннарные таблицы.
+## Критические изменения
+* ⚠️ [v15.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.0) [ PR #4003](https://github.com/manticoresoftware/manticoresearch/pull/4003) Обновлено требование к MCL до версии 9.0.0, что привносит хранение float-векторов без сжатия, изменение размера блока для KNN-векторов и небуферизированное чтение. Это обновление изменяет формат данных. Старые версии MCL не смогут его читать, но новая версия по-прежнему сможет читать ваши существующие колоночные таблицы без каких-либо проблем.
 
 ### Новые функции и улучшения
-* 🆕 [v15.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.0) [ PR #3990](https://github.com/manticoresoftware/manticoresearch/pull/3990) Улучшены записи логов сброса чанков на диск с разбивкой общего времени на более ясные части.
-* 🆕 [v14.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.0) [ Issue #3860](https://github.com/manticoresoftware/manticoresearch/issues/3860) Обновлено требование к Buddy до версии 3.40.1, включающее улучшение автодополнения: нормализованы символы-разделители биграмм в пробелы и отфильтрованы дублирующиеся или некорректные сочетания предложений для повышения их качества. Также исправлены ошибки invalid JSON в представлениях Kafka и исправлено автодополнение — сортировка сочетаний больше не вызывает ошибок при отсутствии некоторых ключей в score map.
-* 🆕 [v14.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.0) [ Issue #615](https://github.com/manticoresoftware/manticoresearch-buddy/issues/615) Обновлено требование к Manticore Buddy до версии 3.39.1, исправляющей ошибки invalid JSON в плагине KNN и позволяющей обработчикам Buddy переопределять HTTP `Content-Type`, так что `/metrics` теперь возвращает текстовый формат Prometheus (`text/plain; version=0.0.4`) вместо JSON, устраняя ошибки при сборе метрик.
-* 🆕 [v14.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.4.0) [ PR #3942](https://github.com/manticoresoftware/manticoresearch/pull/3942) Обновлено требование к Manticore Buddy до 3.38.0, отфильтрованы предложения с нулевым количеством документов, улучшена обработка строковых ключей с Ds\Map, изменён формат отчёта об использовании памяти в Buddy с килобайтов на байты для большей точности, а также повышена производительность, стабильность и поддерживаемость.
-* 🆕 [v14.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.0) [ Issue #3329](https://github.com/manticoresoftware/manticoresearch/issues/3329) Удаление лишних пробелов и символов новой строки в JSON-пейлоадах при логировании запросов — пропуск начальных и конечных пробелов, чтобы избежать записи некорректного JSON.
-* 🆕 [v14.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.3.0) [ PR #3932](https://github.com/manticoresoftware/manticoresearch/pull/3932) Улучшена обработка `LOCK TABLES` / `UNLOCK TABLES`: блокировки на запись теперь возвращают предупреждения вместо ошибок, блокировки на чтение корректно отображаются в `SHOW LOCKS`, логика блокировок стала более последовательной.
-* 🆕 [v14.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.2.0) [ Issue #3891](https://github.com/manticoresoftware/manticoresearch/issues/3891) Добавлена поддержка произвольных выражений фильтрации в `JOIN ON` (не только проверок на равенство), позволяющая делать запросы вида `... ON t1.id = t2.t1_id AND t2.value = 5`.
+* 🆕 [v15.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.1.0) [ PR #3990](https://github.com/manticoresoftware/manticoresearch/pull/3990) Улучшены записи логов сброса дисковых чанков за счёт разделения общего времени на более понятные части.
+* 🆕 [v14.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.7.0) [ Issue #3860](https://github.com/manticoresoftware/manticoresearch/issues/3860) Обновлено требование к Buddy до версии 3.40.1, которая включает улучшение автодополнения: нормализованы символы-разделители биграмм до пробелов и отфильтрованы дублирующиеся или некорректные комбинации предложений для повышения качества предложений. Также включено исправление ошибок невалидного JSON в представлениях Kafka и исправление автодополнения, чтобы сортировка комбинаций больше не вызывала ошибок при отсутствии некоторых ключей в карте оценок.
+* 🆕 [v14.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.6.0) [ Issue #615](https://github.com/manticoresoftware/manticoresearch-buddy/issues/615) Обновлено требование к Manticore Buddy до версии 3.39.1, которая включает исправление ошибок невалидного JSON в плагине KNN и позволяет обработчикам Buddy переопределять HTTP `Content-Type`, так что `/metrics` теперь возвращает текст в формате Prometheus (`text/plain; version=0.0.4`) вместо JSON, исправляя сбои при сборе метрик.
+* 🆕 [v14.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.4.0) [ PR #3942](https://github.com/manticoresoftware/manticoresearch/pull/3942) Обновлено требование к Manticore Buddy до версии 3.38.0, фильтруя предложения с нулевым количеством документов, улучшая обработку строковых ключей с помощью Ds\Map, изменяя формат отчёта об использовании памяти в Buddy с КБ на байты для большей точности, а также повышая производительность, стабильность и сопровождаемость.
+* 🆕 [v14.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.5.0) [ Issue #3329](https://github.com/manticoresoftware/manticoresearch/issues/3329) Удаление лишних пробелов и переводов строк в JSON-полезных нагрузках при логировании запросов — пропуск начальных/конечных пробелов, чтобы избежать логирования некорректного JSON.
+* 🆕 [v14.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.3.0) [ PR #3932](https://github.com/manticoresoftware/manticoresearch/pull/3932) Улучшена обработка `LOCK TABLES` / `UNLOCK TABLES`: блокировки на запись теперь возвращают предупреждения вместо ошибок, блокировки на чтение корректно отображаются в `SHOW LOCKS`, и общая логика блокировок ведёт себя последовательно.
+* 🆕 [v14.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.2.0) [ Issue #3891](https://github.com/manticoresoftware/manticoresearch/issues/3891) Добавлена поддержка произвольных выражений фильтрации в предложениях `JOIN ON` (не только сравнений на равенство), что позволяет выполнять запросы вида `... ON t1.id = t2.t1_id AND t2.value = 5`.
 
 ## Исправления ошибок
 * 🪲 [v15.0.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/15.0.6) [ Issue #3601](https://github.com/manticoresoftware/manticoresearch/issues/3601) Исправлена регрессия, при которой нативная служба Windows не запускалась при установке с пользовательским путем конфигурации.
@@ -151,40 +220,40 @@
 * 🆕 [v13.15.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.0) [ PR #3842](https://github.com/manticoresoftware/manticoresearch/pull/3842) Опция [force_bigrams](../Searching/Spell_correction.md#Using-force_bigrams-for-better-transposition-handling) для плагинов fuzzy и autocomplete.
 
 ### Исправления ошибок
-* 🪲 [Issue #4299](https://github.com/manticoresoftware/manticoresearch/issues/4299) Добавлено тестирование для Grafana версии 12.4.
-* 🪲 [ Issue #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) Добавлено тестирование версии Grafana 12.3.
+* 🪲 [ Issue #4299](https://github.com/manticoresoftware/manticoresearch/issues/4299) Добавлено тестирование для Grafana версии 12.4.
+* 🪲 [ Issue #3994](https://github.com/manticoresoftware/manticoresearch/issues/3994) Добавлено тестирование для Grafana версии 12.3.
 * 🪲 [v14.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/14.0.1) [ Issue #3844](https://github.com/manticoresoftware/manticoresearch/issues/3844) Исправлен сбой, вызванный использованием `max(ft field)`.
 * 🪲 [v13.15.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.13) [ PR #3828](https://github.com/manticoresoftware/manticoresearch/pull/3828) Исправлена ошибка при использовании пустого имени фильтра.
-* 🪲 [v13.15.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.12) [ PR #3873](https://github.com/manticoresoftware/manticoresearch/pull/3873) Обновлен buddy с 3.36.0 до 3.36.1 с проверкой режима RT в плагине EmulateElastic.
-* 🪲 [v13.15.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.11) [ PR #3857](https://github.com/manticoresoftware/manticoresearch/pull/3857) Добавлено тестирование версии Filebeat 9.2.
+* 🪲 [v13.15.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.12) [ PR #3873](https://github.com/manticoresoftware/manticoresearch/pull/3873) Обновлен buddy с версии 3.36.0 до 3.36.1 с проверкой режима RT в плагине EmulateElastic.
+* 🪲 [v13.15.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.11) [ PR #3857](https://github.com/manticoresoftware/manticoresearch/pull/3857) Добавлено тестирование для Filebeat версии 9.2.
 * 🪲 [v13.15.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.10) [ PR #3880](https://github.com/manticoresoftware/manticoresearch/pull/3880) Протестирован автоматический перевод документации после исправлений.
-* 🪲 [v13.15.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.9) [ Issue #3783](https://github.com/manticoresoftware/manticoresearch/issues/3783) Исправлена проблема, препятствующая нативной компиляции FreeBSD.
+* 🪲 [v13.15.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.9) [ Issue #3783](https://github.com/manticoresoftware/manticoresearch/issues/3783) Исправлена проблема, препятствующая нативной компиляции в FreeBSD.
 * 🪲 [v13.15.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.8) Исправлены переводы документации.
-* 🪲 [v13.15.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.7) [ PR #3868](https://github.com/manticoresoftware/manticoresearch/pull/3868) Обновлен executor с 1.3.5 до 1.3.6, добавлена поддержка расширения iconv.
-* 🪲 [v13.15.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.6) Исправлена проблема сборки фуззера, связанная с [issue 3817](https://github.com/manticoresoftware/manticoresearch/issues/3817).
-* 🪲 [v13.15.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.5) [ Issue #3644](https://github.com/manticoresoftware/manticoresearch/issues/3644) Исправлен сбой, вызванный определёнными полнотекстовыми запросами.
-* 🪲 [v13.15.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.4) [ Issue #3686](https://github.com/manticoresoftware/manticoresearch/issues/3686) Исправлена проблема, из-за которой полнотекстовый запрос `"(abc|def)"` не работал как ожидалось.
-* 🪲 [v13.15.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.3) [ Issue #3428](https://github.com/manticoresoftware/manticoresearch/issues/3428) Добавлена возможность получить общее количество результатов для запросов с использованием `HAVING`.
+* 🪲 [v13.15.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.7) [ PR #3868](https://github.com/manticoresoftware/manticoresearch/pull/3868) Обновлен executor с версии 1.3.5 до 1.3.6, добавлена поддержка расширения iconv.
+* 🪲 [v13.15.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.6) Исправлена проблема сборки фаззера, связанная с [issue 3817](https://github.com/manticoresoftware/manticoresearch/issues/3817).
+* 🪲 [v13.15.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.5) [ Issue #3644](https://github.com/manticoresoftware/manticoresearch/issues/3644) Исправлен сбой, вызванный определенными полнотекстовыми запросами.
+* 🪲 [v13.15.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.4) [ Issue #3686](https://github.com/manticoresoftware/manticoresearch/issues/3686) Исправлена проблема, при которой полнотекстовый запрос `"(abc|def)"` не работал как ожидалось.
+* 🪲 [v13.15.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.3) [ Issue #3428](https://github.com/manticoresoftware/manticoresearch/issues/3428) Добавлена возможность получать общее количество результатов для запросов, использующих `HAVING`.
 * 🪲 [v13.15.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.2) [ Issue #3817](https://github.com/manticoresoftware/manticoresearch/issues/3817) Добавлена опция [searchd.expansion_phrase_warning](../Server_settings/Searchd.md#expansion_phrase_warning).
-* 🪲 [v13.15.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.1) [ PR #3848](https://github.com/manticoresoftware/manticoresearch/pull/3848) Исправлена генерация ключей транзакций репликации и обработка конфликтующих транзакций.
-* 🪲 [v13.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.14.0) [ Issue #3806](https://github.com/manticoresoftware/manticoresearch/issues/3806) Исправлен `CALL SUGGEST`, не совпадавший с триграммами.
-* 🪲 [v13.13.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.8) [ PR #3839](https://github.com/manticoresoftware/manticoresearch/pull/3839) Обновлен buddy с 3.35.4 до 3.35.5 для корректировки регулярного выражения для сопоставления соединений в SQL-запросах.
-* 🪲 [v13.13.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.7) [ Issue #3815](https://github.com/manticoresoftware/manticoresearch/issues/3815) Обновлен buddy с 3.35.3 до 3.35.4 для исправления проблемы с отрицательными ID в REPLACE.
-* 🪲 [v13.13.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.6) [ PR #3830](https://github.com/manticoresoftware/manticoresearch/pull/3830) Обновлен buddy с 3.35.1 до 3.35.3.
+* 🪲 [v13.15.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.15.1) [ PR #3848](https://github.com/manticoresoftware/manticoresearch/pull/3848) Исправлено создание ключа транзакции репликации и обработка конфликтующих транзакций.
+* 🪲 [v13.14.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.14.0) [ Issue #3806](https://github.com/manticoresoftware/manticoresearch/issues/3806) Исправлено, что `CALL SUGGEST` не сопоставлял триграммы.
+* 🪲 [v13.13.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.8) [ PR #3839](https://github.com/manticoresoftware/manticoresearch/pull/3839) Обновлен buddy с версии 3.35.4 до 3.35.5 для исправления регулярного выражения для сопоставления JOIN в SQL-запросах.
+* 🪲 [v13.13.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.7) [ Issue #3815](https://github.com/manticoresoftware/manticoresearch/issues/3815) Обновлен buddy с версии 3.35.3 до 3.35.4 для исправления проблемы с отрицательными ID в REPLACE.
+* 🪲 [v13.13.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.6) [ PR #3830](https://github.com/manticoresoftware/manticoresearch/pull/3830) Обновлен buddy с версии 3.35.1 до 3.35.3.
 * 🪲 [v13.13.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.5) [ PR #3823](https://github.com/manticoresoftware/manticoresearch/pull/3823) Добавлен интеграционный тест для Grafana.
-* 🪲 [v13.13.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.4) [ PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) Исправлен `ParseCJKSegmentation` при отсутствии поддержки Jieba.
-* 🪲 [v13.13.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.3) [ PR #3808](https://github.com/manticoresoftware/manticoresearch/pull/3808) Исправлена обработка ошибок при использовании фильтров в JSON-запросах с правым соединением.
+* 🪲 [v13.13.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.4) [ PR #3819](https://github.com/manticoresoftware/manticoresearch/pull/3819) Исправлена `ParseCJKSegmentation`, когда поддержка Jieba недоступна.
+* 🪲 [v13.13.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.3) [ PR #3808](https://github.com/manticoresoftware/manticoresearch/pull/3808) Исправлена обработка ошибок при использовании фильтров в правосторонних JSON-запросах.
 * 🪲 [v13.13.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.2) [ PR #3789](https://github.com/manticoresoftware/manticoresearch/pull/3789) Проверены параметры KNN.
 * 🪲 [v13.13.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.13.1) [ Issue #3800](https://github.com/manticoresoftware/manticoresearch/issues/3800) Исправлены проблемы сборки при компиляции без поддержки cjk/jieba.
 
 ## Версия 13.13.0
-**Выпущено**: 7 октября 2025
+**Выпущена**: 7 октября 2025
 
 ### Рекомендуемые библиотеки
 - Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.1.0
 - Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.35.1
 
-Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
+Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не нужно об этом беспокоиться.
 
 ### ⚠️ Важно
 
@@ -975,45 +1044,45 @@
 * Пользователи теперь могут указывать [движок хранения атрибутов по умолчанию](Server_settings/Searchd.md#engine) через настройки конфигурации, что обеспечивает лучшую настройку в соответствии с конкретными требованиями нагрузки.
 * Поддержка [Manticore Columnar Library 2.2.0](https://github.com/manticoresoftware/columnar/) с многочисленными исправлениями ошибок и улучшениями в [вторичных индексах](Server_settings/Searchd.md#secondary_indexes).
 
-### Небольшие изменения
-* [Buddy #153](https://github.com/manticoresoftware/manticoresearch-buddy/issues/153): HTTP-эндпоинт [/pq](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md?client=JSON#Adding-rules-to-a-percolate-table) теперь служит псевдонимом для HTTP-эндпоинта `/json/pq`.
-* [Commit 0bf1](https://github.com/manticoresoftware/manticoresearch/commit/0bf17d9e): Мы обеспечили совместимость с многобайтовыми символами для `upper()` и `lower()`.
-* [Commit 2bb9](https://github.com/manticoresoftware/manticoresearch/commit/2bb92765): Вместо сканирования индекса для запросов `count(*)` теперь возвращается предрассчитанное значение.
-* [Commit 3c84](https://github.com/manticoresoftware/manticoresearch/commit/3c84091f): Теперь возможно использовать `SELECT` для выполнения произвольных вычислений и отображения `@@sysvars`. В отличие от предыдущего, вы больше не ограничены только одним вычислением. Поэтому запросы, такие как `select user(), database(), @@version_comment, version(), 1+1 as a limit 10`, вернут все столбцы. Обратите внимание, что необязательный 'limit' всегда будет игнорироваться.
-* [Commit 6aca](https://github.com/manticoresoftware/manticoresearch/commit/6aca32f0): Реализован заглушечный запрос `CREATE DATABASE`.
-* [Commit 9dc1](https://github.com/manticoresoftware/manticoresearch/commit/9dc12334): При выполнении `ALTER TABLE table REBUILD SECONDARY` вторичные индексы теперь всегда перестраиваются, даже если атрибуты не были обновлены.
-* [Commit 46ed](https://github.com/manticoresoftware/manticoresearch/commit/46edb089): Сортировщики, использующие предрассчитанные данные, теперь идентифицируются перед использованием CBO, чтобы избежать ненужных расчетов CBO.
-* [Commit 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604): Реализация имитации и использование стека выражений полнотекстового поиска для предотвращения сбоев демона.
-* [Commit 979f](https://github.com/manticoresoftware/manticoresearch/commit/979fa27c): Быстрый код был добавлен для клонирования совпадений для совпадений, которые не используют строковые/массивные/json атрибуты.
-* [Commit a073](https://github.com/manticoresoftware/manticoresearch/commit/a0735ffe): Добавлена поддержка команды `SELECT DATABASE()`. Однако она всегда будет возвращать `Manticore`. Это дополнение имеет решающее значение для интеграций с различными инструментами MySQL.
-* [Commit bc04](https://github.com/manticoresoftware/manticoresearch/commit/bc04908): Изменен формат ответа эндпоинта [/cli](Connecting_to_the_server/HTTP.md#/cli) и добавлен эндпоинт `/cli_json`, который будет функционировать как предыдущий `/cli`.
-* [Commit d70b](https://github.com/manticoresoftware/manticoresearch/commit/d70b0d58): `thread_stack` теперь можно изменять во время выполнения с помощью оператора `SET`. Доступны как локальные для сессии, так и глобальные для демона варианты. Текущие значения можно получить в выводе `show variables`.
-* [Commit d96e](https://github.com/manticoresoftware/manticoresearch/commit/d96ec6b9): Код был интегрирован в CBO для более точной оценки сложности выполнения фильтров по строковым атрибутам.
-* [Commit e77d](https://github.com/manticoresoftware/manticoresearch/commit/e77dd72f5a04531c352fad0d7afcd2a1cbae2510): Расчет стоимости DocidIndex был улучшен, что повысило общую производительность.
-* [Commit f3ae](https://github.com/manticoresoftware/manticoresearch/commit/f3ae8bea): Метрики загрузки, аналогичные 'uptime' в Linux, теперь видны в команде `SHOW STATUS`.
-* [Commit f3cc](https://github.com/manticoresoftware/manticoresearch/commit/f3cc0971): Порядок полей и атрибутов для `DESC` и `SHOW CREATE TABLE` теперь соответствует порядку `SELECT * FROM`.
-* [Commit f3d2](https://github.com/manticoresoftware/manticoresearch/commit/f3d248a6): Разные внутренние парсеры теперь предоставляют свой внутренний мнемонический код (например, `P01`) при различных ошибках. Это улучшение помогает определить, какой парсер вызвал ошибку, и также скрывает несущественные внутренние детали.
-* [Issue #271](https://github.com/manticoresoftware/manticoresearch/issues/271) "Иногда CALL SUGGEST не предлагает исправление для опечатки в одну букву": Улучшено поведение [SUGGEST/QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) для коротких слов: добавлена опция `sentence`, чтобы показать целое предложение.
-* [Issue #696](https://github.com/manticoresoftware/manticoresearch/issues/696) "Индекс перколяции не ищет правильно по запросу точной фразы, когда включено стеммирование": Запрос перколяции был изменен для обработки модификатора точного термина, улучшая функциональность поиска.
-* [Issue #829](https://github.com/manticoresoftware/manticoresearch/issues/829) "Методы форматирования даты": добавлено выражение списка выбора [date_format()](Functions/Date_and_time_functions.md#DATE_FORMAT()), которое открывает функцию `strftime()`.
-* [Issue #961](https://github.com/manticoresoftware/manticoresearch/issues/961) "Сортировка ведер через HTTP JSON API": введено необязательное [свойство сортировки](Searching/Faceted_search.md#HTTP-JSON) для каждого ведра агрегатов в HTTP-интерфейсе.
+### Незначительные изменения
+* [Buddy #153](https://github.com/manticoresoftware/manticoresearch-buddy/issues/153): HTTP-эндпоинт [/pq](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md?client=JSON#Adding-rules-to-a-percolate-table) теперь служит алиасом для HTTP-эндпоинта `/json/pq`.
+* [Коммит 0bf1](https://github.com/manticoresoftware/manticoresearch/commit/0bf17d9e): Обеспечена многобайтовая совместимость для функций `upper()` и `lower()`.
+* [Коммит 2bb9](https://github.com/manticoresoftware/manticoresearch/commit/2bb92765): Вместо сканирования индекса для запросов `count(*)` теперь возвращается предварительно рассчитанное значение.
+* [Коммит 3c84](https://github.com/manticoresoftware/manticoresearch/commit/3c84091f): Теперь можно использовать `SELECT` для выполнения произвольных вычислений и отображения `@@sysvars`. В отличие от прошлого, вы больше не ограничены только одним вычислением. Поэтому запросы вида `select user(), database(), @@version_comment, version(), 1+1 as a limit 10` будут возвращать все столбцы. Обратите внимание, что опциональный 'limit' всегда будет игнорироваться.
+* [Коммит 6aca](https://github.com/manticoresoftware/manticoresearch/commit/6aca32f0): Реализована заглушка запроса `CREATE DATABASE`.
+* [Коммит 9dc1](https://github.com/manticoresoftware/manticoresearch/commit/9dc12334): При выполнении `ALTER TABLE table REBUILD SECONDARY` вторичные индексы теперь всегда перестраиваются, даже если атрибуты не обновлялись.
+* [Коммит 46ed](https://github.com/manticoresoftware/manticoresearch/commit/46edb089): Сортировщики, использующие предварительно рассчитанные данные, теперь идентифицируются до использования CBO, чтобы избежать ненужных вычислений CBO.
+* [Коммит 102a](https://github.com/manticoresoftware/manticoresearch/commit/102ac604): Реализовано заглушка и использование стека полнотекстовых выражений для предотвращения сбоев демона.
+* [Коммит 979f](https://github.com/manticoresoftware/manticoresearch/commit/979fa27c): Добавлен быстрый путь в коде для клонирования совпадений (match cloning) для совпадений, которые не используют строковые/MVA/JSON атрибуты.
+* [Коммит a073](https://github.com/manticoresoftware/manticoresearch/commit/a0735ffe): Добавлена поддержка команды `SELECT DATABASE()`. Однако она всегда будет возвращать `Manticore`. Это дополнение имеет решающее значение для интеграции с различными инструментами MySQL.
+* [Коммит bc04](https://github.com/manticoresoftware/manticoresearch/commit/bc04908): Изменён формат ответа эндпоинта [/cli](Connecting_to_the_server/HTTP.md#/cli), и добавлен эндпоинт `/cli_json`, который функционирует как прежний `/cli`.
+* [Коммит d70b](https://github.com/manticoresoftware/manticoresearch/commit/d70b0d58): Параметр `thread_stack` теперь можно изменять во время выполнения с помощью оператора `SET`. Доступны как сессионные, так и общесистемные (для демона) варианты. Текущие значения можно увидеть в выводе `show variables`.
+* [Коммит d96e](https://github.com/manticoresoftware/manticoresearch/commit/d96ec6b9): В CBO интегрирован код для более точной оценки сложности выполнения фильтров над строковыми атрибутами.
+* [Коммит e77d](https://github.com/manticoresoftware/manticoresearch/commit/e77dd72f5a04531c352fad0d7afcd2a1cbae2510): Улучшен расчёт стоимости DocidIndex, что повышает общую производительность.
+* [Коммит f3ae](https://github.com/manticoresoftware/manticoresearch/commit/f3ae8bea): Метрики загрузки, аналогичные 'uptime' в Linux, теперь видны в команде `SHOW STATUS`.
+* [Коммит f3cc](https://github.com/manticoresoftware/manticoresearch/commit/f3cc0971): Порядок полей и атрибутов для `DESC` и `SHOW CREATE TABLE` теперь соответствует порядку в `SELECT * FROM`.
+* [Коммит f3d2](https://github.com/manticoresoftware/manticoresearch/commit/f3d248a6): Различные внутренние парсеры теперь предоставляют свой внутренний мнемонический код (например, `P01`) при различных ошибках. Это улучшение помогает определить, какой парсер вызвал ошибку, а также скрывает несущественные внутренние детали.
+* [Issue #271](https://github.com/manticoresoftware/manticoresearch/issues/271) "Sometimes CALL SUGGEST does not suggest a correction of a single letter typo": Улучшено поведение [SUGGEST/QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) для коротких слов: добавлена опция `sentence` для отображения всего предложения.
+* [Issue #696](https://github.com/manticoresoftware/manticoresearch/issues/696) "Percolate index does not search properly by exact phrase query when stemming enabled": Запрос перколяции был изменён для обработки модификатора точного термина, что улучшает функциональность поиска.
+* [Issue #829](https://github.com/manticoresoftware/manticoresearch/issues/829) "DATE FORMATTING methods": добавлено выражение для списка выборки [date_format()](Functions/Date_and_time_functions.md#DATE_FORMAT()), которое предоставляет доступ к функции `strftime()`.
+* [Issue #961](https://github.com/manticoresoftware/manticoresearch/issues/961) "Sorting buckets via HTTP JSON API": введено опциональное [свойство сортировки](Searching/Faceted_search.md#HTTP-JSON) для каждого блока агрегатов в HTTP-интерфейсе.
 * [Issue #1062](https://github.com/manticoresoftware/manticoresearch/issues/1062) "Improve error logging of JSON insert api failure - "unsupported value type": Эндпоинт `/bulk` сообщает информацию о количестве обработанных и необработанных строк (документов) в случае ошибки.
-* [Issue #1070](https://github.com/manticoresoftware/manticoresearch/issues/1070) "Подсказки CBO не поддерживают несколько атрибутов": Включены подсказки индекса для обработки нескольких атрибутов.
-* [Issue #1106](https://github.com/manticoresoftware/manticoresearch/issues/1106) "Добавить теги к http поисковому запросу": Теги были добавлены к [HTTP PQ ответам](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md?client=JSON#Adding-rules-to-a-percolate-table).
-* [Issue #1301](https://github.com/manticoresoftware/manticoresearch/issues/1301) "buddy не должен создавать таблицу параллельно": Решена проблема, из-за которой происходили сбои при параллельных операциях CREATE TABLE. Теперь только одна операция `CREATE TABLE` может выполняться одновременно.
-* [Issue #1303](https://github.com/manticoresoftware/manticoresearch/issues/1303) "добавить поддержку @ в названиях столбцов".
-* [Issue #1316](https://github.com/manticoresoftware/manticoresearch/issues/1316) "Запросы к набору данных такси медленные с ps=1": Логика CBO была уточнена, и разрешение по умолчанию для гистограммы было установлено на 8k для лучшей точности по атрибутам с случайно распределенными значениями.
-* [Issue #1317](https://github.com/manticoresoftware/manticoresearch/issues/1317) "Исправить CBO против полнотекстового поиска на наборе данных hn": Улучшенная логика была реализована для определения, когда использовать пересечение итераторов битовых карт и когда использовать приоритетную очередь.
-* [Issue #1318](https://github.com/manticoresoftware/manticoresearch/issues/1318) "колоночный: изменить интерфейс итератора на однократный вызов": Колонковые итераторы теперь используют один вызов `Get`, заменяя предыдущие двухшаговые вызовы `AdvanceTo` + `Get` для получения значения.
-* [Issue #1319](https://github.com/manticoresoftware/manticoresearch/issues/1319) "Ускорение расчета агрегатов (удалить CheckReplaceEntry?)": Вызов `CheckReplaceEntry` был удален из группового сортировщика для ускорения расчета агрегатных функций.
-* [Issue #1320](https://github.com/manticoresoftware/manticoresearch/issues/1320) "создать таблицу read_buffer_docs/hits не понимает синтаксис k/m/g": Опции `CREATE TABLE` `read_buffer_docs` и `read_buffer_hits` теперь поддерживают синтаксис k/m/g.
-* [Языковые пакеты](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) для английского, немецкого и русского языков теперь можно легко установить на Linux, выполнив команду `apt/yum install manticore-language-packs`. На macOS используйте команду `brew install manticoresoftware/tap/manticore-language-packs`.
+* [Issue #1070](https://github.com/manticoresoftware/manticoresearch/issues/1070) "CBO hints don't support multiple attributes": Включена возможность для подсказок индекса обрабатывать несколько атрибутов.
+* [Issue #1106](https://github.com/manticoresoftware/manticoresearch/issues/1106) "Add tags to http search query": Теги были добавлены в [ответы HTTP PQ](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md?client=JSON#Adding-rules-to-a-percolate-table).
+* [Issue #1301](https://github.com/manticoresoftware/manticoresearch/issues/1301) "buddy should not create table in parallel": Исправлена проблема, вызывавшая сбои при параллельных операциях CREATE TABLE. Теперь одновременно может выполняться только одна операция `CREATE TABLE`.
+* [Issue #1303](https://github.com/manticoresoftware/manticoresearch/issues/1303) "add support of @ to column names".
+* [Issue #1316](https://github.com/manticoresoftware/manticoresearch/issues/1316) "Queries on taxi dataset are slow with ps=1": Логика CBO была доработана, и разрешение гистограммы по умолчанию установлено на 8k для большей точности на атрибутах со случайно распределёнными значениями.
+* [Issue #1317](https://github.com/manticoresoftware/manticoresearch/issues/1317) "Fix CBO vs fulltext on hn dataset": Реализована улучшенная логика для определения, когда использовать пересечение битовых итераторов, а когда использовать очередь с приоритетом.
+* [Issue #1318](https://github.com/manticoresoftware/manticoresearch/issues/1318) "columnar: change iterator interface to single-call": Колоночные итераторы теперь используют один вызов `Get`, заменяя предыдущие двухэтапные вызовы `AdvanceTo` + `Get` для получения значения.
+* [Issue #1319](https://github.com/manticoresoftware/manticoresearch/issues/1319) "Aggregate calc speedup (remove CheckReplaceEntry?)": Вызов `CheckReplaceEntry` был удалён из группового сортировщика для ускорения расчёта агрегатных функций.
+* [Issue #1320](https://github.com/manticoresoftware/manticoresearch/issues/1320) "create table read_buffer_docs/hits doesn't understand k/m/g syntax": Опции `CREATE TABLE` `read_buffer_docs` и `read_buffer_hits` теперь поддерживают синтаксис k/m/g.
+* [Языковые пакеты](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) для английского, немецкого и русского языков теперь можно легко установить в Linux, выполнив команду `apt/yum install manticore-language-packs`. В macOS используйте команду `brew install manticoresoftware/tap/manticore-language-packs`.
 * Порядок полей и атрибутов теперь согласован между операциями `SHOW CREATE TABLE` и `DESC`.
-* Если на диске недостаточно места при выполнении запросов `INSERT`, новые запросы `INSERT` будут завершаться неудачей, пока не станет доступно достаточно места на диске.
-* Функция преобразования типа [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) была добавлена.
-* Эндпоинт `/bulk` теперь обрабатывает пустые строки как команду [commit](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK). Дополнительная информация [здесь](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents).
-* Предупреждения были реализованы для [недействительных подсказок индекса](Searching/Options.md#Query-optimizer-hints), обеспечивая большую прозрачность и позволяя смягчить ошибки.
-* Когда `count(*)` используется с одним фильтром, запросы теперь используют предрассчитанные данные из вторичных индексов, когда это возможно, значительно ускоряя время выполнения запросов.
+* Если при выполнении запросов `INSERT` недостаточно места на диске, новые запросы `INSERT` будут завершаться ошибкой, пока не станет доступно достаточно места.
+* Добавлена функция преобразования типов [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29).
+* Эндпоинт `/bulk` теперь обрабатывает пустые строки как команду [commit](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK). Подробнее [здесь](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents).
+* Реализованы предупреждения для [некорректных подсказок индекса](Searching/Options.md#Query-optimizer-hints), обеспечивая большую прозрачность и позволяя смягчать ошибки.
+* Когда `count(*)` используется с одним фильтром, запросы теперь используют предварительно рассчитанные данные из вторичных индексов, когда они доступны, что значительно ускоряет время выполнения запросов.
 
 ### ⚠️ Ломающие изменения
 * ⚠️ Таблицы, созданные или измененные в версии 6.2.0, не могут быть прочитаны более старыми версиями.
@@ -2606,70 +2675,69 @@ sys     0m0.001s
 ### Обновление
 В этом выпуске мы изменили внутренний протокол, используемый мастерами и агентами для взаимодействия друг с другом. В случае, если вы запускаете Manticoresearch в распределенной среде с несколькими экземплярами, убедитесь, что сначала обновляете агентов, а затем мастеров.
 
-## Version 2.5.1, 23 November 2017
-### Features and improvements
-* JSON queries on [HTTP API protocol](Connecting_to_the_server/HTTP.md). Supported search, insert, update, delete, replace operations. Data manipulation commands can be also bulked, also there are some limitations currently as MVA and JSON attributes can't be used for inserts, replaces or updates.
-* [RELOAD INDEXES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) command
-* [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md) command
-* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) can show progress of optimize, rotation or flushes.
-* GROUP N BY work correctly with MVA attributes
-* blackhole agents are run on separate thread to not affect master query anymore
-* implemented reference count on indexes, to avoid stalls caused by rotations and high load
-* SHA1 hashing implemented, not exposed yet externally
-* fixes for compiling on FreeBSD, macOS and Alpine
+## Версия 2.5.1, 23 ноября 2017
+### Функции и улучшения
+* JSON-запросы по [протоколу HTTP API](Connecting_to_the_server/HTTP.md). Поддерживаются операции поиска, вставки, обновления, удаления, замены. Команды манипулирования данными также могут быть объединены в пакеты, также в настоящее время существуют некоторые ограничения, так как MVA и JSON-атрибуты нельзя использовать для вставок, замен или обновлений.
+* Команда [RELOAD INDEXES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES)
+* Команда [FLUSH LOGS](Logging/Rotating_query_and_server_logs.md)
+* [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) может показывать прогресс оптимизации, ротации или сброса.
+* GROUP N BY корректно работает с MVA-атрибутами
+* Агенты blackhole запускаются в отдельном потоке, чтобы больше не влиять на основной запрос
+* Реализован подсчёт ссылок на индексы, чтобы избежать простоев, вызванных ротациями и высокой нагрузкой
+* Реализовано хеширование SHA1, пока не представлено внешне
+* Исправления для компиляции на FreeBSD, macOS и Alpine
 
-### Bugfixes
-* [Commit 9897](https://github.com/manticoresoftware/manticore/commit/989752b) filter regression with block index
-* [Commit b1c3](https://github.com/manticoresoftware/manticore/commit/b1c3864) rename PAGE_SIZE -> ARENA_PAGE_SIZE for compatibility with musl
-* [Commit f213](https://github.com/manticoresoftware/manticore/commit/f2133cc) disable googletests for cmake < 3.1.0
-* [Commit f30e](https://github.com/manticoresoftware/manticore/commit/0839de7) failed to bind socket on server restart
-* [Commit 0807](https://github.com/manticoresoftware/manticore/commit/0807240) fixed crash of server on shutdown
-* [Commit 3e3a](https://github.com/manticoresoftware/manticore/commit/3e3acc3) fixed show threads for system blackhole thread
-* [Commit 262c](https://github.com/manticoresoftware/manticore/commit/262c3fe) Refactored config check of iconv, fixes building on FreeBSD and Darwin
+### Исправления ошибок
+* [Коммит 9897](https://github.com/manticoresoftware/manticore/commit/989752b) регрессия фильтра с блочным индексом
+* [Коммит b1c3](https://github.com/manticoresoftware/manticore/commit/b1c3864) переименование PAGE_SIZE -> ARENA_PAGE_SIZE для совместимости с musl
+* [Коммит f213](https://github.com/manticoresoftware/manticore/commit/f2133cc) отключение googletests для cmake < 3.1.0
+* [Коммит f30e](https://github.com/manticoresoftware/manticore/commit/0839de7) не удалось привязать сокет при перезапуске сервера
+* [Коммит 0807](https://github.com/manticoresoftware/manticore/commit/0807240) исправлен крах сервера при завершении работы
+* [Коммит 3e3a](https://github.com/manticoresoftware/manticore/commit/3e3acc3) исправлен show threads для системного потока blackhole
+* [Коммит 262c](https://github.com/manticoresoftware/manticore/commit/262c3fe) Рефакторинг проверки конфигурации iconv, исправляет сборку на FreeBSD и Darwin
 
-## Version 2.4.1 GA, 16 October 2017
-### Features and improvements
-* OR operator in WHERE clause between attribute filters
-* Maintenance mode ( SET MAINTENANCE=1)
-* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) available on distributed indexes
-* [Grouping in UTC](Server_settings/Searchd.md#grouping_in_utc)
-* [query_log_mode](Server_settings/Searchd.md#query_log_mode) for custom log files permissions
-* Field weights can be zero or negative
-* [max_query_time](Searching/Options.md#max_query_time) can now affect full-scans
-* added [net_wait_tm](Server_settings/Searchd.md#net_wait_tm), [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) and [net_throttle_action](Server_settings/Searchd.md#net_throttle_action) for network thread fine tuning (in case of workers=thread_pool)
-* COUNT DISTINCT works with facet searches
-* IN can be used with JSON float arrays
-* multi-query optimization is not broken anymore by integer/float expressions
-* [SHOW META](Node_info_and_management/SHOW_META.md) shows a `multiplier` row when multi-query optimization is used
+## Версия 2.4.1 GA, 16 октября 2017
+### Функции и улучшения
+* Оператор OR в предложении WHERE между фильтрами атрибутов
+* Режим обслуживания ( SET MAINTENANCE=1)
+* [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) доступен для распределённых индексов
+* [Группировка в UTC](Server_settings/Searchd.md#grouping_in_utc)
+* [query_log_mode](Server_settings/Searchd.md#query_log_mode) для настройки прав доступа к файлам логов
+* Веса полей могут быть нулевыми или отрицательными
+* [max_query_time](Searching/Options.md#max_query_time) теперь может влиять на полные сканирования
+* добавлены [net_wait_tm](Server_settings/Searchd.md#net_wait_tm), [net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) и [net_throttle_action](Server_settings/Searchd.md#net_throttle_action) для тонкой настройки сетевого потока (в случае workers=thread_pool)
+* COUNT DISTINCT работает с фасетным поиском
+* IN можно использовать с JSON-массивами чисел с плавающей запятой
+* Оптимизация мультизапросов больше не нарушается выражениями с целыми/числами с плавающей запятой
+* [SHOW META](Node_info_and_management/SHOW_META.md) показывает строку `multiplier`, когда используется оптимизация мультизапросов
 
-### Compiling
-Manticore Search is built using cmake and the minimum gcc version required for compiling is 4.7.2.
+### Компиляция
+Manticore Search собирается с помощью cmake, минимальная требуемая версия gcc для компиляции — 4.7.2.
 
-### Folders and service
-* Manticore Search runs under `manticore` user.
-* Default data folder is now `/var/lib/manticore/`.
-* Default log folder is now `/var/log/manticore/`.
-* Default pid folder is now `/var/run/manticore/`.
+### Папки и служба
+* Manticore Search работает под пользователем `manticore`.
+* Папка данных по умолчанию теперь `/var/lib/manticore/`.
+* Папка логов по умолчанию теперь `/var/log/manticore/`.
+* Папка pid по умолчанию теперь `/var/run/manticore/`.
 
-### Bugfixes
-* [Commit a58c](https://github.com/manticoresoftware/manticore/commit/a58c619) fixed SHOW COLLATION statement that breaks java connector
-* [Commit 631c](https://github.com/manticoresoftware/manticore/commit/631cf4e) fixed crashes on processing distributed indexes; added locks to distributed index hash; removed move and copy operators from agent
-* [Commit 942b](https://github.com/manticoresoftware/manticore/commit/942bec0) fixed crashes on processing distributed indexes due to parallel reconnects
-* [Commit e5c1](https://github.com/manticoresoftware/manticore/commit/e5c1ed2) fixed crash at crash handler on store query to server log
-* [Commit 4a4b](https://github.com/manticoresoftware/manticore/commit/4a4bda5) fixed a crash with pooled attributes in multiqueries
-* [Commit 3873](https://github.com/manticoresoftware/manticore/commit/3873bfb) fixed reduced core size by prevent index pages got included into core file
-* [Commit 11e6](https://github.com/manticoresoftware/manticore/commit/11e6254) fixed searchd crashes on startup when invalid agents are specified
-* [Commit 4ca6](https://github.com/manticoresoftware/manticore/commit/4ca6350) fixed indexer reports error in sql_query_killlist query
-* [Commit 123a](https://github.com/manticoresoftware/manticore/commit/123a9f0) fixed fold_lemmas=1 vs hit count
-* [Commit cb99](https://github.com/manticoresoftware/manticore/commit/cb99164) fixed inconsistent behavior of html_strip
-* [Commit e406](https://github.com/manticoresoftware/manticore/commit/e406761) fixed optimize rt index loose new settings; fixed optimize with sync option lock leaks;
-* [Commit 86ae](https://github.com/manticoresoftware/manticore/commit/86aeb82) fixed processing erroneous multiqueries
-* [Commit 2645](https://github.com/manticoresoftware/manticore/commit/2645230) fixed result set depends on multi-query order
-* [Commit 7239](https://github.com/manticoresoftware/manticore/commit/72395d9) fixed server crash on multi-query with bad query
-* [Commit f353](https://github.com/manticoresoftware/manticore/commit/f353326) fixed shared to exclusive lock
-* [Commit 3754](https://github.com/manticoresoftware/manticore/commit/3754785) fixed server crash for query without indexes
-* [Commit 29f3](https://github.com/manticoresoftware/manticore/commit/29f360e) fixed dead lock of server
+### Исправления ошибок
+* [Коммит a58c](https://github.com/manticoresoftware/manticore/commit/a58c619) исправлен оператор SHOW COLLATION, который ломает java-коннектор
+* [Коммит 631c](https://github.com/manticoresoftware/manticore/commit/631cf4e) исправлены крахи при обработке распределённых индексов; добавлены блокировки к хешу распределённого индекса; удалены операторы перемещения и копирования из агента
+* [Коммит 942b](https://github.com/manticoresoftware/manticore/commit/942bec0) исправлены крахи при обработке распределённых индексов из-за параллельных переподключений
+* [Коммит e5c1](https://github.com/manticoresoftware/manticore/commit/e5c1ed2) исправлен крах в обработчике краха при сохранении запроса в лог сервера
+* [Коммит 4a4b](https://github.com/manticoresoftware/manticore/commit/4a4bda5) исправлен крах с объединёнными атрибутами в мультизапросах
+* [Коммит 3873](https://github.com/manticoresoftware/manticore/commit/3873bfb) уменьшен размер core-файла за счёт предотвращения включения в него страниц индекса
+* [Коммит 11e6](https://github.com/manticoresoftware/manticore/commit/11e6254) исправлены крахи searchd при запуске, когда указаны неверные агенты
+* [Коммит 4ca6](https://github.com/manticoresoftware/manticore/commit/4ca6350) исправлена ошибка indexer при запросе sql_query_killlist
+* [Коммит 123a](https://github.com/manticoresoftware/manticore/commit/123a9f0) исправлено fold_lemmas=1 vs количество попаданий
+* [Коммит cb99](https://github.com/manticoresoftware/manticore/commit/cb99164) исправлено нестабильное поведение html_strip
+* [Коммит e406](https://github.com/manticoresoftware/manticore/commit/e406761) исправлена потеря новых настроек при оптимизации rt-индекса; исправлены утечки блокировок при оптимизации с опцией sync;
+* [Коммит 86ae](https://github.com/manticoresoftware/manticore/commit/86aeb82) исправлена обработка ошибочных мультизапросов
+* [Коммит 2645](https://github.com/manticoresoftware/manticore/commit/2645230) исправлена зависимость результирующего набора от порядка мультизапросов
+* [Коммит 7239](https://github.com/manticoresoftware/manticore/commit/72395d9) исправлен крах сервера при мультизапросе с плохим запросом
+* [Коммит f353](https://github.com/manticoresoftware/manticore/commit/f353326) исправлена блокировка от общей к эксклюзивной
+* [Коммит 3754](https://github.com/manticoresoftware/manticore/commit/3754785) исправлен крах сервера для запроса без индексов
+* [Коммит 29f3](https://github.com/manticoresoftware/manticore/commit/29f360e) исправлен dead lock сервера
 
-## Version 2.3.3, 06 July 2017
-* Manticore branding
-
+## Версия 2.3.3, 06 июля 2017
+* Брендинг Manticore

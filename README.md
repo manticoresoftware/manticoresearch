@@ -52,6 +52,7 @@ What distinguishes it from other solutions is:
   - **up to 2x faster** max throughput than Elasticsearch's for data ingestion on a single server ([reproducible](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/#data-ingestion-performance)❗)
 * With its modern multithreading architecture and efficient query parallelization capabilities, Manticore is able to fully utilize all your CPU cores to achieve the quickest response times possible.
 * The powerful and speedy full-text search works seamlessly with both small and large datasets.
+* Hybrid search combines full-text and vector retrieval in a single query for better relevance.
 * Row-wise storage for small, medium and big size datasets.
 * For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
 * Performant secondary indexes are automatically created using the PGM-index (Piecewise Geometric Model index), which provides efficient mapping between indexed keys and their memory locations.
@@ -65,7 +66,7 @@ What distinguishes it from other solutions is:
 * Manticore also boasts built-in virtually synchronous multi-master replication using the Galera library and load balancing capabilities.
 * Data can be synced from sources such as MySQL, PostgreSQL, ODBC, xml, and csv with ease.
 * While not fully ACID-compliant, Manticore supports isolated transactions and binary logging for safe writes.
-* Effortless data backup and recovery with built-in tools like manticore-backup and SQL BACKUP command
+* Effortless data backup and recovery with built-in tools like manticore-backup, SQL BACKUP, and S3-compatible backup/restore support
 
 [Craigslist](https://www.craigslist.org/), [Socialgist](https://socialgist.com/), [PubChem](https://pubchem.ncbi.nlm.nih.gov/), [Rozetka](https://rozetka.com.ua/) and many others use Manticore for efficient searching and stream filtering.
 
@@ -80,6 +81,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Fuzzy search](https://manual.manticoresearch.com/Searching/Spell_correction#Fuzzy-Search)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
+  - [Hybrid search](https://manual.manticoresearch.com/Searching/Hybrid_search)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
@@ -106,6 +108,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [read-only mode](https://manual.manticoresearch.com/Security/Read_only)
 * Data safety:
   - [manticore-backup tool and SQL command BACKUP](https://manual.manticoresearch.com/Securing_and_compacting_a_table/Backup_and_restore) to back up and restore your data
+  - [S3-compatible backup and restore](https://manual.manticoresearch.com/Securing_and_compacting_a_table/Backup_and_restore)
 * Data storages:
   - row-wise - requires more RAM, provides faster performance
   - columnar - requires less RAM, still provides decent performance, but lower than the row-wise storage for some kinds of queries
@@ -174,7 +177,7 @@ Read [the full instruction for the docker image](https://github.com/manticoresof
 ### YUM repo for RHEL/Centos/Amazon/Oracle Linux
 ```
 sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-sudo yum install manticore manticore-extra
+sudo yum install manticore
 ```
 
 ### APT repo for Ubuntu/Debian/Mint
@@ -182,7 +185,7 @@ sudo yum install manticore manticore-extra
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 ### Homebrew on MacOS

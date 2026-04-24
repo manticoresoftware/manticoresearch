@@ -361,20 +361,29 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## 在RT模式下更新属性API密钥（用于嵌入生成）
+## 在 RT 模式下更新嵌入生成的属性 API 参数
 
 <!-- example api_key -->
 
-当远程模型用于自动嵌入时，可以使用`ALTER`修改API密钥：
+当使用远程模型进行自动嵌入时，可以使用 `ALTER` 修改 API 参数：
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
 ```
+
+**注意事项：**
+- `API_KEY`：在 ALTER 操作期间通过实际 API 请求验证新 API 密钥。
+- `API_URL`：设置为空字符串 (`''`) 以恢复到默认提供方端点。
+- `API_TIMEOUT`：设置为 `'0'` 以使用默认超时时间（10 秒）。必须是非负整数。
 
 <!-- end -->
 

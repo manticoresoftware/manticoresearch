@@ -20,6 +20,15 @@ SELECT ... ORDER BY
 {attribute_name | expr_alias | weight() | random() } [ASC | DESC]
 ```
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(a int, b int, f text);
+INSERT INTO test (a, b, f) VALUES
+(2, 3, 'document');
+-->
+
 <!-- example alias -->
 
 В предложении сортировки можно использовать любую комбинацию до 5 столбцов, каждый из которых может сопровождаться `asc` или `desc`. Функции и выражения не допускаются в качестве аргументов для предложения сортировки, за исключением функций `weight()` и `random()` (последняя может использоваться только через SQL в виде `ORDER BY random()`). Однако вы можете использовать любое выражение в списке SELECT и сортировать по его псевдониму.
@@ -36,6 +45,42 @@ select *, a + b alias from test order by alias desc;
 +------+------+------+----------+-------+
 |    1 |    2 |    3 | document |     5 |
 +------+------+------+----------+-------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /search
+{
+  "table": "test",
+  "expressions": {
+    "alias": "a+b"
+  },
+  "sort": {"alias":"desc"}
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "a": 2,
+          "b": 3,
+          "f": "document",
+          "alias": 5
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -1026,7 +1071,7 @@ SELECT ... OPTION ranker=sph04;
 | ----------------------- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
 | max_lcs                 | query     | int   | максимальное возможное значение LCS для текущего запроса                                                           |
 | bm25                    | document  | int   | быстрая оценка BM25(1.2, 0)                                                                                        |
-| bm25a(k1, b)            | document  | int   | точное значение BM25() с настраиваемыми константами K1, B и поддержкой синтаксиса                                 |
+| bm25a(k1, b[, avgdl])   | документ  | int   | точное значение BM25() с настраиваемыми константами K1, B и опциональным переопределением средней длины документа  |
 | bm25f(k1, b, {field=weight, ...}) | document | int   | точное значение BM25F() с дополнительными настраиваемыми весами полей                                             |
 | field_mask              | document  | int   | битовая маска совпавших полей                                                                                        |
 | query_word_count        | document  | int   | количество уникальных включённых ключевых слов в запросе                                                           |
@@ -1141,4 +1186,3 @@ atc = log(1+sum(pair_tc))
 Флаги IDF можно комбинировать; `plain` и `normalized` являются взаимоисключающими; `tfidf_unnormalized` и `tfidf_normalized` являются взаимоисключающими; и неуказанные флаги в такой взаимоисключающей группе принимают свои значения по умолчанию. Это означает, что `OPTION idf=plain` эквивалентно полной спецификации `OPTION idf='plain,tfidf_normalized'`.
 
 <!-- proofread -->
-

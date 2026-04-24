@@ -907,7 +907,7 @@ public:
 		static WORD uExtraCapabilities = 0;
 		if ( !bExtraCapabilitiesSet )
 		{
-			uExtraCapabilities = dwval_from_env ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES", 0 );
+			uExtraCapabilities = env_ulong ( "MANTICORE_MYSQL_EXTRA_CAPABILITIES" ).value_or(0);
 			bExtraCapabilitiesSet = true;
 		}
 		m_uCapabilities |= uExtraCapabilities;
@@ -1098,11 +1098,14 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 		return;
 	}
 
-	tSqlOut.HeadBegin(std::move(sName));
-
 	// data
 	const CSphSchema * pSchema = &RIdx_c ( pServed )->GetMatchSchema();
 	const CSphSchema & tSchema = *pSchema;
+
+	if ( tSchema.GetAttrsCount()==0 )
+		return;
+
+	tSqlOut.HeadBegin(std::move(sName));
 	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
 	const auto & tId = tSchema.GetAttr ( 0 );
 

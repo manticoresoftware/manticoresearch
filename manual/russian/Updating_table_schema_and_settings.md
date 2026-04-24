@@ -361,20 +361,29 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## Обновление ключа API атрибута (для генерации эмбеддингов) в режиме RT
+## Обновление параметров API атрибутов (для генерации эмбеддингов) в режиме RT
 
 <!-- example api_key -->
 
-`ALTER` можно использовать для изменения ключа API, когда удаленная модель используется для автоэмбеддингов:
+`ALTER` может использоваться для изменения параметров API, когда для авто-эмбеддингов используется удалённая модель:
 
 ```sql
 ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+ALTER TABLE table_name MODIFY COLUMN column_name API_URL='url';
+ALTER TABLE table_name MODIFY COLUMN column_name API_TIMEOUT='seconds';
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='new-key';
+ALTER TABLE rt MODIFY COLUMN vector API_URL='https://custom-api.example.com/v1/embeddings';
+ALTER TABLE rt MODIFY COLUMN vector API_TIMEOUT='30';
 ```
+
+**Примечания:**
+- `API_KEY`: Новый API-ключ проверяется во время операции ALTER путём выполнения реального API-запроса.
+- `API_URL`: Установите в пустую строку (`''`), чтобы вернуться к конечной точке провайдера по умолчанию.
+- `API_TIMEOUT`: Установите в `'0'`, чтобы использовать таймаут по умолчанию (10 секунд). Должно быть неотрицательным целым числом.
 
 <!-- end -->
 

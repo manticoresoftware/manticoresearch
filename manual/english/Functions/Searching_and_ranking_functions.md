@@ -1,7 +1,7 @@
 # Searching and ranking functions
 
 ### BM25A()
-`BM25A(k1,b)` returns the exact `BM25A()` value. Requires the `expr` ranker and enabled `index_field_lengths`. Parameters `k1` and `b` must be floats.
+`BM25A(k1,b)` returns the exact `BM25A()` value. `BM25A(k1,b,avgdl)` additionally allows overriding the average document length used in the formula. It requires the `expr` ranker and enabled `index_field_lengths`. Parameters `k1`, `b`, and optional `avgdl` must be floats.
 
 ### BM25F()
 `BM25F(k1, b, {field=weight, ...})` returns the exact `BM25F()` value and requires `index_field_lengths` to be enabled. The `expr` ranker is also necessary. Parameters `k1` and `b` must be floats.
@@ -186,4 +186,3 @@ The `ZONESPANLIST()` function returns pairs of matched zone spans. Each pair con
 Table functions are a mechanism for post-query result set processing. Table functions take an arbitrary result set as input and return a new, processed set as output. The first argument should be the input result set, but a table function can optionally take and handle more arguments. Table functions can completely change the result set, including the schema. Currently, only built-in table functions are supported. Table functions work for both outer `SELECT` and [nested SELECT](../Searching/Sub-selects.md).
 
 <!-- proofread -->
-

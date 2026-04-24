@@ -31,6 +31,14 @@ POST /search
 <!-- intro -->
 SQL:
 <!-- request SQL -->
+
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -56,11 +64,19 @@ POST /search
 {
     "table" : "test",
     "query": {
-      "match": {
-        "title": "hello"
-      },
-      "match": {
-        "body": "world"
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "title": "hello"
+            }
+          },
+          {
+            "match": {
+              "body": "world"
+            }
+          }  
+        ]
       }
     },
     "options":
@@ -231,6 +247,25 @@ select avg(a) from t facet a
 
 有关选项的更多详细信息，请参阅 [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)。
 
+### 融合方法
+字符串。启用 [混合搜索](../Searching/Hybrid_search.md) 结果融合。目前唯一支持的值是 `'rrf'`（倒数排名融合）。当设置时，`MATCH(...)` 和 `KNN(...)` 作为独立的子查询运行，其结果通过排名进行融合。
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
+### 融合权重
+命名浮点数列表。用于 [混合搜索](../Searching/Hybrid_search.md) RRF 评分的每个子查询权重。需要 `fusion_method='
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AS text
+  AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) AS dense
+OPTION fusion_method='rrf', fusion_weights=(text=0.7, dense=0.3);
+```
+
 ### field_weights
 命名整数列表（按字段的用户权重用于排序）。
 
@@ -304,12 +339,24 @@ IDF 标志可以组合；`plain` 和 `normalized` 互斥；`tfidf_unnormalized` 
 `none`允许在表使用[index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)启用时，将所有查询术语替换为它们的确切形式。这对于防止对查询术语进行词干提取或词形还原很有用。
 
 ### not_terms_only_allowed
+
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
+-->
+
 <!-- example not_terms_only_allowed -->
 `0`或`1`允许查询中使用独立的[否定](../Searching/Full_text_matching/Operators.md#Negation-operator)。默认值为0。另请参阅相应的[全局设置](../Server_settings/Searchd.md#not_terms_only_allowed)。
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select * from tbl where match('-donald');
+MySQL [(none)]> select * from t where match('-donald');
 ERROR 1064 (42000): index t: query error: query is non-computable (single NOT operator)
 MySQL [(none)]> select * from t where match('-donald') option not_terms_only_allowed=1;
 +---------------------+-----------+
@@ -318,7 +365,60 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql -d "select * from t where match('-d')"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      },
+      {
+        "_id": 5912226830793834497,
+        "_score": 2500,
+        "_source": {
+          "f1": "c",
+          "f2": 3
+        }
+      },
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
+
+### ra
+Integer. Default is 60. Smoothing constant for [hybrid search](../Searching/Hybrid_search.md) RRF ranking. Each document's score from a sub-query is `weight / (rank_constant + rank)`, where `rank` is its 1-based position in that sub-query's results. A lower value (e.g. 10) makes top positions count much more than lower ones; a higher value (e.g. 100) flattens the difference between positions. Requires `fusion_method='rrf'`.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', rank_constant=10;
+```
 
 ### ranker
 从以下选项中选择：
@@ -352,6 +452,23 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 * `pq` - 优先队列，默认设置
 * `kbuffer` - 为已预先排序的数据（例如按id排序的表数据）提供更快的排序
 两种情况下结果集相同；选择其中一个选项可能会简单地提高（或降低）性能。
+
+### window_size
+Integer. Default is 0 (auto). Controls how many results each sub-query (text and every KNN) retrieves before [hybrid search](../Searching/Hybrid_search.md) RRF fusion. A larger window feeds more candidates into fusion, improving recall at the cost of performance. Requires `fusion_method='rrf'`.
+
+When set to 0 (auto), the window is computed as the **maximum** of:
+- the largest KNN requested-docs count across all KNN sub-queries (which is `k * oversampling` when rescoring is enabled, or just `k` otherwise), and
+- the query's `LIMIT`.
+
+For example, with `LIMIT 20` and `knn(vec, 10, ...)` (default oversampling 3.0, rescoring on), auto window = max(10*3, 20) = 30. Both the text sub-query and KNN sub-query will each retrieve up to 30 results before fusion.
+
+When set explicitly, that value overrides the automatic calculation and is used as the limit for all sub-queries.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', window_size=50;
+```
 
 ### threads
 限制当前查询处理使用的最大线程数。默认值 - 无限制（查询可以占用全局定义的[threads](../Server_settings/Searchd.md#threads)中的所有线程）。
@@ -387,6 +504,17 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 
 <!-- end -->
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int);
+INSERT INTO students(name, age) VALUES
+('Alice', 20),
+('Bob', 22),
+('Carol', 25);
+-->
+
 <!-- example comments -->
 当使用MySQL/MariaDB客户端时，请确保包含`--comments`标志以在查询中启用提示。
 
@@ -394,6 +522,13 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```bash
 mysql -P9306 -h0 --comments
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+```
+
 <!-- end -->
 
 <!-- proofread -->

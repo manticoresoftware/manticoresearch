@@ -25,6 +25,7 @@
 #include "sphinxfilter.h"
 #include "queryprofile.h"
 #include "knnmisc.h"
+#include "hybridexecutor.h"
 #include "sorterscroll.h"
 #include "sphinxquery/sphinxquery.h"
 
@@ -206,6 +207,9 @@ void CSphGroupSorterSettings::FixupLocators ( const ISphSchema * pOldSchema, con
 
 	if ( m_pDistinctFetcher )
 		m_pDistinctFetcher->FixupLocators ( pOldSchema, pNewSchema );
+
+	if ( m_pGrouper )
+		m_pGrouper->FixupLocators ( pOldSchema, pNewSchema );
 }
 
 void CSphGroupSorterSettings::SetupDistinctAccuracy ( int iThresh )
@@ -295,6 +299,7 @@ private:
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
 	bool	AddKNNRescoreColumn();
+	bool	AddHybridScoreColumn();
 	bool	AddJoinAttrs();
 	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
@@ -320,6 +325,7 @@ private:
 	bool	SetupGroupSortingFunc ( bool bGotDistinct );
 	bool	AddGroupbyStuff();
 	void	AddKnnDistSort ( CSphString & sSortBy );
+	void	AddHybridScoreSort ( CSphString & sSortBy );
 	bool	ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString & sAttr, const CSphString & sExpr ) const;
 	bool	SetGroupSorting();
 	void	ExtraAddSortkeys ( const int * dAttrs );
@@ -397,8 +403,13 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 		{
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_eCollation = m_tQuery.m_eCollation;
+			if ( m_tSettings.m_pJoinArgs )
+			{
+				tExprArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+				tExprArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+			}
 
-			ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) };
+			ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
 			m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tLoc, pExpr );
 			m_tGroupSorterSettings.m_bJson = true;
 		}
@@ -580,7 +591,12 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 			if ( !sJsonExpr.IsEmpty() )
 			{
 				ExprParseArgs_t tExprArgs;
-				dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) );
+				if ( m_tSettings.m_pJoinArgs )
+				{
+					tExprArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+					tExprArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+				}
+				dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), tSchema, m_sError, tExprArgs ) );
 			}
 			else if ( tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
 			{
@@ -617,8 +633,13 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_eCollation = m_tQuery.m_eCollation;
+		if ( m_tSettings.m_pJoinArgs )
+		{
+			tExprArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+			tExprArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+		}
 
-		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_sError, tExprArgs ) };
 		m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		m_tGroupSorterSettings.m_bJson = true;
 		m_bJoinedGroupSort |= IsJoinAttr(sJsonColumn);
@@ -826,6 +847,37 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & 
 
 bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphString & sExpr, DWORD uQueryPackedFactorFlags )
 {
+	auto fnGetAggrName = [&tExprCol] ()
+	{
+		switch ( tExprCol.m_eAggrFunc )
+		{
+		case SPH_AGGR_MAX: return "MAX";
+		case SPH_AGGR_MIN: return "MIN";
+		case SPH_AGGR_SUM: return "SUM";
+		case SPH_AGGR_AVG: return "AVG";
+		case SPH_AGGR_PERCENTILES: return "PERCENTILES";
+		case SPH_AGGR_PERCENTILE_RANKS: return "PERCENTILE_RANKS";
+		case SPH_AGGR_MAD: return "MEDIAN_ABSOLUTE_DEVIATION";
+		default: return "";
+		}
+	};
+
+	auto fnIsTDigestNumericInput = [] ( ESphAttr eAttr )
+	{
+		switch ( eAttr )
+		{
+		case SPH_ATTR_BOOL:
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_BIGINT:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_FLOAT:
+		case SPH_ATTR_DOUBLE:
+			return true;
+		default:
+			return false;
+		}
+	};
+
 	// validate that MAX/MIN/SUM/AVG cannot be used on string/text columns
 	// This check must happen BEFORE the switch statement that may modify tExprCol.m_eAttrType
 	if ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX || tExprCol.m_eAggrFunc==SPH_AGGR_MIN 
@@ -833,11 +885,18 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 	{
 		if ( tExprCol.m_eAttrType==SPH_ATTR_STRING || tExprCol.m_eAttrType==SPH_ATTR_STRINGPTR )
 		{
-			const char * sFunc = ( tExprCol.m_eAggrFunc==SPH_AGGR_MAX ) ? "MAX" 
-				: ( tExprCol.m_eAggrFunc==SPH_AGGR_MIN ) ? "MIN"
-				: ( tExprCol.m_eAggrFunc==SPH_AGGR_SUM ) ? "SUM" : "AVG";
-			return Err ( "%s() cannot be used on text/string column '%s'", sFunc, sExpr.cstr() );
+			return Err ( "%s() cannot be used on text/string column '%s'", fnGetAggrName(), sExpr.cstr() );
 		}
+	}
+
+	// validate tdigest aggregate input type before rewriting output type to SPH_ATTR_TDIGEST_PTR
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_PERCENTILES || tExprCol.m_eAggrFunc==SPH_AGGR_PERCENTILE_RANKS || tExprCol.m_eAggrFunc==SPH_AGGR_MAD )
+	{
+		if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD || tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD_PTR )
+			return Err ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", sExpr.cstr() );
+
+		if ( !fnIsTDigestNumericInput ( tExprCol.m_eAttrType ) )
+			return Err ( "%s() requires a numeric expression, got '%s'", fnGetAggrName(), sExpr.cstr() );
 	}
 
 	switch ( tExprCol.m_eAggrFunc )
@@ -846,6 +905,13 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 		// force AVG() to be computed in doubles
 		tExprCol.m_eAttrType = SPH_ATTR_DOUBLE;
 		tExprCol.m_tLocator.m_iBitCount = 64;
+		break;
+	case SPH_AGGR_PERCENTILES:
+	case SPH_AGGR_PERCENTILE_RANKS:
+	case SPH_AGGR_MAD:
+		tExprCol.m_eAggrInputType = tExprCol.m_eAttrType;
+		tExprCol.m_eAttrType = SPH_ATTR_TDIGEST_PTR;
+		tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
 		break;
 
 	case SPH_AGGR_CAT:
@@ -1055,8 +1121,20 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		return true;
 	}
 
-	if ( IsKnnDist(sExpr) && m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )<0 )
-		return Err ( "KNN_DIST() is only allowed for KNN() queries" );
+	if ( IsKnnDist(sExpr) )
+	{
+		if ( m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )<0 && !m_tQuery.m_bHybridSearch )
+			return Err ( "%s is only allowed for KNN() queries", sExpr.cstr() );
+
+		if ( sExpr==GetKnnDistAttrName() )
+			return true; // this already is an expression, no need to add it twice
+	}
+
+	if ( sExpr==GetHybridScoreAttrName() || sExpr=="hybrid_score()" )
+	{
+		if ( m_pSorterSchema->GetAttrIndex ( GetHybridScoreAttrName() )<0 )
+			return Err ( "HYBRID_SCORE() is only allowed for hybrid search queries" );
+	}
 
 	// not an attribute? must be an expression, and must be aliased by query parser
 	assert ( !tItem.m_sAlias.IsEmpty() );
@@ -1106,15 +1184,29 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		CSphString sExpr2;
 		sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
+		if ( m_tSettings.m_pJoinArgs )
+		{
+			tExprParseArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+			tExprParseArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+		}
+		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), *m_pSorterSchema, m_sError, tExprParseArgs );
 	}
 	else
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
+	{
+		if ( m_tSettings.m_pJoinArgs )
+		{
+			tExprParseArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+			tExprParseArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+		}
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_sError, tExprParseArgs );
+	}
 
 	m_uPackedFactorFlags |= uQueryPackedFactorFlags;
 	m_bZonespanlist |= bHasZonespanlist;
 	m_bExprsNeedDocids |= bExprsNeedDocids;
 	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
+	tExprCol.m_fTdigestCompression = tItem.m_fTdigestCompression;
+	tExprCol.m_tAggrSettings = tItem.m_tAggrSettings;
 	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
@@ -1246,8 +1338,13 @@ bool QueueCreator_c::MaybeAddExprColumn ()
 	tExprArgs.m_pProfiler = m_tSettings.m_pProfiler;
 	tExprArgs.m_eCollation = m_tQuery.m_eCollation;
 	tExprArgs.m_pZonespanlist = &bHasZonespanlist;
+	if ( m_tSettings.m_pJoinArgs )
+	{
+		tExprArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+		tExprArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+	}
 
-	tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs );
+	tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema, m_sError, tExprArgs );
 	if ( !tCol.m_pExpr )
 		return false;
 
@@ -1442,7 +1539,12 @@ void QueueCreator_c::ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy )
 				if ( !sJsonExpr.IsEmpty() )
 				{
 					ExprParseArgs_t tExprArgs;
-					dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) );
+					if ( m_tSettings.m_pJoinArgs )
+					{
+						tExprArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+						tExprArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+					}
+					dJsonKeys.Add ( sphExprParse ( sJsonExpr.cstr(), *m_pSorterSchema, m_sError, tExprArgs ) );
 				}
 				else
 					dJsonKeys.Add(nullptr);
@@ -1534,7 +1636,24 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 
 bool QueueCreator_c::AddKNNDistColumn()
 {
-	const auto & tKNN = m_tQuery.m_tKnnSettings;
+	if ( m_tQuery.m_bHybridSearch )
+	{
+		// for hybrid search, add a plain knn_dist column that the hybrid executor will populate;
+		// no expression needed — the executor writes the value directly via SetMinKnnDist
+		if ( m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() ) < 0 )
+		{
+			CSphColumnInfo tKNNDist ( GetKnnDistAttrName(), SPH_ATTR_FLOAT );
+			tKNNDist.m_eStage = SPH_EVAL_SORTER;
+			m_pSorterSchema->AddAttr ( tKNNDist, true );
+			m_hQueryColumns.Add ( tKNNDist.m_sName );
+		}
+		return true;
+	}
+
+	if ( !m_tQuery.HasKnn() )
+		return true;
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
 
 	if ( tKNN.m_sAttr.IsEmpty() || m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )>=0 )
 		return true;
@@ -1571,7 +1690,13 @@ bool QueueCreator_c::AddKNNDistColumn()
 
 bool QueueCreator_c::AddKNNRescoreColumn()
 {
-	const auto & tKNN = m_tQuery.m_tKnnSettings;
+	if ( m_tQuery.m_bHybridSearch )
+		return true;
+
+	if ( !m_tQuery.HasKnn() )
+		return true;
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	if ( tKNN.m_sAttr.IsEmpty() )
 		return true;
 
@@ -1591,6 +1716,21 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 }
 
 
+bool QueueCreator_c::AddHybridScoreColumn()
+{
+	if ( !m_tQuery.m_bHybridSearch )
+		return true;
+
+	CSphColumnInfo tHybridScore ( GetHybridScoreAttrName(), SPH_ATTR_FLOAT );
+	tHybridScore.m_eStage = SPH_EVAL_SORTER;
+
+	m_pSorterSchema->AddAttr ( tHybridScore, true );
+	m_hQueryColumns.Add ( tHybridScore.m_sName );
+
+	return true;
+}
+
+
 bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString & sAttr, const CSphString & sExpr ) const
 {
 	tExprCol = CSphColumnInfo ( sAttr.cstr() );
@@ -1599,8 +1739,13 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 	tExprParseArgs.m_pAttrType = &tExprCol.m_eAttrType;
 	tExprParseArgs.m_pProfiler = m_tSettings.m_pProfiler;
 	tExprParseArgs.m_eCollation = m_tQuery.m_eCollation;
+	if ( m_tSettings.m_pJoinArgs )
+	{
+		tExprParseArgs.m_pJoinIdx = &m_tSettings.m_pJoinArgs->m_sIndex2;
+		tExprParseArgs.m_pJoinIdxLeft = &m_tSettings.m_pJoinArgs->m_sIndex1;
+	}
 	tExprCol.m_eStage = SPH_EVAL_PRESORT;
-	tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprParseArgs );
+	tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), *m_pSorterSchema, m_sError, tExprParseArgs );
 	tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_JOINED;
 	return !!tExprCol.m_pExpr;
 }
@@ -2131,18 +2276,31 @@ void QueueCreator_c::RemapAttrs ( CSphMatchComparatorState & tState, CSphVector<
 
 void QueueCreator_c::AddKnnDistSort ( CSphString & sSortBy )
 {
+	if ( m_tQuery.m_bHybridSearch )
+		return;
+
 	if ( m_pSorterSchema->GetAttr ( GetKnnDistAttrName() ) && !strstr ( sSortBy.cstr(), "knn_dist" ) )
 		sSortBy.SetSprintf ( "knn_dist() asc, %s", sSortBy.cstr() );
+}
+
+
+void QueueCreator_c::AddHybridScoreSort ( CSphString & sSortBy )
+{
+	// override default sort order
+	if ( m_tQuery.m_bHybridSearch && m_pSorterSchema->GetAttr ( GetHybridScoreAttrName() ) && sSortBy=="@weight desc" )
+		sSortBy.SetSprintf ( "hybrid_score() desc, %s", sSortBy.cstr() );
 }
 
 // matches sorting function
 bool QueueCreator_c::SetupMatchesSortingFunc()
 {
 	m_bRandomize = false;
+
 	if ( m_tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
 		CSphString sSortBy = m_tQuery.m_sSortBy;
 		AddKnnDistSort ( sSortBy );
+		AddHybridScoreSort ( sSortBy );
 
 		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
 		if ( eRes==SORT_CLAUSE_ERROR )
@@ -2204,7 +2362,10 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	assert ( m_bGotGroupby );
 	CSphString sGroupOrderBy = m_tQuery.m_sGroupSortBy;
 	if ( sGroupOrderBy=="@weight desc" )
+	{
 		AddKnnDistSort ( sGroupOrderBy );
+		AddHybridScoreSort ( sGroupOrderBy );
+	}
 
 	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
 
@@ -2356,12 +2517,19 @@ bool QueueCreator_c::PredictAggregates() const
 int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 {
 	assert ( !m_bGotGroupby );
-	const auto & tKNN = m_tQuery.m_tKnnSettings;
-	if ( !tKNN.m_sAttr.IsEmpty() && tKNN.m_fOversampling > 1.0f )
+	if ( m_tQuery.HasKnn() )
 	{
-		int64_t iRequested = tKNN.GetRequestedDocs();
-		if ( !tKNN.m_sAttr.IsEmpty() && iRequested > tKNN.m_iK )
-			return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
+		int64_t iMaxRequested = 0;
+		for ( const auto & tKNN : m_tQuery.m_dKnnSettings )
+			if ( tKNN.m_fOversampling > 1.0f )
+			{
+				int64_t iRequested = tKNN.GetRequestedDocs();
+				if ( iRequested > tKNN.m_iK )
+					iMaxRequested = Max ( iMaxRequested, iRequested );
+			}
+
+		if ( iMaxRequested > 0 )
+			return Max ( Max ( m_tSettings.m_iMaxMatches, iMaxRequested ), 1 );
 	}
 
 	if ( m_tQuery.m_bExplicitMaxMatches || m_tQuery.m_bHasOuter || !m_tSettings.m_bComputeItems )
@@ -2393,21 +2561,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_tKnnSettings.m_sAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_tKnnSettings.m_sAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_tKnnSettings.m_sAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
@@ -2464,9 +2632,12 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( !pSorter )
 		return nullptr;
 
-	pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.m_tKnnSettings );
-	if ( !pSorter )
-		return nullptr;
+	if ( !m_tQuery.m_bHybridSearch )
+	{
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.HasKnn() ? m_tQuery.SingleKnnSettings() : KnnSearchSettings_t() );
+		if ( !pSorter )
+			return nullptr;
+	}
 
 	return CreateColumnarProxySorter ( pSorter, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
 }
@@ -2478,6 +2649,7 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
+		&& AddHybridScoreColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()
 		&& AddExpressionsForUpdates()

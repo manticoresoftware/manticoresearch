@@ -373,8 +373,9 @@ void test_status ( sphinx_client * client )
 		&& strstr ( status[k], "workers_total" )==NULL
 		&& strstr ( status[k], "workers_active" )==NULL
 		&& strstr ( status[k], "agent_tfo")==NULL
-                && strstr ( status[k], "load") == NULL
-		&& strstr ( status[k], "connect_count" )==NULL ))
+		&& strstr ( status[k], "load") == NULL
+		&& strstr ( status[k], "connect_count" )==NULL
+		&& strstr ( status[k], "_stats_ms_" )==NULL ))
 		{
 			for ( j=0; j<num_cols; j++, k++ )
 				printf ( ( j==0 ) ? "%s:" : " %s", status[k] );

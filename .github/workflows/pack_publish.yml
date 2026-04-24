@@ -253,12 +253,14 @@ jobs:
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      HOMEBREW_PREFIX: /opt/homebrew
+      HOMEBREW_PREFIX: ${{ matrix.arch == 'arm64' && '/opt/homebrew' || '/usr/local' }}
       cmake_command: |
         mkdir build
         cd build
         export BUNDLE_REPO_TYPE=${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
-        cmake -DPACK=1 -DPACK_BUNDLE=1 ..
+        cmake -DPACK=1 -DPACK_BUNDLE=1 -DDL_CURL=1 \
+          -DCURL_LIBRARY=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib \
+          -DCURL_LIBRARY_RELEASE=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib ..
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"

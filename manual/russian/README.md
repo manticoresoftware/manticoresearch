@@ -117,6 +117,7 @@
     * [• Сопоставления](Searching/Collations.md)
     * [• Оптимизатор на основе стоимости](Searching/Cost_based_optimizer.md)
     * [• Векторный поиск K-ближайших соседей](Searching/KNN.md)
+    * [• Гибридный поиск](Searching/Hybrid_search.md)
 * [• Обновление схемы и настроек таблицы](Updating_table_schema_and_settings.md)
     * [• Обновление схемы таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
     * [• Обновление FT-настроек таблицы в режиме RT](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
@@ -190,6 +191,7 @@
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)
     * [≫ UDF и плагины](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md)
+        * [UDF](Extensions/UDFs_and_Plugins/UDF.md)
         * [Список плагинов](Extensions/UDFs_and_Plugins/Listing_plugins.md)
         * [≫ UDF]
             * [Создание функции](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md)

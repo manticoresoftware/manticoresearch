@@ -119,5 +119,16 @@ To remove a node from the replication cluster, follow these steps:
 3. Run `ALTER CLUSTER cluster_name UPDATE nodes` on any other node.
 
 After these steps, the other nodes will forget about the detached node and the detached node will forget about the cluster. This action will not impact the tables in the cluster or on the detached node.
-<!-- proofread -->
 
+## EXIT CLUSTER
+
+`EXIT CLUSTER <cluster_name>` is the online equivalent of the manual detach flow above. It removes the local node from the replication cluster, keeps the local tables intact as regular local tables, saves the local config, and then asks the surviving peers to refresh their persisted node lists using the existing `ALTER CLUSTER ... UPDATE nodes` machinery.
+
+```sql
+EXIT CLUSTER posts
+```
+
+Use `EXIT CLUSTER` when you want to detach only the current node. Use `DELETE CLUSTER` when you want to remove the cluster from every node.
+
+`EXIT CLUSTER` is only allowed for a healthy local node in a primary cluster. If the command returns a warning, the local detach already succeeded, but some follow-up may still be required. In that case run `ALTER CLUSTER <cluster_name> UPDATE nodes` on any surviving node to finish refreshing the remaining cluster metadata.
+<!-- proofread -->

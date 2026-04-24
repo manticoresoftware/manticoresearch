@@ -23,7 +23,7 @@ static void FnSortGetStringRemap ( const ISphSchema & tDstSchema, const ISphSche
 	{
 		const CSphColumnInfo & tDst = tDstSchema.GetAttr ( i );
 		// remap only static strings
-		if ( tDst.m_eAttrType==SPH_ATTR_STRINGPTR || !IsSortStringInternal ( tDst.m_sName ) )
+		if ( tDst.m_eAttrType==SPH_ATTR_STRINGPTR || tDst.m_eAttrType==SPH_ATTR_TDIGEST_PTR || !IsSortStringInternal ( tDst.m_sName ) )
 			continue;
 
 		auto iSrcCol = tSrcSchema.GetAttrIndex ( tDst.m_sName.cstr ()+sizeof ( GetInternalAttrPrefix() )-1 );
@@ -101,7 +101,8 @@ void RemapNullMask ( VecTraits_T<CSphMatch> & dMatches, const CSphSchema & tOldS
 	}
 	else
 	{
-		assert ( pOld->m_eAttrType==SPH_ATTR_STRINGPTR && pNew->m_eAttrType==SPH_ATTR_STRINGPTR );
+		assert ( ( pOld->m_eAttrType==SPH_ATTR_STRINGPTR || pOld->m_eAttrType==SPH_ATTR_TDIGEST_PTR )
+			&& pNew->m_eAttrType==pOld->m_eAttrType );
 
 		for ( auto & i : dMatches )
 		{
@@ -173,7 +174,7 @@ void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnI
 	// parse expression as if it is not columnar
 	CSphString		 sError;
 	ExprParseArgs_t	 tExprArgs;
-	tAttr.m_pExpr = sphExprParse ( tAttr.m_sName.cstr(), m_tNewSchema, nullptr, sError, tExprArgs );
+	tAttr.m_pExpr = sphExprParse ( tAttr.m_sName.cstr(), m_tNewSchema, sError, tExprArgs );
 	assert ( tAttr.m_pExpr );
 
 	// now remove it from schema (it will be added later with the supplied expression)
@@ -230,7 +231,7 @@ private:
 	CSphVector<MapAction_t>	m_dActions;			// the recipe
 	CSphVector<std::pair<CSphAttrLocator, CSphAttrLocator>> m_dRemapCmp;	// remap @int_attr_ATTR -> ATTR
 	CSphVector<int>			m_dNullRemap;		// attr remap for null bitmaps
-	CSphVector<int>			m_dDataPtrAttrs;	// orphaned attrs we have to free before swap to new attr
+	CSphVector<DataPtrAttr_t>	m_dDataPtrAttrs;	// orphaned attrs we have to free before swap to new attr
 	GetBlobPoolFromMatch_fn	m_fnGetBlobPool;	// provides base for pool copying
 	GetColumnarFromMatch_fn	m_fnGetColumnar;	// columnar storage getter
 
@@ -263,7 +264,12 @@ MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, cons
 		{
 			// dataptr present in old, but not in the new - mark it for releasing
 			if ( sphIsDataPtrAttr ( tOld.m_eAttrType ) && tOld.m_tLocator.m_bDynamic )
-				m_dDataPtrAttrs.Add( tOld.m_tLocator.m_iBitOffset >> ROWITEM_SHIFT );
+			{
+				DataPtrAttr_t tDesc;
+				tDesc.m_iRowitem = tOld.m_tLocator.m_iBitOffset >> ROWITEM_SHIFT;
+				tDesc.m_eType = tOld.m_eAttrType;
+				m_dDataPtrAttrs.Add ( tDesc );
+			}
 			continue;
 		}
 
@@ -310,12 +316,13 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 	{
 		CSphString		sError;
 		ExprParseArgs_t tExprArgs;
-		tAction.m_pExpr =  sphExprParse ( tOld.m_sName.cstr(), *pOldSchema, nullptr, sError, tExprArgs );
+		tAction.m_pExpr =  sphExprParse ( tOld.m_sName.cstr(), *pOldSchema, sError, tExprArgs );
 		assert ( tAction.m_pExpr );
 
 		switch ( tNew.m_eAttrType )
 		{
-		case SPH_ATTR_STRINGPTR:		tAction.m_eAction = MapAction_t::EVALEXPR_STR;		break;
+		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:		tAction.m_eAction = MapAction_t::EVALEXPR_STR;		break;
 		case SPH_ATTR_BIGINT:			tAction.m_eAction = MapAction_t::EVALEXPR_BIGINT;	break;
 		case SPH_ATTR_UINT32SET_PTR:
 		case SPH_ATTR_INT64SET_PTR:

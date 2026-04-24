@@ -15,6 +15,7 @@
 #include "sphinxstd.h"
 
 #include "sphinxdefs.h"
+#include "aggrexpr.h"
 #include "locator.h"
 #include "sphinxexpr.h"
 #include "knn/knn.h"
@@ -52,6 +53,7 @@ struct CSphColumnInfo
 
 	CSphString		m_sName;							///< column name
 	ESphAttr		m_eAttrType;						///< attribute type
+	ESphAttr		m_eAggrInputType { SPH_ATTR_NONE };///< original attr type for aggregate inputs
 
 	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
 	bool			m_bIndexed = false;					///< whether to index this column as fulltext field too
@@ -76,6 +78,9 @@ struct CSphColumnInfo
 	knn::IndexSettings_t m_tKNN;						///< knn index settings
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
+
+	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
+	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs
 
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 

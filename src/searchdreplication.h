@@ -61,6 +61,7 @@ bool ReplicationResolveUser ( const SqlStmt_t & tStmt, const CSphString & sSessi
 
 // cluster deletes
 bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
+bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 
 // Return actual nodes list at cluster
 StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );

@@ -31,6 +31,14 @@ POST /search
 <!-- intro -->
 SQL:
 <!-- request SQL -->
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -56,11 +64,19 @@ POST /search
 {
     "table" : "test",
     "query": {
-      "match": {
-        "title": "hello"
-      },
-      "match": {
-        "body": "world"
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "title": "hello"
+            }
+          },
+          {
+            "match": {
+              "body": "world"
+            }
+          }  
+        ]
       }
     },
     "options":
@@ -231,6 +247,25 @@ select avg(a) from t facet a
 
 Подробнее об опциях см. [blend_mode](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode).
 
+### fusion_method
+Строка. Включает слияние результатов [гибридного поиска](../Searching/Hybrid_search.md). В настоящее время единственное поддерживаемое значение — `'rrf'` (Reciprocal Rank Fusion). При установке `MATCH(...)` и `KNN(...)` выполняются как независимые подзапросы, результаты которых объединяются по рангу.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf';
+```
+
+### fusion_weights
+Именованный список чисел с плавающей запятой. Веса для каждого подзапроса при оценке RRF в [гибридном поиске](../Searching/Hybrid_search.md). Требует `fusion_method='rrf'`. Подзапросам должны быть явно присвоены псевдонимы с помощью `AS` в SQL или `"name"` в JSON. Для неуказанных псевдонимов по умолчанию используется вес 1.0.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AS text
+  AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) AS dense
+OPTION fusion_method='rrf', fusion_weights=(text=0.7, dense=0.3);
+```
+
 ### field_weights
 Именованный список целых чисел (пользовательские веса по полям для ранжирования).
 
@@ -304,12 +339,24 @@ Manticore может увеличить `max_matches` для повышения 
 `none` позволяет заменять все термины запроса их точными формами, если таблица была построена с включенной опцией [index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words). Это полезно для предотвращения стемминга или лемматизации терминов запроса.
 
 ### not_terms_only_allowed
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
+-->
+
 <!-- example not_terms_only_allowed -->
 `0` или `1` разрешает автономное [отрицание](../Searching/Full_text_matching/Operators.md#Negation-operator) для запроса. По умолчанию 0. См. также соответствующую [глобальную настройку](../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select * from tbl where match('-donald');
+MySQL [(none)]> select * from t where match('-donald');
 ERROR 1064 (42000): index t: query error: query is non-computable (single NOT operator)
 MySQL [(none)]> select * from t where match('-donald') option not_terms_only_allowed=1;
 +---------------------+-----------+
@@ -318,7 +365,60 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql -d "select * from t where match('-d')"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      },
+      {
+        "_id": 5912226830793834497,
+        "_score": 2500,
+        "_source": {
+          "f1": "c",
+          "f2": 3
+        }
+      },
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
+
+### rank_constant
+Целое число. По умолчанию 60. Константа сглаживания для ранжирования RRF в [гибридном поиске](../Searching/Hybrid_search.md). Оценка каждого документа из подзапроса рассчитывается как `weight / (rank_constant + rank)`, где `rank` — его позиция (начиная с 1) в результатах этого подзапроса. Меньшее значение (например, 10) делает первые позиции гораздо более значимыми, чем последующие; большее значение (например, 100) сглаживает разницу между позициями. Требует `fusion_method='rrf'`.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', rank_constant=10;
+```
 
 ### ranker
 Выберите из следующих вариантов:
@@ -352,6 +452,23 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 * `pq` - очередь с приоритетом, установлена по умолчанию
 * `kbuffer` - обеспечивает более быструю сортировку для уже предварительно отсортированных данных, например, данных таблицы, отсортированных по id
 Результирующий набор одинаков в обоих случаях; выбор того или иного варианта может просто улучшить (или ухудшить) производительность.
+
+### window_size
+Целое число. По умолчанию 0 (авто). Управляет тем, сколько результатов каждый подзапрос (текстовый и каждый KNN) извлекает перед слиянием RRF в [гибридном поиске](../Searching/Hybrid_search.md). Большее окно подаёт больше кандидатов на слияние, улучшая полноту охвата за счёт производительности. Требует `fusion_method='rrf'`.
+
+При установке в 0 (авто) окно вычисляется как **максимум** из:
+- наибольшего запрошенного количества документов KNN среди всех KNN подзапросов (что составляет `k * oversampling`, когда повторное ранжирование включено, или просто `k` в противном случае), и
+- значения `LIMIT` запроса.
+
+Например, при `LIMIT 20` и `knn(vec, 10, ...)` (oversampling по умолчанию 3.0, повторное ранжирование включено), авто окно = max(10*3, 20) = 30. Как текстовый подзапрос, так и KNN подзапрос будут извлекать до 30 результатов каждый перед слиянием.
+
+При явной установке это значение переопределяет автоматический расчёт и используется как лимит для всех подзапросов.
+
+```sql
+SELECT id, hybrid_score() FROM t
+WHERE match('machine learning') AND knn(vec, 5, (0.1, 0.1, 0.1, 0.1))
+OPTION fusion_method='rrf', window_size=50;
+```
 
 ### threads
 Ограничивает максимальное количество потоков, используемых для обработки текущего запроса. По умолчанию — без ограничений (запрос может занять все [потоки](../Server_settings/Searchd.md#threads), определенные глобально).
@@ -387,6 +504,17 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 
 <!-- end -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int);
+INSERT INTO students(name, age) VALUES
+('Alice', 20),
+('Bob', 22),
+('Carol', 25);
+-->
+
 <!-- example comments -->
 При использовании клиента MySQL/MariaDB убедитесь, что включен флаг `--comments`, чтобы активировать подсказки в ваших запросах.
 
@@ -394,6 +522,13 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```bash
 mysql -P9306 -h0 --comments
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+```
+
 <!-- end -->
 
 <!-- proofread -->

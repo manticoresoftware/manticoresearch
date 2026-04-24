@@ -21,6 +21,8 @@ add_library ( daemon OBJECT
 		winservice.cpp
 		winservice.h
 		api_commands.h
+		notifier.h
+		notifier.cpp
 		daemon_ipc.cpp
 		daemon_ipc.h
 )

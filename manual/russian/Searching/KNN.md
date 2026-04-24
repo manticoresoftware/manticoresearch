@@ -2,6 +2,8 @@
 
 Manticore Search поддерживает возможность добавления эмбеддингов, сгенерированных моделями машинного обучения, к каждому документу, а затем выполнение поиска ближайших соседей по ним. Это позволяет создавать такие функции, как поиск по сходству, рекомендации, семантический поиск и ранжирование по релевантности на основе алгоритмов NLP, среди прочего, включая поиск по изображениям, видео и звуку.
 
+Чтобы объединить векторный поиск KNN с полнотекстовым поиском для повышения релевантности, см. [Гибридный поиск](../Searching/Hybrid_search.md).
+
 ## Что такое эмбеддинг?
 
 Эмбеддинг — это метод представления данных — таких как текст, изображения или звук — в виде векторов в многомерном пространстве. Эти векторы созданы таким образом, чтобы расстояние между ними отражало сходство представляемых ими данных. Этот процесс обычно использует алгоритмы, такие как word embeddings (например, Word2Vec, BERT) для текста или нейронные сети для изображений. Многомерная природа векторного пространства, со многими компонентами на вектор, позволяет представлять сложные и тонкие взаимосвязи между элементами. Их сходство измеряется расстоянием между этими векторами, часто с использованием методов, таких как евклидово расстояние или косинусное сходство.
@@ -38,6 +40,23 @@ create table test ( title text, image_vector float_vector knn_type='hnsw' knn_di
 Query OK, 0 rows affected (0.01 sec)
 ```
 
+<!-- request JSON -->
+```json
+POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' )"
+```
+
+<!-- response JSON -->
+
+```json
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- intro -->
 ##### Обычный режим (с использованием файла конфигурации) - Ручные векторы:
 
@@ -68,9 +87,11 @@ table test_vec {
 При создании таблицы для автоэмбеддингов укажите:
 - `MODEL_NAME`: Модель эмбеддингов для использования
 - `FROM`: Какие поля использовать для генерации эмбеддингов (пустое значение означает все текстовые/строковые поля)
+- `API_KEY`: Требуется для удаленных моделей (OpenAI, Voyage, Jina). Ключ API проверяется при создании таблицы путем выполнения реального API-запроса.
+- `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
+- `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
 **Поддерживаемые модели эмбеддингов:**
-
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
 | **Sentence Transformers** | `sentence-transformers/all-MiniLM-L6-v2` | Нет | Локальные модели на основе BERT, автоматически загружаются |
@@ -122,6 +143,17 @@ CREATE TABLE products_openai (
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
+);
+```
+
+Использование OpenAI с пользовательским URL API и таймаутом (опционально)
+```sql
+CREATE TABLE products_openai_custom (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 
@@ -184,6 +216,15 @@ table products_all {
 
 ##### Вставка данных с автоматическими эмбеддингами
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title');
+DROP TABLE IF EXISTS products_openai;
+CREATE TABLE products_openai(title text, description text, embedding_vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title,description');
+-->
+
 <!-- example inserting_embeddings -->
 
 При использовании автоматических эмбеддингов вы можете:
@@ -223,6 +264,26 @@ INSERT INTO products_openai (title, description) VALUES
 ```sql
 INSERT INTO products (title, embedding_vector) VALUES
 ('no embedding item', ());
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+Вставить только текстовые данные — эмбеддинги генерируются автоматически
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products (title) VALUES ('machine learning artificial intelligence'),('banana fruit sweet yellow')"
+```
+
+Вставить несколько полей — оба используются для эмбеддинга, если FROM='title,description'  
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products_openai (title, description) VALUES ('smartphone', 'latest mobile device with advanced features'), ('laptop', 'portable computer for work and gaming')"
+```
+
+Вставить пустой вектор (документ исключается из векторного поиска)
+```JSON
+POST /sql?mode=raw -d "INSERT INTO products (title, embedding_vector) VALUES ('no embedding item', ())"
 ```
 
 <!-- end -->
@@ -522,6 +583,27 @@ create table test ( title text, image_vector float_vector knn_type='hnsw' knn_di
 ```sql
 Query OK, 0 rows affected (0.01 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```json
+POST /sql?mode=raw -d "create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit')"
+```
+
+<!-- response JSON -->
+
+```json
+[
+  {
+    "total": 0,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 <!-- Example knn_similar_docs -->
@@ -657,17 +739,17 @@ POST /search
 	{
 		"field": "image_vector",
 		"query": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5,
-		"filter":
+		"k": 5
+	},
+	"query":
+	{
+		"bool":
 		{
-			"bool":
-			{
-				"must":
-				[
-					{ "match": {"_all":"white"} },
-			        { "range": { "id": { "lt": 10 } } }
-				]
-			}
+			"must":
+			[
+				{ "match": {"_all":"white"} },
+				{ "range": { "id": { "lt": 10 } } }
+			]
 		}
 	}
 }
@@ -708,9 +790,9 @@ POST /search
 
 При комбинировании векторного поиска KNN с фильтрами атрибутов Manticore поддерживает две стратегии, которые отличаются тем, когда фильтр применяется относительно обхода графа HNSW.
 
-* Предварительная фильтрация (по умолчанию; фильтр в `"knn"` (JSON) или `prefilter=1` (SQL)) передаёт фильтр непосредственно в сам обход HNSW. Каждый кандидат проверяется фильтром перед добавлением в кучу результатов — только соответствующие документы вносят вклад в окончательные `k` результатов. Это уменьшает бесполезные вычисления расстояний и гарантирует возврат ровно `k` соответствующих документов (при условии, что существует `k` соответствующих документов).
+* Предфильтрация (по умолчанию; `prefilter=1` (SQL) или `"prefilter": true` (JSON, по умолчанию)) передаёт фильтр непосредственно в сам обход HNSW. Каждый кандидат проверяется фильтром перед добавлением в кучу результатов — только соответствующие документы вносят вклад в итоговые `k` результатов. Это уменьшает бесполезные вычисления расстояний и гарантирует возврат ровно `k` соответствующих документов (при условии, что существует `k` соответствующих документов).
 
-* Последующая фильтрация (фильтр в `"query"` (JSON) или `prefilter=0` (SQL)) сначала выполняет поиск KNN по всему набору данных, а затем применяет фильтр к результатам. Это безопасно и предсказуемо: граф HNSW обходится без помех, и фильтр влияет только на то, какие результаты возвращаются клиенту. Недостаток в том, что граф может тратить усилия на кандидатов, которые в конечном итоге будут отброшены. При жёстком фильтре, соответствующем лишь небольшой доле документов, возвращаемых `k` результатов может быть значительно меньше запрошенного, потому что большинство кандидатов KNN не проходят фильтр.
+* Постфильтрация (`prefilter=0` (SQL) или `"prefilter": false` (JSON)) сначала выполняет поиск KNN по всему набору данных, а затем применяет фильтр к результатам. Это безопасно и предсказуемо: граф HNSW обходится без помех, и фильтр влияет только на то, какие результаты возвращаются клиенту. Недостаток в том, что граф может тратить усилия на кандидатов, которые в итоге будут отброшены. При жёстком фильтре, соответствующем лишь небольшой доле документов, возвращённых результатов `k` может быть значительно меньше запрошенного, потому что большинство кандидатов KNN не проходят фильтр.
 
 Внутренне Manticore использует алгоритм на основе ACORN-1 для предварительной фильтрации. Наивная предварительная фильтрация просто пропускала бы несоответствующие узлы, что рискует потерей "мостовых" узлов, соединяющих иначе разделённые части графа HNSW, вызывая коллапс полноты при увеличении селективности фильтра. ACORN-1 избегает этого: когда узел не проходит фильтр, его соседи всё равно добавляются в очередь исследования. Это позволяет обходу обходить отфильтрованные узлы и поддерживать связность графа. Исследование ACORN-1 активируется автоматически, когда менее 60% от общего количества документов проходят фильтр.
 
@@ -739,26 +821,27 @@ AND price < 100;
 <!-- request JSON -->
 
 ```json
-// prefilter (default): filter is inside "knn", applied during HNSW traversal
-POST /search
-{
-    "table": "test",
-    "knn": {
-        "field": "image_vector",
-        "query": [0.286569,-0.031816,0.066684,0.032926],
-        "filter": {
-            "range": { "price": { "lt": 100 } }
-        }
-    }
-}
-
-// postfilter: filter is in "query", applied after KNN search
+// prefilter (default): filter applied during HNSW traversal
 POST /search
 {
     "table": "test",
     "knn": {
         "field": "image_vector",
         "query": [0.286569,-0.031816,0.066684,0.032926]
+    },
+    "query": {
+        "range": { "price": { "lt": 100 } }
+    }
+}
+
+// postfilter: filter applied after KNN search
+POST /search
+{
+    "table": "test",
+    "knn": {
+        "field": "image_vector",
+        "query": [0.286569,-0.031816,0.066684,0.032926],
+        "prefilter": false
     },
     "query": {
         "range": { "price": { "lt": 100 } }

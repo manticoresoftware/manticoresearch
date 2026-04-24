@@ -20,8 +20,8 @@ jobs:
     if: ${{ inputs.enabled }}
     runs-on: ubuntu-22.04
     outputs:
-      version_full: ${{ steps.semver.outputs.version_full }}
-      version_rpm: ${{ steps.semver.outputs.version_rpm }}
+      version_full: ${{ steps.package_version.outputs.version_full }}
+      version_rpm: ${{ steps.package_version.outputs.version_rpm }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,19 +39,38 @@ jobs:
             echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
             exit 1
           fi
+          source_remote="$(git -C daemon-src/mcl remote get-url origin)"
           git clone --no-local daemon-src/mcl mcl-src
           shopt -s dotglob nullglob
           mv mcl-src/* .
           rmdir mcl-src
-          git fetch --tags --force --prune || true
+          case "$source_remote" in
+            git@github.com:*)
+              source_remote="https://github.com/${source_remote#git@github.com:}"
+              ;;
+            ssh://git@github.com/*)
+              source_remote="https://github.com/${source_remote#ssh://git@github.com/}"
+              ;;
+          esac
+          git remote set-url origin "$source_remote"
+          git fetch --force --prune origin '+refs/heads/*:refs/remotes/origin/*' || true
+          git fetch --tags --force --prune origin || true
           git config --global --add safe.directory "$PWD"
       - name: Calculate MCL package version
-        id: semver
-        uses: manticoresoftware/semver-tagger-action@main
-        with:
-          github_token: ${{ github.token }}
-          conventional_commits_authors: alexey@manticoresearch.com
-          ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
+        id: package_version
+        run: |
+          set -euo pipefail
+          base_version="0.0.0"
+          commit_hash="$(git rev-parse --short=8 HEAD)"
+          timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
+          if git tag --points-at HEAD | grep -Eq '^release'; then
+            version_full="${base_version}+${timestamp}-${commit_hash}"
+          else
+            version_full="${base_version}+${timestamp}-${commit_hash}-dev"
+          fi
+          version_rpm="${version_full//-/.}"
+          echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
+          echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
 
   embeddings_builds:
     if: ${{ inputs.enabled }}

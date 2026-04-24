@@ -84,11 +84,22 @@ jobs:
             echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
             exit 1
           fi
+          source_remote="$(git -C daemon-src/mcl remote get-url origin)"
           git clone --no-local daemon-src/mcl mcl-src
           shopt -s dotglob nullglob
           mv mcl-src/* .
           rmdir mcl-src
-          git fetch --tags --force --prune || true
+          case "$source_remote" in
+            git@github.com:*)
+              source_remote="https://github.com/${source_remote#git@github.com:}"
+              ;;
+            ssh://git@github.com/*)
+              source_remote="https://github.com/${source_remote#ssh://git@github.com/}"
+              ;;
+          esac
+          git remote set-url origin "$source_remote"
+          git fetch --force --prune origin '+refs/heads/*:refs/remotes/origin/*' || true
+          git fetch --tags --force --prune origin || true
           git config --global --add safe.directory "$PWD"
 
       - name: Setup Rust toolchain

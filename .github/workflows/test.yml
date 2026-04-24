@@ -183,12 +183,15 @@ jobs:
             echo "* (no files)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          export FILES="$files"
+          files_list_path="$RUNNER_TEMP/changed-files.txt"
+          printf '%s\n' "$files" > "$files_list_path"
 
-          python3 - <<'PY'
+          python3 - "$files_list_path" <<'PY'
           import os
+          import sys
 
-          files = os.environ.get("FILES", "").splitlines()
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              files = [line.rstrip("\n") for line in fh]
           source = False
           test = False
           clt = False

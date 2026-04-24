@@ -25,7 +25,9 @@ public:
 	virtual void	Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge ) = 0;
 	virtual void	Setup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge ) {}
 	virtual void	Finalize ( CSphMatch & tDst ) {}
+	virtual void	Discard ( CSphMatch & tDst ) {}
 	virtual void	SetColumnar ( columnar::Columnar_i * pColumnar ) {}
+	virtual bool	NeedsDiscard () const { return false; }
 };
 
 
@@ -33,6 +35,10 @@ AggrFunc_i * CreateAggrSum ( const CSphColumnInfo & tAttr );
 AggrFunc_i * CreateAggrAvg ( const CSphColumnInfo & tAttr, const CSphAttrLocator & tCount );
 AggrFunc_i * CreateAggrMin ( const CSphColumnInfo & tAttr );
 AggrFunc_i * CreateAggrMax ( const CSphColumnInfo & tAttr );
+
+AggrFunc_i * CreateAggrPercentiles ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrPercentileRanks ( const CSphColumnInfo & tAttr );
+AggrFunc_i * CreateAggrMad ( const CSphColumnInfo & tAttr );
 
 AggrFunc_i * CreateAggrConcat ( const CSphColumnInfo & tAttr );
 

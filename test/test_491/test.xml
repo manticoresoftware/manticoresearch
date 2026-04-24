@@ -31,6 +31,20 @@ searchd
 
 	select id, vacid, knn_dist() as dist from t where match('machine learning') and knn(vec,5,(0.1,0.1,0.1,0.1)) group by vacid option fusion_method='rrf';
 	drop table t;
+
+	<!-- regression for join vs hybrid -->
+	create table j ( title text );
+	create table t ( post_subject text, forum_id int, embedding_list float_vector knn_type='hnsw' knn_dims='1' hnsw_similarity='L2' );
+	insert into t (id, post_subject, forum_id, embedding_list) VALUES  (1, 'test', 1, (0.1));
+	flush ramchunk t;
+	select 1 from t left join j on t.forum_id = j.id where match('test') and knn(embedding_list, (0.1)) option fusion_method='rrf';
+	select id, hybrid_score() from t left join j on t.forum_id = j.id where match('test') and knn(embedding_list, (0.1)) option fusion_method='rrf';
+	select id from t left join j on t.forum_id = j.id where match('test') and knn(embedding_list, (0.1)) option fusion_method='rrf';
+	select * from t left join j on t.forum_id = j.id where match('test') and knn(embedding_list, (0.1)) option fusion_method='rrf';
+	select *,hybrid_score() from t left join j on t.forum_id = j.id where match('test') and knn(embedding_list, (0.1)) option fusion_method='rrf';
+
+	drop table t;
+	drop table j;
 </sphinxql>
 </queries>
 </test>

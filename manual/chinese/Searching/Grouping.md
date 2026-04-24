@@ -2189,6 +2189,108 @@ POST /sql?mode=raw -d "SELECT release_year year, sum(rental_rate) sum, min(renta
 
 <!-- end -->
 
+<!-- example elasticaggrs -->
+##### PERCENTILES(), PERCENTILE_RANKS(), MEDIAN_ABSOLUTE_DEVIATION()
+
+Manticore 还支持以下针对数字字段的统计函数：
+
+- `percentiles(field[, {values='...',compression=N}])` - 返回数字字段的估计百分位值（例如 p50、p95、p99）。
+- `percentile_ranks(field, {values='...',compression=N})` - 返回每个输入值小于或等于的文档百分比估计值。
+- `median_absolute_deviation(field[, {compression=N}])` - 返回估计的中位数绝对偏差（MAD），这是围绕中位数的稳健分布度量。
+
+这些函数设计为近似计算，当需要内存使用有限的稳健分布统计时非常有用。可选的`compression`参数控制精度/内存的权衡：较低值更快更轻但可能产生更多近似误差；默认值为`200`。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL -->
+```sql
+SELECT
+	percentiles(latency) AS p_default,
+	percentiles(latency, {values='5,50,95',compression=200}) AS p_custom,
+	percentile_ranks(latency, {values='10,150,1500',compression=200}) AS r_custom,
+	median_absolute_deviation(latency, {compression=200}) AS mad
+FROM agg_td;
+```
+
+<!-- response SQL -->
+```sql
++--------------------------------------------------------------+-------------------------------+------------------------------+-------------------------------------+
+| p_default                                                    | p_custom                      | r_custom                       | mad                                 |
++--------------------------------------------------------------+-------------------------------+------------------------------+-------------------------------------+
+| {"1":10,"5":10,"25":20,"50":30,"75":40,"95":50,"99":50}      | {"5":10,"50":30,"95":50}      | {"10":20,"150":100,"1500":100} | {"value":10,"value_as_string":"10"} |
++--------------------------------------------------------------+-------------------------------+------------------------------+-------------------------------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /json/search
+{
+  "table": "agg_td",
+  "size": 0,
+  "aggs": {
+    "latency_percentiles": {
+      "percentiles": {
+        "field": "latency",
+        "values": [5, 50, 95],
+        "keyed": true
+      }
+    },
+    "latency_ranks": {
+      "percentile_ranks": {
+        "field": "latency",
+        "values": [10, 150, 1500],
+        "keyed": true
+      }
+    },
+    "latency_mad": {
+      "median_absolute_deviation": {
+        "field": "latency",
+        "tdigest": {
+          "compression": 200
+        }
+      }
+    }
+  }
+}
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "aggregations": {
+    "latency_percentiles": {
+      "values": {
+        "5.0": 10,
+        "50.0": 30,
+        "95.0": 50
+      }
+    },
+    "latency_ranks": {
+      "values": {
+        "10.0": 20,
+        "150.0": 100,
+        "1500.0": 100
+      }
+    },
+    "latency_mad": {
+      "value": 10,
+      "value_as_string": "10"
+    }
+  },
+  "hits": {
+    "total": 5,
+    "hits": []
+  }
+}
+```
+
+<!-- end -->
+
+对于JSON API，`keyed=true`会按百分位数/排名值返回对象，而`keyed=false`返回数组。这些指标聚合需要数值源值。
+
 <!-- example accuracy -->
 ## 分组精度
 

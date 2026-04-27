@@ -3932,34 +3932,32 @@ void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
 		case DateUnit_e::sec:
 		{
 			// to fixed seconds
-			tDateTime -= ( tDateTime % iMulti );
+			int64_t iInterval = iMulti;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::minute:
 		{
 			// to fixed minutes
-			auto tMin = ( ( tDateTime / 60 ) % 60 );
-			tDateTime -= ( ( tMin % iMulti ) * 60 );
+			int64_t iInterval = int64_t ( iMulti ) * 60;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::hour:
 		{
 			// to fixed hours
-			const int iHourSeconds = 3600;
-			auto tHours = ( ( tDateTime / iHourSeconds ) % 24 );
-			tDateTime -= ( ( tHours % iMulti ) * iHourSeconds );
+			int64_t iInterval = int64_t ( iMulti ) * 3600;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::day:
 		{
 			// to fixed days
-			const int iDaySeconds = 86400;
-			auto tDaysEpoch = ( tDateTime / iDaySeconds );
-			tDaysEpoch -= ( tDaysEpoch % iMulti );
-			tDateTime = ( tDaysEpoch * iDaySeconds );
+			int64_t iInterval = int64_t ( iMulti ) * 86400;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 

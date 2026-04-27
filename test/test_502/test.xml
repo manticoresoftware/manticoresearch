@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>date_histogram fixed interval rounding</name>
+
+<skip_indexer/>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	timezone = UTC
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table dh_minute (ts timestamp);
+	insert into dh_minute (id, ts) values
+		(1,1704067201),
+		(2,1704067230),
+		(3,1704067265),
+		(4,1704067319),
+		(5,1704067320),
+		(6,1704067350);
+
+	create table dh_hour (ts timestamp);
+	insert into dh_hour (id, ts) values
+		(1,1704067201),
+		(2,1704067215),
+		(3,1704070805),
+		(4,1704070810),
+		(5,1704074400),
+		(6,1704077999);
+
+	create table dh_day (ts timestamp);
+	insert into dh_day (id, ts) values
+		(1,1704067201),
+		(2,1704110400),
+		(3,1704153605),
+		(4,1704239999),
+		(5,1704240000),
+		(6,1704283200);
+
+	<!-- Reported issue #4459: fixed hour aliases must match explicit seconds. -->
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='3600s'}) as dh from dh_hour group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='1h'}) as dh from dh_hour group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='60m'}) as dh from dh_hour group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='hour'}) as dh from dh_hour group by dh order by dh asc;
+
+	<!-- Discovered failures from the documented fixed_interval list. -->
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='minute'}) as dh from dh_minute group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='2m'}) as dh from dh_minute group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='3h'}) as dh from dh_hour group by dh order by dh asc;
+
+	<!-- Controls that already worked and should keep working. -->
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='day'}) as dh from dh_day group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='5d'}) as dh from dh_day group by dh order by dh asc;
+</sphinxql>
+
+<!-- JSON aggs use the same fixed interval rounding path. -->
+<query endpoint="json/search">{ "table": "dh_hour", "size":0, "aggs":{ "h": { "date_histogram": { "field": "ts", "fixed_interval":"1h" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_minute", "size":0, "aggs":{ "m": { "date_histogram": { "field": "ts", "fixed_interval":"minute" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_minute", "size":0, "aggs":{ "m2": { "date_histogram": { "field": "ts", "fixed_interval":"2m" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_hour", "size":0, "aggs":{ "h3": { "date_histogram": { "field": "ts", "fixed_interval":"3h" } } } }</query>
+
+<sphinxql>
+	drop table dh_minute;
+	drop table dh_hour;
+	drop table dh_day;
+</sphinxql>
+</queries>
+</test>

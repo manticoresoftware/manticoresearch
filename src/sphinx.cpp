@@ -7786,10 +7786,33 @@ CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 	dResult.Resize ( GetCount() );
 	int j = 0;
 
-	const CSphRowitem * pRow = m_tAttr.GetReadPtr();
-	for ( DWORD uRow=0; uRow < m_iDocinfo; ++uRow, pRow += iStride )
-		if (!m_tDeadRowMap.IsSet (uRow))
-			dResult[j++] = sphGetDocID ( pRow );
+	const CSphColumnInfo * pId = m_tSchema.GetAttr ( sphGetDocidName() );
+	if ( pId && pId->IsColumnar() )
+	{
+		std::string sError;
+		auto pIt = CreateColumnarIterator ( m_pColumnar.get(), sphGetDocidName(), sError );
+		if ( !pIt )
+		{
+			TlsMsg::Err ( "failed to create columnar iterator for '%s': %s", sphGetDocidName(), sError.c_str() );
+			return {};
+		}
+
+		for ( RowID_t tRowID = 0; tRowID < (RowID_t)m_iDocinfo; ++tRowID )
+		{
+			if ( !m_tDeadRowMap.IsSet ( tRowID ) )
+				dResult[j++] = pIt->Get ( tRowID );
+		}
+
+	} else
+	{
+		int iStride = m_tSchema.GetRowSize();
+		const CSphRowitem * pRow = m_tAttr.GetReadPtr();
+		for ( RowID_t tRowID = 0; tRowID < (RowID_t)m_iDocinfo; ++tRowID, pRow += iStride )
+		{
+			if ( !m_tDeadRowMap.IsSet ( tRowID ) )
+				dResult[j++] = sphGetDocID ( pRow );
+		}
+	}
 
 	return dResult;
 }

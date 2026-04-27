@@ -15,6 +15,7 @@ jobs:
     outputs:
       repo: ${{ steps.repo-check.outputs.repo }}
       ref: ${{ steps.repo-check.outputs.ref }}
+      skip_translate: ${{ steps.repo-check.outputs.skip_translate }}
     permissions:
       contents: write
       pull-requests: read
@@ -30,19 +31,34 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           name: pr_repo
           path: .
+      - name: Download translate mode
+        if: github.event_name == 'workflow_run'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: skip_translate
+          path: .
       - name: Check origin repository
         id: repo-check
         run: |
           if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            PR_REPO=$(cat ./pr_repo.txt)
-            repo=$(head -n 1 <<< "$PR_REPO")
-            ref=$(tail -n 1 <<< "$PR_REPO")
+            repo=$(sed -n '1p' ./pr_repo.txt)
+            ref=$(sed -n '2p' ./pr_repo.txt)
+            if [ -f ./skip_translate.txt ]; then
+              skip_translate=$(tr -d '\r\n' < ./skip_translate.txt)
+            else
+              skip_translate="false"
+            fi
           else
             repo="${{ github.repository }}"
             ref="${{ github.head_ref }}"
+            skip_translate="false"
           fi
           echo "repo=$repo" >> $GITHUB_OUTPUT
           echo "ref=$ref" >> $GITHUB_OUTPUT
+          echo "skip_translate=${skip_translate:-false}" >> $GITHUB_OUTPUT
       - name: Checkout
         uses: actions/checkout@v3
         with:
@@ -59,7 +75,13 @@ jobs:
           tools: composer
           extensions: curl
 
+      - name: Explain skipped auto-translate
+        if: steps.repo-check.outputs.skip_translate == 'true'
+        run: |
+          echo "Skipping auto-translate because the PR is draft or labeled 'draft'."
+
       - name: Run auto-translate
+        if: steps.repo-check.outputs.skip_translate != 'true'
         env:
           OPENROUTER_TRANSLATOR_API_KEY: ${{ secrets.OPENROUTER_TRANSLATOR_API_KEY }}
         run: |

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -119,6 +119,7 @@ static void RemapResult ( AggrResult_t & dResult )
 	int iAttrsCount = tSchema.GetAttrsCount();
 	CSphVector<int> dMapFrom(iAttrsCount);
 	CSphVector<int> dRowItems(iAttrsCount);
+	CSphVector<DataPtrAttr_t> dExtraPtrRows;
 	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
 	for ( auto & tRes : dResult.m_dResults )
@@ -141,7 +142,7 @@ static void RemapResult ( AggrResult_t & dResult )
 		}
 
 		// inverse dRowItems - we'll free only those NOT enumerated yet
-		dRowItems = dSchema.SubsetPtrs ( dRowItems );
+		dExtraPtrRows = dSchema.SubsetPtrs ( dRowItems );
 		for ( auto& tMatch : tRes.m_dMatches )
 		{
 			// create new and shiny (and properly sized) match
@@ -175,7 +176,7 @@ static void RemapResult ( AggrResult_t & dResult )
 			}
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tNewMatch );
-			CSphSchemaHelper::FreeDataSpecial ( tNewMatch, dRowItems );
+			CSphSchemaHelper::FreeDataSpecial ( tNewMatch, dExtraPtrRows );
 		}
 	}
 }
@@ -479,6 +480,8 @@ static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResu
 			{
 				assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
 				tCol.m_eAggrFunc = tItem.m_eAggrFunc;
+				tCol.m_fTdigestCompression = tItem.m_fTdigestCompression;
+				tCol.m_tAggrSettings = tItem.m_tAggrSettings;
 			}
 		}
 	}
@@ -635,15 +638,6 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 	// collect unique tags from matches
 	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
 
-	// generates docstore session id
-	DocstoreSession_c tSession;
-	auto iSessionUID = tSession.GetUID();
-
-	// spawn buffered readers for the current session
-	// put them to a global hash
-	for ( int iTag : dDocstoreTags )
-		tRes.m_dResults[iTag].m_pDocstore->CreateReader ( iSessionUID );
-
 	int iLastTag = -1;
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
 	for ( auto & dMatch : dMatches )
@@ -658,7 +652,8 @@ static void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphC
 		if ( iTag!=iLastTag )
 		{
 			for ( const auto & pCol : dPostlimit )
-				SetupPostlimitExprs ( pDocstore, pCol, sQuery, iSessionUID );
+				SetupPostlimitExprs ( pDocstore, pCol, sQuery, -1 );
+
 			iLastTag = iTag;
 		}
 

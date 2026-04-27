@@ -3,6 +3,7 @@
 Searching is a core feature of Manticore Search. You can:
 * Perform [full-text search](../Searching/Full_text_matching/Basic_usage.md#MATCH) and implement search result [highlighting](../Searching/Highlighting.md)
 * Perform [k-nearest neighbor search](../Searching/KNN.md)
+* Perform [hybrid search](../Searching/Hybrid_search.md) combining full-text and KNN vector search
 * Apply [non-full-text filtering](../Searching/Filters.md)
 * Use [expressions](../Searching/Expressions.md) for filtering
 * Utilize various [search options](../Searching/Options.md)

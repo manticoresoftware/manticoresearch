@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -38,7 +38,10 @@ bool InitSecondary ( CSphString & sError )
 	assert ( !g_pSecondaryLib );
 
 	CSphString sLibfile;
-	if ( IsAVX2Supported() )
+	if ( IsAVX512Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION, "_avx512" );
+
+	if ( sLibfile.IsEmpty() && IsAVX2Supported() )
 		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION, "_avx2" );
 
 	if ( sLibfile.IsEmpty() )

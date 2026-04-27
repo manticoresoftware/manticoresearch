@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -113,6 +113,10 @@ void			sphInitIOStats();
 void			sphDoneIOStats();
 
 CSphIOStats *	GetIOStats();
+
+/// always accounted global written bytes (came from writethrottled/writenonthrottled)
+void			GlobalWrite ( int iWritten ) noexcept;
+uint64_t		GlobalWritten () noexcept;
 
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );

@@ -5,6 +5,7 @@
 <requires>
 <force-rt/>
 <http/>
+<sphinxql_keep_null/>
 </requires>
 
 <skip_indexer/>
@@ -46,6 +47,9 @@ select * from join2 order by id asc;
 
 <!-- plain join -->
 select id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by id asc;
+
+<!-- plain join with left table prefix in SELECT (allowed) -->
+select join1.id, join2.name from join1 inner join join2 on join1.string_id=join2.id order by join1.id asc;
 
 <!-- plain join -->
 select id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
@@ -252,6 +256,8 @@ insert into t values(1, 'abc');
 insert into t2 values(1, 'abc', 1),(2, 'def', 1);
 
 select * from t inner join t2 on t.id = t2.t_id where t2.id = 1 or t2.id = 2;
+select * from t inner join t2 on t.id = t2.t_id where id&lt;2 and ( t2.id = 1 or t2.id = 2 );
+select * from t inner join t2 on t.id = t2.t_id where id&lt;1 and ( t2.id = 1 or t2.id = 2 );
 
 drop table t;
 drop table t2;
@@ -388,6 +394,12 @@ select id from join1 inner join join2 on join1.id = join2.id where join2.j.b is 
 select id from join1 inner join join2 on join1.id = join2.id where join2.j.table='join2' order by id asc;
 select id from join1 inner join join2 on join1.id = join2.id where join2.j.table!='join2' order by id asc;
 
+<!-- uppercase table name -->
+select * from JOIN1 left join join2 on JOIN1.id = join2.id where join2.name = 'name1' order by id asc;
+select * from join1 left join JOIN2 on join1.id = JOIN2.id where join2.name = 'name1' order by id asc;
+select * from join1 left join JOIN2 on join1.id = JOIN2.id where JOIN2.name = 'name1' order by id asc;
+select * from JOIN1 left join JOIN2 on JOIN1.id = JOIN2.id where JOIN2.name = 'name1' order by id asc;
+select * from JoIn1 left join jOiN2 on jOiN1.id = JoiN2.id where jOIn2.name = 'name1' order by id asc;
 </sphinxql>
 
 <query endpoint="json/search">
@@ -411,6 +423,37 @@ select id from join1 inner join join2 on join1.id = join2.id where join2.j.table
           "right":
           {
             "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<!-- mixed-case table names in JSON join -->
+<query endpoint="json/search">
+{
+  "table": "JoIn1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "jOiN2",
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "JOIN1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "Join2",
             "field": "id"
           }
         }
@@ -940,7 +983,72 @@ select * from join1 left join join2 on join1.string_id=join2.id and join2.id in 
 drop table join1;
 drop table join2;
 
+<!-- join on json string with explicit cast -->
+create table join_json_l ( id bigint, j json );
+create table join_json_r ( id bigint, j json );
+insert into join_json_l values ( 1, '{"s":"string", "i": 1}' );
+insert into join_json_r values ( 1, '{"s":"string", "i": 1}' );
+select * from join_json_l inner join join_json_r on string(join_json_l.j.s)=join_json_r.j.s;
 </sphinxql>
+
+<query endpoint="json/search">
+{
+  "table": "join_json_l",
+  "join": [
+    {
+      "type": "inner",
+      "table": "join_json_r",
+      "on": [
+        {
+          "left": {
+            "table": "join_json_l",
+            "field": "j.s",
+            "type": "string"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "join_json_r",
+            "field": "j.s"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+
+<sphinxql>
+drop table join_json_r;
+drop table join_json_l;
+</sphinxql>
+
+<sphinxql>
+create table t1;
+create table t2(i int);
+insert into t1 (id) values(1);
+insert into t2 values(1, 1);
+
+<!-- alias from joined attr -->
+select *, i al, (i * 0.01) pct from t2 where pct > 0.0;
+select t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+select t2.i * 0.1 pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+
+select *, t2.i * 0.1 pct from t1 join t2 on t1.id = t2.id where pct>0.0;
+select t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+select *, t2.i al, (al * 0.1) pct from t1 join t2 on t1.id = t2.id where pct > 0.0;
+
+<!-- chained aliases from joined attr -->
+select t2.i al, al+1 b, b*2 c from t1 join t2 on t1.id = t2.id where c > 0;
+
+<!-- multiple aliases from joined attr in one expression -->
+select t2.i al, (al + al) doubled from t1 join t2 on t1.id = t2.id where doubled > 0;
+
+drop table if exists t1;
+drop table if exists t2;
+</sphinxql>
+
+
 </queries>
 
 </test>

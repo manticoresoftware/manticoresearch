@@ -4,7 +4,7 @@
 
 [Logstash](https://www.elastic.co/logstash) 是一个日志管理工具，可以收集来自多种来源的数据，实时转换并发送到您期望的目标。它通常用作 Elasticsearch 的数据管道，Elasticsearch 是一个开源的分析和搜索引擎。
 
-现在，Manticore 支持将 Logstash 用作处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前支持的版本为 7.6-9.2。
+现在，Manticore 支持使用 Logstash 作为处理管道。这允许收集和转换后的数据像发送到 Elasticsearch 一样发送到 Manticore。目前支持的版本为 7.6-9.3。
 
 让我们查看一个用于索引 `dpkg.log` 的简单 Logstash 配置文件示例，`dpkg.log` 是 Debian 包管理器的标准日志文件。该日志本身结构简单，如下所示：
 

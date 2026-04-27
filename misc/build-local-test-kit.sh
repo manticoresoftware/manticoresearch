@@ -30,7 +30,7 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
 fi
 
 # Configuration
-TOOLCHAIN_IMAGE="manticoresearch/external_toolchain:vcpkg331_20250114"
+TOOLCHAIN_IMAGE="manticoresearch/external_toolchain:vcpkg331_20260310"
 BASE_IMAGE="ghcr.io/manticoresoftware/manticoresearch:test-kit-latest"
 OUTPUT_IMAGE="test-kit:local"
 BUILD_TYPE="${BUILD_TYPE:-RelWithDebInfo}"

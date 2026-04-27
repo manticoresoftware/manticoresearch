@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -43,6 +43,7 @@ struct ClusterDesc_t
 	sph::StringSet			m_hIndexes;			// list of index name in cluster
 	StrVec_t				m_dClusterNodes;	// string list of nodes (node - address:API_port)
 	ClusterOptions_t		m_tOptions;			// options for Galera
+	int64_t					m_iClusterEpoch = 0;
 
 	bool					Parse ( const bson::Bson_c & tBson, const CSphString& sName, CSphString & sWarning );
 	void					Save ( JsonEscapedBuilder& tOut ) const;

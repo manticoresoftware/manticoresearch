@@ -93,6 +93,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_vector_regen WHERE KNN(vec, 2, 'artific
 +------+
 |    1 |
 |    2 |
+|    3 |
 +------+
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO test_vector_regen (id, content) VALUES (1, 'Cooking recipes')"; echo $?
@@ -112,6 +113,7 @@ mysql -h0 -P9306 -e "SELECT id FROM test_vector_regen WHERE KNN(vec, 2, 'artific
 +------+
 |    2 |
 |    3 |
+|    1 |
 +------+
 ––– comment –––
 TEST 5: TRUNCATE with vector tables

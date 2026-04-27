@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -983,9 +983,6 @@ void InitSearchdStats() NO_THREAD_SAFETY_ANALYSIS
 	tStats.m_iDiskReads = 0;
 	tStats.m_iDiskReadBytes = 0;
 	tStats.m_iDiskReadTime = 0;
-
-	tStats.m_iPredictedTime = 0;
-	tStats.m_iAgentPredictedTime = 0;
 }
 
 void FormatCmdStats ( const CommandStats_t & tStats, const char * szPrefix, CommandStats_t::EDETAILS eCmd, VectorLike & dStatus )
@@ -3437,7 +3434,7 @@ private:
 			auto* pTask = ( TaskNet_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTimeUS>0 );
 
-			auto iMonoTime = MonoMicroTimer();
+			int64_t iMonoTime = MonoMicroTimer(); // with auto uint64_t test 259 will fail; fixme!
 			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - iMonoTime;
 			if ( m_iNextTimeoutUS>0 )
 				return bHasTimeout;

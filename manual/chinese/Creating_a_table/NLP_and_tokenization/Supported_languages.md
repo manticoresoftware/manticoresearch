@@ -85,6 +85,7 @@ Manticore 支持多种语言，大多数语言通过 `charset_table = non_cont`�
 | 泰语 | charset_table=thai | th | - | |
 | 土耳其语 | charset_table=non_cont | tr | morphology=libstemmer_tr | |
 | 乌克兰语 | charset_table=non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | 需要安装 [UK词形还原器](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) |
+| 越南语 | charset_table=non_cont | - | - | 使用拉丁字母。越南语变音符号（ă, â, ê, ô, ơ, ư, đ 和声调符号）默认会自动映射到其基本拉丁字符，因此无需额外配置，“tiếng” 会匹配 “tieng” |
 | 约鲁巴语 | charset_table=non_cont | yo | - | |
 | 祖鲁语 | charset_table=non_cont | zu | - |  |
 <!-- proofread -->

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -54,7 +54,7 @@ struct Passage_t
 
 struct SnippetQuerySettings_t;
 struct SnippetLimits_t;
-class SnippetsDocIndex_c;
+class SnippetsDocIndex_i;
 
 struct PassageContext_t
 {
@@ -65,7 +65,7 @@ struct PassageContext_t
 
 							PassageContext_t();
 
-	CSphVector<Passage_t>	SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords ) const;
+	CSphVector<Passage_t>	SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_i & tContainer, DWORD uFoundWords ) const;
 };
 
 

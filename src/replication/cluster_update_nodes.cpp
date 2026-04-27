@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,8 +16,20 @@
 #include "common.h"
 #include "nodes.h"
 
+struct UpdateNodesRequest_t : public ClusterRequest_t
+{
+	NODES_E m_eKindNodes;
+};
+
+struct ExitUpdateNodesRequest_t : public ClusterRequest_t
+{
+	CSphString m_sLeavingNode;
+	int64_t m_iWaitTimeoutMs = 0;
+};
+
 // API command to remote node to update nodes by nodes it sees
 using ClusterUpdateNodes_c = ClusterCommand_T<E_CLUSTER::UPDATE_NODES, UpdateNodesRequest_t>;
+using ClusterExitUpdateNodes_c = ClusterCommand_T<E_CLUSTER::EXIT_UPDATE_NODES, ExitUpdateNodesRequest_t>;
 
 void operator<< ( ISphOutputBuffer& tOut, const UpdateNodesRequest_t& tReq )
 {
@@ -29,6 +41,20 @@ void operator>> ( InputBuffer_c& tIn, UpdateNodesRequest_t& tReq )
 {
 	tIn >> (ClusterRequest_t&)tReq;
 	tReq.m_eKindNodes = (NODES_E)( tIn.GetByte() ? 1 : 0 );
+}
+
+void operator<< ( ISphOutputBuffer& tOut, const ExitUpdateNodesRequest_t& tReq )
+{
+	tOut << (const ClusterRequest_t&)tReq;
+	tOut.SendString ( tReq.m_sLeavingNode.cstr() );
+	tOut.SendUint64 ( tReq.m_iWaitTimeoutMs );
+}
+
+void operator>> ( InputBuffer_c& tIn, ExitUpdateNodesRequest_t& tReq )
+{
+	tIn >> (ClusterRequest_t&)tReq;
+	tReq.m_sLeavingNode = tIn.GetString();
+	tReq.m_iWaitTimeoutMs = (int64_t)tIn.GetUint64();
 }
 
 bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes )
@@ -46,6 +72,21 @@ bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const 
 	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }
 
+bool SendClusterExitUpdateNodes ( const CSphString& sCluster, const CSphString& sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString>& dNodes )
+{
+	ClusterExitUpdateNodes_c::REQUEST_T tRequest;
+	tRequest.m_sCluster = sCluster;
+	tRequest.m_sLeavingNode = sLeavingNode;
+	tRequest.m_iWaitTimeoutMs = iWaitTimeoutMs;
+
+	auto dAgents = ClusterExitUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery ( iWaitTimeoutMs + 5000 ), tRequest );
+	if ( dAgents.IsEmpty() )
+		return true;
+
+	ClusterExitUpdateNodes_c tReq;
+	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
+}
+
 
 void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster )
 {
@@ -54,4 +95,13 @@ void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CS
 	sCluster = tRequest.m_sCluster;
 	if ( ClusterUpdateNodes ( tRequest.m_sCluster, tRequest.m_eKindNodes ) )
 		ClusterUpdateNodes_c::BuildReply ( tOut );
+}
+
+void ReceiveClusterExitUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster )
+{
+	ExitUpdateNodesRequest_t tRequest;
+	ClusterExitUpdateNodes_c::ParseRequest ( tBuf, tRequest );
+	sCluster = tRequest.m_sCluster;
+	if ( ClusterExitUpdateNodes ( tRequest.m_sCluster, tRequest.m_sLeavingNode, tRequest.m_iWaitTimeoutMs ) )
+		ClusterExitUpdateNodes_c::BuildReply ( tOut );
 }

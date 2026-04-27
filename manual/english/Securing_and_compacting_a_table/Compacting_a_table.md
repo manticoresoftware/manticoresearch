@@ -1,11 +1,21 @@
 # Compacting a Table
 
-Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines pairs of disk chunks, removing documents that were previously deleted using DELETE statements.
+Over time, RT tables may become fragmented into numerous disk chunks and/or contaminated with deleted, yet unpurged data, affecting search performance. In these cases, optimization is necessary. Essentially, the optimization process combines disk chunks (N-way merge), removing documents that were previously deleted using DELETE statements.
 
 Beginning with Manticore 4, this process occurs [automatically by default](../Server_settings/Searchd.md#auto_optimize). However, you can also use the following commands to manually initiate table compaction.
 
 ## OPTIMIZE TABLE
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(title) VALUES
+('doc one'),
+('doc two'),
+('doc three');
+-->
 <!-- example optimize -->
 ```sql
 OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
@@ -21,6 +31,16 @@ OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```sql
 OPTIMIZE TABLE rt;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt"
+```
+
 <!-- end -->
 
 ### Number of optimized disk chunks
@@ -45,6 +65,16 @@ Additional options include:
 ```sql
 OPTIMIZE TABLE rt OPTION cutoff=4;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION cutoff=4"
+```
+
 <!-- end -->
 
 ### Running in foreground
@@ -61,11 +91,21 @@ When using `OPTION sync=1` (0 by default), the command will wait for the optimiz
 ```sql
 OPTIMIZE TABLE rt OPTION sync=1;
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
+```
+
 <!-- end -->
 
 ### Throttling the IO impact
 
-Optimization can be a lengthy and I/O-intensive process. To minimize the impact, all actual merge work is executed serially in a special background thread, and the `OPTIMIZE` statement simply adds a job to its queue. The optimization thread can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
+Optimization can be a lengthy and I/O-intensive process. The `OPTIMIZE` statement adds a job to a background worker pool. You can control how many jobs run in parallel with [parallel_chunk_merges](../Server_settings/Searchd.md#parallel_chunk_merges) and how many chunks each job merges with [merge_chunks_per_job](../Server_settings/Searchd.md#merge_chunks_per_job). The optimization workers can be I/O-throttled, and you can control the maximum number of I/Os per second and the maximum I/O size with the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) and [rt_merge_maxiosize](../Server_settings/Searchd.md#rt_merge_maxiosize) directives, respectively.
 
 During optimization, the RT table being optimized remains online and available for both searching and updates nearly all the time. It is locked for a very brief period when a pair of disk chunks is successfully merged, allowing for the renaming of old and new files and updating the table header.
 
@@ -75,20 +115,40 @@ As long as [auto_optimize](../Server_settings/Searchd.md#auto_optimize) is not d
 
 If you are experiencing unexpected SSTs or want tables across all nodes of the cluster to be binary identical, you need to:
 1. Disable [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
-2. Manually optimize tables:
+2. Manually optimize tables
+
 <!-- example cluster_manual_drop -->
 On one of the nodes, drop the table from the cluster:
 <!-- request SQL -->
 ```sql
 ALTER CLUSTER mycluster DROP myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster DROP myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_optimize -->
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(title text);
+INSERT INTO myindex(title) VALUES ('cluster doc');
+-->
 Optimize the table:
 <!-- request SQL -->
 ```sql
 OPTIMIZE TABLE myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "OPTIMIZE TABLE myindex"
+```
+
 <!-- end -->
 <!-- example cluster_manual_add -->
 Add back the table to the cluster:
@@ -96,6 +156,12 @@ Add back the table to the cluster:
 ```sql
 ALTER CLUSTER mycluster ADD myindex;
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "ALTER CLUSTER mycluster ADD myindex"
+```
+
 <!-- end -->
 When the table is added back, the new files created by the optimization process will be replicated to the other nodes in the cluster.
 Any local changes made to the table on other nodes will be lost.
@@ -111,4 +177,3 @@ Once the table is added back to the cluster, you must resume write operations on
 Search operations are available as usual during the process on any of the nodes.
 
 <!-- proofread -->
-

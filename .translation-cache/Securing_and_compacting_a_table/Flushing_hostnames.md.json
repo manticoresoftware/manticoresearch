@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339767
+    },
+    "__meta": {
+        "source_text": "# FLUSH HOSTNAMES\n\n```sql\nFLUSH HOSTNAMES\n```\n\nThe FLUSH HOSTNAMES command is used to renew IP addresses associated with agent host names. If you want to always query the DNS for getting the host name IP, you can use the [hostname_lookup](../Server_settings/Searchd.md#hostname_lookup) directive.\n\n```sql\nmysql> FLUSH HOSTNAMES;\nQuery OK, 5 rows affected (0.01 sec)\n```\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "92ed6d39eed804cabc5a707845d2e022"
     }
 }

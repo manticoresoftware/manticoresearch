@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -98,7 +98,10 @@ protected:
 		{
 			BYTE* pVar = GetBlendedVariant();
 			if ( pVar )
+			{
+				m_bBlendedHead = false;
 				return pVar;
+			}
 			m_bBlendedPart = ( m_pBlendEnd != nullptr );
 		}
 

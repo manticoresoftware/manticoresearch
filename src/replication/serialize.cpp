@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -152,7 +152,8 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 // ver 0x107 add blobs vector to replicate update statement
 // ver 0x108 gtid is sent and parsed as blob (was string)
 // ver 0x109 indexes support for ALTER ADD \ DROP table
-static constexpr WORD VER_COMMAND_REPLICATE = 0x109;
+// ver 0x10A changed replicated RT transaction layout for auto-embeddings handling
+static constexpr WORD VER_COMMAND_REPLICATE = 0x10A;
 bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 {
 	TlsMsg::ResetErr();

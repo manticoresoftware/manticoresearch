@@ -52,6 +52,16 @@ index test1
     charset_table	= A..Z->a..z, _, a..z
 }
 
+index rt_files
+{
+	type = rt
+	path			= <data_path/>/rt_files
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+}
+
 </config>
 
 <db_create>
@@ -167,6 +177,12 @@ Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 select * from test1 where match ('9');
 select * from test1 where match ('test 9');
 </sphinxql>
+
+<!-- need only RAM part of the RT table to get consistent files count -->
+<query endpoint="sql?mode=raw" method="post">insert into rt_files (id, idd) values (1, 11)</query>
+<query endpoint="sql?mode=raw" method="post">FLUSH TABLE rt_files</query>
+<!-- regression https://github.com/manticoresoftware/manticoresearch/issues/4307: raw /sql multi-statement with system subtables should not crash -->
+<query endpoint="sql?mode=raw" method="post">select id from rt_files.@files order by id asc; show meta like 'total'</query>
 
 </queries>
 

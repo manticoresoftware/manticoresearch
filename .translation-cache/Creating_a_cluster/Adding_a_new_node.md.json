@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339767
+    },
+    "__meta": {
+        "source_text": "# Adding a new node\n\nTo add a new node to a cluster, simply start another instance of Manticore and ensure that it is accessible by the other nodes in the cluster. Connect the new node to the rest of the cluster using a [distributed table](../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md) and ensure data safety with [replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md).\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "0368cae43a749e96ab855c00b62188cb"
     }
 }

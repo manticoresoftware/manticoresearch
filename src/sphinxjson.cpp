@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1371,8 +1371,11 @@ static bool FindNextSeparator ( const char * & pSep )
 }
 
 
-bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * pColumn )
+bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * pColumn, bool * pIndexPrefix )
 {
+	if ( pIndexPrefix )
+		*pIndexPrefix = false;
+
 	if ( !szName )
 		return false;
 
@@ -1382,6 +1385,9 @@ bool sphJsonNameSplit ( const char * szName, const char * szIndex, CSphString * 
 
 	if ( szIndex && *pSep=='.' && !strncmp ( szIndex, szName, pSep - szName ) )
 	{
+		if ( pIndexPrefix )
+			*pIndexPrefix = true;
+
 		// this was not a json separator, but a dot between table name and column name
 		pSep++;
 		if ( !FindNextSeparator(pSep) )

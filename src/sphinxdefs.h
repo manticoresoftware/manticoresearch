@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -184,7 +184,10 @@ enum ESphAggrFunc {
 	SPH_AGGR_MIN,
 	SPH_AGGR_MAX,
 	SPH_AGGR_SUM,
-	SPH_AGGR_CAT
+	SPH_AGGR_CAT,
+	SPH_AGGR_PERCENTILES,
+	SPH_AGGR_PERCENTILE_RANKS,
+	SPH_AGGR_MAD
 };
 
 

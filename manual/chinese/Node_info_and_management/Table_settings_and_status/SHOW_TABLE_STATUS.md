@@ -1,5 +1,17 @@
 # SHOW TABLE STATUS
 
+<!--
+data for the following example:
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f text);
+INSERT INTO t(f) VALUES
+('first'),
+('second'),
+('third'),
+('fourth'),
+('fifth');
+-->
+
 <!-- example SHOW TABLE STATUS -->
 
 `SHOW TABLE STATUS` 是一个 SQL 语句，用于显示每个表的各种统计信息。
@@ -49,7 +61,7 @@ SHOW TABLE table_name STATUS
 * `query_time_*`、`exact_query_time_*`：最近 1 分钟、5 分钟、15 分钟以及自服务器启动以来的查询执行时间统计；数据封装为 JSON 对象，包括查询数量及最小、最大、平均、95% 和 99% 百分位值。
 * `found_rows_*`：查询所找到的行数统计；分别提供最近 1 分钟、5 分钟、15 分钟以及自服务器启动以来的统计；数据封装为 JSON 对象，包括查询数量及最小、最大、平均、95% 和 99% 百分位值。
 * `command_*`：特定命令成功执行于此表的总次数计数器。
-* `search_stats_ms_*`：搜索查询执行时间（毫秒）的统计。*表示时间窗口（例如 1min, 5min, 15min, total）。这些统计在 1、5 和 15 分钟滑动窗口内计算，显示查询时间的平均值、最小值、最大值以及 95% / 99% 百分位数。
+* `search_stats_ms_*`：搜索查询的执行时间（以毫秒为单位）统计信息。* 表示时间窗口（例如，1 分钟、5 分钟、15 分钟、总时间）。这些统计信息是基于 1、5 和 15 分钟的滑动窗口计算的，显示查询时间的平均值、最小值、最大值和 95%、99% 分位数值。对于分布式表，这些值反映本地和远程表贡献的聚合值，可能高于单个节点级别的查询墙/实际值。
 * `insert_replace_stats_ms_*`：插入和替换查询执行时间（毫秒）的统计。*表示时间窗口（例如 1min, 5min, 15min, total）。这些统计在 1、5 和 15 分钟滑动窗口内计算，显示查询时间的平均值、最小值、最大值以及 95% / 99% 百分位数。
 * `update_stats_ms_*`：更新查询执行时间（毫秒）的统计。*表示时间窗口（例如 1min, 5min, 15min, total）。这些统计在 1、5 和 15 分钟滑动窗口内计算，显示查询时间的平均值、最小值、最大值以及 95% / 99% 百分位数。
 
@@ -127,6 +139,271 @@ mysql> SHOW TABLE statistic STATUS;
 | update_stats_ms_pct99         | 0.530 0.530 0.530                                                        |
 +-------------------------------+--------------------------------------------------------------------------+
 29 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SHOW TABLE t STATUS"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "table_type",
+        "Value": "rt"
+      },
+      {
+        "Variable_name": "indexed_documents",
+        "Value": "5"
+      },
+      {
+        "Variable_name": "indexed_bytes",
+        "Value": "28"
+      },
+      {
+        "Variable_name": "ram_bytes",
+        "Value": "23400"
+      },
+      {
+        "Variable_name": "disk_bytes",
+        "Value": "1969"
+      },
+      {
+        "Variable_name": "disk_mapped",
+        "Value": "196"
+      },
+      {
+        "Variable_name": "disk_mapped_cached",
+        "Value": "16384"
+      },
+      {
+        "Variable_name": "disk_mapped_doclists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_mapped_cached_doclists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_mapped_hitlists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_mapped_cached_hitlists",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "killed_documents",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "killed_rate",
+        "Value": "0.00%"
+      },
+      {
+        "Variable_name": "ram_chunk",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "ram_chunk_segments_count",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "disk_chunks",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "mem_limit",
+        "Value": "134217728"
+      },
+      {
+        "Variable_name": "mem_limit_rate",
+        "Value": "95.00%"
+      },
+      {
+        "Variable_name": "ram_bytes_retired",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "optimizing",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "locked",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "tid",
+        "Value": "7"
+      },
+      {
+        "Variable_name": "tid_saved",
+        "Value": "7"
+      },
+      {
+        "Variable_name": "query_time_1min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "query_time_5min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "query_time_15min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "query_time_total",
+        "Value": "{\"queries\":30, \"avg_sec\":0.324, \"min_sec\":0.051, \"max_sec\":1.718, \"pct95_sec\":1.017, \"pct99_sec\":1.718}"
+      },
+      {
+        "Variable_name": "found_rows_1min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "found_rows_5min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "found_rows_15min",
+        "Value": "{\"queries\":0, \"avg\":\"-\", \"min\":\"-\", \"max\":\"-\", \"pct95\":\"-\", \"pct99\":\"-\"}"
+      },
+      {
+        "Variable_name": "found_rows_total",
+        "Value": "{\"queries\":30, \"avg\":2, \"min\":0, \"max\":5, \"pct95\":5, \"pct99\":5}"
+      },
+      {
+        "Variable_name": "command_search",
+        "Value": "30"
+      },
+      {
+        "Variable_name": "command_excerpt",
+        "Value": "3"
+      },
+      {
+        "Variable_name": "command_update",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_keywords",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_status",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "command_delete",
+        "Value": "1"
+      },
+      {
+        "Variable_name": "command_insert",
+        "Value": "6"
+      },
+      {
+        "Variable_name": "command_replace",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_commit",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_suggest",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_callpq",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "command_getfield",
+        "Value": "0"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "insert_replace_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "search_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_avg",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_min",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_max",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_pct95",
+        "Value": "N/A N/A N/A"
+      },
+      {
+        "Variable_name": "update_stats_ms_pct99",
+        "Value": "N/A N/A N/A"
+      }
+    ],
+    "total": 58,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- intro -->

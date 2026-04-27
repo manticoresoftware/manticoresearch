@@ -2,6 +2,7 @@
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
 ––– output –––
+Package: manticoresoftware/buddy-plugin-replace-select
 Package: manticoresoftware/buddy-plugin-replace
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl;"
@@ -62,6 +63,7 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUE
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
 ––– output –––
+Package: manticoresoftware/buddy-plugin-replace-select
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
 ––– output –––

@@ -63,7 +63,10 @@ enum class Aggr_e
 	MIN,
 	MAX,
 	SUM,
-	AVG
+	AVG,
+	PERCENTILES,
+	PERCENTILE_RANKS,
+	MAD
 };
 
 struct DateRangeSetting_t
@@ -85,6 +88,25 @@ struct AggrDateHistSetting_t
 	bool m_bFixed = false;
 };
 
+struct AggrPercentilesSetting_t
+{
+	CSphVector<float> m_dPercents;
+	bool m_bKeyed = false;
+	float m_fCompression = 200.0f;
+};
+
+struct AggrPercentileRanksSetting_t
+{
+	CSphVector<double> m_dValues;
+	bool m_bKeyed = false;
+	float m_fCompression = 200.0f;
+};
+
+struct AggrMadSetting_t
+{
+	float m_fCompression = 1000.0f;
+};
+
 struct AggrSettings_t
 {
 	Aggr_e		m_eAggrFunc { Aggr_e::NONE };
@@ -92,6 +114,9 @@ struct AggrSettings_t
 	AggrHistSetting_t m_tHist;
 	AggrDateRangeSetting_t m_tDateRange;
 	AggrDateHistSetting_t m_tDateHist;
+	AggrPercentilesSetting_t m_tPercentiles;
+	AggrPercentileRanksSetting_t m_tPercentileRanks;
+	AggrMadSetting_t m_tMad;
 };
 
 ISphExpr * CreateExprRange ( ISphExpr * pAttr, const AggrRangeSetting_t & tRanges );
@@ -125,5 +150,6 @@ bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants
 CSphString DumpAggr ( const CSphString & sCol, const AggrSettings_t & tAggr );
 
 void FixFloat ( AggrHistSetting_t & tHist );
+void PromoteHistogramToFloat ( AggrHistSetting_t & tHist );
 
 #endif // _aggsexpr_

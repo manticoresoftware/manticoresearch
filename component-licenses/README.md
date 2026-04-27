@@ -8,7 +8,7 @@ the components.
 
 Copyright:
 ```
-Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 ```
 Manticore Search is released under [GPL v3 or later](https://raw.githubusercontent.com/manticoresoftware/manticoresearch/master/LICENSE).
@@ -66,7 +66,7 @@ Manticore Search binaries may dynamically load and utilize the library at runtim
 
 Copyright:
 ```
-Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2020-2026, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 ```
 
@@ -80,7 +80,7 @@ Copyright:
 ```
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc
-Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 
 This program is free software; you can redistribute it and/or modify
@@ -114,7 +114,7 @@ Copyright:
 ```
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc
-Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 All rights reserved
 
 This program is free software; you can redistribute it and/or modify
@@ -183,6 +183,44 @@ You should have received a copy of the GNU General Public License
 
 License: [GPLv2 with FOSS Exception](./libmysqlclient-license).
 
+## libcurl / curl
+https://curl.se/ , https://github.com/curl/curl
+
+Source files: Manticore Search project does not modify or redistribute any source
+files from this component. However, its header files are used during the
+compilation process, and Manticore Search binaries may dynamically link to or
+dynamically load and use the library at runtime, depending on the build
+configuration.
+
+Relevant source files:
+- `./src/netfetch.cpp`
+
+Copyright:
+```
+Copyright (c) 1996 - 2026, Daniel Stenberg, <daniel@haxx.se>, and many
+contributors, see the THANKS file.
+
+All rights reserved.
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY AND
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall not
+be used in advertising or otherwise to promote the sale, use or other dealings
+in this Software without prior written authorization of the copyright holder.
+```
+
+License: [curl license](./curl-license).
+
 ## ./cmake/FindMysql.cmake
 Source files:
 - `./cmake/FindMysql.cmake`
@@ -212,7 +250,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 =============================================================================
 Copyright 2015 Sphinx Technologies, Inc.
-Copyright 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+Copyright 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 
 Distributed under the OSI-approved BSD License (the "License");
 see accompanying file Copyright.txt for details.
@@ -753,3 +791,20 @@ source files are utilized during the compilation process and become part of the
 Manticore Search binaries.
 
 License: [MIT License](https://opensource.org/license/mit)
+
+## Language packs (morphology and Jieba dictionaries)
+
+When the bundle package or [manticore-language-packs](https://github.com/manticoresoftware/manticoresearch-language-packs) is installed, the following language-related data files are placed under `share/manticore/` (e.g. `/usr/share/manticore/`). They are used by the daemon for morphology options such as `lemmatize_de`, `lemmatize_en`, `lemmatize_ru` and `jieba_chinese`.
+
+### Morphology dictionaries (de, en, ru)
+
+- **Source:** The `.pak` dictionary files are generated from the [AOT (RML) project](https://github.com/sokirko74/aot) (linguistic tools for Russian and German texts; lexicons and grammars). The archives `de.pak.tgz`, `en.pak.tgz`, `ru.pak.tgz` are built from that source and distributed from `https://repo.manticoresearch.com/repository/morphology/`; they are unpacked into `share/manticore/de/`, `share/manticore/en/`, `share/manticore/ru/` (same layout as the [manticore-language-packs](https://github.com/manticoresoftware/manticoresearch-language-packs) package).
+- **Copyright:** AOT was written by Alexey Sokirko, Igor Nozhov, Lev Gershenzon, Andrey Putrin and others. The project started in Moscow (Dialing Company; Russian and English). The German part was created at Berlin-Brandenburg Academy of Sciences and Humanities (DWDS project). See [AOT readme](https://github.com/sokirko74/aot/blob/master/readme) and [www.aot.ru](https://www.aot.ru).
+- **License:** The AOT project states it is distributed under the [GNU Lesser General Public License v2.1 (LGPL-2.1)](https://github.com/sokirko74/aot/blob/master/copying) (see the file `copying` and the readme in the repository). For the scope of that license (e.g. whether it applies to the lexicon/grammar data in Dicts/ as well as the code), refer to the [AOT repository](https://github.com/sokirko74/aot).
+
+### Jieba dictionary files
+
+- **Source:** Dictionary files under `share/manticore/jieba/` are taken from:
+  - [cppjieba](https://github.com/manticoresoftware/cppjieba) master dict files: `hmm_model.utf8`, `idf.utf8`, `stop_words.utf8`, `user.dict.utf8` (from `cppjieba/master/dict/`).
+  - [jieba](https://github.com/manticoresoftware/jieba) extra dict: `dict.txt.big` from `extra_dict/`, installed as `jieba.dict.utf8`.
+- **Copyright / license:** Same as cppjieba (MIT License; see cppjieba section above). The jieba extra dictionary is from the manticoresoftware/jieba repository (fork of the jieba project); for that repository’s license, see its LICENSE file.

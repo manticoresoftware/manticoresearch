@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>prepared statements via mysql proto</name>
+<requires>
+	<force-rt/>
+	<non-windows/>
+</requires>
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<custom_test><![CDATA[
+
+global $g_locals, $sd_address, $sd_sphinxql_port;
+$results = array();
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$mysqli = @mysql_test_connect ($sockStr);
+
+function fetch_blob($stmt, $id) {
+    $stmt->bind_param("i", $id);
+    if (!$stmt->execute()) {
+        $results[] = "Execute blob select failed: {$stmt->error}";
+    }
+    $res = $stmt->get_result();
+    $row = $res->fetch_assoc();
+    return $row ? $row['blob'] : null;
+}
+
+if ( $mysqli === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $mysqli ) . " : " . @mysql_error ( $mysqli );
+	return;
+}
+
+$mysqli->query("DROP TABLE IF EXISTS ps_test");
+if (!$mysqli->query("CREATE TABLE ps_test (id bigint, title string, price float)"))
+    $results[] = "Create failed: {$mysqli->error}";
+
+$results[] = "Insert using prepared statement.";
+$insert = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");
+if (!$insert)
+    $results[] = "Prepare insert failed: {$mysqli->error}";
+
+$id = 1;
+$title = "hello world";
+$price = 9.5;
+$insert->bind_param("isd", $id, $title, $price);
+if (!$insert->execute())
+    $results[] = "Execute insert failed: {$insert->error}";
+
+$insert->close();
+
+$results[] = "Injection attempts: ensure prepared statements treat values as data.";
+$injInsert = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");
+if (!$injInsert) {
+    $results[] = "Prepare injection insert failed: {$mysqli->error}";
+}
+$injId = 2;
+$injTitle = "hello'; DROP TABLE ps_test; --";
+$injPrice = 1.23;
+$injInsert->bind_param("isd", $injId, $injTitle, $injPrice);
+if (!$injInsert->execute())
+    $results[] = "Execute injection insert failed: {$injInsert->error}";
+
+$injInsert->close();
+
+$injSelect = $mysqli->prepare("SELECT id FROM ps_test WHERE title = ?");
+if (!$injSelect)
+    $results[] = "Prepare injection select failed: {$mysqli->error}";
+
+$injSelect->bind_param("s", $injTitle);
+if (!$injSelect->execute())
+    $results[] = "Execute injection select failed: {$injSelect->error}";
+
+$injRes = $injSelect->get_result();
+if ($injRes->num_rows !== 1)
+    $results[] = "Injection select expected 1 row, got {$injRes->num_rows}";
+
+$injRow = $injRes->fetch_assoc();
+if ((int)$injRow['id'] !== $injId)
+    $results[] = "Injection select returned unexpected id: {$injRow['id']}";
+
+$injCheck = $mysqli->prepare("SELECT title FROM ps_test WHERE id = ?");
+if (!$injCheck)
+    $results[] = "Prepare injection value check failed: {$mysqli->error}";
+
+$injCheck->bind_param("i", $injId);
+if (!$injCheck->execute())
+    $results[] = "Execute injection value check failed: {$injCheck->error}";
+
+$injCheckRes = $injCheck->get_result();
+$injCheckRow = $injCheckRes->fetch_assoc();
+if ($injCheckRow['title'] !== $injTitle)
+    $results[] = "Injection value mismatch: expected '{$injTitle}', got '{$injCheckRow['title']}'";
+
+$injCheck->close();
+$injSelect->close();
+
+
+$results[] = "Confirm table still exists and original row is present.";
+$check = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM ps_test WHERE title = ?");
+if (!$check) {
+    $results[] = "Prepare injection check failed: {$mysqli->error}";
+}
+$checkTitle = "hello world";
+$check->bind_param("s", $checkTitle);
+if (!$check->execute()) {
+    $results[] = "Execute injection check failed: {$check->error}";
+}
+$checkRes = $check->get_result();
+$checkRow = $checkRes->fetch_assoc();
+if ((int)$checkRow['cnt'] !== 1) {
+    $results[] = "Injection check failed: expected 1 row, got {$checkRow['cnt']}";
+}
+$check->close();
+
+$results[] = "Edge cases: empty string, zero, negative, big integer.";
+$edgeInsert = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");
+if (!$edgeInsert) {
+    $results[] = "Prepare edge insert failed: {$mysqli->error}";
+}
+$edgeId = 0;
+$edgeTitle = "";
+$edgePrice = 0.0;
+$edgeInsert->bind_param("isd", $edgeId, $edgeTitle, $edgePrice);
+if (!$edgeInsert->execute()) {
+    $results[] = "Execute edge insert (empty/zero) failed: {$edgeInsert->error}";
+}
+$edgeId = -1;
+$edgeTitle = "negative";
+$edgePrice = -1.5;
+try {
+    if (!$edgeInsert->execute()) {
+        $results[] = "Execute edge insert (negative) failed: {$edgeInsert->error}";
+    }
+    $results[] = "negative id insert unexpectedly succeeded";
+} catch (Throwable $e) {
+    $results[] = "negative id insert rejected as expected: " . $e->getMessage();
+}
+$edgeId = 9223372036854775807;
+$edgeTitle = "bigint";
+$edgePrice = 1.0;
+if (!$edgeInsert->execute()) {
+    $results[] = "Execute edge insert (bigint) failed: {$edgeInsert->error}";
+}
+$edgeInsert->close();
+$results[] = "edge inserts ok";
+
+$mysqli->query("DROP TABLE IF EXISTS ps_test");
+
+$results[] = "Test long data (bind_param + send_long_data) via insert + select.";
+
+$mysqli->query("DROP TABLE IF EXISTS ps_blob");
+if (!$mysqli->query("CREATE TABLE ps_blob (id bigint, blob string)"))
+    $results[] = "Create failed: {$mysqli->error}";
+
+$selectBlob = $mysqli->prepare("SELECT blob FROM ps_blob WHERE id = ?");
+if (!$selectBlob) {
+    $results[] = "Prepare long data select failed: {$mysqli->error}";
+}
+
+$insertBlob = $mysqli->prepare("INSERT INTO ps_blob (id, blob) VALUES (?, ?)");
+if (!$insertBlob) {
+    $results[] = "Prepare long data insert failed: {$mysqli->error}";
+}
+
+$results[] = "Long data only.";
+$blobId = 1;
+$blob = "";
+$insertBlob->bind_param("ib", $blobId, $blob);
+$insertBlob->send_long_data(1, str_repeat("x", 1024));
+$insertBlob->send_long_data(1, str_repeat("y", 512));
+if (!$insertBlob->execute()) {
+    $results[] = "Execute long data insert failed: {$insertBlob->error}";
+}
+$blobVal = fetch_blob($selectBlob, $blobId);
+$results[] = "blob_col length: " . strlen($blobVal);
+
+$results[] = "Long data should ignore inline value.";
+$blobId = 2;
+$blob = "tail";
+$insertBlob->send_long_data(1, "head");
+if (!$insertBlob->execute()) {
+    $results[] = "Execute long data+inline insert failed: {$insertBlob->error}";
+}
+$blobVal = fetch_blob($selectBlob, $blobId);
+if ($blobVal !== "head") {
+    $results[] = "Long data+inline mismatch: expected 'head', got '" . ($blobVal === null ? "NULL" : $blobVal) . "'";
+}
+
+$results[] = "NULL should override long data.";
+$blobId = 3;
+$blob = null;
+$insertBlob->send_long_data(1, "should_be_ignored");
+try {
+    if ($insertBlob->execute()) {
+        $blobVal = fetch_blob($selectBlob, $blobId);
+        if (!is_null($blobVal)) {
+            $results[] = "Long data+NULL mismatch: expected NULL, got '" . $blobVal . "'";
+        }
+    } else {
+        $results[] = "long data+NULL insert rejected as expected: {$insertBlob->error}";
+    }
+} catch (Throwable $e) {
+    $results[] = "long data+NULL insert rejected as expected: " . $e->getMessage();
+}
+
+$insertBlob->close();
+$selectBlob->close();
+
+$mysqli->query("DROP TABLE IF EXISTS ps_blob");
+
+$results[] = "Test prepared statements with all supported types.";
+
+$mysqli->query("DROP TABLE IF EXISTS ps_types");
+if (!$mysqli->query("CREATE TABLE ps_types (id bigint, title text, i int, b bool, ts timestamp, f float, s string, j json, m multi, m64 multi64, vec float_vector)"))
+    $results[] = "Create failed: {$mysqli->error}";
+
+$insertTypes = $mysqli->prepare("INSERT INTO ps_types (id, title, i, b, ts, f, s, j, m, m64, vec) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (?VEC?), (?VEC?), (?VEC?))");
+if (!$insertTypes) {
+    $results[] = "Prepare types insert failed: {$mysqli->error}";
+}
+$typeId = 1;
+$typeTitle = "types";
+$typeI = 42;
+$typeB = 1;
+$typeTs = 1700000000;
+$typeF = 1.25;
+$typeS = "hello";
+$typeJ = "{\"a\":1,\"b\":\"x\"}";
+$typeM = "1,2,5";
+$typeM64 = "10000000000,10000000001";
+$typeVec = "0.1,0.2,0.3";
+$insertTypes->bind_param("isiiidsssss", $typeId, $typeTitle, $typeI, $typeB, $typeTs, $typeF, $typeS, $typeJ, $typeM, $typeM64, $typeVec);
+if (!$insertTypes->execute()) {
+    $results[] = "Execute types insert failed: {$insertTypes->error}";
+}
+$insertTypes->close();
+
+$updateTypes = $mysqli->prepare("UPDATE ps_types SET m = (?VEC?), m64 = (?VEC?), vec = (?VEC?) WHERE id = ?");
+if (!$updateTypes) {
+    $results[] = "Prepare types update failed: {$mysqli->error}";
+}
+$upM = "7,8,9";
+$upM64 = "20000000000,20000000001";
+$upVec = "0.4,0.5,0.6";
+$updateTypes->bind_param("sssi", $upM, $upM64, $upVec, $typeId);
+if (!$updateTypes->execute()) {
+    $results[] = "Execute types update failed: {$updateTypes->error}";
+}
+$updateTypes->close();
+
+$badTypes = $mysqli->prepare("UPDATE ps_types SET m = (?VEC?), m64 = (?VEC?), vec = (?VEC?) WHERE id = ?");
+if (!$badTypes) {
+    $results[] = "Prepare types bad update failed: {$mysqli->error}";
+}
+$badM = "1,2";
+$badM64 = "[3,4]";
+$badVec = "(1, bad)";
+$badTypes->bind_param("sssi", $badM, $badM64, $badVec, $typeId);
+try {
+    if ($badTypes->execute()) {
+        $results[] = "bad vector/mva update unexpectedly succeeded";
+    } else {
+        $results[] = "bad vector/mva update rejected as expected: {$badTypes->error}";
+    }
+} catch (Throwable $e) {
+    $results[] = "bad vector/mva update rejected as expected: " . $e->getMessage();
+}
+$badTypes->close();
+
+$nullTypes = $mysqli->prepare("UPDATE ps_types SET m = (?VEC?), m64 = (?VEC?), vec = (?VEC?) WHERE id = ?");
+if (!$nullTypes) {
+    $results[] = "Prepare types NULL update failed: {$mysqli->error}";
+}
+$nullM = null;
+$nullM64 = null;
+$nullVec = null;
+$nullTypes->bind_param("sssi", $nullM, $nullM64, $nullVec, $typeId);
+try {
+    if ($nullTypes->execute()) {
+        $results[] = "NULL vector/mva update unexpectedly succeeded";
+    } else {
+        $results[] = "NULL vector/mva update rejected as expected: {$nullTypes->error}";
+    }
+} catch (Throwable $e) {
+    $results[] = "NULL vector/mva update rejected as expected: " . $e->getMessage();
+}
+$nullTypes->close();
+
+$exprTypes = $mysqli->prepare("UPDATE ps_types SET m = m + ? WHERE id = ?");
+if (!$exprTypes) {
+    $results[] = "Prepare types expr update failed: {$mysqli->error}";
+}
+$exprVal = "(1,2)";
+$exprTypes->bind_param("si", $exprVal, $typeId);
+try {
+    if ($exprTypes->execute()) {
+        $results[] = "expression update unexpectedly succeeded";
+    } else {
+        $results[] = "expression update rejected as expected: {$exprTypes->error}";
+    }
+} catch (Throwable $e) {
+    $results[] = "expression update rejected as expected: " . $e->getMessage();
+}
+$exprTypes->close();
+
+$selectTypes = $mysqli->prepare("SELECT id, title, i, b, ts, f, s, j, m, m64, vec FROM ps_types WHERE id = ?");
+if (!$selectTypes) {
+    $results[] = "Prepare types select failed: {$mysqli->error}";
+}
+$selectTypes->bind_param("i", $typeId);
+if (!$selectTypes->execute()) {
+    $results[] = "Execute types select failed: {$selectTypes->error}";
+}
+$typesRes = $selectTypes->get_result();
+$typesRow = $typesRes->fetch_assoc();
+$results[] = "types row: " . json_encode($typesRow, JSON_UNESCAPED_SLASHES);
+$selectTypes->close();
+
+$results[] =  "Mode check: autocommit off and rollback (may be unsupported).";
+$mysqli->autocommit(false);
+$txStmt = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");
+if (!$txStmt) {
+    $results[] = "Prepare tx insert failed: {$mysqli->error}";
+}
+$txId = 1001;
+$txTitle = "tx";
+$txPrice = 3.14;
+$txStmt->bind_param("isd", $txId, $txTitle, $txPrice);
+if (!$txStmt->execute()) {
+    $results[] = "Execute tx insert failed: {$txStmt->error}";
+}
+if (!$mysqli->rollback()) {
+    $results[] = "rollback not supported; continuing";
+} else {
+    $chk = $mysqli->prepare("SELECT id FROM ps_test WHERE id = ?");
+    $chk->bind_param("i", $txId);
+    $chk->execute();
+    $res = $chk->get_result();
+    if ($res && $res->fetch_assoc()) {
+        $results[] = "rollback failed or not effective";
+    } else {
+        $results[] = "rollback ok";
+    }
+    $chk->close();
+}
+$txStmt->close();
+$mysqli->autocommit(true);
+
+$mysqli->query("DROP TABLE IF EXISTS ps_types");
+
+]]></custom_test>
+
+</test>
+

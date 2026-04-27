@@ -23,7 +23,9 @@ set ( WITH_POSTGRESQL 1 CACHE BOOL "Forced Pgsql" FORCE )
 set ( WITH_RE2 1 CACHE BOOL "Forced RE2" FORCE )
 set ( WITH_STEMMER 1 CACHE BOOL "Forced Stemmer" FORCE )
 set ( WITH_SSL 1 CACHE BOOL "Forced OpenSSL" FORCE )
-SET ( BUILD_TESTING 0 CACHE BOOL "Forced no testing" FORCE )
+if (NOT "$ENV{PACK_KEEP_TESTS}" STREQUAL "1")
+	SET ( BUILD_TESTING 0 CACHE BOOL "Forced no testing" FORCE )
+endif ()
 infomsg ( "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
 also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_POSTGRESQL, WITH_RE2, WITH_STEMMER, WITH_SSL.

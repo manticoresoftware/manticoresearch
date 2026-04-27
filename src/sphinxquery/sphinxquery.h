@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -32,6 +32,7 @@ struct XQKeyword_t
 	mutable bool		m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
 	mutable void *		m_pPayload = nullptr;
 	mutable bool		m_bRegex = false;
+	mutable int			m_iBlendedGroup = -1;	///< blended token group (-1 - not blended, >0 - group number)
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -135,6 +136,7 @@ public:
 
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
+	uint64_t Hash () const noexcept;
 };
 
 /// extended query node
@@ -405,7 +407,8 @@ bool	IsAllowOnlyNot();
 /// global setting for boolean simplification
 void	SetBooleanSimplify ( bool bSimplify );
 bool	GetBooleanSimplify ( const CSphQuery & tQuery );
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
+bool	GetBooleanSimplify ();
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr, StrVec_t * pZones = nullptr );
 inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );

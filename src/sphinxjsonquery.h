@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -14,6 +14,7 @@
 #include "sphinx.h"
 #include "sphinxjson.h"
 #include "aggrexpr.h"
+#include "std/tdigest.h"
 
 class QueryParser_i;
 class StmtErrorReporter_i;
@@ -36,6 +37,13 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString	m_sSort;
 	CSphVector<AggrComposite_t> m_dComposite;
 	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;
+	struct MadDeviationEntry_t
+	{
+		double		m_fDeviation = 0.0;
+		int64_t		m_iWeight = 0;
+	};
+	mutable CSphVector<TDigestCentroid_t> m_dMadCentroidScratch;
+	mutable CSphVector<MadDeviationEntry_t> m_dMadDeviationScratch;
 
 	CSphString GetAliasName () const;
 };

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication for RT with nodes restart</name>
+
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
+<skip_indexer/>
+<num_agents>2</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+	server_id = <agent_id/>
+}
+</agent1>
+
+</config>
+
+
+<queries>
+
+<!-- request to node 0 -->
+<sphinxql d="0">
+create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='12M';
+create table rt2 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='12M';
+
+create cluster test;
+ALTER CLUSTER test ADD rt1;
+ALTER CLUSTER test ADD rt2;
+</sphinxql>
+
+<!-- request to node 1 -->
+<sphinxql d="1" cluster_connect="0">
+	join cluster test at '%addr_connect%';
+	show status like 'cluster_test_last_committed';
+</sphinxql>
+
+<sphinxql d="0">
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+</sphinxql>
+<sphinxql d="0" cluster_connect="0">show status like 'cluster_test_last_committed';</sphinxql>
+
+<!-- crash on add table after joiner got restarted -->
+<!-- restart node 1 -->
+<sphinxql d="1" system="stop-agent"/>
+<sphinxql d="1" system="start-agent"/>
+<sphinxql d="1" system="wait-ready" cluster="test"/>
+<sphinxql d="1" cluster_connect="0">show status like 'cluster_test_last_committed';</sphinxql>
+
+<!-- donor at the node 0 -->
+<sphinxql d="0">
+ALTER CLUSTER test ADD rt1, rt2;
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+</sphinxql>
+<!-- donor at the node 1 -->
+<sphinxql d="1">
+ALTER CLUSTER test ADD rt1, rt2;
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+</sphinxql>
+<sphinxql d="1" cluster_connect="0">show status like 'cluster_test_last_committed';</sphinxql>
+
+<!-- restart node 1 -->
+<sphinxql d="1" system="stop-agent"/>
+<sphinxql d="1" system="start-agent"/>
+<sphinxql d="1" system="wait-ready" cluster="test"/>
+<sphinxql d="1" cluster_connect="0">show status like 'cluster_test_last_committed';</sphinxql>
+
+<!-- donor at the node 1 -->
+<sphinxql d="1">
+ALTER CLUSTER test ADD rt1, rt2;
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">
+	DROP TABLE rt1;
+	DROP TABLE rt2;
+</sphinxql>
+
+</queries>
+
+</test>

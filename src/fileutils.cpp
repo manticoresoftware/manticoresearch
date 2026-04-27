@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -183,6 +183,26 @@ CSphIOStats * GetIOStats()
 	if ( !pIOStats || !pIOStats->IsEnabled() )
 		return nullptr;
 	return pIOStats;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+	std::atomic<uint64_t> m_uGlobalWritten {0};
+}
+
+void GlobalWrite ( int iWritten ) noexcept
+{
+	if ( !iWritten )
+		return;
+
+	m_uGlobalWritten.fetch_add ( iWritten, std::memory_order_relaxed );
+}
+
+uint64_t GlobalWritten () noexcept
+{
+	return m_uGlobalWritten.load ( std::memory_order_relaxed );
 }
 
 //////////////////////////////////////////////////////////////////////////

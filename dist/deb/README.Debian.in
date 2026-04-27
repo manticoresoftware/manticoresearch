@@ -110,12 +110,14 @@ Manticore Search is versatile and can be applied in various scenarios, including
   - Use percolate tables to filter and process real-time data streams, such as social media feeds or log data, efficiently.
 
 
-# Requirements
+## Requirements
 
 * Architecture: arm64 or x86_64
 * OS: Debian-based (e.g. Debian, Ubuntu, Mint), RHEL-based (e.g. RHEL, CentOS, Alma, Oracle Linux, Amazon Linux), Windows, or MacOS.
 * Manticore Columnar Library, which provides columnar storage and secondary indexes, requires a CPU with SSE >= 4.2.
 * No specific disk space or RAM requirements are needed. An empty Manticore Search instance only uses around 40MB of RSS RAM.
 
-# System Limits
+
+
+## System Limits
 Manticore Search requires increased memory mapping limits for large datasets. The installation sets vm.max_map_count=262144 in /etc/sysctl.d/70-manticore.conf. Verify with 'sysctl vm.max_map_count'.

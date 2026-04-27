@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -29,10 +29,10 @@
 #include "daemon/search_handler.h"
 #include "sphinxquery/xqparser.h"
 
-static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
-static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
+static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
+static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
 
-static bool LOG_LEVEL_HTTP = val_from_env ( "MANTICORE_LOG_HTTP", false ); // verbose logging http processing events, ruled by this env variable
+static bool LOG_LEVEL_HTTP = env_exists ( "MANTICORE_LOG_HTTP" ); // verbose logging http processing events, ruled by this env variable
 #define LOG_COMPONENT_HTTP ""
 #define HTTPINFO LOGMSG ( VERBOSE_DEBUG, HTTP, HTTP )
 
@@ -1197,6 +1197,15 @@ public:
 		if ( tRes.m_sWarning.IsEmpty() && !m_tParsed.m_sWarning.IsEmpty() )
 			tRes.m_sWarning = m_tParsed.m_sWarning;
 
+		ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		{
+			const auto & tMeta = tHandler.m_dAggrResults[i];
+			auto uMatches = tMeta.m_dResults.IsEmpty() ? 0 : tMeta.m_dResults.First().m_dMatches.GetLength();
+
+			if ( !session::GetBuddy() )
+				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tMeta.GetQueryTimeUs() );
+		}
+
 		CSphString sResult = EncodeResult ( tHandler.m_dAggrResults, bNeedProfile ? &tProfile : nullptr );
 		BuildReply ( sResult, EHTTP_STATUS::_200 );
 
@@ -1419,6 +1428,37 @@ public:
 		AddDataColumn();
 		m_dBuf << uVal;
 	}
+
+	void PutFloat ( float fVal ) final
+	{
+		PutFloatAsString ( fVal, nullptr );
+	}
+
+	void PutDouble ( double fVal ) final
+	{
+		PutDoubleAsString ( fVal, nullptr );
+	}
+
+	void PutInt ( int iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutInt64 ( int64_t iVal ) final
+	{
+		PutNumAsString ( iVal );
+	}
+
+	void PutDWORD ( DWORD uVal ) override
+	{
+		PutNumAsString ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal ) final
+	{
+		PutNumAsString ( uVal );
+	}
+
 
 	void PutArray ( const ByteBlob_t& dBlob, bool ) override
 	{

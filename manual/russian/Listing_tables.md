@@ -1,6 +1,6 @@
 # Список таблиц
 
-В Manticore Search используется одноуровневая иерархия для таблиц.
+Manticore Search имеет одноуровневую иерархию для таблиц.
 
 В отличие от других СУБД, в Manticore нет концепции группировки таблиц в базы данных. Однако для совместимости с диалектами SQL, Manticore принимает операторы `SHOW DATABASES` для совместимости с диалектом SQL, но оператор не возвращает никаких результатов.
 
@@ -38,6 +38,56 @@ SHOW TABLES;
 | template | template    |
 +----------+-------------+
 5 rows in set (0.00 sec)
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW TABLES"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "dist",
+        "Type": "distributed"
+      },
+      {
+        "Table": "plain",
+        "Type": "local"
+      },
+      {
+        "Table": "pq",
+        "Type": "percolate"
+      },{
+        "Table": "rt",
+        "Type": "rt"
+      },{
+        "Table": "template",
+        "Type": "template"
+      }
+    ],
+    "total": 5,
+    "error": "",
+    "warning": ""
+  }
+]
+
 ```
 
 <!-- request PHP -->
@@ -157,8 +207,14 @@ utils_api.sql("SHOW TABLES", Some(true)).await
 
 <!-- end -->
 
+<!--
+data for the following examples:
+
+CREATE TABLE products type='distributed' local='products' agent='127.0.0.1:9312:products'
+-->
+
 <!-- example Example_2 -->
-Поддерживается необязательное условие LIKE для фильтрации таблиц по имени.
+Поддерживается необязательное предложение LIKE для фильтрации таблиц по имени.
 
 
 <!-- intro -->
@@ -179,6 +235,41 @@ SHOW TABLES LIKE 'pro%';
 | products | distributed |
 +----------+-------------+
 1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```sql
+POST /sql?mode=raw -d "SHOW TABLES LIKE 'pro%';"
+```
+
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "Table": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Table": "products",
+        "Type": "distributed"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 
 <!-- request PHP -->
@@ -317,13 +408,20 @@ mysql> DESC rt;
 4 rows in set (0.00 sec)
 ```
 
-Поддерживается необязательное условие LIKE. Подробности о его синтаксисе смотрите в разделе
+Поддерживается необязательное предложение LIKE. Подробности о его синтаксисе см. в разделе
 [SHOW META](Node_info_and_management/SHOW_META.md).
 
 ### SELECT FROM name.@table
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl(title text indexed stored) charset_table='non_cont,cont' morphology='icu_chinese';
+--> 
+
 <!-- example name_table -->
-Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать условие `WHERE` для фильтрации:
+Вы также можете просмотреть схему таблицы, выполнив запрос `select * from <table_name>.@table`. Преимущество этого метода в том, что вы можете использовать предложение `WHERE` для фильтрации:
 
 <!-- request SQL -->
 ```sql
@@ -340,11 +438,29 @@ select * from tbl.@table where type='text';
 1 row in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+```sql
+POST /sql?mode=raw -d "select * from tbl.@table where type='text';"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"id":{"type":"long long"}},{"field":{"type":"string"}},{"type":{"type":"string"}},{"properties":{"type":"string"}}],
+"data":[
+{"id":2,"field":"title","type":"text","properties":"indexed stored"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 <!-- example name_table2 -->
 
-Вы также можете выполнять множество других действий с `<your_table_name>.@table`, рассматривая её как обычную таблицу Manticore с колонками, состоящими из целочисленных и строковых атрибутов.
+Вы также можете выполнять множество других действий с `<your_table_name>.@table`, рассматривая его как обычную таблицу Manticore со столбцами, состоящими из целочисленных и строковых атрибутов.
 
 <!-- request SQL -->
 
@@ -360,10 +476,15 @@ select * from tbl.@table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE table_name
+SHOW CREATE TABLE table_name [ OPTION output_words = 'list' | 'file' ]
 ```
 
-Выводит оператор `CREATE TABLE`, который использовался для создания указанной таблицы.
+Выводит оператор `CREATE TABLE`, использованный для создания указанной таблицы.
+
+Опция `output_words` позволяет управлять отображением настроек внешних файлов (таких как `stopwords`, `exceptions`, `wordforms`, `hitless_words`):
+
+* `'list'` (по умолчанию): Отображает содержимое файлов в виде встроенных списков с использованием опций `*_list` (например, `stopwords_list='word1; word2'`).
+* `'file'`: Отображает пути к файлам с использованием исходных опций (например, `stopwords='/path/to/file'`).
 
 <!-- intro -->
 ##### SQL:
@@ -381,6 +502,28 @@ f text indexed stored
 ) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "SHOW CREATE TABLE tbl"
+```
+
+<!-- response JSON -->
+```JSON
+[{
+"columns":[{"Table":{"type":"string"}},{"Create Table":{"type":"string"}}],
+"data":[
+{"Table":"tbl","Create Table":"CREATE TABLE tbl (\nf text)"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]
+```
+
 <!-- end -->
 
 ### Схемы перколяционных таблиц
@@ -415,7 +558,7 @@ mysql> DESC pq TABLE;
 3 rows in set (0.00 sec)
 ```
 
-Также поддерживается `desc pq table like ...`, и работает следующим образом:
+Также поддерживается `desc pq table like ...`, и он работает следующим образом:
 
 ```sql
 mysql> desc pq table like '%title%';

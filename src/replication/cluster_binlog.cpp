@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,8 +17,8 @@
 
 #include "cluster_binlog.h"
 
-static bool g_bRplBinlogEnabled = ( val_from_env ( "MANTICORE_REPLICATION_BINLOG", 1 )!=0 );
-static bool LOG_LEVEL_RPLOG = val_from_env ( "MANTICORE_RPL_BINLOG", false ); // verbose logging for cluster binlog, ruled by this env variable
+static bool g_bRplBinlogEnabled = env_bool ( "MANTICORE_REPLICATION_BINLOG" ).value_or ( true );
+static bool LOG_LEVEL_RPLOG = env_exists ( "MANTICORE_RPL_BINLOG" ); // verbose logging for cluster binlog, ruled by this env variable
 
 struct ClusterTid_t
 {
@@ -39,6 +39,7 @@ public:
 
 	void OnClusterDelete ( const CSphString & sCluster, const StrVec_t & dIndexes ) final;
 	void OnClusterLoad ( ClusterBinlogData_c & tCluster ) final;
+	void InvalidateCluster ( const CSphString & sCluster ) final;
 
 	void ClusterTnx ( const ClusterBinlogData_c & tCluster ) final;
 	void OnClusterSynced ( const ClusterBinlogData_c & tCluster ) final;
@@ -375,6 +376,20 @@ void ClusterBinlog_c::OnClusterLoad ( ClusterBinlogData_c & tCluster )
 		tCluster.m_tGtid = pCluster->m_tGtid;
 
 	sphLogDebugRpl ( "replication binlog on_%s cluster '%s', gtid %s", ( pCluster ? "loaded" : "missed" ), tCluster.m_sName.cstr(), Wsrep::Gtid2Str ( tCluster.m_tGtid ).cstr() );
+}
+
+void ClusterBinlog_c::InvalidateCluster ( const CSphString & sCluster )
+{
+	if ( !IsValid() )
+		return;
+
+	ScopedMutex_t tLock ( m_tLock );
+
+	auto * pCluster = m_hClusters ( sCluster );
+	if ( !pCluster )
+		return;
+
+	pCluster->m_tGtid = {};
 }
 
 void ClusterBinlog_c::OnClusterSynced ( const ClusterBinlogData_c & tCluster )

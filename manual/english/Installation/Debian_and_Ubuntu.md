@@ -32,7 +32,7 @@ sudo apt update
 
 Then install Manticore Search:
 ```
-sudo apt install manticore manticore-extra
+sudo apt install manticore
 ```
 
 If you are upgrading to Manticore 6 from an older version, it is recommended to remove your old packages first to avoid conflicts caused by the updated package structure:
@@ -49,7 +49,7 @@ If you prefer "Nightly" (development) versions do:
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
 sudo dpkg -i manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
-sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l manticore-galera manticore-galera-dbgsym manticore-language-packs manticore-load
+sudo apt -y install manticore
 ```
 
 ### Standalone DEB packages
@@ -143,4 +143,3 @@ sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
 sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
-

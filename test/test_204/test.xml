@@ -66,6 +66,25 @@ index test_stop_rt
     stopwords = <test_root/>/stopwords.txt
 }
 
+table test_rt1
+{
+    type = rt
+    path = <data_path/>/test_rt1
+
+    index_field_lengths = 1
+
+    rt_field = f1
+    rt_field = f2
+
+    rt_attr_string = f3
+    rt_attr_string = f4
+    rt_attr_string = f5
+    rt_attr_string = f6
+    rt_attr_string = f7
+    rt_attr_string = f8
+    rt_attr_string = f9
+}
+
 </config>
 
 <db_create>
@@ -115,6 +134,16 @@ CREATE TABLE test_stop_table
 <sphinxql>INSERT INTO test_stop_rt (id, title, gid) VALUES (1, 'word the', 11), (2, 'the word',12), (3, 'word the word', 11), (4, 'the the word the word the word the the',12)</sphinxql>
 <sphinxql>select * from test_stop_rt order by id asc</sphinxql>
 <sphinxql>select * from test_stop order by id asc</sphinxql>
+
+<!-- crash on insert string into field length table with mix of strings and fields -->
+<sphinxql>
+insert into test_rt1 (f1) values ('test');
+select * from test_rt1 order by id asc;
+truncate table test_rt1 with reconfigure;
+insert into test_rt1 (f1) values ('test2');
+select * from test_rt1 order by id asc;
+</sphinxql>
+
 
 </queries>
 

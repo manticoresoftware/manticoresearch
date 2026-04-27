@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1254,7 +1254,7 @@ bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
 	if ( !pIndex )
 		return false;
 
-	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex), sFile } );
+	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex) } );
 	return true;
 }
 
@@ -1262,7 +1262,7 @@ bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
 bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 {
 	ARRAY_FOREACH ( i, m_dIndexes )
-		if ( m_dIndexes[i].m_sFile==sFile )
+		if ( sFile==m_dIndexes[i].m_pIndex->GetFilename().c_str() )
 		{
 			m_dIndexes.Remove(i);
 			return true;
@@ -1273,11 +1273,27 @@ bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
 }
 
 
-void SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+void SIContainer_c::UpdateFilename ( const CSphString & sOldFile, const CSphString & sNewFile )
 {
+	for ( auto & tIndex : m_dIndexes )
+		if ( sOldFile==tIndex.m_pIndex->GetFilename().c_str() )
+			tIndex.m_pIndex->UpdateFilename ( sNewFile.cstr() );
+}
+
+
+bool SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+{
+	bool bUpdated = false;
 	for ( auto & i : m_dIndexes )
+	{
 		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+		{
 			i.m_pIndex->ColumnUpdated ( sAttr.cstr() );
+			bUpdated = true;
+		}
+	}
+
+	return bUpdated;
 }
 
 
@@ -1364,6 +1380,11 @@ void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo 
 		i.m_pIndex->GetAttrInfo(dInfo);
 }
 
+void SIContainer_c::ClearCache()
+{
+	for ( auto & i : m_dIndexes )
+		i.m_pIndex->ClearCache();
+}
 
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const
 {

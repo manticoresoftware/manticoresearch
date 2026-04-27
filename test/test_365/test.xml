@@ -99,6 +99,110 @@ index rt_bi2
     morphology = stem_en
 }
 
+source src_bi3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table3
+	sql_attr_uint	= gid
+}
+
+index idx_bi3_none
+{
+	source = src_bi3
+	path			= <data_path/>/idx_bi3_none
+
+	bigram_index = all
+	bigram_delimiter = none
+	dict = keywords
+}
+
+index rt_bi3_none
+{
+	type = rt
+	path			= <data_path/>/rt_bi3_none
+	rt_mem_limit = 128k
+
+	rt_field		= title
+	rt_attr_uint	= gid
+
+	bigram_index = all
+	bigram_delimiter = none
+	dict = keywords
+}
+
+index idx_bi3_both
+{
+	source = src_bi3
+	path			= <data_path/>/idx_bi3_both
+
+	bigram_index = all
+	bigram_delimiter = both
+	dict = keywords
+}
+
+index rt_bi3_both
+{
+	type = rt
+	path			= <data_path/>/rt_bi3_both
+	rt_mem_limit = 128k
+
+	rt_field		= title
+	rt_attr_uint	= gid
+
+	bigram_index = all
+	bigram_delimiter = both
+	dict = keywords
+}
+
+index idx_bi3_num
+{
+	source = src_bi3
+	path			= <data_path/>/idx_bi3_num
+
+	bigram_index = second_numeric
+	bigram_delimiter = none
+	dict = keywords
+}
+
+index rt_bi3_num
+{
+	type = rt
+	path			= <data_path/>/rt_bi3_num
+	rt_mem_limit = 128k
+
+	rt_field		= title
+	rt_attr_uint	= gid
+
+	bigram_index = second_numeric
+	bigram_delimiter = none
+	dict = keywords
+}
+
+index idx_bi3_digit
+{
+	source = src_bi3
+	path			= <data_path/>/idx_bi3_digit
+
+	bigram_index = second_has_digit
+	bigram_delimiter = none
+	dict = keywords
+}
+
+index rt_bi3_digit
+{
+	type = rt
+	path			= <data_path/>/rt_bi3_digit
+	rt_mem_limit = 128k
+
+	rt_field		= title
+	rt_attr_uint	= gid
+
+	bigram_index = second_has_digit
+	bigram_delimiter = none
+	dict = keywords
+}
+
 </config>
 <db_create>
 CREATE TABLE `test_table` (
@@ -121,6 +225,17 @@ CREATE TABLE `test_table2` (
 </db_create>
 <db_drop>DROP TABLE IF EXISTS `test_table2`;</db_drop>
 <db_insert>INSERT INTO `test_table2` VALUES ( 1, 1, 'intel i3 10200'), (2, 2, 'intel i5 10500' ), (3, 3, 'intel pentium' )</db_insert>
+
+<db_create>
+CREATE TABLE `test_table3` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table3`;</db_drop>
+<db_insert>INSERT INTO `test_table3` VALUES (1, 1, 'xt 806'), (2, 2, 'xt rt9600'), (3, 3, 'xt abc'), (4, 4, 'xt v2')</db_insert>
 
 <queries><sphinxql>
 INSERT INTO rt_bi (id, gid, title) VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' );
@@ -146,6 +261,47 @@ CALL KEYWORDS ( '*intel*', 'idx_bi2', 1 AS stats, 'hits' AS sort_mode )
 </sphinxql>
 <sphinxql>
 CALL KEYWORDS ( '*intel*', 'rt_bi2', 1 AS stats, 'hits' AS sort_mode )
+</sphinxql>
+
+<sphinxql>
+INSERT INTO rt_bi3_none (id, gid, title) VALUES (1, 1, 'xt 806'), (2, 2, 'xt rt9600'), (3, 3, 'xt abc'), (4, 4, 'xt v2');
+INSERT INTO rt_bi3_both (id, gid, title) VALUES (1, 1, 'xt 806'), (2, 2, 'xt rt9600'), (3, 3, 'xt abc'), (4, 4, 'xt v2');
+INSERT INTO rt_bi3_num (id, gid, title) VALUES (1, 1, 'xt 806'), (2, 2, 'xt rt9600'), (3, 3, 'xt abc'), (4, 4, 'xt v2');
+INSERT INTO rt_bi3_digit (id, gid, title) VALUES (1, 1, 'xt 806'), (2, 2, 'xt rt9600'), (3, 3, 'xt abc'), (4, 4, 'xt v2');
+
+<!-- bigram_delimiter = none: glued token matches -->
+SELECT * FROM idx_bi3_none WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM rt_bi3_none WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM idx_bi3_none WHERE MATCH ('xtrt9600') ORDER BY id ASC;
+SELECT * FROM rt_bi3_none WHERE MATCH ('xtrt9600') ORDER BY id ASC;
+SELECT * FROM idx_bi3_none WHERE MATCH ('xt777') ORDER BY id ASC;
+SELECT * FROM rt_bi3_none WHERE MATCH ('xt777') ORDER BY id ASC;
+
+<!-- bigram_delimiter = both: glued token still matches, phrase path stays valid -->
+SELECT * FROM idx_bi3_both WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM rt_bi3_both WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM idx_bi3_both WHERE MATCH ('"xt rt9600"') ORDER BY id ASC;
+SELECT * FROM rt_bi3_both WHERE MATCH ('"xt rt9600"') ORDER BY id ASC;
+SELECT * FROM idx_bi3_both WHERE MATCH ('"xt 777"') ORDER BY id ASC;
+SELECT * FROM rt_bi3_both WHERE MATCH ('"xt 777"') ORDER BY id ASC;
+
+<!-- bigram_index = second_numeric -->
+SELECT * FROM idx_bi3_num WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM rt_bi3_num WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM idx_bi3_num WHERE MATCH ('xtrt9600') ORDER BY id ASC;
+SELECT * FROM rt_bi3_num WHERE MATCH ('xtrt9600') ORDER BY id ASC;
+SELECT * FROM idx_bi3_num WHERE MATCH ('xtv2') ORDER BY id ASC;
+SELECT * FROM rt_bi3_num WHERE MATCH ('xtv2') ORDER BY id ASC;
+
+<!-- bigram_index = second_has_digit -->
+SELECT * FROM idx_bi3_digit WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM rt_bi3_digit WHERE MATCH ('xt806') ORDER BY id ASC;
+SELECT * FROM idx_bi3_digit WHERE MATCH ('xtrt9600') ORDER BY id ASC;
+SELECT * FROM rt_bi3_digit WHERE MATCH ('xtrt9600') ORDER BY id ASC;
+SELECT * FROM idx_bi3_digit WHERE MATCH ('xtv2') ORDER BY id ASC;
+SELECT * FROM rt_bi3_digit WHERE MATCH ('xtv2') ORDER BY id ASC;
+SELECT * FROM idx_bi3_digit WHERE MATCH ('xtabc') ORDER BY id ASC;
+SELECT * FROM rt_bi3_digit WHERE MATCH ('xtabc') ORDER BY id ASC;
 
 </sphinxql></queries>
 

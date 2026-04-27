@@ -2,7 +2,7 @@
 
 #Run the very same test suite as run on gitlab CI, but locally
 
-BUILD_DOCKER=manticoresearch/external_toolchain:vcpkg331_20250114
+BUILD_DOCKER=manticoresearch/external_toolchain:vcpkg331_20260310
 TEST_DOCKER=manticoresearch/ubertests_public:331
 boost=boost_nov22
 sysroot=roots_nov22

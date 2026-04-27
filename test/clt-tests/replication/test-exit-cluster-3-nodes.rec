@@ -1,0 +1,107 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=exit_cluster_3
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE exit_rt_3 (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD exit_rt_3;" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:exit_rt_3 VALUES (1,'before exit');"
+––– output –––
+––– input –––
+sleep 2; mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+sleep 2; mysql -h0 -P3306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "EXIT CLUSTER ${CLUSTER_NAME};"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM exit_rt_3 ORDER BY id ASC;"
+––– output –––
++------+-------------+
+| id   | title       |
++------+-------------+
+|    1 | before exit |
++------+-------------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:exit_rt_3 VALUES (2,'after exit');" && mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_exit_cluster_3_status
+  Value: primary
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P3306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO exit_rt_3 VALUES (3,'local after exit');" && mysql -h0 -P2306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P3306 -e "SELECT COUNT(*) AS cnt FROM exit_rt_3;"
+––– output –––
+#!/\+[-]+\+/!#
+#!/\| cnt\s+\|/!#
+#!/\+[-]+\+/!#
+| %{NUMBER} |
+#!/\+[-]+\+/!#
+––– input –––
+mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_NAME};" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS exit_rt_3;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS exit_rt_3;" && mysql -h0 -P3306 -e "DROP TABLE IF EXISTS exit_rt_3;"
+––– output –––

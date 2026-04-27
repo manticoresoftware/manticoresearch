@@ -1,0 +1,35 @@
+name: 📖 Trigger doc check
+run-name: 📖 Trigger doc check ${{ github.sha }}
+
+# We use this intermediate workflow to workaround the issue with repo secrets unavailable for PR-s from external repos
+# The `check_docs` workflow use this one for its `workflow_run` event which let it run without errors
+on:
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+      - manticore-*
+
+jobs:
+  trigger_doc_check:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Save PR repo
+        env:
+          PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo $PR_REPO > pr_repo.txt
+          echo $PR_REF >> pr_repo.txt
+      - name: Upload PR repo name
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr_repo
+          path: ./pr_repo.txt
+      - name: Trigger doc check
+        run: |
+          echo "Doc check triggered"

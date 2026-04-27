@@ -465,7 +465,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 ––– input –––
 sleep 1; docker exec manticore stdbuf -oL searchd --stopwait
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#)
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)

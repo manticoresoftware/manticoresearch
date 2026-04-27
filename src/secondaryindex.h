@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -45,10 +45,11 @@ class SIContainer_c
 public:
 	bool		Load ( const CSphString & sFile, CSphString & sError );
 	bool		Drop ( const CSphString & sFile, CSphString & sError );
+	void		UpdateFilename ( const CSphString & sOldFile, const CSphString & sNewFile );
 	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }
 	void		Reset() { m_dIndexes.Reset(); }
 
-	void		ColumnUpdated ( const CSphString & sAttr );
+	bool		ColumnUpdated ( const CSphString & sAttr );
 	bool		SaveMeta ( CSphString & sError ) const;
 	bool		CreateIterators ( std::vector<common::BlockIterator_i *> & dIterators, const common::Filter_t & tFilter, const common::RowidRange_t * pBounds, uint32_t uMaxValues, int64_t iRsetSize, int iCutoff, bool bUseSICache, CSphString & sWarning, CSphString & sError ) const;
 	int64_t		GetCountDistinct ( const CSphString & sAttr ) const;
@@ -56,6 +57,7 @@ public:
 	uint32_t	GetNumIterators ( const common::Filter_t & tFilter ) const;
 	bool		IsEnabled ( const CSphString & sAttr ) const;
 	void		GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo ) const;
+	void		ClearCache();
 
 	RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const;
 
@@ -63,7 +65,6 @@ private:
 	struct IndexInfo_t
 	{
 		std::unique_ptr<SI::Index_i>	m_pIndex;
-		CSphString						m_sFile;
 	};
 
 	CSphVector<IndexInfo_t> m_dIndexes;

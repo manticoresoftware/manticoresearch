@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -59,6 +59,9 @@ bool CallCoroutineRes ( Predicate fnHandler );
 
 // start handler in coroutine, self (if any) or main scheduler, second-priority
 void StartJob ( Handler handler, Scheduler_i * pScheduler = GlobalWorkPool() );
+
+// start handler in coroutine, with provided waiter used to detect when call is done.
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler = GlobalWorkPool() );
 
 // perform handler in custom stack
 // note: handler is called as linear routine, without scheduler.

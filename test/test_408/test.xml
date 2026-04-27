@@ -100,6 +100,14 @@ index all2
 	hitless_words = all
 }
 
+index hitless
+{
+    type = rt
+    rt_field = title
+    path = <data_path/>/hitless
+    hitless_words = <this_test/>/word_a.txt
+}
+
 </config>
 
 <queries><sphinxql>
@@ -278,6 +286,22 @@ insert into hit_1(id, title) values (1, 'protest, to teach, to feed, and'), (2, 
     flush ramchunk all2;
     SELECT * FROM some2 WHERE MATCH('@t1 and');
     SELECT * FROM all2 WHERE MATCH('@t1 and');
+
+	<!-- hitless_words_list='a', many 'a b' rows, flush ramchunk, match('b') and show meta (dict layout / skiplist) -->
+	insert into hitless(id, title) values (1,'a b'),(2,'a b'),(3,'a b'),(4,'a b'),(5,'a b'),(6,'a b'),(7,'a b'),(8,'a b'),(9,'a b'),(10,'a b'),(11,'a b'),(12,'a b'),(13,'a b'),(14,'a b'),(15,'a b'),(16,'a b'),(17,'a b'),(18,'a b'),(19,'a b'),(20,'a b'),(21,'a b'),(22,'a b'),(23,'a b'),(24,'a b'),(25,'a b'),(26,'a b'),(27,'a b'),(28,'a b'),(29,'a b'),(30,'a b'),(31,'a b'),(32,'a b'),(33,'a b');
+	flush ramchunk hitless;
+	select * from hitless where match('b');
+	show meta;
+
+	<!-- runtime hitless+skiplist stress: force > skiplist_block_size docs in one disk chunk -->
+	insert into hitless(id, title) values (100,'a b'),(101,'a b'),(102,'a b'),(103,'a b'),(104,'a b'),(105,'a b'),(106,'a b'),(107,'a b'),(108,'a b'),(109,'a b'),(110,'a b'),(111,'a b'),(112,'a b'),(113,'a b'),(114,'a b'),(115,'a b'),(116,'a b'),(117,'a b'),(118,'a b'),(119,'a b'),(120,'a b'),(121,'a b'),(122,'a b'),(123,'a b'),(124,'a b'),(125,'a b'),(126,'a b'),(127,'a b'),(128,'a b'),(129,'a b'),(130,'a b'),(131,'a b'),(132,'a b');
+	insert into hitless(id, title) values (133,'a b'),(134,'a b'),(135,'a b'),(136,'a b'),(137,'a b'),(138,'a b'),(139,'a b'),(140,'a b'),(141,'a b'),(142,'a b'),(143,'a b'),(144,'a b'),(145,'a b'),(146,'a b'),(147,'a b'),(148,'a b'),(149,'a b'),(150,'a b'),(151,'a b'),(152,'a b'),(153,'a b'),(154,'a b'),(155,'a b'),(156,'a b'),(157,'a b'),(158,'a b'),(159,'a b'),(160,'a b'),(161,'a b'),(162,'a b'),(163,'a b'),(164,'a b'),(165,'a b');
+	insert into hitless(id, title) values (1000,'a rare');
+	flush ramchunk hitless;
+	select * from hitless where match('a rare') order by id asc;
+	show meta;
+	select * from hitless where match('rare') order by id asc;
+	show meta;
     
 </sphinxql></queries>
 

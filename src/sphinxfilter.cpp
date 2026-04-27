@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1373,9 +1373,9 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 }
 
 
-static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, const CSphString * pJoinIdx, CSphString & sError )
+static std::unique_ptr<ISphFilter> TryToCreateExpressionFilter ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString & sAttrName, const ISphSchema & tSchema, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ExprParseArgs_t & tExprArgs, CSphString & sError )
 {
-	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, pJoinIdx, sError, tExprArgs );
+	pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
 	if ( pExpr && pExpr->UsesDocstore() )
 	{
 		sError.SetSprintf ( "unsupported filter on field '%s' (filters are supported only on attributes, not stored fields)", sAttrName.cstr() );
@@ -1483,7 +1483,18 @@ static bool TryToCreateSpecialFilter ( std::unique_ptr<ISphFilter> & pFilter, co
 }
 
 
-static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
+static bool IsColumnarAliasedAttr ( const ISphSchema & tLookupSchema, const CSphString & sAliasedCol )
+{
+	int iAliasedAttr = tLookupSchema.GetAttrIndex ( sAliasedCol.cstr() );
+	if ( iAliasedAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAliasedAttr = tLookupSchema.GetAttr ( iAliasedAttr );
+	return tAliasedAttr.IsColumnar() || tAliasedAttr.IsColumnarExpr();
+}
+
+
+static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema, const ISphSchema * pIndexSchema )
 {
 	if ( iAttr<0 )
 		return false;
@@ -1503,7 +1514,17 @@ static bool CanSpawnColumnarFilter ( int iAttr, const ISphSchema & tSchema )
 	// we had a columnar expression in the select list that we wanted to evaluate at the final stage
 	// we replaced it with a stored expression
 	// now we want to create a columnar filter based on the original columnar attribute
-	if ( tCol.IsStoredExpr() )
+	if ( !tCol.IsStoredExpr() )
+		return false;
+
+	CSphString sAliasedCol;
+	tCol.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sAliasedCol );
+	if ( IsColumnarAliasedAttr ( tSchema, sAliasedCol ) )
+		return true;
+
+	// result-set schemas can contain extra attrs shadowing base attrs by name;
+	// check index schema too to resolve original aliased columnar attribute.
+	if ( pIndexSchema && pIndexSchema!=&tSchema && IsColumnarAliasedAttr ( *pIndexSchema, sAliasedCol ) )
 		return true;
 
 	return false;
@@ -1529,7 +1550,7 @@ static void TryToCreateJoinNullFilter ( std::unique_ptr<ISphFilter> & pFilter, c
 }
 
 
-static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, CSphString & sError, CSphString & sWarning )
+static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter, const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName,	const CommonFilterSettings_t & tFixedSettings, ESphAttr & eAttrType, CSphRefcountedPtr<ISphExpr> & pExpr, const CSphString * pJoinIdx, const CSphString * pJoinIdxLeft, CSphString & sError, CSphString & sWarning )
 {
 	if ( pFilter )
 		return;
@@ -1538,7 +1559,7 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter,
 	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tFixedSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
-	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema );
+	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema, tCtx.m_pIndexSchema );
 
 	if ( iAttr>=0 && !bColumnar )
 	{
@@ -1553,7 +1574,11 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter,
 	ExprParseArgs_t tExprArgs;
 	tExprArgs.m_pAttrType = &eAttrType;
 	tExprArgs.m_eCollation = tCtx.m_eCollation;
-	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, pJoinIdx, sError );
+	if ( pJoinIdx )
+		tExprArgs.m_pJoinIdx = pJoinIdx;
+	if ( pJoinIdxLeft )
+		tExprArgs.m_pJoinIdxLeft = pJoinIdxLeft;
+	pFilter = TryToCreateExpressionFilter ( pExpr, sAttrName, tSchema, tSettings, tFixedSettings, tExprArgs, sError );
 }
 
 
@@ -1593,7 +1618,7 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 			ExprParseArgs_t tExprArgs;
 			tExprArgs.m_pAttrType = &eAttrType;
 			tExprArgs.m_eCollation = tCtx.m_eCollation;
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, nullptr, sError, tExprArgs );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
 		}
 		pFilter = CreateFilterExpr ( pExpr, tSettings, tFixedSettings, sError, tCtx.m_eCollation, tAttr.m_eAttrType );
 	} else
@@ -1842,18 +1867,22 @@ static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CS
 }
 
 
+bool HasKNNDistFilter ( const CSphQuery & tQuery )
+{
+	if ( tQuery.m_dFilterTree.GetLength() )
+		return false;
+
+	return tQuery.m_dFilters.any_of ( [] ( auto & tFilter ) { return IsKnnDist ( tFilter.m_sAttrName ); } )
+		|| tQuery.m_dFilters.any_of ( [&tQuery] ( auto & tFilter ) { return tQuery.m_dItems.any_of ( [&tFilter] ( const CSphQueryItem & tItem ) { return tItem.m_sAlias==tFilter.m_sAttrName && IsKnnDist ( tItem.m_sExpr ); } ); } );
+}
+
+
 static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree )
 {
 	if ( tCtx.m_sJoinIdx.IsEmpty() )
 		return;
 
-	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pMatchSchema, tCtx.m_sJoinIdx.cstr() );
-
-	bool bHaveNullFilters = false;
-	for ( const auto & i : dRightFilters )
-		bHaveNullFilters |= dModified[i.first].m_eType==SPH_FILTER_NULL;
-
-	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() && dRightFilters.GetLength() && ( bHaveNullFilters || dRightFilters.GetLength()!=dModified.GetLength() ) )
+	if ( NeedPostJoinFilterEvaluation ( dModified, tCtx.m_sJoinIdx, tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength(), tCtx.m_eJoinType, *tCtx.m_pMatchSchema ) )
 	{
 		// mixed joined and non-joined filters; they will be handled in join sorter
 		// remove all filters from the query (keep the @rowid/pseudo_sharding filter)
@@ -1887,7 +1916,31 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 }
 
 
-static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems )
+static void RecordJsonSIStage ( CSphVector<JsonSIFilterTransform_t::StageRestore_t> & dStages, const CSphColumnInfo & tAttr )
+{
+	if ( dStages.any_of ( [&tAttr] ( const auto & tStage ) { return tStage.m_sAttr==tAttr.m_sName; } ) )
+		return;
+
+	auto & tStage = dStages.Add();
+	tStage.m_sAttr = tAttr.m_sName;
+	tStage.m_eStage = tAttr.m_eStage;
+}
+
+
+static void RecordJsonSITransform ( CSphVector<JsonSIFilterTransform_t> * pJsonSITransforms, int iFilter, const CSphFilterSettings & tOriginal, const CSphVector<JsonSIFilterTransform_t::StageRestore_t> * pStages=nullptr )
+{
+	if ( !pJsonSITransforms )
+		return;
+
+	JsonSIFilterTransform_t & tTransform = pJsonSITransforms->Add();
+	tTransform.m_iFilter = iFilter;
+	tTransform.m_tOriginal = tOriginal;
+	if ( pStages )
+		tTransform.m_dStages = *pStages;
+}
+
+
+static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<JsonSIFilterTransform_t> * pJsonSITransforms )
 {
 	if ( !tCtx.m_pSI )
 		return;
@@ -1922,51 +1975,71 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 
 	const ISphSchema & tMatchSchema = pModifiedMatchSchema ? *pModifiedMatchSchema : *tCtx.m_pMatchSchema;
 
-	// now modify the schema
-	for ( auto & i : dFilters )
+	ARRAY_FOREACH ( iFilter, dFilters )
 	{
-		const CSphColumnInfo * pAttr = tMatchSchema.GetAttr ( i.m_sAttrName.cstr() );
-		if ( bNeedToCloneSchema && pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, tMatchSchema, *tCtx.m_pSI ) )
+		CSphFilterSettings & tFilter = dFilters[iFilter];
+		const CSphColumnInfo * pAttr = tMatchSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+		if ( bNeedToCloneSchema && pAttr && pAttr->m_pExpr )
 		{
-			// we transformed an attribute from an expression filter into a plain filter
-			// we may no longer need to calculate that expression at PREFILTER stage
-			StrVec_t dAttrNames;
-			dAttrNames.Add ( pAttr->m_sName );
-			FetchAttrDependencies ( dAttrNames, tMatchSchema );
-			for ( const auto & sAttr : dAttrNames )
+			CSphFilterSettings tOriginal = tFilter;
+			if ( pAttr->m_pExpr->SetupAsFilter ( tFilter, tMatchSchema, *tCtx.m_pSI ) )
 			{
-				const CSphColumnInfo * pDependentAttr = tMatchSchema.GetAttr ( sAttr.cstr() );
-				assert(pDependentAttr);
-				if ( pDependentAttr->m_eStage!=SPH_EVAL_STATIC )
-					(const_cast<CSphColumnInfo *>(pDependentAttr))->m_eStage = Max ( pDependentAttr->m_eStage, SPH_EVAL_FINAL );
-			}
+				// we transformed an attribute from an expression filter into a plain filter
+				// we may no longer need to calculate that expression at PREFILTER stage
+				CSphVector<JsonSIFilterTransform_t::StageRestore_t> dStages;
+				StrVec_t dAttrNames;
+				dAttrNames.Add ( pAttr->m_sName );
+				FetchAttrDependencies ( dAttrNames, tMatchSchema );
+				for ( const auto & sAttr : dAttrNames )
+				{
+					const CSphColumnInfo * pDependentAttr = tMatchSchema.GetAttr ( sAttr.cstr() );
+					assert(pDependentAttr);
+					if ( pDependentAttr->m_eStage!=SPH_EVAL_STATIC )
+					{
+						ESphEvalStage eNewStage = Max ( pDependentAttr->m_eStage, SPH_EVAL_FINAL );
+						if ( eNewStage!=pDependentAttr->m_eStage )
+							RecordJsonSIStage ( dStages, *pDependentAttr );
 
-			continue;
+						(const_cast<CSphColumnInfo *>(pDependentAttr))->m_eStage = eNewStage;
+					}
+				}
+
+				RecordJsonSITransform ( pJsonSITransforms, iFilter, tOriginal, &dStages );
+				continue;
+			}
 		}
 
 		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
 		{
-			CSphString sTransformed = UnifyJsonFieldName ( i.m_sAttrName );
+			CSphString sTransformed = UnifyJsonFieldName ( tFilter.m_sAttrName );
 			for ( const auto & tItem : dItems )
-				if ( tItem.m_sAlias==i.m_sAttrName && tItem.m_eAggrFunc==SPH_AGGR_NONE )
+			{
+				if ( tItem.m_sAlias==tFilter.m_sAttrName && tItem.m_eAggrFunc==SPH_AGGR_NONE )
 				{
 					sTransformed = tItem.m_sExpr;
 					if ( sphJsonNameSplit ( sTransformed.cstr() ) )
 						sTransformed = UnifyJsonFieldName ( sTransformed );
 					break;
 				}
+			}
 
 			if ( tCtx.m_pSI->IsEnabled(sTransformed) )
-				i.m_sAttrName = sTransformed;
+			{
+				CSphFilterSettings tOriginal = tFilter;
+				tFilter.m_sAttrName = sTransformed;
+				RecordJsonSITransform ( pJsonSITransforms, iFilter, tOriginal );
+			}
 		}
 	}
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError )
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError, CSphVector<JsonSIFilterTransform_t> * pJsonSITransforms )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
+	if ( pJsonSITransforms )
+		pJsonSITransforms->Resize(0);
 
 	dModified.Resize ( dFilters.GetLength() );
 
@@ -1985,7 +2058,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
-	TransformForJsonSI ( tCtx, dModified, pModifiedMatchSchema, dItems );
+	TransformForJsonSI ( tCtx, dModified, pModifiedMatchSchema, dItems, pJsonSITransforms );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
@@ -2001,23 +2074,6 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	return true;
-}
-
-
-int64_t EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx )
-{
-	if ( !tCtx.m_pHistograms )
-		return tCtx.m_iTotalDocs;
-
-	Histogram_i * pHistogram = tCtx.m_pHistograms->Get ( tSettings.m_sAttrName );
-	if ( !pHistogram || pHistogram->IsOutdated() )
-		return tCtx.m_iTotalDocs;
-
-	HistogramRset_t tEstimate;
-	if ( !pHistogram->EstimateRsetSize ( tSettings, tEstimate ) )
-		return tCtx.m_iTotalDocs;
-
-	return tEstimate.m_iTotal;
 }
 
 
@@ -2330,7 +2386,7 @@ static std::unique_ptr<ISphFilter> CreateFilter ( const CSphFilterSettings & tSe
 		return nullptr;
 
 	TryToCreateJoinNullFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings );
-	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, sError, sWarning );
+	TryToCreateExpressionFilter ( pFilter, tSettings, tCtx, sAttrName, tFixedSettings, eAttrType, pExpr, tCtx.m_sJoinIdx.Length() ? &tCtx.m_sJoinIdx : nullptr, tCtx.m_sJoinIdxLeft.Length() ? &tCtx.m_sJoinIdxLeft : nullptr, sError, sWarning );
 	TryToCreatePlainAttrFilter ( pFilter, tSettings, tCtx, bHaving, sAttrName, tFixedSettings, eAttrType, pExpr, sError, sWarning );
 
 	SetFilterLocator ( pFilter, tSettings, tCtx, sAttrName );
@@ -2835,4 +2891,3 @@ void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const V
 	else
 		tBuf << LogFilterTree ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
-

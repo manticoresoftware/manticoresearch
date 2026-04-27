@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@ bool StackMockingAllowed()
 		return false;
 	}
 #endif
-	return !val_from_env ( "NO_STACK_CALCULATION", false );
+	return !env_exists ( "NO_STACK_CALCULATION" );
 }
 
 
@@ -654,6 +654,11 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
 	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
 	tEvent.WaitEvent ();
+}
+
+void StartCall ( Handler fnHandler, Waiter_t tWait, Scheduler_i* pScheduler )
+{
+	Coro::Worker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(tWait) );
 }
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )

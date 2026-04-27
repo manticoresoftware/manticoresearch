@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>issue 3498: join with field_string colliding with attr name</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source a
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data1.csv
+}
+
+source b
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data2.csv
+	csvpipe_field_string = attribute
+	csvpipe_attr_uint = a_id
+}
+
+table a
+{
+	type = plain
+	source = a
+	path = <data_path/>/a
+}
+
+table b
+{
+	type = plain
+	source = b
+	path = <data_path/>/b
+}
+</config>
+
+<queries>
+<sphinxql>
+select * from a left join b on a.id = b.a_id;
+</sphinxql>
+</queries>
+
+</test>

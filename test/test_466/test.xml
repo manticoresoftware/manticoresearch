@@ -176,6 +176,7 @@ insert into table_multi1 (id,title,brand_id,j) values
 
 <sphinxql>select id, code, count(*), histogram(code, {hist_interval=90}) as c from test_group1,test_group2 group by c order by c asc</sphinxql>
 <sphinxql>select id, code, count(*), histogram(code, {hist_interval=100}) as c from test_group1,test_group2 group by c order by c asc</sphinxql>
+<sphinxql>select id, histogram(code*0.5, {hist_interval=1}) as c from test_group1 order by id asc</sphinxql>
 
 <query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"to":150},{"from":150, "to":300},{"from":300}] } }} }</query>
 <query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{

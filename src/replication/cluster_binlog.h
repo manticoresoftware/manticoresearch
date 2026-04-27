@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -31,6 +31,7 @@ public:
 
 	virtual void OnClusterDelete ( const CSphString & sCluster, const StrVec_t & dIndexes ) = 0;
 	virtual void OnClusterLoad ( ClusterBinlogData_c & tCluster ) = 0;
+	virtual void InvalidateCluster ( const CSphString & sCluster ) = 0;
 
 	virtual void ClusterTnx ( const ClusterBinlogData_c & tCluster ) = 0;
 	virtual void OnClusterSynced ( const ClusterBinlogData_c & tCluster ) = 0;

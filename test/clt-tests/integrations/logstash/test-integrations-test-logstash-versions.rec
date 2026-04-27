@@ -626,5 +626,19 @@ timeout 300 bash /tmp/logstash-single-test.sh 9.2
 ✓ Structure check for 9.2: passed
 ✓ Logstash version 9.2 tested successfully
 ––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-9.3.0-linux-x86_64.tar.gz" -O logstash-9.3.0.tar.gz && gzip -t logstash-9.3.0.tar.gz 2>/dev/null && tar -tzf logstash-9.3.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 9.3.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 9.3.0 after 3 attempts" >&2 || rm -f logstash-9.3.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 9.3.0 downloaded successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 9.3
+––– output –––
+>>> Testing Logstash version: 9.3
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 9.3 started and processed logs
+✓ Row count check for 9.3: 5 rows
+✓ Structure check for 9.3: passed
+✓ Logstash version 9.3 tested successfully
+––– input –––
 rm -f logstash-*.tar.gz
 ––– output –––

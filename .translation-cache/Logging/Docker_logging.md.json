@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339854
+    },
+    "__meta": {
+        "source_text": "# Docker logging\n\nWhen you use the [official Manticore docker image](https://hub.docker.com/r/manticoresearch/manticore/), the server log is sent to `/dev/stdout` which can be viewed from host with:\n\n```bash\ndocker logs manticore\n```\nThe query log can be diverted to the Docker log by passing the variable `QUERY_LOG_TO_STDOUT=true`.\n\nThe log folder is the same as in the case of the Linux package, set to `/var/log/manticore`. If desired, it can be mounted to a local path to view or process the logs.\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "a6c8f47b7c779bee2a9f5c6109510f35"
     }
 }

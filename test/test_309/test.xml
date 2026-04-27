@@ -19,13 +19,21 @@ searchd
 <sphinxql>
 create table jieba_test_accurate (title text) morphology='jieba_chinese' jieba_mode='accurate' charset_table='cont,non_cont';
 insert into jieba_test_accurate values(1,'土風舞班');
+create table jieba_test_accurate2 (title text) morphology='jieba_chinese' jieba_mode='accurate' charset_table='cont,non_cont';
+insert into jieba_test_accurate2 values(1,'土風舞班');
+create table jieba_test_accurate_hmm0 (title text) morphology='jieba_chinese' jieba_mode='accurate' jieba_hmm=0 charset_table='cont,non_cont';
+insert into jieba_test_accurate_hmm0 values(1,'土風舞班');
 create table jieba_test_full (title text) morphology='jieba_chinese' jieba_mode='full' charset_table='cont,non_cont';
 insert into jieba_test_full values(1,'土風舞班');
 select * from jieba_test_full where match('土風') option jieba_mode='accurate';
 select * from jieba_test_accurate where match('土風') option jieba_mode='accurate';
+select * from jieba_test_accurate2 where match('土風') option jieba_mode='accurate';
+select * from jieba_test_accurate_hmm0 where match('土風') option jieba_mode='accurate';
 CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test', 'jieba_test_accurate', 'accurate' as jieba_mode );
 CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test', 'jieba_test_accurate', 'full' as jieba_mode );
 drop table jieba_test_accurate;
+drop table jieba_test_accurate2;
+drop table jieba_test_accurate_hmm0;
 drop table jieba_test_full;
 
 create table jieba_custom_dict (title text) morphology='jieba_chinese' charset_table='cont,non_cont' jieba_user_dict_path='<this_test/>/jieba_user_dict.txt';

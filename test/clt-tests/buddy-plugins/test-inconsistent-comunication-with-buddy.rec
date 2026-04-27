@@ -57,6 +57,8 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -74,6 +76,8 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -90,6 +94,8 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -107,6 +113,8 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -123,6 +131,8 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -140,6 +150,8 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -156,6 +168,8 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 "data":[
 {"Variable_name":"autocommit","Value":"%{NUMBER}"},
 {"Variable_name":"auto_optimize","Value":"%{NUMBER}"},
+{"Variable_name":"parallel_chunk_merges","Value":"%{NUMBER}"},
+{"Variable_name":"merge_chunks_per_job","Value":"%{NUMBER}"},
 {"Variable_name":"optimize_cutoff","Value":"%{NUMBER}"},
 {"Variable_name":"collation_connection","Value":"libc_ci"},
 {"Variable_name":"query_log_format","Value":"sphinxql"},
@@ -173,6 +187,8 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 {"Variable_name":"distinct_precision_threshold","Value":"3500"},
 {"Variable_name":"threads_ex_effective","Value":""},
 {"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"wait_timeout","Value":"%{NUMBER}"},
+{"Variable_name":"interactive_timeout","Value":"%{NUMBER}"},
 {"Variable_name":"thread_stack","Value":"%{NUMBER}"},
 {"Variable_name":"threads_ex","Value":""},
 {"Variable_name":"user","Value":""}
@@ -520,7 +536,7 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | j
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -568,7 +584,7 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION" | jq '.[0].dat
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -616,7 +632,7 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VER
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",
@@ -664,7 +680,7 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION" | jq 
       },
       {
         "Component": "Embeddings",
-        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+        "Version": "embeddings %{VERSION}"
       },
       {
         "Component": "Buddy",

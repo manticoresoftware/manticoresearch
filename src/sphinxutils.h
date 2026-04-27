@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -275,10 +275,18 @@ public:
 	}
 
 	/// get bool option value by key and default value
-	bool GetBool ( const char * sKey, bool bDefault = true ) const
+	bool GetBool ( const char * szKey, bool bDefault = true ) const noexcept
 	{
-		CSphVariant * pEntry = ( *this ) ( sKey );
-		return pEntry ? (pEntry->intval ()!=0) : bDefault;
+		return OptBool (szKey).value_or(bDefault);
+	}
+
+	/// get bool option value by key, if any
+	std::optional<bool> OptBool ( const char * sKey ) const noexcept
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval()>0;
 	}
 
 	/// get size option (plain int, or with K/M suffix) value by key and default value

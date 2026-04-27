@@ -1,0 +1,92 @@
+BUNDLE LICENSES AND NOTICES
+===========================
+
+This package is a convenience bundle of multiple components. Each component
+is distributed under its own license. This bundle does not imply a single
+license for the entire package. You must comply with the license of each
+component that you use.
+
+-------------------------------------------------------------------------------
+1. MANTICORE SEARCH (daemon, tools, common)
+-------------------------------------------------------------------------------
+
+Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
+All rights reserved.
+
+License: GPLv3 or later.
+
+See the LICENSE file in this package, or:
+https://github.com/manticoresoftware/manticoresearch/blob/master/LICENSE
+
+-------------------------------------------------------------------------------
+2. THIRD-PARTY COMPONENTS USED BY THE DAEMON
+-------------------------------------------------------------------------------
+
+The Manticore Search daemon incorporates or links to several open-source
+components (e.g. Sphinx Search, cJSON, http_parser, LZ4, xxHash, libmysqlclient,
+Manticore Columnar Library, and others). Each has its own copyright and
+license.
+
+For a complete list and the applicable license texts, see the
+component-licenses directory installed with this package, e.g.:
+
+  share/doc/manticore/component-licenses/
+  (under the installation prefix; on many systems, /usr/share/doc/manticore/component-licenses/)
+
+In particular, component-licenses/README.md describes each component and
+points to the license text files included in that directory.
+
+-------------------------------------------------------------------------------
+3. BUNDLED DEPENDENCY PACKAGES (included in this bundle)
+-------------------------------------------------------------------------------
+
+The following components are distributed as separate packages but are
+included in this bundle for convenience. Their licenses are unchanged;
+refer to each project or to the documentation installed by that component.
+
+- manticore-columnar-lib (MCL): Apache License 2.0
+  https://github.com/manticoresoftware/columnar
+
+- manticore-backup: GPL-3.0
+  https://github.com/manticoresoftware/manticoresearch-backup
+
+- manticore-buddy: GPL-3.0
+  https://github.com/manticoresoftware/manticoresearch-buddy
+
+- manticore-executor: PHP License
+  https://github.com/manticoresoftware/executor
+  (Not included on Windows.)
+
+- manticore-load: MIT License
+  https://github.com/manticoresoftware/manticore-load
+
+- manticore-tzdata: MIT License
+  https://github.com/manticoresoftware/manticore-tzdata
+  (Not included on macOS.)
+
+- manticore-galera: GPLv2
+  https://github.com/manticoresoftware/galera
+
+-------------------------------------------------------------------------------
+4. LANGUAGE PACKS (included in this bundle)
+-------------------------------------------------------------------------------
+
+This bundle includes language pack data under share/manticore/ (morphology
+dictionaries and Jieba dictionaries), in the same layout as the
+manticore-language-packs package.
+
+- Morphology dictionaries (de, en, ru): built from AOT (sokirko74/aot); LGPL-2.1
+  https://github.com/sokirko74/aot
+  Distributed from https://repo.manticoresearch.com/repository/morphology/
+
+- Jieba dictionary files: from cppjieba (MIT) and manticoresoftware/jieba
+  https://github.com/manticoresoftware/cppjieba
+  https://github.com/manticoresoftware/jieba
+
+-------------------------------------------------------------------------------
+SUMMARY
+-------------------------------------------------------------------------------
+
+For the exact license of any component, refer to the LICENSE or COPYING file
+of that component, to the component-licenses directory mentioned above, or to
+the respective upstream project.

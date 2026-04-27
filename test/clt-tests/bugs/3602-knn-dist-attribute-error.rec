@@ -15,7 +15,7 @@ mysql -h0 -P9306 -e 'drop table if exists companysearch;'
 ––– comment –––
 Create table with text field and float_vector embeddings field
 ––– input –––
-mysql -h0 -P9306 -e "create table companysearch(f text, embeddings float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');"
+mysql -h0 -P9306 -e "create table companysearch(f text, \`embeddings\` float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');"
 ––– output –––
 ––– comment –––
 Insert test data

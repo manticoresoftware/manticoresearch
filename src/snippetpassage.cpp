@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -91,7 +91,7 @@ int Passage_t::GetWeight() const
 
 //////////////////////////////////////////////////////////////////////////
 
-static CSphVector<Passage_t> SelectBestPassages ( const CSphVector<Passage_t> & dPassages, const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords )
+static CSphVector<Passage_t> SelectBestPassages ( const CSphVector<Passage_t> & dPassages, const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_i & tContainer, DWORD uFoundWords )
 {
 	CSphVector<Passage_t> dShow;
 
@@ -282,7 +282,7 @@ PassageContext_t::PassageContext_t()
 }
 
 
-CSphVector<Passage_t> PassageContext_t::SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords ) const
+CSphVector<Passage_t> PassageContext_t::SelectBest ( const SnippetLimits_t & tLimits, const SnippetQuerySettings_t & tSettings, const SnippetsDocIndex_i & tContainer, DWORD uFoundWords ) const
 {
 	CSphVector<Passage_t> dPassagesToShow;
 	if ( !m_dPassages.GetLength() )

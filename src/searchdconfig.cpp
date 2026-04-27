@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -212,6 +212,7 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 		++iItem;
 	} );
 
+	m_iClusterEpoch = Int ( tBson.ChildByName ( "cluster_epoch" ) );
 	m_sPath = String ( tBson.ChildByName ( "path" ) );
 	return true;
 }
@@ -246,6 +247,8 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 		auto _1 = tOut.Array();
 		for_each ( m_hIndexes, [&tOut] ( const auto& tIndex ) { tOut.String ( tIndex.first ); } );
 	}
+	if ( m_iClusterEpoch > 0 )
+		tOut.NamedVal ( "cluster_epoch", m_iClusterEpoch );
 	tOut.NamedStringNonEmpty ( "path", m_sPath );
 }
 
@@ -982,6 +985,38 @@ static bool CopyJiebaDict ( const CSphString & sSrcPath, const CSphString & sDst
 	return true;
 }
 
+static bool CopyHitless ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, JsonObj_c & tHeader, CopiedFiles & hCopied, CSphString & sError )
+{
+	const char * szHitless = "hitless_files";
+	assert ( tHeader && tHeader.HasItem ( szHitless ) && tHeader.GetItem ( szHitless ).IsStr() );
+
+	CSphString sHitless = tHeader.GetItem ( szHitless ).StrVal();
+	if ( sHitless=="all" || sHitless=="none" )
+		return true;
+
+	StrVec_t dHitless = sphSplit ( sHitless.cstr(), sHitless.Length(), " \t," );
+	StringBuilder_c sHitlessDst ( " " );
+
+	int iFile = 0;
+	for ( const auto & sFile : dHitless )
+	{
+		if ( sFile.IsEmpty() )
+			continue;
+
+		CSphSavedFile tHitless;
+		tHitless.m_sFilename = sFile;
+		if ( !CopyExternalFile ( sSrcPath, sDstPath, "hitless_words", iPostfix, iFile, tHitless, hCopied, sError ) )
+			return false;
+
+		++iFile;
+		sHitlessDst << tHitless.m_sFilename;
+	}
+
+	tHeader.DelItem ( szHitless );
+	tHeader.AddStr ( szHitless, sHitlessDst.cstr() );
+	return true;
+}
+
 
 static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, CSphString & sError )
 {
@@ -1016,7 +1051,7 @@ static bool WriteJsonHeader ( const CSphString & sFilename, const JsonObj_c & tM
 	return true;
 }
 
-// check for any stopwords, wordforms or exceptions and copy all avaliable
+// check for any external files and copy all available
 static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphString & sDstIndex, OptInt_t iPostfix, JsonObj_c & tHeader, CopiedFiles & hCopied, CSphString & sError )
 {
 	JsonObj_c tTokSettings = tHeader.GetItem ( "tokenizer_settings" );
@@ -1042,8 +1077,9 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 	}
 
 	bool bHasJiebaDict = tHeader.HasItem("jieba_user_dict_path");
+	bool bHasHitless = tHeader.HasItem ( "hitless_files" ) && tHeader.GetItem ( "hitless_files" ).IsStr() && !tHeader.GetItem ( "hitless_files" ).StrVal().IsEmpty();
 
-	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms && !bHasJiebaDict )
+	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms && !bHasJiebaDict && !bHasHitless )
 		return true;
 
 	CSphString sDstPath = GetPathOnly ( sDstIndex );
@@ -1058,6 +1094,9 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		return false;
 
 	if ( bHasJiebaDict && !CopyJiebaDict ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tHeader, hCopied, sError ) )
+		return false;
+
+	if ( bHasHitless && !CopyHitless ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tHeader, hCopied, sError ) )
 		return false;
 
 	return true;

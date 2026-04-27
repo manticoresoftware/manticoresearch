@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339775
+    },
+    "__meta": {
+        "source_text": "#Inheritance of index and source declarations\n\nInheritance in `index` and `source` declarations enables better organization of tables with similar settings or structures and reduces the configuration size. Both parent and child tables or sources can utilize inheritance.\n\nNo specific configurations are needed for a parent table or source.\n\nIn the child table or source declaration, specify the table or source name followed by a colon (:) and the parent name:\n\n```ini\ntable parent {\npath = /var/lib/manticore/parent\n...\n}\n\ntable child:parent {\npath = /var/lib/manticore/child\n...\n}\n```\n\nThe child will inherit the entire configuration of the parent. Any settings declared in the child will overwrite the inherited values. Be aware that for multi-value settings, defining a single value in the child will clear all inherited values. For example, if the parent has several `sql_query_pre` declarations and the child has a single `sql_query_pre` declaration, all inherited `sql_query_pre` declarations are cleared. To override some of the inherited values from the parent, explicitly declare them in the child. This is also applicable if you don't need a value from the parent. For example, if the `sql_query_pre` value from the parent is not needed, declare the directive with an empty value in the child like `sql_query_pre=`.\n\nNote that existing values of a multi-value setting will not be copied if the child declares one value for that setting.\n\nThe inheritance behavior applies to fields and attributes, not just table options. For example, if the parent has two integer attributes and the child needs a new integer attribute, the integer attribute declarations from the parent must be copied into the child configuration.\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "cc21b8f5ff81c7217c4a7d425b345df8"
     }
 }

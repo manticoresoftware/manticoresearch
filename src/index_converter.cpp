@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2026, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -892,7 +892,7 @@ CSphRowitem * AttrConverter_t::NextRow()
 				iLen = sphUnpackStr ( m_tIndex.m_tString.GetReadPtr() + uOff, &pStr );
 
 			assert ( m_pBlob );
-			m_pBlob->SetAttr( iBlobAttr++, (const BYTE*)pStr, iLen, m_sError );
+			m_pBlob->SetAttr( iBlobAttr++, (const BYTE*)pStr, iLen, BlobAttrInput_e::RAW_BYTES, m_sError );
 
 		} else if ( tColumnSrc.m_eAttrType==SPH_ATTR_UINT32SET || tColumnSrc.m_eAttrType==SPH_ATTR_INT64SET )
 		{
@@ -929,7 +929,7 @@ CSphRowitem * AttrConverter_t::NextRow()
 				iValues /= 2;
 			}
 
-			m_pBlob->SetAttr ( iBlobAttr++, (const BYTE*)pMva, iValues*sizeof(int64_t), m_sError );
+			m_pBlob->SetAttr ( iBlobAttr++, (const BYTE*)pMva, iValues*sizeof(int64_t), BlobAttrInput_e::MVA_INT64, m_sError );
 		} else
 		{
 			SphAttr_t tValue = sphGetRowAttr ( pAttrs, tColumnSrc.m_tLocator );
@@ -1326,7 +1326,7 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 			iHits = tReaderDict.UnzipInt();
 			tWriterDict.ZipInt ( iDocs );
 			tWriterDict.ZipInt ( iHits );
-			if ( iDocs>=DOCLIST_HINT_THRESH )
+			if ( ( iDocs & HITLESS_DOC_MASK )>=DOCLIST_HINT_THRESH )
 			{
 				BYTE uHint = tReaderDict.GetByte();
 				tWriterDict.PutByte ( uHint );
@@ -1354,10 +1354,10 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 		}
 
 		// skiplist
-		if ( iDocs>(int)SPH_SKIPLIST_BLOCK )
+		if ( ( iDocs & HITLESS_DOC_MASK )>(int)SPH_SKIPLIST_BLOCK )
 			tReaderDict.UnzipInt();
 
-		if ( iDocs>tIndex.m_tSettings.m_iSkiplistBlockSize )
+		if ( ( iDocs & HITLESS_DOC_MASK )>tIndex.m_tSettings.m_iSkiplistBlockSize )
 			tWriterDict.ZipInt ( pOff->m_uSkiplist );
 
 		if ( ( iWords%SPH_WORDLIST_CHECKPOINT )==0 )

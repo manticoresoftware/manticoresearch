@@ -4,6 +4,9 @@ mkdir /tmp/import-table/
 ––– input –––
 echo "a > b" > /tmp/import-table/wordforms1.txt; echo "c > d" > /tmp/import-table/exc.txt; echo "abcstop" > /tmp/import-table/stop.txt
 ––– output –––
+––– input –––
+echo "hlword" > /tmp/import-table/hitless.txt
+––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test (id INT) exceptions='/tmp/import-table/exc.txt' wordforms='/tmp/import-table/wordforms1.txt' stopwords='/tmp/import-table/stop.txt'; INSERT INTO test(id) VALUES(1);"
@@ -567,3 +570,12 @@ Variable_name: settings
         Value: exceptions = /var/lib/manticore/test100/exceptions.txt
 stopwords = /var/lib/manticore/test100/stopwords_0.txt
 wordforms = /var/lib/manticore/test100/wordforms_0.txt
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_hl (id INT, title TEXT) hitless_words='/tmp/import-table/hitless.txt'; INSERT INTO test_hl VALUES(1,'hlword test');"
+––– output –––
+––– input –––
+new_table="test_hl2"; import_path="/var/lib/manticore/test_hl/test_hl"; mysql -h0 -P9306 -e "import table ${new_table} from '${import_path}'"; mysql -h0 -P9306 -e "SHOW TABLE ${new_table} SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+        Value: hitless_words = /var/lib/manticore/test_hl2/hitless_words_chunk0_0.txt

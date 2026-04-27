@@ -122,6 +122,10 @@ insert into rt2 (id, title) VALUES (33, 'ю'),  (34, 'юф');
 select id, title from rt2 where match(' REGEX(/.{1}/) ');
 select id, title from rt2 where match(' REGEX(/.{2}/) ');
 
+SELECT id, highlight({limit=0}) as hi1 FROM rt1 WHERE MATCH (' do REGEX(/te.*/) ') and id=1;
+SELECT id, highlight({limit=0}) as hi1 FROM rt1 WHERE MATCH (' do ') and id=1;
+INSERT INTO rt1 (id, title) VALUES (40, 'placement description press release is ready'), (41, 'update the descriptional PR document now'), (42, 'the short description PRO version only');
+SELECT id, highlight({limit=0}) as hi1 FROM rt1 WHERE MATCH (' REGEX(/descriptio.*/) REGEX(/pre?.*/) ') and id in (40,41,42);
 
 </sphinxql></queries>
 

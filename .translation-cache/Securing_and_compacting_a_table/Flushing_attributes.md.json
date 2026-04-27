@@ -8,5 +8,10 @@
         "is_code_or_comment": false,
         "model": "openai:gpt-4.1-mini",
         "updated_at": 1766339767
+    },
+    "__meta": {
+        "source_text": "# FLUSH ATTRIBUTES\n\n```sql\nFLUSH ATTRIBUTES\n```\n\nThe FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active disk tables to disk. It returns a tag that identifies the result on-disk state (which is basically a number of actual disk attribute saves performed since the server startup).\n\n```sql\nmysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;\nQuery OK, 1 row affected (0.04 sec)\n\nmysql> FLUSH ATTRIBUTES;\n+------+\n| tag  |\n+------+\n|    1 |\n+------+\n1 row in set (0.19 sec)\n```\n\n<!-- proofread -->\n\n",
+        "updated_at": 1768530797,
+        "source_md5": "0fde3506aabd17888b590223da54b759"
     }
 }

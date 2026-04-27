@@ -3,6 +3,7 @@
 搜索是 Manticore Search 的核心功能。您可以：
 * 执行[全文搜索](../Searching/Full_text_matching/Basic_usage.md#MATCH)并实现搜索结果的[高亮显示](../Searching/Highlighting.md)
 * 执行[k 近邻搜索](../Searching/KNN.md)
+* 执行[混合搜索](../Searching/Hybrid_search.md)结合全文和 KNN 向量搜索
 * 应用[非全文过滤](../Searching/Filters.md)
 * 使用[表达式](../Searching/Expressions.md)进行过滤
 * 利用各种[搜索选项](../Searching/Options.md)

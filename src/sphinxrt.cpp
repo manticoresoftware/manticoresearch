@@ -9344,6 +9344,7 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 		}
 
 		uAliveDocuments = dIndexDocs.GetLength();
+		dIndexDocs.Uniq();
 		iTotalKilled = ApplyKillList ( dIndexDocs );
 	} else
 		uAliveDocuments = pIndex->GetStats().m_iTotalDocuments;

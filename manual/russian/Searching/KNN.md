@@ -91,6 +91,12 @@ table test_vec {
 - `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
 - `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
+Для удаленных моделей `MODEL_NAME` может быть записана в двух формах:
+- Устаревшая форма с префиксом провайдера: `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v4`
+- Явная форма с указанием провайдера для пользовательских конечных точек: `openai:text-embedding-ada-002`, `openai:openai/text-embedding-ada-002`, `voyage:custom-model`, `jina:custom-model`
+
+Когда вы используете форму `provider:model` вместе с `API_URL`, часть перед `:` только выбирает формат запроса. Часть после `:` отправляется на удаленную конечную точку без изменений. Это полезно для шлюзов, совместимых с OpenAI, таких как OpenRouter или LiteLLM.
+
 **Поддерживаемые модели эмбеддингов:**
 | Тип модели | Пример | Требуется API-ключ | Примечания |
 |------------|---------|-----------------|-------|
@@ -99,9 +105,9 @@ table test_vec {
 | **Llama** | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Нет | Локальные модели семейства Llama |
 | **Mistral** | `Locutusque/TinyMistral-248M-v2` | Нет | Локальные модели семейства Mistral |
 | **Gemma** | `h2oai/embeddinggemma-300m` | Нет | Локальные модели семейства Gemma |
-| **OpenAI** | `openai/text-embedding-ada-002` | Да | `API_KEY='<OPENAI_API_KEY>'` |
-| **Voyage** | Модели Voyage AI | Да | `API_KEY='<VOYAGE_API_KEY>'` |
-| **Jina** | Модели Jina AI | Да | `API_KEY='<JINA_API_KEY>'` |
+| **OpenAI** | `openai/text-embedding-ada-002` или `openai:text-embedding-ada-002` | Да | `API_KEY='***'` |
+| **Voyage** | `voyage/voyage-3.5-lite` или `voyage:voyage-3.5-lite` | Да | `API_KEY='***'` |
+| **Jina** | `jina/jina-embeddings-v4` или `jina:jina-embeddings-v4` | Да | `API_KEY='***'` |
 
 **Требования к формату локальных моделей:**
 - Должны быть сохранены в формате `safetensors` (только однофайловый)
@@ -145,15 +151,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description' API_KEY='...'
 );
 ```
-
 Использование OpenAI с пользовательским URL API и таймаутом (опционально)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     description TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,description'
-    API_KEY='...' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Использование шлюза, совместимого с OpenAI, который ожидает идентификатор модели с указанием провайдера
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    description TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,description'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

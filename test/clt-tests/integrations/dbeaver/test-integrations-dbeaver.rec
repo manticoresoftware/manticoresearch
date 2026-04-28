@@ -417,29 +417,20 @@ mysql -h0 -P9306 -e "SELECT name, price FROM products"
 | Mouse  |  #!/[0-9]+\.[0-9]+/!# |
 +--------+------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM products"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM products"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        2 |
-+----------+
+*************************** 1. row ***************************
+2
 ––– input –––
-mysql -h0 -P9306 -e "SELECT MAX(price) FROM products"
+mysql -NE -h0 -P9306 -e "SELECT MAX(price) FROM products"
 ––– output –––
-+------------+
-| max(price) |
-+------------+
-| #!/[0-9]+\.[0-9]+/!# |
-+------------+
+*************************** 1. row ***************************
+#!/[0-9]+\.[0-9]+/!#
 ––– input –––
-mysql -h0 -P9306 -e "SELECT MIN(price) FROM products"
+mysql -NE -h0 -P9306 -e "SELECT MIN(price) FROM products"
 ––– output –––
-+------------+
-| min(price) |
-+------------+
-|  #!/[0-9]+\.[0-9]+/!# |
-+------------+
+*************************** 1. row ***************************
+#!/[0-9]+\.[0-9]+/!#
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test_simple"
 ––– output –––

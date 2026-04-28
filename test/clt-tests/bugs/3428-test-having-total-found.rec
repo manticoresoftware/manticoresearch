@@ -19,10 +19,10 @@ manticore-load --quiet --json --init="CREATE TABLE test_having (id bigint, categ
 ––– comment –––
 Verify: 10K rows loaded
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_having\G"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_having"
 ––– output –––
 *************************** 1. row ***************************
-count(*): 10000
+10000
 ––– comment –––
 Verify: ~200 distinct categories exist
 ––– input –––

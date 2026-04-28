@@ -14,13 +14,10 @@ mysql -h0 -P9306 -e "DELETE FROM test_delete WHERE id = 1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_delete"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_delete"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
+*************************** 1. row ***************************
+0
 ––– comment –––
 TEST 2: DELETE multiple records
 ––– input –––
@@ -122,13 +119,10 @@ mysql -h0 -P9306 -e "TRUNCATE TABLE test_vector_regen"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_vector_regen"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_vector_regen"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        0 |
-+----------+
+*************************** 1. row ***************************
+0
 ––– comment –––
 TEST 6: Bulk DELETE operations
 ––– input –––
@@ -155,13 +149,10 @@ mysql -h0 -P9306 -e "DELETE FROM test_bulk WHERE id >= 40"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_bulk"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_bulk"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       29 |
-+----------+
+*************************** 1. row ***************************
+29
 ––– comment –––
 TEST 7: Multiple vector fields
 ––– input –––

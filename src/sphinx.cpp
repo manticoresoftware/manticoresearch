@@ -7782,8 +7782,6 @@ CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 		return dResult;
 	}
 
-	int iStride = m_tSchema.GetRowSize();
-	dResult.Resize ( GetCount() );
 	int j = 0;
 
 	const CSphColumnInfo * pId = m_tSchema.GetAttr ( sphGetDocidName() );
@@ -7794,9 +7792,10 @@ CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 		if ( !pIt )
 		{
 			TlsMsg::Err ( "failed to create columnar iterator for '%s': %s", sphGetDocidName(), sError.c_str() );
-			return {};
+			return dResult;
 		}
 
+		dResult.Resize ( GetCount() );
 		for ( RowID_t tRowID = 0; tRowID < (RowID_t)m_iDocinfo; ++tRowID )
 		{
 			if ( !m_tDeadRowMap.IsSet ( tRowID ) )
@@ -7805,8 +7804,9 @@ CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 
 	} else
 	{
-		int iStride = m_tSchema.GetRowSize();
+		const int iStride = m_tSchema.GetRowSize();
 		const CSphRowitem * pRow = m_tAttr.GetReadPtr();
+		dResult.Resize ( GetCount() );
 		for ( RowID_t tRowID = 0; tRowID < (RowID_t)m_iDocinfo; ++tRowID, pRow += iStride )
 		{
 			if ( !m_tDeadRowMap.IsSet ( tRowID ) )

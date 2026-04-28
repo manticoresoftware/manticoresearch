@@ -2364,9 +2364,10 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			}
 
 		case 'U': // decimal uint64
+		case 'X': // hex uint64
 			{
 				uint64_t iValue = va_arg ( ap, uint64_t );
-				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, ( c=='x' ) ? 16 : 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}

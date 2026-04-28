@@ -1716,7 +1716,7 @@ private:
 	bool						ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) override;
 	void						FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) override;
 
-	virtual void				ManualOptimizeCutoff ( int iCutoff );
+	void						ManualOptimizeCutoff ( int iCutoff ) override;
 };
 
 
@@ -12177,12 +12177,9 @@ bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFile
 	const int iSuffix = tDstIndex.GetChunkId();
 	if ( !AttachRtChunkExtCopy ( tSrcIndex, tDstIndex, iSuffix, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
 		return false;
-	{
-		auto pDict = tDstIndex.GetDictionary();
-		assert ( pDict );
-		const auto & tDictSettings = pDict->GetSettings();
-		assert ( tDictSettings.m_dWordforms.GetLength()==pDict->GetWordformsFileInfos().GetLength() );
-	}
+
+	assert ( tDstIndex.GetDictionary() );
+	assert ( tDstIndex.GetDictionary()->GetSettings().m_dWordforms.GetLength()==tDstIndex.GetDictionary()->GetWordformsFileInfos().GetLength() );
 	return true;
 }
 

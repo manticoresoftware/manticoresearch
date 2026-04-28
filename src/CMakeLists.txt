@@ -117,6 +117,11 @@ if (WITH_STEMMER)
 	target_link_libraries ( lmanticore PRIVATE stemmer::stemmer )
 endif ()
 if (WITH_RE2)
+	# Prefer the headers that belong to the imported re2::re2 archive.
+	# Homebrew's generic include path may also contain re2 headers with a newer ABI,
+	# which breaks the link when we intentionally use the cached static library.
+	target_include_directories ( lmanticore BEFORE PRIVATE
+		$<TARGET_PROPERTY:re2::re2,INTERFACE_INCLUDE_DIRECTORIES> )
 	target_link_libraries ( lmanticore PRIVATE re2::re2 )
 endif ()
 
@@ -283,10 +288,11 @@ trace ( lextra )
 trace ( lsearchd )
 
 add_subdirectory ( daemon )
+add_subdirectory ( ui )
 
 # our executables
 add_executable ( searchd searchd.cpp )
-target_link_libraries ( searchd daemon searchd_ssl lmanticore lsearchd )
+target_link_libraries ( searchd daemon searchd_ssl lmanticore lsearchd lui )
 
 if (NOT STATIC_BINARY)
 	add_executable ( indexer indexer.cpp )

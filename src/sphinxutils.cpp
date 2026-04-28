@@ -1070,6 +1070,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "preopen_tables",			0, nullptr },
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },
+	{ "ui",						0, nullptr },
 	{ "auto_schema",			0, nullptr },
 	{ "engine",					0, nullptr },
 	{ "join_cache_size",		0, nullptr },

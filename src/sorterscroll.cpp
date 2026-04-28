@@ -200,7 +200,19 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 			continue;
 
 		const CSphColumnInfo * pAttr = pSchema->GetAttr ( tScrollAttr.m_sSortAttr.cstr() );
-		if ( !pAttr || !sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
+		if ( !pAttr )
+			continue;
+
+		if ( tScrollAttr.m_eType==SPH_ATTR_STRINGPTR && pAttr->m_eAttrType==SPH_ATTR_STRING )
+		{
+			CSphString sRemappedName;
+			sRemappedName.SetSprintf ( "%s%s", GetInternalAttrPrefix(), tScrollAttr.m_sSortAttr.cstr() );
+			const CSphColumnInfo * pRemapped = pSchema->GetAttr ( sRemappedName.cstr() );
+			if ( pRemapped && pRemapped->m_eAttrType==SPH_ATTR_STRINGPTR )
+				pAttr = pRemapped;
+		}
+
+		if ( !sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
 			continue;
 
 		auto * pData = (BYTE *)m_tRefMatch.GetAttr ( pAttr->m_tLocator );

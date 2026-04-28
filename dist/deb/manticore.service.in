@@ -9,6 +9,7 @@ User=manticore
 Group=manticore
 RuntimeDirectory=manticore
 # Run ExecStart with User=manticore / Group=manticore
+ExecStartPre=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf --check
 ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/searchd --config @CMAKE_INSTALL_FULL_SYSCONFDIR@/manticoresearch/manticore.conf --nodetach $_ADDITIONAL_SEARCHD_PARAMS
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
@@ -25,4 +26,3 @@ NotifyAccess=all
 WantedBy=multi-user.target
 Alias=manticore.service
 Alias=searchd.service
-

@@ -520,6 +520,7 @@ index_converter {--config /path/to/config|--path}
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - Проверяет файл конфигурации и завершает работу
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - Задает путь к файлу конфигурации
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - Принудительно запускает сервер в консольном режиме
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - Включает сохранение дампа памяти при аварийном завершении

@@ -520,6 +520,7 @@ index_converter {--config /path/to/config|--path}
 ```bash
 searchd [OPTIONS]
 ```
+* [--check](Starting_the_server/Manually.md#searchd-command-line-options) - 检查配置文件并退出
 * [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - 指定配置文件的路径
 * [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器以控制台模式运行
 * [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 在崩溃时启用核心转储保存

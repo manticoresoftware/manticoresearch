@@ -16,6 +16,7 @@
 #include "sphinxfilter.h"
 #include "coroutine.h"
 #include "knnmisc.h"
+#include "sorterscroll.h"
 #include "sphinxquery/xqparser.h"
 
 struct SubQueryResult_t
@@ -175,6 +176,37 @@ static void EvalDependentExprs ( const CSphVector<ExprEval_t> & dExprs, CSphMatc
 		default:				tMatch.SetAttr ( tExpr.m_tLoc, tExpr.m_pExpr->IntEval ( tMatch ) ); break;
 		}
 	}
+}
+
+
+bool IsHybridScoreAttr ( const CSphString & sAttr )
+{
+	return sAttr=="hybrid_score()" || sAttr==GetHybridScoreAttrName();
+}
+
+
+bool IsKnnDistAttr ( const CSphString & sAttr )
+{
+	return sAttr=="knn_dist()" || sAttr==GetKnnDistAttrName();
+}
+
+
+bool IsHybridPostFusionAttr ( const CSphString & sAttr )
+{
+	return IsHybridScoreAttr ( sAttr ) || IsKnnDistAttr ( sAttr );
+}
+
+
+static void AddHybridScrollPostFilter ( const CSphQuery & tQuery, CSphVector<CSphFilterSettings> & dPostFilters )
+{
+	if ( !tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
+		return;
+
+	const ScrollAttr_t & tFirst = tQuery.m_tScrollSettings.m_dAttrs[0];
+	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR || !IsHybridPostFusionAttr ( tFirst.m_sSortAttr ) )
+		return;
+
+	dPostFilters.Add ( CreateScrollRangeFilter ( tFirst, tQuery.m_tScrollSettings.m_dAttrs.GetLength()==1, tFirst.m_sSortAttr ) );
 }
 
 
@@ -388,6 +420,8 @@ void HybridExecutor_c::SetupPostFilters ( const CSphQuery & tQuery )
 	for ( const auto & tFilter : m_tTextQuery.m_dFilters )
 		if ( m_tKnnDistNames.MatchFilter(tFilter) )
 			m_dPostFilters.Add(tFilter);
+
+	AddHybridScrollPostFilter ( tQuery, m_dPostFilters );
 }
 
 

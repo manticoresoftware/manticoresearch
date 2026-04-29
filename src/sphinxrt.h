@@ -51,6 +51,7 @@ public:
 	void								AddMVAValue ( int64_t iValue )						{ m_dMvas.Add(iValue); }
 	void								ResetMVAs()											{ m_dMvas.Resize(0); }
 	const int64_t *						GetMVA ( int iMVA ) const							{ return m_dMvas.Begin()+iMVA; }
+	const VecTraits_T<int64_t> &		GetMVAs() const										{ return m_dMvas; }
 	void								FixParsedMVAs ( const CSphVector<int64_t> & dParsed, int iCount );
 	static std::pair<int, bool>			ReadMVALength ( const int64_t * & pMVA );
 	void								SwapMVAs ( InsertDocData_c & tSrc )					{ Swap ( m_dMvas, tSrc.m_dMvas ); }

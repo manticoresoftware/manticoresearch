@@ -52,7 +52,7 @@ const char * szCommand ( int eCmd)
 	const char* szCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
 		"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
 		"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
-		"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield"};
+		"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield", "command_shard_write"};
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
 		return szCommands[eCmd];
 	return "***WRONG COMMAND!***";
@@ -257,6 +257,7 @@ const char* GetIndexTypeName ( IndexType_e eType )
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";
 	case IndexType_e::DISTR: return "distributed";
+	case IndexType_e::SHARD: return "shard";
 	default: return "invalid";
 	}
 }
@@ -265,6 +266,9 @@ IndexType_e TypeOfIndexConfig( const CSphString& sType )
 {
 	if ( sType=="distributed" )
 		return IndexType_e::DISTR;
+
+	if ( sType=="shard" )
+		return IndexType_e::SHARD;
 
 	if ( sType=="rt" )
 		return IndexType_e::RT;

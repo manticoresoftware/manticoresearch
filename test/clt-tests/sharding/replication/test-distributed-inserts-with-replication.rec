@@ -116,19 +116,19 @@ Table: system.test2_s2
 ––– input –––
 mysql -P1306 -h0 -e "SHOW TABLES;"
 ––– output –––
-+-------+-------------+
-| Table | Type        |
-+-------+-------------+
-| test2 | distributed |
-+-------+-------------+
++-------+-------+
+| Table | Type  |
++-------+-------+
+| test2 | shard |
++-------+-------+
 ––– input –––
 mysql -P2306 -h0 -e "SHOW TABLES;"
 ––– output –––
-+-------+-------------+
-| Table | Type        |
-+-------+-------------+
-| test2 | distributed |
-+-------+-------------+
++-------+-------+
+| Table | Type  |
++-------+-------+
+| test2 | shard |
++-------+-------+
 ––– input –––
 mysql -P1306 -h0 -e "DESCRIBE test2;"
 ––– output –––

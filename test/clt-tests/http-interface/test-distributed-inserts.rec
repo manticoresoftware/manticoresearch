@@ -32,11 +32,11 @@ mysql -h0 -P9306 -e "CREATE TABLE test2 (
 ––– input –––
 mysql -P9306 -h0 -e "show tables;"
 ––– output –––
-+-------+-------------+
-| Table | Type        |
-+-------+-------------+
-| test2 | distributed |
-+-------+-------------+
++-------+-------+
+| Table | Type  |
++-------+-------+
+| test2 | shard |
++-------+-------+
 ––– input –––
 mysql -P9306 -h0 -e "DESCRIBE test2;"
 ––– output –––

@@ -150,15 +150,15 @@ mysql -P1306 -h0 -e "DESCRIBE test2;"
 | vector           | float_vector | knn            |
 +------------------+--------------+----------------+
 ––– input –––
-curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 1, "doc": {"model": "iPhone 13 Pro", "storage_capacity": 256, "color": "silver", "release_year": 2021, "price": 1099.99, "discounted_price": 989.99, "sold": 1, "date_added": 1591362342000, "product_codes": [1,2,3], "values": [523456764345678976], "additional_info": {"features": ["ProMotion display", "A15 Bionic chip"]}, "vector": [0.773448,0.312478,0.137971,0.459821]}}' | jq '.result'
+curl -s -X POST http://localhost:1308/insert -d '{"table": "test2", "id": 1, "doc": {"model": "iPhone 13 Pro", "storage_capacity": 256, "color": "silver", "release_year": 2021, "price": 1099.99, "discounted_price": 989.99, "sold": 1, "date_added": 1591362342000, "product_codes": [1,2,3], "values": [523456764345678976], "additional_info": {"features": ["ProMotion display", "A15 Bionic chip"]}, "vector": [0.773448,0.312478,0.137971,0.459821]}}' | jq '.result'
 ––– output –––
 "created"
 ––– input –––
-curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"model": "Galaxy S21 Ultra", "storage_capacity": 128, "color": "black", "release_year": 2021, "price": 1199.99, "discounted_price": 1099.99, "sold": 1, "date_added": 1609459200000, "product_codes": [4,5,6], "values": [1234567890123456789], "additional_info": {"features": ["Dynamic AMOLED 2X", "Exynos 2100"]}, "vector": [0.5,0.4,0.3,0.2]}}' | jq '.result'
+curl -s -X POST http://localhost:1308/insert -d '{"table": "test2", "id": 2, "doc": {"model": "Galaxy S21 Ultra", "storage_capacity": 128, "color": "black", "release_year": 2021, "price": 1199.99, "discounted_price": 1099.99, "sold": 1, "date_added": 1609459200000, "product_codes": [4,5,6], "values": [1234567890123456789], "additional_info": {"features": ["Dynamic AMOLED 2X", "Exynos 2100"]}, "vector": [0.5,0.4,0.3,0.2]}}' | jq '.result'
 ––– output –––
 "created"
 ––– input –––
-curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 3, "doc": {"model": "Pixel 6", "storage_capacity": 128, "color": "white", "release_year": 2021, "price": 599.99, "discounted_price": 549.99, "sold": false, "date_added": 1630454400000, "product_codes": [7,8,9], "values": [987654321987654321], "additional_info": {"features": ["Smooth display", "Google Tensor chip"]}, "vector": [0.8,0.6,0.4,0.2]}}' | jq '.result'
+curl -s -X POST http://localhost:1308/insert -d '{"table": "test2", "id": 3, "doc": {"model": "Pixel 6", "storage_capacity": 128, "color": "white", "release_year": 2021, "price": 599.99, "discounted_price": 549.99, "sold": false, "date_added": 1630454400000, "product_codes": [7,8,9], "values": [987654321987654321], "additional_info": {"features": ["Smooth display", "Google Tensor chip"]}, "vector": [0.8,0.6,0.4,0.2]}}' | jq '.result'
 ––– output –––
 "created"
 ––– input –––
@@ -172,7 +172,7 @@ mysql -h0 -P1306 -e "SELECT * FROM test2 ORDER BY id ASC;"
 |    3 | Pixel 6          |              128 | white  |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 987654321987654321  | {"features":["Smooth display","Google Tensor chip"]} | 0.800000,0.600000,0.400000,0.200000 |
 +------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+---------------------+------------------------------------------------------+-------------------------------------+
 ––– input –––
-curl -s -X POST http://localhost:1308/replace -d '{"cluster": "replication", "table": "test2", "id": 1, "doc": {"model": "Updated Model", "storage_capacity": 512, "color": "black", "release_year": 2022, "price": 1399.99, "discounted_price": 1299.99, "sold": false, "date_added": 1630454400000, "product_codes": [10,11,12], "values": [987654321987654321], "additional_info": {"features": ["New feature 1", "New feature 2"]}, "vector": [0.7,0.8,0.9,1.0]}}' | jq '.result'
+curl -s -X POST http://localhost:1308/replace -d '{"table": "test2", "id": 1, "doc": {"model": "Updated Model", "storage_capacity": 512, "color": "black", "release_year": 2022, "price": 1399.99, "discounted_price": 1299.99, "sold": false, "date_added": 1630454400000, "product_codes": [10,11,12], "values": [987654321987654321], "additional_info": {"features": ["New feature 1", "New feature 2"]}, "vector": [0.7,0.8,0.9,1.0]}}' | jq '.result'
 ––– output –––
 "updated"
 ––– input –––
@@ -186,7 +186,7 @@ mysql -h0 -P1306 -e "SELECT * FROM test2 ORDER BY id ASC;"
 |    3 | Pixel 6          |              128 | white |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 987654321987654321  | {"features":["Smooth display","Google Tensor chip"]} | 0.800000,0.600000,0.400000,0.200000 |
 +------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+---------------------+------------------------------------------------------+-------------------------------------+
 ––– input –––
-curl -s -X POST http://localhost:1308/update -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"price": 1099.99, "discounted_price": 999.99}}' | jq '.result'
+curl -s -X POST http://localhost:1308/update -d '{"table": "test2", "id": 2, "doc": {"price": 1099.99, "discounted_price": 999.99}}' | jq '.result'
 ––– output –––
 "updated"
 ––– input –––
@@ -200,7 +200,7 @@ mysql -h0 -P1306 -e "SELECT * FROM test2 ORDER BY id ASC;"
 |    3 | Pixel 6          |              128 | white |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 987654321987654321  | {"features":["Smooth display","Google Tensor chip"]} | 0.800000,0.600000,0.400000,0.200000 |
 +------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+---------------------+------------------------------------------------------+-------------------------------------+
 ––– input –––
-curl -s -X POST http://localhost:1308/update -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"price": 1099.99, "discounted_price": 999.99}}' | jq '.result'
+curl -s -X POST http://localhost:1308/update -d '{"table": "test2", "id": 2, "doc": {"price": 1099.99, "discounted_price": 999.99}}' | jq '.result'
 ––– output –––
 "updated"
 ––– input –––
@@ -214,7 +214,7 @@ mysql -h0 -P1306 -e "SELECT * FROM test2 ORDER BY id ASC;"
 |    3 | Pixel 6          |              128 | white |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 987654321987654321  | {"features":["Smooth display","Google Tensor chip"]} | 0.800000,0.600000,0.400000,0.200000 |
 +------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+---------------------+------------------------------------------------------+-------------------------------------+
 ––– input –––
-curl -s -X POST http://localhost:1308/delete -d '{"cluster": "replication", "table": "test2", "id": 3}' | jq '.result'
+curl -s -X POST http://localhost:1308/delete -d '{"table": "test2", "id": 3}' | jq '.result'
 ––– output –––
 "deleted"
 ––– input –––
@@ -227,16 +227,16 @@ mysql -h0 -P1306 -e "SELECT * FROM test2 ORDER BY id ASC;"
 |    2 | Galaxy S21 Ultra |              128 | black |         2021 | 1099.989990 |       999.989990 |    1 | 3141431296 | 4,5,6         | 1234567890123456789 | {"features":["Dynamic AMOLED 2X","Exynos 2100"]} | 0.500000,0.400000,0.300000,0.200000 |
 +------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+---------------------+--------------------------------------------------+-------------------------------------+
 ––– input –––
-curl -s -X POST http://localhost:1308/delete -d '{"cluster": "replication", "table": "test2", "id": 3}' | jq '.result'
+curl -s -X POST http://localhost:1308/delete -d '{"table": "test2", "id": 3}' | jq '.result'
 ––– output –––
 "not found"
 ––– input –––
-curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 4, "doc": {"model": "Updated iPhone 14", "storage_capacity": 512, "color": "black", "release_year": 2022, "price": 1299.99, "discounted_price": 1199.99, "sold": 1, "date_added": 1661990400, "product_codes": [19,20,21], "values": [1234567890123456789],"additional_info": {"features": ["A16 Bionic","Dynamic Island","Improved camera"]},"vector": [0.1,0.2,0.3,0.4]}}' | jq -e '.error' && echo "Duplicate ID test passed!" || echo "Duplicate ID test failed!"
+curl -s -X POST http://localhost:1308/insert -d '{"table": "test2", "id": 4, "doc": {"model": "Updated iPhone 14", "storage_capacity": 512, "color": "black", "release_year": 2022, "price": 1299.99, "discounted_price": 1199.99, "sold": 1, "date_added": 1661990400, "product_codes": [19,20,21], "values": [1234567890123456789],"additional_info": {"features": ["A16 Bionic","Dynamic Island","Improved camera"]},"vector": [0.1,0.2,0.3,0.4]}}' | jq -e '.error' && echo "Duplicate ID test passed!" || echo "Duplicate ID test failed!"
 ––– output –––
 null
 Duplicate ID test failed!
 ––– input –––
-(for i in {1..10}; do curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": '$((10 + $i))', "doc": {"model": "Device '$i'", "storage_capacity": 64, "color": "black", "release_year": 2023, "price": 499.99, "discounted_price": 449.99, "sold": 0, "date_added": 1672531200, "product_codes": [1,2,3], "values": [1234567890123456789], "additional_info": {"features": ["Feature 1","Feature 2"]}, "vector": [0.1,0.2,0.3,0.4]}}' & done; wait) | jq -s 'map(select(.created == true)) | length == 10' > /dev/null && echo "Parallel insert test passed!" || echo "Parallel insert test failed!"
+(for i in {1..10}; do curl -s -X POST http://localhost:1308/insert -d '{"table": "test2", "id": '$((10 + $i))', "doc": {"model": "Device '$i'", "storage_capacity": 64, "color": "black", "release_year": 2023, "price": 499.99, "discounted_price": 449.99, "sold": 0, "date_added": 1672531200, "product_codes": [1,2,3], "values": [1234567890123456789], "additional_info": {"features": ["Feature 1","Feature 2"]}, "vector": [0.1,0.2,0.3,0.4]}}' & done; wait) | jq -s 'map(select(.created == true)) | length == 10' > /dev/null && echo "Parallel insert test passed!" || echo "Parallel insert test failed!"
 ––– output –––
 Parallel insert test passed!
 ––– input –––

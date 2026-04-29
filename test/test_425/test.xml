@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>show tables with template index</name>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+index common
+{
+	type = template
+	path = <data_path/>/common
+}
+
+index dcommon
+{
+	type = distributed
+	local = common
+}
+</config>
+
+<queries>
+<sphinxql>
+	show tables;
+	describe dcommon;
+	show fields from dcommon;
+	describe common;
+	show fields from common;
+</sphinxql>
+</queries>
+
+</test>

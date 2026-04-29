@@ -252,6 +252,8 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_tLocator = s.m_tLocator;
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
+		tFrontend.m_fTdigestCompression = s.m_fTdigestCompression;
+		tFrontend.m_tAggrSettings = s.m_tAggrSettings;
 		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
 
 		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
@@ -305,6 +307,8 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 			tFrontend.m_tLocator = p->m_tLocator;
 			tFrontend.m_eAttrType = p->m_eAttrType;
 			tFrontend.m_eAggrFunc = p->m_eAggrFunc;
+			tFrontend.m_fTdigestCompression = p->m_fTdigestCompression;
+			tFrontend.m_tAggrSettings = p->m_tAggrSettings;
 		}
 
 	// check aliases too
@@ -319,6 +323,8 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 				tFrontend.m_tLocator = p->m_tLocator;
 				tFrontend.m_eAttrType = p->m_eAttrType;
 				tFrontend.m_eAggrFunc = p->m_eAggrFunc;
+				tFrontend.m_fTdigestCompression = p->m_fTdigestCompression;
+				tFrontend.m_tAggrSettings = p->m_tAggrSettings;
 			}
 	}
 }
@@ -419,6 +425,8 @@ void FrontendSchemaBuilder_c::RemapFacets()
 			tFrontend.m_tLocator = pRemapCol->m_tLocator;
 			tFrontend.m_eAttrType = pRemapCol->m_eAttrType;
 			tFrontend.m_eAggrFunc = pRemapCol->m_eAggrFunc;
+			tFrontend.m_fTdigestCompression = pRemapCol->m_fTdigestCompression;
+			tFrontend.m_tAggrSettings = pRemapCol->m_tAggrSettings;
 		}
 	}
 }

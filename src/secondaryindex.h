@@ -45,6 +45,7 @@ class SIContainer_c
 public:
 	bool		Load ( const CSphString & sFile, CSphString & sError );
 	bool		Drop ( const CSphString & sFile, CSphString & sError );
+	void		UpdateFilename ( const CSphString & sOldFile, const CSphString & sNewFile );
 	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }
 	void		Reset() { m_dIndexes.Reset(); }
 
@@ -64,7 +65,6 @@ private:
 	struct IndexInfo_t
 	{
 		std::unique_ptr<SI::Index_i>	m_pIndex;
-		CSphString						m_sFile;
 	};
 
 	CSphVector<IndexInfo_t> m_dIndexes;

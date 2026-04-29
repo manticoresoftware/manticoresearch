@@ -52,6 +52,9 @@
 #include "daemon/search_handler.h"
 #include "daemon/api_commands.h"
 #include "dict/stem/sphinxstem.h"
+#include "tdigest_aggr_utils.h"
+#include "std/tdigest.h"
+#include "std/tdigest_runtime.h"
 #include "daemon/notifier.h"
 
 // services
@@ -1310,13 +1313,14 @@ public:
 			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) not found in result set", m_sCol.cstr() );
 
 		ESphAttr t = pCol->m_eAttrType;
-		if ( t!=SPH_ATTR_INTEGER && t!=SPH_ATTR_BIGINT && t!=SPH_ATTR_TOKENCOUNT && t!=SPH_ATTR_STRINGPTR && t!=SPH_ATTR_STRING )
+		if ( t!=SPH_ATTR_INTEGER && t!=SPH_ATTR_BIGINT && t!=SPH_ATTR_TOKENCOUNT
+			&& t!=SPH_ATTR_STRINGPTR && t!=SPH_ATTR_TDIGEST_PTR && t!=SPH_ATTR_STRING )
 			LOC_ERROR1 ( "REMOVE_REPEATS() argument 2 (column %s) must be of INTEGER, BIGINT, or STRINGPTR type", m_sCol.cstr() );
 
 		// we need to initialize the "last seen" value with a key that
 		// is guaranteed to be different from the 1st match that we will scan
 		// hence (val-1) for scalars, and NULL for strings
-		SphAttr_t iLastValue = ( t==SPH_ATTR_STRING || t==SPH_ATTR_STRINGPTR )
+		SphAttr_t iLastValue = ( t==SPH_ATTR_STRING || t==SPH_ATTR_STRINGPTR || t==SPH_ATTR_TDIGEST_PTR )
 			? 0
 			: ( dSubMatches.First().GetAttr ( pCol->m_tLocator ) - 1 );
 
@@ -1328,7 +1332,7 @@ public:
 			if ( iCur==iLastValue )
 				continue;
 
-			if ( iCur && iLastValue && t==SPH_ATTR_STRINGPTR )
+			if ( iCur && iLastValue && ( t==SPH_ATTR_STRINGPTR || t==SPH_ATTR_TDIGEST_PTR ) )
 			{
 				auto a = sphUnpackPtrAttr ((const BYTE *) iCur );
 				auto b = sphUnpackPtrAttr ((const BYTE *) iLastValue );
@@ -1513,6 +1517,7 @@ public:
 			break;
 
 		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_TDIGEST_PTR:
 			break;
 
 		case SPH_ATTR_TIMESTAMP:
@@ -4441,7 +4446,7 @@ bool AttributeConverter_c::String2JsonPack ( char * pStr, CSphVector<BYTE> & dBu
 
 bool AttributeConverter_c::CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow )
 {
-	if ( tCol.m_eAttrType!=SPH_ATTR_STRING && tCol.m_eAttrType!=SPH_ATTR_STRINGPTR )
+	if ( tCol.m_eAttrType!=SPH_ATTR_STRING && tCol.m_eAttrType!=SPH_ATTR_STRINGPTR && tCol.m_eAttrType!=SPH_ATTR_TDIGEST_PTR )
 		return true;
 
 	if ( tVal.m_sVal.Length() > 0x3FFFFF )
@@ -4581,7 +4586,8 @@ void AttributeConverter_c::SetDefaultAttrValue ( int iCol )
 	CSphAttrLocator tLoc = tCol.m_tLocator;
 	tLoc.m_bDynamic = true;
 
-	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
+	if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR
+		|| tCol.m_eAttrType==SPH_ATTR_TDIGEST_PTR || tCol.m_eAttrType==SPH_ATTR_JSON )
 		m_dStrings.Add(nullptr);
 
 	if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
@@ -6213,8 +6219,13 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	return sProps.cstr();
 }
 
+struct DescFlavour_t
+{
+	std::function<void (const char*)> fnAddProperties;
+	ESphAttr eSkipAttr = SPH_ATTR_NONE;
+};
 
-static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema )
+static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, const CSphSchema & tSchema, const DescFlavour_t& tFlavour )
 {
 	if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
 		return;
@@ -6238,107 +6249,69 @@ static void AddFieldDesc ( VectorLike & dOut, const CSphColumnInfo & tField, con
 			sProperties << sProps;
 	}
 
-	dOut.Add ( sProperties.cstr () );
+	tFlavour.fnAddProperties ( sProperties.cstr () );
 }
 
 
-static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema )
+static void AddAttributeDesc ( VectorLike & dOut, const CSphColumnInfo & tAttr, const CSphSchema & tSchema, const DescFlavour_t& tFlavour )
 {
 	if ( sphIsInternalAttr ( tAttr ) )
+		return;
+
+	if ( tFlavour.eSkipAttr == tAttr.m_eAttrType )
 		return;
 
 	if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
 		return; // already described it as a field property
 
-	if ( dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
-	{
-		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
-		{
-			StringBuilder_c sName;
-			sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
-			dOut.Add ( sName.cstr() );
-		} else
-			dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+	if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
+		return;
 
-		dOut.Add ( DescribeAttributeProperties(tAttr) );
-	}
+	if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount!=ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount>0 )
+	{
+		StringBuilder_c sName;
+		sName.Sprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount );
+		dOut.Add ( sName.cstr() );
+	} else
+		dOut.Add ( sphTypeName ( tAttr.m_eAttrType ) );
+
+	tFlavour.fnAddProperties ( DescribeAttributeProperties(tAttr).cstr() );
 }
 
-
-void ShowFields ( VectorLike& dOut, const CSphSchema& tSchema )
+void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bShowFields )
 {
-	// result set header packet
-	dOut.SetColNames ( { "Field", "Type", "Null", "Key", "Default", "Extra" } );
-
-	auto Tail = [&dOut](const auto& tCol) { dOut.Add (tCol); dOut.Add ( "NO" ); dOut.Add ( "" ); dOut.Add ( "" ); dOut.Add ( "" ); };
-
-	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
-	const auto& tId = tSchema.GetAttr ( 0 );
-	if ( dOut.MatchAdd ( tId.m_sName.cstr() ) )
-		Tail ( sphTypeName ( tId.m_eAttrType ) );
-
-	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
-	{
-		const auto& tField = tSchema.GetField ( i );
-		if ( !dOut.MatchAdd ( tField.m_sName.cstr() ) )
-			continue;
-
-		const CSphColumnInfo* pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
-		Tail ( pAttr ? "string" : "text" );
+	DescFlavour_t tFlavour;
+	if ( bShowFields ) {
+		dOut.SetColNames ( { "Field", "Type", "Null", "Key", "Default", "Extra" } );
+		tFlavour.fnAddProperties = [&dOut](const char*) { dOut.Add ( "NO" ); dOut.Add ( "" ); dOut.Add ( "" ); dOut.Add ( "" ); };
+		tFlavour.eSkipAttr = SPH_ATTR_TOKENCOUNT;
+	} else {
+		dOut.SetColNames ( { "Field", "Type", "Properties" } );
+		tFlavour.fnAddProperties = [&dOut](const char* szAttr) { dOut.Add ( szAttr ); };
 	}
 
-	for ( int i = 1; i < tSchema.GetAttrsCount(); ++i ) // from 1, as 0 is docID and already emerged
-	{
-		const auto& tAttr = tSchema.GetAttr ( i );
-		if ( sphIsInternalAttr ( tAttr ) )
+	for ( int i = 0; i<tSchema.GetAttrsCount (); ++i ) {
+		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema, tFlavour );
+		if ( i>0 )
 			continue;
 
-		if ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-			continue;
-
-		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
-			continue; // already described it as a field property
-
-		if ( !dOut.MatchAdd ( tAttr.m_sName.cstr() ) )
-			continue;
-
-		if ( tAttr.m_eAttrType == SPH_ATTR_INTEGER && tAttr.m_tLocator.m_iBitCount != ROWITEM_BITS && tAttr.m_tLocator.m_iBitCount > 0 )
-			Tail ( SphSprintf ( "%s:%d", sphTypeName ( tAttr.m_eAttrType ), tAttr.m_tLocator.m_iBitCount ) );
-		else
-			Tail ( sphTypeName ( tAttr.m_eAttrType ) );
+		assert ( i==0 && tSchema.GetAttr(0).m_sName==sphGetDocidName() );
+		for ( int j = 0; j<tSchema.GetFieldsCount (); ++j )
+			AddFieldDesc ( dOut, tSchema.GetField(j), tSchema, tFlavour );
 	}
 }
 
-void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool bIsTemplate, bool bShowFields )
-{
-	if ( bShowFields )
-		return ShowFields ( dOut, tSchema );
 
-	// result set header packet
-	dOut.SetColNames ( { "Field", "Type", "Properties" } );
-
-	// id comes before fields
-	if ( !bIsTemplate )
-	{
-		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		AddAttributeDesc ( dOut, tSchema.GetAttr(0), tSchema );
-	}
-
-	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-		AddFieldDesc ( dOut, tSchema.GetField(i), tSchema );
-
-	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
-		AddAttributeDesc ( dOut, tSchema.GetAttr(i), tSchema );
-}
-
-
-bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce )
+bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce, bool bShowFields )
 {
 	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
 		return false;
 
 	// result set header packet
 	dOut.SetColNames ( { "Agent", "Type" } );
+
+	if ( bShowFields )
+		return true;
 
 	for ( const auto & sIdx : pDistr->m_dLocal )
 		dOut.MatchTuplet( sIdx.cstr (), "local" );
@@ -6400,7 +6373,7 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 
 		const CSphSchema &tSchema = *pSchema;
 		assert ( pServed->m_eType==IndexType_e::TEMPLATE || tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-		DescribeLocalSchema ( dOut, tSchema, pServed->m_eType==IndexType_e::TEMPLATE, bShowFields );
+		DescribeLocalSchema ( dOut, tSchema, bShowFields );
 	} else
 	{
 		auto pDistr = GetDistr ( sName );
@@ -6412,8 +6385,8 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 
 		if ( auto pShard = AsShard ( pDistr.Ptr() ); pShard && !tStmt.m_bDescTopo )
 		{
-			DescribeLocalSchema ( dOut, pShard->m_tSchema, false, bShowFields );
-		} else if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce ) )
+			DescribeLocalSchema ( dOut, pShard->m_tSchema, bShowFields );
+		} else if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
 		{
 			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 			return;
@@ -7767,6 +7740,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			switch ( eAttrType )
 			{
 				case SPH_ATTR_STRINGPTR:
+				case SPH_ATTR_TDIGEST_PTR:
 					pExpr->StringEval ( tMatch, &pStr );
 					dRows.PutString ( (const char *)pStr );
 					SafeDelete ( pStr );
@@ -7812,6 +7786,130 @@ static bool IsNullSet ( const CSphMatch	& tMatch, int iAttr, SphAttr_t tNullMask
 
 	assert ( iAttr < 64 );
 	return !!( tNullMask & ( 1ULL << iAttr ) );
+}
+
+static CSphString FormatNumericSql ( double fValue )
+{
+	return tdigest_aggr::FormatNumeric ( fValue );
+}
+
+static bool LoadTDigestFromMatchSql ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, TDigest_c & tDigest )
+{
+	return tdigest_aggr::LoadFromMatch ( tMatch, tCol, tDigest );
+}
+
+static bool CalcMadFromDigestSql ( const TDigest_c & tDigest, double & fMad )
+{
+	return tdigest_aggr::CalcMad ( tDigest, fMad );
+}
+
+static void EncodePercentilesSql ( const AggrPercentilesSetting_t & tSettings, const TDigest_c & tDigest, bool bHasSamples, StringBuilder_c & tOut )
+{
+	if ( tSettings.m_dPercents.GetLength()==1 )
+	{
+		if ( bHasSamples )
+		{
+			CSphString sValue = FormatNumericSql ( tDigest.Percentile ( tSettings.m_dPercents[0] ) );
+			tOut << sValue.cstr();
+		}
+		else
+			tOut << "null";
+		return;
+	}
+
+	tOut << "[";
+	bool bFirst = true;
+	for ( float fPercent : tSettings.m_dPercents )
+	{
+		if ( !bFirst )
+			tOut << ",";
+		bFirst = false;
+
+		if ( bHasSamples )
+		{
+			CSphString sValue = FormatNumericSql ( tDigest.Percentile ( fPercent ) );
+			tOut << sValue.cstr();
+		}
+		else
+			tOut << "null";
+	}
+	tOut << "]";
+}
+
+static void EncodePercentileRanksSql ( const AggrPercentileRanksSetting_t & tSettings, const TDigest_c & tDigest, bool bHasSamples, StringBuilder_c & tOut )
+{
+	if ( tSettings.m_dValues.GetLength()==1 )
+	{
+		if ( bHasSamples )
+		{
+			CSphString sValue = FormatNumericSql ( tDigest.Cdf ( tSettings.m_dValues[0] ) * 100.0 );
+			tOut << sValue.cstr();
+		}
+		else
+			tOut << "null";
+		return;
+	}
+
+	tOut << "[";
+	bool bFirst = true;
+	for ( double fThreshold : tSettings.m_dValues )
+	{
+		if ( !bFirst )
+			tOut << ",";
+		bFirst = false;
+
+		if ( bHasSamples )
+		{
+			CSphString sValue = FormatNumericSql ( tDigest.Cdf ( fThreshold ) * 100.0 );
+			tOut << sValue.cstr();
+		}
+		else
+			tOut << "null";
+	}
+	tOut << "]";
+}
+
+static void EncodeMadSql ( const TDigest_c & tDigest, bool bHasSamples, StringBuilder_c & tOut )
+{
+	if ( !bHasSamples )
+	{
+		tOut << "null";
+		return;
+	}
+
+	double fMad = 0.0;
+	if ( !CalcMadFromDigestSql ( tDigest, fMad ) )
+	{
+		tOut << "null";
+		return;
+	}
+
+	CSphString sValue = FormatNumericSql ( fMad );
+	tOut << sValue.cstr();
+}
+
+static bool EncodeTDigestAggregateSql ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, StringBuilder_c & tOut )
+{
+	if ( tCol.m_eAggrFunc!=SPH_AGGR_PERCENTILES && tCol.m_eAggrFunc!=SPH_AGGR_PERCENTILE_RANKS && tCol.m_eAggrFunc!=SPH_AGGR_MAD )
+		return false;
+
+	TDigest_c tDigest ( tCol.m_fTdigestCompression ? tCol.m_fTdigestCompression : 200.0f );
+	bool bHasSamples = LoadTDigestFromMatchSql ( tMatch, tCol, tDigest );
+
+	switch ( tCol.m_eAggrFunc )
+	{
+	case SPH_AGGR_PERCENTILES:
+		EncodePercentilesSql ( tCol.m_tAggrSettings.m_tPercentiles, tDigest, bHasSamples, tOut );
+		return true;
+	case SPH_AGGR_PERCENTILE_RANKS:
+		EncodePercentileRanksSql ( tCol.m_tAggrSettings.m_tPercentileRanks, tDigest, bHasSamples, tOut );
+		return true;
+	case SPH_AGGR_MAD:
+		EncodeMadSql ( tDigest, bHasSamples, tOut );
+		return true;
+	default:
+		return false;
+	}
 }
 
 
@@ -7896,6 +7994,23 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 
 		case SPH_ATTR_STRINGPTR:
 		{
+			auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+			auto dString = sphUnpackPtrAttr ( pString );
+			if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
+				dString.second -= 2;
+			dRows.PutArray ( dString );
+		}
+		break;
+
+		case SPH_ATTR_TDIGEST_PTR:
+		{
+			StringBuilder_c sEncoded;
+			if ( EncodeTDigestAggregateSql ( tMatch, tAttr, sEncoded ) )
+			{
+				dRows.PutArray ( sEncoded, false );
+				break;
+			}
+
 			auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 			auto dString = sphUnpackPtrAttr ( pString );
 			if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
@@ -9649,6 +9764,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			switch ( dColumn.m_eType )
 			{
 			case SPH_ATTR_STRINGPTR:
+			case SPH_ATTR_TDIGEST_PTR:
 				{
 					const BYTE* pStr = nullptr;
 					int iLen = pExpr->StringEval ( tMatch, &pStr );

@@ -254,8 +254,11 @@ static int StoreRow ( const AttributeConverter_c & tConverter, const CSphSchema 
 			const char * pStr = iStringAttr < tConverter.m_dStrings.GetLength() ? tConverter.m_dStrings[iStringAttr] : nullptr;
 			if ( tAttr.m_eAttrType == SPH_ATTR_JSON && pStr )
 			{
+				// pStr is a packed PtrAttr (zipped length prefix + payload). Stash the
+				// whole packed blob as-is; on readout RowToInsert hands it back to
+				// RtIndex::AddDocument, which expects exactly that packed format.
 				auto dPacked = sphUnpackPtrAttr ( (const BYTE *)pStr );
-				pStringRefs[iStringAttr] = StoreShardBlob ( tStorage.m_dBlobPool, dPacked.first, sphCalcPackedLength ( dPacked.second ) );
+				pStringRefs[iStringAttr] = StoreShardBlob ( tStorage.m_dBlobPool, (const BYTE *)pStr, sphCalcPackedLength ( dPacked.second ) );
 			} else
 				pStringRefs[iStringAttr] = StoreShardString ( tStorage.m_dBlobPool, pStr );
 

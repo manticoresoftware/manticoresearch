@@ -1878,6 +1878,13 @@ The histogram parameter `calendar_interval` understands months to have different
 Unlike `calendar_interval`, the `fixed_interval` parameter uses a fixed number of units and does not deviate, regardless of where it falls on the calendar. However `fixed_interval` cannot process units such as months because a month is not a fixed quantity. Attempting to specify units like weeks or months for `fixed_interval` will result in an error.
 The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
 
+In JSON queries, `date_histogram` also supports `time_zone` and `offset` with `calendar_interval`:
+
+- `time_zone` changes the timezone used to round calendar buckets and to format `key_as_string`. It must be an IANA timezone name supported by the server, for example `Asia/Novosibirsk`. Numeric UTC offsets such as `+03:00` are not supported.
+- `offset` shifts calendar bucket boundaries by a fixed amount before rounding. It can be a fixed-interval string using the same units as `fixed_interval`, for example `3h`, or an integer number of seconds, for example `10800`. The value can be prefixed with `+` or `-`.
+
+`time_zone` and `offset` are not supported with `fixed_interval`.
+
 <!-- request SQL -->
 
 ```sql
@@ -3156,4 +3163,3 @@ POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET pri
 
 <!-- end -->
 <!-- proofread -->
-

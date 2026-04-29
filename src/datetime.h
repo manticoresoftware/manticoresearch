@@ -28,19 +28,23 @@ enum class TimeUnit_e
 };
 
 void		InitTimeZones ( StrVec_t & dWarnings );
+bool		LoadTimeZone ( const char * szTZ, cctz::time_zone & tTZ, CSphString & sError );
 bool		SetTimeZone ( const char * szTZ, CSphString & sError );
 bool		IsTimeZoneSet();
 CSphString	GetTimeZoneName();
 CSphString	GetLocalTimeZoneName();
 
 cctz::civil_second ConvertTime ( time_t tTime );		// use local time zone by default; can be overridden by `timezone` setting
+cctz::civil_second ConvertTime ( time_t tTime, const cctz::time_zone & tTZ );
 cctz::civil_second ConvertTimeLocal ( time_t tTime );	// always use local time zone
 cctz::civil_second ConvertTimeUTC ( time_t tTime );		// always use UTC time zone
 
 time_t		ConvertTime ( const cctz::civil_second & tCS );
+time_t		ConvertTime ( const cctz::civil_second & tCS, const cctz::time_zone & tTZ );
 
 time_t		PackLocalTimeAsUTC ( time_t tTime );
 CSphString	FormatTime ( time_t tTime, const char * szFmt );
+CSphString	FormatTime ( time_t tTime, const char * szFmt, const cctz::time_zone & tTZ );
 bool		ParseAsLocalTime ( const char * szFmt, const CSphString & sTime, time_t & tRes );
 int			GetWeekDay ( const cctz::civil_second & tTime, bool bSundayFirst );
 int			GetYearDay ( const cctz::civil_second & tTime );

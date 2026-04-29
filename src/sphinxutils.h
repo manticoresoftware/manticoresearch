@@ -174,12 +174,15 @@ int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefa
 int64_t GetUTC ( const CSphString & sTime, const char * sFormat=nullptr );
 bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime );
 
+namespace cctz { class time_zone; }
+
 enum class DateUnit_e
 {
 	ms, sec, minute, hour, day, week, month, year,
 	total_units
 };
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone & tTZ );
 void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime );
 std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError );
 

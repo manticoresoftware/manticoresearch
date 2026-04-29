@@ -106,13 +106,10 @@ mysql -h0 -P9306 -e "INSERT INTO knn_test5 (id, model, vector) VALUES (1, 'Model
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test5 WHERE knn(vector, 10, 1)"
+mysql -NE -h0 -P9306 -e "SELECT count(*) FROM knn_test5 WHERE knn(vector, 10, 1)"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+1
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test5"
 ––– output –––

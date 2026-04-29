@@ -374,13 +374,13 @@ uint64_t TemplateDictTraits_c::GetSettingsFNV() const
 	if ( m_pStopwords )
 		uHash = sphFNV64 ( m_pStopwords, m_iStopwords * sizeof ( *m_pStopwords ), uHash );
 
-	uHash = sphFNV64 ( &m_tSettings.m_iMinStemmingLen, sizeof ( m_tSettings.m_iMinStemmingLen ), uHash );
+	uHash = sphFNV64 ( m_tSettings.m_iMinStemmingLen, uHash );
 	DWORD uFlags = 0;
 	if ( m_tSettings.m_bWordDict )
 		uFlags |= 1 << 0;
 	if ( m_tSettings.m_bStopwordsUnstemmed )
 		uFlags |= 1 << 2;
-	uHash = sphFNV64 ( &uFlags, sizeof ( uFlags ), uHash );
+	uHash = sphFNV64 ( uFlags, uHash );
 
 	uHash = sphFNV64 ( m_dMorph.Begin(), m_dMorph.GetLength() * sizeof ( m_dMorph[0] ), uHash );
 #if WITH_STEMMER

@@ -107,13 +107,10 @@ mysql -h0 -P9306 -e "FREEZE test_backup"
 | /var/lib/manticore/test_backup/test_backup.settings | /var/lib/manticore/test_backup/test_backup.settings |
 +-----------------------------------------------------+-----------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
+*************************** 1. row ***************************
+3
 ––– comment –––
 INSERT works while table is frozen (writes are queued)
 ––– input –––
@@ -129,13 +126,10 @@ mysql -h0 -P9306 -e "UNFREEZE test_backup"; echo $?
 ––– comment –––
 Verify frozen insert is now visible (4 records before restore)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        4 |
-+----------+
+*************************** 1. row ***************************
+4
 ––– comment –––
 Test mysqldump for logical backup
 ––– input –––
@@ -186,13 +180,10 @@ Waiting for searchd to start
 ––– comment –––
 Verify restored data (backup taken before frozen insert, so only 3 records)
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_backup"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
+*************************** 1. row ***************************
+3
 ––– comment –––
 Verify vectors restored correctly
 ––– input –––
@@ -243,13 +234,10 @@ mysql -h0 -P9306 -e "INSERT INTO test_copy (id, title, content, status) VALUES
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_copy"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_copy"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        4 |
-+----------+
+*************************** 1. row ***************************
+4
 ––– comment –––
 Verify vectors work in RAM chunk (k parameter is ignored for RAM chunks per documentation)
 ––– input –––

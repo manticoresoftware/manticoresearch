@@ -99,10 +99,10 @@ mysql -h0 -P1306 -e "SELECT * FROM tencent_rt WHERE category = 100 \G"
 category: 100
    views: 1500
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) FROM tencent_rt \G"
+mysql -NE -h0 -P1306 -e "SELECT COUNT(*) FROM tencent_rt"
 ––– output –––
 *************************** 1. row ***************************
-count(*): 2
+2
 ––– comment –––
 Execute UPDATE operations (numeric fields only)
 ––– input –––

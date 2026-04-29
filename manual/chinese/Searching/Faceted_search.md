@@ -1878,6 +1878,13 @@ key_of_the_bucket = interval * floor ( value / interval )
 与`calendar_interval`不同，`fixed_interval`参数使用固定数量的单位，无论其在日历中的位置如何，都不会偏离。但是`fixed_interval`无法处理如周或月这样的单位，因为月不是一个固定数量。尝试为`fixed_interval`指定如周或月这样的单位将导致错误。
 接受的区间在[日期直方图](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29)表达式中描述。默认情况下，桶以数组形式返回。直方图参数`keyed`使得响应以字典形式返回桶键。
 
+在 JSON 查询中，`date_histogram` 还支持 `time_zone` 和 `offset` 与 `calendar_interval` 一起使用：
+
+- `time_zone` 更改用于四舍五入日历桶和格式化 `key_as_string` 的时区。它必须是服务器支持的 IANA 时区名称，例如 `Asia/Novosibirsk`。不支持像 `+03:00` 这样的数字 UTC 偏移量。
+- `offset` 在四舍五入之前通过固定量移动日历桶边界。它可以是使用与 `fixed_interval` 相同单位的固定间隔字符串，例如 `3h`，或者以秒为单位的整数，例如 `10800`。该值可以以 `+` 或 `-` 前缀。
+
+`time_zone` 和 `offset` 不支持 `fixed_interval`。
+
 <!-- request SQL -->
 
 ```sql
@@ -3156,4 +3163,3 @@ POST /sql?mode=raw -d "SELECT brand_name FROM facetdemo FACET brand_id FACET pri
 
 <!-- end -->
 <!-- proofread -->
-

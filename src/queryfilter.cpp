@@ -262,7 +262,7 @@ void UniqKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
 	ARRAY_FOREACH ( i, dSrc )
 	{
 		const CSphKeywordInfo & tInfo = dSrc[i];
-		uint64_t uKey = sphFNV64 ( &tInfo.m_iQpos, sizeof(tInfo.m_iQpos) );
+		uint64_t uKey = sphFNV64 ( tInfo.m_iQpos );
 		uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
 
 		CSphKeywordInfo & tVal = hWords.AddUnique ( uKey );

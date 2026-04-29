@@ -287,6 +287,15 @@ TEST ( functions, builder_sprintf_formatters )
 	sBuf.Sprintf ( "%U", (uint64_t)4294967295UL );
 	EXPECT_STREQ ( sBuf.cstr(), "4294967295" );
 
+	// %X - hexadecimal uint64
+	sBuf.Clear();
+	sBuf.Sprintf ( "%X", 4294967295ULL );
+	EXPECT_STREQ ( sBuf.cstr(), "ffffffff" );
+
+	sBuf.Clear();
+	sBuf.Sprintf ( "%X", 0xFFFFFFFFFFFFFF00ULL );
+	EXPECT_STREQ ( sBuf.cstr(), "ffffffffffffff00" );
+
 	// %D - fixed-point signed 64 bit
 	sBuf.Clear();
 	Sprintf ( sBuf, "%.3D", (int64_t)-10000 );

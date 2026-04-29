@@ -188,6 +188,7 @@ StringBuilder_c & StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap
 
 	'uint64_t' (unsigned) values:
 	%U - decimal uint64
+	%X - hex uint64
 
 	z-terminated string:
 	%s - print string, or "(null)"

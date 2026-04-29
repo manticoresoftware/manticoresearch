@@ -269,19 +269,13 @@ void StringBuilder_c::NewBuffer()
 
 StringBuilder_c& StringBuilder_c::operator<< ( double fVal )
 {
-	InitAddPrefix();
-	GrowEnough ( 32 );
-	m_iUsed += snprintf ( end(), 31, "%f", fVal );
-	m_szBuffer[m_iUsed] = '\0';
+	DtoA ( fVal );
 	return *this;
 }
 
 StringBuilder_c& StringBuilder_c::operator<< ( float fVal )
 {
-	InitAddPrefix();
-	GrowEnough ( 32 );
-	m_iUsed += sph::PrintVarFloat ( end(), 31, fVal );
-	m_szBuffer[m_iUsed] = '\0';
+	FtoA ( fVal );
 	return *this;
 }
 

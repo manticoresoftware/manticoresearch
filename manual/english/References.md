@@ -546,10 +546,6 @@ searchd [OPTIONS]
 * [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - Stops the Manticore server
 * [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - Stops the Manticore server gracefully
 * [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - Removes path names from all file names referenced in the table
-* [--watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - Force internal watchdog
-* [--no-watchdog](Starting_the_server/Manually.md#searchd-command-line-options) - Disable internal watchdog
-* [--systemd](Starting_the_server/Manually.md#searchd-command-line-options) - Force systemd mode
-* [--no-systemd](Starting_the_server/Manually.md#searchd-command-line-options) - Force standalone mode (ignores systemd)
 * [-v](Starting_the_server/Manually.md#searchd-command-line-options) - Displays version information
 
 ##### Searchd environment variables

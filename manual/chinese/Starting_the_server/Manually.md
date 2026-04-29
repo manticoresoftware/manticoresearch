@@ -134,14 +134,6 @@ searchd [OPTIONS]
 
 *   `--nodetach`（仅限 Linux）：防止 `searchd` 转入后台。在此模式下，日志条目直接打印到控制台。查询处理不受影响。此选项旨在调试或在 Docker 容器中运行 Manticore 时捕获输出。
 
-*   `--watchdog`（仅限 Linux）：启用内部 [watchdog](Server_settings/Searchd.md#watchdog)，覆盖配置文件中的任何设置。请注意，`--watchdog` 与前台模式不兼容；如果使用 `--console` 或 `--nodetach`，watchdog 会隐式禁用，并发出警告。
-
-*   `--no-watchdog`（仅限 Linux）：禁用内部 [watchdog](Server_settings/Searchd.md#watchdog)。这会覆盖配置文件中的任何设置，等同于在配置中设置 `watchdog=0`。
-
-*   `--systemd`（仅限 Linux）：强制 `searchd` 以仿佛由 systemd 管理的方式运行。默认情况下，`searchd` 会检查是否可以通知 systemd 其状态；如果通信可行，它会假设由 systemd 管理。在此模式下，watchdog 会被禁用（除非显式启用），并且 `pid_file` 配置不是严格必需的。此选项显式强制使用 systemd 管理模式。
-
-*   `--no-systemd`（仅限 Linux）：禁用 systemd 管理模式，并防止 `searchd` 假设任何外部管理。因此，进程会启用 watchdog（除非显式禁用），并将 PID 写入配置中 `pid_file` 选项指定的文件。
-
 ### Windows 选项
 
 `searchd` 在 Windows 平台上有一些特定的选项，主要是关于作为服务的处理，仅在 Windows 二进制文件上可用。

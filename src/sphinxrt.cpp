@@ -1716,7 +1716,7 @@ private:
 	bool						ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) override;
 	void						FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) override;
 
-	virtual void				ManualOptimizeCutoff ( int iCutoff );
+	void						ManualOptimizeCutoff ( int iCutoff ) override;
 };
 
 
@@ -9344,6 +9344,7 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 		}
 
 		uAliveDocuments = dIndexDocs.GetLength();
+		dIndexDocs.Uniq();
 		iTotalKilled = ApplyKillList ( dIndexDocs );
 	} else
 		uAliveDocuments = pIndex->GetStats().m_iTotalDocuments;
@@ -11216,15 +11217,15 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( &tSettings.m_eBigramIndex, sizeof(tSettings.m_eBigramIndex), uHash );
 	uHash = sphFNV64 ( &tSettings.m_eBigramDelimiter, sizeof(tSettings.m_eBigramDelimiter), uHash );
 	uHash = sphFNV64 ( tSettings.m_sBigramWords.cstr(), tSettings.m_sBigramWords.Length(), uHash );
-	uHash = sphFNV64 ( &tSettings.m_uAotFilterMask, sizeof(tSettings.m_uAotFilterMask), uHash );
+	uHash = sphFNV64 ( tSettings.m_uAotFilterMask, uHash );
 	uHash = sphFNV64 ( &tSettings.m_ePreprocessor, sizeof(tSettings.m_ePreprocessor), uHash );
 	uHash = sphFNV64 ( tSettings.m_sIndexTokenFilter.cstr(), tSettings.m_sIndexTokenFilter.Length(), uHash );
-	uHash = sphFNV64 ( &iMinPrefixLen, sizeof(iMinPrefixLen), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iMinInfixLen, sizeof(tSettings.m_iMinInfixLen), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iMaxSubstringLen, sizeof(tSettings.m_iMaxSubstringLen), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iBoundaryStep, sizeof(tSettings.m_iBoundaryStep), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iOvershortStep, sizeof(tSettings.m_iOvershortStep), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iStopwordStep, sizeof(tSettings.m_iStopwordStep), uHash );
+	uHash = sphFNV64 ( iMinPrefixLen, uHash );
+	uHash = sphFNV64 ( tSettings.m_iMinInfixLen, uHash );
+	uHash = sphFNV64 ( tSettings.m_iMaxSubstringLen, uHash );
+	uHash = sphFNV64 ( tSettings.m_iBoundaryStep, uHash );
+	uHash = sphFNV64 ( tSettings.m_iOvershortStep, uHash );
+	uHash = sphFNV64 ( tSettings.m_iStopwordStep, uHash );
 
 	return uHash;
 }
@@ -11942,15 +11943,15 @@ static bool BuildExtCacheEntry ( const CSphIndex & tIndex, const FilenameBuilder
 
 	uint64_t uHash = SPH_FNV64_SEED;
 	uHash = sphFNV64 ( "stopwords", 9, uHash );
-	uHash = sphFNV64 ( &uStopwords, sizeof ( uStopwords ), uHash );
+	uHash = sphFNV64 ( uStopwords, uHash );
 	uHash = sphFNV64 ( "wordforms", 9, uHash );
-	uHash = sphFNV64 ( &uWordforms, sizeof ( uWordforms ), uHash );
+	uHash = sphFNV64 ( uWordforms, uHash );
 	uHash = sphFNV64 ( "exceptions", 10, uHash );
-	uHash = sphFNV64 ( &uExceptions, sizeof ( uExceptions ), uHash );
+	uHash = sphFNV64 ( uExceptions, uHash );
 	uHash = sphFNV64 ( "hitless", 7, uHash );
-	uHash = sphFNV64 ( &uHitless, sizeof ( uHitless ), uHash );
+	uHash = sphFNV64 ( uHitless, uHash );
 	uHash = sphFNV64 ( "jieba", 5, uHash );
-	uHash = sphFNV64 ( &uJieba, sizeof ( uJieba ), uHash );
+	uHash = sphFNV64 ( uJieba, uHash );
 
 	tEntry.m_uHash = uHash;
 	tEntry.m_sStopwords = tDictSettings.m_sStopwords;
@@ -12176,12 +12177,9 @@ bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFile
 	const int iSuffix = tDstIndex.GetChunkId();
 	if ( !AttachRtChunkExtCopy ( tSrcIndex, tDstIndex, iSuffix, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
 		return false;
-	{
-		auto pDict = tDstIndex.GetDictionary();
-		assert ( pDict );
-		const auto & tDictSettings = pDict->GetSettings();
-		assert ( tDictSettings.m_dWordforms.GetLength()==pDict->GetWordformsFileInfos().GetLength() );
-	}
+
+	assert ( tDstIndex.GetDictionary() );
+	assert ( tDstIndex.GetDictionary()->GetSettings().m_dWordforms.GetLength()==tDstIndex.GetDictionary()->GetWordformsFileInfos().GetLength() );
 	return true;
 }
 

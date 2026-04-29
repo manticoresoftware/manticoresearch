@@ -3,7 +3,7 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_replace; DROP TABLE IF EXISTS shard_phase2_replace_s_0; DROP TABLE IF EXISTS shard_phase2_replace_s_1; CREATE TABLE shard_phase2_replace_s_0(id bigint, title text); CREATE TABLE shard_phase2_replace_s_1(id bigint, title text); CREATE TABLE shard_phase2_replace(id bigint, title text) type='shard' local='shard_phase2_replace_s_0' local='shard_phase2_replace_s_1'; INSERT INTO shard_phase2_replace (id, title) VALUES (11, 'old-explicit'); REPLACE INTO shard_phase2_replace (id, title) VALUES (11, 'updated-explicit'), (0, 'auto-row');"
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_replace; DROP TABLE IF EXISTS shard_phase2_replace_s0; DROP TABLE IF EXISTS shard_phase2_replace_s1; CREATE TABLE shard_phase2_replace_s0(id bigint, title text); CREATE TABLE shard_phase2_replace_s1(id bigint, title text); CREATE TABLE shard_phase2_replace(id bigint, title text) type='shard' local='shard_phase2_replace_s0' local='shard_phase2_replace_s1'; INSERT INTO shard_phase2_replace (id, title) VALUES (11, 'old-explicit'); REPLACE INTO shard_phase2_replace (id, title) VALUES (11, 'updated-explicit'), (0, 'auto-row');"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SELECT id, title FROM shard_phase2_replace WHERE id=11;"
@@ -22,7 +22,7 @@ mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_phase2_replace;"
 |    2 |
 +------+
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_stmt_rollback; DROP TABLE IF EXISTS shard_phase2_stmt_rollback_s_0; DROP TABLE IF EXISTS shard_phase2_stmt_rollback_s_1; CREATE TABLE shard_phase2_stmt_rollback_s_0(id bigint, title text); CREATE TABLE shard_phase2_stmt_rollback_s_1(id bigint, title text); CREATE TABLE shard_phase2_stmt_rollback(id bigint, title text) type='shard' local='shard_phase2_stmt_rollback_s_0' local='shard_phase2_stmt_rollback_s_1';"
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_stmt_rollback; DROP TABLE IF EXISTS shard_phase2_stmt_rollback_s0; DROP TABLE IF EXISTS shard_phase2_stmt_rollback_s1; CREATE TABLE shard_phase2_stmt_rollback_s0(id bigint, title text); CREATE TABLE shard_phase2_stmt_rollback_s1(id bigint, title text); CREATE TABLE shard_phase2_stmt_rollback(id bigint, title text) type='shard' local='shard_phase2_stmt_rollback_s0' local='shard_phase2_stmt_rollback_s1';"
 ––– output –––
 ––– input –––
 mysql --force -h0 -P1306 >/dev/null 2>&1 <<'SQL'
@@ -49,7 +49,7 @@ mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_phase2_stmt_rollback WHERE 
 |    0 |
 +------+
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_mix_modes; DROP TABLE IF EXISTS shard_phase2_mix_modes_s_0; DROP TABLE IF EXISTS shard_phase2_mix_modes_s_1; CREATE TABLE shard_phase2_mix_modes_s_0(id bigint, title text); CREATE TABLE shard_phase2_mix_modes_s_1(id bigint, title text); CREATE TABLE shard_phase2_mix_modes(id bigint, title text) type='shard' local='shard_phase2_mix_modes_s_0' local='shard_phase2_mix_modes_s_1';"
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_mix_modes; DROP TABLE IF EXISTS shard_phase2_mix_modes_s0; DROP TABLE IF EXISTS shard_phase2_mix_modes_s1; CREATE TABLE shard_phase2_mix_modes_s0(id bigint, title text); CREATE TABLE shard_phase2_mix_modes_s1(id bigint, title text); CREATE TABLE shard_phase2_mix_modes(id bigint, title text) type='shard' local='shard_phase2_mix_modes_s0' local='shard_phase2_mix_modes_s1';"
 ––– output –––
 ––– input –––
 mysql --force -h0 -P1306 >/dev/null 2>&1 <<'SQL'

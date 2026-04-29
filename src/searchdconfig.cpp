@@ -1972,11 +1972,26 @@ ShardIndex_c * AsShard ( DistributedIndex_t * pIndex )
 
 int ParseShardRouteOrderId ( const CSphString & sName )
 {
-	const char * sSuffix = strrchr ( sName.cstr(), '_' );
-	if ( !sSuffix )
+	// Shard order id lives in the "_s<digits>" suffix at the end of the
+	// table name (e.g. "system.test_s0" -> 0). We only trust this suffix
+	// shape so that a stray trailing number in some unrelated identifier
+	// (e.g. "table_v2") does not get misread as a shard order.
+	const char * sBeg = sName.cstr();
+	if ( !sBeg )
 		return -1;
 
-	return (int)strtol ( sSuffix + 1, nullptr, 10 );
+	const char * sEnd = sBeg + sName.Length();
+	const char * pDigit = sEnd;
+	while ( pDigit > sBeg && isdigit ( (unsigned char)*(pDigit-1) ) )
+		--pDigit;
+
+	if ( pDigit == sEnd )
+		return -1;
+
+	if ( pDigit - sBeg < 2 || pDigit[-1] != 's' || pDigit[-2] != '_' )
+		return -1;
+
+	return (int)strtol ( pDigit, nullptr, 10 );
 }
 
 static bool ResolveSingleShardAgentTarget ( const char * szIndexName, const MultiAgentDescRefPtr_c & pAgent, CSphString & sTargetName, CSphString & sError )

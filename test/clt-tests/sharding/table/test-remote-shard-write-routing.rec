@@ -7,23 +7,23 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_ok; DROP TABLE IF EXISTS shard_remote_ok_s_0;"
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_ok; DROP TABLE IF EXISTS shard_remote_ok_s0;"
 ––– output –––
 ––– input –––
-mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_ok_s_1; CREATE TABLE shard_remote_ok_s_1(id bigint, title text, gid uint);"
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_ok_s1; CREATE TABLE shard_remote_ok_s1(id bigint, title text, gid uint);"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE shard_remote_ok_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_ok(id bigint, title text, gid uint) type='shard' local='shard_remote_ok_s_0' agent='127.0.0.1:2312:shard_remote_ok_s_1';"
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_ok_s0(id bigint, title text, gid uint); CREATE TABLE shard_remote_ok(id bigint, title text, gid uint) type='shard' local='shard_remote_ok_s0' agent='127.0.0.1:2312:shard_remote_ok_s1';"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO shard_remote_ok (id, title, gid) VALUES (1, 'local-1', 10), (3, 'remote-3', 30), (4, 'remote-4', 40);"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SELECT COUNT(*) FROM shard_remote_ok_s_0;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM shard_remote_ok_s0;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
 ––– output –––
 1
 ––– input –––
-mysql -h0 -P2306 -e "SELECT COUNT(*) FROM shard_remote_ok_s_1;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
+mysql -h0 -P2306 -e "SELECT COUNT(*) FROM shard_remote_ok_s1;" | awk -F'|' '/^[|]/{gsub(/^ +| +$/,"",$2); if ($2!="" && $2!~/[A-Za-z]/) print $2} /^[0-9]+$/{print $0}'
 ––– output –––
 2
 ––– input –––
@@ -38,7 +38,7 @@ mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_ok ORDER BY id ASC;
 6	local-6	60
 7	remote-7	70
 ––– input –––
-mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_ok_s_1 ORDER BY id ASC;" | awk -F'|' 'BEGIN{OFS="\t"} /^[|]/{for(i=2;i<=4;i++) gsub(/^ +| +$/,"",$i); if ($2!="" && $2!="id") print $2,$3,$4} /^[0-9]+\t/{print $0}'
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_ok_s1 ORDER BY id ASC;" | awk -F'|' 'BEGIN{OFS="\t"} /^[|]/{for(i=2;i<=4;i++) gsub(/^ +| +$/,"",$i); if ($2!="" && $2!="id") print $2,$3,$4} /^[0-9]+\t/{print $0}'
 ––– output –––
 3	r3-upd	300
 4	remote-4	40

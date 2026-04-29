@@ -3,7 +3,7 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_local; DROP TABLE IF EXISTS shard_http_bulk_local_s_0; DROP TABLE IF EXISTS shard_http_bulk_local_s_1; CREATE TABLE shard_http_bulk_local_s_0(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_local_s_1(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_local(id bigint, title text, gid uint) type='shard' local='shard_http_bulk_local_s_0' local='shard_http_bulk_local_s_1'; SHOW TABLES LIKE 'shard_http_bulk_local';"
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_bulk_local; DROP TABLE IF EXISTS shard_http_bulk_local_s0; DROP TABLE IF EXISTS shard_http_bulk_local_s1; CREATE TABLE shard_http_bulk_local_s0(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_local_s1(id bigint, title text, gid uint); CREATE TABLE shard_http_bulk_local(id bigint, title text, gid uint) type='shard' local='shard_http_bulk_local_s0' local='shard_http_bulk_local_s1'; SHOW TABLES LIKE 'shard_http_bulk_local';"
 ––– output –––
 +-----------------------+-------+
 | Table                 | Type  |

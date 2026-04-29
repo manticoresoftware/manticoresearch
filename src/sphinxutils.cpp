@@ -3871,28 +3871,40 @@ std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bF
 	return { *pUnit, iMulti };
 }
 
-void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+static cctz::civil_second ConvertRoundTime ( time_t tDateTime, const cctz::time_zone * pTZ )
+{
+	return pTZ ? ConvertTime ( tDateTime, *pTZ ) : ConvertTime ( tDateTime );
+}
+
+
+static time_t ConvertRoundTime ( const cctz::civil_second & tSrcTime, const cctz::time_zone * pTZ )
+{
+	return pTZ ? ConvertTime ( tSrcTime, *pTZ ) : ConvertTime ( tSrcTime );
+}
+
+
+static void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone * pTZ )
 {
 	if ( eUnit==DateUnit_e::ms )
 		return;
 
-	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	cctz::civil_second tSrcTime = ConvertRoundTime ( tDateTime, pTZ );
 	switch ( eUnit )
 	{
 	case DateUnit_e::sec:
-		tDateTime = ConvertTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+		tDateTime = ConvertRoundTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ), pTZ );
 	break;
 
 	case DateUnit_e::minute:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ), pTZ );
 	break;
 
 	case DateUnit_e::hour:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ), pTZ );
 	break;
 
 	case DateUnit_e::day:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ), pTZ );
 	break;
 
 	case DateUnit_e::week:
@@ -3900,22 +3912,34 @@ void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
 		cctz::civil_day tWeekStart ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() );
 		if ( cctz::get_weekday ( tWeekStart )!=cctz::weekday::monday )
 			tWeekStart = cctz::prev_weekday ( tWeekStart, cctz::weekday::monday );
-		tDateTime = ConvertTime ( tWeekStart );
+		tDateTime = ConvertRoundTime ( tWeekStart, pTZ );
 	}
 	break;
 
 	case DateUnit_e::month:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ), pTZ );
 		break;
 
 	case DateUnit_e::year:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year() ), pTZ );
 		break;
 
 	default:
 		break;
 	}
 }
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+{
+	RoundDate ( eUnit, tDateTime, nullptr );
+}
+
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone & tTZ )
+{
+	RoundDate ( eUnit, tDateTime, &tTZ );
+}
+
 
 void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
 {

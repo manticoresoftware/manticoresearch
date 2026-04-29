@@ -1,0 +1,103 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_http_local; DROP TABLE IF EXISTS shard_http_local_s0; DROP TABLE IF EXISTS shard_http_local_s1; CREATE TABLE shard_http_local_s0(id bigint, title text, gid uint); CREATE TABLE shard_http_local_s1(id bigint, title text, gid uint); CREATE TABLE shard_http_local(id bigint, title text, gid uint) type='shard' local='shard_http_local_s0' local='shard_http_local_s1'; SHOW TABLES LIKE 'shard_http_local';"
+––– output –––
++------------------+-------+
+| Table            | Type  |
++------------------+-------+
+| shard_http_local | shard |
++------------------+-------+
+––– input –––
+curl -s -X POST http://localhost:1308/insert -d '{"table":"shard_http_local","id":1,"doc":{"title":"http-insert-1","gid":10}}' | tr -d '\n' | sed -n 's/.*"created":\([^,}]*\).*/\1/p'
+––– output –––
+true
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_local WHERE id=1;"
+––– output –––
++------+---------------+------+
+| id   | title         | gid  |
++------+---------------+------+
+|    1 | http-insert-1 |   10 |
++------+---------------+------+
+––– input –––
+curl -s -X POST http://localhost:1308/replace -d '{"table":"shard_http_local","id":1,"doc":{"title":"http-replace-1","gid":11}}' | tr -d '\n' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+updated
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_local WHERE id=1;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    1 | http-replace-1 |   11 |
++------+----------------+------+
+––– input –––
+BULK_INSERT=$(curl -s -X POST http://localhost:1308/bulk -H "Content-Type: application/x-ndjson" -d '
+{"insert":{"index":"shard_http_local","id":3,"doc":{"title":"bulk-insert-3","gid":30}}}
+{"insert":{"index":"shard_http_local","id":4,"doc":{"title":"bulk-insert-4","gid":40}}}
+') ; printf '%s\n' "$BULK_INSERT" | tr -d '\n' | sed -n 's/.*"created":\([0-9][0-9]*\).*"errors":\([^,}]*\).*/created=\1 errors=\2/p'
+––– output –––
+created=2 errors=false
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_local WHERE id IN (1,3,4) ORDER BY id ASC;"
+––– output –––
++------+----------------+------+
+| id   | title          | gid  |
++------+----------------+------+
+|    1 | http-replace-1 |   11 |
+|    3 | bulk-insert-3  |   30 |
+|    4 | bulk-insert-4  |   40 |
++------+----------------+------+
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_http_local","id":1}' | tr -d '\n' | sed -n 's/.*"id":\([0-9][0-9]*\).*"found":\([^,}]*\).*"result":"\([^"]*\)".*/id=\1 found=\2 result=\3/p'
+––– output –––
+id=1 found=true result=deleted
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_http_local","id":1}' | tr -d '\n' | sed -n 's/.*"id":\([0-9][0-9]*\).*"found":\([^,}]*\).*"result":"\([^"]*\)".*/id=\1 found=\2 result=\3/p'
+––– output –––
+id=1 found=false result=not found
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_http_local ORDER BY id ASC;"
+––– output –––
++------+---------------+------+
+| id   | title         | gid  |
++------+---------------+------+
+|    3 | bulk-insert-3 |   30 |
+|    4 | bulk-insert-4 |   40 |
++------+---------------+------+
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_http_local","id":[3,4]}' | tr -d '\n' | sed -n 's/.*"id":\([0-9][0-9]*\).*"found":\([^,}]*\).*"result":"\([^"]*\)".*/id=\1 found=\2 result=\3/p'
+––– output –––
+id=3 found=true result=deleted
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_http_local;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_http_local (id, title, gid) VALUES (1, 'query-delete-local', 80), (4, 'query-delete-remote', 90); SELECT id, title, gid FROM shard_http_local ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|    1 | query-delete-local  |   80 |
+|    4 | query-delete-remote |   90 |
++------+---------------------+------+
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_http_local","query":{"range":{"gid":{"gte":80}}}}' | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*/\1/p'
+––– output –––
+2
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_http_local;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+

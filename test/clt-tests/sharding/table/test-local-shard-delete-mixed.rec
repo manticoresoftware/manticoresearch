@@ -1,0 +1,172 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_local_delete_mix; DROP TABLE IF EXISTS shard_local_delete_mix_s0; DROP TABLE IF EXISTS shard_local_delete_mix_s1; CREATE TABLE shard_local_delete_mix_s0(id bigint, title text, gid uint); CREATE TABLE shard_local_delete_mix_s1(id bigint, title text, gid uint); CREATE TABLE shard_local_delete_mix(id bigint, title text, gid uint) type='shard' local='shard_local_delete_mix_s0' local='shard_local_delete_mix_s1'; INSERT INTO shard_local_delete_mix (id, title, gid) VALUES (1, 'local-1', 10), (3, 'remote-3', 30), (4, 'remote-4', 40), (6, 'local-6', 60);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_local_delete_mix_s0; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s1;"
+––– output –––
++------+
+| c    |
++------+
+|    2 |
++------+
++------+
+| c    |
++------+
+|    2 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "DELETE FROM shard_local_delete_mix WHERE id IN (1,4);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_local_delete_mix_s0; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s1;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; DELETE FROM shard_local_delete_mix WHERE id IN (3); ROLLBACK;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+0 rows affected
+0 rows affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_delete_mix ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |   30 |
+|    6 | local-6  |   60 |
++------+----------+------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; DELETE FROM shard_local_delete_mix WHERE gid IN (60); COMMIT;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+0 rows affected
+1 row affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_delete_mix ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |   30 |
++------+----------+------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"SET autocommit=0; INSERT INTO shard_local_delete_mix (id, title, gid) VALUES (7, 'remote-7', 70); DELETE FROM shard_local_delete_mix WHERE gid IN (70); SET autocommit=1;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+1 row affected
+0 rows affected
+0 rows affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_delete_mix ORDER BY id ASC; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s0; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s1;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |   30 |
+|    7 | remote-7 |   70 |
++------+----------+------+
++------+
+| c    |
++------+
+|    0 |
++------+
++------+
+| c    |
++------+
+|    2 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_local_delete_mix (id, title, gid) VALUES (1, 'local-1b', 80), (4, 'remote-4b', 90); DELETE FROM shard_local_delete_mix WHERE gid IN (80,90);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_delete_mix ORDER BY id ASC; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s0; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s1;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |   30 |
+|    7 | remote-7 |   70 |
++------+----------+------+
++------+
+| c    |
++------+
+|    0 |
++------+
++------+
+| c    |
++------+
+|    2 |
++------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; DELETE FROM shard_local_delete_mix WHERE id IN (7); COMMIT;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+0 rows affected
+1 row affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_delete_mix ORDER BY id ASC; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s0; SELECT COUNT(*) AS c FROM shard_local_delete_mix_s1;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |   30 |
++------+----------+------+
++------+
+| c    |
++------+
+|    0 |
++------+
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_local_delete_same_target; DROP TABLE IF EXISTS shard_local_delete_same_target_s0; DROP TABLE IF EXISTS shard_local_delete_same_target_s1; CREATE TABLE shard_local_delete_same_target_s0(id bigint, title text, gid uint); CREATE TABLE shard_local_delete_same_target_s1(id bigint, title text, gid uint); CREATE TABLE shard_local_delete_same_target(id bigint, title text, gid uint) type='shard' local='shard_local_delete_same_target_s0' local='shard_local_delete_same_target_s1'; INSERT INTO shard_local_delete_same_target (id, title, gid) VALUES (1, 'odd-1', 10), (3, 'odd-3', 10), (2, 'even-2', 20), (4, 'even-4', 40);"
+––– output –––
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; INSERT INTO shard_local_delete_same_target (id, title, gid) VALUES (5, 'odd-5-before', 10); DELETE FROM shard_local_delete_same_target WHERE id IN (1); DELETE FROM shard_local_delete_same_target WHERE gid IN (10); INSERT INTO shard_local_delete_same_target (id, title, gid) VALUES (7, 'odd-7-after', 10); COMMIT;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+1 row affected
+0 rows affected
+0 rows affected
+1 row affected
+2 rows affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_local_delete_same_target ORDER BY id ASC; SELECT id, title, gid FROM shard_local_delete_same_target_s0 ORDER BY id ASC; SELECT id, title, gid FROM shard_local_delete_same_target_s1 ORDER BY id ASC;"
+––– output –––
++------+--------------+------+
+| id   | title        | gid  |
++------+--------------+------+
+|    2 | even-2       |   20 |
+|    4 | even-4       |   40 |
+|    5 | odd-5-before |   10 |
+|    7 | odd-7-after  |   10 |
++------+--------------+------+
++------+--------+------+
+| id   | title  | gid  |
++------+--------+------+
+|    2 | even-2 |   20 |
++------+--------+------+
++------+--------------+------+
+| id   | title        | gid  |
++------+--------------+------+
+|    4 | even-4       |   40 |
+|    5 | odd-5-before |   10 |
+|    7 | odd-7-after  |   10 |
++------+--------------+------+

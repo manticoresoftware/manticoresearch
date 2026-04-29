@@ -13,19 +13,19 @@ Manticore started!
 ––– comment –––
 Execute the MRE commands
 ––– input –––
-mysql -v -P9306 -h0 -e "drop table if exists t; create table t(f int); drop table if exists d; CREATE TABLE d type='distributed' agent='127.0.0.1:9312:t'"
+mysql -v -P9306 -h0 -e "drop table if exists t_s0; create table t_s0(f int); drop table if exists d; CREATE TABLE d(f int) type='shard' agent='127.0.0.1:9312:t_s0'"
 ––– output –––
 --------------
-drop table if exists t
+drop table if exists t_s0
 --------------
 --------------
-create table t(f int)
+create table t_s0(f int)
 --------------
 --------------
 drop table if exists d
 --------------
 --------------
-CREATE TABLE d type='distributed' agent='127.0.0.1:9312:t'
+CREATE TABLE d(f int) type='shard' agent='127.0.0.1:9312:t_s0'
 --------------
 ––– comment –––
 Test HTTP update with wrong cluster - should not crash
@@ -34,4 +34,4 @@ The issue about it: https://github.com/manticoresoftware/manticoresearch/issues/
 ––– input –––
 curl -s -X POST http://localhost:9312/update -d '{"cluster": "unknown_cluster", "table": "d", "id": 2, "doc": {"f": 5}}'
 ––– output –––
-{"error":{"type":"action_request_validation_exception","reason":"table t: table t: table 't' is not in any cluster, use just 't'","table":"d"},"status":409}
+{"error":{"type":"action_request_validation_exception","reason":"table t_s0: table t_s0: table 't_s0' is not in any cluster, use just 't_s0'","table":"d"},"status":409}

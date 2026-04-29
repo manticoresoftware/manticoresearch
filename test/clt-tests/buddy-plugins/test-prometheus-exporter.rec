@@ -13,8 +13,10 @@ curl -s 0:9308/metrics > /tmp/exporter_unfiltered_output.txt
 cat /tmp/exporter_unfiltered_output.txt | grep -e "^manticore" | cut -d" " -f1 | sed 's/^manticore_//' | sed 's/qcache_thresh_microseconds/qcache_thresh_msec/' | sort > /tmp/exporter_output.txt
 ––– output –––
 ––– input –––
-searchd --iostats --cpustats --status | cut -d":" -f1 | tail -n +10 | sort > /tmp/searchd_output.txt
+searchd --iostats --cpustats --status | cut -d":" -f1 | tail -n +10 | grep -v "^command_shard_write$" | sort > /tmp/searchd_output.txt
 ––– output –––
+––– comment –––
+command_shard_write is a public daemon metric, but the pinned Buddy version does not export it yet. Keep this filter until Buddy metric_definitions.json is updated in the Buddy repo.
 ––– input –––
 ls -1 /tmp | grep -E "^(exporter|searchd).*\.txt$"
 ––– output –––

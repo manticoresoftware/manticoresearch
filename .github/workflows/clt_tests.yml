@@ -76,6 +76,7 @@ jobs:
               "test/clt-tests/sharding/functional",
               "test/clt-tests/sharding/replication",
               "test/clt-tests/sharding/syntax",
+              "test/clt-tests/sharding/rollback",
               "test/clt-tests/test-configuration",
               "test/clt-tests/vector-knn",
           ]

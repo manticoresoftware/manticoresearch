@@ -26,6 +26,7 @@
 #include "indexfiles.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "client_session.h"
+#include "searchd_shard.h"
 #include "sphinx_alter.h"
 #include "docs_collector.h"
 #include "index_rotator.h"
@@ -236,7 +237,7 @@ int64_t g_iNextSystemdWatchdogTick = -1;
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq", "getfield"
+	"callpq", "clusterpq", "getfield", "shard_write"
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3193,6 +3194,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CLUSTER:	HandleAPICommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SHARD_WRITE: HandleCommandShardWrite ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 
@@ -3241,52 +3243,6 @@ public:
 
 private:
 	RowBuffer_i & m_tRowBuffer;
-};
-
-
-struct StringPtrTraits_t
-{
-	CSphVector<BYTE> m_dPackedData;
-	CSphFixedVector<int> m_dOff { 0 };
-	CSphVector<BYTE> m_dParserBuf;
-
-	// remap offsets to string pointers
-	void SavePointersTo ( VecTraits_T<const char *> &dStrings, bool bSkipInvalid=true ) const
-	{
-		if ( bSkipInvalid )
-			ARRAY_FOREACH ( i, m_dOff )
-			{
-				int iOff = m_dOff[i];
-				if ( iOff<0 )
-					continue;
-				dStrings[i] = ( const char * ) m_dPackedData.Begin () + iOff;
-			}
-		else
-			ARRAY_FOREACH ( i, m_dOff )
-			{
-				int iOff = m_dOff[i];
-				dStrings[i] = ( iOff>=0 ? ( const char * ) m_dPackedData.Begin () + iOff : nullptr );
-			}
-	}
-
-	void Reset ()
-	{
-		m_dPackedData.Resize ( 0 );
-		m_dParserBuf.Resize ( 0 );
-		m_dOff.Fill ( -1 );
-	}
-
-	BYTE * ReserveBlob ( int iBlobSize, int iOffset )
-	{
-		if ( !iBlobSize )
-			return nullptr;
-
-		m_dOff[iOffset] = m_dPackedData.GetLength ();
-
-		BYTE * pPacked = m_dPackedData.AddN ( sphCalcPackedLength(iBlobSize) );
-		pPacked += ZipToPtrBE ( pPacked, iBlobSize );
-		return pPacked;
-	}
 };
 
 static void BsonToSqlInsert ( const bson::Bson_c& dBson, SqlInsert_t& tAttr )
@@ -4341,7 +4297,7 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 	tOut.Eof();
 }
 
-static bool IsHttpStmt ( const SqlStmt_t & tStmt )
+bool IsHttpStmt ( const SqlStmt_t & tStmt )
 {
 	return !tStmt.m_sEndpoint.IsEmpty();
 }
@@ -4373,7 +4329,7 @@ static void PopulateMapsFromIndexSchema ( CSphVector<int> & dAttrSchema, CSphVec
 }
 
 
-static bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSchema, CSphVector<bool> & dFieldAttrs, const CSphSchema & tSchema, const StrVec_t & dStmtInsertSchema, StmtErrorReporter_i & tOut )
+bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dFieldSchema, CSphVector<bool> & dFieldAttrs, const CSphSchema & tSchema, const StrVec_t & dStmtInsertSchema, StmtErrorReporter_i & tOut )
 {
 	ARRAY_FOREACH ( i, dFieldAttrs )
 		dFieldAttrs[i] = false;
@@ -4439,43 +4395,6 @@ static bool CreateAttrMaps ( CSphVector<int> & dAttrSchema, CSphVector<int> & dF
 }
 
 /////////////////////////////////////////////////////////////////////
-
-class AttributeConverter_c : public InsertDocData_c
-{
-public:
-				AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning );
-
-	bool		SetAttrValue ( int iCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError );
-	void		SetDefaultAttrValue ( int iCol );
-
-	bool		SetFieldValue ( int iField, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
-	void		SetDefaultFieldValue ( int iField );
-
-	void		NewRow();
-	void		Finalize();
-
-private:
-	const CSphSchema &		m_tSchema;
-	const CSphColumnInfo *	m_pDocId = nullptr;
-
-	const CSphVector<bool> & m_dFieldAttrs;
-
-	StringPtrTraits_t 		m_tStrings;
-	StrVec_t				m_dTmpFieldStorage;
-	CSphVector<float>		m_dTmpFloats;
-	CSphVector<int>			m_dColumnarRemap;
-
-	CSphString &			m_sError;
-	CSphString &			m_sWarning;
-
-	bool		String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf );
-
-	bool		CheckStrings ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
-	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
-	bool		CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
-	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
-};
-
 
 AttributeConverter_c::AttributeConverter_c ( const CSphSchema & tSchema, const CSphVector<bool> & dFieldAttrs, CSphString & sError, CSphString & sWarning )
 	: InsertDocData_c ( tSchema )
@@ -4824,6 +4743,16 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	auto& sError = pSession->m_sError;
 
 	MEMORY ( MEM_SQL_BEGIN );
+	if ( pSession->m_tShardTxn.HasPendingData() )
+	{
+		CSphVector<int64_t> dCommittedDocIDs;
+		if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs ) )
+		{
+			pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
+			return tOut.Error ( "%s", sError.cstr() );
+		}
+	}
+
 	if ( tAcc.GetIndex() )
 	{
 		if ( !CheckAccIndex ( tAcc, sError, false ) )
@@ -4849,8 +4778,27 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 	MEMORY ( MEM_SQL_COMMIT );
 	pSession->m_bInTransaction = false;
-	RtIndex_i* pIndex = tAcc.GetIndex();
 	int iDeleted = 0;
+
+	if ( pSession->m_tShardTxn.HasPendingData() )
+	{
+		if ( bCommit )
+		{
+			CSphVector<int64_t> dCommittedDocIDs;
+			int iShardDeleted = 0;
+			if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs, &iShardDeleted ) )
+			{
+				pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
+				tOut.Error ( "%s", sError.cstr() );
+				return;
+			}
+
+			iDeleted += iShardDeleted;
+		} else
+			RollbackShardTxn ( pSession->m_tShardTxn );
+	}
+
+	RtIndex_i* pIndex = tAcc.GetIndex();
 	if ( pIndex )
 	{
 		RtAccum_t * pAccum = tAcc.GetAcc();
@@ -4896,13 +4844,21 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		bool bDistTable = false;
-		if ( !pServed )
+		auto pDist = !pServed ? GetDistr ( tStmt.m_sIndex ) : cDistributedIndexRefPtr_t();
+		const ShardIndex_c * pShard = AsShard ( pDist.Ptr() );
+		if ( pShard )
 		{
-			bDistTable = GetDistr ( tStmt.m_sIndex );
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+			int iAffectedRows = 0;
+			if ( !AddDocumentShard ( tStmt, *pShard, tOut, iAffectedRows ) )
+				return;
+
+			pDist->m_tStats.AddWriteStat ( SearchdStats_t::eReplace, bReplace, iAffectedRows, tmStart );
+			gStats().AddDetailed ( SearchdStats_t::eReplace, iAffectedRows, tmStart );
+			return;
 		}
 
-		if ( pServed || bDistTable )
+		if ( pServed || pDist )
 			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
@@ -4963,11 +4919,16 @@ void MaybeFixupIndexNameFromMysqldump ( SqlStmt_t & tStmt )
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
 {
 	auto * pSession = session::GetClientSession();
+	CSphString sError;
+	if ( !EnsureNoPendingShardTxn ( *pSession, sError ) )
+	{
+		tOut.ErrorEx ( EMYSQL_ERR::PARSE_ERROR, sError.cstr() );
+		return false;
+	}
+
 	auto & tAcc = pSession->m_tAcc;
 	bool bReplace = ( tStmt.m_eStmt == STMT_REPLACE );
 	auto & dLastIds = pSession->m_dLastIds;
-
-	CSphString sError;
 	auto & sWarning = pSession->m_tLastMeta.m_sWarning;
 
 	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
@@ -6386,12 +6347,12 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 {
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
+	bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
 
 	MaybeFixupIndexNameFromMysqldump ( tStmt );
 	FixupSystemTableName (&tStmt);
 	auto sName = tStmt.m_sIndex;
 	auto pServed = GetServed ( sName );
-	const bool bShowFields = tStmt.m_iIntParam == -2; // -2 emitted in parser
 	if ( pServed )
 	{
 		// data
@@ -6422,8 +6383,10 @@ void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 			return;
 		}
 
-		CSphString sError;
-		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
+		if ( auto pShard = AsShard ( pDistr.Ptr() ); pShard && !tStmt.m_bDescTopo )
+		{
+			DescribeLocalSchema ( dOut, pShard->m_tSchema, bShowFields );
+		} else if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce, bShowFields ) )
 		{
 			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 			return;
@@ -6488,7 +6451,7 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( { tIt.first, IndexType_e::DISTR } );
+		dIndexes.Add ( { tIt.first, tIt.second->m_sCluster, tIt.second->GetType() } );
 
 	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.m_sName.cstr(), b.m_sName.cstr() ) < 0; } ) );
 	return dIndexes;
@@ -6743,7 +6706,9 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	case RunIdx_e::DISTR:
 	{
 		auto pDist = GetDistr ( sLike );
-		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+		sCreateTable = AsShard ( pDist.Ptr() )
+			? BuildCreateTableShard ( tStmt.m_sIndex, *AsShard ( pDist.Ptr() ), ExtFilesFormat_e::LIST )
+			: BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 	}
 	default: break;
 	};
@@ -6847,8 +6812,15 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	{
 		RIdx_c pIdx { pServed };
 		sCreateTable = BuildCreateTableRt ( pIdx->GetName(), pIdx, GetSchemaForCreateTable ( pIdx ), ( tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST ) );
+
+	} else if ( auto pShard = AsShard ( pDist.Ptr() ) )
+	{
+		sCreateTable = BuildCreateTableShard ( tStmt.m_sIndex, *pShard, tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST );
+
 	} else
+	{
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+	}
 
 	tOut.DataTuplet ( tStmt.m_sIndex.cstr(), sCreateTable.cstr() );
 	tOut.Eof();
@@ -7363,7 +7335,7 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed, const CSphString * pClusterOverride = nullptr )
 {
 	TRACE_CORO ( "rt", "DoExtendedUpdate" );
 
@@ -7375,7 +7347,13 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	if ( !ValidateClusterStatement ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+	// pClusterOverride is set by the shard-table caller so that when the
+	// aggregate is not itself in a cluster but its per-shard targets are,
+	// validation/replication uses the target's own cluster rather than the
+	// statement's (empty) cluster.
+	const CSphString & sStmtCluster = pClusterOverride ? *pClusterOverride : tStmt.m_sCluster;
+
+	if ( !ValidateClusterStatement ( sIndex, *pServed, sStmtCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
 		return;
@@ -7389,7 +7367,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, sStmtCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -7537,6 +7515,17 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			assert ( !dDistributed[iIdx]->IsEmpty() );
 			const StrVec_t & dLocal = dDistributed[iIdx]->m_dLocal;
 
+			// For type='shard' aggregates the aggregate itself is not in any
+			// cluster, but its per-shard targets typically are. Validate the
+			// statement against the shard's own cluster context once, then let
+			// each per-target update use the target's cluster.
+			const ShardIndex_c * pShard = AsShard ( dDistributed[iIdx].Ptr() );
+			if ( pShard && !ValidateClusterStatement ( sReqIndex, pShard->m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+			{
+				dFails.Submit ( sReqIndex, nullptr, TlsMsg::szError() );
+				continue;
+			}
+
 			ARRAY_FOREACH ( i, dLocal )
 			{
 				const char * sLocal = dLocal[i].cstr();
@@ -7544,7 +7533,14 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
+				const CSphString * pClusterOverride = nullptr;
+				CSphString sLocalCluster;
+				if ( pShard && pServed )
+				{
+					sLocalCluster = pServed->m_sCluster;
+					pClusterOverride = &sLocalCluster;
+				}
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed, pClusterOverride );
 
 				iUpdated += iUpdatedIdx;
 				iUpdatedReq += iUpdatedIdx;
@@ -8364,6 +8360,9 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 	if ( !tWriting.CanWrite() )
 		return err ( "table is locked" );
 
+	if ( !EnsureNoPendingShardTxn ( *session::GetClientSession(), sError ) )
+		return err();
+
 	RtAccum_t* pAccum = nullptr;
 
 	// goto to percolate path with unlocked index
@@ -8446,6 +8445,28 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		tOut.Error ( "no such table '%s'", tStmt.m_sIndex.cstr () );
 		return;
+	}
+
+	if ( dNames.GetLength()==1 )
+	{
+		auto pDist = GetDistr ( dNames[0] );
+		if ( const auto * pShard = AsShard ( pDist.Ptr() ) )
+		{
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
+			int iAffectedRows = 0;
+			DeleteDocumentShard ( tStmt, *pShard, tOut, iAffectedRows );
+			return;
+		}
+	} else
+	{
+		for ( const auto & sName : dNames )
+		{
+			if ( AsShard ( GetDistr ( sName ).Ptr() ) )
+			{
+				tOut.Error ( "shard DELETE must target exactly one logical table" );
+				return;
+			}
+		}
 	}
 
 	DistrPtrs_t dDistributed;
@@ -8773,6 +8794,16 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 		pSession->m_bInTransaction = false;
 
 		// commit all pending changes
+		if ( bAutoCommit && pSession->m_tShardTxn.HasPendingData() )
+		{
+			CSphVector<int64_t> dCommittedDocIDs;
+			if ( !CommitShardTxn ( *pSession, sError, &dCommittedDocIDs ) )
+			{
+				pSession->m_dLastIds.SwapData ( dCommittedDocIDs );
+				return false;
+			}
+		}
+
 		if ( bAutoCommit && tAcc.GetIndex() && !HandleCmdReplicate ( *tAcc.GetAcc() ) )
 		{
 			TlsMsg::MoveError(sError);
@@ -10021,7 +10052,7 @@ void ServedStats_c::GetIndexQueryStats ( VectorLike & dStatus ) const
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 
 	// command stats
-	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD };
+	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD, SEARCHD_COMMAND_SHARD_WRITE };
 	for ( auto eCmd : dCommands )
 		dStatus.MatchTupletf ( szCommand ( eCmd ), "%l", m_tCommandsStats.Get ( eCmd ) );
 
@@ -10113,6 +10144,7 @@ const char * szIndexType ( IndexType_e eType )
 	case IndexType_e::RT: return "rt";
 	case IndexType_e::PERCOLATE: return "percolate";
 	case IndexType_e::DISTR: return "distributed";
+	case IndexType_e::SHARD: return "shard";
 	default: return "unknown";
 	}
 }
@@ -10138,7 +10170,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedInd
 {
 	assert ( pIndex );
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet( "table_type", "distributed" );
+	dStatus.MatchTuplet( "table_type", szIndexType ( pIndex->GetType() ) );
 	pIndex->m_tStats.GetIndexQueryStats ( dStatus );
 	tOut.DataTable ( dStatus );
 }
@@ -10240,7 +10272,7 @@ void HandleMysqlShowFederatedIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t &
 		if ( !tSelector.Match ( sName.cstr() ) )
 			continue;
 
-		if ( tIndex.m_eType == IndexType_e::DISTR )
+		if ( tIndex.m_eType == IndexType_e::DISTR || tIndex.m_eType == IndexType_e::SHARD )
 			AddFederatedIndexStatusLine ( tFakeStats, sName, tOut );
 		else {
 			auto pServed = GetServed ( tIndex.m_sName );
@@ -11542,6 +11574,7 @@ void ClientSession_c::FreezeLastMeta()
 
 ClientSession_c::~ClientSession_c ()
 {
+	m_tShardTxn.Cleanup();
 	UnlockTables(this);
 }
 
@@ -13081,7 +13114,7 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 
 bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
 {
-	assert ( hIndex("type") && hIndex["type"]=="distributed" );
+	assert ( hIndex("type") && ( hIndex["type"]=="distributed" || hIndex["type"]=="shard" ) );
 
 	bool bSetHA = false;
 	// configure ha_strategy
@@ -13107,10 +13140,12 @@ bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 		sphSplit ( dLocs, pLocal->cstr(), " \t," );
 		for ( const auto & sLocal: dLocs )
 		{
+			sError = "";
 			if ( !fnCheck ( sLocal ) )
 			{
-				sphWarning ( "table '%s': no such local table '%s', SKIPPED", szIndexName, sLocal.cstr() );
-				sError.SetSprintf ( "no such local table '%s'", sLocal.cstr() );
+				if ( sError.IsEmpty() )
+					sError.SetSprintf ( "no such local table '%s'", sLocal.cstr() );
+				sphWarning ( "table '%s': %s, SKIPPED", szIndexName, sError.cstr() );
 				return false;
 			}
 			tIdx.m_dLocal.Add ( sLocal );
@@ -13221,7 +13256,7 @@ static ResultAndIndex_t AddDistributedIndex ( const char * szIndexName, const CS
 }
 
 // common preconfiguration of mutable indexes
-static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError )
+bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings, const char * szIndexName, const CSphConfigSection & hIndex, bool bWordDict, bool bPercolate, StrVec_t * pWarnings, CSphString & sError )
 {
 	// pick config settings
 	// they should be overriden later by Preload() if needed
@@ -13457,7 +13492,7 @@ static ResultAndIndex_t LoadTemplateIndex ( const char * szIndexName, const CSph
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadConfigAndRotateIndexes() -> AddIndex()
 // ConfigureAndPreloadIndex() -> AddIndex() // maybe from non-main thread!
 // 		ClientSession_c::Execute -> HandleMysqlImportTable -> AddExistingIndexConfigless -> ConfiglessPreloadIndex -> ConfigureAndPreloadIndex -> AddIndex
-ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
+ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bCheckDupe, bool bMutableOpt, bool bShardLoadMeta, StrVec_t * pWarnings, CSphString & sError )
 {
 	// check name
 	if ( bCheckDupe && IndexIsServed ( szIndexName ) )
@@ -13471,6 +13506,8 @@ ResultAndIndex_t AddIndex ( const char * szIndexName, const CSphConfigSection & 
 	{
 		case IndexType_e::DISTR:
 			return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
+		case IndexType_e::SHARD:
+			return AddShardIndex ( szIndexName, hIndex, bShardLoadMeta, sError, pWarnings );
 		case IndexType_e::RT:
 			return LoadRTPercolate ( true, szIndexName, hIndex, bMutableOpt, pWarnings, sError );
 		case IndexType_e::PERCOLATE:
@@ -14682,7 +14719,7 @@ void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut )
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * szIndexName, StrVec_t& dWarnings, CSphString& sError )
 {
 	sd::statusf("preloading index %s", szIndexName);
-	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, nullptr, sError );
+	auto [eAdd, pJustLoadedLocal] = AddIndex ( szIndexName, hIndex, true, false, true, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least preallocated before they could work.
 	switch ( eAdd )

@@ -1,0 +1,152 @@
+Test mixed RF tables in same cluster - RF=1 skips rebalance, RF=2 rebalances on node failure
+––– comment –––
+Start 3-node cluster
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c TABLE_NAME=t
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Create RF=1 table - no redundancy
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:norep (id bigint, value string) shards='2' rf='1'"; echo $?
+––– output –––
+0
+––– comment –––
+Create RF=2 table - with redundancy
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE ${CLUSTER_NAME}:rep (id bigint, value string) shards='2' rf='2'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert data into both tables
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO norep (id, value) VALUES (1, 'a'), (2, 'b')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO rep (id, value) VALUES (1, 'x'), (2, 'y')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify initial RF=1 layout - each shard on 1 node only
+––– input –––
+show_shards 1306 "norep"
+––– output –––
+system.norep_s0: 127.0.0.1:1312
+system.norep_s1: 127.0.0.1:2312
+––– comment –––
+Verify initial RF=2 layout - each shard on 2 nodes
+––– input –––
+show_shards 1306 "rep"
+––– output –––
+system.rep_s0: 127.0.0.1:1312 127.0.0.1:2312
+system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+Kill node 1
+––– input –––
+export INSTANCE=1; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "Node 1 killed"
+––– output –––
+Node 1 killed
+––– input –––
+timeout 30 bash -c 'while lsof -i :${INSTANCE}306 &>/dev/null; do sleep 1; done'
+––– output –––
+––– comment –––
+Wait for master to process the failure - RF=1 should skip, RF=2 should rebalance
+––– input –––
+timeout 60 grep -qm1 'Skipping rebalance for table norep' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
+––– input –––
+timeout 60 grep -qm1 'Rebalancing completed' <(tail -n 100 -f /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+Verify remaining nodes maintain quorum
+––– input –––
+for i in 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+RF=1 table: shard layout unchanged (no rebalance), node 1 shard unavailable
+––– input –––
+show_shards 2306 "norep"
+––– output –––
+system.norep_s0: 127.0.0.1:1312
+system.norep_s1: 127.0.0.1:2312
+––– comment –––
+RF=2 table: shards rebalanced to nodes 2 and 3
+––– input –––
+show_shards 2306 "rep"
+––– output –––
+system.rep_s0: 127.0.0.1:2312 127.0.0.1:3312
+system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+RF=2 data fully accessible
+––– input –––
+mysql -h0 -P2306 -sN -e "SELECT COUNT(*) FROM rep"
+––– output –––
++------+
+|    2 |
++------+
+––– comment –––
+Restart node 1
+––– input –––
+truncate -s 0 /var/log/manticore-2/searchd.log
+––– output –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for rebalancing to complete for RF=2 table
+––– input –––
+timeout 90 grep -qm1 'Rebalancing completed' <(tail -n 100 -F /var/log/manticore-2/searchd.log); echo $?
+––– output –––
+0
+––– comment –––
+All nodes synced
+––– input –––
+for i in 1 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
+––– output –––
+OK
+––– comment –––
+RF=1 table: original layout restored (node 1 back with its shard)
+––– input –––
+show_shards 1306 "norep"
+––– output –––
+system.norep_s0: 127.0.0.1:1312
+system.norep_s1: 127.0.0.1:2312
+––– comment –––
+RF=2 table: balanced distribution restored
+––– input –––
+show_shards 1306 "rep"
+––– output –––
+system.rep_s0: 127.0.0.1:1312 127.0.0.1:2312
+system.rep_s1: 127.0.0.1:2312 127.0.0.1:3312
+––– comment –––
+Both tables data intact
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM norep"
+––– output –––
++------+
+|    2 |
++------+
+––– input –––
+mysql -h0 -P1306 -sN -e "SELECT COUNT(*) FROM rep"
+––– output –––
++------+
+|    2 |
++------+

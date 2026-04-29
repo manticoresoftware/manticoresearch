@@ -116,6 +116,7 @@ public:
 	void					SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings );
 	bool					HasStoredFields() const;
 	bool					HasStoredAttrs() const;
+	int						GetColumnarAttrsCount() const;
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
 	bool					HasKNNAttrs() const;

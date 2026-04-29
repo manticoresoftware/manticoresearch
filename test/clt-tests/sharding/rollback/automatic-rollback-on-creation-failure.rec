@@ -1,0 +1,53 @@
+Test automatic rollback on table creation failure when a node dies mid-operation
+
+––– comment –––
+Start nodes 1, 2, 3
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Start table creation and kill node 2 mid-operation
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE c:test_products (id bigint, name string, price float) shards='2' rf='2'" & sleep 3; export INSTANCE=2; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; sleep 1; echo "Node 2 killed"
+––– output –––
+Node 2 killed
+––– comment –––
+Wait for Buddy to detect and handle
+––– input –––
+sleep 15; echo "Wait completed"
+––– output –––
+Wait completed
+––– comment –––
+Restart node 2
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– comment –––
+Verify node 2 rejoined and cluster is healthy
+––– input –––
+sleep 10; mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_c_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_c_status
+  Value: primary
+––– comment –––
+––– comment –––
+Verify table exists and has correct shard count after recovery
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) as shard_count FROM system.sharding_table WHERE table = 'test_products'"
+––– output –––
++-------------+
+| shard_count |
++-------------+
+|           2 |
++-------------+

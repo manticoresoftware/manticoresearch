@@ -2338,11 +2338,32 @@ struct AggrKeyTrait_t
 	RangeNameHash_t m_tRangeNames;
 };
 
-static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
+static bool IsJsonFieldAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_JSON_FIELD || eAttr==SPH_ATTR_JSON_FIELD_PTR;
+}
+
+
+static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	const CSphColumnInfo * pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
+		return pKey;
+
+	CSphString sJsonKey = SortJsonInternalSet ( tAggr.m_sCol );
+	const CSphColumnInfo * pJsonKey = tSchema.GetAttr ( sJsonKey.cstr() );
+	if ( !pJsonKey )
+		pJsonKey = tRawSchema.GetAttr ( sJsonKey.cstr() );
+
+	return pJsonKey && IsJsonFieldAttr ( pJsonKey->m_eAttrType ) ? pJsonKey : pKey;
+}
+
+
+static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::NONE )
 	{
-		tRes.m_pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+		tRes.m_pKey = GetPlainAggrKey ( tAggr, tSchema, tRawSchema );
 	} else if ( tAggr.m_eAggrFunc==Aggr_e::COMPOSITE )
 	{
 		for ( const auto & tItem : tAggr.m_dComposite )
@@ -2676,8 +2697,9 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		return;
 
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+	const CSphSchema & tRawSchema = tRes.m_dResults.First().m_tSchema;
 	AggrKeyTrait_t tKey;
-	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
+	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, tRawSchema, iAggrItem, iNow, tKey );
 	const CSphColumnInfo * pDistinct = nullptr;
 	if ( !sDistinctName.IsEmpty() )
 		pDistinct = tRes.m_tSchema.GetAttr ( sDistinctName.cstr() );

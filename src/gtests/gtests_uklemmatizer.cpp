@@ -21,7 +21,7 @@ namespace {
 
 constexpr char g_sUkAssetPath[] = "__uklemmatizer_test.pak";
 constexpr char g_sUkAssetMagic[] = "MSUKLEM1";
-constexpr DWORD g_uUkAssetVersion = 3;
+constexpr DWORD g_uUkAssetVersion = 1;
 constexpr DWORD g_uUkSectionStrings = 1;
 constexpr DWORD g_uUkSectionExact = 2;
 constexpr DWORD g_uUkSectionPredictions = 3;

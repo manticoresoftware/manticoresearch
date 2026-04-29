@@ -11,7 +11,7 @@ import tempfile
 from collections import OrderedDict
 
 MAGIC = b"MSUKLEM1"
-VERSION = 3
+VERSION = 1
 DEFAULT_PYMORPHY2_VERSION = "0.9.1"
 DEFAULT_PYMORPHY2_DICTS_UK_VERSION = "2.4.1.1.1460299261"
 SECTION_STRINGS = 1
@@ -56,7 +56,7 @@ def build_string_table(
     return strings, dict(string_ids)
 
 
-def write_asset_v3(
+def write_asset(
     entries: OrderedDict[str, list[str]],
     predictions: list[tuple[str, str, str, str, str, str, str, int]],
     min_word_length: int,
@@ -226,7 +226,7 @@ def build_from_upstream(output_pak: str, pymorphy2_version: str, dicts_uk_versio
             dict_path = pymorphy2_dicts_uk.get_path()
             entries = convert_pymorphy2_dictionary(dict_path)
             predictions, min_word_length, max_suffix_length = extract_prediction_rules(dict_path)
-            write_asset_v3(entries, predictions, min_word_length, max_suffix_length, output_pak)
+            write_asset(entries, predictions, min_word_length, max_suffix_length, output_pak)
         finally:
             sys.path.remove(tmpdir)
 
@@ -234,7 +234,7 @@ def build_from_upstream(output_pak: str, pymorphy2_version: str, dicts_uk_versio
 def build_from_dict_dir(dict_dir: str, output_pak: str) -> None:
     entries = convert_pymorphy2_dictionary(dict_dir)
     predictions, min_word_length, max_suffix_length = extract_prediction_rules(dict_dir)
-    write_asset_v3(entries, predictions, min_word_length, max_suffix_length, output_pak)
+    write_asset(entries, predictions, min_word_length, max_suffix_length, output_pak)
 
 
 def parse_args() -> argparse.Namespace:

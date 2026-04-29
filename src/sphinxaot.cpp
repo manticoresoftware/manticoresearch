@@ -15,6 +15,7 @@
 
 #include "sphinxint.h"
 #include "fileutils.h"
+#include "memio.h"
 #include "dict/stem/sphinxstem.h"
 #include "tokenizer/token_filter.h"
 #include "dict/word_forms.h"
@@ -37,8 +38,7 @@ const DWORD	AOT_NOFORM					= 0xffffffffUL;
 const DWORD	AOT_ORIGFORM				= 0xfffffffeUL;
 
 static int	g_iCacheSize				= 262144; // in bytes, so 256K
-static constexpr int UK_MAX_ASSET_STRING = 1024;
-static constexpr DWORD UK_LEMMATIZER_VERSION = 3;
+static constexpr DWORD UK_LEMMATIZER_VERSION = 1;
 static constexpr std::array<char,8> UK_LEMMATIZER_MAGIC { 'M', 'S', 'U', 'K', 'L', 'E', 'M', '1' };
 static constexpr DWORD UK_SECTION_STRINGS = 1;
 static constexpr DWORD UK_SECTION_EXACT = 2;
@@ -76,56 +76,6 @@ struct UkSectionDesc_t
 	DWORD		m_uFlags = 0;
 	DWORD		m_uReserved = 0;
 };
-
-class UkMemoryReader_c
-{
-public:
-	explicit UkMemoryReader_c ( const VecTraits_T<BYTE> & dData )
-		: m_pData ( dData.Begin() )
-		, m_iLength ( dData.GetLength() )
-	{}
-
-	bool GetDword ( DWORD & uValue )
-	{
-		if ( m_iPos + (int)sizeof(uValue) > m_iLength )
-			return false;
-
-		memcpy ( &uValue, m_pData + m_iPos, sizeof(uValue) );
-		m_iPos += sizeof(uValue);
-		return true;
-	}
-
-	bool GetBytes ( void * pDst, int iLen )
-	{
-		if ( iLen<0 || m_iPos + iLen > m_iLength )
-			return false;
-
-		if ( iLen )
-			memcpy ( pDst, m_pData + m_iPos, iLen );
-		m_iPos += iLen;
-		return true;
-	}
-
-	bool GetString ( CSphString & sValue )
-	{
-		DWORD uLen = 0;
-		if ( !GetDword ( uLen ) || uLen>UK_MAX_ASSET_STRING )
-			return false;
-
-		sValue.Reserve ( (int)uLen + 1 );
-		if ( uLen && !GetBytes ( (void*)sValue.cstr(), uLen ) )
-			return false;
-
-		((char*)sValue.cstr())[uLen] = '\0';
-		return true;
-	}
-
-private:
-	const BYTE *	m_pData = nullptr;
-	int				m_iLength = 0;
-	int				m_iPos = 0;
-};
-
 
 #define		AOT_MODEL_NO(_a)	((_a)>>18)
 #define		AOT_ITEM_NO(_a)		(((_a)&0x3FFFF)>>9)
@@ -260,7 +210,7 @@ private:
 		DWORD m_uCount = 0;
 	};
 
-	bool LoadV3 ( CSphReader & rd, CSphString & sError );
+	bool LoadData ( CSphReader & rd, CSphString & sError );
 	bool LookupWord ( const std::string & sWord, CSphVector<CSphString> & dLemmas, int iDepth ) const;
 	bool LookupExact ( const std::string & sWord, CSphVector<CSphString> & dLemmas ) const;
 	bool LookupPrediction ( const std::string & sWord, CSphVector<CSphString> & dLemmas ) const;
@@ -2031,7 +1981,7 @@ void NativeUkLemmatizer_c::AddUniqueLemma ( std::vector<CSphString> & dLemmas, c
 	dLemmas.emplace_back ( sLemma );
 }
 
-bool NativeUkLemmatizer_c::LoadV3 ( CSphReader & rd, CSphString & sError )
+bool NativeUkLemmatizer_c::LoadData ( CSphReader & rd, CSphString & sError )
 {
 	DWORD uSectionCount = rd.GetDword();
 	m_uPredictionMinWordLen = rd.GetDword();
@@ -2079,36 +2029,24 @@ bool NativeUkLemmatizer_c::LoadV3 ( CSphReader & rd, CSphString & sError )
 		|| !ReadSection ( rd, *pPredictions, dPredictionSection, sError ) )
 		return false;
 
-	UkMemoryReader_c tStringsReader ( dStringsSection );
-	DWORD uStringCount = 0;
-	if ( !tStringsReader.GetDword ( uStringCount ) )
-	{
-		sError = "failed to read Ukrainian lemmatizer string table size";
-		return false;
-	}
+	MemoryReader_c tStringsReader ( dStringsSection.Begin(), dStringsSection.GetLength() );
+	DWORD uStringCount = tStringsReader.GetDword();
 
 	CSphVector<CSphString> dStrings;
 	dStrings.Resize ( uStringCount );
 	for ( DWORD i=0; i<uStringCount; ++i )
-		if ( !tStringsReader.GetString ( dStrings[i] ) )
-		{
-			sError.SetSprintf ( "failed to read Ukrainian lemmatizer string %u", i );
-			return false;
-		}
-
-	UkMemoryReader_c tExactReader ( dExactSection );
-	DWORD uEntries = 0;
-	if ( !tExactReader.GetDword ( uEntries ) )
 	{
-		sError = "failed to read Ukrainian lemmatizer exact entry count";
-		return false;
+		dStrings[i] = tStringsReader.GetString();
 	}
+
+	MemoryReader_c tExactReader ( dExactSection.Begin(), dExactSection.GetLength() );
+	DWORD uEntries = tExactReader.GetDword();
 
 	for ( DWORD i=0; i<uEntries; ++i )
 	{
-		DWORD uWordId = 0;
-		DWORD uLemmaCount = 0;
-		if ( !tExactReader.GetDword ( uWordId ) || !tExactReader.GetDword ( uLemmaCount ) || !uLemmaCount )
+		DWORD uWordId = tExactReader.GetDword();
+		DWORD uLemmaCount = tExactReader.GetDword();
+		if ( !uLemmaCount )
 		{
 			sError.SetSprintf ( "failed to read Ukrainian lemmatizer exact entry %u", i );
 			return false;
@@ -2125,12 +2063,7 @@ bool NativeUkLemmatizer_c::LoadV3 ( CSphReader & rd, CSphString & sError )
 		dLemmas.clear();
 		for ( DWORD j=0; j<uLemmaCount; ++j )
 		{
-			DWORD uLemmaId = 0;
-			if ( !tExactReader.GetDword ( uLemmaId ) )
-			{
-				sError.SetSprintf ( "failed to read Ukrainian lemmatizer lemma id at entry %u", i );
-				return false;
-			}
+			DWORD uLemmaId = tExactReader.GetDword();
 
 			const auto * pLemma = GetStringById ( dStrings, uLemmaId, "lemma", sError );
 			if ( !pLemma || pLemma->IsEmpty() )
@@ -2143,45 +2076,25 @@ bool NativeUkLemmatizer_c::LoadV3 ( CSphReader & rd, CSphString & sError )
 		}
 	}
 
-	UkMemoryReader_c tPredictionReader ( dPredictionSection );
-	DWORD uPredictionCount = 0;
-	if ( !tPredictionReader.GetDword ( uPredictionCount ) )
-	{
-		sError = "failed to read Ukrainian lemmatizer prediction count";
-		return false;
-	}
+	MemoryReader_c tPredictionReader ( dPredictionSection.Begin(), dPredictionSection.GetLength() );
+	DWORD uPredictionCount = tPredictionReader.GetDword();
 
 	for ( DWORD i=0; i<uPredictionCount; ++i )
 	{
-		DWORD uEndingId = 0;
-		if ( !tPredictionReader.GetDword ( uEndingId ) )
-		{
-			sError.SetSprintf ( "failed to read Ukrainian prediction suffix id at rule %u", i );
-			return false;
-		}
+		DWORD uEndingId = tPredictionReader.GetDword();
 
 		const auto * pEnding = GetStringById ( dStrings, uEndingId, "prediction suffix", sError );
 		if ( !pEnding )
 			return false;
 
 		PredictionRule_t tRule;
-		DWORD uRequiredPrefixId = 0;
-		DWORD uFixedSuffixId = 0;
-		DWORD uCurrentPrefixId = 0;
-		DWORD uCurrentSuffixId = 0;
-		DWORD uNormalPrefixId = 0;
-		DWORD uNormalSuffixId = 0;
-		if ( !tPredictionReader.GetDword ( uRequiredPrefixId )
-			|| !tPredictionReader.GetDword ( uFixedSuffixId )
-			|| !tPredictionReader.GetDword ( uCurrentPrefixId )
-			|| !tPredictionReader.GetDword ( uCurrentSuffixId )
-			|| !tPredictionReader.GetDword ( uNormalPrefixId )
-			|| !tPredictionReader.GetDword ( uNormalSuffixId )
-			|| !tPredictionReader.GetDword ( tRule.m_uCount ) )
-		{
-			sError.SetSprintf ( "failed to read Ukrainian prediction payload at rule %u", i );
-			return false;
-		}
+		DWORD uRequiredPrefixId = tPredictionReader.GetDword();
+		DWORD uFixedSuffixId = tPredictionReader.GetDword();
+		DWORD uCurrentPrefixId = tPredictionReader.GetDword();
+		DWORD uCurrentSuffixId = tPredictionReader.GetDword();
+		DWORD uNormalPrefixId = tPredictionReader.GetDword();
+		DWORD uNormalSuffixId = tPredictionReader.GetDword();
+		tRule.m_uCount = tPredictionReader.GetDword();
 
 		const auto * pRequiredPrefix = GetStringById ( dStrings, uRequiredPrefixId, "required prefix", sError );
 		const auto * pFixedSuffix = GetStringById ( dStrings, uFixedSuffixId, "fixed suffix", sError );
@@ -2233,7 +2146,7 @@ bool NativeUkLemmatizer_c::Load ( CSphReader & rd, CSphString & sError )
 	m_mLemmas.clear();
 	m_mPredictionRules.clear();
 
-	return LoadV3 ( rd, sError );
+	return LoadData ( rd, sError );
 }
 
 void NativeUkLemmatizer_c::AddUniqueLemma ( CSphVector<CSphString> & dLemmas, const char * sLemma )

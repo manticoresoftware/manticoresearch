@@ -359,6 +359,9 @@ static bool AddDistIndex ( const DistIndexSendRequest_t & tCmd )
 	if ( !sWarning.IsEmpty() )
 		sphWarning ( "table '%s' create warning: %s", tCmd.m_sIndex.cstr(), sWarning.cstr() );
 
+	if ( tIndexDesc.m_eType != IndexType_e::DISTR )
+		return TlsMsg::Err ( "unsupported distributed table type '%s' for '%s:%s'", GetIndexTypeName ( tIndexDesc.m_eType ), tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
+
 	CSphConfigSection hConf;
 	tIndexDesc.Save ( hConf );
 

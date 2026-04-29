@@ -23,6 +23,7 @@ void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CS
 void ReceiveClusterExitUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );
 void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf );
+void ReceiveClusterGetAuth ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf );
 
 // sending doesn't include cluster name
 void ReceiveClusterFileSend ( ISphOutputBuffer& tOutb, InputBuffer_c& tBuf );

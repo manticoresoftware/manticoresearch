@@ -1,0 +1,43 @@
+––– comment –––
+Test MySQL Protocol authentication (mysql_native_password).
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Behavior update: auth failures now return MySQL error code 1045
+and preserve whether password was provided.
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– 1.1.1 Successful login with correct credentials –––
+EXPECTED: Success, returns result
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT 1 AS test;"
+––– output –––
+*************************** 1. row ***************************
+test: 1
+––– comment –––
+––– 1.1.2 Reject with wrong password –––
+EXPECTED: ERROR 1045 (42000): Access denied for user 'admin' (using password: YES)
+––– comment –––
+––– input –––
+MYSQL_PWD=wrongpass mysql -uadmin -h0 -P9306 -e "SELECT 1;" 2>&1
+––– output –––
+ERROR 1045 (42000): Access denied for user 'admin' (using password: YES)
+––– comment –––
+––– 1.1.3 Reject with non-existent user –––
+EXPECTED: ERROR 1045 (42000): Access denied for user 'nonexistent' (using password: YES)
+––– comment –––
+––– input –––
+MYSQL_PWD=anypass mysql -unonexistent -h0 -P9306 -e "SELECT 1;" 2>&1
+––– output –––
+ERROR 1045 (42000): Access denied for user 'nonexistent' (using password: YES)
+––– comment –––
+––– 1.1.4 Reject with empty password –––
+EXPECTED: ERROR 1045 (42000): Access denied for user 'admin' (using password: NO)
+––– comment –––
+––– input –––
+mysql -uadmin -h0 -P9306 -e "SELECT 1;" 2>&1
+––– output –––
+ERROR 1045 (42000): Access denied for user 'admin' (using password: NO)

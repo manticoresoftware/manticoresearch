@@ -69,7 +69,7 @@ public:
 	virtual void FinishLocalStage() = 0;
 
 	virtual void SetDonor4Joiner ( int iFilesCount, SstProgressContext_t & tCtx ) = 0;
-	static void StartPushUpdates ( const CSphString & sCluster, const VecTraits_T<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress );
+	static void StartPushUpdates ( const CSphString & sCluster, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc, CSphRefcountedPtr<SstProgress_i> pProgress );
 	virtual bool IsPushUpdateDone() = 0;
 };
 

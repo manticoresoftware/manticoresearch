@@ -23,6 +23,9 @@
 
 #include "std/string.h"
 
+#include "auth/auth.h"
+#include "auth/auth_common.h"
+
 static const bool LOG_LEVEL_LOCAL_SEARCH = env_exists ( "MANTICORE_LOG_LOCAL_SEARCH" ); // verbose logging local search events, ruled by this env variable
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
@@ -1771,10 +1774,11 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	int iOrderTag = 0;
 	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" );
 //		bSysVar = bSysVar || StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );
+	bool bAuthTbl = tQuery.m_sIndexes.Begins ( GetPrefixAuth().cstr() );
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;
-	if ( bSysVar )
+	if ( bSysVar || bAuthTbl )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
 	{
@@ -1858,7 +1862,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	else
 		m_dLocal.SwapData ( dLocals );
 
-	return !bSysVar;
+	return !( bSysVar || bAuthTbl );
 }
 
 // generate warning about slow full text expansion for queries there
@@ -2046,6 +2050,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tReqBuilder = std::make_unique<SearchRequestBuilder_c> ( m_dNQueries, iDivideLimits );
 		tParser = std::make_unique<SearchReplyParser_c> ( iQueries );
 		tReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.

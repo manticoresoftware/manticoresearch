@@ -127,7 +127,15 @@ utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'cli
 
 <!-- end -->
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, the effective replication user must have `replication` permission on the cluster target. You can specify that user in the `CREATE CLUSTER` statement:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+CREATE CLUSTER posts 'repl_user' AS user;
+```
+
+If no user is specified, the current session user is used for the statement and stored as the cluster user after successful creation.
+
 If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.
 
 <!-- proofread -->
-

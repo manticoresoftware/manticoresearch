@@ -23,6 +23,14 @@ To set up replication in Manticore Search:
 * A [listen](../../Server_settings/Searchd.md#listen)  directive must be specified, containing an IP address accessible by other nodes, or a [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address.
 * Optionally, you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will attempt to use the MAC address or a random number to generate the `server_id`.
 
+If [authentication and authorization](../../Security/Authentication_and_authorization.md) is enabled, cluster operations require the `replication` permission. Grant it to the user that should own replication operations for the cluster:
+
+```sql
+GRANT replication ON 'posts' TO 'repl_user';
+```
+
+`CREATE CLUSTER` and `JOIN CLUSTER` can specify that user with `'<user>' AS user`. Later `ALTER CLUSTER ... ADD`, `ALTER CLUSTER ... DROP`, `ALTER CLUSTER ... UPDATE nodes`, and `DELETE CLUSTER` use the stored cluster user. Joining a cluster can replace local authentication data with the donor cluster's authentication data.
+
 If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster. When you define a replication listener with a port range (e.g., `listen = 192.168.0.1:9320-9328:replication`), Manticore doesn't immediately start listening on these ports. Instead, it will take random free ports from the specified range only when you start using replication.
 
 ## Replication cluster
@@ -696,4 +704,3 @@ let insert_res = index_api.insert(insert_req).await;
 
 All queries that modify tables in the cluster are now replicated to all nodes in the cluster.
 <!-- proofread -->
-

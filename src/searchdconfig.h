@@ -44,6 +44,7 @@ struct ClusterDesc_t
 	StrVec_t				m_dClusterNodes;	// string list of nodes (node - address:API_port)
 	ClusterOptions_t		m_tOptions;			// options for Galera
 	int64_t					m_iClusterEpoch = 0;
+	CSphString				m_sUser;			// user that owns that cluster
 
 	bool					Parse ( const bson::Bson_c & tBson, const CSphString& sName, CSphString & sWarning );
 	void					Save ( JsonEscapedBuilder& tOut ) const;

@@ -1,0 +1,125 @@
+––– comment –––
+Test TOKEN command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec: TOKEN ['username']
+- Without username: regenerate own token
+- With username: admin regenerates token for another user
+Returns: token, username, generated_at
+
+BUG CRITICAL: TOKEN command is NOT IMPLEMENTED — returns syntax error for all cases!
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+––– Setup: create test user –––
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'tokenuser' IDENTIFIED BY 'tokenpass123';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: tokenuser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– comment –––
+––– 2.4.1 Generate own token (without username) –––
+EXPECTED: Returns token, username, generated_at
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN;" 2>&1
+––– output –––
+#!/\+[-+]+\+/!#
+#!/\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
+#!/\| admin +\| [0-9a-f]{64} +\|/!#
+#!/\+[-+]+\+/!#
+––– comment –––
+––– 2.4.2 Admin generates token for another user –––
+EXPECTED: Returns token, username, generated_at for tokenuser
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';" 2>&1
+––– output –––
+#!/\+[-+]+\+/!#
+#!/\| username +\| token +\|/!#
+#!/\+[-+]+\+/!#
+#!/\| tokenuser +\| [0-9a-f]{64} +\|/!#
+#!/\+[-+]+\+/!#
+––– comment –––
+––– 2.4.3 Repeated TOKEN returns different token –––
+EXPECTED: New token each time, old token invalidated
+––– comment –––
+––– input –––
+TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
+TOK2=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
+[ "$TOK1" != "$TOK2" ] && echo "tokens differ"
+curl -s -H "Authorization: Bearer $TOK1" -X POST http://127.0.0.1:9308/token -d "{}"
+echo
+curl -s -H "Authorization: Bearer $TOK2" -X POST http://127.0.0.1:9308/token -d "{}"
+echo
+––– output –––
+tokens differ
+#!/\{"error":"Access denied for token '.*'"\}/!#
+#!/\s*\{"token":"[0-9a-f]{64}"\}/!#
+––– comment –––
+––– 2.4.4 Error for non-existent user –––
+EXPECTED: Error — user does not exist
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'nonexistent';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found
+––– comment –––
+––– 2.4.5 Error without ADMIN when generating other's token –––
+EXPECTED: Permission denied
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'other' IDENTIFIED BY 'other1234567';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: other
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=tokenpass123 mysql -utokenuser -h0 -P9306 -e "TOKEN 'other';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'tokenuser'
+––– comment –––
+––– Daemon-first additional coverage –––
+––– comment –––
+––– 2.4.6 Generate own token (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "TOKEN;"
+––– output –––
+*************************** 1. row ***************************
+username: admin
+   token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.4.7 Admin generates token for another user (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "TOKEN 'tokenuser';"
+––– output –––
+*************************** 1. row ***************************
+username: tokenuser
+   token: #!/[0-9a-f]{64}/!#
+––– comment –––
+––– 2.4.8 Repeated TOKEN returns different token (implemented path) –––
+––– input –––
+TOK1=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
+TOK2=$(MYSQL_PWD=adminpass mysql -N -B -uadmin -h0 -P9306 -e "TOKEN;" | grep -Eo '[0-9a-f]{64}' | head -n1 | tr -d '\r\n')
+[ "$TOK1" != "$TOK2" ] && echo "tokens differ"
+––– output –––
+tokens differ
+––– comment –––
+––– 2.4.9 Error for non-existent user (implemented path) –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "TOKEN 'nonexistent';" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: user 'nonexistent' not found
+––– comment –––
+––– 2.4.10 Error without ADMIN when generating other's token (implemented path) –––
+––– input –––
+MYSQL_PWD=tokenpass123 mysql -utokenuser -h0 -P9306 -e "TOKEN 'other';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'tokenuser'

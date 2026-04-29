@@ -1,0 +1,95 @@
+––– comment –––
+Test GRANT WITH BUDGET: rate limiting via JSON budget parameter.
+- GRANT with budget sets rate limit JSON
+- Budget is visible in system.auth_permissions
+- REVOKE removes budget, can re-GRANT with new budget
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Issue: https://github.com/manticoresoftware/manticoresearch/issues/2983
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+Setup: create table and user
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE budget_tbl(content text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO budget_tbl(id, content) VALUES(1, 'budget test');"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'budgetuser' IDENTIFIED BY 'budgetpass1';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: budgetuser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– comment –––
+Test 1: GRANT READ with budget
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":5}';"
+––– output –––
+––– comment –––
+Test 2: Budget is visible in system.auth_permissions
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT * FROM system.auth_permissions WHERE username='budgetuser';"
+––– output –––
+*************************** 1. row ***************************
+      id: #!/[0-9]+/!#
+username: budgetuser
+  action: read
+  target: *
+   allow: 1
+  budget: {"queries_per_minute":5}
+––– comment –––
+Test 3: User can query within budget
+––– comment –––
+––– input –––
+MYSQL_PWD=budgetpass1 mysql -E -ubudgetuser -h0 -P9306 -e "SELECT content FROM budget_tbl;"
+––– output –––
+*************************** 1. row ***************************
+content: budget test
+––– comment –––
+Test 4: GRANT with different budget (queries_per_day)
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'daybudget' IDENTIFIED BY 'daybudget1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: daybudget
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'daybudget' WITH BUDGET '{\"queries_per_day\":10000}';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT * FROM system.auth_permissions WHERE username='daybudget';"
+––– output –––
+*************************** 1. row ***************************
+      id: #!/[0-9]+/!#
+username: daybudget
+  action: read
+  target: *
+   allow: 1
+  budget: {"queries_per_day":10000}
+––– comment –––
+Test 5: Update budget via REVOKE + GRANT
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON * FROM 'budgetuser';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'budgetuser' WITH BUDGET '{\"queries_per_minute\":1000}';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SELECT * FROM system.auth_permissions WHERE username='budgetuser';"
+––– output –––
+*************************** 1. row ***************************
+      id: #!/[0-9]+/!#
+username: budgetuser
+  action: read
+  target: *
+   allow: 1
+  budget: {"queries_per_minute":1000}

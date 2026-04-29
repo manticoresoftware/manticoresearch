@@ -106,6 +106,15 @@ void RefreshIsAtty () noexcept
 	g_bLogTty = (isatty ( g_iLogFile ) != 0);
 }
 
+bool LogIsStdout () noexcept
+{
+	return ForceLogStdout();
+}
+
+bool LogIsSyslog () noexcept
+{
+	return g_bLogSyslog;
+}
 
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed

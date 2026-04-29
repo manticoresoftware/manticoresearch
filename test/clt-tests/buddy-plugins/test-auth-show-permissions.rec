@@ -1,0 +1,60 @@
+––– comment –––
+Test SHOW PERMISSIONS command.
+Spec: https://github.com/manticoresoftware/manticoresearch/blob/wip_auth/src/auth/spec.md
+Admin credentials: admin / adminpass (bootstrap via auth.json)
+
+Per spec:
+- SHOW PERMISSIONS — admin sees all, user sees only own
+- SHOW PERMISSIONS FOR 'user' — admin-only targeted lookup
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "CREATE USER 'permuser' IDENTIFIED BY 'permpass1234';"
+––– output –––
+*************************** 1. row ***************************
+       token: #!/[0-9a-f]{64}/!#
+    username: permuser
+generated_at: #!/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4})/!#
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON * TO 'permuser';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT write ON 'mytable' TO 'permuser';"
+––– output –––
+––– comment –––
+––– 2.8.1 Admin SHOW PERMISSIONS returns multiple users –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS;" | grep "username:" | sort | uniq
+––– output –––
+username: admin
+username: permuser
+username: system.buddy
+––– comment –––
+––– 2.8.2 Non-admin SHOW PERMISSIONS returns only own user –––
+––– input –––
+MYSQL_PWD=permpass1234 mysql -E -upermuser -h0 -P9306 -e "SHOW PERMISSIONS;" | grep "username:" | sort | uniq
+––– output –––
+username: permuser
+––– comment –––
+––– 2.8.3 Admin SHOW PERMISSIONS FOR returns only target user –––
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'permuser';" | grep "username:" | sort | uniq
+––– output –––
+username: permuser
+––– input –––
+MYSQL_PWD=adminpass mysql -E -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'permuser';" | grep "action:" | sort
+––– output –––
+#!/\s*action:\s*read/!#
+#!/\s*action:\s*write/!#
+––– comment –––
+––– 2.8.4 Non-admin SHOW PERMISSIONS FOR denied –––
+––– input –––
+MYSQL_PWD=permpass1234 mysql -upermuser -h0 -P9306 -e "SHOW PERMISSIONS FOR 'admin';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'permuser'
+––– comment –––
+––– 2.8.5 Admin SHOW PERMISSIONS FOR missing user returns not found –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW PERMISSIONS FOR 'nonexistent';" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: user 'nonexistent' not found

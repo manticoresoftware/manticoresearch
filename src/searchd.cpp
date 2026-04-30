@@ -7519,7 +7519,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			// cluster, but its per-shard targets typically are. Validate the
 			// statement against the shard's own cluster context once, then let
 			// each per-target update use the target's cluster.
-			const ShardIndex_c * pShard = AsShard ( dDistributed[iIdx].Ptr() );
+			const ShardIndex_c * pShard = AsShard ( dDistributed[iIdx] );
 			if ( pShard && !ValidateClusterStatement ( sReqIndex, pShard->m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 			{
 				dFails.Submit ( sReqIndex, nullptr, TlsMsg::szError() );

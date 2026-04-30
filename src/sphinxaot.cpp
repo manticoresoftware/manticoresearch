@@ -2037,6 +2037,8 @@ bool NativeUkLemmatizer_c::LoadData ( CSphReader & rd, CSphString & sError )
 	for ( DWORD i=0; i<uStringCount; ++i )
 	{
 		dStrings[i] = tStringsReader.GetString();
+		if ( dStrings[i].IsEmpty() )
+			dStrings[i] = "";
 	}
 
 	MemoryReader_c tExactReader ( dExactSection.Begin(), dExactSection.GetLength() );

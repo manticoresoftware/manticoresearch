@@ -2553,10 +2553,12 @@ let search_res = search_api.search(search_req).await;
 - `API_URL`: Опционально. Пользовательский URL конечной точки API. Если не указан, используется конечная точка провайдера по умолчанию (например, `https://api.openai.com/v1/embeddings` для OpenAI).
 - `API_TIMEOUT`: Опционально. HTTP-таймаут в секундах для API-запросов. По умолчанию 10 секунд. Установите `'0'`, чтобы использовать таймаут по умолчанию. Применяется как к запросам проверки при создании таблицы, так и к генерации эмбеддингов во время операций INSERT.
 
+Для удаленных моделей `MODEL_NAME` может использовать либо устаревшую форму `provider/model`, либо явную форму `provider:model`. Используйте `provider:model` с `API_URL`, когда вы хотите, чтобы часть после `:` была передана в пользовательскую совместимую с провайдером конечную точку точно так, как написано.
+
 **Поддерживаемые модели эмбеддингов:**
 - **Sentence Transformers**: Любая [подходящая модель Hugging Face на основе BERT](https://huggingface.co/sentence-transformers/models) (например, `sentence-transformers/all-MiniLM-L6-v2`) — ключ API не требуется. Manticore загружает модель при создании таблицы.
 - **Локальные эмбеддинги Qwen**: Модели эмбеддингов Qwen, такие как `Qwen/Qwen3-Embedding-0.6B` — API-ключ не требуется. Manticore загружает модель при создании таблицы.
-- **OpenAI, Voyage, Jina**: Удаленные модели эмбеддингов (например, `openai/text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - требуют параметр `API_KEY='<API_KEY>'`. При необходимости укажите `API_URL='<CUSTOM_URL>'` для использования пользовательской конечной точки API и `API_TIMEOUT='<SECONDS>'` для настройки HTTP-таймаута (по умолчанию 10 секунд).
+- **OpenAI, Voyage, Jina**: Удаленные модели эмбеддингов (например, `openai/text-embedding-ada-002`, `openai:text-embedding-ada-002`, `voyage/voyage-3.5-lite`, `jina/jina-embeddings-v2-base-en`) - требуют параметр `API_KEY='***'`. При необходимости укажите `API_URL='<CUSTOM_URL>'` для использования пользовательской конечной точки API и `API_TIMEOUT='<SECONDS>'` для настройки HTTP-таймаута (по умолчанию 10 секунд).
 
 <!-- intro -->
 ##### SQL:
@@ -2591,15 +2593,25 @@ CREATE TABLE products_openai (
     MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content' API_KEY='<OPENAI_API_KEY>'
 );
 ```
-
 Использование OpenAI с пользовательским URL API и таймаутом (опционально)
 ```sql
 CREATE TABLE products_openai_custom (
     title TEXT,
     content TEXT,
     embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
-    MODEL_NAME='openai/text-embedding-ada-002' FROM='title,content'
-    API_KEY='<OPENAI_API_KEY>' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+    MODEL_NAME='openai:text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://custom-api.example.com/v1/embeddings' API_TIMEOUT='30'
+);
+```
+
+Использование OpenRouter с идентификатором модели с указанием провайдера
+```sql
+CREATE TABLE products_openrouter (
+    title TEXT,
+    content TEXT,
+    embedding_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine'
+    MODEL_NAME='openai:openai/text-embedding-ada-002' FROM='title,content'
+    API_KEY='***' API_URL='https://openrouter.ai/api/v1/embeddings' API_TIMEOUT='30'
 );
 ```
 

@@ -278,10 +278,7 @@ StringBuilder_c& StringBuilder_c::operator<< ( double fVal )
 
 StringBuilder_c& StringBuilder_c::operator<< ( float fVal )
 {
-	InitAddPrefix();
-	GrowEnough ( 32 );
-	m_iUsed += sph::PrintVarFloat ( end(), 31, fVal );
-	m_szBuffer[m_iUsed] = '\0';
+	FtoA ( fVal );
 	return *this;
 }
 

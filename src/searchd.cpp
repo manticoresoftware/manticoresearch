@@ -7335,7 +7335,7 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed, const CSphString * pClusterOverride = nullptr )
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
 	TRACE_CORO ( "rt", "DoExtendedUpdate" );
 
@@ -7347,13 +7347,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	// pClusterOverride is set by the shard-table caller so that when the
-	// aggregate is not itself in a cluster but its per-shard targets are,
-	// validation/replication uses the target's own cluster rather than the
-	// statement's (empty) cluster.
-	const CSphString & sStmtCluster = pClusterOverride ? *pClusterOverride : tStmt.m_sCluster;
-
-	if ( !ValidateClusterStatement ( sIndex, *pServed, sStmtCluster, IsHttpStmt ( tStmt ) ) )
+	if ( !ValidateClusterStatement ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
 		return;
@@ -7367,7 +7361,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, sStmtCluster );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -7515,17 +7509,6 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			assert ( !dDistributed[iIdx]->IsEmpty() );
 			const StrVec_t & dLocal = dDistributed[iIdx]->m_dLocal;
 
-			// For type='shard' aggregates the aggregate itself is not in any
-			// cluster, but its per-shard targets typically are. Validate the
-			// statement against the shard's own cluster context once, then let
-			// each per-target update use the target's cluster.
-			const ShardIndex_c * pShard = AsShard ( dDistributed[iIdx] );
-			if ( pShard && !ValidateClusterStatement ( sReqIndex, pShard->m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
-			{
-				dFails.Submit ( sReqIndex, nullptr, TlsMsg::szError() );
-				continue;
-			}
-
 			ARRAY_FOREACH ( i, dLocal )
 			{
 				const char * sLocal = dLocal[i].cstr();
@@ -7533,14 +7516,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				const CSphString * pClusterOverride = nullptr;
-				CSphString sLocalCluster;
-				if ( pShard && pServed )
-				{
-					sLocalCluster = pServed->m_sCluster;
-					pClusterOverride = &sLocalCluster;
-				}
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed, pClusterOverride );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
 
 				iUpdated += iUpdatedIdx;
 				iUpdatedReq += iUpdatedIdx;

@@ -188,20 +188,20 @@ echo "HNSW configurations test completed"
 ––– output –––
 HNSW configurations test completed
 ––– input –––
-mysql -h0 -P9306 -E -e "SELECT COUNT(*) FROM test_hnsw_m4"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_m4"
 ––– output –––
 *************************** 1. row ***************************
-count(*): 1
+1
 ––– input –––
-mysql -h0 -P9306 -E -e "SELECT COUNT(*) FROM test_hnsw_m32"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_m32"
 ––– output –––
 *************************** 1. row ***************************
-count(*): 1
+1
 ––– input –––
-mysql -h0 -P9306 -E -e "SELECT COUNT(*) FROM test_hnsw_ef"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_hnsw_ef"
 ––– output –––
 *************************** 1. row ***************************
-count(*): 1
+1
 ––– comment –––
 Test 9: Performance comparison with different M values
 ––– input –––

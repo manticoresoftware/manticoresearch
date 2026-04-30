@@ -18,6 +18,35 @@ select NOW();
 | 1615788407 |
 +------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select NOW()"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "now()": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "now()": 1615788407
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+
 <!-- end -->
 
 ### CURTIME()
@@ -36,6 +65,35 @@ select CURTIME();
 | 07:06:30  |
 +-----------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select CURTIME()"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "CURTIME()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "CURTIME()": "07:06:30"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ### CURDATE()
@@ -54,6 +112,34 @@ select curdate();
 | 2023-08-02 |
 +------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select CURDATE()"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "CURDATE()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "CURDATE()": "2023-08-02"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 
 ### UTC_TIME()
@@ -71,6 +157,34 @@ select UTC_TIME();
 +------------+
 | 06:06:18   |
 +------------+
+```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select UTC_TIME()"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "UTC_TIME()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "UTC_TIME()": "06:06:18"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -90,6 +204,33 @@ select UTC_TIMESTAMP();
 | 2021-03-15 06:06:03 |
 +---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select UTC_TIMESTAMP()"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "UTC_TIMESTAMP()": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "UTC_TIMESTAMP()": "2021-03-15 06:06:0"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### SECOND()
@@ -107,6 +248,33 @@ select second(now());
 +---------------+
 | 52            |
 +---------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select second(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "second(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "second(now())": 52
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -126,6 +294,33 @@ select minute(now());
 | 5             |
 +---------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select minute(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "minute(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "minute(now())": 5
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### HOUR()
@@ -143,6 +338,33 @@ select hour(now());
 +-------------+
 | 7           |
 +-------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select hour(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "hour(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "hour(now())": 7
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -162,6 +384,33 @@ select day(now());
 | 15         |
 +------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select day(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "day(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "day(now())": 15
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### MONTH()
@@ -179,6 +428,33 @@ select month(now());
 +--------------+
 | 3            |
 +--------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select month(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "month(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "month(now())": 3
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -198,6 +474,33 @@ select quarter(now());
 | 2              |
 +----------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select quarter(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "quarter(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "quarter(now())": 2
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### YEAR()
@@ -215,6 +518,33 @@ select year(now());
 +-------------+
 | 2024        |
 +-------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select year(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "year(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "year(now())": 2024
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -234,6 +564,33 @@ select dayname(now());
 | Wednesday      |
 +----------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select dayname(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "dayname(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "dayname(now())": "Wednesday"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### MONTHNAME()
@@ -251,6 +608,33 @@ select monthname(now());
 +------------------+
 | August           |
 +------------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select monthname(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "monthname(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "monthname(now())": "August"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -271,6 +655,33 @@ select dayofweek(now());
 | 5                |
 +------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select dayofweek(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "dayofweek(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "dayofweek(now())": 5
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DAYOFYEAR()
@@ -288,6 +699,33 @@ select dayofyear(now());
 +------------------+
 |              214 |
 +------------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select dayofyear(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "dayofyear(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "dayofyear(now())": 214
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -307,6 +745,33 @@ select yearweek(now());
 |         2023211 |
 +-----------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select yearweek(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "yearweek(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "yearweek(now())": 2023211
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### YEARMONTH()
@@ -324,6 +789,32 @@ select yearmonth(now());
 +------------------+
 | 202103           |
 +------------------+
+```
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select yearmonth(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "yearmonth(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "yearmonth(now())": 202103
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -343,6 +834,33 @@ select yearmonthday(now());
 | 20210315            |
 +---------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select yearmonthday(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "yearmonthday(now())": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "yearmonthday(now())": 20210315
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### TIMEDIFF()
@@ -360,6 +878,33 @@ select timediff(1615787586, 1613787583);
 +----------------------------------+
 | 555:33:23                        |
 +----------------------------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select timediff(1615787586, 1613787583)"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "timediff(1615787586, 1613787583)": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "timediff(1615787586, 1613787583)": "555:33:23"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -379,6 +924,33 @@ select datediff(1615787586, 1613787583);
 |                               23 |
 +----------------------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select datediff(1615787586, 1613787583)"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "datediff(1615787586, 1613787583)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "datediff(1615787586, 1613787583)": 23
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### DATE()
@@ -397,6 +969,34 @@ select date(now());
 | 2023-08-02  |
 +-------------+
 ```
+
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select date(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "date(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "date(now())": "2023-08-02"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 ### TIME()
@@ -414,6 +1014,33 @@ select time(now());
 +-------------+
 | 15:21:27    |
 +-------------+
+```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select time(now())"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "time(now())": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "time(now())": "15:21:27"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
 ```
 <!-- end -->
 
@@ -443,13 +1070,40 @@ SELECT DATE_FORMAT(NOW(), 'year %Y and time %T');
 | year 2023 and time 11:54:52              |
 +------------------------------------------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "select DATE_FORMAT(NOW(), 'year %Y and time %T')"
+```
+<!-- response JSON -->
+```JSON
+[
+  {
+    "columns": [
+      {
+        "DATE_FORMAT(NOW(), 'year %Y and time %T')": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "DATE_FORMAT(NOW(), 'year %Y and time %T')": "year 2023 and time 11:54:52"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 Этот пример форматирует текущие дату и время, отображая четырехзначный год и время в 24-часовом формате.
 
 ### DATE_HISTOGRAM()
 <!-- example DATE_HISTOGRAM -->
-`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` принимает размер ведра в виде названия единицы измерения и возвращает номер ведра для значения. Значения округляются до ближайшего ведра. Основная функция:
+`DATE_HISTOGRAM(expr, {calendar_interval='unit_name'})` или `DATE_HISTOGRAM(expr, {fixed_interval='interval'})` принимает размер интервала в виде имени единицы или фиксированного интервала и возвращает номер интервала для значения. Значения округляются до ближайшего интервала. Ключевая функция:
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
@@ -466,11 +1120,15 @@ key_of_the_bucket = interval * floor ( value / interval )
 
 Допустимые интервалы для `fixed_interval`:
 
+- `ms`, `1000ms`
+- `s`, `30s`
 - `minute`, `2m`
 - `hour`, `3h`
 - `day`, `5d`
 
 Используется в агрегировании, `FACET` и группировке.
+
+Агрегат `date_histogram` в JSON также поддерживает `time_zone` и `offset` с `calendar_interval`; см. [Фасетный поиск по значениям гистограммы дат](../Searching/Faceted_search.md#Facet-over-histogram-date-values).
 
 Пример:
 
@@ -526,4 +1184,3 @@ Date math позволяет работать с датами и времене�
 - `2010-04-20||+2M/d` — 20 июня 2010 года, округлённое до ближайшего дня.
 
 <!-- proofread -->
-

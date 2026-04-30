@@ -130,6 +130,10 @@ searchd [OPTIONS]
   export NO_STACK_CALCULATION=1
     ```
 
+* `--safetrace` 强制 `searchd` 仅在崩溃报告中使用系统的 backtrace() 调用。在某些（罕见）情况下，这可能是获取该报告的“更安全”的方式。这是一个调试选项。
+
+*   `--nodetach`（仅限 Linux）：防止 `searchd` 转入后台。在此模式下，日志条目直接打印到控制台。查询处理不受影响。此选项旨在调试或在 Docker 容器中运行 Manticore 时捕获输出。
+
 ### Windows 选项
 
 `searchd` 在 Windows 平台上有一些特定的选项，主要是关于作为服务的处理，仅在 Windows 二进制文件上可用。
@@ -163,10 +167,6 @@ searchd [OPTIONS]
     ```
 
 * `--ntservice` 是由 Microsoft 管理控制台传递给 `searchd` 的选项，用于在 Windows 平台以服务形式调用它。通常不需要直接调用此选项；这是 Windows 启动服务时自动调用的，但理论上你可以作为命令行中的常规服务调用它（作为 `--console` 的补充）。
-
-* `--safetrace` 强制 `searchd` 在崩溃报告中仅使用系统的 backtrace() 调用。在某些（罕见）场景中，这可能是获取报告的“更安全”方式。这是一个调试选项。
-
-* `--nodetach` 开关（仅限 Linux）告诉 `searchd` 不要分离到后台。这也会导致日志条目打印到控制台。查询处理照常进行。这是一个调试选项，也可能在你运行 Manticore 容器化时捕获输出时有用。
 
 ## Plugin dir
 

@@ -56,6 +56,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 
 // cluster deletes
 bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
+bool ClusterExit ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 
 // Return actual nodes list at cluster
 StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );

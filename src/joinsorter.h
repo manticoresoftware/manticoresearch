@@ -24,5 +24,7 @@ bool				ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLe
 std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tSettings, const CSphAttrLocator & tNullMapLocator );
 bool				SplitJoinedAttrName ( const CSphString & sJoinedAttr, CSphString & sTable, CSphString & sAttr, CSphString * pError = nullptr );
 
+bool				RefreshJoinSorterAfterHybridTransform ( ISphMatchSorter * pSorter, CSphString & sError );
+
 ISphMatchSorter *	CreateJoinSorter ( const CSphIndex * pIndex, const VecTraits_T<const CSphIndex *> & dJoinedIndexes, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, int iBatchSize, const char * szParentLeft, const char * szParentRight, CSphString & sError );
 bool				CreateJoinMultiSorter ( const CSphIndex * pIndex, const VecTraits_T<const CSphIndex *> & dJoinedIndexes, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> & dSorters, int iBatchSize, const char * szParentLeft, const char * szParentRight, CSphString & sError );

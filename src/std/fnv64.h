@@ -22,33 +22,41 @@ constexpr uint64_t SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 uint64_t	sphFNV64 ( const void * pString );
 uint64_t	sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
 uint64_t	sphFNV64cont ( const void * pString, uint64_t uPrev );
-FORCE_INLINE uint64_t sphFNV64 ( uint64_t uVal, uint64_t uPrev = SPH_FNV64_SEED )
+
+template<typename INT, int iLen = sizeof(INT)>
+FORCE_INLINE typename std::enable_if<std::is_integral<INT>::value, uint64_t>::type sphFNV64 ( INT uVal, uint64_t uPrev = SPH_FNV64_SEED )
 {
-	const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
-	const BYTE * p = (const BYTE*)&uVal;
-	uint64_t hval = uPrev;
+	constexpr uint64_t FNV_64_PRIME = 0x100000001b3ULL;
+	if constexpr ( iLen==1 )
+		return (uPrev ^ (uint64_t)uVal) * FNV_64_PRIME;
 
-	hval ^= (uint64_t)*(p+0);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+1);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+2);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+3);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+4);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+5);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+6);
-	hval *= FNV_64_PRIME;
-	hval ^= (uint64_t)*(p+7);
-	hval *= FNV_64_PRIME;
+	if constexpr ( iLen==2 )
+	{
+		const auto * p = (const BYTE*)&uVal;
+		return sphFNV64(p[1],sphFNV64(p[0],uPrev));
+	}
 
-	return hval;
+	if constexpr ( iLen==4 )
+	{
+		const auto * p = (const uint16_t*)&uVal;
+		return sphFNV64(p[1],sphFNV64(p[0],uPrev));
+	}
+
+	if constexpr ( iLen==8 )
+	{
+		const auto * p = (const uint32_t*)&uVal;
+		return sphFNV64(p[1],sphFNV64(p[0],uPrev));
+	}
 }
 
-inline uint64_t	sphFNV64 ( const ByteBlob_t & dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second ); }
+// same as sphFNV64(0,sphFNV64(0,sphFNV64(0,sphFNV64((BYTE)uVal))))
+FORCE_INLINE uint64_t sphFNV64_4x ( BYTE uVal, uint64_t uPrev = SPH_FNV64_SEED )
+{
+	constexpr uint64_t FNV_64_PRIMEx4 = 0x9FFAAC085635BC91ULL;
+	return (uPrev ^ (uint64_t)uVal) * FNV_64_PRIMEx4;
+}
+
+inline uint64_t	sphFNV64 ( const ByteBlob_t & dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second, SPH_FNV64_SEED ); }
 inline uint64_t	sphFNV64cont ( const ByteBlob_t & dBlob, uint64_t uPrev ) { return sphFNV64 ( dBlob.first, dBlob.second, uPrev ); }
 
 #endif // _fnv64_

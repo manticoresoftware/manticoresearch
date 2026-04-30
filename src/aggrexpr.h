@@ -17,6 +17,8 @@
 #include "sphinxexpr.h"
 #include <variant>
 
+namespace cctz { class time_zone; }
+
 using AggrBound_t = std::variant<int64_t, float>;
 
 struct RangeSetting_t
@@ -63,7 +65,10 @@ enum class Aggr_e
 	MIN,
 	MAX,
 	SUM,
-	AVG
+	AVG,
+	PERCENTILES,
+	PERCENTILE_RANKS,
+	MAD
 };
 
 struct DateRangeSetting_t
@@ -81,8 +86,30 @@ struct AggrDateRangeSetting_t : public CSphVector<DateRangeSetting_t>
 struct AggrDateHistSetting_t
 {
 	CSphString m_sInterval;
+	CSphString m_sTimeZone;
+	CSphString m_sOffset;
+	int64_t m_iOffsetSeconds = 0;
 	bool m_bKeyed = false;
 	bool m_bFixed = false;
+};
+
+struct AggrPercentilesSetting_t
+{
+	CSphVector<float> m_dPercents;
+	bool m_bKeyed = false;
+	float m_fCompression = 200.0f;
+};
+
+struct AggrPercentileRanksSetting_t
+{
+	CSphVector<double> m_dValues;
+	bool m_bKeyed = false;
+	float m_fCompression = 200.0f;
+};
+
+struct AggrMadSetting_t
+{
+	float m_fCompression = 1000.0f;
 };
 
 struct AggrSettings_t
@@ -92,6 +119,9 @@ struct AggrSettings_t
 	AggrHistSetting_t m_tHist;
 	AggrDateRangeSetting_t m_tDateRange;
 	AggrDateHistSetting_t m_tDateHist;
+	AggrPercentilesSetting_t m_tPercentiles;
+	AggrPercentileRanksSetting_t m_tPercentileRanks;
+	AggrMadSetting_t m_tMad;
 };
 
 ISphExpr * CreateExprRange ( ISphExpr * pAttr, const AggrRangeSetting_t & tRanges );
@@ -111,7 +141,11 @@ using RangeNameHash_t = CSphOrderedHash<RangeKeyDesc_t, int, IdentityHash_fn, 25
 void GetRangeKeyNames ( const AggrRangeSetting_t & tRanges, RangeNameHash_t & hRangeNames );
 void GetRangeKeyNames ( const AggrDateRangeSetting_t & tRanges, int iNow, RangeNameHash_t & hRangeNames );
 void FormatDate ( time_t tDate, CSphString & sRes );
+void FormatDate ( time_t tDate, const cctz::time_zone & tTZ, CSphString & sRes );
 void FormatDate ( time_t tDate, StringBuilder_c & sRes );
+void FormatDate ( time_t tDate, const cctz::time_zone & tTZ, StringBuilder_c & sRes );
+bool LoadAggrDateHistogramTimeZone ( const CSphString & sTimeZone, cctz::time_zone & tTZ, CSphString & sError );
+bool ParseAggrDateHistogramOffset ( const CSphString & sExpr, int64_t & iOffsetSeconds, CSphString & sError );
 
 ISphExpr * CreateExprHistogram ( ISphExpr * pAttr, const AggrHistSetting_t & tHist );
 

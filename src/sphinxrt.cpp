@@ -125,11 +125,11 @@ static void SetTightConcurrencyLimits()
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
 
 // ops for save RAM segments as disk chunk
-static bool LOG_LEVEL_RTSAVEDIAG = val_from_env ( "MANTICORE_LOG_RTSAVEDIAG", false );
+static const bool LOG_LEVEL_RTSAVEDIAG = env_exists ( "MANTICORE_LOG_RTSAVEDIAG" );
 #define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 
-static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static const bool LOG_LEVEL_RTSPLIT_QUERY = env_exists ( "MANTICORE_LOG_RTSPLIT_QUERY" ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_RTQUERYINFO __LINE__ << " "
 #define RTQUERYINFO LOGINFO ( RTSPLIT_QUERY, RTQUERYINFO )
 
@@ -1716,7 +1716,7 @@ private:
 	bool						ValidateUpdateEmbedding ( const ExtUpdState_t & tState, AttrUpdateInc_t & tUpd, CSphString & sError ) override;
 	void						FinishUpdateEmbeddingState ( ExtUpdState_t & tState ) override;
 
-	virtual void				ManualOptimizeCutoff ( int iCutoff );
+	void						ManualOptimizeCutoff ( int iCutoff ) override;
 };
 
 
@@ -1731,10 +1731,10 @@ RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSche
 	SetSchema ( std::move ( tSchema ) );
 	SetMemLimit ( iRamSize );
 
-	auto iTrack = val_from_env ( "MANTICORE_TRACK_RT_ERRORS",-1 );
-	if ( iTrack>0 )
+	auto iTrack = env_long ( "MANTICORE_TRACK_RT_ERRORS" );
+	if ( iTrack.has_value() )
 	{
-		m_iTrackFailedRamActions = iTrack;
+		m_iTrackFailedRamActions = iTrack.value();
 		sphInfo ( "MANTICORE_TRACK_RT_ERRORS env provided; up to %d insert/merge errors will be reported", m_iTrackFailedRamActions );
 	}
 
@@ -5350,6 +5350,15 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
+	// maybe fixup document's counter. It may be damaged, say, if you delete some documents and then shut down daemon without saving the index.
+	// in this case meta will show previous number of indexed documents, but actually part of them already killed.
+	// (binlog also will not help, as kill-map is mmapped, and is not transactional, i.e. on replay it will detect the documents as already killed)
+	const auto iCount = GetCount();
+	if ( m_tStats.m_iTotalDocuments!=iCount) {
+		sphWarning ( "Detected wrong count of indexed documents: " INT64_FMT " in meta vs " INT64_FMT " actually", m_tStats.m_iTotalDocuments, iCount );
+		m_tStats.m_iTotalDocuments = iCount;
+	}
+
 	// neet to set m_iSoftRamLimit more than iUsedRam to prevent flush of disk chunk right after index load
 	int64_t iUsedRam = SegmentsGetUsedRam ( *m_tRtChunks.RamSegs() );
 	RecalculateRateLimit ( iUsedRam, 1, false );
@@ -7505,8 +7514,8 @@ public:
 
 	bool HasSegments () const							{ return ( m_iSeg==0 || m_dSegments.BitCount()>0 );	}
 	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch ( pMatch ); }
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
-	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && i.m_pExpr->IsColumnar(); } );	}
+	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch ( pMatch ); } ); }
+	bool ProcessInRowIdOrder() const final				{ return m_tCtx.m_dCalcFinal.any_of ( []( const ContextCalcItem_t & i ){ return i.m_pExpr && ( i.m_pExpr->IsColumnar() || i.m_pExpr->PrefersRowIdOrder() ); } );	}
 
 private:
 	const CSphQueryContext &	m_tCtx;
@@ -9322,6 +9331,7 @@ bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString 
 bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	int iTotalKilled = 0;
+	DWORD uAliveDocuments = 0;
 
 	// attach to non-empty RT: apply upcoming index'es docs as k-list.
 	if ( !m_tRtChunks.IsEmpty() )
@@ -9333,8 +9343,11 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 			return false;
 		}
 
+		uAliveDocuments = dIndexDocs.GetLength();
+		dIndexDocs.Uniq();
 		iTotalKilled = ApplyKillList ( dIndexDocs );
-	}
+	} else
+		uAliveDocuments = pIndex->GetStats().m_iTotalDocuments;
 
 	// rename that source index to our last chunk
 	int iChunk = m_tChunkID.MakeChunkId ( m_tRtChunks );
@@ -9351,7 +9364,7 @@ bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphStr
 	}
 
 	m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
-	m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments-iTotalKilled;
+	m_tStats.m_iTotalDocuments += uAliveDocuments-iTotalKilled;
 
 	pIndex->SetName ( SphSprintf ( "%s_%d", GetName(), iChunk ) ); // idx name is cosmetic thing
 	pIndex->SetBinlog ( false );
@@ -9442,6 +9455,8 @@ bool RtIndex_c::AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError )
 
 	// FIXME? what about copying m_TID etc?
 	// resave header file
+	m_iTID = Max ( m_iTID, pSrcRtIndex->m_iTID );
+	pSrcRtIndex->SaveMeta();
 	SaveMeta();
 
 	// FIXME? do something about binlog too?
@@ -9473,6 +9488,10 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 
 	auto pHeadChunk = tNewSet.m_pNewDiskChunks->First();
 	tNewSet.m_pNewDiskChunks->Remove(0);
+
+	assert ( pHeadChunk );
+	const auto iCount = pHeadChunk->Cidx().GetCount();
+	m_tStats.m_iTotalDocuments -= iCount;
 	return pHeadChunk;
 }
 
@@ -11198,15 +11217,15 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( &tSettings.m_eBigramIndex, sizeof(tSettings.m_eBigramIndex), uHash );
 	uHash = sphFNV64 ( &tSettings.m_eBigramDelimiter, sizeof(tSettings.m_eBigramDelimiter), uHash );
 	uHash = sphFNV64 ( tSettings.m_sBigramWords.cstr(), tSettings.m_sBigramWords.Length(), uHash );
-	uHash = sphFNV64 ( &tSettings.m_uAotFilterMask, sizeof(tSettings.m_uAotFilterMask), uHash );
+	uHash = sphFNV64 ( tSettings.m_uAotFilterMask, uHash );
 	uHash = sphFNV64 ( &tSettings.m_ePreprocessor, sizeof(tSettings.m_ePreprocessor), uHash );
 	uHash = sphFNV64 ( tSettings.m_sIndexTokenFilter.cstr(), tSettings.m_sIndexTokenFilter.Length(), uHash );
-	uHash = sphFNV64 ( &iMinPrefixLen, sizeof(iMinPrefixLen), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iMinInfixLen, sizeof(tSettings.m_iMinInfixLen), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iMaxSubstringLen, sizeof(tSettings.m_iMaxSubstringLen), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iBoundaryStep, sizeof(tSettings.m_iBoundaryStep), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iOvershortStep, sizeof(tSettings.m_iOvershortStep), uHash );
-	uHash = sphFNV64 ( &tSettings.m_iStopwordStep, sizeof(tSettings.m_iStopwordStep), uHash );
+	uHash = sphFNV64 ( iMinPrefixLen, uHash );
+	uHash = sphFNV64 ( tSettings.m_iMinInfixLen, uHash );
+	uHash = sphFNV64 ( tSettings.m_iMaxSubstringLen, uHash );
+	uHash = sphFNV64 ( tSettings.m_iBoundaryStep, uHash );
+	uHash = sphFNV64 ( tSettings.m_iOvershortStep, uHash );
+	uHash = sphFNV64 ( tSettings.m_iStopwordStep, uHash );
 
 	return uHash;
 }
@@ -11924,15 +11943,15 @@ static bool BuildExtCacheEntry ( const CSphIndex & tIndex, const FilenameBuilder
 
 	uint64_t uHash = SPH_FNV64_SEED;
 	uHash = sphFNV64 ( "stopwords", 9, uHash );
-	uHash = sphFNV64 ( &uStopwords, sizeof ( uStopwords ), uHash );
+	uHash = sphFNV64 ( uStopwords, uHash );
 	uHash = sphFNV64 ( "wordforms", 9, uHash );
-	uHash = sphFNV64 ( &uWordforms, sizeof ( uWordforms ), uHash );
+	uHash = sphFNV64 ( uWordforms, uHash );
 	uHash = sphFNV64 ( "exceptions", 10, uHash );
-	uHash = sphFNV64 ( &uExceptions, sizeof ( uExceptions ), uHash );
+	uHash = sphFNV64 ( uExceptions, uHash );
 	uHash = sphFNV64 ( "hitless", 7, uHash );
-	uHash = sphFNV64 ( &uHitless, sizeof ( uHitless ), uHash );
+	uHash = sphFNV64 ( uHitless, uHash );
 	uHash = sphFNV64 ( "jieba", 5, uHash );
-	uHash = sphFNV64 ( &uJieba, sizeof ( uJieba ), uHash );
+	uHash = sphFNV64 ( uJieba, uHash );
 
 	tEntry.m_uHash = uHash;
 	tEntry.m_sStopwords = tDictSettings.m_sStopwords;
@@ -12158,12 +12177,9 @@ bool AttachCopyExt ( const CSphIndex & tSrcIndex, RtIndex_i & tDstIndex, ExtFile
 	const int iSuffix = tDstIndex.GetChunkId();
 	if ( !AttachRtChunkExtCopy ( tSrcIndex, tDstIndex, iSuffix, pSrcFileBuilder.get(), pDstFileBuilder.get(), hExtCache, sDstPath, sError ) )
 		return false;
-	{
-		auto pDict = tDstIndex.GetDictionary();
-		assert ( pDict );
-		const auto & tDictSettings = pDict->GetSettings();
-		assert ( tDictSettings.m_dWordforms.GetLength()==pDict->GetWordformsFileInfos().GetLength() );
-	}
+
+	assert ( tDstIndex.GetDictionary() );
+	assert ( tDstIndex.GetDictionary()->GetSettings().m_dWordforms.GetLength()==tDstIndex.GetDictionary()->GetWordformsFileInfos().GetLength() );
 	return true;
 }
 

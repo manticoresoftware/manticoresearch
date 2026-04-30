@@ -35,6 +35,17 @@ The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement us
 <!-- intro -->
 ##### SQL:
 
+
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS myindex;
+CREATE TABLE myindex(gid int, title text);
+INSERT INTO myindex(gid, title) VALUES
+(11, 'first find me'),
+(12, 'second find me');
+-->
+
 <!-- request SQL -->
 
 ```sql
@@ -50,6 +61,48 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 |    2 |   12 | second find me |
 +------+------+----------------+
 2 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "myindex",
+  "query": {
+    "query_string" : "\"find me fast\"/2"
+  }
+}
+```
+<!-- response JSON -->
+
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {
+          "gid": 11,
+          "title": "first find me"
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 1500,
+        "_source": {
+          "gid": 12,
+          "title": "second find me"
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- request MATCH with filters -->

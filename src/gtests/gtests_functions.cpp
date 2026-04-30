@@ -2115,7 +2115,7 @@ TEST ( functions, histogram_expression )
 
 	CSphString sError;
 	ExprParseArgs_t tExprArgs;
-	ISphExprRefPtr_c pExpr ( sphExprParse ( "histogram(price*100, {hist_interval=1})", tSchema, nullptr, sError, tExprArgs ) );
+	ISphExprRefPtr_c pExpr ( sphExprParse ( "histogram(price*100, {hist_interval=1})", tSchema, sError, tExprArgs ) );
 	ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr();
 
 	sphSetRowAttr ( pRow, tSchema.GetAttr(0).m_tLocator, sphF2DW ( 0.5f ) );

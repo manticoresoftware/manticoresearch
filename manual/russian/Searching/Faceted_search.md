@@ -764,6 +764,18 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 Данные могут быть фасетированы путем агрегации другого атрибута или выражения. Например, если документы содержат как идентификатор бренда, так и его название, мы можем вернуть в фасете названия брендов, но агрегировать идентификаторы брендов. Это можно сделать с помощью `FACET {expr1} BY {expr2}`
 
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS facetdemo;
+CREATE TABLE facetdemo(price float, brand_id int, title text, brand_name string, property string, j json, categories multi);
+INSERT INTO facetdemo(price, brand_id, title, brand_name, property, j, categories) VALUES
+(306, 1, 'Product Ten Three', 'Brand One', 'Six_Ten', '{"prop1":66,"prop2":91,"prop3":"One"}', (10,11)),
+(400, 10, 'Product Three One', 'Brand Ten', 'Four_Three', '{"prop1":69,"prop2":19,"prop3":"One"}', (13,14)),
+(855, 1, 'Product Seven Two', 'Brand One', 'Eight_Seven', '{"prop1":63,"prop2":78,"prop3":"One"}', (10,11,12)),
+(31, 9, 'Product Four One', 'Brand Nine', 'Ten_Four', '{"prop1":79,"prop2":42,"prop3":"One"}', (12,13,14));
+--> 
+
 <!-- intro -->
 ##### SQL:
 
@@ -801,6 +813,70 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 | Brand Seven |      965 |
 +-------------+----------+
 10 rows in set (0.00 sec)
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT brand_name, brand_id FROM facetdemo FACET brand_name by brand_id"
+```
+
+<!-- response JSON -->
+```JSON
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand One",
+          "brand_id": 1
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand Ten",
+          "brand_id": 10
+        }
+      },
+      ...
+      {
+        "_id": 20,
+        "_score": 1500,
+        "_source": {
+          "brand_name": "Brand Nine",
+          "brand_id": 9
+        }
+      },
+    ]
+  },
+  "aggregations": {
+    "brand_name": {
+      "buckets": [
+        {
+          "key": "Brand One",
+          "doc_count": 1013
+        },
+        {
+          "key": "Brand Ten",
+          "doc_count": 998
+        },
+        ...
+        {
+          "key": "Brand Seven",
+          "doc_count": 965
+        },
+      ]
+    }
+  }
+}
 ```
 
 <!-- end -->
@@ -1563,6 +1639,88 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 |            1 | Brand Four  |      195 |
 ...
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql?mode=raw -d "SELECT brand_name,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo FACET price_range AS price_range,brand_name ORDER BY brand_name asc"
+```
+
+<!-- response JSON -->
+
+```JSON
+[
+  {
+    "columns": [
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "price_range": {
+          "type": "long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One",
+        "price_range": 1
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "fprice_range": {
+          "type": "long"
+        }
+      },
+      {
+        "brand_name": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Eight",
+        "count(*)": 197
+      },
+      {
+        "fprice_range": 4,
+        "brand_name": "Brand Eight",
+        "count(*)": 235
+      },
+      ...
+      {
+        "fprice_range": 0,
+        "brand_name": "Brand Five",
+        "count(*)": 183
+      },
+      {
+        "fprice_range": 1,
+        "brand_name": "Brand Four",
+        "count(*)": 195
+      }
+    ],
+    "total": 10,
+    "error": "",
+    "warning": ""
+  }
+]
+```
 <!-- end -->
 
 <!-- example histogram -->
@@ -1719,6 +1877,13 @@ key_of_the_bucket = interval * floor ( value / interval )
 Параметр гистограммы `calendar_interval` учитывает, что месяцы имеют разное количество дней.
 В отличие от `calendar_interval`, параметр `fixed_interval` использует фиксированное количество единиц и не отклоняется, независимо от того, на какую дату календаря он приходится. Однако `fixed_interval` не может обрабатывать единицы, такие как месяцы, потому что месяц — это не фиксированная величина. Попытка указать единицы, такие как недели или месяцы, для `fixed_interval` приведёт к ошибке.
 Допустимые интервалы описаны в выражении [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29). По умолчанию бакеты возвращаются в виде массива. Аргумент гистограммы `keyed` преобразует ответ в словарь с ключами бакетов.
+
+В JSON-запросах `date_histogram` также поддерживает `time_zone` и `offset` с `calendar_interval`:
+
+- `time_zone` изменяет часовой пояс, используемый для округления календарных сегментов и форматирования `key_as_string`. Это должно быть имя часового пояса IANA, поддерживаемое сервером, например `Asia/Novosibirsk`. Числовые смещения UTC, такие как `+03:00`, не поддерживаются.
+- `offset` сдвигает границы календарных сегментов на фиксированную величину перед округлением. Это может быть строка фиксированного интервала, использующая те же единицы, что и `fixed_interval`, например `3h`, или целое число секунд, например `10800`. Значение может иметь префикс `+` или `-`.
+
+`time_zone` и `offset` не поддерживаются с `fixed_interval`.
 
 <!-- request SQL -->
 
@@ -2870,6 +3035,131 @@ SHOW META LIKE 'multiplier';
 1 row in set (0.00 sec)
 ```
 
+<!-- request JSON -->
+
+```JSON
+          "type": "string"
+```
+
+<!-- response JSON -->
+
+```JSON
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_name": "Brand One"
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "brand_id": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "brand_id": 1,
+        "count(*)": 1013
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "price": {
+          "type": "long"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "price": 306,
+        "count(*)": 7
+      },
+      ...
+    ],
+    "total": 20,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "categories": {
+          "type": "string"
+        }
+      },
+      {
+        "count(*)": {
+          "type": "long long"
+        }
+      }
+    ],
+    "data": [
+      {
+        "categories": "10,11",
+        "count(*)": 2436
+      },
+      ...
+    ],
+    "total": 15,
+    "error": "",
+    "warning": ""
+  },
+  {
+    "columns": [
+      {
+        "Variable_name": {
+          "type": "string"
+        }
+      },
+      {
+        "Value": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Variable_name": "multiplier",
+        "Value": "4"
+      }
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+    ],
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
-

@@ -47,6 +47,7 @@ public:
 	virtual CSphGrouper *	Clone() const = 0;
 	virtual bool			IsMultiValue() const { return false; }
 	virtual void			SetColumnar ( const columnar::Columnar_i * ) {}
+	virtual void			FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
 
 protected:
 							~CSphGrouper () override {} // =default causes bunch of errors building on wheezy

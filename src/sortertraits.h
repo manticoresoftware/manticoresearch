@@ -79,6 +79,9 @@ protected:
 	void		ResetAfterFlatten()		{ m_dIData.Resize(0); }
 	int			ResetDynamic ( int iMaxUsed );
 	int			ResetDynamicFreeData ( int iMaxUsed );
+
+protected:
+	virtual void	OnMatchFree ( CSphMatch & tMatch );
 };
 
 
@@ -115,8 +118,8 @@ private:
 	CSphFixedVector<CSphRowitem>	m_dRowBuf { 0 };
 	CSphVector<CSphAttrLocator>		m_dAttrsGrp; // locators for grouping attrs (@groupby, @count, @distinct, etc.)
 	CSphVector<CSphAttrLocator>		m_dAttrsPtr; // locators for group_concat attrs
-	CSphVector<int>					m_dMyPtrRows; // rowids matching m_dAttrsPtr. i.e. grpconcat ptr result I own
-	CSphVector<int>					m_dOtherPtrRows; // rest rowids NOT matching m_dAttrsPtr. i.e. other ptr results
+	CSphVector<DataPtrAttr_t>		m_dMyPtrRows; // descriptors for grpconcat ptr results I own
+	CSphVector<DataPtrAttr_t>		m_dOtherPtrRows; // descriptors for other data ptr results
 	const CSphSchemaHelper *		m_pSchema = nullptr;
 	bool							m_bPtrRowsCommited = false; // readiness of m_dMyPtrRows and m_dOtherPtrRows
 };
@@ -131,6 +134,7 @@ public:
 protected:
 	MatchCloner_c				m_tPregroup;
 	CSphVector<AggrFunc_i *>	m_dAggregates;
+	bool						m_bHasDiscardableAggregates = false;
 
 	void	SetColumnar ( columnar::Columnar_i * pColumnar );
 	void	SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs = nullptr );
@@ -140,7 +144,9 @@ protected:
 	void	AggrUpdate ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped, bool bMerge = false );
 	void	AggrSetup ( CSphMatch & tDst, const CSphMatch & tSrc, bool bMerge = false );
 	void	AggrUngroup ( CSphMatch & tMatch );
+	void	AggrDiscard ( CSphMatch & tMatch );
 
 private:
 	void	ResetAggregates();
+	void	RegisterAggregate ( AggrFunc_i * pAggregate );
 };

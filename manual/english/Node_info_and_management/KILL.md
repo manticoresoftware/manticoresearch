@@ -13,6 +13,18 @@ mysql> KILL 4;
 Query OK, 1 row affected (0.00 sec)
 ```
 
+<!-- request JSON -->
+```JSON
+POST /sql?mode=raw -d "KILL 4"
+[
+  {
+    "total": 1,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
 <!-- end -->
 <!-- proofread -->
 

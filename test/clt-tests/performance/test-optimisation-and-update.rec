@@ -33,13 +33,10 @@ sleep 1 && mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 | disk_chunks              | 2     |
 +--------------------------+-------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|  2000000 |
-+----------+
+*************************** 1. row ***************************
+2000000
 ––– input –––
 php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=2000001 --no-drop-table > /dev/null; echo $?
 ––– output –––
@@ -61,13 +58,10 @@ sleep 5 && mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 | disk_chunks              | 2     |
 +--------------------------+-------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|  4000000 |
-+----------+
+*************************** 1. row ***************************
+4000000
 ––– input –––
 rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; (stdbuf -oL searchd 2>&1 | tee /var/log/manticore/searchd.log | grep -i precach & disown); sleep 0.5; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––

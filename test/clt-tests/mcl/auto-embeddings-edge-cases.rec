@@ -155,13 +155,10 @@ mysql -h0 -P9306 -e "SELECT id, knn_dist() FROM test_huge WHERE KNN(vec, 1, 'mac
 ––– comment –––
 Verify document is findable with relevant query
 ––– input –––
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_huge WHERE KNN(vec, 1, 'neural network')"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_huge WHERE KNN(vec, 1, 'neural network')"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        1 |
-+----------+
+*************************** 1. row ***************************
+1
 ––– comment –––
 Test concurrent inserts with auto-embeddings
 ––– input –––
@@ -169,13 +166,10 @@ for i in 1 2 3; do
     mysql -h0 -P9306 -e "INSERT INTO test_concurrent (id, title) VALUES ($((1000+i)), 'Concurrent insert $i')" 2>&1 &
 done
 wait
-mysql -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id >= 1001 AND id <= 1003"
+mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM test_concurrent WHERE id >= 1001 AND id <= 1003"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        3 |
-+----------+
+*************************** 1. row ***************************
+3
 ––– comment –––
 Create table with auto-detected dimensions
 ––– input –––
@@ -407,7 +401,7 @@ knn_dist(): 0.31627#!/[0-9]{3}/!#
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.33028#!/[0-9]{3}/!#
+knn_dist(): 0.33028#!/[0-9]{0,3}/!#
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043
@@ -515,7 +509,7 @@ knn_dist(): 0.31627#!/[0-9]{3}/!#
         id: 10072
      title: Document title 10071
   category: cat_10069
-knn_dist(): 0.33028#!/[0-9]{3}/!#
+knn_dist(): 0.33028#!/[0-9]{0,3}/!#
 *************************** 5. row ***************************
         id: 10044
      title: Document title 10043

@@ -130,6 +130,10 @@ The options available to `searchd` in all operating systems are:
     export NO_STACK_CALCULATION=1
     ```
 
+* `--safetrace` forces `searchd` to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
+
+*   `--nodetach` (Linux only): Prevents `searchd` from detaching into the background. In this mode, log entries are printed directly to the console. Query processing remains unaffected. This option is intended for debugging or for capturing output when running Manticore in a Docker container.
+
 ### Windows options
 
 There are some options for `searchd` that are specific to Windows platforms, concerning handling as a service, and are only available in Windows binaries.
@@ -163,10 +167,6 @@ Note that in Windows searchd will default to `--console` mode, unless you instal
     ```
 
 * `--ntservice` is an option that is passed by the Microsoft Management Console to `searchd` to invoke it as a service on Windows platforms. It would not normally be necessary to call this directly; this would normally be called by Windows when the service is started, although if you wanted to call this as a regular service from the command-line (as the complement to `--console`) you could do so in theory.
-
-* `--safetrace` forces `searchd` to only use the system's backtrace() call in crash reports. In certain (rare) scenarios, this might be a "safer" way to get that report. This is a debugging option.
-
-* `--nodetach` switch (Linux only) tells `searchd` not to detach into the background. This will also cause log entries to be printed out to the console. Query processing operates as usual. This is a debugging option and might also be useful when you run Manticore in a Docker container to capture its output.
 
 ## Plugin dir
 

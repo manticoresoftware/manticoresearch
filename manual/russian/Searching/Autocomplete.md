@@ -53,6 +53,28 @@ POST /autocomplete
 - `expansion_len`: Количество символов для расширения последнего слова. По умолчанию: `10`
 - `force_bigrams`: Логическое (0/1 в SQL). Принудительно использует биграммы (2-символьные n-граммы) вместо триграмм для всех длин слов, что может улучшить поиск для слов с ошибками перестановки символов. По умолчанию: `0` (используются триграммы для слов длиной ≥6 символов)
 
+<!--
+data for the following examples:
+
+DROP TABLE IF EXISTS comment;
+CREATE TABLE comment(content text) min_infix_len='2';
+INSERT INTO comment(id,content) VALUES
+(1,'hello'),
+(2,'helio'),
+(3,'hell'),
+(4,'shell'),
+(5,'nushell'),
+(6,'powershell'),
+(7,'well'),
+(8,'help'),
+(9,'hello world'),
+(10,'hello wrld');
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(name text) min_infix_len='2';
+INSERT INTO products(id,name) VALUES (1,'iphone');
+-->
+
 <!-- request SQL -->
 
 ```sql

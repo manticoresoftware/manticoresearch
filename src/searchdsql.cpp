@@ -366,6 +366,7 @@ public:
 
 	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddCount ();
 	void			AliasLastItem ( SqlNode_t * pAlias );
@@ -1283,6 +1284,133 @@ void SqlParser_c::FixupLastBacktick ( SqlNode_t * pExpr ) const noexcept
 		++pExpr->m_iEnd;
 }
 
+static Aggr_e ToExtendedAggr ( ESphAggrFunc eAggrFunc )
+{
+	switch ( eAggrFunc )
+	{
+	case SPH_AGGR_MIN: return Aggr_e::MIN;
+	case SPH_AGGR_MAX: return Aggr_e::MAX;
+	case SPH_AGGR_SUM: return Aggr_e::SUM;
+	case SPH_AGGR_AVG: return Aggr_e::AVG;
+	case SPH_AGGR_PERCENTILES: return Aggr_e::PERCENTILES;
+	case SPH_AGGR_PERCENTILE_RANKS: return Aggr_e::PERCENTILE_RANKS;
+	case SPH_AGGR_MAD: return Aggr_e::MAD;
+	default: return Aggr_e::NONE;
+	}
+}
+
+static bool ParseCompressionOption ( const CSphNamedVariant & tOpt, float & fCompression, CSphString & sError )
+{
+	if ( tOpt.m_eType==VariantType_e::BIGINT )
+		fCompression = (float)tOpt.m_iValue;
+	else if ( tOpt.m_eType==VariantType_e::FLOAT )
+		fCompression = tOpt.m_fValue;
+	else
+	{
+		sError.SetSprintf ( "option '%s' should be numeric", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	if ( fCompression<=0.0f )
+	{
+		sError.SetSprintf ( "option '%s' should be positive", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+static bool ParseFloatCsvOption ( const CSphNamedVariant & tOpt, CSphVector<float> & dOut, bool bCheckRange, CSphString & sError )
+{
+	if ( tOpt.m_eType!=VariantType_e::STRING )
+	{
+		sError.SetSprintf ( "option '%s' should be a comma-separated string", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	StrVec_t dVals;
+	sphSplit ( dVals, tOpt.m_sValue.cstr(), "," );
+	dOut.Resize ( 0 );
+	dOut.Reserve ( dVals.GetLength() );
+	for ( auto & sVal : dVals )
+	{
+		sVal.Trim();
+		if ( sVal.IsEmpty() )
+			continue;
+
+		char * pEnd = nullptr;
+		double fVal = strtod ( sVal.cstr(), &pEnd );
+		if ( pEnd==sVal.cstr() || ( pEnd && *pEnd ) )
+		{
+			sError.SetSprintf ( "option '%s' has invalid number '%s'", tOpt.m_sKey.cstr(), sVal.cstr() );
+			return false;
+		}
+
+		if ( bCheckRange && ( fVal<0.0 || fVal>100.0 ) )
+		{
+			sError.SetSprintf ( "option '%s' values should be within [0,100]", tOpt.m_sKey.cstr() );
+			return false;
+		}
+
+		dOut.Add ( (float)fVal );
+	}
+
+	if ( dOut.IsEmpty() )
+	{
+		sError.SetSprintf ( "option '%s' can not be empty", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+static bool ParseDoubleCsvOption ( const CSphNamedVariant & tOpt, CSphVector<double> & dOut, CSphString & sError )
+{
+	if ( tOpt.m_eType!=VariantType_e::STRING )
+	{
+		sError.SetSprintf ( "option '%s' should be a comma-separated string", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	StrVec_t dVals;
+	sphSplit ( dVals, tOpt.m_sValue.cstr(), "," );
+	dOut.Resize ( 0 );
+	dOut.Reserve ( dVals.GetLength() );
+	for ( auto & sVal : dVals )
+	{
+		sVal.Trim();
+		if ( sVal.IsEmpty() )
+			continue;
+
+		char * pEnd = nullptr;
+		double fVal = strtod ( sVal.cstr(), &pEnd );
+		if ( pEnd==sVal.cstr() || ( pEnd && *pEnd ) )
+		{
+			sError.SetSprintf ( "option '%s' has invalid number '%s'", tOpt.m_sKey.cstr(), sVal.cstr() );
+			return false;
+		}
+
+		dOut.Add ( fVal );
+	}
+
+	if ( dOut.IsEmpty() )
+	{
+		sError.SetSprintf ( "option '%s' can not be empty", tOpt.m_sKey.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+static void ApplyDefaultPercentiles ( CSphVector<float> & dPercents )
+{
+	static const float dDefaults[] = { 1.f, 5.f, 25.f, 50.f, 75.f, 95.f, 99.f };
+	dPercents.Resize ( 0 );
+	dPercents.Reserve ( (int)( sizeof ( dDefaults ) / sizeof ( dDefaults[0] ) ) );
+	for ( float fVal : dDefaults )
+		dPercents.Add ( fVal );
+}
+
 void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
 	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
@@ -1290,7 +1418,96 @@ void SqlParser_c::AddItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t
 	tItem.m_sExpr.SetBinary ( m_pBuf + pExpr->m_iStart, pExpr->m_iEnd - pExpr->m_iStart );
 	sphColumnToLowercase ( const_cast<char *>( tItem.m_sExpr.cstr() ) );
 	tItem.m_eAggrFunc = eAggrFunc;
+	tItem.m_tAggrSettings.m_eAggrFunc = ToExtendedAggr ( eAggrFunc );
 	AutoAlias ( tItem, pStart?pStart:pExpr, pEnd?pEnd:pExpr );
+}
+
+bool SqlParser_c::AddExtendedAggrItem ( SqlNode_t * pExpr, ESphAggrFunc eAggrFunc, SqlNode_t * pStart, SqlNode_t * pEnd, const CSphVector<CSphNamedVariant> * pOpts )
+{
+	AddItem ( pExpr, eAggrFunc, pStart, pEnd );
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Last();
+	AggrSettings_t & tAggr = tItem.m_tAggrSettings;
+	CSphString sError;
+
+	if ( eAggrFunc==SPH_AGGR_PERCENTILES )
+	{
+		ApplyDefaultPercentiles ( tAggr.m_tPercentiles.m_dPercents );
+		tAggr.m_tPercentiles.m_bKeyed = true;
+		tItem.m_fTdigestCompression = tAggr.m_tPercentiles.m_fCompression;
+	}
+	else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
+	{
+		tAggr.m_tPercentileRanks.m_bKeyed = true;
+		tItem.m_fTdigestCompression = tAggr.m_tPercentileRanks.m_fCompression;
+	}
+	else if ( eAggrFunc==SPH_AGGR_MAD )
+	{
+		tItem.m_fTdigestCompression = tAggr.m_tMad.m_fCompression;
+	}
+
+	if ( pOpts )
+	{
+		for ( const auto & tOpt : *pOpts )
+		{
+			if ( tOpt.m_sKey=="compression" )
+			{
+				float fCompression = tItem.m_fTdigestCompression;
+				if ( !ParseCompressionOption ( tOpt, fCompression, sError ) )
+					goto failed;
+
+				tItem.m_fTdigestCompression = fCompression;
+				switch ( eAggrFunc )
+				{
+				case SPH_AGGR_PERCENTILES: tAggr.m_tPercentiles.m_fCompression = fCompression; break;
+				case SPH_AGGR_PERCENTILE_RANKS: tAggr.m_tPercentileRanks.m_fCompression = fCompression; break;
+				case SPH_AGGR_MAD: tAggr.m_tMad.m_fCompression = fCompression; break;
+				default: break;
+				}
+				continue;
+			}
+
+			if ( tOpt.m_sKey=="keyed" )
+			{
+				sError.SetSprintf ( "option '%s' is not supported in SphinxQL for this aggregate (output is always keyed)", tOpt.m_sKey.cstr() );
+				goto failed;
+			}
+
+			if ( tOpt.m_sKey=="values" )
+			{
+				if ( eAggrFunc==SPH_AGGR_PERCENTILES )
+				{
+					if ( !ParseFloatCsvOption ( tOpt, tAggr.m_tPercentiles.m_dPercents, true, sError ) )
+						goto failed;
+				}
+				else if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS )
+				{
+					if ( !ParseDoubleCsvOption ( tOpt, tAggr.m_tPercentileRanks.m_dValues, sError ) )
+						goto failed;
+				}
+				else
+				{
+					sError.SetSprintf ( "option '%s' is not supported by this aggregate", tOpt.m_sKey.cstr() );
+					goto failed;
+				}
+				continue;
+			}
+
+			sError.SetSprintf ( "unknown aggregate option '%s'", tOpt.m_sKey.cstr() );
+			goto failed;
+		}
+	}
+
+	if ( eAggrFunc==SPH_AGGR_PERCENTILE_RANKS && tAggr.m_tPercentileRanks.m_dValues.IsEmpty() )
+	{
+		sError = "percentile_ranks requires option values='v1,v2,...'";
+		goto failed;
+	}
+
+	return true;
+
+failed:
+	yyerror ( this, sError.cstr() );
+	return false;
 }
 
 bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t * pEnd )
@@ -2716,7 +2933,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_pAttrType = &eAttrType;
 		tExprArgs.m_eCollation = eCollation;
-		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, nullptr, sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, sError, tExprArgs ) };
 		if ( pExpr )
 		{
 			sError = "";

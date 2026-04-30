@@ -174,12 +174,15 @@ int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefa
 int64_t GetUTC ( const CSphString & sTime, const char * sFormat=nullptr );
 bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime );
 
+namespace cctz { class time_zone; }
+
 enum class DateUnit_e
 {
 	ms, sec, minute, hour, day, week, month, year,
 	total_units
 };
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone & tTZ );
 void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime );
 std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError );
 
@@ -275,10 +278,18 @@ public:
 	}
 
 	/// get bool option value by key and default value
-	bool GetBool ( const char * sKey, bool bDefault = true ) const
+	bool GetBool ( const char * szKey, bool bDefault = true ) const noexcept
 	{
-		CSphVariant * pEntry = ( *this ) ( sKey );
-		return pEntry ? (pEntry->intval ()!=0) : bDefault;
+		return OptBool (szKey).value_or(bDefault);
+	}
+
+	/// get bool option value by key, if any
+	std::optional<bool> OptBool ( const char * sKey ) const noexcept
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->intval()>0;
 	}
 
 	/// get size option (plain int, or with K/M suffix) value by key and default value

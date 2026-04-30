@@ -105,7 +105,7 @@ Manticore Search поддерживает переменные сервера н
 * `WAIT_TIMEOUT = <значение>` устанавливает таймаут SQL-соединения на максимально допустимое время простоя для неинтерактивного соединения. Вы можете настроить этот параметр либо для сессии (для текущего соединения), либо глобально, но глобальные настройки применяются только при использовании VIP-соединений.
 * `INTERACTIVE_TIMEOUT = <значение>` устанавливает таймаут SQL-соединения на максимально допустимое время простоя для интерактивного соединения. Как и `WAIT_TIMEOUT`, этот параметр можно настроить для сессии или глобально, но глобальные настройки применяются только при использовании VIP-соединений.
 * `ACCURATE_AGGREGATION`: Устанавливает значение по умолчанию для опции [accurate_aggregation](../Searching/Options.md#accurate_aggregation) будущих запросов.  
-* `AUTO_OPTIMIZE = {1|0}` Включает/выключает [auto_optimize](../Server_settings/Searchd.md#auto_optimize).  
+* `AUTO_OPTIMIZE = <non-negative integer>` Настраивает [auto_optimize](../Server_settings/Searchd.md#auto_optimize): `0` отключает, `1` включает с порогом по умолчанию, а значения больше `1` умножают этот порог.
 * `cluster_user = name` Устанавливает имя пользователя, используемое с `mysqldump` / `mariadb-dump` для [включения режима репликации](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).  
 * `COREDUMP= {1|0}` Включает/выключает сохранение core-файла или минидампа сервера при сбое. Подробнее [здесь](../Starting_the_server/Manually.md#searchd-command-line-options).  
 * `CPUSTATS= {1|0}` Включает/выключает [отслеживание времени CPU](../Starting_the_server/Manually.md#searchd-command-line-options).  

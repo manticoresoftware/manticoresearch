@@ -3,6 +3,8 @@
 <!-- example deleting a replication cluster  1 -->
 Оператор `DELETE CLUSTER` удаляет указанный кластер по его [имени](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name). После удаления кластер удаляется со всех узлов, но его таблицы остаются нетронутыми и становятся активными локальными нереплицируемыми таблицами.
 
+Если вам нужно только отключить текущий узел и оставить остальную часть кластера работающей, используйте вместо этого `EXIT CLUSTER`. См. [Управление узлами репликации](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md).
+
 
 
 <!-- intro -->
@@ -100,4 +102,3 @@ utils_api.Sql("DELETE CLUSTER click_query", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
-

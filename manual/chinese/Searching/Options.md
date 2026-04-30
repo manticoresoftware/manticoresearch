@@ -31,6 +31,14 @@ POST /search
 <!-- intro -->
 SQL:
 <!-- request SQL -->
+
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -56,11 +64,19 @@ POST /search
 {
     "table" : "test",
     "query": {
-      "match": {
-        "title": "hello"
-      },
-      "match": {
-        "body": "world"
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "title": "hello"
+            }
+          },
+          {
+            "match": {
+              "body": "world"
+            }
+          }  
+        ]
       }
     },
     "options":
@@ -323,12 +339,24 @@ IDF 标志可以组合；`plain` 和 `normalized` 互斥；`tfidf_unnormalized` 
 `none`允许在表使用[index_exact_words](../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)启用时，将所有查询术语替换为它们的确切形式。这对于防止对查询术语进行词干提取或词形还原很有用。
 
 ### not_terms_only_allowed
+
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(f1 text, f2 int);
+INSERT INTO t(f1, f2) VALUES
+('b', 2),
+('c', 3),
+('b', 2);
+-->
+
 <!-- example not_terms_only_allowed -->
 `0`或`1`允许查询中使用独立的[否定](../Searching/Full_text_matching/Operators.md#Negation-operator)。默认值为0。另请参阅相应的[全局设置](../Server_settings/Searchd.md#not_terms_only_allowed)。
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select * from tbl where match('-donald');
+MySQL [(none)]> select * from t where match('-donald');
 ERROR 1064 (42000): index t: query error: query is non-computable (single NOT operator)
 MySQL [(none)]> select * from t where match('-donald') option not_terms_only_allowed=1;
 +---------------------+-----------+
@@ -337,6 +365,50 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 | 1658178727135150081 | smth else |
 +---------------------+-----------+
 ```
+
+<!-- request JSON -->
+```JSON
+POST /sql -d "select * from t where match('-d')"
+{
+  "error": "table t: query error: query is non-computable (single NOT operator)"
+}
+POST /sql -d "select * from t where match('-d')  option not_terms_only_allowed=1"
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      },
+      {
+        "_id": 5912226830793834497,
+        "_score": 2500,
+        "_source": {
+          "f1": "c",
+          "f2": 3
+        }
+      },
+      {
+        "_id": 724024784404348900,
+        "_score": 2500,
+        "_source": {
+          "f1": "b",
+          "f2": 2
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 ### ra
@@ -432,6 +504,17 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 
 <!-- end -->
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS students;
+CREATE TABLE students(name text, age int);
+INSERT INTO students(name, age) VALUES
+('Alice', 20),
+('Bob', 22),
+('Carol', 25);
+-->
+
 <!-- example comments -->
 当使用MySQL/MariaDB客户端时，请确保包含`--comments`标志以在查询中启用提示。
 
@@ -439,6 +522,13 @@ SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```bash
 mysql -P9306 -h0 --comments
 ```
+
+<!-- request JSON -->
+
+```JSON
+POST /sql -d "SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */"
+```
+
 <!-- end -->
 
 <!-- proofread -->

@@ -16,10 +16,5 @@
 
 enum class NODES_E : bool;
 
-struct UpdateNodesRequest_t : public ClusterRequest_t
-{
-	NODES_E m_eKindNodes;
-};
-
 bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes );
-
+bool SendClusterExitUpdateNodes ( const CSphString& sCluster, const CSphString& sLeavingNode, int64_t iWaitTimeoutMs, const VecTraits_T<CSphString>& dNodes );

@@ -7,7 +7,7 @@
 1. **监控Manticore性能**：使用Prometheus从Manticore收集指标并在Grafana仪表板中进行可视化。这种方法专注于搜索引擎本身的系统健康状况、性能监控和告警。
 2. **可视化搜索数据**：通过MySQL连接器查询并显示存储在Manticore表中的数据，类似于Kibana用于Elasticsearch数据可视化的方式。这对于分析趋势、聚合和基于索引数据的自定义可视化非常理想。
 
-目前测试并支持Grafana版本10.0-12.4。
+目前测试并支持Grafana版本10.0-13.0。
 
 ## 使用Prometheus和Grafana监控Manticore
 

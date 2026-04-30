@@ -22,8 +22,8 @@
 #include "searchdreplication.h"
 
 
-// verbose logging of replcating transactions, ruled by this env variable
-static bool LOG_LEVEL_RPL_TNX = val_from_env ( "MANTICORE_LOG_RPL_TNX", false );
+// verbose logging of replicating transactions, ruled by this env variable
+static const bool LOG_LEVEL_RPL_TNX = env_exists ( "MANTICORE_LOG_RPL_TNX" );
 #define LOG_COMPONENT_RPL_TNX ""
 #define RPL_TNX LOGMSG ( RPL_DEBUG, RPL_TNX, RPL_TNX )
 

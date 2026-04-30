@@ -86,6 +86,7 @@ struct CreateFilterContext_t
 	const SIContainer_c *		m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
 	CSphString					m_sJoinIdx;
+	CSphString					m_sJoinIdxLeft;	///< left table name in JOIN (for resolving table.attr in expressions)
 	JoinType_e					m_eJoinType = JoinType_e::NONE;
 	bool						m_bAddKNNDistFilter = false;
 };
@@ -103,6 +104,7 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 void OptimizeFilters ( CSphVector<CSphFilterSettings> & dFilters );
 
 CSphString FilterType2Str ( ESphFilter eFilterType );
+bool HasKNNDistFilter ( const CSphQuery & tQuery );
 
 void SetFilterStackItemSize ( std::pair<int,int> );
 int GetFilterStackItemSize();
@@ -329,7 +331,20 @@ struct RowIdBoundaries_t
 
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
+struct JsonSIFilterTransform_t
+{
+	struct StageRestore_t
+	{
+		CSphString		m_sAttr;
+		ESphEvalStage	m_eStage = SPH_EVAL_STATIC;
+	};
+
+	int					m_iFilter = -1;
+	CSphFilterSettings	m_tOriginal;
+	CSphVector<StageRestore_t> m_dStages;
+};
+
 bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
-bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError );
+bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError, CSphVector<JsonSIFilterTransform_t> * pJsonSITransforms=nullptr );
 
 #endif // _sphinxfilter_

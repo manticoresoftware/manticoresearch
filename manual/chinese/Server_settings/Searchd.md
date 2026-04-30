@@ -83,12 +83,12 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 
 默认情况下，表压缩会自动进行。您可以通过`auto_optimize`设置修改此行为：
 * 0 表示禁用自动表压缩（您仍可以手动调用`OPTIMIZE`）
-* 1 表示显式启用
-* 启用它，同时将优化阈值乘以2。
+* 1 启用自动表压缩并使用默认阈值
+* 任何大于 1 的整数 启用自动表压缩，同时将阈值乘以该值
 
-默认情况下，OPTIMIZE会一直运行，直到磁盘块数量小于或等于逻辑CPU核心数乘以2。
+默认情况下，阈值是逻辑 CPU 核心数乘以 2。
 
-但是，如果表具有KNN索引属性，则此阈值不同。在这种情况下，为了提高KNN搜索性能，它被设置为物理CPU核心数除以2。
+但是，如果表具有带有 KNN 索引的属性，则默认阈值不同。在这种情况下，它设置为物理 CPU 核心数除以 2，最小值为 1，以提高 KNN 搜索性能。
 
 请注意，开启或关闭`auto_optimize`不会阻止您手动运行[OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)。
 
@@ -1099,10 +1099,18 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 ### pid_file
 
 <!-- example conf pid_file -->
-pid_file 是 Manticore 搜索中必填的配置选项，指定存储 `searchd` 服务器进程ID的文件路径。
+`pid_file` 是一个配置选项，指定存储 `searchd` 服务器进程 ID (PID) 的文件路径。
 
-searchd 进程ID文件在启动时会被重新创建并锁定，并在服务器运行时包含主服务器进程ID。服务器关闭时会解除链接。
-此文件的目的是让 Manticore 执行各种内部任务，例如检查是否已经有运行中的 `searchd` 实例，停止 `searchd`，并通知它应该轮换表。该文件也可用于外部自动化脚本。
+PID 文件在启动时创建并锁定，包含服务器运行时的主进程 ID。服务器关闭时，该文件会被删除。此文件允许 Manticore 执行内部任务，例如：
+
+* 验证是否已有 `searchd` 实例在运行。
+* 停止 `searchd` 进程。
+* 触发表轮转。
+
+外部自动化脚本也可以使用此 PID 文件。
+
+**要求：**
+如果 `searchd` 使用 `--console`、`--nodetach` 或 `--systemd` 选项运行，或者系统自动检测到 systemd 管理，则 `pid_file` 是可选的。在所有其他情况下，此设置是强制性的。如果使用了 `--pidfile` 命令行选项，此设置也是必需的。
 
 
 <!-- intro -->
@@ -1770,7 +1778,7 @@ unlink_old = 0
 <!-- example conf watchdog -->
 线程服务器看门狗。可选，缺省值为1（启用看门狗）。
 
-当Manticore查询崩溃时，可能会导致整个服务器崩溃。启用看门狗功能后，`searchd`还会维护一个独立的轻量级进程，监控主服务器进程，并在发生异常终止时自动重新启动它。看门狗默认是启用的。
+当 Manticore 查询崩溃时，可能导致整个服务器崩溃。启用看门狗功能后，`searchd` 还会维护一个独立的轻量级进程，用于监控主服务器进程，并在发生异常终止时自动重新启动它。
 
 <!-- request Example -->
 

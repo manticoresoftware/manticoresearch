@@ -3111,10 +3111,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 			}
 
 			if ( pKNNDist )
-			{
-				float fKNNDist = tMatch.GetAttrFloat ( pKNNDist->m_tLocator );
-				tOut.Sprintf( R"("_knn_dist":%f)", fKNNDist );
-			}
+				tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
 
 			if ( pHybridScore )
 				tOut.Sprintf( R"("_hybrid_score":%f)", tMatch.GetAttrFloat ( pHybridScore->m_tLocator ) );

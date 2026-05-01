@@ -1,29 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <test>
-<name>replication cluster create with long data_dir path</name>
+<name>date_histogram cases</name>
+
+<skip_indexer/>
 
 <requires>
-	<replication/>
-	<non-windows/>
-	<force-rt/>
+<force-rt/>
+<http/>
 </requires>
-<skip_indexer/>
 
 <config>
 searchd
 {
 	<searchd_settings/>
-	watchdog = 0
-	data_dir = <data_path path="1234567890123456789012345678901234567890"/>
+	data_dir = <data_path path="data0"/>
+	timezone = UTC
 }
 </config>
 
 <queries>
 <sphinxql>
-	create cluster c;
-	show status like 'cluster_c_status';
-	delete cluster c;
+	create table dh_minute (ts timestamp);
+	insert into dh_minute (id, ts) values
+		(1,1704067201),
+		(2,1704067230),
+		(3,1704067265),
+		(4,1704067319),
+		(5,1704067320),
+		(6,1704067350);
+
+	create table dh_hour (ts timestamp);
+	insert into dh_hour (id, ts) values
+		(1,1704067201),
+		(2,1704067215),
+		(3,1704070805),
+		(4,1704070810),
+		(5,1704074400),
+		(6,1704077999);
+
+	create table dh_day (ts timestamp);
+	insert into dh_day (id, ts) values
+		(1,1704067201),
+		(2,1704110400),
+		(3,1704153605),
+		(4,1704239999),
+		(5,1704240000),
+		(6,1704283200);
+
+	<!-- Reported issue #4459: fixed hour aliases must match explicit seconds. -->
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='3600s'}) as dh from dh_hour group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='1h'}) as dh from dh_hour group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='60m'}) as dh from dh_hour group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='hour'}) as dh from dh_hour group by dh order by dh asc;
+
+	<!-- Discovered failures from the documented fixed_interval list. -->
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='minute'}) as dh from dh_minute group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='2m'}) as dh from dh_minute group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='3h'}) as dh from dh_hour group by dh order by dh asc;
+
+	<!-- Controls that already worked and should keep working. -->
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='day'}) as dh from dh_day group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {fixed_interval='5d'}) as dh from dh_day group by dh order by dh asc;
+</sphinxql>
+
+<!-- JSON aggs use the same fixed interval rounding path. -->
+<query endpoint="json/search">{ "table": "dh_hour", "size":0, "aggs":{ "h": { "date_histogram": { "field": "ts", "fixed_interval":"1h" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_minute", "size":0, "aggs":{ "m": { "date_histogram": { "field": "ts", "fixed_interval":"minute" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_minute", "size":0, "aggs":{ "m2": { "date_histogram": { "field": "ts", "fixed_interval":"2m" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_hour", "size":0, "aggs":{ "h3": { "date_histogram": { "field": "ts", "fixed_interval":"3h" } } } }</query>
+
+<sphinxql>
+	create table dh_tz (ts timestamp);
+	insert into dh_tz (id, ts) values
+		(1,1704061800),
+		(2,1704144600),
+		(3,1704148200),
+		(4,1704155400);
+</sphinxql>
+
+<!-- JSON date_histogram calendar timezone and offset support. -->
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "days": { "date_histogram": { "field": "ts", "calendar_interval":"day" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "novosibirsk_days": { "date_histogram": { "field": "ts", "calendar_interval":"day", "time_zone":"Asia/Novosibirsk" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "offset_days": { "date_histogram": { "field": "ts", "calendar_interval":"day", "offset":"3h" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "offset_days_num": { "date_histogram": { "field": "ts", "calendar_interval":"day", "offset":10800 } } } }</query>
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "bad_tz": { "date_histogram": { "field": "ts", "calendar_interval":"day", "time_zone":"+03:00" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "bad_fixed_tz": { "date_histogram": { "field": "ts", "fixed_interval":"day", "time_zone":"Asia/Novosibirsk" } } } }</query>
+<query endpoint="json/search">{ "table": "dh_tz", "size":0, "aggs":{ "bad_fixed_offset": { "date_histogram": { "field": "ts", "fixed_interval":"day", "offset":"3h" } } } }</query>
+
+<sphinxql>
+	<!-- Internal SphinxQL forms used by JSON aggregate dump/reparse should match the JSON buckets above. -->
+	select count(*) as cnt, date_histogram(ts, {calendar_interval='day'}) as dh from dh_tz group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {calendar_interval='day', calendar_interval_time_zone='Asia/Novosibirsk'}) as dh from dh_tz group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {calendar_interval='day', calendar_interval_offset='3h'}) as dh from dh_tz group by dh order by dh asc;
+	select count(*) as cnt, date_histogram(ts, {calendar_interval='day', calendar_interval_offset='10800s'}) as dh from dh_tz group by dh order by dh asc;
+</sphinxql>
+
+<sphinxql>
+	drop table dh_minute;
+	drop table dh_hour;
+	drop table dh_day;
+	drop table dh_tz;
 </sphinxql>
 </queries>
-
 </test>

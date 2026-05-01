@@ -39,11 +39,11 @@ Soundex implementation matches that of MySQL. Metaphone implementation is based 
 To use the `morphology` option, specify one or multiple of the built-in options, including:
 * none: do not perform any morphology processing
 * lemmatize_ru - apply Russian lemmatizer and pick a single root form
-* lemmatize_uk - apply Ukrainian lemmatizer and pick a single root form (install it first in [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) or [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer)). For correct work of the lemmatizer make sure specific Ukrainian characters are preserved in your `charset_table` since by default they are not. For that override them, like this: `charset_table='non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491'`. [Here](https://play.manticoresearch.com/ua-lemmatizer/) is an interactive course about how to install and use the urkainian lemmatizer.
+* lemmatize_uk - apply Ukrainian lemmatizer and pick a single root form
 * lemmatize_en - apply English lemmatizer and pick a single root form
 * lemmatize_de - apply German lemmatizer and pick a single root form
 * lemmatize_ru_all - apply Russian lemmatizer and index all possible root forms
-* lemmatize_uk_all - apply Ukrainian lemmatizer and index all possible root forms. Find the installation links above and take care of the `charset_table`.
+* lemmatize_uk_all - apply Ukrainian lemmatizer and index all possible root forms
 * lemmatize_en_all - apply English lemmatizer and index all possible root forms
 * lemmatize_de_all - apply German lemmatizer and index all possible root forms
 * stem_en - apply Porter's English stemmer
@@ -790,4 +790,3 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
-

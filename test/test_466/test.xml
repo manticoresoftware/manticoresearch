@@ -80,10 +80,27 @@ index multi1
 	path              = <data_path/>/multi1
 }
 
+source src_gh4466_json_aggs
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_gh4466_json_aggs
+	sql_attr_string   = foo
+	sql_attr_json     = comments
+}
+
+
+index gh4466_json_aggs
+{
+	source            = src_gh4466_json_aggs
+	path              = <data_path/>/gh4466_json_aggs
+}
+
 </config>
 
 <db_drop>drop table if exists test_group1</db_drop>
 <db_drop>drop table if exists test_group2</db_drop>
+<db_drop>drop table if exists table_gh4466_json_aggs</db_drop>
 
 <db_create>
 CREATE TABLE `test_group1` (
@@ -166,6 +183,19 @@ insert into table_multi1 (id,title,brand_id,j) values
 (1,'Product 1', 11, '{a:13, b:14}'),
 (2,'Product 2', 12, '{a:13, b:12}'),
 (3,'Product 3', 11, '{a:13, b:13}')
+</db_insert>
+
+<db_create>
+CREATE TABLE `table_gh4466_json_aggs` (
+  `id` int(11),
+  `foo` varchar(255),
+  `comments` varchar(255)
+);
+</db_create>
+
+<db_insert>
+insert into table_gh4466_json_aggs (id,foo,comments) values
+(1,'1', '["a","b","c"]')
 </db_insert>
 
 <queries>
@@ -306,6 +336,15 @@ insert into table_multi1 (id,title,brand_id,j) values
 <sphinxql>select id, count(*), date_histogram(tm, {fixed_interval='day'}) as days from idx_dates group by days order by days asc limit 5</sphinxql>
 <!-- aggs.fixed_interval with unit multiplier -->
 <sphinxql>select id, count(*), date_histogram(tm, {fixed_interval='4day'}) as days, date_format(days, '%Y-%m-%dT%H:%M') as d from idx_dates group by days order by days asc limit 5</sphinxql>
+
+<!-- GH-4466: single terms aggregation with limit 0 uses group emulation and should bucket JSON array items, not the whole array. -->
+<query endpoint="json/search">{ "table": "gh4466_json_aggs", "limit":0, "aggs":{ "a1": { "terms": { "field": "comments", "size": 10 } } } }</query>
+
+<!-- Control: multi-aggregation path already remaps the JSON group key via the facet schema. -->
+<query endpoint="json/search">{ "table": "gh4466_json_aggs", "limit":0, "aggs":{ "a1": { "terms": { "field": "comments", "size": 10 } }, "a2": { "terms": { "field": "foo", "size": 10 } } } }</query>
+
+<!-- Control: nonzero limit uses the regular aggregation/facet path. -->
+<query endpoint="json/search">{ "table": "gh4466_json_aggs", "limit":1, "aggs":{ "a1": { "terms": { "field": "comments", "size": 10 } } } }</query>
 
 
 </queries>

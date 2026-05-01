@@ -23,6 +23,7 @@
 #include "hybridexecutor.h"
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
+#include "datetime.h"
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
 
@@ -2331,15 +2332,38 @@ struct AggrKeyTrait_t
 {
 	const CSphColumnInfo * m_pKey = nullptr;
 	CSphVector<CompositeLocator_t> m_dCompositeKeys;
+	const AggrDateHistSetting_t * m_pDateHist = nullptr;
+	cctz::time_zone m_tDateHistTimeZone;
 	bool m_bKeyed = false;
 	RangeNameHash_t m_tRangeNames;
 };
 
-static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
+static bool IsJsonFieldAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_JSON_FIELD || eAttr==SPH_ATTR_JSON_FIELD_PTR;
+}
+
+
+static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	const CSphColumnInfo * pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
+		return pKey;
+
+	CSphString sJsonKey = SortJsonInternalSet ( tAggr.m_sCol );
+	const CSphColumnInfo * pJsonKey = tSchema.GetAttr ( sJsonKey.cstr() );
+	if ( !pJsonKey )
+		pJsonKey = tRawSchema.GetAttr ( sJsonKey.cstr() );
+
+	return pJsonKey && IsJsonFieldAttr ( pJsonKey->m_eAttrType ) ? pJsonKey : pKey;
+}
+
+
+static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::NONE )
 	{
-		tRes.m_pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+		tRes.m_pKey = GetPlainAggrKey ( tAggr, tSchema, tRawSchema );
 	} else if ( tAggr.m_eAggrFunc==Aggr_e::COMPOSITE )
 	{
 		for ( const auto & tItem : tAggr.m_dComposite )
@@ -2376,6 +2400,12 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 
 		case Aggr_e::DATE_HISTOGRAM:
 			tRes.m_bKeyed = tAggr.m_tDateHist.m_bKeyed;
+			tRes.m_pDateHist = &tAggr.m_tDateHist;
+			if ( !tAggr.m_tDateHist.m_sTimeZone.IsEmpty() )
+			{
+				CSphString sError;
+				Verify ( LoadAggrDateHistogramTimeZone ( tAggr.m_tDateHist.m_sTimeZone, tRes.m_tDateHistTimeZone, sError ) );
+			}
 			break;
 
 		default:
@@ -2385,6 +2415,15 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 
 	return ( tRes.m_pKey || tRes.m_dCompositeKeys.GetLength() );
 }
+
+static void FormatDateHistogramKey ( time_t tSrcTime, const AggrKeyTrait_t & tKey, StringBuilder_c & tOut )
+{
+	if ( tKey.m_pDateHist && !tKey.m_pDateHist->m_sTimeZone.IsEmpty() )
+		FormatDate ( tSrcTime, tKey.m_tDateHistTimeZone, tOut );
+	else
+		FormatDate ( tSrcTime, tOut );
+}
+
 
 static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, JsonEscapedBuilder & tPrefixBucketBlock )
 {
@@ -2417,7 +2456,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 			tPrefixBucketBlock.Clear();
 			tPrefixBucketBlock.Appendf ( "\"");
 			time_t tSrcTime = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
-			FormatDate ( tSrcTime, tPrefixBucketBlock );
+			FormatDateHistogramKey ( tSrcTime, tKey, tPrefixBucketBlock );
 			tPrefixBucketBlock.Appendf ( "\":{" );
 			sPrefix = tPrefixBucketBlock.cstr();
 		}
@@ -2458,7 +2497,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 
 		tBuf.Clear();
 		time_t tSrcTime = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
-		FormatDate ( tSrcTime, tBuf );
+		FormatDateHistogramKey ( tSrcTime, tKey, tBuf );
 		tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 
 	} else if ( eAggrFunc==Aggr_e::COMPOSITE )
@@ -2658,8 +2697,9 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		return;
 
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+	const CSphSchema & tRawSchema = tRes.m_dResults.First().m_tSchema;
 	AggrKeyTrait_t tKey;
-	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
+	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, tRawSchema, iAggrItem, iNow, tKey );
 	const CSphColumnInfo * pDistinct = nullptr;
 	if ( !sDistinctName.IsEmpty() )
 		pDistinct = tRes.m_tSchema.GetAttr ( sDistinctName.cstr() );
@@ -4329,6 +4369,44 @@ static bool ParseAggrDateHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tIt
 		return false;
 	}
 	tHist.m_sInterval = tInterval.StrVal();
+
+	JsonObj_c tTimeZone = tBucket.GetItem ( "time_zone" );
+	JsonObj_c tOffset = tBucket.GetItem ( "offset" );
+	if ( tHist.m_bFixed && ( !tTimeZone.Empty() || !tOffset.Empty() ) )
+	{
+		sError.SetSprintf ( "\"%s\" time_zone and offset are only supported with calendar_interval", tItem.m_sCol.cstr() );
+		return false;
+	}
+
+	if ( !tTimeZone.Empty() )
+	{
+		if ( !tTimeZone.IsStr() )
+		{
+			sError.SetSprintf ( "\"%s\" time_zone should be string", tItem.m_sCol.cstr() );
+			return false;
+		}
+
+		tHist.m_sTimeZone = tTimeZone.StrVal();
+		cctz::time_zone tTZ;
+		if ( !LoadAggrDateHistogramTimeZone ( tHist.m_sTimeZone, tTZ, sError ) )
+			return false;
+	}
+
+	if ( !tOffset.Empty() )
+	{
+		if ( tOffset.IsInt() )
+			tHist.m_sOffset.SetSprintf ( INT64_FMT "s", tOffset.IntVal() );
+		else if ( tOffset.IsStr() )
+			tHist.m_sOffset = tOffset.StrVal();
+		else
+		{
+			sError.SetSprintf ( "\"%s\" offset should be string or integer", tItem.m_sCol.cstr() );
+			return false;
+		}
+
+		if ( !ParseAggrDateHistogramOffset ( tHist.m_sOffset, tHist.m_iOffsetSeconds, sError ) )
+			return false;
+	}
 
 	if ( !GetKeyed ( tBucket, tHist.m_bKeyed, sError ) )
 		return false;

@@ -1,11 +1,11 @@
 //
-// Created by Alexey on 2019-01-05.
+// Copyright (c) 2019-2026, Manticore Software LTD (https://manticoresearch.com)
 //
 
 // main purpose of this wrapper is to make some internal stuff of cJSON visible from outside
 // for the sake of testing/benching. And keep original file untouched for the sake of no-conflicts merging on update.
 
-#include "json/cJSON.c"
+#include "cJSON.c"
 
 // stuff below is only for benching purpuses (used in gtests_functions.cpp)
 int cJsonunescape ( char ** buf, cJSON * item )

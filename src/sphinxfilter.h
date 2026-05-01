@@ -331,7 +331,20 @@ struct RowIdBoundaries_t
 
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
+struct JsonSIFilterTransform_t
+{
+	struct StageRestore_t
+	{
+		CSphString		m_sAttr;
+		ESphEvalStage	m_eStage = SPH_EVAL_STATIC;
+	};
+
+	int					m_iFilter = -1;
+	CSphFilterSettings	m_tOriginal;
+	CSphVector<StageRestore_t> m_dStages;
+};
+
 bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
-bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError );
+bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError, CSphVector<JsonSIFilterTransform_t> * pJsonSITransforms=nullptr );
 
 #endif // _sphinxfilter_

@@ -26,10 +26,32 @@ source disk
 	sql_attr_uint	= gid
 }
 
+source klist
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+	sql_query_killlist = select 4
+}
+
 index disk
 {
 	source			= disk
 	path			= <data_path/>/disk
+}
+
+index disk1 : disk
+{
+	source			= disk
+	path			= <data_path/>/disk1
+}
+
+index klist : disk
+{
+	source = klist
+	path = <data_path/>/klist
+	killlist_target = disk1:kl
 }
 
 index rt
@@ -38,6 +60,11 @@ index rt
 	path			= <data_path/>/rt
 	rt_attr_uint = gid
 	rt_field = title
+}
+
+index rt1 : rt
+{
+	path			= <data_path/>/rt1
 }
 
 </config>
@@ -60,32 +87,65 @@ INSERT INTO test_table VALUES
 ( 2, 23, 'And if for ever got' ),
 ( 3, 31, 'Still for ever fare thee well' ),
 ( 3, 32, 'under_score <stuff>got removed</stuff>' ),
-( 3, 33, 'And if for ever got' )
+( 3, 33, 'And if for ever got' ),
+( 4, 44, 'Andd if for ever got' )
 ]]></db_insert>
 
 <queries><sphinxql>
-	SELECT * FROM rt;
-	SELECT * FROM disk;
+	<!-- empty rt, pure plain -->
+	SELECT * FROM rt ORDER BY id ASC;
+	show index rt status like '%documents';
+	SELECT * FROM disk ORDER BY id ASC;
+	show index disk status like '%documents';
 	ATTACH INDEX disk TO RTINDEX rt;
-	SELECT * FROM rt;
-	SELECT * FROM disk;
+	show index rt status like '%documents';
+	SELECT * FROM rt ORDER BY id ASC;
+	SELECT * FROM disk ORDER BY id ASC;
 	delete from rt where id=2;
-	select * from rt;
+	show index rt status like '%documents';
+	select * from rt ORDER BY id ASC;
 	select count(*) from rt;
 	delete from rt where id=2;
-	select * from rt;
+	show index rt status like '%documents';
+	select * from rt ORDER BY id ASC;
 	select count(*) from rt;
-	show index rt status like 'killed_rate';
-
 	debug dedup rt 0;
-	select * from rt;
+	show index rt status like '%documents';
+	select * from rt ORDER BY id ASC;
 	select count(*) from rt;
-	show index rt status like 'killed_rate';
-
 	debug compress rt 0 option sync=1;
-	select * from rt;
+	show index rt status like '%documents';
+	select * from rt ORDER BY id ASC;
 	select count(*) from rt;
-	show index rt status like 'killed_rate';
+
+	<!-- non-empty rt, plain with killed -->
+	insert into rt1 (id,title,gid) values (1, 'dupe of doc1', 15), (4, 'It was dupe here', 45);
+	SELECT * FROM rt1 ORDER BY id ASC;
+	show index rt1 status like '%documents';
+	SELECT * FROM disk1 ORDER BY id ASC;
+	show index disk1 status like '%documents';
+	ATTACH INDEX disk1 TO RTINDEX rt1;
+	show index rt1 status like '%documents';
+	SELECT * FROM rt1 ORDER BY id ASC;
+	SELECT * FROM disk1 ORDER BY id ASC;
+	delete from rt1 where id=2;
+	show index rt1 status like '%documents';
+	select * from rt1 ORDER BY id ASC;
+	select count(*) from rt1;
+	delete from rt1 where id=2;
+	show index rt1 status like '%documents';
+	select * from rt1 ORDER BY id ASC;
+	select count(*) from rt1;
+	debug dedup rt1 0;
+	show index rt1 status like '%documents';
+	select * from rt1 ORDER BY id ASC;
+	select count(*) from rt1;
+	debug compress rt1 0 option sync=1;
+	show index rt1 status like '%documents';
+	debug compress rt1 1 option sync=1;
+	show index rt1 status like '%documents';
+	select * from rt1 ORDER BY id ASC;
+	select count(*) from rt1;
 </sphinxql></queries>
 
 </test>

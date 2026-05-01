@@ -88,13 +88,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka ORDER BY id ASC;"
 ––– output –––
@@ -199,13 +196,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_metadata;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_metadata"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       46 |
-+----------+
+*************************** 1. row ***************************
+46
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metadata ORDER BY id ASC;"
 ––– output –––
@@ -253,13 +247,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_tags;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_tags"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       23 |
-+----------+
+*************************** 1. row ***************************
+23
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags ORDER BY id ASC;"
 ––– output –––
@@ -311,21 +302,15 @@ docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_al
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       50 |
-+----------+
+*************************** 1. row ***************************
+50
 ––– input –––
-sleep 10; docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+sleep 10; docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       50 |
-+----------+
+*************************** 1. row ***************************
+50
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_alter suspended=0;"; echo $?
 ––– output –––
@@ -335,13 +320,10 @@ timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELEC
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 CONSUMER_GROUP="manticore_ts"
 ––– block: ../../base/kafka-reset-consumer-offsets –––
@@ -362,13 +344,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_ts;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_ts"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       26 |
-+----------+
+*************************** 1. row ***************************
+26
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts ORDER BY id ASC;"
 ––– output –––
@@ -416,13 +395,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_combined;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_combined"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|        5 |
-+----------+
+*************************** 1. row ***************************
+5
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined ORDER BY id ASC;"
 ––– output –––
@@ -455,13 +431,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       50 |
-+----------+
+*************************** 1. row ***************************
+50
 ––– input –––
 sleep 1; docker exec manticore stdbuf -oL searchd --stopwait
 ––– output –––
@@ -480,13 +453,10 @@ timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELEC
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50;"
 ––– output –––
@@ -535,13 +505,10 @@ timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/se
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop_source;"
+docker exec manticore mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop_source"
 ––– output –––
-+----------+
-| count(*) |
-+----------+
-|       57 |
-+----------+
+*************************** 1. row ***************************
+57
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=1"; echo $?
 ––– output –––

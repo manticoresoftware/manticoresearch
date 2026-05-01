@@ -578,6 +578,20 @@ TEST ( Text, ArabicStemmer )
 		stem_ar_utf8 ( dTest22.Begin () + iOff );
 		ASSERT_FALSE ( memcmp ( dTest22.Begin () + iOff, sRef2, sizeof ( sRef2 ) ) );
 	}
+
+	const char * dMixedTests[] =
+	{
+		u8"ال200د",
+		u8"ال200ددد",
+	};
+
+	for ( const auto * sMixed : dMixedTests )
+	{
+		char sBuf[64];
+		snprintf ( sBuf, sizeof ( sBuf ), "%s", sMixed );
+		stem_ar_utf8 ( ( BYTE * ) sBuf );
+		ASSERT_STREQ ( sBuf, sMixed );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

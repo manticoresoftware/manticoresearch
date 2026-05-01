@@ -462,6 +462,10 @@ static void ar_word_6 ( BYTE * word )
 
 void stem_ar_utf8 ( BYTE * word )
 {
+	for ( BYTE * p = word; *p; ++p )
+		if ( *p < 0x80 )
+			return;
+
 	AR_STRIP ( AR_DIACRITIC );
 	AR_STRIP ( AR_KASHIDA ); // extension
 

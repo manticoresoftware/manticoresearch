@@ -115,7 +115,8 @@ POST /sql?mode=raw -d "OPTIMIZE TABLE rt OPTION sync=1"
 
 如果您遇到意外的SST或希望集群中所有节点的表二进制相同，则需要：
 1. 禁用[auto_optimize](../Server_settings/Searchd.md#auto_optimize)。
-2. 手动优化表：
+2. 手动优化表
+
 <!-- example cluster_manual_drop -->
 在其中一个节点上，从集群中删除表：
 <!-- request SQL -->

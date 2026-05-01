@@ -17,11 +17,16 @@
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "searchdsql.h"
+#include "tdigest_aggr_utils.h"
 #include "searchdha.h"
 #include "knnmisc.h"
 #include "hybridexecutor.h"
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
+#include "datetime.h"
+#include "std/tdigest.h"
+#include "std/tdigest_runtime.h"
+
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
@@ -1394,6 +1399,8 @@ static bool ParseOnCond ( const JsonObj_c & tRoot, CSphString & sIdx, CSphString
 	if ( !tRoot.FetchStrItem ( sIdx, "table", sError ) ) return false;
 	if ( !tRoot.FetchStrItem ( sAttr, "field", sError ) ) return false;
 	if ( !tRoot.FetchStrItem ( sType, "type", sError, true ) ) return false;
+	CanonicalizeIndexName ( sIdx );
+	sphColumnToLowercase ( const_cast<char*>( sAttr.cstr() ) );
 
 	if ( !sType.IsEmpty() )
 	{
@@ -1481,6 +1488,7 @@ static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString 
 
 		if ( !tJoinItem.FetchStrItem ( tQuery.m_sJoinIdx, "table", sError ) )
 			return false;
+		CanonicalizeIndexName ( tQuery.m_sJoinIdx );
 
 		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
 		if ( tMatchQuery )
@@ -2324,15 +2332,38 @@ struct AggrKeyTrait_t
 {
 	const CSphColumnInfo * m_pKey = nullptr;
 	CSphVector<CompositeLocator_t> m_dCompositeKeys;
+	const AggrDateHistSetting_t * m_pDateHist = nullptr;
+	cctz::time_zone m_tDateHistTimeZone;
 	bool m_bKeyed = false;
 	RangeNameHash_t m_tRangeNames;
 };
 
-static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
+static bool IsJsonFieldAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_JSON_FIELD || eAttr==SPH_ATTR_JSON_FIELD_PTR;
+}
+
+
+static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
+{
+	const CSphColumnInfo * pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
+		return pKey;
+
+	CSphString sJsonKey = SortJsonInternalSet ( tAggr.m_sCol );
+	const CSphColumnInfo * pJsonKey = tSchema.GetAttr ( sJsonKey.cstr() );
+	if ( !pJsonKey )
+		pJsonKey = tRawSchema.GetAttr ( sJsonKey.cstr() );
+
+	return pJsonKey && IsJsonFieldAttr ( pJsonKey->m_eAttrType ) ? pJsonKey : pKey;
+}
+
+
+static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema, int iAggrItem, int iNow, AggrKeyTrait_t & tRes )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::NONE )
 	{
-		tRes.m_pKey = tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+		tRes.m_pKey = GetPlainAggrKey ( tAggr, tSchema, tRawSchema );
 	} else if ( tAggr.m_eAggrFunc==Aggr_e::COMPOSITE )
 	{
 		for ( const auto & tItem : tAggr.m_dComposite )
@@ -2369,6 +2400,12 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 
 		case Aggr_e::DATE_HISTOGRAM:
 			tRes.m_bKeyed = tAggr.m_tDateHist.m_bKeyed;
+			tRes.m_pDateHist = &tAggr.m_tDateHist;
+			if ( !tAggr.m_tDateHist.m_sTimeZone.IsEmpty() )
+			{
+				CSphString sError;
+				Verify ( LoadAggrDateHistogramTimeZone ( tAggr.m_tDateHist.m_sTimeZone, tRes.m_tDateHistTimeZone, sError ) );
+			}
 			break;
 
 		default:
@@ -2378,6 +2415,15 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 
 	return ( tRes.m_pKey || tRes.m_dCompositeKeys.GetLength() );
 }
+
+static void FormatDateHistogramKey ( time_t tSrcTime, const AggrKeyTrait_t & tKey, StringBuilder_c & tOut )
+{
+	if ( tKey.m_pDateHist && !tKey.m_pDateHist->m_sTimeZone.IsEmpty() )
+		FormatDate ( tSrcTime, tKey.m_tDateHistTimeZone, tOut );
+	else
+		FormatDate ( tSrcTime, tOut );
+}
+
 
 static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, JsonEscapedBuilder & tPrefixBucketBlock )
 {
@@ -2410,7 +2456,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 			tPrefixBucketBlock.Clear();
 			tPrefixBucketBlock.Appendf ( "\"");
 			time_t tSrcTime = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
-			FormatDate ( tSrcTime, tPrefixBucketBlock );
+			FormatDateHistogramKey ( tSrcTime, tKey, tPrefixBucketBlock );
 			tPrefixBucketBlock.Appendf ( "\":{" );
 			sPrefix = tPrefixBucketBlock.cstr();
 		}
@@ -2451,7 +2497,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 
 		tBuf.Clear();
 		time_t tSrcTime = tMatch.GetAttr ( tKey.m_pKey->m_tLocator );
-		FormatDate ( tSrcTime, tBuf );
+		FormatDateHistogramKey ( tSrcTime, tKey, tBuf );
 		tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 
 	} else if ( eAggrFunc==Aggr_e::COMPOSITE )
@@ -2508,7 +2554,141 @@ static VecTraits_T<CSphMatch> GetResultMatches ( const VecTraits_T<CSphMatch> & 
 
 static bool IsSingleValue ( Aggr_e eAggr )
 {
-	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG );
+	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG || eAggr==Aggr_e::MAD
+		|| eAggr==Aggr_e::PERCENTILES || eAggr==Aggr_e::PERCENTILE_RANKS );
+}
+
+static float GetTdigestCompression ( const CSphColumnInfo & tCol )
+{
+	return tdigest_aggr::GetCompression ( tCol );
+}
+
+static void LoadTdigestFromMatch ( const CSphMatch & tMatch, const CSphColumnInfo & tCol, TDigest_c & tDigest )
+{
+	tdigest_aggr::LoadFromMatch ( tMatch, tCol, tDigest );
+}
+
+static bool CalcMadFromDigest ( const TDigest_c & tDigest, double & fMad,
+	CSphVector<TDigestCentroid_t> & dCentroids,
+	CSphVector<JsonAggr_t::MadDeviationEntry_t> & dDeviations )
+{
+	return tdigest_aggr::CalcMad ( tDigest, fMad, dCentroids, dDeviations );
+}
+
+static CSphString FormatNumeric ( double fValue )
+{
+	return tdigest_aggr::FormatNumeric ( fValue );
+}
+
+static CSphString FormatKey ( double fValue )
+{
+	return tdigest_aggr::FormatKey ( fValue );
+}
+
+static void AppendValueStringFields ( JsonEscapedBuilder & tOut, const CSphString & sValue )
+{
+	tOut.AppendName ( "value" );
+	tOut += sValue.cstr();
+	tOut.AppendName ( "value_as_string" );
+	tOut.Sprintf ( "\"%s\"", sValue.cstr() );
+}
+
+static void AppendNullValueFields ( JsonEscapedBuilder & tOut )
+{
+	tOut.AppendName ( "value" );
+	tOut += "null";
+	tOut.AppendName ( "value_as_string" );
+	tOut += "null";
+}
+
+static void EncodePercentilesValues ( const JsonAggr_t & tAggr, const CSphMatch & tMatch, const CSphColumnInfo & tStore, JsonEscapedBuilder & tOut )
+{
+	TDigest_c tDigest ( GetTdigestCompression ( tStore ) );
+	LoadTdigestFromMatch ( tMatch, tStore, tDigest );
+	bool bHasSamples = ( tDigest.GetCount()>0 );
+	const auto & dPercents = tAggr.m_tPercentiles.m_dPercents;
+
+	if ( tAggr.m_tPercentiles.m_bKeyed )
+	{
+		tOut.StartBlock ( ",", "\"values\":{", "}" );
+		for ( float fPercent : dPercents )
+		{
+			CSphString sKey = FormatKey ( fPercent );
+			tOut.Sprintf ( "\"%s\":", sKey.cstr() );
+			tOut.SkipNextComma ();
+
+			if ( bHasSamples )
+			{
+				CSphString sValue = FormatNumeric ( tDigest.Percentile ( fPercent ) );
+				tOut += sValue.cstr();
+			} else
+				tOut += "null";
+		}
+		tOut.FinishBlock ( false );
+		return;
+	}
+
+	tOut.StartBlock ( ",", "\"values\":[", "]" );
+	for ( float fPercent : dPercents )
+	{
+		ScopedComma_c sEntry ( tOut, ",", "{", "}" );
+		CSphString sKey = FormatKey ( fPercent );
+		tOut.Sprintf ( "\"key\":%s", sKey.cstr() );
+
+		if ( bHasSamples )
+		{
+			CSphString sValue = FormatNumeric ( tDigest.Percentile ( fPercent ) );
+			AppendValueStringFields ( tOut, sValue );
+		} else
+			AppendNullValueFields ( tOut );
+	}
+	tOut.FinishBlock ( false );
+}
+
+static void EncodePercentileRanksValues ( const JsonAggr_t & tAggr, const CSphMatch & tMatch, const CSphColumnInfo & tStore, JsonEscapedBuilder & tOut )
+{
+	TDigest_c tDigest ( GetTdigestCompression ( tStore ) );
+	LoadTdigestFromMatch ( tMatch, tStore, tDigest );
+	bool bHasSamples = ( tDigest.GetCount()>0 );
+	const auto & dValues = tAggr.m_tPercentileRanks.m_dValues;
+
+	if ( tAggr.m_tPercentileRanks.m_bKeyed )
+	{
+		tOut.StartBlock ( ",", "\"values\":{", "}" );
+		for ( double fThreshold : dValues )
+		{
+			CSphString sKey = FormatKey ( fThreshold );
+			tOut.Sprintf ( "\"%s\":", sKey.cstr() );
+			tOut.SkipNextComma ();
+
+			if ( bHasSamples )
+			{
+				double fRank = tDigest.Cdf ( fThreshold ) * 100.0;
+				CSphString sValue = FormatNumeric ( fRank );
+				tOut += sValue.cstr();
+			} else
+				tOut += "null";
+		}
+		tOut.FinishBlock ( false );
+		return;
+	}
+
+	tOut.StartBlock ( ",", "\"values\":[", "]" );
+	for ( double fThreshold : dValues )
+	{
+		ScopedComma_c sEntry ( tOut, ",", "{", "}" );
+		CSphString sKey = FormatKey ( fThreshold );
+		tOut.Sprintf ( "\"key\":%s", sKey.cstr() );
+
+		if ( bHasSamples )
+		{
+			double fRank = tDigest.Cdf ( fThreshold ) * 100.0;
+			CSphString sValue = FormatNumeric ( fRank );
+			AppendValueStringFields ( tOut, sValue );
+		} else
+			AppendNullValueFields ( tOut );
+	}
+	tOut.FinishBlock ( false );
 }
 
 static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
@@ -2517,8 +2697,9 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 		return;
 
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+	const CSphSchema & tRawSchema = tRes.m_dResults.First().m_tSchema;
 	AggrKeyTrait_t tKey;
-	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
+	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, tRawSchema, iAggrItem, iNow, tKey );
 	const CSphColumnInfo * pDistinct = nullptr;
 	if ( !sDistinctName.IsEmpty() )
 		pDistinct = tRes.m_tSchema.GetAttr ( sDistinctName.cstr() );
@@ -2596,10 +2777,36 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 
 	} else
 	{
-		if ( bHasKey && pCount && dMatches.GetLength() )
+		if ( bHasKey && dMatches.GetLength() && tKey.m_pKey )
 		{
 			const CSphMatch & tMatch = dMatches[0];
+			switch ( tAggr.m_eAggrFunc )
+			{
+			case Aggr_e::PERCENTILES:
+				EncodePercentilesValues ( tAggr, tMatch, *tKey.m_pKey, tOut );
+				break;
+			case Aggr_e::PERCENTILE_RANKS:
+				EncodePercentileRanksValues ( tAggr, tMatch, *tKey.m_pKey, tOut );
+				break;
+			case Aggr_e::MAD:
+			{
+				TDigest_c tDigest ( GetTdigestCompression ( *tKey.m_pKey ) );
+				LoadTdigestFromMatch ( tMatch, *tKey.m_pKey, tDigest );
+
+				double fMad = 0.0;
+				if ( CalcMadFromDigest ( tDigest, fMad, tAggr.m_dMadCentroidScratch, tAggr.m_dMadDeviationScratch ) )
+				{
+					CSphString sValue = FormatNumeric ( fMad );
+					AppendValueStringFields ( tOut, sValue );
+				} else
+					AppendNullValueFields ( tOut );
+				break;
+			}
+			default:
+				if ( pCount )
 			JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "value", tMatch, tKey.m_pKey->m_tLocator );
+				break;
+			}
 		}
 	}
 
@@ -3892,6 +4099,12 @@ static Aggr_e GetAggrFunc ( const JsonObj_c & tBucket, bool bCheckAggType )
 		return Aggr_e::SUM;
 	if ( StrEq ( tBucket.Name(), "avg") )
 		return Aggr_e::AVG;
+	if ( StrEq ( tBucket.Name(), "percentiles") )
+		return Aggr_e::PERCENTILES;
+	if ( StrEq ( tBucket.Name(), "percentile_ranks") )
+		return Aggr_e::PERCENTILE_RANKS;
+	if ( StrEq ( tBucket.Name(), "median_absolute_deviation") )
+		return Aggr_e::MAD;
 
 	if ( bCheckAggType )
 		sphWarning ( "unsupported aggregate type '%s'", tBucket.Name() );
@@ -3934,6 +4147,18 @@ static bool GetKeyed ( const JsonObj_c & tBucket, bool & bKeyed, CSphString & sE
 
 static bool ParseAggrRange ( const JsonObj_c & tRanges, const CSphString & sCol, AggrRangeSetting_t & dRanges, CSphString & sError );
 static bool ParseAggrRange ( const JsonObj_c & tRanges, const CSphString & sCol, AggrDateRangeSetting_t & dRanges, CSphString & sError );
+static bool ParseAggrPercentiles ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError );
+static bool ParseAggrPercentileRanks ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError );
+static bool ParseAggrMad ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError );
+
+static void ApplyDefaultPercentiles ( CSphVector<float> & dPercents )
+{
+	static const float dDefaults[] = { 1.f, 5.f, 25.f, 50.f, 75.f, 95.f, 99.f };
+	dPercents.Resize ( 0 );
+	dPercents.Reserve ( (int)( sizeof ( dDefaults ) / sizeof ( dDefaults[0] ) ) );
+	for ( float fVal : dDefaults )
+		dPercents.Add ( fVal );
+}
 
 static bool ParseAggrRange ( const JsonObj_c & tBucket, JsonAggr_t & tItem, bool bDate, CSphString & sError )
 {
@@ -4145,6 +4370,44 @@ static bool ParseAggrDateHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tIt
 	}
 	tHist.m_sInterval = tInterval.StrVal();
 
+	JsonObj_c tTimeZone = tBucket.GetItem ( "time_zone" );
+	JsonObj_c tOffset = tBucket.GetItem ( "offset" );
+	if ( tHist.m_bFixed && ( !tTimeZone.Empty() || !tOffset.Empty() ) )
+	{
+		sError.SetSprintf ( "\"%s\" time_zone and offset are only supported with calendar_interval", tItem.m_sCol.cstr() );
+		return false;
+	}
+
+	if ( !tTimeZone.Empty() )
+	{
+		if ( !tTimeZone.IsStr() )
+		{
+			sError.SetSprintf ( "\"%s\" time_zone should be string", tItem.m_sCol.cstr() );
+			return false;
+		}
+
+		tHist.m_sTimeZone = tTimeZone.StrVal();
+		cctz::time_zone tTZ;
+		if ( !LoadAggrDateHistogramTimeZone ( tHist.m_sTimeZone, tTZ, sError ) )
+			return false;
+	}
+
+	if ( !tOffset.Empty() )
+	{
+		if ( tOffset.IsInt() )
+			tHist.m_sOffset.SetSprintf ( INT64_FMT "s", tOffset.IntVal() );
+		else if ( tOffset.IsStr() )
+			tHist.m_sOffset = tOffset.StrVal();
+		else
+		{
+			sError.SetSprintf ( "\"%s\" offset should be string or integer", tItem.m_sCol.cstr() );
+			return false;
+		}
+
+		if ( !ParseAggrDateHistogramOffset ( tHist.m_sOffset, tHist.m_iOffsetSeconds, sError ) )
+			return false;
+	}
+
 	if ( !GetKeyed ( tBucket, tHist.m_bKeyed, sError ) )
 		return false;
 
@@ -4241,6 +4504,158 @@ static bool ParseAggrComposite ( const JsonObj_c & tBucket, JsonAggr_t & tAggr, 
 	return true;
 }
 
+static bool ParseTdigestCompression ( const JsonObj_c & tBucket, float & fCompression, CSphString & sError )
+{
+	JsonObj_c tTdigest = tBucket.GetItem ( "tdigest" );
+	if ( !tTdigest )
+		return true;
+
+	if ( !tTdigest.IsObj() )
+	{
+		sError.SetSprintf ( "\"%s\" \"tdigest\" property should be an object", tBucket.Name() );
+		return false;
+	}
+
+	JsonObj_c tCompression = tTdigest.GetItem ( "compression" );
+	if ( !tCompression )
+		return true;
+
+	if ( !tCompression.IsNum() )
+	{
+		sError.SetSprintf ( "\"%s\" tdigest \"compression\" should be numeric", tBucket.Name() );
+		return false;
+	}
+
+	double fValue = tCompression.DblVal();
+	if ( fValue<=0.0 )
+	{
+		sError.SetSprintf ( "\"%s\" tdigest \"compression\" should be positive", tBucket.Name() );
+		return false;
+	}
+
+	fCompression = (float)fValue;
+	return true;
+}
+
+static bool ParseAggrPercentiles ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError )
+{
+	JsonObj_c tValues = tBucket.GetItem ( "values" );
+	auto & dPercents = tItem.m_tPercentiles.m_dPercents;
+	if ( !tValues )
+	{
+		ApplyDefaultPercentiles ( dPercents );
+	} else
+	{
+		if ( !tValues.IsArray() )
+		{
+			sError.SetSprintf ( "\"%s\" \"values\" should be an array", tItem.m_sBucketName.cstr() );
+			return false;
+		}
+
+		int iCount = tValues.Size();
+		if ( !iCount )
+		{
+			sError.SetSprintf ( "\"%s\" empty \"values\" property", tItem.m_sBucketName.cstr() );
+			return false;
+		}
+
+		dPercents.Resize ( 0 );
+		dPercents.Reserve ( iCount );
+
+		for ( const auto & tVal : tValues )
+		{
+			if ( !tVal.IsNum() )
+			{
+				sError.SetSprintf ( "\"%s\" \"values\" entries should be numeric", tItem.m_sBucketName.cstr() );
+				return false;
+			}
+
+			double fPercent = tVal.DblVal();
+			if ( fPercent<0.0 || fPercent>100.0 )
+			{
+				sError.SetSprintf ( "\"%s\" percentile values should be within [0,100]", tItem.m_sBucketName.cstr() );
+				return false;
+			}
+
+			dPercents.Add ( (float)fPercent );
+		}
+	}
+
+	bool bKeyed = false;
+	if ( !GetKeyed ( tBucket, bKeyed, sError ) )
+		return false;
+	tItem.m_tPercentiles.m_bKeyed = bKeyed;
+
+	float fCompression = tItem.m_tPercentiles.m_fCompression;
+	if ( !ParseTdigestCompression ( tBucket, fCompression, sError ) )
+		return false;
+	tItem.m_tPercentiles.m_fCompression = fCompression;
+	tItem.m_iSize = Max ( tItem.m_iSize, 1 );
+
+	return true;
+}
+
+static bool ParseAggrPercentileRanks ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError )
+{
+	JsonObj_c tValues = tBucket.GetItem ( "values" );
+	if ( !tValues || !tValues.IsArray() )
+	{
+		sError.SetSprintf ( "\"%s\" missed \"values\" property", tItem.m_sBucketName.cstr() );
+		return false;
+	}
+
+	int iCount = tValues.Size();
+	if ( !iCount )
+	{
+		sError.SetSprintf ( "\"%s\" empty \"values\" property", tItem.m_sBucketName.cstr() );
+		return false;
+	}
+
+	auto & dValues = tItem.m_tPercentileRanks.m_dValues;
+	dValues.Resize ( 0 );
+	dValues.Reserve ( iCount );
+
+	for ( const auto & tVal : tValues )
+	{
+		if ( !tVal.IsNum() )
+		{
+			sError.SetSprintf ( "\"%s\" \"values\" entries should be numeric", tItem.m_sBucketName.cstr() );
+			return false;
+		}
+
+		dValues.Add ( tVal.DblVal() );
+	}
+
+	bool bKeyed = false;
+	if ( !GetKeyed ( tBucket, bKeyed, sError ) )
+		return false;
+	tItem.m_tPercentileRanks.m_bKeyed = bKeyed;
+
+	float fCompression = tItem.m_tPercentileRanks.m_fCompression;
+	if ( !ParseTdigestCompression ( tBucket, fCompression, sError ) )
+		return false;
+	tItem.m_tPercentileRanks.m_fCompression = fCompression;
+	tItem.m_iSize = Max ( tItem.m_iSize, 1 );
+
+	return true;
+}
+
+static bool ParseAggrMad ( const JsonObj_c & tBucket, JsonAggr_t & tItem, CSphString & sError )
+{
+	if ( tBucket.HasItem ( "values" ) )
+	{
+		sError.SetSprintf ( "\"%s\" unexpected \"values\" property", tItem.m_sBucketName.cstr() );
+		return false;
+	}
+
+	float fCompression = tItem.m_tMad.m_fCompression;
+	if ( !ParseTdigestCompression ( tBucket, fCompression, sError ) )
+		return false;
+	tItem.m_tMad.m_fCompression = fCompression;
+	tItem.m_iSize = Max ( tItem.m_iSize, 1 );
+
+	return true;
+}
 static bool ParseAggsNode ( const JsonObj_c & tBucket, const JsonObj_c & tJsonItem, bool bRoot, JsonAggr_t & tItem, CSphString & sError )
 {
 	if ( !tBucket.IsObj() )
@@ -4290,6 +4705,19 @@ static bool ParseAggsNode ( const JsonObj_c & tBucket, const JsonObj_c & tJsonIt
 	case Aggr_e::MAX:
 	case Aggr_e::SUM:
 	case Aggr_e::AVG:
+		tItem.m_iSize = 1;
+		break;
+	case Aggr_e::PERCENTILES:
+		if ( !ParseAggrPercentiles ( tBucket, tItem, sError ) )
+			return false;
+		break;
+	case Aggr_e::PERCENTILE_RANKS:
+		if ( !ParseAggrPercentileRanks ( tBucket, tItem, sError ) )
+			return false;
+		break;
+	case Aggr_e::MAD:
+		if ( !ParseAggrMad ( tBucket, tItem, sError ) )
+			return false;
 		tItem.m_iSize = 1;
 		break;
 			

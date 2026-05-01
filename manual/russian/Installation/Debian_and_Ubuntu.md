@@ -28,14 +28,14 @@ wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
 ```
-(установите `wget`, если он не установлен; установите `gnupg2`, если `apt-key` завершается ошибкой).
+(установите `wget`, если он не установлен; установите `gnupg2`, если `apt-key` завершится ошибкой).
 
 Затем установите Manticore Search:
 ```
 sudo apt install manticore
 ```
 
-Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов из-за обновлённой структуры пакетов:
 
 ```bash
 sudo apt remove manticore*
@@ -98,7 +98,7 @@ libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
 libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
 ```
 
-Обратите внимание, что вам нужны библиотеки только для типов хранилищ, которые вы собираетесь использовать. Так что если вы планируете создавать таблицы только из MySQL, то вам может потребоваться установить только библиотеку MySQL (в приведенном выше случае `libmysqlclient20`).
+Обратите внимание, что вам нужны библиотеки только для типов хранилищ, которые вы собираетесь использовать. Так что если вы планируете строить таблицы только из MySQL, то вам может потребоваться установить только библиотеку MySQL (в приведённом выше случае `libmysqlclient20`).
 
 Наконец, установите необходимые пакеты:
 
@@ -108,38 +108,5 @@ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 Если вы вообще не собираетесь использовать инструмент `indexer`, вам не нужно искать и устанавливать никакие библиотеки.
 
-Для поддержки токенизации CJK официальные пакеты содержат бинарные файлы со встроенной библиотекой ICU и включают файл данных ICU. Они не зависят от любой библиотеки времени выполнения ICU, которая может быть доступна в вашей системе, и не могут быть обновлены.
-
-#### Украинский лемматизатор
-Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и сконфигурирован с опцией `--enable-shared`.**
-
-Вот как установить Python 3.9 и украинский лемматизатор в Debian и Ubuntu:
-
-```bash
-# install Manticore Search and UK lemmatizer from APT repository
-cd ~
-wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
-sudo dpkg -i manticore-repo.noarch.deb
-sudo apt -y update
-sudo apt -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-sudo apt -y update
-sudo apt -y install wget build-essential libreadline-dev libncursesw5-dev libssl-dev libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.4/Python-3.9.4.tgz
-tar xzf Python-3.9.4.tgz
-cd Python-3.9.4
-./configure --enable-optimizations --enable-shared
-sudo make -j8 altinstall
-
-# update linker cache
-sudo ldconfig
-
-# install pymorphy2 and UK dictionary
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
-sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
-```
+Для поддержки токенизации CJK официальные пакеты содержат бинарные файлы со встроенной библиотекой ICU и включают файл данных ICU. Они не зависят от какой-либо библиотеки ICU, которая может быть доступна в вашей системе, и не могут быть обновлены.
 <!-- proofread -->

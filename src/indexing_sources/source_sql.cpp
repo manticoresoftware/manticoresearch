@@ -1369,8 +1369,8 @@ struct CmpPairs_fn
 
 static uint64_t CreateKey ( DocID_t tDocID, int iEntry )
 {
-	uint64_t uRes = sphFNV64 ( &tDocID, sizeof(tDocID) );
-	return sphFNV64 ( &iEntry, sizeof(iEntry), uRes );
+	uint64_t uRes = sphFNV64 ( tDocID );
+	return sphFNV64 ( iEntry, uRes );
 }
 
 

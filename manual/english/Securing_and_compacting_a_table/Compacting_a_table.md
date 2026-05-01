@@ -115,7 +115,8 @@ As long as [auto_optimize](../Server_settings/Searchd.md#auto_optimize) is not d
 
 If you are experiencing unexpected SSTs or want tables across all nodes of the cluster to be binary identical, you need to:
 1. Disable [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
-2. Manually optimize tables:
+2. Manually optimize tables
+
 <!-- example cluster_manual_drop -->
 On one of the nodes, drop the table from the cluster:
 <!-- request SQL -->

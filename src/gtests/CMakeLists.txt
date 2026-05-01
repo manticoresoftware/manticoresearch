@@ -20,7 +20,8 @@ set ( GTESTS_SRC
 		gtests_pqstuff.cpp
 		gtests_json.cpp
 		gtests_threadstuff.cpp
-		gtests_wsrep.cpp )
+		gtests_wsrep.cpp
+		gtests_uklemmatizer.cpp )
 
 add_executable ( gmanticoretest ${GTESTS_SRC} )
 target_include_directories ( gmanticoretest PRIVATE "${MANTICORE_SOURCE_DIR}/src" )

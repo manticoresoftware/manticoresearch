@@ -6,6 +6,7 @@
 <requires>
 	<http/>
 	<knn/>
+	<knn_float_tolerance/>
 	<embeddings/>
 </requires>
 
@@ -63,4 +64,3 @@ index test_error_no_model_no_dims
 </queries>
 
 </test>
-

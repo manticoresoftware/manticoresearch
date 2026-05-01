@@ -3511,7 +3511,8 @@ class SphinxConfig
 		$variants_match = $this->Requires("variant_match");
 		$keep_json_ctrls = $this->Requires("keep_json_ctrls");
 
-		$round_knn = $this->Requires("knn") && ( HasKnnInQuery ( $set1 ) || HasKnnInQuery ( $set2 ) );
+		$round_knn = $this->Requires("knn_float_tolerance")
+			|| ( $this->Requires("knn") && ( HasKnnInQuery ( $set1 ) || HasKnnInQuery ( $set2 ) ) );
 
 		$this->CompareResultSetFixup ( $set1, $roundoff, $variants_match, $keep_json_ctrls );
 		$this->CompareResultSetFixup ( $set2, $roundoff, $variants_match, $keep_json_ctrls );

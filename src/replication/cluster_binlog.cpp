@@ -14,6 +14,7 @@
 #include "wsrep_cxx.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
+#include "digest_sha1.h"
 
 #include "cluster_binlog.h"
 
@@ -95,24 +96,11 @@ void ReplicationBinlogStart ( const CSphString & sDataDir, bool bDisabled )
 
 static CSphString GetFileName ( const CSphString & sDataDir )
 {
-	CSphString sFile;
-	if ( !sDataDir.Begins ( "/" ) )
-		sFile.SetSprintf ( "/%s", sDataDir.cstr() );
-	else
-		sFile = sDataDir;
+	auto sHash = CalcSHA1 ( sDataDir.cstr(), sDataDir.Length() );
+	constexpr int iHashPrefixLen = 20;
+	assert ( sHash.Length() >= iHashPrefixLen );
 
-	char * sCur = const_cast<char *> ( sFile.cstr() );
-	const char * sEnd = sCur + sFile.Length();
-	if ( sCur<sEnd && *sCur=='/' )
-		sCur++;
-
-	for ( ; sCur<sEnd; sCur++ )
-	{
-		if ( *sCur=='/' )
-			*sCur = '_';
-	}
-
-	return sFile;
+	return SphSprintf ( "/mcrpl_%.*s", iHashPrefixLen, sHash.cstr() );
 }
 
 void ClusterBinlog_c::Init ( const CSphString & sDataDir, bool bDisabled )
@@ -198,7 +186,7 @@ BYTE * ClusterBinlog_c::GetWritePtr ( int64_t iSize )
 		if ( !pBinlog->Create ( Relimit ( 0, iSize ) ) )
 		{
 			m_bValid = false;
-			m_sError = m_pBinlog->GetError();
+			m_sError = pBinlog->GetError();
 			LogError();
 			return nullptr;
 		}

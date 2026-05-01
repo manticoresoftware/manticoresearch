@@ -1,0 +1,1 @@
+a:1:{i:0;a:3:{i:0;a:2:{s:8:"sphinxql";s:16:"create cluster c";s:14:"total_affected";i:0;}i:1;a:3:{s:8:"sphinxql";s:35:"show status like 'cluster_c_status'";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:7:"Counter";s:16:"cluster_c_status";s:5:"Value";s:7:"primary";}}}i:2;a:2:{s:8:"sphinxql";s:16:"delete cluster c";s:14:"total_affected";i:0;}}}

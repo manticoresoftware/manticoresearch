@@ -605,9 +605,7 @@ static int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 	static struct sockaddr_un uaddr;
 	size_t len = strlen ( sPath );
 
-	if ( len + 1 > sizeof( uaddr.sun_path ) )
-		sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
-
+	assert ( len + 1 <= sizeof( uaddr.sun_path ) );
 	sphInfo ( "listening on UNIX socket %s", sPath );
 
 	memset ( &uaddr, 0, sizeof(uaddr) );
@@ -14844,17 +14842,12 @@ static void InitBanner()
 static void CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners )
 {
 	// check for SSL inited well
-	for ( const auto & tListener : dListeners )
-	{
-		CSphString sError;
-		if ( tListener.m_eProto==Proto_e::HTTPS )
-		{
-			if ( !CheckWeCanUseSSL ( &sError ) )
-				sphWarning ( "SSL init error: %s", sError.cstr() );
+	if ( dListeners.none_of ([] ( const auto& tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+		return;
 
-			break;
-		}
-	}
+	CSphString sError;
+	if ( !CheckWeCanUseSSL ( &sError ) )
+		sphWarning ( "SSL init error: %s", sError.cstr() );
 }
 
 
@@ -14924,11 +14917,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bHasPIDFile = false;
 	StrVec_t		dOptIndexes; // indexes explicitly pointed in cmdline options
 
-	int				iOptPort = 0;
-	bool			bOptPort = false;
-
-	CSphString		sOptListen;
-	bool			bOptListen = false;
+	std::optional<int>				iOptPort;
+	std::optional<CSphString>		sOptListen;
 	bool			bTestMode = false;
 	bool			bConfigTest = false;
 	bool			bOptDebugQlog = true;
@@ -15009,8 +14999,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
 		OPT ( "-c", "--config" )	szCmdConfigFile = argv[++i];
-		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
-		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
+		OPT ( "-p", "--port" )		{ iOptPort = atoi ( argv[++i] ); }
+		OPT ( "-l", "--listen" )	{ sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] ); // FIXME!!! remove depricated cli option
 		OPT ( "-t", "--table" )		dOptIndexes.Add ( argv[++i] );
 #if _WIN32
@@ -15031,8 +15021,23 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( g_bOptQuiet )
 		g_eLogLevel = SPH_LOG_FATAL;
 
-	if ( !WinService() && !g_bOptQuiet )
-		fprintf ( stdout, "%s",  g_sBanner.cstr() );
+	StringBuilder_c sStack;
+	DetermineNodeItemStackSize ( sStack );
+	DetermineFilterItemStackSize ( sStack );
+	DetermineMatchStackSize ( sStack );
+
+	if ( !WinService() )
+	{
+		if ( !g_bOptQuiet )
+			fprintf ( stdout, "%s",  g_sBanner.cstr() );
+
+		if ( bMeasureStack )
+		{
+			sStack << "export NO_STACK_CALCULATION=1\n";
+			fprintf ( stdout, "%s", sStack.cstr() );
+			return 0;
+		}
+	}
 
 	if ( bColumnarError )
 		sphWarning ( "Error initializing columnar storage: %s", sError.cstr() );
@@ -15043,26 +15048,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bKNNError )
 		sphWarning ( "Error initializing knn index: %s", sKNNError.cstr() );
 
-	if ( !sError.IsEmpty() )
-		sError = "";
+	sError = {};
+	sKNNError = {};
 
-	if ( !sKNNError.IsEmpty() )
-		sKNNError = "";
-
-	StringBuilder_c sStack;
-	DetermineNodeItemStackSize ( sStack );
-	DetermineFilterItemStackSize ( sStack );
-	DetermineMatchStackSize ( sStack );
-
-	if ( bMeasureStack )
-	{
-		if ( !WinService() )
-		{
-			sStack << "export NO_STACK_CALCULATION=1\n";
-			fprintf ( stdout, "%s", sStack.cstr() );
-		}
-		return 0;
-	}
 	SetupLemmatizerBase();
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
 #if _WIN32
@@ -15092,21 +15080,22 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bOptPIDFile = !g_bOptNoLock;
 
 	// check port and listen arguments early
-	if ( !g_bOptNoDetach && ( bOptPort || bOptListen ) )
+	if ( !g_bOptNoDetach && ( iOptPort || sOptListen ) )
 	{
 		sphWarning ( "--listen and --port are only allowed in --nodetach or --console debug mode; switch ignored" );
-		bOptPort = bOptListen = false;
+		iOptPort = std::nullopt;
+		sOptListen = std::nullopt;
 	}
 
 	if ( g_bOptNoDetach && g_tWatchdog.value_or ( false ) )
 		sphWarning ( "--watchdog is not allowed in foreground mode (--console, --nodetach); switch ignored" );
 
-	if ( bOptPort )
+	if ( iOptPort )
 	{
-		if ( bOptListen )
+		if ( sOptListen )
 			sphFatal ( "please specify either --port or --listen, not both" );
 
-		CheckPort ( iOptPort );
+		CheckPort ( iOptPort.value() );
 	}
 
 	/////////////////////
@@ -15183,38 +15172,71 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( g_iMaxFilterValues<1 || g_iMaxFilterValues>10485760 )
 		sphFatal ( "max_filter_values out of bounds (1..10485760)" );
 
-	if ( bConfigTest )
-	{
-		CSphVector<ListenerDesc_t> dConfigTestListeners;
+	CSphVector<ListenerDesc_t> dListenerDescs;
 
-		if ( bOptListen )
-			dConfigTestListeners.Add ( ParseListener ( sOptListen.cstr() ) );
-		else if ( bOptPort )
-			dConfigTestListeners.Add ( MakeAnyListener ( iOptPort ) );
+	auto InitCheckListeners = [&] (auto hDaemonConfig, auto fnAddGlobal ) REQUIRES ( MainThread )
+	{
+		dListenerDescs.Reset();
+		auto AddCheck = [&] (const ListenerDesc_t& tDesc) REQUIRES ( MainThread )
+		{
+			fnAddGlobal ( tDesc );
+#if !_WIN32
+			if ( tDesc.m_sUnix.IsEmpty () )
+				return;
+
+			size_t len = tDesc.m_sUnix.Length();
+			[[maybe_unused]] struct sockaddr_un uaddr;
+			if ( tDesc.m_sUnix.Length() + 1 > sizeof ( uaddr.sun_path ) )
+				sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
+#endif
+		};
+
+
+		// command line arguments override config (but only in --console)
+		if ( sOptListen )
+		{
+			auto tDesc = ParseListener ( sOptListen->cstr() );
+			dListenerDescs.Add ( tDesc );
+			AddCheck ( tDesc );
+		} else if ( iOptPort )
+			AddCheck (  MakeAnyListener ( iOptPort.value() ) );
 		else
 		{
-			for ( CSphVariant * v = hSearchdpre ( "listen" ); v; v = v->m_pNext )
-				dConfigTestListeners.Add ( ParseListener ( v->cstr() ) );
-
-			if ( dConfigTestListeners.IsEmpty() )
+			// listen directives in configuration file
+			for ( CSphVariant * v = hDaemonConfig("listen"); v; v = v->m_pNext )
 			{
-				dConfigTestListeners.Add ( MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX ) );
-				dConfigTestListeners.Add ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
+				auto tDesc = ParseListener ( v->cstr () );
+				dListenerDescs.Add ( tDesc );
+				AddCheck ( tDesc );
+			}
+
+			// default is to listen on our two ports
+			if ( dListenerDescs.IsEmpty() )
+			{
+				auto tDesc = MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX );
+				dListenerDescs.Add ( tDesc );
+				AddCheck ( tDesc );
+				AddCheck ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
 			}
 		}
 
-		if ( !ValidateListenerRanges ( dConfigTestListeners, sError ) )
+		if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
 			sphFatal ( "%s", sError.cstr() );
 
-		CSphString sSslCert ( hSearchdpre.GetStr ( "ssl_cert" ) );
-		CSphString sSslKey ( hSearchdpre.GetStr ( "ssl_key" ) );
-		CSphString sSslCa ( hSearchdpre.GetStr ( "ssl_ca" ) );
+		auto sSslCert = hDaemonConfig.GetStr ( "ssl_cert" );
+		auto sSslKey = hDaemonConfig.GetStr ( "ssl_key" );
+		auto sSslCa = hDaemonConfig.GetStr ( "ssl_ca" );
 		FixPathAbsolute ( sSslCert );
 		FixPathAbsolute ( sSslKey );
 		FixPathAbsolute ( sSslCa );
 		SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-		CheckSSL ( dConfigTestListeners );
+		CheckSSL ( dListenerDescs );
+	};
 
+	if ( bConfigTest )
+	{
+		CSphVector<ListenerDesc_t> dConfigTestListeners;
+		InitCheckListeners (hSearchdpre, [&] (const ListenerDesc_t& tDesc ) { dConfigTestListeners.Add (tDesc); });
 		fprintf ( stdout, "OK\n" );
 		fflush ( stdout );
 		return 0;
@@ -15348,46 +15370,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	////////////////////
 	// network startup
 	////////////////////
-	CSphVector<ListenerDesc_t> dListenerDescs;
 
-	// command line arguments override config (but only in --console)
-	if ( bOptListen )
-	{
-		auto tDesc = ParseListener ( sOptListen.cstr() );
-		dListenerDescs.Add ( tDesc );
-		AddGlobalListener ( tDesc );
-	} else if ( bOptPort )
-	{
-		AddGlobalListener ( MakeAnyListener ( iOptPort ) );
-	} else
-	{
-		// listen directives in configuration file
-		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
-		{
-			auto tDesc = ParseListener ( v->cstr () );
-			dListenerDescs.Add ( tDesc );
-			AddGlobalListener ( tDesc );
-		}
-
-		// default is to listen on our two ports
-		if ( g_dListeners.IsEmpty() )
-		{
-			AddGlobalListener ( MakeLocalhostListener ( SPHINXAPI_PORT, Proto_e::SPHINX ) );
-			AddGlobalListener ( MakeLocalhostListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
-		}
-	}
-
-	if ( !ValidateListenerRanges ( dListenerDescs, sError ) )
-		sphFatal ( "%s", sError.cstr() );
-
-	CSphString sSslCert ( hSearchd.GetStr ( "ssl_cert" ) );
-	CSphString sSslKey ( hSearchd.GetStr ( "ssl_key" ) );
-	CSphString sSslCa ( hSearchd.GetStr ( "ssl_ca" ) );
-	FixPathAbsolute ( sSslCert );
-	FixPathAbsolute ( sSslKey );
-	FixPathAbsolute ( sSslCa );
-	SetServerSSLKeys ( sSslCert, sSslKey, sSslCa );
-	CheckSSL ( dListenerDescs );
+	InitCheckListeners (hSearchd, [&] (const ListenerDesc_t& tDesc ) REQUIRES ( MainThread ) { AddGlobalListener (tDesc); });
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).

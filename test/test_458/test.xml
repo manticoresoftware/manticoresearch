@@ -30,6 +30,11 @@ SELECT * FROM test1 WHERE @timestamp IN @uvar;
 SELECT * FROM test1 WHERE @timestamp NOT IN @uvar;
 SELECT * FROM test1 WHERE @version IN('20');
 SELECT * FROM test1 group by @timestamp;
+
+<!-- facet filter modes and per-facet overrides -->
+SELECT count(*) FROM test1 WHERE @timestamp IN (10,20) AND @version IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET @timestamp FACET @version;;
+SELECT count(*) FROM test1 WHERE @timestamp IN (10,20) AND @version IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET @timestamp MODE max FACET @version MODE strict;;
+SELECT count(*) FROM test1 WHERE @timestamp IN (10) AND @version IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET idd;;
 </sphinxql>
 </queries>
 
@@ -53,6 +58,47 @@ SELECT * FROM test1 group by @timestamp;
 
 <!-- order of the aggs and FACET result sets should match -->
 <query endpoint="search">{ "table": "test1", "aggs":{ "gr1": { "terms": { "field": "@timestamp" } }, "gr2": { "terms": { "field": "@version" } }} }</query>
+
+<!-- facet filter modes and per-aggregation overrides -->
+<query endpoint="search">{
+  "table": "test1",
+  "query": {
+    "bool": {
+      "must": [
+        { "range": { "@timestamp": { "lte": 20 } } },
+        { "equals": { "@version": "20" } }
+      ]
+    }
+  },
+  "facet_filter_mode": "max",
+  "aggs": {
+    "ts_max": { "terms": { "field": "@timestamp" } },
+    "ver_max": { "terms": { "field": "@version" } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "test1",
+  "query": {
+    "bool": {
+      "must": [
+        { "range": { "@timestamp": { "lte": 20 } } },
+        { "equals": { "@version": "20" } }
+      ]
+    }
+  },
+  "facet_filter_mode": "strict",
+  "aggs": {
+    "ts_mode_max": {
+      "terms": { "field": "@timestamp" },
+      "mode": "max"
+    },
+    "ver_mode_strict": {
+      "terms": { "field": "@version" },
+      "mode": "strict"
+    }
+  }
+}</query>
 
 <sphinxql>SELECT count(*) FROM test1 LIMIT 0 FACET @timestamp as gr1 FACET @version as gr2;</sphinxql>
 

@@ -12,6 +12,7 @@
 
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "facetutils.h"
 #include "docstore.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
@@ -8105,7 +8106,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 }
 
 // returns N of matches in resultset
-uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
+uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile, const CSphVector<CSphFilterSettings> * pSelectedFilters=nullptr, const CSphVector<CSphFilterSettings> * pAvailableFilters=nullptr )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -8148,6 +8149,9 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 	if ( bAddQueryColumn )
 		dRows.HeadColumn ( "query" );
 
+	if ( pSelectedFilters || pAvailableFilters )
+		dRows.HeadColumn ( "status" );
+
 	// EOF packet is sent explicitly due to non-default params.
 	auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
 	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
@@ -8168,6 +8172,9 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 			assert ( pQueryColumn );
 			dRows.PutString ( *pQueryColumn );
 		}
+
+		if ( pSelectedFilters || pAvailableFilters )
+			dRows.PutString ( facet::GetBucketStatus ( tMatch, tRes.m_tSchema, pSelectedFilters, pAvailableFilters ) );
 
 		if ( !dRows.Commit() )
 			return uMatches;
@@ -8554,6 +8561,56 @@ Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 	return NONE;
 }
 
+static const CSphVector<CSphFilterSettings> * CollectFacetAvailableFilters ( const CSphQuery & tFacetQuery, const AggrResult_t & tStrictRes, CSphVector<CSphFilterSettings> & dAvailable )
+{
+	if ( tFacetQuery.m_dFacetOwnFilterAttrs.GetLength()!=1 || tStrictRes.m_dResults.IsEmpty() )
+		return nullptr;
+
+	const CSphString & sAttr = tFacetQuery.m_dFacetOwnFilterAttrs[0];
+	const CSphColumnInfo * pAttr = tStrictRes.m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+		return nullptr;
+
+	auto dMatches = tStrictRes.m_dResults.First().m_dMatches.Slice ( tStrictRes.m_iOffset, tStrictRes.m_iCount );
+	for ( const auto & tMatch : dMatches )
+	{
+		auto & tFilter = dAvailable.Add();
+		tFilter.m_sAttrName = sAttr;
+		switch ( pAttr->m_eAttrType )
+		{
+		case SPH_ATTR_STRINGPTR:
+		{
+			tFilter.m_eType = SPH_FILTER_STRING;
+			auto * pString = (const BYTE*) tMatch.GetAttr ( pAttr->m_tLocator );
+			auto dString = sphUnpackPtrAttr ( pString );
+			int iLen = dString.second;
+			if ( iLen>1 && dString.first[iLen-2]=='\0' )
+				iLen -= 2;
+			tFilter.m_dStrings.Add().SetBinary ( (const char*)dString.first, iLen );
+			break;
+		}
+		default:
+			tFilter.m_eType = SPH_FILTER_VALUES;
+			tFilter.m_dValues.Add ( tMatch.GetAttr ( pAttr->m_tLocator ) );
+			break;
+		}
+	}
+
+	return dAvailable.IsEmpty() ? nullptr : &dAvailable;
+}
+
+static const CSphVector<CSphFilterSettings> * CollectFacetSelectedFilters ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery, CSphVector<CSphFilterSettings> & dSelected )
+{
+	if ( !tFacetQuery.m_bFacet || tFacetQuery.m_dFacetOwnFilterAttrs.IsEmpty() )
+		return nullptr;
+
+	for ( const auto & tFilter : tHeadQuery.m_dFilters )
+		if ( facet::IsSelectedFilterType ( tFilter ) && facet::AttrNameInList ( tFacetQuery.m_dFacetOwnFilterAttrs, tFilter.m_sAttrName ) )
+			dSelected.Add ( tFilter );
+
+	return dSelected.IsEmpty() ? nullptr : &dSelected;
+}
+
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
 		const CSphString & sWarning )
 {
@@ -8634,6 +8691,17 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		return;
 
 	// send multi-result set
+	auto fnMoreVisibleResults = [&dStmt] ( int iStmt )
+	{
+		for ( int iNext=iStmt+1; iNext<dStmt.GetLength(); ++iNext )
+		{
+			if ( dStmt[iNext].m_eStmt!=STMT_SELECT )
+				return true;
+			if ( !dStmt[iNext].m_tQuery.m_bFacetAvailability )
+				return true;
+		}
+		return false;
+	};
 	iSelect = 0;
 	ARRAY_FOREACH ( i, dStmt )
 	{
@@ -8642,7 +8710,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
-		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
+		bool bMoreResultsFollow = fnMoreVisibleResults ( i );
 		bool bBreak = false;
 
 		switch ( eStmt )
@@ -8658,7 +8726,25 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			if ( bBreak )
 				bMoreResultsFollow = false;
 
-			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
+			const int iQueryIdx = iSelect-1;
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacetAvailability )
+				break;
+
+			CSphVector<CSphFilterSettings> dSelectedFilters;
+			const CSphVector<CSphFilterSettings> * pSelectedFilters = nullptr;
+
+			CSphVector<CSphFilterSettings> dAvailableFilters;
+			const CSphVector<CSphFilterSettings> * pAvailableFilters = nullptr;
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet && tHandler.m_dQueries[iQueryIdx].m_eFacetFilterMode==FacetFilterMode_e::FACET_FILTER_MAX )
+			{
+				pSelectedFilters = CollectFacetSelectedFilters ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], dSelectedFilters );
+				const AggrResult_t * pAvailabilityRes = &tRes;
+				if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetAvailability )
+					pAvailabilityRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+				pAvailableFilters = CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], *pAvailabilityRes, dAvailableFilters );
+			}
+
+			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), pSelectedFilters, pAvailableFilters );
 			
 			if ( !session::GetBuddy() )
 				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tRes.GetQueryTimeUs() );

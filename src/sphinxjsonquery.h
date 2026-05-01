@@ -35,6 +35,10 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString	m_sCol;
 	int			m_iSize = 0;
 	CSphString	m_sSort;
+	FacetFilterMode_e m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
+	bool			m_bFacetFilterModeExplicit = false;
+	FacetFilterClause_e m_eFacetFilterClause = FacetFilterClause_e::NONE;
+	StrVec_t		m_dFacetFilterAttrs;
 	CSphVector<AggrComposite_t> m_dComposite;
 	CSphVector<CSphFilterSettings> m_dCompositeAfterKey;
 	struct MadDeviationEntry_t

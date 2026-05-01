@@ -14,6 +14,7 @@
 #include "sphinxint.h"
 #include "sphinxplugin.h"
 #include "searchdaemon.h"
+#include "facetutils.h"
 #include "searchdddl.h"
 #include "sphinxql_debug.h"
 #include "sphinxql_second.h"
@@ -646,6 +647,7 @@ enum class Option_e : BYTE
 	RANK_CONSTANT,
 	WINDOW_SIZE,
 	FUSION_WEIGHTS,
+	FACET_FILTER_MODE,
 
 	INVALID_OPTION
 };
@@ -661,7 +663,7 @@ void InitParserOption()
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
-		"fusion_method", "rank_constant", "window_size", "fusion_weights" };
+		"fusion_method", "rank_constant", "window_size", "fusion_weights", "facet_filter_mode" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -696,7 +698,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
 			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED,
-			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS };
+			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS,
+			Option_e::FACET_FILTER_MODE };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -1003,6 +1006,17 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		tQuery.m_bHybridSearch = true;
 		break;
 	}
+
+	case Option_e::FACET_FILTER_MODE:
+		if ( sVal=="strict" )
+			tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
+		else if ( sVal=="auto" )
+			tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_AUTO;
+		else if ( sVal=="max" )
+			tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_MAX;
+		else
+			return FAILED ( "unknown facet_filter_mode '%s' (supported: strict, auto, max)", sVal.cstr() );
+		break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -2551,26 +2565,31 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 }
 
 
-static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
+static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	bool bGotFacet = false;
-	ARRAY_FOREACH ( i, dStmt )
+	CSphVector<SqlStmt_t> dOut;
+	for ( int i = 0; i < dStmt.GetLength(); ++i )
 	{
-		const SqlStmt_t & tHeadStmt = dStmt[i];
-		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
-		if ( dStmt[i].m_eStmt!=STMT_SELECT )
-			continue;
-
-		++i;
-		if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
+		SqlStmt_t tHeadStmt = std::move ( dStmt[i] );
+		if ( tHeadStmt.m_eStmt!=STMT_SELECT )
 		{
-			bGotFacet = true;
-			const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
+			dOut.Add ( std::move ( tHeadStmt ) );
+			continue;
 		}
 
-		for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; ++i )
+		const CSphQuery tHeadQuery = tHeadStmt.m_tQuery;
+		int iFacetStart = i + 1;
+		if ( iFacetStart<dStmt.GetLength() && dStmt[iFacetStart].m_eStmt==STMT_FACET )
 		{
-			SqlStmt_t & tStmt = dStmt[i];
+			bGotFacet = true;
+			tHeadStmt.m_tQuery.m_bFacetHead = true;
+		}
+		dOut.Add ( std::move ( tHeadStmt ) );
+
+		for ( ; iFacetStart<dStmt.GetLength() && dStmt[iFacetStart].m_eStmt==STMT_FACET; ++iFacetStart )
+		{
+			SqlStmt_t tStmt = std::move ( dStmt[iFacetStart] );
 			tStmt.m_tQuery.m_bFacet = true;
 
 			tStmt.m_eStmt = STMT_SELECT;
@@ -2582,18 +2601,44 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
 			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
 			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
 			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;
+			tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Reset();
+			if ( !tStmt.m_tQuery.m_sGroupBy.IsEmpty() )
+				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
+			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
+				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
+			if ( !tStmt.m_tQuery.m_bFacetFilterModeExplicit )
+				tStmt.m_tQuery.m_eFacetFilterMode = tHeadQuery.m_eFacetFilterMode;
 
-			// append filters
-			ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
-				tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
-			ARRAY_FOREACH ( k, tHeadQuery.m_dFilterTree )
-				tStmt.m_tQuery.m_dFilterTree.Add ( tHeadQuery.m_dFilterTree[k] );
+			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, tStmt.m_tQuery.m_eFacetFilterMode!=FacetFilterMode_e::FACET_FILTER_MAX ) )
+				return false;
+
+			SqlStmt_t tStrict;
+			bool bNeedStrict = ( tStmt.m_tQuery.m_eFacetFilterMode==FacetFilterMode_e::FACET_FILTER_MAX );
+			if ( bNeedStrict )
+			{
+				tStrict.m_eStmt = STMT_SELECT;
+				tStrict.m_tQuery = tStmt.m_tQuery;
+				tStrict.m_tQuery.m_bFacetAvailability = true;
+				tStrict.m_tQuery.m_bFacetFilterModeExplicit = true;
+				tStrict.m_tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
+				tStrict.m_tQuery.m_eFacetFilterClause = FacetFilterClause_e::ALL;
+				tStrict.m_tQuery.m_dFilters.Reset();
+				tStrict.m_tQuery.m_dFilterTree.Reset();
+				if ( !facet::CopyFilters ( tHeadQuery, tStrict.m_tQuery, sError, true ) )
+					return false;
+			}
+
+			dOut.Add ( std::move ( tStmt ) );
+			if ( bNeedStrict )
+				dOut.Add ( std::move ( tStrict ) );
 		}
+
+		i = iFacetStart - 1;
 	}
 
+	dStmt.SwapData ( dOut );
 	return bGotFacet;
 }
-
 
 static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
@@ -2791,7 +2836,11 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	if ( !tParser.SetupScroll(sError) )
 		return false;
 
-	if ( SetupFacets(dStmt) )
+	bool bGotFacet = SetupFacets ( dStmt, sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( bGotFacet )
 	{
 		if ( !SetupFacetDistinct ( dStmt, sError ) )
 			return false;

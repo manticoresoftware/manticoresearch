@@ -11,6 +11,7 @@
 //
 
 #include "search_handler.h"
+#include "../facetutils.h"
 
 #include "sphinxdefs.h"
 #include "hybridexecutor.h"
@@ -143,6 +144,22 @@ SearchHandler_c::~SearchHandler_c ()
 	}
 }
 
+
+static bool HaveSameFacetFilters ( const CSphQuery & tHead, const CSphQuery & tCheck )
+{
+	if ( tCheck.m_dFilters.GetLength()!=tHead.m_dFilters.GetLength() || tCheck.m_dFilterTree.GetLength()!=tHead.m_dFilterTree.GetLength() )
+		return false;
+
+	ARRAY_FOREACH ( iFilter, tHead.m_dFilters )
+		if ( tHead.m_dFilters[iFilter]!=tCheck.m_dFilters[iFilter] )
+			return false;
+
+	ARRAY_FOREACH ( iFilter, tHead.m_dFilterTree )
+		if ( tHead.m_dFilterTree[iFilter]!=tCheck.m_dFilterTree[iFilter] )
+			return false;
+
+	return true;
+}
 
 bool KeepCollection_c::AddUniqIndex ( const CSphString & sName )
 {
@@ -1975,6 +1992,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( !m_dNQueries[iCheck].m_bFacet )
 			m_bFacetQueue = false;
 
+	for ( int iCheck = 1; iCheck<m_dNQueries.GetLength () && m_bFacetQueue; ++iCheck )
+		if ( !HaveSameFacetFilters ( m_dNQueries[0], m_dNQueries[iCheck] ) )
+			m_bFacetQueue = false;
+
 	m_bMultiQueue = m_bFacetQueue || CheckMultiQuery();
 
 	////////////////////////////
@@ -2356,7 +2377,10 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
 
 	// make single grouper / sorter to match plain query with only group by (wo FACET) if single aggs set and main query limit=0
-	if ( eQueryType==QueryType_e::QUERY_JSON && tQuery.m_dAggs.GetLength()==1 && tQuery.m_iLimit==0 && tQuery.m_dAggs[0].m_eAggrFunc==Aggr_e::NONE )
+	if ( eQueryType==QueryType_e::QUERY_JSON && tQuery.m_dAggs.GetLength()==1 && tQuery.m_iLimit==0 && tQuery.m_dAggs[0].m_eAggrFunc==Aggr_e::NONE
+		&& tQuery.m_eFacetFilterMode==FacetFilterMode_e::FACET_FILTER_STRICT
+		&& !tQuery.m_dAggs[0].m_bFacetFilterModeExplicit
+		&& tQuery.m_dAggs[0].m_eFacetFilterClause==FacetFilterClause_e::NONE )
 	{
 		iQueries = 1;
 		tQuery.m_bGroupEmulation = true;
@@ -2375,6 +2399,7 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	}
 
 	SearchHandler_c tHandler { iQueries, std::move ( pQueryParser ), eQueryType, true };
+	CSphString sError;
 
 	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL || tQuery.m_bGroupEmulation )
 	{
@@ -2439,12 +2464,14 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	tQuery.m_bFacetHead = true;
 	tHandler.SetQuery ( 0, tQuery, nullptr );
 	tHandler.SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
+	const JsonQuery_c tHeadFacetQuery = tQuery;
 	int iRefLimit = tQuery.m_iLimit;
 	int iRefOffset = tQuery.m_iOffset;
 
-	ARRAY_FOREACH ( i, tQuery.m_dAggs )
+	ARRAY_FOREACH ( i, tHeadFacetQuery.m_dAggs )
 	{
-		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
+		const JsonAggr_t & tBucket = tHeadFacetQuery.m_dAggs[i];
+		tQuery = tHeadFacetQuery;
 
 		// common to main query but flags, select list and ref items should uniq
 		tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR;
@@ -2452,6 +2479,21 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		// facet flags
 		tQuery.m_bFacetHead = false;
 		tQuery.m_bFacet = true;
+		tQuery.m_dFilters.Reset();
+		tQuery.m_dFilterTree.Reset();
+		tQuery.m_dFacetOwnFilterAttrs.Reset();
+		tQuery.m_dFacetOwnFilterAttrs.Add ( tBucket.m_sCol );
+		tQuery.m_bFacetFilterModeExplicit = tBucket.m_bFacetFilterModeExplicit;
+		tQuery.m_eFacetFilterMode = tBucket.m_eFacetFilterMode;
+		tQuery.m_eFacetFilterClause = tBucket.m_eFacetFilterClause;
+		tQuery.m_dFacetFilterAttrs = tBucket.m_dFacetFilterAttrs;
+
+		if ( !facet::CopyFilters ( tHeadFacetQuery, tQuery, sError, true ) )
+		{
+			tHandler.SetError ( sError );
+			tQuery = tHeadFacetQuery;
+			return tHandler;
+		}
 
 		// select list to facet query
 		if ( tBucket.m_eAggrFunc==Aggr_e::PERCENTILES || tBucket.m_eAggrFunc==Aggr_e::PERCENTILE_RANKS || tBucket.m_eAggrFunc==Aggr_e::MAD )
@@ -2585,5 +2627,6 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		tHandler.SetQuery ( i+1, tQuery, nullptr );
 	}
 
+	tQuery = tHeadFacetQuery;
 	return tHandler;
 }

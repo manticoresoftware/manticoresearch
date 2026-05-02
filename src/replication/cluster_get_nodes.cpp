@@ -18,6 +18,17 @@
 #include "searchdreplication.h"
 #include "serialize.h"
 
+void operator<< ( ISphOutputBuffer & tOut, const CSphString & sVal )
+{
+	tOut.SendString ( sVal.cstr() );
+}
+
+void operator>> ( InputBuffer_c & tIn, CSphString & sVal )
+{
+	sVal = tIn.GetString();
+}
+
+
 // API command to remote node to get nodes it sees
 using ClusterGetNodes_c = ClusterCommand_T<E_CLUSTER::GET_NODES, ClusterRequest_t, StrVec_t>;
 
@@ -183,6 +194,40 @@ void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSp
 	
 	ClusterGetState ( tRequest.m_sCluster, tRequest.m_tState );
 	ClusterNodeState_c::BuildReply ( tOut, tRequest );
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// cluster get frozen indexes
+/////////////////////////////////////////////////////////////////////////////
+
+using ClusterGetFrozen_c = ClusterCommand_T<E_CLUSTER::GET_FROZEN, ClusterRequest_t, CSphString>;
+
+CSphString QueryFrozenFromRemote ( const ClusterDesc_t & tDesc )
+{
+	ClusterGetFrozen_c::REQUEST_T tReq;
+	tReq.m_sCluster = tDesc.m_sName;
+
+	auto dAgents = ClusterGetFrozen_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tReq );
+	if ( dAgents.IsEmpty() )
+		return {};
+
+	ClusterGetFrozen_c tReply;
+	PerformRemoteTasksWrap ( dAgents, tReply, tReply, true );
+
+	for ( const AgentConn_t * pAgent : dAgents )
+		if ( pAgent->m_bSuccess )
+			return ClusterGetFrozen_c::GetRes ( *pAgent );
+
+	return {};
+}
+
+void ReceiveClusterGetFrozen ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster )
+{
+	ClusterRequest_t tReq;
+	ClusterGetFrozen_c::ParseRequest ( tBuf, tReq );
+	sCluster = tReq.m_sCluster;
+	ClusterGetFrozen_c::BuildReply ( tOut, ClusterGetFrozen ( tReq.m_sCluster ) );
 }
 
 struct ClusterNodeVerReply_t

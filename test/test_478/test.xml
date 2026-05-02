@@ -87,6 +87,11 @@ ALTER CLUSTER test ADD rt1, rt2;
 ALTER CLUSTER test DROP `rt1`,`rt2`;
 </sphinxql>
 
+<!-- wait until node 0 applies the final donor-at-node-1 DROP -->
+<sphinxql d="0">
+debug wait test status 9 like 'state' option 'timeout'=30;
+</sphinxql>
+
 <!-- cleanup -->
 <sphinxql d="0">
 	DROP TABLE rt1;

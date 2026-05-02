@@ -16,6 +16,7 @@
 
 // command to all remote nodes at cluster to get actual nodes list
 StrVec_t GetNodeListFromRemotes ( const ClusterDesc_t& tDesc );
+CSphString QueryFrozenFromRemote ( const ClusterDesc_t & tDesc );
 
 struct RemoteNodeClusterState_t
 {
@@ -29,5 +30,6 @@ using ClusterNodesStatesVec_t = CSphVector<RemoteNodeClusterState_t>;
 // command to all remote nodes at cluster to get actual nodes states
 ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc );
 bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState );
+CSphString ClusterGetFrozen ( const CSphString & sCluster );
 
 bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, int64_t * pEpoch = nullptr );

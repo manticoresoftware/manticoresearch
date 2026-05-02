@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>join via frozen donor is rejected</name>
+
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
+<skip_indexer/>
+<num_agents>3</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"/>
+	server_id = <agent_id/>
+}
+</agent1>
+<agent2>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data2"/>
+	server_id = <agent_id/>
+}
+</agent2>
+
+</config>
+
+<queries>
+
+<sphinxql d="0">
+create table rt1 (title text indexed, gid int) rt_mem_limit='12M';
+create cluster test;
+ALTER CLUSTER test ADD rt1;
+insert into test:rt1 (id,title,gid) values (1,'test 1',1),(2,'test 2',2),(3,'test 3',3);
+</sphinxql>
+
+<sphinxql d="1" cluster_connect="0">
+	join cluster test at '%addr_connect%';
+</sphinxql>
+
+<sphinxql d="1">
+	FREEZE rt1;
+</sphinxql>
+
+<sphinxql d="2" cluster_connect="1">
+	join cluster test at '%addr_connect%';
+</sphinxql>
+
+<sphinxql d="1">
+	UNFREEZE rt1;
+</sphinxql>
+
+<sphinxql d="0">
+	ALTER CLUSTER test DROP rt1;
+	DROP TABLE rt1;
+</sphinxql>
+
+</queries>
+
+</test>

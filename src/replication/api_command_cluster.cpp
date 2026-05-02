@@ -152,6 +152,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveClusterExitUpdateNodes ( tOut, tBuf, sCluster );
 		break;
 
+	case E_CLUSTER::GET_FROZEN:
+		ReceiveClusterGetFrozen ( tOut, tBuf, sCluster );
+		break;
+
 	case E_CLUSTER::INDEX_ADD_DIST:
 		ReceiveDistIndex ( tOut, tBuf, sCluster );
 		break;

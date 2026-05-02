@@ -559,6 +559,24 @@ bool ReplicationCluster_t::DonateSST ( CSphString sJoiner, const Wsrep::GlobalTi
 
 	sphLogDebugRpl ( "donate %s to %s, state gtid %s, current gtid %s, current indexes '%s', bypass %d", m_sName.cstr(), sJoiner.cstr(), Wsrep::Gtid2Str ( tGtid ).cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr(), Vec2Str ( GetIndexes() ).cstr(), (int)bBypass );
 
+	if ( !bBypass )
+	{
+		StringBuilder_c sFrozen ( "," );
+		for ( const CSphString & sIndex : GetIndexes() )
+		{
+			cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+			if ( !ServedDesc_t::IsMutable ( pServed ) )
+				continue;
+
+			RIdx_T<RtIndex_i*> pRt { pServed };
+			if ( pRt->GetNumOfLocks()>0 )
+				sFrozen << sIndex;
+		}
+
+		if ( !sFrozen.IsEmpty() )
+			return TlsMsg::Err ( "cluster '%s' can not act as donor while frozen tables are present: %s", m_sName.cstr(), sFrozen.cstr() );
+	}
+
 	SetState ( ClusterState_e::DONOR );
 	const bool bOk = SendClusterIndexes ( this, sJoiner, bBypass, tGtid );
 	SetState ( ClusterState_e::SYNCED );
@@ -1906,6 +1924,13 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( !CheckRemotesVersions ( tDesc.value() ) )
 		return false;
 
+	if ( tDesc->m_dClusterNodes.GetLength()==1 )
+	{
+		CSphString sFrozen = QueryFrozenFromRemote ( tDesc.value() );
+		if ( !sFrozen.IsEmpty() )
+			return TlsMsg::Err ( "cluster '%s' can not use '%s' as join target while frozen tables are present there: %s", sCluster.cstr(), tDesc->m_dClusterNodes[0].cstr(), sFrozen.cstr() );
+	}
+
 	ReplicationClusterRefPtr_c pCluster { MakeCluster ( tDesc.value(), BOOTSTRAP_E::NO, PrepareMode_e::RUNTIME ) };
 	if ( !pCluster )
 		return false;
@@ -2207,6 +2232,29 @@ bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & t
 	tState.m_eState = pCluster->GetState();
 	tState.m_sNode = pCluster->GetNodeName();
 	return true;
+}
+
+CSphString ClusterGetFrozen ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+		return {};
+
+	StringBuilder_c sFrozen ( "," );
+	for ( const CSphString & sIndex : pCluster->GetIndexes() )
+	{
+		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pServed ) )
+			continue;
+
+		RIdx_T<RtIndex_i*> pRt { pServed };
+		if ( pRt->GetNumOfLocks()>0 )
+			sFrozen << sIndex;
+	}
+
+	CSphString sRes;
+	sFrozen.MoveTo ( sRes );
+	return sRes;
 }
 
 int64_t ClusterGetRemoteEpoch ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )

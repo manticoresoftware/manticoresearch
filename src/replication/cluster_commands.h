@@ -22,6 +22,7 @@ void ReceiveClusterSynced ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphStr
 void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterExitUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );
+void ReceiveClusterGetFrozen ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );
 void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf );
 
 // sending doesn't include cluster name

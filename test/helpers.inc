@@ -2424,6 +2424,15 @@ class SphinxConfig
 		return strtr ( $s, $tr );
 	}
 
+
+	function NormalizeFreezePath ( $s )
+	{
+		$s = str_replace ( "\\", "/", $s );
+		if ( preg_match ( '~(?:^|/)(data(?:_[^/]+)?/data\d+/.*)$~', $s, $m ) )
+			return preg_replace ( '~^data(?:_[^/]+)?/~', 'data/', $m[1] );
+		return $s;
+	}
+
 	function FixupErrorMessage ( $err, $s )
 	{
 		$s = $this->FixupAgentAddress ( $s );
@@ -2725,6 +2734,14 @@ class SphinxConfig
 
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
+				$lower_query = strtolower ( trim ( $query ) );
+				if ( StrBegins ( $lower_query, "freeze " ) )
+				{
+					if ( array_key_exists ( 'file', $row ) )
+						$row['file'] = $this->NormalizeFreezePath ( $row['file'] );
+					if ( array_key_exists ( 'normalized', $row ) )
+						$row['normalized'] = $this->NormalizeFreezePath ( $row['normalized'] );
+				}
                 $raw_result["rows"][] = $row;
 				if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
 					continue;

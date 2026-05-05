@@ -753,6 +753,12 @@ static CLemmatizer *	g_pLemmatizers[AOT_LENGTH] = {0};
 static CSphNamedInt		g_tDictinfos[AOT_LENGTH];
 static std::unique_ptr<NativeUkLemmatizer_c> g_pUkLemmatizer;
 
+static bool IsAotLoaded ( int iLang )
+{
+	assert ( iLang>=AOT_BEGIN && iLang<AOT_LENGTH );
+	return iLang==AOT_UK ? (bool)g_pUkLemmatizer : (bool)g_pLemmatizers[iLang];
+}
+
 void sphAotSetCacheSize ( int iCacheSize )
 {
 	g_iCacheSize = Max ( iCacheSize, 0 );
@@ -762,7 +768,7 @@ static bool LoadLemmatizerUk ( const CSphString & sDictFile, CSphString & sError
 
 bool AotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 {
-	if ( g_pLemmatizers[iLang] )
+	if ( IsAotLoaded ( iLang ) )
 		return true;
 
 	if ( iLang==AOT_UK )
@@ -1544,7 +1550,7 @@ public:
 	CSphAotTokenizerTmpl ( TokenizerRefPtr_c pTok, const DictRefPtr_c& pDict, bool bIndexExact, int DEBUGARG(iLang) )
 		: CSphTokenFilter ( std::move (pTok) )
 	{
-		assert ( g_pLemmatizers[iLang] );
+		assert ( IsAotLoaded ( iLang ) );
 		m_FindResults[0] = AOT_NOFORM;
 		if ( pDict )
 		{
@@ -2495,8 +2501,9 @@ BYTE * LemmatizerUk_c::GetToken ( const BYTE * pWord, int & iExtra )
 	m_iCurrent = 0;
 	iExtra = 0;
 
+	// No lemma mirrors generic AOT_NOFORM handling: pass the token through.
 	if ( !g_pUkLemmatizer || !g_pUkLemmatizer->Lookup ( pWord, m_dLemmas ) )
-		return (BYTE *)pWord;
+		return nullptr;
 
 	if ( m_dLemmas.GetLength()>1 )
 		iExtra = m_dLemmas.GetLength() - 1;
@@ -2557,6 +2564,9 @@ void sphAotLemmatizeUk ( BYTE * pWord, LemmatizerTrait_i * pLemmatizer )
 
 	int iExtraCount = 0;
 	const BYTE * pDst = pLemmatizer->GetToken ( pWord, iExtraCount );
+	if ( !pDst )
+		return;
+
 	strcpy ( (char*)pWord, (char*)pDst ); // NOLINT
 }
 
@@ -2569,7 +2579,11 @@ void sphAotLemmatizeUk ( StrVec_t & dLemmas, const BYTE * pWord, LemmatizerTrait
 		return;
 
 	int iExtraCount = 0;
-	dLemmas.Add ( (const char *)pLemmatizer->GetToken ( pWord, iExtraCount ) );
+	const BYTE * pDst = pLemmatizer->GetToken ( pWord, iExtraCount );
+	if ( !pDst )
+		return;
+
+	dLemmas.Add ( (const char *)pDst );
 
 	iExtraCount = Min ( iExtraCount, MAX_EXTRA_TOKENS );
 	for ( int i=0; i<iExtraCount; i++ )
@@ -2665,9 +2679,17 @@ BYTE * TokenizerUk_c::GetToken()
 
 		// lemmatize
 		int iExtra = 0;
+		BYTE * pOrigToken = pToken;
+		if ( m_bIndexExact )
+		{
+			strncpy ( (char*)m_sOrigToken, (char*)pToken, sizeof(m_sOrigToken) );
+			m_sOrigToken[sizeof ( m_sOrigToken ) - 1] = '\0';
+		}
+
 		pToken = m_tLemmatizer.GetToken ( pToken, iExtra );
-		
-		// FIXME!!! implement token pass throu
+		if ( !pToken )
+			return pOrigToken;
+
 		m_FindResults[0] = 0;
 		int iLastEmpty = 1;
 		int iTokensEnd = Min ( iLastEmpty+iExtra, MAX_EXTRA_TOKENS-1 );
@@ -2681,8 +2703,6 @@ BYTE * TokenizerUk_c::GetToken()
 			iLastEmpty = Min ( iLastEmpty, MAX_EXTRA_TOKENS-2 );
 			m_FindResults[iLastEmpty] = AOT_ORIGFORM;
 			m_FindResults[iLastEmpty+1] = AOT_NOFORM;
-			strncpy ( (char*)m_sOrigToken, (char*)pToken, sizeof(m_sOrigToken) );
-			m_sOrigToken[sizeof ( m_sOrigToken ) - 1] = '\0';
 		}
 
 		// schedule lemmas 2+ for return

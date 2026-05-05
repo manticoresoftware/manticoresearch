@@ -75,7 +75,7 @@ ScopedPort_c g_tBuddyPort;
 
 static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
-static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir );
+static CSphString BuddyGetPath ( const std::optional<CSphString> & sPath, const CSphString & sPluginDir, int iHostPort, const CSphString & sDataDir );
 static void BuddyStop ();
 static CSphString GetLogLevel();
 
@@ -431,7 +431,7 @@ static void BuddyStopContainer()
 #endif
 }
 
-void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
+void BuddyStart ( const std::optional<CSphString>& sConfigPath, const CSphString & sPluginDir, const VecTraits_T<ListenerDesc_t> & dListeners, bool bTelemetry, int iThreads, const CSphString & sConfigFilePath, const CSphString & sDataDir )
 {
 	const char* szHelperUrl = getenv ( "MANTICORE_HELPER_URL" );
 	if ( szHelperUrl )
@@ -445,7 +445,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 	SetContainerName ( sConfigFilePath );
 	// should not check buddy related code if buddy disabled at config
-	if ( bHasBuddyPath && sConfigPath.IsEmpty() )
+	if ( sConfigPath && sConfigPath->IsEmpty() )
 		return;
 
 	ARRAY_FOREACH ( i, dListeners )
@@ -473,7 +473,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, (int)g_tBuddyPort, sDataDir );
 	if ( sPath.IsEmpty() )
 		return;
 
@@ -913,10 +913,10 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 }
 
 #ifdef _WIN32
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
+CSphString BuddyGetPath ( const std::optional<CSphString> & sConfigPath, const CSphString & , int iHostPort, const CSphString & sDataDir )
 {
-	if ( bHasBuddyPath )
-		return sConfigPath;
+	if ( sConfigPath )
+		return *sConfigPath;
 
 	const char * sDefaultBuddyName ( "manticore-buddy" );
 	const char * sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
@@ -935,10 +935,10 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 	return CSphString ( sCmd );
 }
 #else
-CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & )
+CSphString BuddyGetPath ( const std::optional<CSphString> & sConfigPath, const CSphString & sPluginDir, int iHostPort, const CSphString & )
 {
-	if ( bHasBuddyPath )
-		return sConfigPath;
+	if ( sConfigPath )
+		return *sConfigPath;
 
 	const char * sExecutor = "manticore-executor";
 	const char * sDefaultBuddyName = "manticore-buddy/src/main.php";

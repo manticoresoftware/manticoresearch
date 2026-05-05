@@ -67,15 +67,19 @@ jobs:
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
       - name: Check if branch exists in manticoresoftware/columnar
         id: check_branch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           # Extract the actual branch name for pull requests
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            BRANCH_NAME="$PR_HEAD_REF"
           else
-            BRANCH_NAME="${{ github.ref_name }}"
+            BRANCH_NAME="$REF_NAME"
           fi
 
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME")
           if [ "$HTTP_STATUS" -eq "200" ]; then
             echo "branch_exists=true" >> $GITHUB_OUTPUT
             echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
@@ -85,6 +89,8 @@ jobs:
           fi
       - name: Sanitize branch name for tags
         id: sanitize_branch
+        env:
+          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
           sanitize_tag() {
             local name=$1
@@ -92,15 +98,18 @@ jobs:
             name=$(echo "$name" | sed 's/[^a-zA-Z0-9_.-]//g')
             echo "$name"
           }
-          branch_name="${{ steps.check_branch.outputs.branch_name }}"
+          branch_name="$BRANCH_NAME"
           branch_tag=$(sanitize_tag "$branch_name")
           echo "branch_tag=$branch_tag" >> $GITHUB_OUTPUT
       - name: Calculate source hash
         id: source_hash
+        env:
+          BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
+          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
           set -euo pipefail
-          if [[ "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            git clone --depth 1 --branch "${{ steps.check_branch.outputs.branch_name }}"               https://github.com/manticoresoftware/columnar.git columnar
+          if [[ "$BRANCH_EXISTS" == "true" ]]; then
+            git clone --depth 1 --branch "$BRANCH_NAME"               https://github.com/manticoresoftware/columnar.git columnar
             rm -rf columnar/.git
           fi
           HASH=$(find . -type f             ! -path "./test/clt-tests/*"             ! -path "./columnar/test/clt-tests/*"             ! -path "./.git/*"             -print0             | sort -z             | xargs -0 md5sum             | md5sum             | awk '{print $1}')
@@ -128,9 +137,13 @@ jobs:
           echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
       - name: Set Columnar Locator
         id: set_locator
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
+          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
-          if [[ "${{ github.ref_name }}" != "master" && "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${{ steps.check_branch.outputs.branch_name }}" >> $GITHUB_OUTPUT
+          if [[ "$REF_NAME" != "master" && "$BRANCH_EXISTS" == "true" ]]; then
+            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $BRANCH_NAME" >> $GITHUB_OUTPUT
           else
             echo "columnar_locator=" >> $GITHUB_OUTPUT
           fi
@@ -208,14 +221,19 @@ jobs:
           PY
       - name: Check related PRs for branch
         id: related_prs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           reason=""
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
             for repo in columnar manticoresearch-buddy; do
-              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls?state=open&head=${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }}&per_page=1" || true) | tr -d '[:space:]')"
+              response="$( (curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY_OWNER/$repo/pulls?state=open&head=$GITHUB_REPOSITORY_OWNER:$PR_HEAD_REF&per_page=1" || true) | tr -d '[:space:]')"
               if [[ "$response" != "[]" && "$response" != "" ]]; then
-                reason+="$repo: open PR for ${{ github.repository_owner }}:${{ github.event.pull_request.head.ref }} | "
+                reason+="$repo: open PR for $GITHUB_REPOSITORY_OWNER:$PR_HEAD_REF | "
               fi
             done
 

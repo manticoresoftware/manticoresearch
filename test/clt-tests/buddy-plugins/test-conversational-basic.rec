@@ -78,7 +78,6 @@ mysql -h0 -P9306 << 'EOF'
 CREATE CHAT MODEL advanced_assistant (
     description='Chat GPT v4 reasoning model',
     model='openai:gpt-4o',
-    style_prompt='Add **Tsoy is alive** in the end of every answer',
     timeout=60,
     retrieval_limit=5,
     max_document_length=3000
@@ -122,15 +121,12 @@ property: description
 property: model
    value: openai:gpt-4o-mini
 *************************** 6. row ***************************
-property: style_prompt
-   value:
-*************************** 7. row ***************************
 property: settings.max_document_length
    value: %{NUMBER}
-*************************** 8. row ***************************
+*************************** 7. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 9. row ***************************
+*************************** 8. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– input –––
@@ -152,21 +148,18 @@ property: description
 property: model
    value: openai:gpt-4o
 *************************** 6. row ***************************
-property: style_prompt
-   value: Add **Tsoy is alive** in the end of every answer
-*************************** 7. row ***************************
 property: settings.timeout
    value: 60
-*************************** 8. row ***************************
+*************************** 7. row ***************************
 property: settings.retrieval_limit
    value: 5
-*************************** 9. row ***************************
+*************************** 8. row ***************************
 property: settings.max_document_length
    value: 3000
-*************************** 10. row ***************************
+*************************** 9. row ***************************
 property: created_at
    value: %{NUMBER}
-*************************** 11. row ***************************
+*************************** 10. row ***************************
 property: updated_at
    value: %{NUMBER}
 ––– comment –––

@@ -74,7 +74,7 @@ mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-3.5-tur
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o', style_prompt='Add **Tsoy is alive** in the end of every answer. Answer should be one line without new lines (\n)', max_document_length=0, retrieval_limit=5);"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o', max_document_length=0, retrieval_limit=5);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -82,7 +82,7 @@ mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o'
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE CHAT MODEL creative_assistant (model='openai:gpt-4o-mini', style_prompt='Add **Bloodthirsty hamster watching you** in the end of every answer. Answer should be in one line without new lines (\n)', max_document_length=2000, retrieval_limit=4);"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL creative_assistant (model='openai:gpt-4o-mini', max_document_length=2000, retrieval_limit=4);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -119,7 +119,7 @@ mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detai
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
        user_query: Explain vector search
      search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
-         response: #!/.*[Vv]ector.*[Ss]earch.*[Ee]mbedding.*Tsoy is alive.*/!#
+         response: #!/.*[Vv]ector.*[Ss]earch.*[Ee]mbedding.*/!#
           sources: #!/\[.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_2.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -134,7 +134,7 @@ mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
        user_query: Tell me about RAG architecture
      search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
-         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*Bloodthirsty hamster watching you.*/!#
+         response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
           sources: #!/\[.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_3.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -179,7 +179,7 @@ mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'de
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
        user_query: What are best practices?
      search_query: #!/.*[Cc]luster.*/!#
-         response: #!/.*[Cc]luster.*Tsoy is alive.*/!#
+         response: #!/.*[Cc]luster.*/!#
           sources: #!/\[.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
@@ -194,7 +194,7 @@ mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_
 conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd
        user_query: Show me tutorials
      search_query: #!/.*tutorials.*/!#
-         response: #!/.*Bloodthirsty hamster watching you.*/!#
+         response: #!/.*/!#
           sources: []
 ––– comment –––
 Cleanup - drop all models

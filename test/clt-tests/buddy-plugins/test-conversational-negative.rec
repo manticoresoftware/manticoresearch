@@ -50,13 +50,13 @@ Test 3: CREATE CHAT MODEL with duplicate name
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL valid_model (model='openai:gpt-4o-mini');"
 ––– output –––
-ERROR 1064 (42000) at line 1: CHAT model 'valid_model' already exists
+ERROR 1064 (42000) at line 1: chat model 'valid_model' already exists
 ––– comment –––
 Test 4: DESCRIBE CHAT MODEL that doesn't exist
 ––– input –––
 mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL nonexistent_model;"
 ––– output –––
-ERROR 1064 (42000) at line 1: CHAT model 'nonexistent_model' not found
+ERROR 1064 (42000) at line 1: chat model 'nonexistent_model' not found
 ––– comment –––
 Test 5: CALL CHAT with non-existent model
 ––– input –––
@@ -69,7 +69,7 @@ CALL CHAT(
 );
 EOF
 ––– output –––
-ERROR 1064 (42000) at line 1: CHAT model 'nonexistent_model' not found
+ERROR 1064 (42000) at line 1: chat model 'nonexistent_model' not found
 ––– comment –––
 Test 6: CALL CHAT with non-existent table
 ––– input –––
@@ -93,13 +93,13 @@ CALL CHAT(
 );
 EOF
 ––– output –––
-ERROR 1064 (42000) at line 1: CHAT model '' not found
+ERROR 1064 (42000) at line 1: CHAT expects query, table, model, optional conversation_uuid, optional fields
 ––– comment –––
 Test 9: DROP non-existent CHAT MODEL
 ––– input –––
 mysql -h0 -P9306 -e "DROP CHAT MODEL nonexistent_model;"
 ––– output –––
-ERROR 1064 (42000) at line 1: CHAT model 'nonexistent_model' not found
+ERROR 1064 (42000) at line 1: chat model 'nonexistent_model' not found
 ––– input –––
 mysql -h0 -P9306 -e "CREATE CHAT MODEL invalid_temp_model (model='gpt-4o-mini');"
 ––– output –––

@@ -3287,7 +3287,11 @@ DECLARE_UNARY_FLT ( Expr_Exp_c,		float(exp(EVALFIRST)) )
 
 DECLARE_UNARY_INT ( Expr_NotInt_c,		(float)(INTFIRST?0:1),		INTFIRST?0:1,	INTFIRST?0:1 )
 DECLARE_UNARY_INT ( Expr_NotInt64_c,	(float)(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 )
-DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
+DECLARE_UNARY_TRAITS ( Expr_Sint_c )
+	float Eval ( const CSphMatch & tMatch ) const final { return (float)Int64Eval ( tMatch ); }
+	int IntEval ( const CSphMatch & tMatch ) const final { return (int)Int64Eval ( tMatch ); }
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const final { return INT64FIRST; }
+};
 
 DECLARE_UNARY_TRAITS ( Expr_Ln_c )
 	   float Eval ( const CSphMatch & tMatch ) const final
@@ -9554,9 +9558,14 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 		}
 		break;
 
-	case '+': case '-': case '*': case ',':
+	case '+': case '*': case ',':
 		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
 		tNode.m_eRetType = tNode.m_eArgType;
+		break;
+
+	case '-':
+		tNode.m_eArgType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = ( tNode.m_eArgType==SPH_ATTR_INTEGER ) ? SPH_ATTR_BIGINT : tNode.m_eArgType;
 		break;
 
 	case '%':

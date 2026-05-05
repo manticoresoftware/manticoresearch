@@ -4,7 +4,7 @@
 <requires>
 <lemmatizer_base/>
 </requires>
-<skip_db/>
+<skip_indexer/>
 
 <name>ukrainian native lemmatizer</name>
 
@@ -81,6 +81,7 @@ CALL KEYWORDS ( 'гніт ґніти гніти', 'uk_all_tpl' );
 CALL KEYWORDS ( 'інтернет-магазину команд-учасниць скажи-но псевдокотом мегакітові мегакотом', 'uk_all_tpl' );
 CALL KEYWORDS ( 'красный красная красное красные', 'uk_all_tpl' );
 CALL KEYWORDS ( 'ґніти інтернет-магазину команд-учасниць скажи-но псевдокотом мегакотом красная красное невідоме foo', 'uk_single_tpl' );
+CALL KEYWORDS ( 'аб foo', 'uk_all_tpl' );
 </sphinxql></queries>
 
 </test>

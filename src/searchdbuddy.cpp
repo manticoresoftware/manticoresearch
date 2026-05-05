@@ -844,7 +844,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	return true;
 }
 
-static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
+static bool ConvertErrorMessage ( const Str_t & sStmt, RowBuffer_i* pRows, const JsonObj_c & tMessage )
 {
 	if ( !tMessage.IsObj() )
 		return false;
@@ -855,19 +855,18 @@ static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSav
 		return false;
 
 	// reset back out buff and packet
-	uPacketID = tSavedPos.second;
-	tOut.Rewind ( tSavedPos.first );
-	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
+	pRows->RestoreLastPositionState ();
 
 	LogSphinxqlError ( sStmt, FromStr ( sMsgError ) );
 	session::GetClientSession()->m_sError = sMsgError;
 	session::GetClientSession()->m_tLastMeta.m_sError = sMsgError;
-	tBuddyRows->Error ( sMsgError.cstr() );
+	pRows->Error ( sMsgError.cstr() );
 	return true;
 }
 
-void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
+void ProcessSqlQueryBuddy ( Str_t sSrcQuery, RowBuffer_i* pRows )
 {
+	Str_t tError = FromStr ( pRows->GetError() );
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET, VecTraits_T<BYTE>() );
 	if ( !tReplyRaw.first )
 	{
@@ -893,7 +892,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( !tReplyParsed.m_tMessage.IsArray() )
 	{
-		if ( ConvertErrorMessage ( sSrcQuery, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
+		if ( ConvertErrorMessage ( sSrcQuery, pRows, tReplyParsed.m_tMessage ) )
 			return;
 
 		LogSphinxqlError ( sSrcQuery.first, tError );
@@ -902,11 +901,8 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	}
 
 	// reset back out buff and packet
-	uPacketID = tSavedPos.second;
-	tOut.Rewind ( tSavedPos.first );
-	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
-
-	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
+	pRows->RestoreLastPositionState ();
+	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *pRows );
 
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );

@@ -17,6 +17,7 @@
 #include "queryprofile.h"
 #include "searchdaemon.h"
 #include "searchdsql.h"
+#include "searchd_shard.h"
 #include "sphinxpq.h"
 
 constexpr const char* szManticore = "Manticore";
@@ -42,6 +43,7 @@ public:
 	CSphString m_sError;
 	CSphQueryResultMeta m_tLastMeta;
 	CSphSessionAccum m_tAcc;
+	ShardTxnState_t m_tShardTxn;
 	CPqResult m_tPercolateMeta;
 	SqlStmt_e m_eLastStmt { STMT_DUMMY };
 	bool m_bFederatedUser = false;

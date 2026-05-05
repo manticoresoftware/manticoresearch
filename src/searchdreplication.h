@@ -71,6 +71,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 void ReplicateClustersStatus ( VectorLike & dStatus );
 
 // validate that SphinxQL statement could be run for this cluster:index
+bool ValidateClusterStatement ( const CSphString & sIndexName, const CSphString & sIndexCluster, const CSphString & sStmtCluster, bool bHTTP );
 bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP );
 
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );

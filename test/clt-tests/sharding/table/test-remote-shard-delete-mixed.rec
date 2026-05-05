@@ -1,0 +1,395 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_delete_mix; DROP TABLE IF EXISTS shard_remote_delete_mix_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_delete_mix_s_1; CREATE TABLE shard_remote_delete_mix_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_delete_mix_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_delete_mix(id bigint, title text, gid uint) type='shard' local='shard_remote_delete_mix_s_0' agent='127.0.0.1:2312:shard_remote_delete_mix_s_1'; INSERT INTO shard_remote_delete_mix (id, title, gid) VALUES (1, 'local-1', 10), (3, 'remote-3', 30), (4, 'remote-4', 40), (6, 'local-6', 60);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DELETE FROM shard_remote_delete_mix WHERE id IN (1,4);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_1;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_remote_delete_mix (id, title, gid) VALUES (1, 'local-1b', 80), (4, 'remote-4b', 90); DELETE FROM shard_remote_delete_mix WHERE gid IN (80,90);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_1;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; DELETE FROM shard_remote_delete_mix WHERE id IN (6); ROLLBACK;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+0 rows affected
+0 rows affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_1;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; DELETE FROM shard_remote_delete_mix WHERE gid IN (30); COMMIT;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+0 rows affected
+1 row affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    1 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_1;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"SET autocommit=0; INSERT INTO shard_remote_delete_mix (id, title, gid) VALUES (7, 'remote-7', 70); DELETE FROM shard_remote_delete_mix WHERE gid IN (70); SET autocommit=1;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+1 row affected
+0 rows affected
+0 rows affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_delete_mix_s_0 ORDER BY id ASC;"
+––– output –––
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    6 | local-6 |   60 |
++------+---------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_delete_mix_s_1 ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    7 | remote-7 |   70 |
++------+----------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_http_delete; DROP TABLE IF EXISTS shard_remote_http_delete_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_http_delete_s_1; CREATE TABLE shard_remote_http_delete_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_http_delete_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_http_delete(id bigint, title text, gid uint) type='shard' local='shard_remote_http_delete_s_0' agent='127.0.0.1:2312:shard_remote_http_delete_s_1'; INSERT INTO shard_remote_http_delete (id, title, gid) VALUES (1, 'local-1', 10), (3, 'remote-3', 30), (4, 'remote-4', 40), (6, 'local-6', 60);"
+––– output –––
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_remote_http_delete","id":3}' | tr -d '\n' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+deleted
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_remote_http_delete","id":3}' | tr -d '\n' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+not found
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_remote_http_delete","id":[1,4]}' | tr -d '\n' | sed -n 's/.*"id":\([0-9][0-9]*\).*"found":\([^,}]*\).*"result":"\([^"]*\)".*/id=\1 found=\2 result=\3/p'
+––– output –––
+id=1 found=true result=deleted
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_http_delete_s_0 ORDER BY id ASC;"
+––– output –––
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    6 | local-6 |   60 |
++------+---------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT COUNT(*) AS c FROM shard_remote_http_delete_s_1;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO shard_remote_http_delete (id, title, gid) VALUES (1, 'query-delete-local', 80), (4, 'query-delete-remote', 90); SELECT id, title, gid FROM shard_remote_http_delete ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+
+| id   | title               | gid  |
++------+---------------------+------+
+|    1 | query-delete-local  |   80 |
+|    4 | query-delete-remote |   90 |
+|    6 | local-6             |   60 |
++------+---------------------+------+
+––– input –––
+curl -s -X POST http://localhost:1308/delete -d '{"table":"shard_remote_http_delete","query":{"range":{"gid":{"gte":80}}}}' | tr -d '\n' | sed -n 's/.*"deleted":\([0-9][0-9]*\).*/\1/p'
+––– output –––
+2
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_http_delete ORDER BY id ASC;"
+––– output –––
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    6 | local-6 |   60 |
++------+---------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_http_delete_fail; DROP TABLE IF EXISTS shard_remote_http_delete_fail_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_http_delete_fail_s_1; CREATE TABLE shard_remote_http_delete_fail_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_http_delete_fail_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_http_delete_fail(id bigint, title text, gid uint) type='shard' local='shard_remote_http_delete_fail_s_0' agent='127.0.0.1:2312:shard_remote_http_delete_fail_s_1'; INSERT INTO shard_remote_http_delete_fail (id, title, gid) VALUES (1, 'local-fail-1', 10), (3, 'remote-fail-3', 30);"
+––– output –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/delete -d '\''{"table":"shard_remote_http_delete_fail","id":[1,3]}'\'' | tr -d '\''\n'\''); echo "$out" | grep -F '\''"status":409'\'' >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F '\''"type":"action_request_validation_exception"'\'' >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "remote table '\''shard_remote_http_delete_fail_s_1'\''" >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "processed_ids=1" >/dev/null || { echo "$out"; exit 1; }; echo "http exact-id failure preserved processed_ids";'
+––– output –––
+http exact-id failure preserved processed_ids
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_http_delete_fail_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_http_delete_fail_s_1 ORDER BY id ASC;"
+––– output –––
++------+---------------+------+
+| id   | title         | gid  |
++------+---------------+------+
+|    3 | remote-fail-3 |   30 |
++------+---------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_http_delete_fail_q; DROP TABLE IF EXISTS shard_remote_http_delete_fail_q_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_http_delete_fail_q_s_1; CREATE TABLE shard_remote_http_delete_fail_q_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_http_delete_fail_q_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_http_delete_fail_q(id bigint, title text, gid uint) type='shard' local='shard_remote_http_delete_fail_q_s_0' agent='127.0.0.1:2312:shard_remote_http_delete_fail_q_s_1'; INSERT INTO shard_remote_http_delete_fail_q (id, title, gid) VALUES (1, 'local-fail-q-1', 10), (3, 'remote-fail-q-3', 30);"
+––– output –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+bash -c 'out=$(curl -s -X POST http://localhost:1308/delete -d '\''{"table":"shard_remote_http_delete_fail_q","query":{"range":{"gid":{"gte":10}}}}'\'' | tr -d '\''\n'\''); echo "$out" | grep -F '\''"status":409'\'' >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F '\''"type":"action_request_validation_exception"'\'' >/dev/null || { echo "$out"; exit 1; }; echo "$out" | grep -F "remote table '\''shard_remote_http_delete_fail_q_s_1'\''" >/dev/null || { echo "$out"; exit 1; }; if echo "$out" | grep -Fq "processed_ids="; then echo "$out"; exit 1; fi; echo "http predicate failure omitted processed_ids";'
+––– output –––
+http predicate failure omitted processed_ids
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_http_delete_fail_q_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_http_delete_fail_q_s_1 ORDER BY id ASC;"
+––– output –––
++------+-----------------+------+
+| id   | title           | gid  |
++------+-----------------+------+
+|    3 | remote-fail-q-3 |   30 |
++------+-----------------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_update; DROP TABLE IF EXISTS shard_remote_update_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_update_s_1; CREATE TABLE shard_remote_update_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_update_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_update(id bigint, title text, gid uint) type='shard' local='shard_remote_update_s_0' agent='127.0.0.1:2312:shard_remote_update_s_1'; INSERT INTO shard_remote_update (id, title, gid) VALUES (1, 'local-1', 10), (2, 'local-2', 20), (3, 'remote-3', 30), (4, 'remote-4', 40), (5, 'remote-5', 50), (6, 'local-6', 60);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "UPDATE shard_remote_update SET gid=800 WHERE id IN (1,2,3,4,5,6);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_update_s_0 WHERE id IN (1,2,3,4,5,6,7) ORDER BY id ASC;"
+––– output –––
++------+---------+------+
+| id   | title   | gid  |
++------+---------+------+
+|    1 | local-1 |  800 |
+|    2 | local-2 |  800 |
+|    6 | local-6 |  800 |
++------+---------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_update_s_1 WHERE id IN (1,2,3,4,5,6,7) ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |  800 |
+|    4 | remote-4 |  800 |
+|    5 | remote-5 |  800 |
++------+----------+------+
+––– input –––
+mysql -h0 -P1306 -e "SET autocommit=0; UPDATE shard_remote_update SET gid=801 WHERE id IN (3); ROLLBACK; SET autocommit=1;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_update_s_1 WHERE id IN (3) ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    3 | remote-3 |  801 |
++------+----------+------+
+––– input –––
+curl -s -X POST http://localhost:1308/update -d '{"table": "shard_remote_update", "id": 4, "doc": {"gid": 802}}' | tr -d '\n' | sed -n 's/.*"result":"\([^"]*\)".*/\1/p'
+––– output –––
+updated
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_update_s_1 WHERE id IN (4) ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    4 | remote-4 |  802 |
++------+----------+------+
+––– input –––
+mysql -h0 -P1306 -e "SET autocommit=0; INSERT INTO shard_remote_update (id, title, gid) VALUES (7, 'pending-7', 70); UPDATE shard_remote_update SET gid=899 WHERE id IN (3); SET autocommit=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_update WHERE id IN (3,7) ORDER BY id ASC;"
+––– output –––
++------+-----------+------+
+| id   | title     | gid  |
++------+-----------+------+
+|    3 | remote-3  |  899 |
+|    7 | pending-7 |   70 |
++------+-----------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_update_s_1 WHERE id IN (3,7) ORDER BY id ASC;"
+––– output –––
++------+-----------+------+
+| id   | title     | gid  |
++------+-----------+------+
+|    3 | remote-3  |  899 |
+|    7 | pending-7 |   70 |
++------+-----------+------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_remote_delete_same_target; DROP TABLE IF EXISTS shard_remote_delete_same_target_s_0;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP TABLE IF EXISTS shard_remote_delete_same_target_s_1; CREATE TABLE shard_remote_delete_same_target_s_1(id bigint, title text, gid uint);"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE shard_remote_delete_same_target_s_0(id bigint, title text, gid uint); CREATE TABLE shard_remote_delete_same_target(id bigint, title text, gid uint) type='shard' local='shard_remote_delete_same_target_s_0' agent='127.0.0.1:2312:shard_remote_delete_same_target_s_1'; INSERT INTO shard_remote_delete_same_target (id, title, gid) VALUES (1, 'odd-1', 10), (3, 'odd-3', 10), (2, 'even-2', 20), (4, 'even-4', 40);"
+––– output –––
+––– input –––
+bash -lc "mysql -vvv -h0 -P1306 -e \"BEGIN; INSERT INTO shard_remote_delete_same_target (id, title, gid) VALUES (5, 'odd-5-before', 10); DELETE FROM shard_remote_delete_same_target WHERE id IN (1); DELETE FROM shard_remote_delete_same_target WHERE gid IN (10); INSERT INTO shard_remote_delete_same_target (id, title, gid) VALUES (7, 'odd-7-after', 10); COMMIT;\" | sed -n 's/Query OK, \\([0-9][0-9]* row[s]* affected\\).*/\\1/p'"
+––– output –––
+0 rows affected
+1 row affected
+0 rows affected
+0 rows affected
+1 row affected
+2 rows affected
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title, gid FROM shard_remote_delete_same_target_s_0 ORDER BY id ASC;"
+––– output –––
++------+--------+------+
+| id   | title  | gid  |
++------+--------+------+
+|    2 | even-2 |   20 |
++------+--------+------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_delete_same_target_s_1 ORDER BY id ASC;"
+––– output –––
++------+--------------+------+
+| id   | title        | gid  |
++------+--------------+------+
+|    4 | even-4       |   40 |
+|    5 | odd-5-before |   10 |
+|    7 | odd-7-after  |   10 |
++------+--------------+------+
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/stop-searchd –––
+––– input –––
+bash -c 'out=$(mysql --force -h0 -P1306 -e "BEGIN; DELETE FROM shard_remote_delete_mix WHERE gid IN (60,70); COMMIT;" 2>&1 || true); echo "$out" | grep -F "remote table '\''shard_remote_delete_mix_s_1'\''" >/dev/null || { echo "$out"; exit 1; }; if echo "$out" | grep -Fq "processed_ids="; then echo "unexpected processed_ids"; exit 1; fi; echo "remote failure without processed_ids";'
+––– output –––
+remote failure without processed_ids
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_remote_delete_mix_s_0;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT id, title, gid FROM shard_remote_delete_mix_s_1 ORDER BY id ASC;"
+––– output –––
++------+----------+------+
+| id   | title    | gid  |
++------+----------+------+
+|    7 | remote-7 |   70 |
++------+----------+------+

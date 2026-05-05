@@ -69,7 +69,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_public:331
+      image: manticoresearch/ubertests_public:332_aot
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -90,6 +90,15 @@ jobs:
 
       - name: Tests container entrypoint
         run: bash /entry_point.sh &
+
+      - name: Setup lemmatizer config
+        run: |
+          mkdir -p "$HOME"
+          cp /root/.sphinx "$HOME/.sphinx"
+          test -f /work/aot/de.pak
+          test -f /work/aot/en.pak
+          test -f /work/aot/ru.pak
+          test -f /work/aot/uk.pak
 
       - name: Check out cache before building
         uses: actions/cache@v4

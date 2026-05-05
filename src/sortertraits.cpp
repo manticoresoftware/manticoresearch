@@ -142,7 +142,11 @@ CSphMatchQueueTraits::CSphMatchQueueTraits ( int iSize )
 CSphMatchQueueTraits::~CSphMatchQueueTraits ()
 {
 	if ( m_pSchema )
-		m_dData.Apply ( [this] ( CSphMatch& tMatch ) { m_pSchema->FreeDataPtrs ( tMatch ); } );
+		m_dData.Apply ( [this] ( CSphMatch& tMatch )
+		{
+			OnMatchFree ( tMatch );
+			m_pSchema->FreeDataPtrs ( tMatch );
+		} );
 }
 
 
@@ -183,11 +187,17 @@ int CSphMatchQueueTraits::ResetDynamicFreeData ( int iMaxUsed )
 {
 	for ( int i=0; i<iMaxUsed; i++ )
 	{
+		OnMatchFree ( m_dData[i] );
 		m_pSchema->FreeDataPtrs ( m_dData[i] );
 		m_dData[i].ResetDynamic();
 	}
 
 	return -1;
+}
+
+
+void CSphMatchQueueTraits::OnMatchFree ( CSphMatch & tMatch )
+{
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -288,14 +298,21 @@ void MatchCloner_c::CommitPtrs()
 	if ( m_bPtrRowsCommited )
 		m_dMyPtrRows.Resize(0);
 
+	CSphVector<int> dOwnedRows;
 	for ( const CSphAttrLocator &tLoc : m_dAttrsPtr )
-		m_dMyPtrRows.Add ( tLoc.m_iBitOffset / SIZE_OF_ROW );
+	{
+		int iRowitem = tLoc.m_iBitOffset / SIZE_OF_ROW;
+		dOwnedRows.Add ( iRowitem );
+		DataPtrAttr_t tDesc;
+		bool bFound = m_pSchema->DescribePtrRow ( iRowitem, tDesc );
+		assert ( bFound );
+		if ( bFound )
+			m_dMyPtrRows.Add ( tDesc );
+	}
 
-	m_dOtherPtrRows = m_pSchema->SubsetPtrs ( m_dMyPtrRows );
+	m_dOtherPtrRows = m_pSchema->SubsetPtrs ( dOwnedRows );
 
 #ifndef NDEBUG
-	// sanitize check
-	m_dMyPtrRows = m_pSchema->SubsetPtrs ( m_dOtherPtrRows );
 	assert ( m_dMyPtrRows.GetLength ()==m_dAttrsPtr.GetLength () );
 #endif
 	m_bPtrRowsCommited = true;
@@ -310,7 +327,6 @@ void BaseGroupSorter_c::SetColumnar ( columnar::Columnar_i * pColumnar )
 	for ( auto i : m_dAggregates )
 		i->SetColumnar(pColumnar);
 }
-
 
 void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, CSphVector<AggrFunc_i *> * pAvgs )
 {
@@ -335,19 +351,31 @@ void BaseGroupSorter_c::SetupBaseGrouper ( ISphSchema * pSchema, int iDistinct, 
 
 		switch ( tAttr.m_eAggrFunc )
 		{
-		case SPH_AGGR_SUM:	m_dAggregates.Add ( CreateAggrSum(tAttr) );	break;
+		case SPH_AGGR_SUM:	RegisterAggregate ( CreateAggrSum(tAttr) );	break;
 		case SPH_AGGR_AVG:
-			m_dAggregates.Add ( CreateAggrAvg ( tAttr, m_tLocCount ) );
+			RegisterAggregate ( CreateAggrAvg ( tAttr, m_tLocCount ) );
 
 			// store avg to calculate these attributes prior to groups sort
 			if ( pAvgs )
 				pAvgs->Add ( m_dAggregates.Last() );
 			break;
 
-		case SPH_AGGR_MIN:	m_dAggregates.Add ( CreateAggrMin(tAttr) );	break;
-		case SPH_AGGR_MAX:	m_dAggregates.Add ( CreateAggrMax(tAttr) );	break;
+		case SPH_AGGR_MIN:	RegisterAggregate ( CreateAggrMin(tAttr) );	break;
+		case SPH_AGGR_MAX:	RegisterAggregate ( CreateAggrMax(tAttr) );	break;
 		case SPH_AGGR_CAT:
-			m_dAggregates.Add ( CreateAggrConcat(tAttr) );
+			RegisterAggregate ( CreateAggrConcat(tAttr) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_PERCENTILES:
+			RegisterAggregate ( CreateAggrPercentiles ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_PERCENTILE_RANKS:
+			RegisterAggregate ( CreateAggrPercentileRanks ( tAttr ) );
+			m_tPregroup.AddPtr ( tAttr.m_tLocator );
+			break;
+		case SPH_AGGR_MAD:
+			RegisterAggregate ( CreateAggrMad ( tAttr ) );
 			m_tPregroup.AddPtr ( tAttr.m_tLocator );
 			break;
 
@@ -389,10 +417,35 @@ void BaseGroupSorter_c::AggrUngroup ( CSphMatch & tMatch )
 }
 
 
+void BaseGroupSorter_c::AggrDiscard ( CSphMatch & tMatch )
+{
+	if ( !m_bHasDiscardableAggregates )
+		return;
+
+	for ( auto * pAggregate : this->m_dAggregates )
+	{
+		if ( pAggregate->NeedsDiscard() )
+			pAggregate->Discard ( tMatch );
+	}
+}
+
+
 void BaseGroupSorter_c::ResetAggregates()
 {
 	for ( auto & pAggregate : m_dAggregates )
 		SafeDelete ( pAggregate );
 
 	m_dAggregates.Resize(0);
+	m_bHasDiscardableAggregates = false;
+}
+
+
+void BaseGroupSorter_c::RegisterAggregate ( AggrFunc_i * pAggregate )
+{
+	if ( !pAggregate )
+		return;
+
+	m_dAggregates.Add ( pAggregate );
+	if ( pAggregate->NeedsDiscard() )
+		m_bHasDiscardableAggregates = true;
 }

@@ -11,7 +11,6 @@ add_executable ( gmanticorebench EXCLUDE_FROM_ALL
 		functions.cpp
 		text.cpp
 		json.cpp
-		cJSON_test.c
 		locators.cpp
 		popcount.cpp
 		appendf.cpp
@@ -23,6 +22,7 @@ add_executable ( gmanticorebench EXCLUDE_FROM_ALL
 
 target_include_directories ( gmanticorebench PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( gmanticorebench
+		daemon
 		lmanticore
 		lsearchd
 		stub_ssl

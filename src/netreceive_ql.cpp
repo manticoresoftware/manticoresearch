@@ -1239,7 +1239,7 @@ using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t
 bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tStmt, VecTraits_T<QueryParam_t>& dValues, CSphString& sError )
 {
 	tIn.GetByte(); // uFlags, not used
-	DWORD uIterationCount = tIn.GetLSBDword();
+	[[maybe_unused]] DWORD uIterationCount = tIn.GetLSBDword();
 	assert (uIterationCount==1);
 
 	const DWORD uParams = tStmt.dParamsPositions.GetLength();

@@ -2364,9 +2364,10 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			}
 
 		case 'U': // decimal uint64
+		case 'X': // hex uint64
 			{
 				uint64_t iValue = va_arg ( ap, uint64_t );
-				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, ( c=='X' ) ? 16 : 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2407,24 +2408,24 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				double fValue = va_arg ( ap, double );
 
-				// ensure 32 is enough to take any float value.
-				Grow ( pOutput, Max ( (int) iWidth, 32 ));
-
 				// extract current format from source format line
 				auto *pF = sFmt;
 				while ( *--pF!='%' );
 
 				if ( memcmp ( pF, "%f", 2 )!=0 )
 				{
-
 					// invoke standard sprintf
 					char sFormat[32] = { 0 };
 					memcpy ( sFormat, pF, sFmt - pF );
-					pOutput += snprintf ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, sFormat, fValue );
+					int iPrinted = snprintf ( nullptr, 0, sFormat, fValue );
+					assert ( iPrinted >= 0 );
+					Grow ( pOutput, Max ( iPrinted + 1, (int)iWidth ) );
+					pOutput += snprintf ( Tail ( pOutput ), iPrinted + 1, sFormat, fValue );
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, (float)fValue );
+					Grow ( pOutput, Max ( (int) iWidth, SPH_MAX_NUMERIC_STR ) );
+					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, SPH_MAX_NUMERIC_STR ) - 1, (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 
@@ -3870,28 +3871,40 @@ std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bF
 	return { *pUnit, iMulti };
 }
 
-void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+static cctz::civil_second ConvertRoundTime ( time_t tDateTime, const cctz::time_zone * pTZ )
+{
+	return pTZ ? ConvertTime ( tDateTime, *pTZ ) : ConvertTime ( tDateTime );
+}
+
+
+static time_t ConvertRoundTime ( const cctz::civil_second & tSrcTime, const cctz::time_zone * pTZ )
+{
+	return pTZ ? ConvertTime ( tSrcTime, *pTZ ) : ConvertTime ( tSrcTime );
+}
+
+
+static void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone * pTZ )
 {
 	if ( eUnit==DateUnit_e::ms )
 		return;
 
-	cctz::civil_second tSrcTime = ConvertTime ( tDateTime );
+	cctz::civil_second tSrcTime = ConvertRoundTime ( tDateTime, pTZ );
 	switch ( eUnit )
 	{
 	case DateUnit_e::sec:
-		tDateTime = ConvertTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ) );
+		tDateTime = ConvertRoundTime (  cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute(), tSrcTime.second() ), pTZ );
 	break;
 
 	case DateUnit_e::minute:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour(), tSrcTime.minute() ), pTZ );
 	break;
 
 	case DateUnit_e::hour:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day(), tSrcTime.hour() ), pTZ );
 	break;
 
 	case DateUnit_e::day:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() ), pTZ );
 	break;
 
 	case DateUnit_e::week:
@@ -3899,22 +3912,34 @@ void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
 		cctz::civil_day tWeekStart ( tSrcTime.year(), tSrcTime.month(), tSrcTime.day() );
 		if ( cctz::get_weekday ( tWeekStart )!=cctz::weekday::monday )
 			tWeekStart = cctz::prev_weekday ( tWeekStart, cctz::weekday::monday );
-		tDateTime = ConvertTime ( tWeekStart );
+		tDateTime = ConvertRoundTime ( tWeekStart, pTZ );
 	}
 	break;
 
 	case DateUnit_e::month:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year(), tSrcTime.month() ), pTZ );
 		break;
 
 	case DateUnit_e::year:
-		tDateTime = ConvertTime ( cctz::civil_second ( tSrcTime.year() ) );
+		tDateTime = ConvertRoundTime ( cctz::civil_second ( tSrcTime.year() ), pTZ );
 		break;
 
 	default:
 		break;
 	}
 }
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
+{
+	RoundDate ( eUnit, tDateTime, nullptr );
+}
+
+
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime, const cctz::time_zone & tTZ )
+{
+	RoundDate ( eUnit, tDateTime, &tTZ );
+}
+
 
 void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
 {
@@ -3932,34 +3957,32 @@ void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
 		case DateUnit_e::sec:
 		{
 			// to fixed seconds
-			tDateTime -= ( tDateTime % iMulti );
+			int64_t iInterval = iMulti;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::minute:
 		{
 			// to fixed minutes
-			auto tMin = ( ( tDateTime / 60 ) % 60 );
-			tDateTime -= ( ( tMin % iMulti ) * 60 );
+			int64_t iInterval = int64_t ( iMulti ) * 60;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::hour:
 		{
 			// to fixed hours
-			const int iHourSeconds = 3600;
-			auto tHours = ( ( tDateTime / iHourSeconds ) % 24 );
-			tDateTime -= ( ( tHours % iMulti ) * iHourSeconds );
+			int64_t iInterval = int64_t ( iMulti ) * 3600;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 
 		case DateUnit_e::day:
 		{
 			// to fixed days
-			const int iDaySeconds = 86400;
-			auto tDaysEpoch = ( tDateTime / iDaySeconds );
-			tDaysEpoch -= ( tDaysEpoch % iMulti );
-			tDateTime = ( tDaysEpoch * iDaySeconds );
+			int64_t iInterval = int64_t ( iMulti ) * 86400;
+			tDateTime -= ( tDateTime % iInterval );
 		}
 		break;
 

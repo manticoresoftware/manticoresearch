@@ -673,7 +673,7 @@ static StringBuilder_c & operator << ( StringBuilder_c & tBuilder, const Replica
 		const auto & dKeys = tKeys.m_dHashes.Slice ( tItem.m_iOff, tItem.m_iCount );
 		const char * sExclusive = ( tItem.m_bShared ? "" : "(e)" );
 		for ( uint64_t uDocid : dKeys )
-			tBuilder.Appendf ( "0x%lx%s", uDocid, sExclusive );
+			tBuilder.Sprintf ( "0x%X%s", uDocid, sExclusive );
 	}
 	
 	tBuilder.FinishBlock();
@@ -1039,7 +1039,7 @@ static bool EnableIndexWrite ( const CSphString & sIndex )
 }
 
 // handle replicated command (came from outside)
-bool HandleCmdReplicated ( RtAccum_t & tAcc )
+bool HandleCmdReplicated ( RtAccum_t & tAcc ) NO_THREAD_SAFETY_ANALYSIS
 {
 	TRACE_SCHED ( "conn", "HandleCmdReplicated" );
 	TlsMsg::ResetErr();
@@ -1067,7 +1067,10 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		int iUpd = -1;
 		CSphString sWarning;
 		CommitMonitor_c tCommit ( tAcc, &sWarning, &iUpd );
-		return tCommit.UpdateTOI() && ( sWarning.IsEmpty() || TlsMsg::Err ( "%s", sWarning.cstr() ) );
+		bool bOk = tCommit.UpdateTOI();
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "%s", sWarning.cstr() );
+		return bOk;
 
 		// FIXME!!! make update trx
 	}
@@ -1115,7 +1118,7 @@ static void AddSharedKeys ( const uint64_t uIndex, const VecTraits_T<DocID_t> & 
 	ARRAY_FOREACH ( i, dKeys )
 	{
 		DocID_t iDocid = dDocids[i];
-		dKeys[i] = sphFNV64 ( &iDocid, sizeof ( iDocid ), uIndex );
+		dKeys[i] = sphFNV64 ( iDocid, uIndex );
 	}
 }
 

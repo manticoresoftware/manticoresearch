@@ -59,6 +59,7 @@ public:
 	QueryProfile_c m_tLastProfile;
 	bool m_bOptimizeById = true;
 	bool m_bDeprecatedEOF = false;
+	bool m_bShardPhysicalUpdate = false;
 	StrVec_t m_dLockedTables;
 	PreparedStatements m_dPreparedStatements;
 

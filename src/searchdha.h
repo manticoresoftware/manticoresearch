@@ -809,12 +809,13 @@ bool sphNBSockEof ( int iSock );
 class SphinxqlRequestBuilder_c : public RequestBuilder_i
 {
 public:
-			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt );
+			SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt, DWORD uApiFlags );
 	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 
 protected:
 	const Str_t m_sBegin;
 	const Str_t m_sEnd;
+	DWORD		m_uApiFlags = 0;
 };
 
 class SphinxqlReplyParser_c : public ReplyParser_i

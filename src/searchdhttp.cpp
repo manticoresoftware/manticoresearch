@@ -890,11 +890,12 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl )
+	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl, DWORD uApiFlags )
 		: m_sEndpoint ( std::move ( sEndpoint ) )
 		, m_tQuery ( szQuery )
 		, m_sRawQuery ( sRawQuery )
 		, m_sFullUrl ( sFullUrl )
+		, m_uApiFlags ( uApiFlags )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
@@ -912,6 +913,7 @@ public:
 		tOut.SendString ( sRequest.cstr() );
 		tOut.SendString ( m_sRawQuery.cstr() );
 		tOut.SendString ( m_sFullUrl.cstr() );
+		tOut.SendDword ( m_uApiFlags );
 	}
 
 private:
@@ -919,6 +921,7 @@ private:
 	mutable JsonObj_c	m_tQuery;
 	const CSphString & m_sRawQuery;
 	const CSphString & m_sFullUrl;
+	DWORD				m_uApiFlags = 0;
 };
 
 
@@ -944,7 +947,11 @@ public:
 		dResult[uLength] = '\0';
 
 		CSphString sError;
-		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		int iAffected = 0;
+		int iWarnings = 0;
+		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), iAffected, iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		m_iAffected += iAffected;
+		m_iWarnings += iWarnings;
 		if ( !sError.IsEmpty() )
 			m_tFails.Submit ( tAgent.m_tDesc.m_sIndexes, nullptr, sError.cstr() );
 
@@ -962,15 +969,16 @@ std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept
 	return bJson ? sphCreateJsonQueryParser() : sphCreatePlainQueryParser();
 }
 
-std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt, bool bShardPhysicalUpdate )
 {
+	DWORD uApiFlags = ( tStmt.m_bShardPhysicalUpdate || bShardPhysicalUpdate ) ? API_FLAG_SHARD_PHYSICAL_UPDATE : 0;
 	if ( tStmt.m_bJson )
 	{
 		assert ( !tStmt.m_sEndpoint.IsEmpty() );
-		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl );
+		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl, uApiFlags );
 	} else
 	{
-		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt );
+		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt, uApiFlags );
 	}
 }
 
@@ -1936,6 +1944,7 @@ static void SetQueryOptions ( const OptionsHash_t & hOpts, SqlStmt_t & tStmt )
 		const CSphString * pFullUrl = hOpts  ( "full_url" );
 		if ( pFullUrl )
 			tStmt.m_sFullUrl = *pFullUrl;
+		tStmt.m_bShardPhysicalUpdate = session::GetClientSession()->m_bShardPhysicalUpdate;
 	}
 }
 

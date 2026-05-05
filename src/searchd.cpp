@@ -7313,9 +7313,10 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 }
 
 
-SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt )
+SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt, DWORD uApiFlags )
 	: m_sBegin { sQuery.first, tStmt.m_iListStart }
 	, m_sEnd ( sQuery.first + tStmt.m_iListEnd, sQuery.second - tStmt.m_iListEnd )
+	, m_uApiFlags ( uApiFlags )
 {
 }
 
@@ -7326,16 +7327,19 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 	// API header
 	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SPHINXQL, VER_COMMAND_SPHINXQL );
-	APIBlob_c dWrapper ( tOut ); // sphinxql wrapped twice, so one more length need to be written.
-	tOut.SendBytes ( m_sBegin );
-	tOut.SendBytes ( sIndexes );
-	tOut.SendBytes ( m_sEnd );
+	{
+		APIBlob_c dWrapper ( tOut ); // sphinxql wrapped twice, so one more length need to be written.
+		tOut.SendBytes ( m_sBegin );
+		tOut.SendBytes ( sIndexes );
+		tOut.SendBytes ( m_sEnd );
+	}
+	tOut.SendDword ( m_uApiFlags );
 }
 
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, bool bShardPhysicalUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
 	TRACE_CORO ( "rt", "DoExtendedUpdate" );
 
@@ -7347,7 +7351,14 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 		return;
 	}
 
-	if ( !ValidateClusterStatement ( sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+	if ( bShardPhysicalUpdate && pServed->m_eType!=IndexType_e::RT )
+	{
+		dFails.Submit ( sIndex, szDistributed, "shard physical update target must be a real-time table" );
+		return;
+	}
+
+	const CSphString & sEffectiveCluster = bShardPhysicalUpdate ? pServed->m_sCluster : tStmt.m_sCluster;
+	if ( !ValidateClusterStatement ( sIndex, *pServed, sEffectiveCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		dFails.Submit ( sIndex, szDistributed, TlsMsg::szError() );
 		return;
@@ -7361,7 +7372,7 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	}
 
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, tStmt.m_sCluster );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplCmd_e::UPDATE_JSON : ReplCmd_e::UPDATE_QL, sIndex, sEffectiveCluster );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = tStmt.AttrUpdatePtr();
 	pCmd->m_bBlobUpdate = bBlobUpdate;
@@ -7468,6 +7479,41 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
+	if ( tStmt.m_bShardPhysicalUpdate && ( dIndexNames.GetLength()!=1 || !GetServed ( dIndexNames[0] ) ) )
+	{
+		tOut.Error ( "shard physical update target must be a concrete local table" );
+		return;
+	}
+
+	bool bShardUpdate = false;
+	ARRAY_FOREACH ( i, dDistributed )
+	{
+		if ( dDistributed[i] && AsShard ( dDistributed[i] ) )
+		{
+			bShardUpdate = true;
+			break;
+		}
+	}
+
+	if ( bShardUpdate && dIndexNames.GetLength()!=1 )
+	{
+		tOut.Error ( "shard table update must target exactly one shard table" );
+		return;
+	}
+
+	if ( bShardUpdate )
+	{
+		const auto * pShard = AsShard ( dDistributed[0] );
+		assert ( pShard );
+		if ( !ValidateClusterStatement ( dIndexNames[0], pShard->m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+		{
+			tOut.Error ( "%s", TlsMsg::szError() );
+			return;
+		}
+	}
+
+	const bool bShardPhysicalUpdate = tStmt.m_bShardPhysicalUpdate || bShardUpdate;
+
 	// do update
 	SearchFailuresLog_c dFails;
 	int iSuccesses = 0;
@@ -7498,7 +7544,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			int64_t tmStartIdx = sphMicroTimer();
 			int iUpdatedIdx = 0;
 
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, bShardPhysicalUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pLocked );
 
 			iUpdated += iUpdatedIdx;
 			iUpdatedReq += iUpdatedIdx;
@@ -7516,7 +7562,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				int iUpdatedIdx = 0;
 
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, bShardPhysicalUpdate, iSuccessesReq, iUpdatedIdx, dFails, sWarning, pServed );
 
 				iUpdated += iUpdatedIdx;
 				iUpdatedReq += iUpdatedIdx;
@@ -7539,7 +7585,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			{
 				int iUpdatedRemote = 0;
 				int iWarnsRemote = 0;
-				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+				std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt, bShardPhysicalUpdate );
 				std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iUpdatedRemote, iWarnsRemote, dFails, &sWarning );
 				int iSuccessesRemote = PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 				iSuccessesReq += iSuccessesRemote;
@@ -8503,7 +8549,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			int iWarns = 0;
 
 			// connect to remote agents and query them
-			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
+			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt, false );
 			std::unique_ptr<ReplyParser_i> pReplyParser = CreateReplyParser ( tStmt.m_bJson, iGot, iWarns, dErrors, nullptr );
 			PerformRemoteTasks ( dAgents, pRequestBuilder.get (), pReplyParser.get () );
 
@@ -11603,6 +11649,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	for ( auto& tStmt : dStmt ) {
 		FixupSystemTableName ( &tStmt );
 		CanonicalizeIndexName ( tStmt.m_sIndex );
+		tStmt.m_bShardPhysicalUpdate = m_bShardPhysicalUpdate;
 	}
 	SqlStmt_t * pStmt = dStmt.Begin();
 	assert ( !bParsedOK || pStmt );
@@ -12246,7 +12293,12 @@ void HandleCommandSphinxql ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffe
 	// parse and run request
 	CSphVector<BYTE> dString;
 	tReq.GetString ( dString );
+	DWORD uApiFlags = ( uVer>=0x101 ) ? tReq.GetDword() : 0;
+
+	session::GetClientSession()->m_bShardPhysicalUpdate = ( uApiFlags & API_FLAG_SHARD_PHYSICAL_UPDATE )!=0;
+
 	RunSingleSphinxqlCommand ( dString, tOut );
+	session::GetClientSession()->m_bShardPhysicalUpdate = false;
 }
 
 /// json command over API
@@ -12266,9 +12318,13 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 		hOptions.AddUnique ( "raw_query" ) = tReq.GetString ();
 		hOptions.AddUnique ( "full_url" ) = tReq.GetString ();
 	}
+	DWORD uApiFlags = ( uVer>=0x103 ) ? tReq.GetDword() : 0;
+
+	session::GetClientSession()->m_bShardPhysicalUpdate = ( uApiFlags & API_FLAG_SHARD_PHYSICAL_UPDATE )!=0;
 	
 	CSphVector<BYTE> dResult;
 	ProcessHttpJsonQuery ( sCommand, hOptions, dResult );
+	session::GetClientSession()->m_bShardPhysicalUpdate = false;
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_JSON );
 	tOut.SendString ( sEndpoint.cstr() );

@@ -337,6 +337,7 @@ public:
 	int						m_iIntParam = -1;
 
 	bool					m_bJson = false;
+	bool					m_bShardPhysicalUpdate = false;
 	CSphString				m_sEndpoint;
 	CSphString				m_sRawQuery;
 	CSphString				m_sFullUrl;

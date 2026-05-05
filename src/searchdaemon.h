@@ -149,8 +149,8 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_KEYWORDS	= 0x102,
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
-	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_JSON		= 0x102,
+	VER_COMMAND_SPHINXQL	= 0x101,
+	VER_COMMAND_JSON		= 0x103,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
@@ -160,6 +160,11 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_SHARD_WRITE	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
+};
+
+enum ApiCommandFlags_e : DWORD
+{
+	API_FLAG_SHARD_PHYSICAL_UPDATE = 1U << 0,
 };
 
 enum UpdateType_e
@@ -1288,7 +1293,7 @@ class ReplyParser_i;
 class SearchFailuresLog_c;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
-std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt, bool bShardPhysicalUpdate );
 std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails, CSphString * pWarning = nullptr );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 

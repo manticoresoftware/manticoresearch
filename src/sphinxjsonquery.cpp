@@ -3371,6 +3371,19 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 		return true;
 	}
 
+	JsonObj_c tResult = tJsonRoot.GetItem ( "result" );
+	if ( tResult && tResult.IsStr() )
+	{
+		if ( bUpdate )
+		{
+			iAffected = ( tResult.StrVal()=="updated" ) ? 1 : 0;
+			return true;
+		}
+
+		iAffected = ( tResult.StrVal()=="deleted" ) ? 1 : 0;
+		return true;
+	}
+
 	// it was probably a query with an "id"
 	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sParseError );
 	if ( tId )

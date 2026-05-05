@@ -1,6 +1,6 @@
 ––– comment –––
-This test verifies advanced ConversationalRag plugin features:
-- Multiple RAG models with different configurations
+This test verifies advanced ConversationalSearch plugin features:
+- Multiple CHAT models with different configurations
 - Multiple content fields handling
 - Conversation tracking across multiple queries
 - Complex document structures with multiple text fields
@@ -64,9 +64,9 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM knowledge_base;"
 |        5 |
 +----------+
 ––– comment –––
-Create multiple RAG models with different configurations
+Create multiple CHAT models with different configurations
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=0, retrieval_limit=3);"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=0, retrieval_limit=3);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -74,7 +74,7 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL fast_assistant (model='openai:gpt-3.5-turb
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL detailed_assistant (model='openai:gpt-4o', style_prompt='Add **Tsoy is alive** in the end of every answer. Answer should be one line without new lines (\n)', max_document_length=0, retrieval_limit=5);"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL detailed_assistant (model='openai:gpt-4o', style_prompt='Add **Tsoy is alive** in the end of every answer. Answer should be one line without new lines (\n)', max_document_length=0, retrieval_limit=5);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -82,7 +82,7 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL detailed_assistant (model='openai:gpt-4o',
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (model='openai:gpt-4o-mini', style_prompt='Add **Bloodthirsty hamster watching you** in the end of every answer. Answer should be in one line without new lines (\n)', max_document_length=2000, retrieval_limit=4);"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL creative_assistant (model='openai:gpt-4o-mini', style_prompt='Add **Bloodthirsty hamster watching you** in the end of every answer. Answer should be in one line without new lines (\n)', max_document_length=2000, retrieval_limit=4);"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -92,13 +92,13 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL creative_assistant (model='openai:gpt-4o-m
 ––– comment –––
 Verify all models are created (check count, order may vary)
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;" | grep -c "openai"
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;" | grep -c "openai"
 ––– output –––
 3
 ––– comment –––
 Test with single content field
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | tee /tmp/output_1.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about vector search', 'knowledge_base', 'fast_assistant')\G;" | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -113,7 +113,7 @@ OK
 ––– comment –––
 Test with two content fields (title, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | tee /tmp/output_2.txt
+mysql -h0 -P9306 -e "CALL CHAT('Explain vector search', 'knowledge_base', 'detailed_assistant')\G;" | tee /tmp/output_2.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -128,7 +128,7 @@ OK
 ––– comment –––
 Test with multiple content fields (title, summary, content)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | tee /tmp/output_3.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG architecture', 'knowledge_base', 'creative_assistant')\G;" | tee /tmp/output_3.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -143,7 +143,7 @@ OK
 ––– comment –––
 Test conversation tracking - first message in a new conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_4.txt
+mysql -h0 -P9306 -e "CALL CHAT('What is clustering?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
@@ -158,7 +158,7 @@ OK
 ––– comment –––
 Test conversation tracking - follow-up message (should maintain context)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_5.txt
+mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_5.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
@@ -173,7 +173,7 @@ OK
 ––– comment –––
 Test different model on same conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What are best practices?', 'knowledge_base', 'detailed_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_6.txt
+mysql -h0 -P9306 -e "CALL CHAT('What are best practices?', 'knowledge_base', 'detailed_assistant', 'conv-test-1234-5678-90ab-cdef12345678')\G;" | tee /tmp/output_6.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
@@ -188,7 +188,7 @@ OK
 ––– comment –––
 Test independent conversation - different context
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;"
+mysql -h0 -P9306 -e "CALL CHAT('Show me tutorials', 'knowledge_base', 'creative_assistant', 'conv-other-aaaa-bbbb-cccc-dddddddddddd')\G;"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd
@@ -199,18 +199,18 @@ conversation_uuid: conv-other-aaaa-bbbb-cccc-dddddddddddd
 ––– comment –––
 Cleanup - drop all models
 ––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL fast_assistant;"
+mysql -h0 -P9306 -e "DROP CHAT MODEL fast_assistant;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL detailed_assistant;"
+mysql -h0 -P9306 -e "DROP CHAT MODEL detailed_assistant;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL creative_assistant;"
+mysql -h0 -P9306 -e "DROP CHAT MODEL creative_assistant;"
 ––– output –––
 ––– comment –––
 Verify all models are dropped
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;"
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;"
 ––– output –––
 ––– comment –––
 Cleanup table

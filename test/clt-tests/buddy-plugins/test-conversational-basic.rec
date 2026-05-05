@@ -1,19 +1,18 @@
 ––– comment –––
-This test verifies the basic functionality of the ConversationalRag plugin.
-It tests model creation, management, and conversational RAG queries.
+This test verifies the basic functionality of the ConversationalSearch plugin.
+It tests model creation, management, and conversational CHAT queries.
 The plugin combines vector search with LLM capabilities for intelligent responses.
-Based on schema.sql and setup_rag_test.sh from issue #3978
 ––– input –––
 export SEARCHD_FLAGS="--iostats --cpustats"
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
-Clean up any existing RAG data
+Clean up any existing CHAT data
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
 ––– output –––
 ––– comment –––
-Create a test table with vector embeddings for RAG search
+Create a test table with vector embeddings for CHAT search
 Note: knn_dims is NOT specified when using model_name - dimensions are auto-detected
 API_KEY is required for remote OpenAI embedding models
 ––– input –––
@@ -58,10 +57,10 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM docs;"
 |        3 |
 +----------+
 ––– comment –––
-Test CREATE RAG MODEL - basic configuration
+Test CREATE CHAT MODEL - basic configuration
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
-CREATE RAG MODEL test_assistant (
+CREATE CHAT MODEL test_assistant (
     description='Chat GPT cheap reasoning model',
     model='openai:gpt-4o-mini'
 );
@@ -73,10 +72,10 @@ EOF
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– comment –––
-Test CREATE RAG MODEL - advanced configuration with custom settings
+Test CREATE CHAT MODEL - advanced configuration with custom settings
 ––– input –––
 mysql -h0 -P9306 << 'EOF'
-CREATE RAG MODEL advanced_assistant (
+CREATE CHAT MODEL advanced_assistant (
     description='Chat GPT v4 reasoning model',
     model='openai:gpt-4o',
     style_prompt='Add **Tsoy is alive** in the end of every answer',
@@ -92,9 +91,9 @@ EOF
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
 +--------------------------------------+
 ––– comment –––
-Test SHOW RAG MODELS - should display created models
+Test SHOW CHAT MODELS - should display created models
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;"
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;"
 ––– output –––
 +--------------------------------------+--------------------+--------------------+------------+
 | uuid                                 | name               | model              | created_at |
@@ -103,9 +102,9 @@ mysql -h0 -P9306 -e "SHOW RAG MODELS;"
 | #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
 +--------------------------------------+--------------------+--------------------+------------+
 ––– comment –––
-Test DESCRIBE RAG MODEL - verify model configuration
+Test DESCRIBE CHAT MODEL - verify model configuration
 ––– input –––
-mysql -h0 -P9306 -e "DESCRIBE RAG MODEL test_assistant\G"
+mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL test_assistant\G"
 ––– output –––
 *************************** 1. row ***************************
 property: id
@@ -135,7 +134,7 @@ property: created_at
 property: updated_at
    value: %{NUMBER}
 ––– input –––
-mysql -h0 -P9306 -e "DESCRIBE RAG MODEL advanced_assistant\G"
+mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL advanced_assistant\G"
 ––– output –––
 *************************** 1. row ***************************
 property: id
@@ -171,10 +170,10 @@ property: created_at
 property: updated_at
    value: %{NUMBER}
 ––– comment –––
-Test CALL CONVERSATIONAL_RAG - basic query without conversation UUID
+Test CALL CHAT - basic query without conversation UUID
 This should succeed with OPENAI_API_KEY set
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is vector search?', 'docs', 'test_assistant')\G"
+mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'test_assistant')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -183,9 +182,9 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
          response: #!/.*[Vv]ector.*[Ss]earch.*/!#
           sources: [{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
 ––– comment –––
-Test CALL CONVERSATIONAL_RAG - with multiple content fields
+Test CALL CHAT - with multiple content fields
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about RAG', 'docs', 'test_assistant')\G"
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG', 'docs', 'test_assistant')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -194,9 +193,9 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
          response: #!/.+/!#
           sources: [{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
 ––– comment –––
-Test CALL CONVERSATIONAL_RAG - with conversation UUID for context tracking (should fail)
+Test CALL CHAT - with conversation UUID for context tracking (should fail)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G"
+mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc
@@ -205,17 +204,17 @@ conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc
          response: #!/.+/!#
           sources: []
 ––– comment –––
-Test DROP RAG MODEL - cleanup
+Test DROP CHAT MODEL - cleanup
 ––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL test_assistant;"
+mysql -h0 -P9306 -e "DROP CHAT MODEL test_assistant;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL advanced_assistant;"
+mysql -h0 -P9306 -e "DROP CHAT MODEL advanced_assistant;"
 ––– output –––
 ––– comment –––
 Verify models are dropped
 ––– input –––
-mysql -h0 -P9306 -e "SHOW RAG MODELS;"
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;"
 ––– output –––
 ––– comment –––
 Cleanup test table

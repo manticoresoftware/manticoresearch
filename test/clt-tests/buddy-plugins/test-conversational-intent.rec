@@ -1,7 +1,6 @@
 ––– comment –––
-This test verifies intent classification and conversation flow in the ConversationalRag plugin.
+This test verifies intent classification and conversation flow in the ConversationalSearch plugin.
 Tests various user intents: NEW_SEARCH, TOPIC_CHANGE, INTEREST, REJECTION, ALTERNATIVES.
-Based on issue #3978 - conversational RAG with intent classification.
 Uses rich document content based on internal test data (schema.sql).
 ––– block: ../base/start-searchd-with-buddy –––
 ––– comment –––
@@ -52,9 +51,9 @@ Wait for auto-embeddings generation (async via Buddy)
 mysql -h0 -P9306 -e "debug sleep 30;" > /dev/null 2>&1
 ––– output –––
 ––– comment –––
-Create RAG model
+Create CHAT model
 ––– input –––
-mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (model='openai:gpt-4o-mini');"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL test_assistant (model='openai:gpt-4o-mini');"
 ––– output –––
 +--------------------------------------+
 | uuid                                 |
@@ -65,7 +64,7 @@ mysql -h0 -P9306 -e "CREATE RAG MODEL test_assistant (model='openai:gpt-4o-mini'
 Test 1: Initial question about RAG (NEW_SEARCH intent)
 Expected: Search for RAG/AI-related documents, response contains RAG keywords
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('What is RAG?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_1.txt
+mysql -h0 -P9306 -e "CALL CHAT('What is RAG?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -81,7 +80,7 @@ OK
 Test 2: User expresses rejection (REJECTION intent - "Its boring")
 Expected: System acknowledges rejection, maintains conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Its boring', 'docs', 'test_assistant', 'test-conv-intent-001')\G;"
+mysql -h0 -P9306 -e "CALL CHAT('Its boring', 'docs', 'test_assistant', 'test-conv-intent-001')\G;"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -93,7 +92,7 @@ conversation_uuid: test-conv-intent-001
 Test 3: Topic change to movies (TOPIC_CHANGE intent)
 Expected: Search for Entertainment category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('what about movies?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_3.txt
+mysql -h0 -P9306 -e "CALL CHAT('what about movies?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_3.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -111,7 +110,7 @@ OK
 Test 4: User shows interest in specific show (INTEREST intent)
 Expected: Should find Breaking Bad in sources
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('I like Breaking Bad', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_4.txt
+mysql -h0 -P9306 -e "CALL CHAT('I like Breaking Bad', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -127,7 +126,7 @@ OK
 Test 6: Request for more content (ALTERNATIVES intent)
 Expected: Returns more entertainment results
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('show me more entertainment', 'docs', 'test_assistant', 'test-conv-intent-001')\G;"
+mysql -h0 -P9306 -e "CALL CHAT('show me more entertainment', 'docs', 'test_assistant', 'test-conv-intent-001')\G;"
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -139,7 +138,7 @@ conversation_uuid: test-conv-intent-001
 Test 7: New independent conversation - Programming topic
 Expected: Fresh context, should find Python
 ––– input –––
-mysql -h0 -P9306 -e "CALL CONVERSATIONAL_RAG('Tell me about Python', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_7.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about Python', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_7.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -154,7 +153,7 @@ OK
 ––– comment –––
 Cleanup
 ––– input –––
-mysql -h0 -P9306 -e "DROP RAG MODEL test_assistant;"
+mysql -h0 -P9306 -e "DROP CHAT MODEL test_assistant;"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"

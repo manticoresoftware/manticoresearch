@@ -170,15 +170,12 @@ static SmartSSL_CTX_t GetReadySslCtx ( CSphString * pError=nullptr )
 // is global SSL context created and keys set
 bool CheckWeCanUseSSL ( CSphString * pError )
 {
-	static bool bCheckPerformed = false; // to check only once
-	static bool bWeCanUseSSL;
+	static std::optional<bool> bWeCanUseSSL;
 
-	if ( bCheckPerformed )
-		return bWeCanUseSSL;
+	if ( !bWeCanUseSSL )
+		bWeCanUseSSL.emplace ( GetReadySslCtx ( pError )!=nullptr );
 
-	bCheckPerformed = true;
-	bWeCanUseSSL = ( GetReadySslCtx ( pError )!=nullptr );
-	return bWeCanUseSSL;
+	return *bWeCanUseSSL;
 }
 
 // translates AsyncNetBuffer_c to openSSL BIO calls.

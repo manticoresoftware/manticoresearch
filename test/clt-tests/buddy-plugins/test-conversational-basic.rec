@@ -166,7 +166,7 @@ property: updated_at
 Test CALL CHAT - basic query without conversation UUID
 This should succeed with OPENAI_API_KEY set
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'test_assistant')\G"
+mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'test_assistant')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -177,7 +177,7 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
 ––– comment –––
 Test CALL CHAT - with multiple content fields
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG', 'docs', 'test_assistant')\G"
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG', 'docs', 'test_assistant')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
@@ -188,7 +188,7 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
 ––– comment –––
 Test CALL CHAT - with conversation UUID for context tracking (should fail)
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G"
+mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc

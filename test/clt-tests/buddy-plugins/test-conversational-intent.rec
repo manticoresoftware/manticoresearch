@@ -64,7 +64,7 @@ mysql -h0 -P9306 -e "CREATE CHAT MODEL test_assistant (model='openai:gpt-4o-mini
 Test 1: Initial question about RAG (NEW_SEARCH intent)
 Expected: Search for RAG/AI-related documents, response contains RAG keywords
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('What is RAG?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_1.txt
+mysql -h0 -P9306 -e "CALL CHAT('What is RAG?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_1.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -73,14 +73,14 @@ conversation_uuid: test-conv-intent-001
          response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
           sources: #!/.*/!#
 ––– input –––
-grep -o '\[.*\]' /tmp/output_1.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([3])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+grep 'sources:' /tmp/output_1.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([3])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
 OK
 ––– comment –––
 Test 2: User expresses rejection (REJECTION intent - "Its boring")
 Expected: System acknowledges rejection, maintains conversation
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Its boring', 'docs', 'test_assistant', 'test-conv-intent-001')\G;"
+mysql -h0 -P9306 -e "CALL CHAT('Its boring', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -92,7 +92,7 @@ conversation_uuid: test-conv-intent-001
 Test 3: Topic change to movies (TOPIC_CHANGE intent)
 Expected: Search for Entertainment category
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('what about movies?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_3.txt
+mysql -h0 -P9306 -e "CALL CHAT('what about movies?', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_3.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -103,14 +103,14 @@ conversation_uuid: test-conv-intent-001
 ––– comment –––
 Verify sources contain Entertainment category after topic change
 ––– input –––
-grep -o '\[.*\]' /tmp/output_3.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([8])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+grep 'sources:' /tmp/output_3.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([8])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
 OK
 ––– comment –––
 Test 4: User shows interest in specific show (INTEREST intent)
 Expected: Should find Breaking Bad in sources
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('I like Breaking Bad', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_4.txt
+mysql -h0 -P9306 -e "CALL CHAT('I like Breaking Bad', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_4.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -119,14 +119,14 @@ conversation_uuid: test-conv-intent-001
          response: #!/.*[Bb]reaking [Bb]ad.*/!#
           sources: #!/.*/!#
 ––– input –––
-grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+grep 'sources:' /tmp/output_4.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
 OK
 ––– comment –––
 Test 6: Request for more content (ALTERNATIVES intent)
 Expected: Returns more entertainment results
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('show me more entertainment', 'docs', 'test_assistant', 'test-conv-intent-001')\G;"
+mysql -h0 -P9306 -e "CALL CHAT('show me more entertainment', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -138,7 +138,7 @@ conversation_uuid: test-conv-intent-001
 Test 7: New independent conversation - Programming topic
 Expected: Fresh context, should find Python
 ––– input –––
-mysql -h0 -P9306 -e "CALL CHAT('Tell me about Python', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | tee /tmp/output_7.txt
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about Python', 'docs', 'test_assistant', 'test-conv-intent-001')\G;" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }' | tee /tmp/output_7.txt
 ––– output –––
 *************************** 1. row ***************************
 conversation_uuid: test-conv-intent-001
@@ -147,7 +147,7 @@ conversation_uuid: test-conv-intent-001
          response: #!/.*[Pp]ython.*/!#
           sources: #!/.*/!#
 ––– input –––
-grep -o '\[.*\]' /tmp/output_7.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+grep 'sources:' /tmp/output_7.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
 OK
 ––– comment –––

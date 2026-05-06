@@ -158,9 +158,8 @@ CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
-static CSphString		g_sBuddyPath;
+static std::optional<CSphString>		g_sBuddyPath;
 static bool				g_bTelemetry = env_bool ( "MANTICORE_TELEMETRY" ).value_or ( true );
-static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = env_exists ( "MANTICORE_NO_CHANGE_CWD" );
 static bool				g_bCwdChanged = false;
@@ -14494,8 +14493,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	else
 		sphWarning ( "%s", sWarning.cstr() );
 
-	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
-	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
+	g_sBuddyPath = hSearchd.OptStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
@@ -15077,6 +15075,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CSphString		sOptListen;
 	bool			bOptListen = false;
 	bool			bTestMode = false;
+	std::optional<bool>			bWithBuddy;
 	bool			bOptDebugQlog = true;
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
@@ -15143,6 +15142,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster" )	bNewCluster = true;
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
+		OPT1 ( "--with-buddy" )	bWithBuddy = true;
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -15732,8 +15732,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
-	if ( !bTestMode )
-		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
+	if ( bWithBuddy.value_or (!bTestMode) )
+		BuddyStart ( g_sBuddyPath, PluginGetDir(), dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
 
 	g_bJsonConfigLoadedOk = true;
 

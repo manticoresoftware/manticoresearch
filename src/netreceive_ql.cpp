@@ -446,6 +446,9 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 	LazyVector_T<BYTE> m_tBuf {0};
 	CSphString m_sTable;
 
+	int m_iStoredPosition = -1;
+	BYTE m_uStoredPacketID = 0;
+
 	void SendSqlInt ( int iVal )
 	{
 		MysqlSendInt ( m_tOut, iVal );
@@ -717,14 +720,16 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 	[[nodiscard]] bool WasFlushed() const noexcept { return m_bWasFlushed; }
 
-	[[nodiscard]] std::pair<int, BYTE> GetCurrentPositionState() noexcept
+
+	void StoreCurrentPositionState() noexcept override
 	{
 		// we track flushes just for current position (that is - flushing invalidates position)
 		m_bWasFlushed = false;
-		return { m_tOut.GetSentCount(), m_uPacketID };
+		m_iStoredPosition = m_tOut.GetSentCount();
+		m_uStoredPacketID = m_uPacketID;
 	};
 
-	void ResetToPositionState ( std::pair<int, BYTE> tPoint )
+	void RestoreLastPositionState () noexcept override
 	{
 		assert ( !m_bWasFlushed && "Can't rewind already flushed stream!");
 
@@ -738,8 +743,9 @@ struct SqlRowBufferTraits_t : RowBuffer_i
 
 		// rewind stream and packetID
 		assert ( !m_bError );
-		m_tOut.Rewind ( tPoint.first );
-		m_uPacketID = tPoint.second;
+		assert ( m_iStoredPosition>=0 && "RestoreLastPosition called without previously StoreCurrentPositionState");
+		m_tOut.Rewind ( m_iStoredPosition );
+		m_uPacketID = m_uStoredPacketID;
 	}
 
 protected:
@@ -1409,15 +1415,42 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 	return true;
 }
 
+static bool ExecuteSqlQuery ( SqlRowBufferTraits_t * pRows, BYTE uMysqlCmd, Str_t tSrcQueryReference )
+{
+	auto& tSess = session::Info();
+	myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
+	AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
+
+	sphLogDebugv ( "ExecuteSqlQuery command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
+	tSess.SetTaskState ( TaskState_e::QUERY );
+
+	tSess.m_pSqlRowBuffer = pRows;
+	pRows->StoreCurrentPositionState();
+	bool bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), *pRows );
+	if ( !pRows->IsError() )
+		return bKeepProfile;
+
+	if ( !HasBuddy() || pRows->WasFlushed() )
+	{
+		LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( pRows->GetError() ) );
+		if ( pRows->WasFlushed() )
+			sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
+	} else
+	{
+		ProcessSqlQueryBuddy ( tSrcQueryReference, pRows );
+	}
+	return bKeepProfile;
+}
+
 // Handle COM_STMT_EXECUTE
-void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen )
+bool HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputBuffer_c& tIn, int iPacketLen, BYTE uMysqlCmd )
 {
 //	sphWarning ("COM_STMT_EXECUTE");
 	// Need at least 9 bytes: stmt_id (4) + flags (1) + iteration_count (4)
 	if ( iPacketLen < 10 || tIn.HasBytes() < 9 )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, FROMS("Invalid COM_STMT_EXECUTE packet"), EMYSQL_ERR::UNKNOWN_COM_ERROR );
-		return;
+		return false;
 	}
 
 	DWORD uStmtID = tIn.GetLSBDword();
@@ -1430,7 +1463,7 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 		CSphString sError;
 		sError.SetSprintf ( "Unknown prepared statement handler (%u)", uStmtID );
 		SendMysqlErrorPacket ( tOut, uPacketID, FromStr(sError), EMYSQL_ERR::UNKNOWN_COM_ERROR );
-		return;
+		return false;
 	}
 
 	// Parse parameter values
@@ -1438,7 +1471,7 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 	if ( !ParseBinaryParameters ( tIn, *pStmt, pStmt->m_dParams, sError ) )
 	{
 		SendMysqlErrorPacket ( tOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
-		return;
+		return false;
 	}
 
 	// Build the actual query by substituting parameters
@@ -1468,13 +1501,11 @@ void HandleComStmtExecute ( GenericOutputBuffer_c& tOut, BYTE& uPacketID, InputB
 	tBuilder.Add('\0');
 	tBuilder.Add('\0'); // two zero bytes, because bison parser needs it.
 	tBuilder.Resize(tBuilder.GetLength()-2);
+	Str_t tSrcQueryReference ( tBuilder.begin(), tBuilder.GetLength() );
 
 	// Execute the query using the same mechanism as COM_QUERY
-	SqlBinaryRowBuffer_c tRows ( &uPacketID, &tOut ); // stub! Should be binary!
-	auto& tSess = session::Info();
-	tSess.m_pSqlRowBuffer = &tRows;
-//	sphWarning("Execute %d: %s", uStmtID, tBuilder.begin() );
-	session::Execute ( tBuilder, tRows );
+	SqlBinaryRowBuffer_c tRows ( &uPacketID, &tOut );
+	return ExecuteSqlQuery ( &tRows, uMysqlCmd, tSrcQueryReference );
 }
 
 // Handle COM_STMT_CLOSE
@@ -1613,30 +1644,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 			// handle query packet
 			Str_t tSrcQueryReference ( nullptr, iPacketLen-1 );
 			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
-
-			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
-			myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
-			AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
 			assert ( !tIn.GetError() );
-			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
-			tSess.SetTaskState ( TaskState_e::QUERY );
-
+			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
-			tSess.m_pSqlRowBuffer = &tRows;
-			auto tStoredPos = tRows.GetCurrentPositionState();
-			bKeepProfile = session::Execute ( myinfo::UnsafeDescription(), tRows );
-			if ( tRows.IsError() )
-			{
-				if ( !HasBuddy() || tRows.WasFlushed() )
-				{
-					LogSphinxqlError ( myinfo::UnsafeDescription().first, FromStr ( tRows.GetError() ) );
-					if ( tRows.WasFlushed() )
-						sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
-				} else
-				{
-					ProcessSqlQueryBuddy ( tSrcQueryReference, FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
-				}
-			}
+
+			bKeepProfile = ExecuteSqlQuery ( &tRows, uMysqlCmd, tSrcQueryReference );
 			break;
 		}
 		case MYSQL_COM_FIELD_LIST:
@@ -1658,7 +1670,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 
 		case MYSQL_COM_STMT_EXECUTE:
 		{
-			HandleComStmtExecute ( tOut, uPacketID, tIn, iPacketLen );
+			bKeepProfile = HandleComStmtExecute ( tOut, uPacketID, tIn, iPacketLen, uMysqlCmd );
 			break;
 		}
 
@@ -1705,7 +1717,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	// finalize query profile
 	if ( pProfile )
 		pProfile->Stop();
-	if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
+	if ( bKeepProfile && ( uMysqlCmd==MYSQL_COM_QUERY || uMysqlCmd==MYSQL_COM_STMT_EXECUTE ) )
 		session::SaveLastProfile();
 	tOut.SetProfiler ( nullptr );
 	return true;

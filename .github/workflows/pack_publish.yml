@@ -30,40 +30,66 @@ concurrency:
   group: pack_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   check_branch:
-    name: Check branch existence
+    name: Resolve MCL metadata
+    needs: [pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     outputs:
-      columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
+      mcl_sha: ${{ steps.mcl.outputs.mcl_sha }}
+      mcl_full_sha: ${{ steps.mcl.outputs.mcl_full_sha }}
+      mcl_changed: ${{ steps.detect.outputs.mcl_changed }}
     steps:
-      - name: Check if branch exists in manticoresoftware/manticoresearch
-        id: check_branch
-        if: github.ref_name != 'master'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+      - name: Resolve current MCL submodule SHA
+        id: mcl
         run: |
-          # Extract the actual branch name for pull requests
+          echo "mcl_sha=$(git -C mcl rev-parse --short=8 HEAD)" >> $GITHUB_OUTPUT
+          echo "mcl_full_sha=$(git -C mcl rev-parse HEAD)" >> $GITHUB_OUTPUT
+      - name: Detect MCL submodule change
+        id: detect
+        run: |
+          set -euo pipefail
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            head="${{ github.event.workflow_run.head_sha }}"
+            base="$(git rev-parse "${head}^" 2>/dev/null || true)"
           else
-            BRANCH_NAME="${{ github.ref_name }}"
+            head="${{ github.sha }}"
+            base="${{ github.event.before }}"
+            if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
+              base="$(git rev-parse "${head}^" 2>/dev/null || true)"
+            fi
           fi
-          
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
-          if [ "$HTTP_STATUS" -eq "200" ]; then
-            echo "branch_exists=true" >> $GITHUB_OUTPUT
-            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          if [[ -n "$base" ]]; then
+            files=$(git diff --name-only "$base" "$head")
           else
-            echo "branch_exists=false" >> $GITHUB_OUTPUT
-            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+            files=$(git ls-tree -r --name-only "$head")
           fi
-      - name: Set Columnar Locator
-        id: set_locator
-        run: |
-          if [[ "${{ github.ref_name }}" != "master" && "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${{ steps.check_branch.outputs.branch_name }}" >> $GITHUB_OUTPUT
+          repo_has_mcl_pkg=false
+          if python3 dist/resolve_repo_package.py --repo-type dev --distr jammy --arch amd64 --sha "${{ steps.mcl.outputs.mcl_sha }}" --extensions .deb >/dev/null 2>&1; then
+            repo_has_mcl_pkg=true
+          fi
+
+          if echo "$files" | grep -Eq '^(mcl|mcl/|\.gitmodules$)'; then
+            echo "mcl_changed=true" >> $GITHUB_OUTPUT
+          elif [[ "$repo_has_mcl_pkg" != true ]]; then
+            echo "mcl_changed=true" >> $GITHUB_OUTPUT
           else
-            echo "columnar_locator=" >> $GITHUB_OUTPUT
+            echo "mcl_changed=false" >> $GITHUB_OUTPUT
           fi
+
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -114,13 +140,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          submodules: recursive
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Update version
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GH_ACCESS_TOKEN != '' && secrets.GH_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing
@@ -171,6 +199,15 @@ jobs:
 #          echo "GitHub Event JSON:"
 #          echo '${{ toJSON(github.event) }}'
 
+  mcl_pack_matrix:
+    needs: [check_branch, pack]
+    if: needs.pack.outputs.should_continue == 'true'
+    uses: ./.github/workflows/mcl_pack_publish.yml
+    with:
+      enabled: ${{ needs.check_branch.outputs.mcl_changed == 'true' && needs.pack.outputs.should_continue == 'true' }}
+      mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
+      source_ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
@@ -181,6 +218,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       # We have to checkout to access .github/workflows/ in further steps
       - name: Run dependency check script
         run: |
@@ -189,7 +228,7 @@ jobs:
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch, check_deps]
+    needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -197,7 +236,9 @@ jobs:
         DISTR: [bionic, focal, jammy, bullseye, bookworm]
         arch: [x86_64, aarch64]
     with:
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       cmake_command: |
@@ -210,11 +251,12 @@ jobs:
       artifact_list: "build/manticore*deb"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
+      ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch, check_deps]
+    needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -222,7 +264,9 @@ jobs:
         DISTR: [rhel8, rhel9, rhel10]
         arch: [x86_64, aarch64]
     with:
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       boost_url_key: boost_rhel_feb17
@@ -238,11 +282,12 @@ jobs:
       artifact_list: "build/manticore*rpm"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
+      ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch, check_deps]
+    needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -250,7 +295,9 @@ jobs:
         DISTR: [macos]
         arch: [x86_64, arm64]
     with:
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       HOMEBREW_PREFIX: ${{ matrix.arch == 'arm64' && '/opt/homebrew' || '/usr/local' }}
@@ -266,14 +313,17 @@ jobs:
       artifact_list: "build/manticore*tar.gz"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
+      ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch, check_deps]
+    needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     with:
-      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
+      MCL_PACKAGE_ARTIFACT_NAME: ${{ needs.check_branch.outputs.mcl_changed == 'true' && 'mcl_pkg_windows_x64' || '' }}
+      MCL_PACKAGE_SHA: ${{ needs.check_branch.outputs.mcl_changed != 'true' && needs.check_branch.outputs.mcl_sha || '' }}
+      MCL_REPO_TYPE: ${{ needs.pack.outputs.target == 'release' && 'release_candidate' || 'dev' }}
       DISTR: windows
       arch: x64
       sysroot_url_key: roots_mysql83_jan17
@@ -288,19 +338,29 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
+      ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
   build_nsis:
     name: Making Windows NSIS installer
-    needs: [pack_windows, pack]
+    needs: [pack_windows, pack, check_branch, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     container:
       image: manticoresearch/build_nsis:1.0.0
     env:
-      CI_COMMIT_SHA: ${{ github.sha }}
+      CI_COMMIT_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          submodules: recursive
+      - name: Download local Windows MCL package artifact
+        if: ${{ needs.check_branch.outputs.mcl_changed == 'true' }}
+        uses: manticoresoftware/download_artifact_with_retries@v4
+        with:
+          name: mcl_pkg_windows_x64
+          path: ./mcl-package
       - name: Patch version
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
@@ -627,6 +687,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          submodules: recursive
       - name: Patch version
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in

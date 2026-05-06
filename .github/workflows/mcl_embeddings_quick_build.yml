@@ -1,0 +1,39 @@
+name: MCL embeddings quick build
+
+on:
+  workflow_call:
+    inputs:
+      distr:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+      setup:
+        required: false
+        type: string
+        default: ""
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build:
+    uses: ./.github/workflows/mcl_embeddings_core.yml
+    with:
+      distr: ${{ inputs.distr }}
+      arch: ${{ inputs.arch }}
+      setup: ${{ inputs.setup }}
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      run_quality_checks: false
+    secrets: inherit

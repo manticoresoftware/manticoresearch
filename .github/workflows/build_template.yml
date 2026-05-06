@@ -66,7 +66,19 @@ on:
         required: false
         type: number
         default: 0
-      COLUMNAR_LOCATOR:
+      MCL_PACKAGE_ARTIFACT_NAME:
+        required: false
+        type: string
+        default: ""
+      MCL_PACKAGE_SHA:
+        required: false
+        type: string
+        default: ""
+      MCL_REPO_TYPE:
+        required: false
+        type: string
+        default: "dev"
+      ref:
         required: false
         type: string
         default: ""
@@ -96,14 +108,18 @@ jobs:
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
         PACK_GALERA: ${{ inputs.PACK_GALERA }}
-        COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
+        MCL_PACKAGE_ARTIFACT_NAME: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
+        MCL_PACKAGE_SHA: ${{ inputs.MCL_PACKAGE_SHA }}
+        MCL_REPO_TYPE: ${{ inputs.MCL_REPO_TYPE }}
         BUILD_TAG: ${{ inputs.build_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           set-safe-directory: true
+          submodules: recursive
 
       - name: Patch version
         if: inputs.version != ''
@@ -122,6 +138,25 @@ jobs:
         run: |
           USER_INPUT=${{ inputs.artifact_name }}
           echo "value=${USER_INPUT:-"build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}"}" >> "$GITHUB_OUTPUT"
+
+
+      - name: Download built MCL package artifact
+        if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' }}
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
+          path: ./mcl-package
+
+      - name: Export MCL package environment
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}" ]]; then
+            echo "MCL_PACKAGE_DIR=$(pwd)/mcl-package" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "${{ inputs.MCL_PACKAGE_SHA }}" ]]; then
+            echo "MCL_PACKAGE_SHA=${{ inputs.MCL_PACKAGE_SHA }}" >> "$GITHUB_ENV"
+          fi
+          echo "MCL_REPO_TYPE=${{ inputs.MCL_REPO_TYPE }}" >> "$GITHUB_ENV"
 
       - name: Check out cache before building
         uses: actions/cache@v4

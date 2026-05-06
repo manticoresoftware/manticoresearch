@@ -1,3 +1,6 @@
 [submodule "translator"]
 	path = translator
 	url = https://github.com/manticoresoftware/translator.git
+[submodule "mcl"]
+	path = mcl
+	url = git@github.com:sanikolaev/columnar.git

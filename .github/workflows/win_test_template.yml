@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: Download build artifacts
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
@@ -106,11 +108,16 @@ jobs:
     name: Windows tests summary and report
     needs: test_windows
     runs-on: ubuntu-22.04
+    permissions:
+      checks: write
+      contents: read
     container:
       image: manticoresearch/ubertests_public:331
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: Download test report artifacts
         uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true

@@ -1,0 +1,292 @@
+name: MCL package build
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
+      arch:
+        required: false
+        type: string
+        default: x86_64
+      distr:
+        required: false
+        type: string
+        default: jammy
+      CTEST_CMAKE_GENERATOR:
+        required: false
+        type: string
+        default: Ninja
+      CTEST_CONFIGURATION_TYPE:
+        required: false
+        type: string
+        default: RelWithDebInfo
+      version:
+        required: false
+        type: string
+        default: ""
+      package_version:
+        required: false
+        type: string
+        default: ""
+      rpm_package_version:
+        required: false
+        type: string
+        default: ""
+      cmake_command:
+        required: false
+        type: string
+        default: ""
+      cache_key:
+        required: false
+        type: string
+        default: build_linux_x86_64
+      boost:
+        required: false
+        type: string
+        default: boost_nov22
+      embeddings_artifact:
+        required: false
+        type: string
+        default: ""
+      artifact_list:
+        required: false
+        type: string
+        default: "build/manticore-columnar-lib* build/columnar/* build/secondary/* build/knn/*"
+      HOMEBREW_PREFIX:
+        required: false
+        type: string
+        default: ""
+      skip_avx2_move:
+        required: false
+        type: boolean
+        default: false
+      artifact_name:
+        required: true
+        type: string
+      package_cache_key:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build:
+    if: ${{ inputs.enabled }}
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    container:
+      image: manticoresearch/external_toolchain:clang16_cmake3263
+      env:
+        CACHEB: "../cache"
+        VERBOSE: 1
+        DIAGNOSTIC: 1
+        NO_TESTS: 1
+        DISTR: ${{ inputs.distr }}
+        boost: ${{ inputs.boost }}
+        sysroot: roots_nov22
+        arch: ${{ inputs.arch }}
+        CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
+        CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
+        SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
+        HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
+        PACKAGE_VERSION: ${{ inputs.package_version }}
+        RPM_PACKAGE_VERSION: ${{ inputs.rpm_package_version }}
+    steps:
+      - name: Checkout daemon repository with MCL submodule
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          source_remote="$(git -C daemon-src/mcl remote get-url origin)"
+          git config --global --add safe.directory "$PWD"
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          case "$source_remote" in
+            git@github.com:*)
+              source_remote="https://github.com/${source_remote#git@github.com:}"
+              ;;
+            ssh://git@github.com/*)
+              source_remote="https://github.com/${source_remote#ssh://git@github.com/}"
+              ;;
+          esac
+          git remote set-url origin "$source_remote"
+          git fetch --force --prune origin '+refs/heads/*:refs/remotes/origin/*' || true
+          git fetch --tags --force --prune origin || true
+          git config --global --add safe.directory "$PWD"
+
+      - name: Determine branch name for cache
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "branch_name=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "branch_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Patch version
+        if: inputs.version != ''
+        run: |
+          sed -i "s/0\.0\.0/${{ inputs.version }}/g" CMakeLists.txt
+          cat CMakeLists.txt
+
+      - name: Mark repository as safe for package versioning
+        if: ${{ inputs.package_version == '' }}
+        run: git config --global --add safe.directory "$PWD"
+
+      - name: Calculate MCL package version
+        if: ${{ inputs.package_version == '' }}
+        id: semver
+        run: |
+          set -euo pipefail
+          base_version="8.0.0"
+          commit_hash="$(git rev-parse --short=8 HEAD)"
+          timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
+          if git tag --points-at HEAD | grep -Eq '^release'; then
+            version_full="${base_version}+${timestamp}-${commit_hash}"
+          else
+            version_full="${base_version}+${timestamp}-${commit_hash}-dev"
+          fi
+          version_rpm="${version_full//-/.}"
+          echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
+          echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
+
+      - name: Download embeddings lib
+        if: ${{ inputs.embeddings_artifact != '' }}
+        uses: manticoresoftware/download_artifact_with_retries@v4
+        continue-on-error: true
+        with:
+          name: ${{ inputs.embeddings_artifact }}
+          path: ./embeddings-lib/
+
+      - name: Initialization
+        run: |
+          bash /sysroot/root/entry_point.sh
+          git config --global --add safe.directory "$PWD"
+          if [[ -n "${{ inputs.embeddings_artifact }}" ]] && compgen -G "./embeddings-lib/build/*" >/dev/null; then
+            mkdir -p embeddings/target/release
+            mv ./embeddings-lib/build/* embeddings/target/release/
+            rm -fr ./embeddings-lib
+          elif ! command -v cargo >/dev/null 2>&1; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y cargo rustc
+          fi
+          if [[ -z "${PACKAGE_VERSION}" && -n "${{ steps.semver.outputs.version_full }}" ]]; then
+            export PACKAGE_VERSION='${{ steps.semver.outputs.version_full }}'
+            echo "PACKAGE_VERSION=${{ steps.semver.outputs.version_full }}" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${RPM_PACKAGE_VERSION}" && -n "${{ steps.semver.outputs.version_rpm }}" ]]; then
+            export RPM_PACKAGE_VERSION='${{ steps.semver.outputs.version_rpm }}'
+            echo "RPM_PACKAGE_VERSION=${{ steps.semver.outputs.version_rpm }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Check out main cache before building
+        uses: actions/cache@v4
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: ${{ inputs.cache_key }}_${{ steps.branch.outputs.branch_name }}
+          restore-keys: |
+            ${{ inputs.cache_key }}_master
+
+      - name: Check out deps cache before building
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/cache
+          enableCrossOsArchive: true
+          key: ${{ inputs.cache_key }}_deps_${{ steps.branch.outputs.branch_name }}
+          restore-keys: |
+            ${{ inputs.cache_key }}_deps_master
+
+      - name: Build
+        run: |
+          if [[ -n "${{ inputs.cmake_command }}" ]]; then
+            eval "${{ inputs.cmake_command }}"
+          else
+            mkdir build
+            cd build
+            if [[ -n "${{ inputs.embeddings_artifact }}" ]]; then
+              cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=OFF ..
+            else
+              cmake -DPACK=1 -DBUILD_EMBEDDINGS_LOCALLY=ON ..
+            fi
+            cmake --build . --target package
+          fi
+
+      - name: Move AVX2/AVX-512-optimized libraries
+        if: success() && inputs.skip_avx2_move != true
+        run: |
+          if [ -d build/avx2/share/manticore/modules ]; then
+            mv build/avx2/share/manticore/modules/lib_manticore_columnar_avx2.so build/columnar/ || true
+            mv build/avx2/share/manticore/modules/lib_manticore_secondary_avx2.so build/secondary/ || true
+            mv build/avx2/share/manticore/modules/lib_manticore_knn_avx2.so build/knn/ || true
+          fi
+          if [ -d build/avx512/share/manticore/modules ]; then
+            mv build/avx512/share/manticore/modules/lib_manticore_columnar_avx512.so build/columnar/ || true
+            mv build/avx512/share/manticore/modules/lib_manticore_secondary_avx512.so build/secondary/ || true
+            mv build/avx512/share/manticore/modules/lib_manticore_knn_avx512.so build/knn/ || true
+          fi
+          if [ -d build/avx2/share/modules ]; then
+            mkdir -p build/columnar/Debug build/secondary/Debug build/knn/Debug
+            mv build/avx2/share/modules/lib_manticore_columnar_avx2.dll build/columnar/Debug/ || true
+            mv build/avx2/share/modules/lib_manticore_secondary_avx2.dll build/secondary/Debug/ || true
+            mv build/avx2/share/modules/lib_manticore_knn_avx2.dll build/knn/Debug/ || true
+          fi
+          if [ -d build/avx512/share/modules ]; then
+            mkdir -p build/columnar/Debug build/secondary/Debug build/knn/Debug
+            mv build/avx512/share/modules/lib_manticore_columnar_avx512.dll build/columnar/Debug/ || true
+            mv build/avx512/share/modules/lib_manticore_secondary_avx512.dll build/secondary/Debug/ || true
+            mv build/avx512/share/modules/lib_manticore_knn_avx512.dll build/knn/Debug/ || true
+          fi
+
+      - name: Prepare MCL package cache payload
+        if: success() && inputs.package_cache_key != ''
+        run: |
+          set -euo pipefail
+          rm -rf .mcl-package-cache
+          mkdir -p .mcl-package-cache
+          find build -maxdepth 1 -type f -name 'manticore-columnar-lib*' -exec cp {} .mcl-package-cache/ \;
+          find .mcl-package-cache -maxdepth 1 -type f | sort
+          if ! find .mcl-package-cache -maxdepth 1 -type f -name 'manticore-columnar-lib_*' | grep -q .; then
+            echo 'No manticore-columnar-lib package found to save into exact-SHA cache' >&2
+            exit 1
+          fi
+
+      - name: Save MCL package to exact-SHA cache
+        if: success() && inputs.package_cache_key != ''
+        uses: actions/cache@v4
+        with:
+          path: .mcl-package-cache
+          key: ${{ inputs.package_cache_key }}
+
+      - name: Upload build artifacts
+        if: success()
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact_list }}

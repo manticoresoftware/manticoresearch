@@ -8,6 +8,9 @@ DEPS_FILE="${REPO_ROOT}/deps.txt"
 REPO_TYPE="${BUNDLE_REPO_TYPE:-dev}"
 DISTR="${DISTR:?DISTR must be set (e.g. jammy, rhel9, macos, windows)}"
 arch="${arch:?arch must be set (e.g. x86_64, aarch64)}"
+MCL_PACKAGE_DIR="${MCL_PACKAGE_DIR:-}"
+MCL_PACKAGE_SHA="${MCL_PACKAGE_SHA:-}"
+MCL_REPO_TYPE="${MCL_REPO_TYPE:-$REPO_TYPE}"
 
 [[ -f "$DEPS_FILE" ]] || { echo "Error: deps.txt not found at $DEPS_FILE" >&2; exit 1; }
 mkdir -p "$OUT_DIR"
@@ -396,6 +399,45 @@ resolve_listing_url() {
   [[ "$best" =~ ^https?:// ]] && echo "$best" || echo "${base_url}/${best}"
 }
 
+
+process_package_file() {
+  local pkg_path="$1" pkg_name="$2"
+  collect_external_deps "$pkg_path"
+  extract_one "$pkg_path" "$pkg_name"
+}
+
+find_local_mcl_package() {
+  [[ -n "$MCL_PACKAGE_DIR" && -d "$MCL_PACKAGE_DIR" ]] || return 1
+  case "$pkg_fmt" in
+    deb) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib_*.'"$pkg_fmt" 2>/dev/null | grep -v dbgsym | head -n 1 ;;
+    rpm) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib-*.'"$pkg_fmt" 2>/dev/null | grep -v debuginfo | head -n 1 ;;
+    tar.gz) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib-*.'"$pkg_fmt" 2>/dev/null | grep -v dbgsymbols | head -n 1 ;;
+    zip) find "$MCL_PACKAGE_DIR" -type f -name 'manticore-columnar-lib-*.zip' 2>/dev/null | grep '\-libs\.zip$' | head -n 1 ;;
+  esac
+}
+
+install_mcl_package() {
+  local real_pkg="manticore-columnar-lib"
+  local local_pkg artifact_url artifact_name out_path
+  local_pkg=$(find_local_mcl_package || true)
+  if [[ -n "$local_pkg" ]]; then
+    echo "Using locally built MCL package $local_pkg"
+    process_package_file "$local_pkg" "$real_pkg"
+    return 0
+  fi
+
+  [[ -n "$MCL_PACKAGE_SHA" ]] || { echo "Error: MCL package is required, but neither MCL_PACKAGE_DIR nor MCL_PACKAGE_SHA was provided" >&2; return 1; }
+  echo "Resolving MCL package by sha ${MCL_PACKAGE_SHA} from repo.manticoresearch.com ..."
+  artifact_url=$(python3 "${REPO_ROOT}/dist/resolve_repo_package.py" --repo-type "$MCL_REPO_TYPE" --distr "$DISTR" --arch "$arch" --sha "$MCL_PACKAGE_SHA" --extensions ".${pkg_fmt}") || return 1
+  artifact_url="${artifact_url//+/%2B}"
+  artifact_name="${artifact_url##*/}"
+  out_path="$OUT_DIR/$artifact_name"
+  echo "Downloading $artifact_name"
+  download_retry "$artifact_url" "$out_path" || { echo "Error: download failed for $artifact_url" >&2; return 1; }
+  process_package_file "$out_path" "$real_pkg"
+  rm -f "$out_path"
+}
+
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ -z "$line" || "$line" =~ ^[[:space:]#] ]] && continue
   [[ "$line" == "---" ]] && break
@@ -419,10 +461,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   out_path="$OUT_DIR/$artifact_name"
   echo "Downloading $artifact_name"
   download_retry "$artifact_url" "$out_path" || { echo "Error: download failed for $artifact_url" >&2; exit 1; }
-  collect_external_deps "$out_path"
-  extract_one "$out_path" "$real_pkg"
+  process_package_file "$out_path" "$real_pkg"
   rm -f "$out_path"
 done < "$DEPS_FILE"
+
+install_mcl_package
 
 meta_file=""
 case "$pkg_fmt" in

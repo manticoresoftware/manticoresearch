@@ -53,75 +53,41 @@ macro ( restore_paths )
 endmacro ()
 
 macro ( return_if_all_api_found )
-	if (TARGET columnar::columnar_api)
-		set ( _HAS_COLUMNAR ON )
-	endif ()
-
-	if (TARGET columnar::secondary_api)
-		set ( _HAS_SECONDARY ON )
-	endif ()
-
-	if (TARGET columnar::knn_api)
-		set ( _HAS_KNN ON )
-	endif ()
-
-	if (_HAS_COLUMNAR AND _HAS_SECONDARY AND _HAS_KNN)
+	if (TARGET columnar::columnar_api AND TARGET columnar::secondary_api AND TARGET columnar::knn_api)
 		include ( FeatureSummary )
 		set_package_properties ( columnar PROPERTIES TYPE RUNTIME
-				DESCRIPTION "a column-oriented storage library with a low memory footprint, designed to handle large volumes of data, a secondary index library, and a k-nearest neighbor search library"
-				URL "https://github.com/manticoresoftware/columnar/"
-				)
-		trace ( columnar::columnar_api )
-		trace ( columnar::secondary_api )
-		trace ( columnar::knn_api )
-
-		# restore prev find paths to avoid polishing global scope
+			DESCRIPTION "columnar, secondary, knn, and embeddings APIs from MCL"
+			URL "https://github.com/manticoresoftware/columnar/"
+		)
 		restore_paths()
 		return ()
 	endif ()
 endmacro ()
 
-# Columnar might be already provided by inverted inclusion - i.e. when sources of manticore included as testing tool into columnar's sources
 if (TARGET columnar::columnar_api)
-	message ( STATUS "Columnar is already defined, skip." )
+	message ( STATUS "Columnar API targets already defined, skip." )
 	return ()
 endif ()
 
-# expected version
-set ( NEED_API_NUMERIC_VERSION "${NEED_COLUMNAR_API}.${NEED_SECONDARY_API}.${NEED_KNN_API}" )
-set ( AUTO_TAG "c${NEED_COLUMNAR_API}-s${NEED_SECONDARY_API}-k${NEED_KNN_API}" )
-
-# set current path to modules in local usr
-get_build ( COLUMNAR_BUILD "mcl/${AUTO_TAG}" )
-
-# store prev find paths to avoid polishing global scope
 backup_paths()
 
-prepend_prefix ( "${COLUMNAR_BUILD}" )
-
-find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_api secondary_api knn_api CONFIG )
-return_if_all_api_found ()
-
-# Not found. get columnar src, extract columnar_api.
-if (DEFINED ENV{COLUMNAR_LOCATOR} AND NOT "$ENV{COLUMNAR_LOCATOR}" STREQUAL "")
-	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
-	message(STATUS "Using COLUMNAR_LOCATOR from environment variable: ${COLUMNAR_LOCATOR}")
-elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
-	file ( STRINGS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1 )
-	message(STATUS "Using COLUMNAR_LOCATOR from local_columnar_src.txt: ${COLUMNAR_LOCATOR}")
-else ()
-	file ( STRINGS "${MANTICORE_SOURCE_DIR}/columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1)
-	message(STATUS "Using COLUMNAR_LOCATOR from columnar_src.txt: ${COLUMNAR_LOCATOR}")
+set ( MCL_SUBMODULE_DIR "${MANTICORE_SOURCE_DIR}/mcl" )
+set ( USE_MCL_SUBMODULE OFF )
+if ( EXISTS "${MCL_SUBMODULE_DIR}/CMakeLists.txt" )
+	set ( USE_MCL_SUBMODULE ON )
 endif ()
 
-string ( CONFIGURE "${COLUMNAR_LOCATOR}" COLUMNAR_LOCATOR ) # that is to expand possible inside variables
+if ( USE_MCL_SUBMODULE )
+	message ( STATUS "Using MCL from git submodule: ${MCL_SUBMODULE_DIR}" )
+	set ( API_ONLY ON )
+	add_subdirectory ( "${MCL_SUBMODULE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/mcl-api" EXCLUDE_FROM_ALL )
+	unset ( API_ONLY )
+	return_if_all_api_found ()
+	message ( FATAL_ERROR "MCL submodule was found at ${MCL_SUBMODULE_DIR}, but API targets were not exported" )
+endif ()
 
-configure_file ( ${MANTICORE_SOURCE_DIR}/cmake/columnar-imported.cmake.in columnar-build/CMakeLists.txt )
-execute_process ( COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build )
-execute_process ( COMMAND ${CMAKE_COMMAND} --build . WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/columnar-build )
-
-find_package ( columnar ${NEED_API_NUMERIC_VERSION} EXACT REQUIRED COMPONENTS columnar_api secondary_api knn_api CONFIG )
+message ( WARNING "MCL submodule is not available at ${MCL_SUBMODULE_DIR}; trying installed columnar package. MCL runtime support may be unavailable if headers are not installed system-wide." )
+find_package ( columnar CONFIG QUIET COMPONENTS columnar_api secondary_api knn_api )
 return_if_all_api_found ()
 
-# restore prev find paths to avoid polishing global scope
-restore_paths()
+message ( FATAL_ERROR "Could not find MCL API targets. Initialize ./mcl submodule or install a compatible columnar package that exports columnar::columnar_api, columnar::secondary_api, and columnar::knn_api." )

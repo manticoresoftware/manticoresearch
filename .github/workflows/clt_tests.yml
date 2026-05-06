@@ -55,6 +55,11 @@ jobs:
           import os
           import pathlib
 
+          openai_key = os.environ.get("OPENAI_API_KEY", "")
+          voyage_key = os.environ.get("VOYAGE_API_KEY", "")
+          jina_key = os.environ.get("JINA_API_KEY", "")
+          have_remote_embedding_keys = all([openai_key, voyage_key, jina_key])
+
           roots = [
               "test/clt-tests/buddy",
               "test/clt-tests/buddy-plugins",
@@ -86,6 +91,9 @@ jobs:
               if not root_path.exists():
                   continue
               for path in sorted(root_path.glob("*.rec")):
+                  content = path.read_text(encoding="utf-8")
+                  if not have_remote_embedding_keys and "API_KEY='" in content:
+                      continue
                   # clt appends "*.rec" to the prefix; strip the suffix to avoid ".rec*.rec"
                   tests.append(str(path.with_suffix("")))
 

@@ -1,0 +1,495 @@
+name: MCL embeddings core
+
+on:
+  workflow_call:
+    inputs:
+      distr:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+      setup:
+        required: false
+        type: string
+        default: ""
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
+      run_quality_checks:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  # Quality check job - runs tests and clippy before build
+  quality-check:
+    if: ${{ inputs.enabled && inputs.run_quality_checks }}
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          source_remote="$(git -C daemon-src/mcl remote get-url origin)"
+          git config --global --add safe.directory "$PWD"
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          case "$source_remote" in
+            git@github.com:*)
+              source_remote="https://github.com/${source_remote#git@github.com:}"
+              ;;
+            ssh://git@github.com/*)
+              source_remote="https://github.com/${source_remote#ssh://git@github.com/}"
+              ;;
+          esac
+          git remote set-url origin "$source_remote"
+          git fetch --force --prune origin '+refs/heads/*:refs/remotes/origin/*' || true
+          git fetch --tags --force --prune origin || true
+          git config --global --add safe.directory "$PWD"
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+          override: true
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '29.3'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('embeddings/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      - name: Cache cargo build target
+        uses: actions/cache@v4
+        with:
+          path: ./embeddings/target
+          key: cargo-target-${{ runner.os }}-${{ hashFiles('embeddings/Cargo.lock') }}-${{ hashFiles('embeddings/src/**/*.rs') }}
+          restore-keys: |
+            cargo-target-${{ runner.os }}-${{ hashFiles('embeddings/Cargo.lock') }}-
+            cargo-target-${{ runner.os }}-
+
+      - name: Cache ML test models
+        uses: actions/cache@v4
+        with:
+          path: ./embeddings/.cache/manticore
+          key: ml-models-${{ runner.os }}-${{ hashFiles('embeddings/src/model/local_test.rs') }}
+          restore-keys: ml-models-${{ runner.os }}-
+
+      - name: Run Clippy (strict mode)
+        run: cargo clippy --lib --manifest-path ./embeddings/Cargo.toml -- -D warnings
+
+      - name: Check code formatting
+        run: cargo fmt --check --manifest-path ./embeddings/Cargo.toml
+
+      - name: Download ONNX Runtime for unit tests
+        run: |
+          set -euo pipefail
+          ort_version="1.24.2"
+          ort_name="onnxruntime-linux-x64-static_lib-${ort_version}-glibc2_17"
+          curl --fail --show-error --location             --retry 5 --retry-all-errors --retry-delay 2             "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v${ort_version}/${ort_name}.zip"             -o /tmp/ort-unit-tests.zip
+          rm -rf /tmp/ort-unit-tests
+          unzip -q /tmp/ort-unit-tests.zip -d /tmp/ort-unit-tests
+          echo "ORT_LIB_PATH=/tmp/ort-unit-tests/${ort_name}/lib" >> "$GITHUB_ENV"
+          echo "ORT_STRATEGY=system" >> "$GITHUB_ENV"
+
+      - name: Run unit tests
+        run: cargo test --lib --verbose --manifest-path ./embeddings/Cargo.toml
+        env:
+          RUST_BACKTRACE: 1
+          ORT_LIB_PATH: ${{ env.ORT_LIB_PATH }}
+          ORT_STRATEGY: ${{ env.ORT_STRATEGY }}
+
+      - name: Run OpenAI integration tests (if API key available)
+        run: |
+          cd ./embeddings
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "✅ Running OpenAI integration tests..."
+            cargo test --lib openai_test::tests --verbose
+          else
+            echo "⏭️  Skipping OpenAI tests - OPENAI_API_KEY not configured"
+          fi
+
+          if [ -n "${{ secrets.VOYAGE_API_KEY }}" ]; then
+            echo "✅ Running Voyager integration tests..."
+            cargo test --lib voyager_test::tests --verbose
+          else
+            echo "⏭️  Skipping Voyager tests - VOYAGE_API_KEY not configured"
+          fi
+
+          if [ -n "${{ secrets.JINA_API_KEY }}" ]; then
+            echo "✅ Running Jina integration tests..."
+            cargo test --lib jina_test::tests --verbose
+          else
+            echo "⏭️  Skipping Jina tests - JINA_API_KEY not configured"
+          fi
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          RUST_BACKTRACE: 1
+
+      - name: Clean build target bloat
+        if: always()
+        run: |
+          rm -rf ./embeddings/target/debug/incremental
+          rm -rf ./embeddings/target/debug/.fingerprint
+          find ./embeddings/target/debug -name "*.d" -delete 2>/dev/null || true
+
+      - name: Quality check summary
+        run: |
+          echo "✅ Quality Check Summary:"
+          echo "- Clippy: Passed (zero warnings enforced)"
+          echo "- Format: Checked and compliant"
+          echo "- Tests: All unit tests passed"
+          echo "- OpenAI: $([ -n "${{ secrets.OPENAI_API_KEY }}" ] && echo "Integration tested" || echo "Skipped (no API key)")"
+          echo "- Voyage: $([ -n "${{ secrets.VOYAGE_API_KEY }}" ] && echo "Integration tested" || echo "Skipped (no API key)")"
+          echo "- Jina: $([ -n "${{ secrets.JINA_API_KEY }}" ] && echo "Integration tested" || echo "Skipped (no API key)")"
+
+  build:
+    if: ${{ always() && inputs.enabled && (needs.quality-check.result == 'success' || needs.quality-check.result == 'skipped') }}
+    needs: [quality-check]  # Run after quality checks when enabled, otherwise continue after skipped job
+    runs-on: ${{ 
+      (inputs.distr == 'linux' && inputs.arch == 'aarch64' && 'ubuntu-24.04-arm') ||
+      (inputs.distr == 'linux' && 'ubuntu-24.04') ||
+      (inputs.distr == 'macos' && 'macos-14') ||
+      (inputs.distr == 'windows' && 'windows-2022') ||
+      'ubuntu-24.04' }}
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    steps:
+      - name: Setup
+        if: ${{ inputs.setup }}
+        run: |
+          ${{ inputs.setup }}
+
+      - name: Check distribution type
+        id: vars
+        run: |
+          case ${{ inputs.distr }} in
+            linux)
+              target_arch="${{ inputs.arch }}"
+              target_suffix="unknown-linux-gnu"
+              ;;
+            macos)
+              if [[ "${{ inputs.arch }}" == "arm64" ]]; then
+                target_arch="aarch64"
+              else
+                target_arch="${{ inputs.arch }}"
+              fi
+              target_suffix="apple-darwin"
+              ;;
+            windows)
+              target_arch="${{ inputs.arch }}"
+              target_suffix="pc-windows-msvc"
+              ;;
+            *)
+              echo "Unsupported distribution type: ${{ inputs.distr }}"
+              exit 1
+              ;;
+          esac
+          target="${target_arch}-${target_suffix}"
+          echo "target=${target}" >> $GITHUB_OUTPUT
+
+          lib_dir="./embeddings/target/${target}/release"
+          echo "lib_dir=${lib_dir}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          source_remote="$(git -C daemon-src/mcl remote get-url origin)"
+          git config --global --add safe.directory "$PWD"
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          case "$source_remote" in
+            git@github.com:*)
+              source_remote="https://github.com/${source_remote#git@github.com:}"
+              ;;
+            ssh://git@github.com/*)
+              source_remote="https://github.com/${source_remote#ssh://git@github.com/}"
+              ;;
+          esac
+          git remote set-url origin "$source_remote"
+          git fetch --force --prune origin '+refs/heads/*:refs/remotes/origin/*' || true
+          git fetch --tags --force --prune origin || true
+          git config --global --add safe.directory "$PWD"
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ steps.vars.outputs.target }}
+          override: true
+
+      - name: Install protoc
+        if: ${{ inputs.distr != 'linux' }}
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '29.3'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract git metadata
+        id: git_meta
+        run: |
+          git config --global --add safe.directory "$(pwd)"
+
+          commit="$(git log -1 --format=%h)"
+          timestamp="$(git log -1 --date=format-local:%y%m%d%H --format=%cd)"
+
+          if [[ -z "${commit}" || -z "${timestamp}" ]]; then
+            echo "Failed to extract git metadata for embeddings versioning"
+            exit 1
+          fi
+
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+          echo "timestamp=${timestamp}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare build args
+        id: params
+        run: |
+          # Enable platform-specific BLAS acceleration:
+          # - macOS: Apple Accelerate framework (always available)
+          # - Linux/Windows x86_64: Intel MKL (downloaded at build time)
+          # - Linux aarch64: no extra BLAS (gemm crate uses NEON via runtime detection)
+          features=""
+          if [[ "${{ inputs.distr }}" == "macos" ]]; then
+            features="--features accelerate"
+          elif [[ "${{ inputs.arch }}" == "x86_64" ]]; then
+            features="--features mkl"
+          fi
+
+          args=(
+            "--target"
+            "${{ steps.vars.outputs.target }}"
+            "--lib"
+            "--release"
+            "--manifest-path"
+            "./embeddings/Cargo.toml"
+            ${features}
+          )
+          echo "args=${args[@]}" >> $GITHUB_OUTPUT
+
+      - name: Cache cargo registry for Docker build
+        if: ${{ inputs.distr == 'linux' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo-cache/registry
+            .cargo-cache/git
+          key: emb-build-cargo-${{ runner.os }}-${{ inputs.arch }}-${{ hashFiles('embeddings/Cargo.lock') }}
+          restore-keys: emb-build-cargo-${{ runner.os }}-${{ inputs.arch }}-
+
+      - name: Build for Linux
+        if: ${{ inputs.distr == 'linux' }}
+        run: |
+          # Set Docker image based on architecture
+          # Download glibc2_17-compatible ORT static lib (avoids __isoc23_strtoll from pyke.io builds)
+          ORT_VERSION="1.24.2"
+          if [[ "${{ inputs.arch }}" == "aarch64" ]]; then
+            docker_image="ghcr.io/manticoresoftware/rust-min-libc:aarch64-rust1.94.1-glibc2.27-openssl1.1.1k"
+            ort_asset="onnxruntime-linux-aarch64-static_lib-${ORT_VERSION}-glibc2_17"
+          else
+            docker_image="ghcr.io/manticoresoftware/rust-min-libc:amd64-rust1.94.1-glibc2.27-openssl1.1.1k"
+            ort_asset="onnxruntime-linux-x64-static_lib-${ORT_VERSION}-glibc2_17"
+          fi
+
+          curl -sL "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v${ORT_VERSION}/${ort_asset}.zip" -o /tmp/ort.zip
+          unzip -q /tmp/ort.zip -d /tmp/ort
+
+          docker run --rm  \
+            -v $(pwd):/src \
+            -v $(pwd)/.cargo-cache:/cargo-cache \
+            -v /tmp/ort/${ort_asset}/lib:/ort-lib \
+            -w /src \
+            -u root \
+            -e CARGO_HOME=/cargo-cache \
+            -e ORT_LIB_PATH=/ort-lib \
+            -e MKLROOT=/opt/intel/oneapi/mkl/latest \
+            -e GIT_COMMIT_ID="${{ steps.git_meta.outputs.commit }}" \
+            -e GIT_TIMESTAMP_ID="${{ steps.git_meta.outputs.timestamp }}" \
+            --entrypoint bash \
+            "${docker_image}" \
+            -c "cargo build ${{ steps.params.outputs.args }}"
+          sudo chown -hR $(id -u):$(id -g) ${{ steps.vars.outputs.lib_dir }}
+          sudo chown -hR $(id -u):$(id -g) .cargo-cache
+
+
+      - name: Download ONNX Runtime static library
+        if: ${{ inputs.distr == 'macos' || inputs.distr == 'windows' }}
+        shell: bash
+        run: |
+          ort_version="1.24.2"
+          if [[ "${{ inputs.distr }}" == "macos" ]]; then
+            if [[ "${{ inputs.arch }}" == "arm64" ]]; then
+              ort_name="onnxruntime-osx-arm64-static_lib-${ort_version}"
+            else
+              ort_name="onnxruntime-osx-x86_64-static_lib-${ort_version}"
+            fi
+            curl -sL "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v${ort_version}/${ort_name}.zip" -o /tmp/ort.zip
+            unzip -q /tmp/ort.zip -d /tmp/ort
+            echo "ORT_LIB_LOCATION=/tmp/ort/${ort_name}/lib" >> $GITHUB_ENV
+          else
+            if [[ "${{ inputs.arch }}" == "aarch64" ]]; then
+              ort_name="onnxruntime-win-arm64-static_lib-MD-Release-${ort_version}"
+            else
+              ort_name="onnxruntime-win-x64-static_lib-MD-Release-${ort_version}"
+            fi
+            curl -sL "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v${ort_version}/${ort_name}.tar.bz2" -o ort.tar.bz2
+            mkdir -p ort-lib
+            tar xjf ort.tar.bz2 -C ort-lib
+            echo "ORT_LIB_LOCATION=${{ github.workspace }}/ort-lib/${ort_name}/lib" >> $GITHUB_ENV
+          fi
+
+      - name: Build native
+        if: ${{ inputs.distr == 'windows' || inputs.distr == 'macos' }}
+        run: |
+          rustup target add ${{ steps.vars.outputs.target }}
+          cargo build ${{ steps.params.outputs.args }}
+        env:
+          GIT_COMMIT_ID: ${{ steps.git_meta.outputs.commit }}
+          GIT_TIMESTAMP_ID: ${{ steps.git_meta.outputs.timestamp }}
+
+      - run: | 
+          mkdir build
+          lib_dir="${{ steps.vars.outputs.lib_dir }}"
+          ls -la $lib_dir/*
+          find $lib_dir -type f \( -name "libmanticore*.so" -o -name "libmanticore*.dylib" -o -name "manticore*.dll" \) -exec cp {} build/ \;
+
+          # Rename libmanticore*.so to lib_manticore*.so
+          for file in build/libmanticore*.so; do
+            if [ -f "$file" ]; then
+              base=$(basename "$file")
+              newbase=$(echo "$base" | sed 's/^libmanticore/lib_manticore/')
+              mv "$file" "build/$newbase"
+              echo "Renamed $file to build/$newbase"
+            fi
+          done
+
+          # Rename libmanticore*.dylib to lib_manticore*.dylib
+          for file in build/libmanticore*.dylib; do
+              if [ -f "$file" ]; then
+                  base=$(basename "$file")
+                  newbase=$(echo "$base" | sed 's/^libmanticore/lib_manticore/')
+                  mv "$file" "build/$newbase"
+                  echo "Renamed $file to build/$newbase"
+              fi
+          done
+
+          # Rename manticore*.dll to lib_manticore*.dll
+          for file in build/manticore*.dll; do
+              if [ -f "$file" ]; then
+                  base=$(basename "$file")
+                  newbase="lib_$base"
+                  mv "$file" "build/$newbase"
+                  echo "Renamed $file to build/$newbase"
+              fi
+          done
+
+      - name: Verify Linux library compatibility
+        if: ${{ inputs.distr == 'linux' }}
+        run: |
+          lib=$(find build -name "lib_manticore_knn_embeddings.so" | head -1)
+          if [ -z "$lib" ]; then
+            echo "Embeddings library not found in build/, skipping check"
+            exit 0
+          fi
+
+          echo "=== Checking $lib ==="
+          failed=0
+
+          # Check GLIBC — must not exceed 2.27
+          max_glibc=$(objdump -T "$lib" | grep -oE 'GLIBC_[0-9.]+' | sort -u -t. -k1,1 -k2,2n | tail -1)
+          echo "Max GLIBC: $max_glibc"
+          glibc_minor=$(echo "$max_glibc" | grep -oE '[0-9]+$')
+          if [ -n "$glibc_minor" ] && [ "$glibc_minor" -gt 27 ]; then
+            echo "FAIL: GLIBC requirement $max_glibc exceeds 2.27"
+            failed=1
+          fi
+
+          # Check GLIBCXX — must have none (libstdc++ should be static)
+          glibcxx=$(objdump -T "$lib" | grep -c 'GLIBCXX' || true)
+          echo "GLIBCXX dynamic symbols: $glibcxx"
+          if [ "$glibcxx" -gt 0 ]; then
+            echo "FAIL: Found GLIBCXX dynamic symbols — libstdc++ not statically linked"
+            objdump -T "$lib" | grep 'GLIBCXX' | head -5
+            failed=1
+          fi
+
+          # Check __isoc23 — must have none
+          isoc23=$(nm -D "$lib" 2>/dev/null | grep -c '__isoc23' || true)
+          echo "__isoc23 symbols: $isoc23"
+          if [ "$isoc23" -gt 0 ]; then
+            echo "FAIL: Found __isoc23 symbols — ORT prebuilt has wrong glibc target"
+            failed=1
+          fi
+
+          if [ "$failed" -eq 1 ]; then
+            echo ""
+            echo "Library compatibility check FAILED"
+            exit 1
+          fi
+          echo "All checks passed"
+
+      - name: Install current Bash on macOS
+        if: inputs.distr == 'macos'
+        run: brew install bash
+
+      - name: Upload build artifacts
+        if: success()
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: embeddings_${{ inputs.distr }}_${{ inputs.arch }}
+          path: ./build/*

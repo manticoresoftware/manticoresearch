@@ -21,18 +21,6 @@ message ( STATUS "Inside directory src..." )
 include ( GetColumnar )
 target_link_libraries ( lextra INTERFACE columnar::columnar_api columnar::secondary_api columnar::knn_api )
 
-# check if we have correct columnar api
-set_property ( TARGET lextra PROPERTY INTERFACE_COLUMNAR_API_VERSION ${NEED_COLUMNAR_API} )
-set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING COLUMNAR_API_VERSION )
-
-# check if we have correct secondary api
-set_property ( TARGET lextra PROPERTY INTERFACE_SECONDARY_API_VERSION ${NEED_SECONDARY_API} )
-set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING SECONDARY_API_VERSION )
-
-# check if we have correct knn api
-set_property ( TARGET lextra PROPERTY INTERFACE_KNN_API_VERSION ${NEED_KNN_API} )
-set_property ( TARGET lextra APPEND PROPERTY COMPATIBLE_INTERFACE_STRING KNN_API_VERSION )
-
 target_include_directories ( lextra INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} )
 get_banner ( CONFIGURE_FLAGS )
 infomsg ( "${CONFIGURE_FLAGS}" )

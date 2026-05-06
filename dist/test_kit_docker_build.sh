@@ -76,6 +76,48 @@ download_package() {
 	exit 1
 }
 
+
+download_package_by_sha() {
+    package="$1"
+    sha="$2"
+    url=$(python3 ../dist/resolve_repo_package.py --repo-type dev --distr jammy --arch amd64 --package "$package" --sha "$sha" --extensions .deb)
+    file_name="${url##*/}"
+    mkdir -p ../build
+    wget -q -O "../build/${file_name}" "$url"
+}
+
+
+extract_mcl_artifacts() {
+    local base_dir="$1"
+    [ -d "$base_dir" ] || return 0
+
+    while IFS= read -r artifact; do
+        tar -xf "$artifact" -C "$(dirname "$artifact")"
+    done < <(find "$base_dir" -type f -name 'artifact.tar' | sort)
+}
+
+find_local_mcl_package() {
+    local candidate_dirs=(../mcl-package ../.mcl-package-cache)
+    local dir
+
+    for dir in "${candidate_dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        extract_mcl_artifacts "$dir"
+        pkg=$(find "$dir" -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
+        if [ -n "$pkg" ]; then
+            echo "$pkg"
+            return 0
+        fi
+    done
+}
+
+LOCAL_MCL_PACKAGE=$(find_local_mcl_package)
+if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+    echo "Using local MCL package artifact: $LOCAL_MCL_PACKAGE"
+    mkdir -p ../build
+    cp "$LOCAL_MCL_PACKAGE" ../build/
+fi
+
 # Read deps.txt line by line
 while read -r line
 do
@@ -144,6 +186,10 @@ do
 			arch="all"
 			;;
 		mcl)
+			if [ -n "$LOCAL_MCL_PACKAGE" ]; then
+				echo "Skipping repo download for mcl because local package artifact is present"
+				continue
+			fi
 			package="manticore-columnar-lib"
 			arch="amd64"
 			;;
@@ -167,6 +213,12 @@ do
 		download_package "${package}" "${version}" "${date}" "${commit}" "${arch}"
 	fi
 done < ../deps.txt
+
+if [ -z "$LOCAL_MCL_PACKAGE" ]; then
+    MCL_COMMIT_SHA=$(git -C ../mcl rev-parse --short=8 HEAD)
+    echo "Downloading MCL package for submodule sha: $MCL_COMMIT_SHA"
+    download_package_by_sha "manticore-columnar-lib" "$MCL_COMMIT_SHA"
+fi
 
 # we want to build the image based on specific packages, copying them from a directory coming from an artifact of a previous job
 deb_dir=$(realpath ../build/)

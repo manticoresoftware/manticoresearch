@@ -1,0 +1,190 @@
+name: MCL pack matrix
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      mcl_full_sha:
+        required: true
+        type: string
+      source_ref:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  metadata:
+    if: ${{ inputs.enabled }}
+    runs-on: ubuntu-22.04
+    outputs:
+      version_full: ${{ steps.package_version.outputs.version_full }}
+      version_rpm: ${{ steps.package_version.outputs.version_rpm }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          set-safe-directory: true
+          path: daemon-src
+
+      - name: Materialize MCL source tree
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C daemon-src/mcl rev-parse HEAD)"
+          if [[ "$actual_sha" != "${{ inputs.mcl_full_sha }}" ]]; then
+            echo "Expected MCL submodule SHA ${{ inputs.mcl_full_sha }}, got $actual_sha" >&2
+            exit 1
+          fi
+          source_remote="$(git -C daemon-src/mcl remote get-url origin)"
+          git config --global --add safe.directory "$PWD"
+          git clone --no-local daemon-src/mcl mcl-src
+          shopt -s dotglob nullglob
+          mv mcl-src/* .
+          rmdir mcl-src
+          case "$source_remote" in
+            git@github.com:*)
+              source_remote="https://github.com/${source_remote#git@github.com:}"
+              ;;
+            ssh://git@github.com/*)
+              source_remote="https://github.com/${source_remote#ssh://git@github.com/}"
+              ;;
+          esac
+          git remote set-url origin "$source_remote"
+          git fetch --force --prune origin '+refs/heads/*:refs/remotes/origin/*' || true
+          git fetch --tags --force --prune origin || true
+          git config --global --add safe.directory "$PWD"
+      - name: Calculate MCL package version
+        id: package_version
+        run: |
+          set -euo pipefail
+          base_version="8.0.0"
+          commit_hash="$(git rev-parse --short=8 HEAD)"
+          timestamp="$(git log -1 --format='%cd' --date=format:'%y%m%d%H' HEAD)"
+          if git tag --points-at HEAD | grep -Eq '^release'; then
+            version_full="${base_version}+${timestamp}-${commit_hash}"
+          else
+            version_full="${base_version}+${timestamp}-${commit_hash}-dev"
+          fi
+          version_rpm="${version_full//-/.}"
+          echo "version_full=${version_full}" >> "$GITHUB_OUTPUT"
+          echo "version_rpm=${version_rpm}" >> "$GITHUB_OUTPUT"
+
+  embeddings_builds:
+    if: ${{ inputs.enabled }}
+    needs: metadata
+    uses: ./.github/workflows/mcl_embeddings_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distr: linux
+            arch: x86_64
+          - distr: linux
+            arch: aarch64
+          - distr: macos
+            arch: x86_64
+          - distr: macos
+            arch: arm64
+          - distr: windows
+            arch: x86_64
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      distr: ${{ matrix.distr }}
+      arch: ${{ matrix.arch }}
+
+  pack_debian_ubuntu:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        arch: [x86_64, aarch64]
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
+      artifact_name: ${{ format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) }}
+      distr: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+
+  pack_rhel:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        DISTR: [rhel7, rhel8, rhel9, rhel10]
+        arch: [x86_64, aarch64]
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: ${{ format('embeddings_linux_{0}', matrix.arch) }}
+      artifact_name: ${{ format('mcl_pkg_{0}_{1}', matrix.DISTR, matrix.arch) }}
+      distr: ${{ matrix.DISTR }}
+      arch: ${{ matrix.arch }}
+      boost: boost_rhel_feb17
+      cmake_command: |
+        ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
+        mkdir build
+        cd build
+        CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX=/builds_manticoresearch_dev_usr_src_debug_manticore_component cmake -DPACK=1 ..
+        cmake --build . --target package
+
+  pack_macos:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64]
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: ${{ format('embeddings_macos_{0}', matrix.arch) }}
+      artifact_name: ${{ format('mcl_pkg_macos_{0}', matrix.arch) }}
+      distr: macos
+      arch: ${{ matrix.arch }}
+      HOMEBREW_PREFIX: /opt/homebrew
+      cmake_command: |
+        mkdir build
+        cd build
+        cmake -DPACK=1 -DDL_CURL=1           -DCURL_LIBRARY=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib           -DCURL_LIBRARY_RELEASE=${HOMEBREW_PREFIX}/opt/curl/lib/libcurl.dylib ..
+        cmake --build . --target package
+
+  pack_windows:
+    if: ${{ inputs.enabled }}
+    needs: [metadata, embeddings_builds]
+    uses: ./.github/workflows/mcl_package_build.yml
+    with:
+      enabled: ${{ inputs.enabled }}
+      mcl_full_sha: ${{ inputs.mcl_full_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      package_version: ${{ needs.metadata.outputs.version_full }}
+      rpm_package_version: ${{ needs.metadata.outputs.version_rpm }}
+      embeddings_artifact: embeddings_windows_x86_64
+      artifact_name: mcl_pkg_windows_x64
+      distr: windows
+      arch: x64
+      skip_avx2_move: true
+      CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+      CTEST_CONFIGURATION_TYPE: Debug

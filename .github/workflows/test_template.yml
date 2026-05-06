@@ -44,14 +44,22 @@ on:
         required: false
         type: string
         default: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests.xml ../misc/junit/ctest2junit.xsl Test.xml"
-      COLUMNAR_LOCATOR:
+      MCL_PACKAGE_ARTIFACT_NAME:
         required: false
         type: string
         default: ""
-      INSTALL_MCL_FROM_DEPS:
+      MCL_PACKAGE_SHA:
         required: false
-        type: boolean
-        default: false
+        type: string
+        default: ""
+      MCL_PACKAGE_CACHE_KEY:
+        required: false
+        type: string
+        default: ""
+      MCL_REPO_TYPE:
+        required: false
+        type: string
+        default: "dev"
     outputs:
       test_outcome:
         description: Outcome of the test step (success/failure)
@@ -83,10 +91,11 @@ jobs:
         LIBS_BUNDLE:
         UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
         FLOAT_TOLERANCE: ${{ inputs.FLOAT_TOLERANCE }}
-        COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
       - name: Tests container entrypoint
         run: bash /entry_point.sh &
@@ -104,46 +113,48 @@ jobs:
           name: ${{ inputs.build_artifact_name }}
           path: .
 
-      - name: Install manticore-columnar-lib from deps.txt
-        if: ${{ inputs.INSTALL_MCL_FROM_DEPS }}
+      - name: Download built MCL package artifact (best effort)
+        if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' }}
+        continue-on-error: true
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
+          path: ./.mcl-package-cache
+
+      - name: Install manticore-columnar-lib
+        if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' || inputs.MCL_PACKAGE_CACHE_KEY != '' || inputs.MCL_PACKAGE_SHA != '' }}
         run: |
           set -euo pipefail
 
-          MCL_VERSION="$(awk '$1=="mcl"{print $2; exit}' deps.txt)"
-          if [[ -z "${MCL_VERSION}" ]]; then
-            echo "mcl version was not found in deps.txt"
-            exit 1
-          fi
-
-          MCL_VERSION_URL="${MCL_VERSION//+/%2B}"
-          PACKAGE_NAME="manticore-columnar-lib_${MCL_VERSION_URL}_amd64.deb"
-          REPOS=(
-            "https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-amd64"
-            "https://repo.manticoresearch.com/repository/manticoresearch_jammy_release_candidate/dists/jammy/main/binary-amd64"
-            "https://repo.manticoresearch.com/repository/manticoresearch_jammy/dists/jammy/main/binary-amd64"
-          )
-
-          PACKAGE_URL=""
-          for repo in "${REPOS[@]}"; do
-            candidate="${repo}/${PACKAGE_NAME}"
-            if curl -fsSLI "${candidate}" >/dev/null; then
-              PACKAGE_URL="${candidate}"
-              break
-            fi
-          done
-
-          if [[ -z "${PACKAGE_URL}" ]]; then
-            echo "could not find ${PACKAGE_NAME} in jammy dev/release_candidate/release repos"
-            exit 1
-          fi
-
-          echo "Installing ${PACKAGE_URL}"
           export DEBIAN_FRONTEND=noninteractive
-          printf '%s\n' 'deb http://azure.archive.ubuntu.com/ubuntu jammy main' 'deb http://azure.archive.ubuntu.com/ubuntu jammy-updates main' > /etc/apt/sources.list && rm -f /etc/apt/sources.list.d/* && apt-get update
-          apt-get -y remove 'manticore-repo'
-          apt-get -y install wget
+          cat >/etc/apt/sources.list <<'EOF'
+          deb http://archive.ubuntu.com/ubuntu jammy main
+          deb http://archive.ubuntu.com/ubuntu jammy-updates main
+          deb http://security.ubuntu.com/ubuntu jammy-security main
+          EOF
+          rm -f /etc/apt/sources.list.d/*
+          apt-get -o Acquire::Retries=3 update || apt-get -o Acquire::Retries=3 update
+          apt-get -y remove 'manticore-repo' || true
+          apt-get -o Acquire::Retries=3 -y install wget curl python3
           curl -fsSL https://repo.manticoresearch.com/manticore-repo.noarch.deb -o /tmp/manticore-repo.noarch.deb
           dpkg -i /tmp/manticore-repo.noarch.deb
+
+          if [[ -f ./.mcl-package-cache/artifact.tar ]]; then
+            tar -xf ./.mcl-package-cache/artifact.tar -C ./.mcl-package-cache
+          fi
+          pkg=$(find ./.mcl-package-cache -type f -name 'manticore-columnar-lib_*_amd64.deb' | head -n 1)
+          if [[ -n "$pkg" ]]; then
+            echo "Installing $pkg"
+            dpkg -i "$pkg"
+            exit 0
+          fi
+
+          if [[ -n "${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}" || -n "${{ inputs.MCL_PACKAGE_CACHE_KEY }}" ]]; then
+            echo 'built/cached MCL package not found'; find ./.mcl-package-cache -maxdepth 4 -type f | sort || true
+          fi
+
+          PACKAGE_URL=$(python3 dist/resolve_repo_package.py --repo-type "${{ inputs.MCL_REPO_TYPE }}" --distr jammy --arch amd64 --sha "${{ inputs.MCL_PACKAGE_SHA }}" --extensions .deb)
+          echo "Installing ${PACKAGE_URL}"
           curl -fsSL "${PACKAGE_URL}" -o /tmp/manticore-columnar-lib.deb
           dpkg -i /tmp/manticore-columnar-lib.deb
 

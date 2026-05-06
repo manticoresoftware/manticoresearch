@@ -92,7 +92,7 @@ EOF
 ––– comment –––
 Test SHOW CHAT MODELS - should display created models
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CHAT MODELS;"
+mysql -h0 -P9306 -e "SHOW CHAT MODELS"
 ––– output –––
 +--------------------------------------+--------------------+--------------------+------------+
 | uuid                                 | name               | model              | created_at |

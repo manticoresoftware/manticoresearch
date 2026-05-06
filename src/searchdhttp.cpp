@@ -1325,6 +1325,9 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long" )
 		return MYSQL_COL_LONG;
 
+	if ( sType == "bool" )
+		return MYSQL_COL_LONG;
+
 	if ( sType == "float" )
 		return MYSQL_COL_FLOAT;
 
@@ -1334,10 +1337,7 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long long" )
 		return MYSQL_COL_LONGLONG;
 
-	if ( sType == "string" )
-		return MYSQL_COL_STRING;
-
-	assert (false && "Unknown column");
+	assert ( (sType == "string" || sType == "multi" || sType == "json") && "Unknown column");
 	return MYSQL_COL_STRING;
 }
 

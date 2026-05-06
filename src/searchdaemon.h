@@ -1325,6 +1325,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI,
 	CLI_JSON,
 	ES_BULK,
+	UI,
 
 	TOTAL
 };

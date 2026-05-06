@@ -24,6 +24,7 @@
 #include "client_session.h"
 #include "tracer.h"
 #include "searchdbuddy.h"
+#include "ui/searchdui.h"
 #include "compressed_http.h"
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
@@ -170,13 +171,17 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
-		{ "_bulk", nullptr }
+		{ "_bulk", nullptr },
+		{ "ui", nullptr }
 };
 
 EHTTP_ENDPOINT StrToHttpEndpoint ( const CSphString& sEndpoint ) noexcept
 {
 	if ( sEndpoint.Begins ( g_dEndpoints[(int)EHTTP_ENDPOINT::PQ].m_szName1 ) || sEndpoint.Begins ( g_dEndpoints[(int)EHTTP_ENDPOINT::PQ].m_szName2 ) )
 		return EHTTP_ENDPOINT::PQ;
+
+	if ( sEndpoint.Begins ( g_dEndpoints[(int)EHTTP_ENDPOINT::UI].m_szName1 ) )
+		return EHTTP_ENDPOINT::UI;
 
 	for ( int i = 0; i < (int)EHTTP_ENDPOINT::TOTAL; ++i )
 		if ( sEndpoint == g_dEndpoints[i].m_szName1 || ( g_dEndpoints[i].m_szName2 && sEndpoint == g_dEndpoints[i].m_szName2 ) )
@@ -878,6 +883,16 @@ R"index(<!DOCTYPE html>
 
 static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
+	// If UI is enabled, redirect root to /ui/
+	if ( g_bUI )
+	{
+		CSphString sHttp;
+		sHttp.SetSprintf ( "HTTP/1.1 302 Found\r\nLocation: /ui/\r\nContent-Length: 0\r\n\r\n" );
+		dData.Resize ( sHttp.Length() );
+		memcpy ( dData.Begin(), sHttp.cstr(), sHttp.Length() );
+		return;
+	}
+
 	StringBuilder_c sIndexPage;
 	sIndexPage.Appendf ( g_sIndexPage, g_sStatusVersion.cstr() );
 
@@ -2473,6 +2488,14 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
+
+	// Try to serve embedded UI assets
+	if ( HttpServeUI ( sEndpoint, dResult, eRequestType == HTTP_HEAD ) )
+	{
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_200;
+		tRes.m_bOk = true;
+		return tRes;
+	}
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )

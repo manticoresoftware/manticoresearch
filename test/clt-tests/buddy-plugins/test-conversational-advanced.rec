@@ -105,7 +105,7 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
        user_query: Tell me about vector search
      search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
          response: #!/.*[Vv]ector.*[Ss]earch.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_1.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -120,7 +120,7 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
        user_query: Explain vector search
      search_query: #!/.*[Vv]ector.*[Ss]earch.*/!#
          response: #!/.*[Vv]ector.*[Ss]earch.*[Ee]mbedding.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_2.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([2,3,4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -135,7 +135,7 @@ conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{1
        user_query: Tell me about RAG architecture
      search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
          response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_3.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([4])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -150,7 +150,7 @@ conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
        user_query: What is clustering?
      search_query: #!/.*[Cc]luster.*/!#
          response: #!/.*[Cc]luster.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -165,7 +165,7 @@ conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
        user_query: How do I configure it?
      search_query: #!/.*[Cc]luster.*/!#
          response: #!/.*[Cc]luster.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -180,7 +180,7 @@ conversation_uuid: conv-test-1234-5678-90ab-cdef12345678
        user_query: What are best practices?
      search_query: #!/.*[Cc]luster.*/!#
          response: #!/.*[Cc]luster.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––

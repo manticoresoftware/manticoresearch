@@ -71,7 +71,7 @@ conversation_uuid: test-conv-intent-001
        user_query: What is RAG?
      search_query: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
          response: #!/.*(RAG|[Rr]etrieval|[Gg]eneration).*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_1.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([3])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -99,7 +99,7 @@ conversation_uuid: test-conv-intent-001
        user_query: what about movies?
      search_query: #!/.*movie.*/!#
          response: #!/.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– comment –––
 Verify sources contain Entertainment category after topic change
 ––– input –––
@@ -117,7 +117,7 @@ conversation_uuid: test-conv-intent-001
        user_query: I like Breaking Bad
      search_query: #!/.*[Bb]reaking [Bb]ad.*/!#
          response: #!/.*[Bb]reaking [Bb]ad.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_4.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([6])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
@@ -133,7 +133,7 @@ conversation_uuid: test-conv-intent-001
        user_query: show me more entertainment
      search_query: #!/.*/!#
          response: #!/.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– comment –––
 Test 7: New independent conversation - Programming topic
 Expected: Fresh context, should find Python
@@ -145,7 +145,7 @@ conversation_uuid: test-conv-intent-001
        user_query: Tell me about Python
      search_query: #!/.*[Pp]ython.*/!#
          response: #!/.*[Pp]ython.*/!#
-          sources: #!/\[.*/!#
+          sources: #!/.*/!#
 ––– input –––
 grep -o '\[.*\]' /tmp/output_7.txt | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––

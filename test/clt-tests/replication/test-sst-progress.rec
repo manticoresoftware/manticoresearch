@@ -17,7 +17,7 @@ This test validates that SST progress variables exist and show real values durin
 Uses pre-generated test data (~883MB compressed, ~1.5GB uncompressed) with full-text stored fields.
 500K documents with 27 fields ensures SST takes enough time to capture progress values.
 ––– input –––
-apt-get update -y > /dev/null; apt-get install -y wget iproute2 procps > /dev/null; echo $?
+apt-get update -y > /dev/null; DEBIAN_FRONTEND=noninteractive apt-get install -y wget iproute2 procps > /dev/null; echo $?
 ––– output –––
 0
 ––– comment –––

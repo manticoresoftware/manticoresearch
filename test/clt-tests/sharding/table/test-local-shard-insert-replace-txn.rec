@@ -1,0 +1,77 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_replace; DROP TABLE IF EXISTS shard_phase2_replace_s0; DROP TABLE IF EXISTS shard_phase2_replace_s1; CREATE TABLE shard_phase2_replace_s0(id bigint, title text); CREATE TABLE shard_phase2_replace_s1(id bigint, title text); CREATE TABLE shard_phase2_replace(id bigint, title text) type='shard' local='shard_phase2_replace_s0' local='shard_phase2_replace_s1'; INSERT INTO shard_phase2_replace (id, title) VALUES (11, 'old-explicit'); REPLACE INTO shard_phase2_replace (id, title) VALUES (11, 'updated-explicit'), (0, 'auto-row');"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title FROM shard_phase2_replace WHERE id=11;"
+––– output –––
++------+------------------+
+| id   | title            |
++------+------------------+
+|   11 | updated-explicit |
++------+------------------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_phase2_replace;"
+––– output –––
++------+
+| c    |
++------+
+|    2 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_stmt_rollback; DROP TABLE IF EXISTS shard_phase2_stmt_rollback_s0; DROP TABLE IF EXISTS shard_phase2_stmt_rollback_s1; CREATE TABLE shard_phase2_stmt_rollback_s0(id bigint, title text); CREATE TABLE shard_phase2_stmt_rollback_s1(id bigint, title text); CREATE TABLE shard_phase2_stmt_rollback(id bigint, title text) type='shard' local='shard_phase2_stmt_rollback_s0' local='shard_phase2_stmt_rollback_s1';"
+––– output –––
+––– input –––
+mysql --force -h0 -P1306 >/dev/null 2>&1 <<'SQL'
+BEGIN;
+INSERT INTO shard_phase2_stmt_rollback (id, title) VALUES (21, 'kept-after-error');
+INSERT INTO shard_phase2_stmt_rollback (id, title) VALUES (22);
+COMMIT;
+SQL
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title FROM shard_phase2_stmt_rollback WHERE id=21;"
+––– output –––
++------+------------------+
+| id   | title            |
++------+------------------+
+|   21 | kept-after-error |
++------+------------------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_phase2_stmt_rollback WHERE id=22;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS shard_phase2_mix_modes; DROP TABLE IF EXISTS shard_phase2_mix_modes_s0; DROP TABLE IF EXISTS shard_phase2_mix_modes_s1; CREATE TABLE shard_phase2_mix_modes_s0(id bigint, title text); CREATE TABLE shard_phase2_mix_modes_s1(id bigint, title text); CREATE TABLE shard_phase2_mix_modes(id bigint, title text) type='shard' local='shard_phase2_mix_modes_s0' local='shard_phase2_mix_modes_s1';"
+––– output –––
+––– input –––
+mysql --force -h0 -P1306 >/dev/null 2>&1 <<'SQL'
+BEGIN;
+INSERT INTO shard_phase2_mix_modes (id, title) VALUES (31, 'insert-row');
+REPLACE INTO shard_phase2_mix_modes (id, title) VALUES (32, 'replace-row');
+COMMIT;
+SQL
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, title FROM shard_phase2_mix_modes WHERE id=31;"
+––– output –––
++------+------------+
+| id   | title      |
++------+------------+
+|   31 | insert-row |
++------+------------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) AS c FROM shard_phase2_mix_modes WHERE id=32;"
+––– output –––
++------+
+| c    |
++------+
+|    0 |
++------+

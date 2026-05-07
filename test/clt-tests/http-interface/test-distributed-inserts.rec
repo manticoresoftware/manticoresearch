@@ -32,11 +32,11 @@ mysql -h0 -P9306 -e "CREATE TABLE test2 (
 ––– input –––
 mysql -P9306 -h0 -e "show tables;"
 ––– output –––
-+-------+-------------+
-| Table | Type        |
-+-------+-------------+
-| test2 | distributed |
-+-------+-------------+
++-------+-------+
+| Table | Type  |
++-------+-------+
+| test2 | shard |
++-------+-------+
 ––– input –––
 mysql -P9306 -h0 -e "DESCRIBE test2;"
 ––– output –––
@@ -123,13 +123,13 @@ true
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
 ––– output –––
-+------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+---------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
-| id   | model            | storage_capacity | color  | release_year | price       | discounted_price | sold | date_added | product_codes | values                                | additional_info                                                                   | vector                              |
-+------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+---------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
-|    1 | iPhone 13 Pro    |              256 | silver |         2021 | 1099.989990 |       989.989990 |    1 | 2224442480 | 1,2,3         | 523456764345678976                    | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | 0.773448,0.312478,0.137971,0.459821 |
-|    2 | Galaxy S21 Ultra |              128 | black  |         2021 | 1199.989990 |      1099.989990 |    1 | 3141431296 | 4,5,6         | 1234567890123456789                   | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}                   | 0.500000,0.400000,0.300000,0.200000 |
-|    3 | Pixel 6          |              128 | white  |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 123456789123456789,987654321987654321 | {"features":["Smooth display","Google Tensor chip","AI-powered camera"]}          | 0.800000,0.600000,0.400000,0.200000 |
-+------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+---------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
++------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+------------------------------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+| id   | model            | storage_capacity | color  | release_year | price       | discounted_price | sold | date_added | product_codes | values                                                     | additional_info                                                                   | vector                              |
++------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+------------------------------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+|    1 | iPhone 13 Pro    |              256 | silver |         2021 | 1099.989990 |       989.989990 |    1 | 2224442480 | 1,2,3         | 523456764345678976,9223372036854775807,9223372036854775807 | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | 0.773448,0.312478,0.137971,0.459821 |
+|    2 | Galaxy S21 Ultra |              128 | black  |         2021 | 1199.989990 |      1099.989990 |    1 | 3141431296 | 4,5,6         | 1234567890123456789                                        | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}                   | 0.500000,0.400000,0.300000,0.200000 |
+|    3 | Pixel 6          |              128 | white  |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 123456789123456789,987654321987654321                      | {"features":["Smooth display","Google Tensor chip","AI-powered camera"]}          | 0.800000,0.600000,0.400000,0.200000 |
++------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+------------------------------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
 ––– input –––
 curl -s -X POST http://localhost:9308/replace -d '{
   "table": "test2",
@@ -234,11 +234,11 @@ curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_insert" ht
 ––– output –––
 {
   "index": "created",
-  "id": 4
+  "id": "4"
 }
 {
   "index": "created",
-  "id": 5
+  "id": "5"
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -260,11 +260,11 @@ curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_insert" ht
 ––– output –––
 {
   "index": "created",
-  "id": 6
+  "id": "6"
 }
 {
   "index": "created",
-  "id": 7
+  "id": "7"
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -341,10 +341,10 @@ bulk_ops=$(mktemp); echo -e '{"delete":{"_index":"test2","_id":1}}\n{"index":{"_
 ––– input –––
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_ops" http://localhost:9308/_bulk | jq -c '.items[] | {operation: (to_entries | .[0].key), result: (.[].result?), id: (.[]._id?), status: (.[].status?), error: (.[].error?)}'
 ––– output –––
-{"operation":"delete","result":"deleted","id":1,"status":201,"error":null}
-{"operation":"index","result":"created","id":2,"status":201,"error":null}
-{"operation":"index","result":"created","id":17,"status":201,"error":null}
-{"operation":"update","result":"updated","id":6,"status":201,"error":null}
+{"operation":"delete","result":"deleted","id":"1","status":201,"error":null}
+{"operation":"index","result":"created","id":"2","status":201,"error":null}
+{"operation":"index","result":"created","id":"17","status":201,"error":null}
+{"operation":"update","result":"updated","id":"6","status":201,"error":null}
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 WHERE id = 4;"
 ––– output –––
@@ -380,8 +380,7 @@ curl -s -X POST http://localhost:9308/insert -d '{
 {
   "type": "action_request_validation_exception",
   "reason": "duplicate id '4'",
-  "table": "system.test2_s2",
-  "index": "test2"
+  "table": "test2"
 }
 Duplicate ID test passed!
 ––– input –––

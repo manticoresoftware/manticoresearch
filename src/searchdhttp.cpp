@@ -890,11 +890,12 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl )
+	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint, const CSphString & sRawQuery, const CSphString & sFullUrl, DWORD uApiFlags )
 		: m_sEndpoint ( std::move ( sEndpoint ) )
 		, m_tQuery ( szQuery )
 		, m_sRawQuery ( sRawQuery )
 		, m_sFullUrl ( sFullUrl )
+		, m_uApiFlags ( uApiFlags )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
@@ -912,6 +913,7 @@ public:
 		tOut.SendString ( sRequest.cstr() );
 		tOut.SendString ( m_sRawQuery.cstr() );
 		tOut.SendString ( m_sFullUrl.cstr() );
+		tOut.SendDword ( m_uApiFlags );
 	}
 
 private:
@@ -919,6 +921,7 @@ private:
 	mutable JsonObj_c	m_tQuery;
 	const CSphString & m_sRawQuery;
 	const CSphString & m_sFullUrl;
+	DWORD				m_uApiFlags = 0;
 };
 
 
@@ -944,7 +947,11 @@ public:
 		dResult[uLength] = '\0';
 
 		CSphString sError;
-		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		int iAffected = 0;
+		int iWarnings = 0;
+		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), iAffected, iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		m_iAffected += iAffected;
+		m_iWarnings += iWarnings;
 		if ( !sError.IsEmpty() )
 			m_tFails.Submit ( tAgent.m_tDesc.m_sIndexes, nullptr, sError.cstr() );
 
@@ -962,15 +969,16 @@ std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept
 	return bJson ? sphCreateJsonQueryParser() : sphCreatePlainQueryParser();
 }
 
-std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )
+std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt, bool bShardPhysicalUpdate )
 {
+	DWORD uApiFlags = ( tStmt.m_bShardPhysicalUpdate || bShardPhysicalUpdate ) ? API_FLAG_SHARD_PHYSICAL_UPDATE : 0;
 	if ( tStmt.m_bJson )
 	{
 		assert ( !tStmt.m_sEndpoint.IsEmpty() );
-		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl );
+		return std::make_unique<JsonRequestBuilder_c> ( sQuery.first, tStmt.m_sEndpoint, tStmt.m_sRawQuery, tStmt.m_sFullUrl, uApiFlags );
 	} else
 	{
-		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt );
+		return std::make_unique<SphinxqlRequestBuilder_c> ( sQuery, tStmt, uApiFlags );
 	}
 }
 
@@ -1767,14 +1775,22 @@ protected:
 		: m_eFormat ( eFormat )
 	{}
 
-	void ProcessBegin ( const CSphString& sIndex )
+	void ProcessBegin ( const CSphString& sIndex, bool bAllowShardTxn )
 	{
-		// for now - only local mutable indexes are suitable
+		bool bCanBeginTxn = false;
 		{
 			auto pIndex = GetServed ( sIndex );
-			if ( !ServedDesc_t::IsMutable ( pIndex ) )
-				return;
+			bCanBeginTxn = ServedDesc_t::IsMutable ( pIndex );
 		}
+
+		if ( !bCanBeginTxn && bAllowShardTxn )
+		{
+			auto pDist = GetDistr ( sIndex );
+			bCanBeginTxn = AsShard ( pDist.Ptr() )!=nullptr;
+		}
+
+		if ( !bCanBeginTxn )
+			return;
 
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlBegin ( tReporter, FromStr (sIndex) );
@@ -1800,6 +1816,12 @@ protected:
 			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates, m_eFormat );
 		}
 		return !tReporter.IsError();
+	}
+
+	void ProcessRollback ( Str_t sIndex ) const
+	{
+		HttpErrorReporter_c tReporter;
+		sphHandleMysqlCommitRollback ( tReporter, sIndex, false );
 	}
 
 	int m_iInserts = 0;
@@ -1927,6 +1949,7 @@ static void SetQueryOptions ( const OptionsHash_t & hOpts, SqlStmt_t & tStmt )
 		const CSphString * pFullUrl = hOpts  ( "full_url" );
 		if ( pFullUrl )
 			tStmt.m_sFullUrl = *pFullUrl;
+		tStmt.m_bShardPhysicalUpdate = session::GetClientSession()->m_bShardPhysicalUpdate;
 	}
 }
 
@@ -2102,6 +2125,25 @@ static Str_t TrimHeadSpace ( Str_t tLine )
 class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpJsonUpdateTraits_c, public HttpJsonTxnTraits_c
 {
 protected:
+	struct BulkTxnState_t
+	{
+		CSphString	m_sIndex;
+		bool		m_bIsShard = false;
+		SqlStmt_e	m_eShardWriteStmt = STMT_DUMMY;
+
+		void Reset ()
+		{
+			m_sIndex = "";
+			m_bIsShard = false;
+			m_eShardWriteStmt = STMT_DUMMY;
+		}
+
+		bool HasIndex () const
+		{
+			return !m_sIndex.IsEmpty();
+		}
+	};
+
 	NDJsonStream_c m_tSource;
 	const OptionsHash_t& m_tOptions;
 
@@ -2123,33 +2165,13 @@ public:
 		int iCurLine = 0;
 		int iLastTxStartLine = 0;
 
-		auto FinishBulk = [&, this] ( EHTTP_STATUS eStatus = EHTTP_STATUS::_200 ) {
-			JsonObj_c tRoot;
-			tRoot.AddItem ( "items", tResults );
-			tRoot.AddInt ( "current_line", iCurLine );
-			tRoot.AddInt ( "skipped_lines", iCurLine - iLastTxStartLine );
-			tRoot.AddBool ( "errors", !bResult );
-			tRoot.AddStr ( "error", m_sError.IsEmpty() ? "" : m_sError );
-			if ( eStatus == EHTTP_STATUS::_200 && !bResult )
-				eStatus = EHTTP_STATUS::_500;
-			BuildReply ( tRoot.AsString(), eStatus );
-			HTTPINFO << "inserted  " << iCurLine;
-			return bResult;
-		};
-
-		auto AddResult = [&tResults] ( const char* szStmt, JsonObj_c& tResult ) {
-			JsonObj_c tItem;
-			tItem.AddItem ( szStmt, tResult );
-			tResults.AddItem ( tItem );
-		};
-
 		if ( m_tSource.Eof() )
-			return FinishBulk();
+			return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 
 		// originally we execute txn for single index
 		// if there is combo, we fall back to query-by-query commits
 
-		CSphString sTxnIdx;
+		BulkTxnState_t tTxnState;
 		CSphString sStmt;
 
 		while ( !m_tSource.Eof() )
@@ -2165,14 +2187,11 @@ public:
 			{
 				if ( session::IsInTrans() )
 				{
-					assert ( !sTxnIdx.IsEmpty() );
+					assert ( tTxnState.HasIndex() );
 					// empty query finishes current txn
-					bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-					AddResult ( "bulk", tResult );
+					bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine );
 					if ( !bResult )
 						break;
-					sTxnIdx = "";
-					iLastTxStartLine = iCurLine;
 				}
 				continue;
 			}
@@ -2183,30 +2202,42 @@ public:
 			const char* szStmt = tQuery.first;
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
+			tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
 
 			CSphString sQuery;
 			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
 			{
 				HTTPINFO << "inserted " << iCurLine << ", error: " << m_sError;
-				return FinishBulk ( EHTTP_STATUS::_400 );
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
 			}
 
-			if ( sTxnIdx.IsEmpty() )
+			const bool bStmtShard = IsShardTxn ( tStmt.m_sIndex );
+			const bool bShardUpdateStmt = bStmtShard && tStmt.m_eStmt==STMT_UPDATE;
+			const bool bNeedShardBreak = NeedShardBreak ( tTxnState, tStmt, bStmtShard );
+
+			if ( session::IsInTrans() && tTxnState.m_sIndex!=tStmt.m_sIndex )
 			{
-				sTxnIdx = tStmt.m_sIndex;
-				ProcessBegin ( sTxnIdx );
-			}
-			else if ( session::IsInTrans() && sTxnIdx!=tStmt.m_sIndex )
-			{
-				assert ( !sTxnIdx.IsEmpty() );
+				assert ( tTxnState.HasIndex() );
 				// we should finish current txn, as we got another index
-				bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-				AddResult ( "bulk", tResult );
+				bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine-1 );
 				if ( !bResult )
 					break;
-				sTxnIdx = tStmt.m_sIndex;
-				ProcessBegin ( sTxnIdx );
-				iLastTxStartLine = iCurLine;
+
+			} else if ( bNeedShardBreak )
+			{
+				assert ( tTxnState.HasIndex() );
+				// shard updates are non-transactional, and INSERT/REPLACE can not share a shard txn
+				bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine-1 );
+				if ( !bResult )
+					break;
+			}
+
+			if ( !tTxnState.HasIndex() )
+			{
+				tTxnState.m_sIndex = tStmt.m_sIndex;
+				tTxnState.m_bIsShard = bStmtShard;
+				ProcessBegin ( tTxnState.m_sIndex, true );
 			}
 
 			SetQueryOptions ( m_tOptions, tStmt );
@@ -2217,7 +2248,11 @@ public:
 			case STMT_REPLACE:
 				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
 				if ( bResult )
+				{
 					++m_iInserts;
+					if ( tTxnState.m_bIsShard )
+						tTxnState.m_eShardWriteStmt = tStmt.m_eStmt;
+				}
 				break;
 
 			case STMT_UPDATE:
@@ -2234,11 +2269,19 @@ public:
 
 			default:
 				HTTPINFO << "inserted  " << iCurLine << ", got unknown statement:" << (int)tStmt.m_eStmt;
-				return FinishBulk ( EHTTP_STATUS::_400 );
+				RollbackBulkTxn ( tTxnState );
+				return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine, EHTTP_STATUS::_400 );
+			}
+
+			if ( bResult && bShardUpdateStmt && session::IsInTrans() )
+			{
+				if ( !CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine ) )
+					break;
+				continue;
 			}
 
 			if ( !bResult || !session::IsInTrans() )
-				AddResult ( sStmt.cstr(), tResult );
+				AddBulkResult ( tResults, sStmt.cstr(), tResult );
 
 			// no further than the first error
 			if ( !bResult )
@@ -2250,22 +2293,89 @@ public:
 
 		if ( bResult && session::IsInTrans() )
 		{
-			assert ( !sTxnIdx.IsEmpty() );
+			assert ( tTxnState.HasIndex() );
 			// We're in txn - that is, nothing committed, and we should do it right now
 			JsonObj_c tResult;
 			DocID_t tDocId = 0;
-			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
-			AddResult ( "bulk", tResult );
-			if ( bResult )
-				iLastTxStartLine = iCurLine;
+			bResult = CommitBulkTxn ( tTxnState, tDocId, tResult, tResults, iLastTxStartLine, iCurLine );
 		}
 
-		session::SetInTrans ( false );
+		if ( !bResult )
+			RollbackBulkTxn ( tTxnState );
+		else
+		{
+			session::SetInTrans ( false );
+			tTxnState.Reset ();
+		}
+
 		HTTPINFO << "inserted  " << iCurLine << " result: " << (int)bResult << ", error:" << m_sError;
-		return FinishBulk();
+		return FinishBulk ( tResults, bResult, iCurLine, iLastTxStartLine );
 	}
 
 private:
+	bool FinishBulk ( JsonObj_c & tResults, bool bResult, int iCurLine, int iLastTxStartLine, EHTTP_STATUS eStatus = EHTTP_STATUS::_200 )
+	{
+		JsonObj_c tRoot;
+		tRoot.AddItem ( "items", tResults );
+		tRoot.AddInt ( "current_line", iCurLine );
+		tRoot.AddInt ( "skipped_lines", iCurLine - iLastTxStartLine );
+		tRoot.AddBool ( "errors", !bResult );
+		tRoot.AddStr ( "error", m_sError.IsEmpty() ? "" : m_sError );
+		if ( eStatus == EHTTP_STATUS::_200 && !bResult )
+			eStatus = EHTTP_STATUS::_500;
+		BuildReply ( tRoot.AsString(), eStatus );
+		HTTPINFO << "inserted  " << iCurLine;
+		return bResult;
+	}
+
+	static void AddBulkResult ( JsonObj_c & tResults, const char * szStmt, JsonObj_c & tResult )
+	{
+		JsonObj_c tItem;
+		tItem.AddItem ( szStmt, tResult );
+		tResults.AddItem ( tItem );
+	}
+
+	static bool IsShardTxn ( const CSphString & sIndex )
+	{
+		auto pDist = GetDistr ( sIndex );
+		return AsShard ( pDist.Ptr() )!=nullptr;
+	}
+
+	static bool NeedShardBreak ( const BulkTxnState_t & tTxnState, const SqlStmt_t & tStmt, bool bStmtShard )
+	{
+		const bool bShardUpdateStmt = bStmtShard && tStmt.m_eStmt==STMT_UPDATE;
+		return session::IsInTrans()
+			&& tTxnState.m_bIsShard
+			&& tTxnState.m_sIndex==tStmt.m_sIndex
+			&& ( bShardUpdateStmt
+				|| ( ( tStmt.m_eStmt==STMT_INSERT || tStmt.m_eStmt==STMT_REPLACE )
+					&& tTxnState.m_eShardWriteStmt!=STMT_DUMMY
+					&& tTxnState.m_eShardWriteStmt!=tStmt.m_eStmt ) );
+	}
+
+	bool CommitBulkTxn ( BulkTxnState_t & tTxnState, DocID_t & tDocId, JsonObj_c & tResult, JsonObj_c & tResults, int & iLastTxStartLine, int iCommittedThroughLine )
+	{
+		assert ( tTxnState.HasIndex() );
+		bool bResult = ProcessCommitRollback ( FromStr ( tTxnState.m_sIndex ), tDocId, tResult, m_sError );
+		AddBulkResult ( tResults, "bulk", tResult );
+		if ( bResult )
+		{
+			tTxnState.Reset();
+			iLastTxStartLine = iCommittedThroughLine;
+		}
+
+		return bResult;
+	}
+
+	void RollbackBulkTxn ( BulkTxnState_t & tTxnState ) const
+	{
+		if ( session::IsInTrans() && tTxnState.HasIndex() )
+			ProcessRollback ( FromStr ( tTxnState.m_sIndex ) );
+
+		session::SetInTrans ( false );
+		tTxnState.Reset();
+	}
+
 	bool CheckNDJson()
 	{
 		if ( !m_tOptions.Exists ( "content-type" ) )
@@ -3373,7 +3483,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 	{
 		const CSphString & sIdx = dDocs[tTnx.m_iFrom].m_sIndex;
 		assert ( !sIdx.IsEmpty() );
-		ProcessBegin ( sIdx );
+		ProcessBegin ( sIdx, false );
 
 		bool bUpdate = false;
 		bOk &= dErrors.IsEmpty();

@@ -174,7 +174,7 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString & sIndexPath, IndexTy
 
 	TLS_MSG_STRING ( sError );
 	ServedIndexRefPtr_c pResult;
-	auto [eAdd, pNewServed] = AddIndex ( szIndexName, hIndex, false, true, nullptr, sError );
+	auto [eAdd, pNewServed] = AddIndex ( szIndexName, hIndex, false, true, true, nullptr, sError );
 
 	assert ( eAdd == ADD_NEEDLOAD || eAdd == ADD_ERROR );
 	if ( eAdd != ADD_NEEDLOAD )

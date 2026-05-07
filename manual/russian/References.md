@@ -88,6 +88,13 @@
 * [CALL PQ](Searching/Percolate_query.md) - Выполняет перколяционный запрос
 * [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Используется для проверки токенизации ключевых слов. Также позволяет получить токенизированные формы предоставленных ключевых слов
 * [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Автозаполняет ваш поисковый запрос
+* [CALL CHAT](Searching/Conversational_search.md#CALL-CHAT-syntax) - Выполняет поиск с усилением извлечением в разговорном режиме
+
+##### Модели чата
+* [CREATE CHAT MODEL](Searching/Conversational_search.md#Creating-a-chat-model) - Создает конфигурацию модели чата
+* [SHOW CHAT MODELS](Searching/Conversational_search.md#Model-management) - Показывает конфигурации моделей чата
+* [DESCRIBE CHAT MODEL](Searching/Conversational_search.md#Model-management) - Показывает конфигурацию модели чата
+* [DROP CHAT MODEL](Searching/Conversational_search.md#Model-management) - Удаляет конфигурацию модели чата
 
 ##### Плагины
 * [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Устанавливает пользовательскую функцию (UDF)

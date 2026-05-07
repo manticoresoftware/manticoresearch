@@ -88,6 +88,13 @@
 * [CALL PQ](Searching/Percolate_query.md) - 运行反向查询
 * [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - 用于检查关键词的分词方式。并允许获取给定关键词的分词形式
 * [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - 自动完成搜索查询
+* [CALL CHAT](Searching/Conversational_search.md#CALL-CHAT-syntax) - 运行检索增强型对话搜索
+
+##### 聊天模型
+* [CREATE CHAT MODEL](Searching/Conversational_search.md#Creating-a-chat-model) - 创建聊天模型配置
+* [SHOW CHAT MODELS](Searching/Conversational_search.md#Model-management) - 显示聊天模型配置
+* [DESCRIBE CHAT MODEL](Searching/Conversational_search.md#Model-management) - 显示聊天模型配置
+* [DROP CHAT MODEL](Searching/Conversational_search.md#Model-management) - 删除聊天模型配置
 
 ##### 插件
 * [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - 安装用户定义函数（UDF）

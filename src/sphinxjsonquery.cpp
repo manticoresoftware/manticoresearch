@@ -12,6 +12,7 @@
 #include "sphinxquery/parse_helper.h"
 #include "sphinxsearch.h"
 #include "sphinxplugin.h"
+#include "facetutils.h"
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "jsonqueryfilter.h"
@@ -33,6 +34,7 @@ static const char * g_szHighlight = "_@highlight_";
 static const char * g_szOrder = "_@order_";
 
 class QueryTreeBuilder_c;
+static bool ParseFacetFilterMode ( const JsonObj_c & tValue, FacetFilterMode_e & eMode, CSphString & sError, const char * sName );
 struct ErrorPathGuard_t
 {
 	ErrorPathGuard_t ( QueryTreeBuilder_c & tBuilder, bool bEnabled, const JsonObj_c & tPath );
@@ -1686,6 +1688,12 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		return false;
 
 	// aggs
+	JsonObj_c tFacetFilterMode = tRoot.GetItem ( "facet_filter_mode" );
+	if ( tFacetFilterMode )
+	{
+		if ( !ParseFacetFilterMode ( tFacetFilterMode, tQuery.m_eFacetFilterMode, sError, "facet_filter_mode" ) )
+			return false;
+	}
 	JsonObj_c tAggs = tRoot.GetItem ( "aggs" );
 	if ( tAggs && !ParseAggregates ( tAggs, tQuery, sError ) )
 		return false;
@@ -2691,7 +2699,14 @@ static void EncodePercentileRanksValues ( const JsonAggr_t & tAggr, const CSphMa
 	tOut.FinishBlock ( false );
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
+static const CSphVector<CSphFilterSettings> * CollectFacetSelectedFilters ( const JsonQuery_c & tQuery, const JsonAggr_t & tAggr, CSphVector<CSphFilterSettings> & dSelected )
+{
+	StrVec_t dAttrs;
+	dAttrs.Add ( tAggr.m_sCol );
+	return facet::CollectSelectedFiltersForAttrs ( tQuery.m_dFilters, dAttrs, dSelected );
+}
+
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, const CSphVector<CSphFilterSettings> * pSelectedFilters, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2762,6 +2777,8 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, eFormat, hDatetime, tBufMatch, tOut );
 
 				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
+				if ( pSelectedFilters )
+					tOut.Sprintf ( R"("status":"%s")", facet::GetBucketStatus ( tMatch, tRes.m_tSchema, pSelectedFilters ) );
 				// FIXME!!! add support
 				if ( tAggr.m_eAggrFunc==Aggr_e::SIGNIFICANT )
 				{
@@ -3214,7 +3231,11 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 		if ( tQuery.m_bGroupEmulation )
 		{
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
-			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			CSphVector<CSphFilterSettings> dSelectedFilters;
+			const CSphVector<CSphFilterSettings> * pSelectedFilters = tQuery.m_dAggs[0].m_eFacetFilterMode==FacetFilterMode_e::FACET_FILTER_MAX
+				? CollectFacetSelectedFilters ( tQuery, tQuery.m_dAggs[0], dSelectedFilters )
+				: nullptr;
+			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, pSelectedFilters, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 
 		} else
@@ -3223,7 +3244,13 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 			assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 			ARRAY_FOREACH ( i, tQuery.m_dAggs )
-				EncodeAggr ( tQuery.m_dAggs[i], i, dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			{
+				CSphVector<CSphFilterSettings> dSelectedFilters;
+				const CSphVector<CSphFilterSettings> * pSelectedFilters = tQuery.m_dAggs[i].m_eFacetFilterMode==FacetFilterMode_e::FACET_FILTER_MAX
+					? CollectFacetSelectedFilters ( tQuery, tQuery.m_dAggs[i], dSelectedFilters )
+					: nullptr;
+				EncodeAggr ( tQuery.m_dAggs[i], i, dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, pSelectedFilters, tOut );
+			}
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
 	}
@@ -4727,6 +4754,52 @@ static bool ParseAggsNode ( const JsonObj_c & tBucket, const JsonObj_c & tJsonIt
 	return true;
 }
 
+static bool ParseFacetFilterMode ( const JsonObj_c & tValue, FacetFilterMode_e & eMode, CSphString & sError, const char * sName )
+{
+	if ( !tValue.IsStr() )
+	{
+		sError.SetSprintf ( R"("%s" property should be a string)", sName );
+		return false;
+	}
+
+	CSphString sMode = tValue.StrVal();
+	sMode.ToLower();
+	if ( sMode=="strict" )
+		eMode = FacetFilterMode_e::FACET_FILTER_STRICT;
+	else if ( sMode=="auto" )
+		eMode = FacetFilterMode_e::FACET_FILTER_AUTO;
+	else if ( sMode=="max" )
+		eMode = FacetFilterMode_e::FACET_FILTER_MAX;
+	else
+	{
+		sError.SetSprintf ( R"("%s" property should be "strict", "auto", or "max")", sName );
+		return false;
+	}
+
+	return true;
+}
+
+static bool ParseFacetFilterAttrs ( const JsonObj_c & tValue, StrVec_t & dAttrs, CSphString & sError, const char * sName )
+{
+	if ( !tValue.IsArray() )
+	{
+		sError.SetSprintf ( R"("%s" property should be an array)", sName );
+		return false;
+	}
+
+	for ( const auto & tAttr : tValue )
+	{
+		if ( !tAttr.IsStr() )
+		{
+			sError.SetSprintf ( R"("%s" items should be strings)", sName );
+			return false;
+		}
+		dAttrs.Add ( tAttr.StrVal() );
+	}
+
+	return true;
+}
+
 static bool ParseAggsNodeSort ( const JsonObj_c & tJsonItem, bool bOrder, JsonAggr_t & tItem, CSphString & sError )
 {
 	if ( !( tJsonItem.IsArray() || tJsonItem.IsObj() ) )
@@ -4773,33 +4846,54 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 
 		for ( const auto & tAggsItem : tJsonItem )
 		{
-			// could be a sort object at the aggs item or order object at the bucket
-			if ( strcmp (  tAggsItem.Name(), "sort" )==0 )
+			if ( strcmp ( tAggsItem.Name(), "sort" )==0 )
 			{
 				if ( !ParseAggsNodeSort ( tAggsItem, false, tItem, sError ) )
 					return false;
+				continue;
+			}
 
-			} else
+			if ( strcmp ( tAggsItem.Name(), "filter_mode" )==0 || strcmp ( tAggsItem.Name(), "mode" )==0 )
 			{
-				if ( StrEq ( tAggsItem.Name(), "aggs" ) ||  tAggsItem.HasItem ( "aggs" ) )
-				{
-					sError = R"(nested "aggs" is not supported)";
+				if ( !ParseFacetFilterMode ( tAggsItem, tItem.m_eFacetFilterMode, sError, tAggsItem.Name() ) )
 					return false;
-				}
-				if ( tAggsItem==tAggsItem.end() )
-				{
-					sError.SetSprintf ( R"("aggs" bucket '%s' with only nested items)", tAggsItem.Name() );
-					return false;
-				}
-				if ( !ParseAggsNode ( tAggsItem, tJsonItem, bRoot, tItem, sError ) )
-					return false;
+				tItem.m_bFacetFilterModeExplicit = true;
+				continue;
+			}
 
-				// bucket could have its own order item
-				if ( tAggsItem.HasItem ( "order" ) )
-				{
-					if ( !ParseAggsNodeSort ( tAggsItem.GetItem("order"), true, tItem, sError ) )
-						return false;
-				}
+			if ( strcmp ( tAggsItem.Name(), "filters" )==0 )
+			{
+				if ( !ParseFacetFilterAttrs ( tAggsItem, tItem.m_dFacetFilterAttrs, sError, "filters" ) )
+					return false;
+				tItem.m_eFacetFilterClause = FacetFilterClause_e::INCLUDE;
+				continue;
+			}
+
+			if ( strcmp ( tAggsItem.Name(), "exclude_filters" )==0 )
+			{
+				if ( !ParseFacetFilterAttrs ( tAggsItem, tItem.m_dFacetFilterAttrs, sError, "exclude_filters" ) )
+					return false;
+				tItem.m_eFacetFilterClause = FacetFilterClause_e::EXCLUDE;
+				continue;
+			}
+
+			if ( StrEq ( tAggsItem.Name(), "aggs" ) ||  tAggsItem.HasItem ( "aggs" ) )
+			{
+				sError = R"(nested "aggs" is not supported)";
+				return false;
+			}
+			if ( tAggsItem==tAggsItem.end() )
+			{
+				sError.SetSprintf ( R"("aggs" bucket '%s' with only nested items)", tAggsItem.Name() );
+				return false;
+			}
+			if ( !ParseAggsNode ( tAggsItem, tJsonItem, bRoot, tItem, sError ) )
+				return false;
+
+			if ( tAggsItem.HasItem ( "order" ) )
+			{
+				if ( !ParseAggsNodeSort ( tAggsItem.GetItem("order"), true, tItem, sError ) )
+					return false;
 			}
 		}
 

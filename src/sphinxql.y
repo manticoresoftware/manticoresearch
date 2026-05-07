@@ -65,9 +65,12 @@
 %token	TOK_DIV
 %token	TOK_DOUBLE
 %token	TOK_EXPLAIN
+%token	TOK_EXCLUDE
 %token	TOK_FACET
 %token	TOK_FALSE
+%token	TOK_FILTERS
 %token	TOK_FLOAT
+%token	TOK_MODE
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
@@ -291,7 +294,7 @@ names_transaction_collate:
     ;
 
 ident_without_option:
-	TOK_IDENT | reserved_tokens_without_option
+	TOK_IDENT | reserved_tokens_without_option | TOK_EXCLUDE | TOK_FILTERS | TOK_MODE
 	;
 
 ident_for_set_stmt:
@@ -2083,8 +2086,64 @@ facet_items_list:
 	| facet_items_list ',' facet_item
 	;
 
+facet_filter_attr:
+	identcol
+	| json_expr
+	;
+
+facet_filter_attr_list:
+	facet_filter_attr
+		{
+			pParser->ToString ( pParser->m_pQuery->m_dFacetFilterAttrs.Add(), $1 );
+		}
+	| facet_filter_attr_list ',' facet_filter_attr
+		{
+			pParser->ToString ( pParser->m_pQuery->m_dFacetFilterAttrs.Add(), $3 );
+		}
+	;
+
+opt_facet_filters:
+	// empty
+	| TOK_ALL TOK_FILTERS
+		{
+			pParser->m_pQuery->m_eFacetFilterClause = FacetFilterClause_e::ALL;
+		}
+	| TOK_FILTERS
+		{
+			pParser->m_pQuery->m_eFacetFilterClause = FacetFilterClause_e::INCLUDE;
+		}
+		facet_filter_attr_list
+	| TOK_EXCLUDE TOK_FILTERS
+		{
+			pParser->m_pQuery->m_eFacetFilterClause = FacetFilterClause_e::EXCLUDE;
+		}
+		facet_filter_attr_list
+	;
+
+opt_facet_mode:
+	// empty
+	| TOK_MODE ident
+		{
+			CSphString sMode;
+			pParser->ToString ( sMode, $2 );
+			sMode.ToLower();
+			pParser->m_pQuery->m_bFacetFilterModeExplicit = true;
+			if ( sMode=="strict" )
+				pParser->m_pQuery->m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
+			else if ( sMode=="auto" )
+				pParser->m_pQuery->m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_AUTO;
+			else if ( sMode=="max" )
+				pParser->m_pQuery->m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_MAX;
+			else
+			{
+				pParser->m_pParseError->SetSprintf ( "unknown FACET mode '%s' (supported: strict, auto, max)", sMode.cstr() );
+				YYERROR;
+			}
+		}
+	;
+
 facet_stmt:
-	TOK_FACET facet_items_list opt_facet_by_items_list opt_distinct_item opt_order_clause opt_limit_clause
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_facet_filters opt_facet_mode opt_distinct_item opt_order_clause opt_limit_clause
 		{
 			if ( !pParser->SetupFacetStmt() )
 				YYERROR;

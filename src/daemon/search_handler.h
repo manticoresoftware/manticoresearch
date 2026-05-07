@@ -92,6 +92,7 @@ public:
 	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) const { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetProfile ( QueryProfile_c * pProfile );
 	void							SetFederatedUser () { m_bFederatedUser = true; }
+	void							SetError ( const CSphString & sError ) { m_sError << sError; }
 
 public:
 	CSphFixedVector<CSphQuery>				m_dQueries;						///< queries which i need to search

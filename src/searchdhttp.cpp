@@ -1325,6 +1325,9 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long" )
 		return MYSQL_COL_LONG;
 
+	if ( sType == "bool" )
+		return MYSQL_COL_LONG;
+
 	if ( sType == "float" )
 		return MYSQL_COL_FLOAT;
 
@@ -1334,10 +1337,7 @@ static MysqlColumnType_e GetMysqlTypeByName ( const CSphString& sType )
 	if ( sType == "long long" )
 		return MYSQL_COL_LONGLONG;
 
-	if ( sType == "string" )
-		return MYSQL_COL_STRING;
-
-	assert (false && "Unknown column");
+	assert ( (sType == "string" || sType == "multi" || sType == "json") && "Unknown column");
 	return MYSQL_COL_STRING;
 }
 
@@ -1595,6 +1595,40 @@ private:
 }]
  */
 
+inline static void PutAnyValAsString ( RowBuffer_i & tOut, const JsonObj_c& tDataCol ) noexcept
+{
+	if ( tDataCol.IsInt () )
+		tOut.PutNumAsString ( tDataCol.IntVal() );
+	else if ( tDataCol.IsDbl () )
+		tOut.PutDoubleAsString ( tDataCol.DblVal() );
+	else if ( tDataCol.IsBool () )
+		tOut.PutString ( tDataCol.BoolVal() ? "true" : "false" );
+	else if ( tDataCol.IsNull () )
+		tOut.PutString ( "null" );
+	else
+		tOut.PutString ( tDataCol.StrVal() );
+}
+
+inline static int64_t NumberAsInt ( const JsonObj_c& tDataCol ) noexcept
+{
+	if ( tDataCol.IsInt () )
+		return tDataCol.IntVal();
+	if ( tDataCol.IsDbl () )
+		return (int64_t)tDataCol.DblVal();
+	assert (false && "Wrong value");
+	return 0;
+}
+
+inline static double NumberAsDouble ( const JsonObj_c& tDataCol ) noexcept
+{
+	if ( tDataCol.IsInt () )
+		return (double)tDataCol.IntVal();
+	if ( tDataCol.IsDbl () )
+		return tDataCol.DblVal();
+	assert (false && "Wrong value");
+	return 0.0;
+}
+
 
 void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer_i & tOut )
 {
@@ -1674,14 +1708,19 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 		for ( const auto & tDataRow : tDataNodes )
 		{
 			assert ( tDataRow.IsObj() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}
+			int iCol = 0;
+			tOut.DataStart ( nullptr ); // fixme! Here should be nullmask instead of nullptr, and following null columns should be skipped.
 			for ( const auto & tDataCol : tDataRow )
 			{
-				if ( tDataCol.IsInt () )
-					tOut.PutNumAsString ( tDataCol.IntVal() );
-				else if ( tDataCol.IsDbl () )
-					tOut.PutDoubleAsString ( tDataCol.DblVal() );
-				else
-					tOut.PutString ( tDataCol.StrVal() );
+				assert ( iCol < dSqlColumns.GetLength() );
+				switch ( dSqlColumns[iCol].second ) {
+					case MYSQL_COL_LONG : assert ( tDataCol.IsInt() ); tOut.PutDWORD (NumberAsInt(tDataCol)); break;
+					case MYSQL_COL_LONGLONG : assert ( tDataCol.IsInt() ); tOut.PutInt64 (NumberAsInt(tDataCol)); break;
+					case MYSQL_COL_FLOAT : assert ( tDataCol.IsDbl() ); tOut.PutFloat (NumberAsDouble(tDataCol)); break;
+					case MYSQL_COL_DOUBLE : assert ( tDataCol.IsDbl() ); tOut.PutDouble (NumberAsDouble(tDataCol)); break;
+					default: PutAnyValAsString ( tOut, tDataCol );
+				}
+				++iCol;
 			}
 			if ( !tOut.Commit() )
 				return;

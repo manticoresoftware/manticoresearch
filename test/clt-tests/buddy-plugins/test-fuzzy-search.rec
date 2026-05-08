@@ -62,6 +62,389 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') ORDER BY id ASC, use
 | 3517 | BRICE LONGORIA      | a    |
 +------+---------------------+------+
 ––– input –––
+php << 'EOF'
+<?php
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$mysqli = new mysqli('127.0.0.1', '', '', '', 9306);
+$mysqli->set_charset('utf8');
+echo "Direct SQL:\n";
+$res = $mysqli->query("SELECT * FROM name WHERE MATCH('RICH') ORDER BY id ASC, username ASC OPTION fuzzy=1");
+var_dump($res->fetch_all(MYSQLI_ASSOC));
+echo "\nPrepared SQL:\n";
+$stmt = $mysqli->prepare( "SELECT * FROM name WHERE MATCH(?) ORDER BY id ASC, username ASC OPTION fuzzy=1");
+$q = 'EBGRNA';
+$stmt->bind_param('s', $q);
+$stmt->execute();
+var_dump($stmt->get_result()->fetch_all(MYSQLI_ASSOC));
+EOF
+––– output –––
+Direct SQL:
+array(20) {
+  [0]=>
+  array(3) {
+    ["id"]=>
+    string(2) "43"
+    ["username"]=>
+    string(19) "KOURTNEY RICHARDSON"
+    ["s"]=>
+    string(1) "a"
+  }
+  [1]=>
+  array(3) {
+    ["id"]=>
+    string(3) "125"
+    ["username"]=>
+    string(17) "ELAINA RICHARDSON"
+    ["s"]=>
+    string(1) "a"
+  }
+  [2]=>
+  array(3) {
+    ["id"]=>
+    string(3) "226"
+    ["username"]=>
+    string(17) "RICHARD ZAMARRIPA"
+    ["s"]=>
+    string(1) "a"
+  }
+  [3]=>
+  array(3) {
+    ["id"]=>
+    string(3) "363"
+    ["username"]=>
+    string(10) "MAYRA RICO"
+    ["s"]=>
+    string(1) "a"
+  }
+  [4]=>
+  array(3) {
+    ["id"]=>
+    string(3) "840"
+    ["username"]=>
+    string(13) "RICO MCFADDEN"
+    ["s"]=>
+    string(1) "a"
+  }
+  [5]=>
+  array(3) {
+    ["id"]=>
+    string(3) "855"
+    ["username"]=>
+    string(16) "RICHARD ALDRIDGE"
+    ["s"]=>
+    string(1) "a"
+  }
+  [6]=>
+  array(3) {
+    ["id"]=>
+    string(3) "934"
+    ["username"]=>
+    string(11) "VALERY RICH"
+    ["s"]=>
+    string(1) "a"
+  }
+  [7]=>
+  array(3) {
+    ["id"]=>
+    string(3) "948"
+    ["username"]=>
+    string(14) "REGINE ALDRICH"
+    ["s"]=>
+    string(1) "a"
+  }
+  [8]=>
+  array(3) {
+    ["id"]=>
+    string(4) "1017"
+    ["username"]=>
+    string(9) "HEE TRICE"
+    ["s"]=>
+    string(1) "a"
+  }
+  [9]=>
+  array(3) {
+    ["id"]=>
+    string(4) "1624"
+    ["username"]=>
+    string(15) "OLEVIA RICHARDS"
+    ["s"]=>
+    string(1) "a"
+  }
+  [10]=>
+  array(3) {
+    ["id"]=>
+    string(4) "1816"
+    ["username"]=>
+    string(15) "MAURICE BARCLAY"
+    ["s"]=>
+    string(1) "a"
+  }
+  [11]=>
+  array(3) {
+    ["id"]=>
+    string(4) "2228"
+    ["username"]=>
+    string(17) "THERESIA RICHARDS"
+    ["s"]=>
+    string(1) "a"
+  }
+  [12]=>
+  array(3) {
+    ["id"]=>
+    string(4) "2670"
+    ["username"]=>
+    string(13) "JULIANA GRICE"
+    ["s"]=>
+    string(1) "a"
+  }
+  [13]=>
+  array(3) {
+    ["id"]=>
+    string(4) "2918"
+    ["username"]=>
+    string(15) "GRICELDA WHELAN"
+    ["s"]=>
+    string(1) "a"
+  }
+  [14]=>
+  array(3) {
+    ["id"]=>
+    string(4) "3012"
+    ["username"]=>
+    string(15) "RICHARD MCCURDY"
+    ["s"]=>
+    string(1) "a"
+  }
+  [15]=>
+  array(3) {
+    ["id"]=>
+    string(4) "3147"
+    ["username"]=>
+    string(16) "MERRILEE ALDRICH"
+    ["s"]=>
+    string(1) "a"
+  }
+  [16]=>
+  array(3) {
+    ["id"]=>
+    string(4) "3262"
+    ["username"]=>
+    string(12) "FONDA RICHEY"
+    ["s"]=>
+    string(1) "a"
+  }
+  [17]=>
+  array(3) {
+    ["id"]=>
+    string(4) "3431"
+    ["username"]=>
+    string(14) "MELANY RICHARD"
+    ["s"]=>
+    string(1) "a"
+  }
+  [18]=>
+  array(3) {
+    ["id"]=>
+    string(4) "3438"
+    ["username"]=>
+    string(13) "JOVAN ALDRICH"
+    ["s"]=>
+    string(1) "a"
+  }
+  [19]=>
+  array(3) {
+    ["id"]=>
+    string(4) "3517"
+    ["username"]=>
+    string(14) "BRICE LONGORIA"
+    ["s"]=>
+    string(1) "a"
+  }
+}
+Prepared SQL:
+array(20) {
+  [0]=>
+  array(3) {
+    ["id"]=>
+    int(20)
+    ["username"]=>
+    string(15) "BERNARDO DUGGAN"
+    ["s"]=>
+    string(1) "a"
+  }
+  [1]=>
+  array(3) {
+    ["id"]=>
+    int(27)
+    ["username"]=>
+    string(17) "BERNARDINE BREWER"
+    ["s"]=>
+    string(1) "a"
+  }
+  [2]=>
+  array(3) {
+    ["id"]=>
+    int(209)
+    ["username"]=>
+    string(12) "KATLYN SERNA"
+    ["s"]=>
+    string(1) "a"
+  }
+  [3]=>
+  array(3) {
+    ["id"]=>
+    int(1292)
+    ["username"]=>
+    string(13) "LAVERNA CLARK"
+    ["s"]=>
+    string(1) "a"
+  }
+  [4]=>
+  array(3) {
+    ["id"]=>
+    int(1414)
+    ["username"]=>
+    string(15) "BENNY FERNANDEZ"
+    ["s"]=>
+    string(1) "a"
+  }
+  [5]=>
+  array(3) {
+    ["id"]=>
+    int(1638)
+    ["username"]=>
+    string(13) "JULENE BERNAL"
+    ["s"]=>
+    string(1) "a"
+  }
+  [6]=>
+  array(3) {
+    ["id"]=>
+    int(2021)
+    ["username"]=>
+    string(17) "LAVERNA JEFFERSON"
+    ["s"]=>
+    string(1) "a"
+  }
+  [7]=>
+  array(3) {
+    ["id"]=>
+    int(2169)
+    ["username"]=>
+    string(13) "MERNA ORNELAS"
+    ["s"]=>
+    string(1) "a"
+  }
+  [8]=>
+  array(3) {
+    ["id"]=>
+    int(2471)
+    ["username"]=>
+    string(17) "BERNADINE SCANLON"
+    ["s"]=>
+    string(1) "a"
+  }
+  [9]=>
+  array(3) {
+    ["id"]=>
+    int(2843)
+    ["username"]=>
+    string(20) "BERNADINE NAPOLITANO"
+    ["s"]=>
+    string(1) "a"
+  }
+  [10]=>
+  array(3) {
+    ["id"]=>
+    int(3177)
+    ["username"]=>
+    string(14) "FERNANDA FRYER"
+    ["s"]=>
+    string(1) "a"
+  }
+  [11]=>
+  array(3) {
+    ["id"]=>
+    int(3199)
+    ["username"]=>
+    string(18) "FERNANDO FRANCISCO"
+    ["s"]=>
+    string(1) "a"
+  }
+  [12]=>
+  array(3) {
+    ["id"]=>
+    int(3455)
+    ["username"]=>
+    string(16) "FERNANDE MERRITT"
+    ["s"]=>
+    string(1) "a"
+  }
+  [13]=>
+  array(3) {
+    ["id"]=>
+    int(3539)
+    ["username"]=>
+    string(16) "BERNADINE HILLER"
+    ["s"]=>
+    string(1) "a"
+  }
+  [14]=>
+  array(3) {
+    ["id"]=>
+    int(3862)
+    ["username"]=>
+    string(18) "FERNANDO MACDONALD"
+    ["s"]=>
+    string(1) "a"
+  }
+  [15]=>
+  array(3) {
+    ["id"]=>
+    int(4022)
+    ["username"]=>
+    string(17) "JOHNSON HERNANDES"
+    ["s"]=>
+    string(1) "a"
+  }
+  [16]=>
+  array(3) {
+    ["id"]=>
+    int(4484)
+    ["username"]=>
+    string(15) "SYBIL HERNANDES"
+    ["s"]=>
+    string(1) "a"
+  }
+  [17]=>
+  array(3) {
+    ["id"]=>
+    int(5159)
+    ["username"]=>
+    string(15) "MARTINA BERNARD"
+    ["s"]=>
+    string(1) "a"
+  }
+  [18]=>
+  array(3) {
+    ["id"]=>
+    int(5793)
+    ["username"]=>
+    string(13) "BERNA TALBOTT"
+    ["s"]=>
+    string(1) "a"
+  }
+  [19]=>
+  array(3) {
+    ["id"]=>
+    int(6506)
+    ["username"]=>
+    string(17) "FERNANDO FREELAND"
+    ["s"]=>
+    string(1) "a"
+  }
+}
+––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
 +------+----------------------+------+

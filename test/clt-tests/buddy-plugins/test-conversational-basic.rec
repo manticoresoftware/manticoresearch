@@ -1,0 +1,216 @@
+––– comment –––
+This test verifies the basic functionality of the ConversationalSearch plugin.
+It tests model creation, management, and conversational CHAT queries.
+The plugin combines vector search with LLM capabilities for intelligent responses.
+––– input –––
+export SEARCHD_FLAGS="--iostats --cpustats"
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Clean up any existing CHAT data
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
+––– output –––
+––– comment –––
+Create a test table with vector embeddings for CHAT search
+Note: knn_dims is NOT specified when using model_name - dimensions are auto-detected
+API_KEY is required for remote OpenAI embedding models
+––– input –––
+mysql -h0 -P9306 << EOF
+CREATE TABLE docs (
+    id BIGINT,
+    content TEXT,
+    title TEXT,
+    embedding_vector FLOAT_VECTOR
+    knn_type='hnsw'
+    hnsw_similarity='cosine'
+    model_name='sentence-transformers/all-MiniLM-L6-v2'
+    from='content,title'
+    api_key='\${OPENAI_API_KEY}'
+) TYPE='rt';
+EOF
+––– output –––
+––– comment –––
+Insert sample documents - vectors are generated automatically from content and title
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO docs (id, content, title) VALUES (1, 'Vector search uses embeddings to find semantically similar documents', 'Vector Search Guide');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO docs (id, content, title) VALUES (2, 'Full-text search and KNN capabilities for efficient retrieval', 'Manticore Features');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO docs (id, content, title) VALUES (3, 'Retrieval-Augmented Generation combines search with LLM for intelligent responses', 'RAG Introduction');"
+––– output –––
+––– comment –––
+Wait for auto-embeddings generation (async via Buddy)
+––– input –––
+mysql -h0 -P9306 -e "debug sleep 20;" > /dev/null 2>&1
+––– output –––
+––– comment –––
+Verify documents are inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM docs;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+––– comment –––
+Test CREATE CHAT MODEL - basic configuration
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+CREATE CHAT MODEL test_assistant (
+    description='Chat GPT cheap reasoning model',
+    model='openai:gpt-4o-mini'
+);
+EOF
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– comment –––
+Test CREATE CHAT MODEL - advanced configuration with custom settings
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+CREATE CHAT MODEL advanced_assistant (
+    description='Chat GPT v4 reasoning model',
+    model='openai:gpt-4o',
+    timeout=60,
+    retrieval_limit=5,
+    max_document_length=3000
+);
+EOF
+––– output –––
++--------------------------------------+
+| uuid                                 |
++--------------------------------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# |
++--------------------------------------+
+––– comment –––
+Test SHOW CHAT MODELS - should display created models
+––– input –––
+mysql -h0 -P9306 -e "SHOW CHAT MODELS"
+––– output –––
++--------------------------------------+--------------------+--------------------+------------+
+| uuid                                 | name               | model              | created_at |
++--------------------------------------+--------------------+--------------------+------------+
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | advanced_assistant | openai:gpt-4o      | %{NUMBER} |
+| #!/[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}/!# | test_assistant     | openai:gpt-4o-mini | %{NUMBER} |
++--------------------------------------+--------------------+--------------------+------------+
+––– comment –––
+Test DESCRIBE CHAT MODEL - verify model configuration
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL test_assistant\G"
+––– output –––
+*************************** 1. row ***************************
+property: id
+   value: %{NUMBER}
+*************************** 2. row ***************************
+property: uuid
+   value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+*************************** 3. row ***************************
+property: name
+   value: test_assistant
+*************************** 4. row ***************************
+property: description
+   value: Chat GPT cheap reasoning model
+*************************** 5. row ***************************
+property: model
+   value: openai:gpt-4o-mini
+*************************** 6. row ***************************
+property: settings.max_document_length
+   value: %{NUMBER}
+*************************** 7. row ***************************
+property: created_at
+   value: %{NUMBER}
+*************************** 8. row ***************************
+property: updated_at
+   value: %{NUMBER}
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE CHAT MODEL advanced_assistant\G"
+––– output –––
+*************************** 1. row ***************************
+property: id
+   value: %{NUMBER}
+*************************** 2. row ***************************
+property: uuid
+   value: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+*************************** 3. row ***************************
+property: name
+   value: advanced_assistant
+*************************** 4. row ***************************
+property: description
+   value: Chat GPT v4 reasoning model
+*************************** 5. row ***************************
+property: model
+   value: openai:gpt-4o
+*************************** 6. row ***************************
+property: settings.timeout
+   value: 60
+*************************** 7. row ***************************
+property: settings.retrieval_limit
+   value: 5
+*************************** 8. row ***************************
+property: settings.max_document_length
+   value: 3000
+*************************** 9. row ***************************
+property: created_at
+   value: %{NUMBER}
+*************************** 10. row ***************************
+property: updated_at
+   value: %{NUMBER}
+––– comment –––
+Test CALL CHAT - basic query without conversation UUID
+This should succeed with OPENAI_API_KEY set
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('What is vector search?', 'docs', 'test_assistant')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: What is vector search?
+     search_query: What is vector search?
+         response: #!/.*[Vv]ector.*[Ss]earch.*/!#
+          sources: [{"id":1,"content":"Vector search uses embeddings to find semantically similar documents","title":"Vector Search Guide","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":2,"content":"Full-text search and KNN capabilities for efficient retrieval","title":"Manticore Features","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}},{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
+––– comment –––
+Test CALL CHAT - with multiple content fields
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('Tell me about RAG', 'docs', 'test_assistant')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: #!/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/!#
+       user_query: Tell me about RAG
+     search_query: #!/.*RAG.*/!#
+         response: #!/.+/!#
+          sources: [{"id":3,"content":"Retrieval-Augmented Generation combines search with LLM for intelligent responses","title":"RAG Introduction","@knn_dist":0.%{NUMBER},"knn_dist":0.%{NUMBER}}]
+––– comment –––
+Test CALL CHAT - with conversation UUID for context tracking (should fail)
+––– input –––
+mysql -h0 -P9306 -e "CALL CHAT('Can you explain more?', 'docs', 'test_assistant', 'test-conv-12345678-1234-1234-1234-123456789abc')\G" | awk '/^         response: ?/ { r=$0; in_response=1; next } in_response && /^          sources: / { print r; print; in_response=0; next } in_response { r=r " " $0; next } { print } END { if (in_response) print r }'
+––– output –––
+*************************** 1. row ***************************
+conversation_uuid: test-conv-12345678-1234-1234-1234-123456789abc
+       user_query: Can you explain more?
+     search_query: #!/.+/!#
+         response: #!/.+/!#
+          sources: []
+––– comment –––
+Test DROP CHAT MODEL - cleanup
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL test_assistant;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP CHAT MODEL advanced_assistant;"
+––– output –––
+––– comment –––
+Verify models are dropped
+––– input –––
+mysql -h0 -P9306 -e "SHOW CHAT MODELS;"
+––– output –––
+––– comment –––
+Cleanup test table
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS docs;"
+––– output –––

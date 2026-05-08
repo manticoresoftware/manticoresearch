@@ -277,6 +277,15 @@ public:
 		return pEntry ? pEntry->strval() : sDefault;
 	}
 
+	/// get string option value by key, if any
+	std::optional<CSphString> OptStr ( const char * sKey ) const
+	{
+		CSphVariant * pEntry = (*this)( sKey );
+		if (!pEntry)
+			return std::nullopt;
+		return pEntry->strval();
+	}
+
 	/// get bool option value by key and default value
 	bool GetBool ( const char * szKey, bool bDefault = true ) const noexcept
 	{

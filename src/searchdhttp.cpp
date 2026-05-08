@@ -1684,7 +1684,13 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 					case MYSQL_COL_LONGLONG : assert ( tDataCol.IsInt() ); tOut.PutInt64 (tDataCol.IntVal()); break;
 					case MYSQL_COL_FLOAT : assert ( tDataCol.IsDbl() ); tOut.PutFloat (tDataCol.DblVal()); break;
 					case MYSQL_COL_DOUBLE : assert ( tDataCol.IsDbl() ); tOut.PutDouble (tDataCol.DblVal()); break;
-					default: tOut.PutString ( tDataCol.StrVal() );
+					default:
+						if ( tDataCol.IsInt() )
+							tOut.PutNumAsString ( tDataCol.IntVal() );
+						else if ( tDataCol.IsDbl() )
+							tOut.PutDoubleAsString ( tDataCol.DblVal() );
+						else
+							tOut.PutString ( tDataCol.StrVal() );
 				}
 				++iCol;
 			}

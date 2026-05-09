@@ -120,7 +120,7 @@ void HttpBuildReply ( const HttpReplyTrait_t & tReply, CSphVector<BYTE> & dData 
 		sContentType = ( tReply.m_bHtml ? "text/html" : "application/json" );
 
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", HttpGetStatusName ( tReply.m_eCode ), g_sStatusVersion.cstr(), sContentType, tReply.m_sBody.second );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", HttpGetStatusName ( tReply.m_eCode ), g_sStatusVersion.cstr(), sContentType, tReply.m_sBody.second );
 
 	int iHeaderLen = sHttp.Length();
 	int iBufLen = iHeaderLen;

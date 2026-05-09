@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>HTTP Content-Length header includes required space</name>
+
+<skip_indexer/>
+<requires>
+    <http/>
+    <force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<custom_test><![CDATA[
+$results = [];
+$table = 'rt_header_504';
+
+HttpQueryPost ( 'sql?mode=raw', NULL, "DROP TABLE IF EXISTS $table", 0, false );
+HttpQueryPost ( 'sql?mode=raw', NULL, "CREATE TABLE $table(title text)", 0, false );
+
+$rows = "{\"create\":{\"_index\":\"$table\",\"_id\":\"1\"}}\n{\"title\":\"abc\"}\n";
+
+$con = curl_init();
+$curl_desc = CurlDesc ( "_bulk" );
+$curl_desc[CURLOPT_POST] = 1;
+$curl_desc[CURLOPT_POSTFIELDS] = $rows;
+$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: application/x-ndjson", 'Content-Length: ' . strlen($rows));
+$curl_desc[CURLOPT_HEADER] = 1;
+
+curl_setopt_array ( $con, $curl_desc );
+$res = curl_exec ( $con );
+$header_size = curl_getinfo ( $con, CURLINFO_HEADER_SIZE );
+$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
+$header = substr ( $res, 0, $header_size );
+$body = substr ( $res, $header_size );
+
+$line = '';
+foreach ( preg_split('/\r\n/', $header) as $hdr )
+	if ( stripos ( $hdr, 'Content-Length:' )===0 )
+		$line = $hdr;
+
+$body = preg_replace('/"took":\d+/', '"took":0', $body);
+
+$results[] = array ( 'http_code'=>$http_code, 'content_length_header'=>$line, 'has_required_space'=>preg_match('/^Content-Length: /m', $header) ? 1 : 0, 'has_missing_space'=>preg_match('/^Content-Length:[^ ]/m', $header) ? 1 : 0, 'body'=>$body );
+
+curl_close($con);
+HttpQueryPost ( 'sql?mode=raw', NULL, "DROP TABLE IF EXISTS $table", 0, false );
+]]></custom_test>
+
+</test>

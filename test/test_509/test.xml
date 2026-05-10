@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>facet filter scope modes and overrides</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>create table facet_scope ( title text, ts integer, gid integer, ver string )</sphinxql>
+<sphinxql>insert into facet_scope ( id, title, ts, gid, ver ) values (1,'a',10,110,'20'), (2,'b',10,120,'30'), (3,'c',20,120,'20'), (4,'d',30,110,'20'), (5,'e',10,130,'10'), (6,'f',20,130,'30')</sphinxql>
+
+<sphinxql>
+<!-- defaults and global facet_filter_mode -->
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 FACET ts FACET ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET ts FACET ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='auto' FACET ts FACET ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET ts FACET ver;;
+
+<!-- per-facet mode overrides and inheritance/conflicts -->
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET ts MODE auto FACET ver MODE max FACET gid MODE strict;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='auto' FACET ts ALL FILTERS FACET ver ALL FILTERS MODE max;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET gid FILTERS ts MODE max;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='max' FACET gid EXCLUDE FILTERS ver MODE auto;;
+
+<!-- ALL FILTERS / FILTERS / EXCLUDE FILTERS -->
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 FACET gid FILTERS ts;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 FACET gid EXCLUDE FILTERS ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 FACET ts FILTERS ts, ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 FACET gid EXCLUDE FILTERS ts, ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) AND ver IN('20') LIMIT 0 OPTION facet_filter_mode='strict' FACET ts ALL FILTERS MODE max;;
+
+<!-- boundary cases -->
+SELECT count(*) FROM facet_scope LIMIT 0 OPTION facet_filter_mode='max' FACET ts MODE max FACET ver MODE max;;
+SELECT count(*) FROM facet_scope WHERE ver IN('20') LIMIT 0 OPTION facet_filter_mode='auto' FACET ver;;
+SELECT count(*) FROM facet_scope WHERE ts IN (10,20) LIMIT 0 OPTION facet_filter_mode='max' FACET gid MODE strict FACET ver MODE max;;
+
+<!-- invalid syntax / invalid values -->
+SELECT count(*) FROM facet_scope LIMIT 0 OPTION facet_filter_mode='bogus' FACET ts;;
+SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE bogus;;
+SELECT count(*) FROM facet_scope LIMIT 0 FACET ts FILTERS;;
+SELECT count(*) FROM facet_scope LIMIT 0 FACET ts EXCLUDE FILTERS;;
+SELECT count(*) FROM facet_scope LIMIT 0 FACET ts MODE max FILTERS ver;;
+</sphinxql>
+</queries>
+
+<httpqueries>
+<!-- default and top-level facet_filter_mode -->
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "aggs": {
+    "ts_default": { "terms": { "field": "ts" } },
+    "ver_default": { "terms": { "field": "ver" } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "facet_filter_mode": "strict",
+  "aggs": {
+    "ts_strict": { "terms": { "field": "ts" } },
+    "ver_strict": { "terms": { "field": "ver" } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "facet_filter_mode": "auto",
+  "aggs": {
+    "ts_auto": { "terms": { "field": "ts" } },
+    "ver_auto": { "terms": { "field": "ver" } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "facet_filter_mode": "max",
+  "aggs": {
+    "ts_max": { "terms": { "field": "ts" } },
+    "ver_max": { "terms": { "field": "ver" } }
+  }
+}</query>
+
+<!-- per-aggregation mode and alias -->
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "facet_filter_mode": "strict",
+  "aggs": {
+    "ts_mode_auto": { "terms": { "field": "ts" }, "mode": "auto" },
+    "ver_mode_max": { "terms": { "field": "ver" }, "mode": "max" },
+    "gid_mode_strict": { "terms": { "field": "gid" }, "mode": "strict" }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "aggs": {
+    "ts_filter_mode_max": { "terms": { "field": "ts" }, "filter_mode": "max" },
+    "ver_filter_mode_strict": { "terms": { "field": "ver" }, "filter_mode": "strict" }
+  }
+}</query>
+
+<!-- filters / exclude_filters and conflicts -->
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "aggs": {
+    "gid_filters_ts": { "terms": { "field": "gid" }, "filters": ["ts"] },
+    "gid_exclude_ver": { "terms": { "field": "gid" }, "exclude_filters": ["ver"] }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "in": { "ts": [10,20] } }, { "equals": { "ver": "20" } } ] } },
+  "facet_filter_mode": "strict",
+  "aggs": {
+    "gid_filters_ts_mode_max": { "terms": { "field": "gid" }, "filters": ["ts"], "mode": "max" },
+    "gid_exclude_ver_mode_auto": { "terms": { "field": "gid" }, "exclude_filters": ["ver"], "mode": "auto" }
+  }
+}</query>
+
+<!-- boundary cases -->
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "match_all": {} },
+  "facet_filter_mode": "max",
+  "aggs": {
+    "ts_all_docs_max": { "terms": { "field": "ts" }, "mode": "max" },
+    "ver_all_docs_max": { "terms": { "field": "ver" }, "mode": "max" }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "query": { "bool": { "must": [ { "equals": { "ver": "20" } } ] } },
+  "facet_filter_mode": "auto",
+  "aggs": {
+    "ver_only_filter_auto": { "terms": { "field": "ver" } },
+    "ts_under_ver_only": { "terms": { "field": "ts" } }
+  }
+}</query>
+
+<!-- invalid JSON cases -->
+<query endpoint="search">{
+  "table": "facet_scope",
+  "facet_filter_mode": "bogus",
+  "aggs": { "ts_bad_global": { "terms": { "field": "ts" } } }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "aggs": { "ts_bad_mode": { "terms": { "field": "ts" }, "mode": "bogus" } }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "aggs": { "ts_bad_filters": { "terms": { "field": "ts" }, "filters": "ts" } }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_scope",
+  "aggs": { "ts_bad_exclude_filters": { "terms": { "field": "ts" }, "exclude_filters": "ver" } }
+}</query>
+
+<!-- clean up -->
+<query endpoint="sql" method="post">mode=raw&amp;query=drop table facet_scope</query>
+</httpqueries>
+
+</test>

@@ -1114,7 +1114,15 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	if ( !tParsedQuery.m_sWarning.IsEmpty() )
 		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
-	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery );
+	CSphString sError;
+	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery, sError );
+	if ( !sError.IsEmpty() )
+	{
+		CompatWarning ( "'%s' at '%s' body '%s'", sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
+		sRes = JsonEncodeResultError ( sError, GetErrorTypeName ( HttpErrorType_e::Parse ), 400 );
+		TlsMsg::Err ( sError );
+		return false;
+	}
 	tHandler.RunQueries();
 
 	sRes = sphEncodeResultJson ( tHandler.m_dAggrResults, tQuery, nullptr, ResultSetFormat_e::ES );
@@ -1257,7 +1265,10 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		tFilter.m_bExclude = false;
 	}
 
-	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed );
+	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed, sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
 	tHandler.RunQueries();
 
 	if ( tHandler.m_dAggrResults.IsEmpty() )

@@ -15,7 +15,7 @@ In Manticore Search, there's an optimization that maintains the result set of th
 The facet values can originate from an attribute, a JSON property within a JSON attribute, or an expression. Facet values can also be aliased, but the **alias must be unique** across all result sets (main query result set and other facets result sets). The facet value is derived from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
 ```sql
-FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [MODE {strict | auto | max}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
 Multiple facet declarations must be separated by a whitespace.
@@ -2581,7 +2581,7 @@ Notes:
 - in JSON, `mode` or `filter_mode` overrides the top-level `facet_filter_mode` for one aggregation
 - `status=selected` is currently derived from explicit value filters such as `=` and `IN` on the facet field.
 - unsupported same-field filters such as ranges do not currently mark buckets as `selected`.
-- In V1, facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.
+- facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.
 
 <!-- end -->
 

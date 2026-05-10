@@ -87,9 +87,8 @@ static bool IsCount ( const CSphString & s )
 
 static bool IsGroupby ( const CSphString & s )
 {
-	return s=="@groupby"
+	return IsGroupbyOnlyMagic ( s )
 		|| s=="@distinct"
-		|| s=="groupby()"
 		|| IsSortJsonInternal(s);
 }
 
@@ -99,6 +98,11 @@ bool IsGroupbyMagic ( const CSphString & s )
 	return IsGroupby ( s ) || IsCount ( s );
 }
 
+bool IsGroupbyOnlyMagic ( const CSphString & s )
+{
+	return s=="@groupby"
+		|| s=="groupby()";
+}
 
 ESphAttr DetermineNullMaskType ( int iNumAttrs )
 {

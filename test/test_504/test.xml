@@ -14,8 +14,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data0"/>
-	server_id = <agent_id/>
+	data_dir = <data_path/>
 }
 </config>
 

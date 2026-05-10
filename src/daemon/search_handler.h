@@ -92,7 +92,6 @@ public:
 	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) const { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetProfile ( QueryProfile_c * pProfile );
 	void							SetFederatedUser () { m_bFederatedUser = true; }
-	void							SetError ( const CSphString & sError ) { m_sError << sError; }
 
 public:
 	CSphFixedVector<CSphQuery>				m_dQueries;						///< queries which i need to search
@@ -190,4 +189,4 @@ private:
 	bool							SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, int64_t tmLocalCallUs, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes );
 };
 
- SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
+ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed, CSphString & sError );

@@ -1,167 +1,58 @@
 //
-// Shared facet helpers for filter-scope rewriting and bucket status metadata.
+// Copyright (c) 2017-2026, Manticore Software LTD (https://manticoresearch.com)
+// All rights reserved
 //
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
 #ifndef _facetutils_
 #define _facetutils_
 
 #include "sphinx.h"
+#include "aggrexpr.h"
 
 namespace facet
 {
-inline bool AttrNameInList ( const StrVec_t & dAttrs, const CSphString & sAttr )
+struct FacetBucketSet_t
 {
-	for ( const auto & sCandidate : dAttrs )
-		if ( !strcasecmp ( sCandidate.cstr(), sAttr.cstr() ) )
-			return true;
+	CSphString m_sAttr;
+	CSphVector<uint64_t> m_dHashes;
 
-	return false;
-}
+	void Reset();
+};
 
-inline bool IsSelectedFilterType ( const CSphFilterSettings & tFilter )
+struct FacetStatusSources_t
 {
-	if ( tFilter.m_bExclude )
-		return false;
+	const CSphVector<CSphFilterSettings> * m_pSelectedFilters = nullptr;
+	const FacetBucketSet_t * m_pSelectedBuckets = nullptr;
+	const FacetBucketSet_t * m_pAvailableBuckets = nullptr;
 
-	switch ( tFilter.m_eType )
-	{
-	case SPH_FILTER_VALUES:
-	case SPH_FILTER_STRING:
-	case SPH_FILTER_STRING_LIST:
-		return true;
-	default:
-		return false;
-	}
-}
+	bool HasStatus() const;
+};
 
-inline bool ShouldRewriteFilters ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery )
-{
-	if ( tFacetQuery.m_eFacetFilterClause==FacetFilterClause_e::INCLUDE || tFacetQuery.m_eFacetFilterClause==FacetFilterClause_e::EXCLUDE )
-		return true;
+bool AttrNameInList ( const StrVec_t & dAttrs, const CSphString & sAttr );
+bool IsSelectedFilterType ( const CSphFilterSettings & tFilter );
+bool IsJsonFacetStatusBucket ( Aggr_e eAggr );
+bool HasExcludedFilter ( const CSphVector<CSphFilterSettings> & dFilters );
+bool HasLocalFilterMode ( const FacetFilterTrait_t & tTrait );
+const CSphColumnInfo * GetGroupbyOnlyMagicAttr ( const ISphSchema & tSchema );
 
-	if ( tFacetQuery.m_bFacetFilterModeExplicit )
-		return tFacetQuery.m_eFacetFilterMode!=FacetFilterMode_e::FACET_FILTER_STRICT;
+FacetFilterMode_e GetDefaultFilterMode ( const FacetFilterTrait_t & tTrait );
+FacetFilterMode_e GetFilterMode ( const CSphQuery & tHeadQuery, const FacetFilterTrait_t & tLocalTrait );
+FacetFilterMode_e GetFilterMode ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery );
 
-	return tHeadQuery.m_eFacetFilterMode!=FacetFilterMode_e::FACET_FILTER_STRICT;
-}
+bool ShouldRewriteFilters ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery );
+bool CopyFilters ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, CSphString & sError, bool bUseOwnExclusionRuleInNoneClause );
 
-inline bool CopyFilters ( const CSphQuery & tHeadQuery, CSphQuery & tFacetQuery, CSphString & sError, bool bUseOwnExclusionRuleInNoneClause )
-{
-	if ( tFacetQuery.m_eFacetFilterClause==FacetFilterClause_e::ALL || !ShouldRewriteFilters ( tHeadQuery, tFacetQuery ) )
-	{
-		ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
-			tFacetQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
-		ARRAY_FOREACH ( k, tHeadQuery.m_dFilterTree )
-			tFacetQuery.m_dFilterTree.Add ( tHeadQuery.m_dFilterTree[k] );
-		return true;
-	}
+const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSchema, const FacetStatusSources_t & tStatus );
+const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttr ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sAttr, CSphVector<CSphFilterSettings> & dSelected );
 
-	if ( !tHeadQuery.m_dFilterTree.IsEmpty() )
-	{
-		sError = "facet-local filter scope supports conjunction-only attribute filters in V1";
-		return false;
-	}
-
-	for ( const auto & tFilter : tHeadQuery.m_dFilters )
-	{
-		bool bKeep = true;
-		switch ( tFacetQuery.m_eFacetFilterClause )
-		{
-		case FacetFilterClause_e::INCLUDE:
-			bKeep = AttrNameInList ( tFacetQuery.m_dFacetFilterAttrs, tFilter.m_sAttrName );
-			break;
-		case FacetFilterClause_e::EXCLUDE:
-			bKeep = !AttrNameInList ( tFacetQuery.m_dFacetFilterAttrs, tFilter.m_sAttrName );
-			break;
-		case FacetFilterClause_e::NONE:
-			bKeep = bUseOwnExclusionRuleInNoneClause ? !AttrNameInList ( tFacetQuery.m_dFacetOwnFilterAttrs, tFilter.m_sAttrName ) : false;
-			break;
-		case FacetFilterClause_e::ALL:
-			bKeep = true;
-			break;
-		}
-
-		if ( bKeep )
-			tFacetQuery.m_dFilters.Add ( tFilter );
-	}
-
-	return true;
-}
-
-inline bool MatchStringFilterValue ( const CSphMatch & tMatch, const CSphColumnInfo & tAttr, const CSphString & sValue )
-{
-	if ( tAttr.m_eAttrType!=SPH_ATTR_STRINGPTR )
-		return false;
-
-	auto * pString = (const BYTE*) tMatch.GetAttr ( tAttr.m_tLocator );
-	auto dString = sphUnpackPtrAttr ( pString );
-	int iLen = dString.second;
-	if ( iLen>1 && dString.first[iLen-2]=='\0' )
-		iLen -= 2;
-
-	return iLen==(int)sValue.Length() && !memcmp ( dString.first, sValue.cstr(), iLen );
-}
-
-inline bool MatchBucketFilter ( const CSphMatch & tMatch, const ISphSchema & tSchema, const CSphFilterSettings & tFilter )
-{
-	if ( tFilter.m_bExclude )
-		return false;
-
-	const CSphColumnInfo * pAttr = tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pAttr )
-		return false;
-
-	switch ( tFilter.m_eType )
-	{
-	case SPH_FILTER_VALUES:
-	{
-		SphAttr_t uValue = tMatch.GetAttr ( pAttr->m_tLocator );
-		for ( auto uFilterValue : tFilter.GetValues() )
-			if ( uValue==uFilterValue )
-				return true;
-		return false;
-	}
-	case SPH_FILTER_STRING:
-		return tFilter.m_dStrings.GetLength()==1 && MatchStringFilterValue ( tMatch, *pAttr, tFilter.m_dStrings[0] );
-	case SPH_FILTER_STRING_LIST:
-		for ( const auto & sFilterValue : tFilter.m_dStrings )
-			if ( MatchStringFilterValue ( tMatch, *pAttr, sFilterValue ) )
-				return true;
-		return false;
-	default:
-		return false;
-	}
-}
-
-inline const char * GetBucketStatus ( const CSphMatch & tMatch, const ISphSchema & tSchema, const CSphVector<CSphFilterSettings> * pSelectedFilters, const CSphVector<CSphFilterSettings> * pAvailableFilters=nullptr )
-{
-	bool bSelected = pSelectedFilters && !pSelectedFilters->IsEmpty();
-	if ( bSelected )
-		for ( const auto & tFilter : *pSelectedFilters )
-			if ( !MatchBucketFilter ( tMatch, tSchema, tFilter ) )
-			{
-				bSelected = false;
-				break;
-			}
-
-	if ( bSelected )
-		return "selected";
-
-	if ( pAvailableFilters )
-		for ( const auto & tFilter : *pAvailableFilters )
-			if ( MatchBucketFilter ( tMatch, tSchema, tFilter ) )
-				return "available";
-
-	return pAvailableFilters ? "unavailable" : "available";
-}
-
-inline const CSphVector<CSphFilterSettings> * CollectSelectedFiltersForAttrs ( const CSphVector<CSphFilterSettings> & dFilters, const StrVec_t & dAttrs, CSphVector<CSphFilterSettings> & dSelected )
-{
-	for ( const auto & tFilter : dFilters )
-		if ( IsSelectedFilterType ( tFilter ) && AttrNameInList ( dAttrs, tFilter.m_sAttrName ) )
-			dSelected.Add ( tFilter );
-
-	return dSelected.IsEmpty() ? nullptr : &dSelected;
-}
+const FacetBucketSet_t * CollectFacetStatusValuesFilter ( const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t & tRes, FacetBucketSet_t & tBuckets );
+const FacetBucketSet_t * CollectFacetAvailableFilters ( const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t & tRes, FacetBucketSet_t & tAvailable );
+const FacetBucketSet_t * CollectFacetAvailableFilters ( const AggrResult_t & tRes, const CSphString & sAttr, const VecTraits_T<CSphMatch> & dMatches, FacetBucketSet_t & tAvailable );
 }
 
 #endif

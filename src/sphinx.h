@@ -439,17 +439,24 @@ struct FilterTreeItem_t
 
 enum class FacetFilterMode_e : BYTE
 {
-	FACET_FILTER_STRICT,
-	FACET_FILTER_AUTO,
-	FACET_FILTER_MAX
+	Strict,
+	Auto,
+	Max
 };
 
 enum class FacetFilterClause_e : BYTE
 {
-	NONE,
-	ALL,
-	INCLUDE,
-	EXCLUDE
+	None,
+	All,
+	Include,
+	Exclude
+};
+
+struct FacetFilterTrait_t
+{
+	std::optional<FacetFilterMode_e> m_tMode;
+	FacetFilterClause_e m_eClause = FacetFilterClause_e::None;
+	StrVec_t m_dAttrs;
 };
 
 /// table function interface
@@ -680,11 +687,8 @@ struct CSphQuery
 
 	bool			m_bFacet = false;			///< whether this a facet query
 	bool			m_bFacetHead = false;
-	bool			m_bFacetAvailability = false;	///< internal strict helper for max facet status
-	FacetFilterMode_e	m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
-	bool			m_bFacetFilterModeExplicit = false;
-	FacetFilterClause_e	m_eFacetFilterClause = FacetFilterClause_e::NONE;
-	StrVec_t		m_dFacetFilterAttrs;
+	bool			m_bFacetMaxRef = false;	///< internal strict helper for max facet status
+	FacetFilterTrait_t m_tFacetFilter;
 	StrVec_t		m_dFacetOwnFilterAttrs;
 
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling

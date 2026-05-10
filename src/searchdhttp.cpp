@@ -1170,7 +1170,13 @@ public:
 		if ( IsBuddyQuery ( m_tOptions ) )
 			m_tParsed.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 
-		auto tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed );
+		CSphString sError;
+		auto tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed, sError );
+		if ( !sError.IsEmpty() )
+		{
+			ReportError ( sError.cstr(), EHTTP_STATUS::_500 );
+			return false;
+		}
 		SetStmt ( tHandler );
 
 		QueryProfile_c tProfile;

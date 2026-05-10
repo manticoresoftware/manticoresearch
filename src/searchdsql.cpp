@@ -14,7 +14,6 @@
 #include "sphinxint.h"
 #include "sphinxplugin.h"
 #include "searchdaemon.h"
-#include "facetutils.h"
 #include "searchdddl.h"
 #include "sphinxql_debug.h"
 #include "sphinxql_second.h"
@@ -24,6 +23,7 @@
 #include "sorterscroll.h"
 #include "joinsorter.h"
 #include "std/base64.h"
+#include "facetutils.h"
 
 // uncomment to see everything came to parser.
 //#define DUMP_INCOMING_QUERIES
@@ -418,6 +418,9 @@ public:
 	bool			AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc );
 	bool			MaybeAddFacetDistinct();
 	bool			SetupFacetStmt();
+	void			AddFacetFilterAttr ( const SqlNode_t & tAttr );
+	void			SetFacetFilterClause ( FacetFilterClause_e eClause );
+	bool			SetFacetFilterMode ( const SqlNode_t & tMode );
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
@@ -1009,11 +1012,11 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 
 	case Option_e::FACET_FILTER_MODE:
 		if ( sVal=="strict" )
-			tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
+			tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
 		else if ( sVal=="auto" )
-			tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_AUTO;
+			tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Auto;
 		else if ( sVal=="max" )
-			tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_MAX;
+			tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Max;
 		else
 			return FAILED ( "unknown facet_filter_mode '%s' (supported: strict, auto, max)", sVal.cstr() );
 		break;
@@ -1638,6 +1641,40 @@ bool SqlParser_c::SetupFacetStmt()
 	}
 
 	return MaybeAddFacetDistinct();
+}
+
+
+void SqlParser_c::AddFacetFilterAttr ( const SqlNode_t & tAttr )
+{
+	ToString ( m_pQuery->m_tFacetFilter.m_dAttrs.Add(), tAttr );
+}
+
+
+void SqlParser_c::SetFacetFilterClause ( FacetFilterClause_e eClause )
+{
+	m_pQuery->m_tFacetFilter.m_eClause = eClause;
+}
+
+
+bool SqlParser_c::SetFacetFilterMode ( const SqlNode_t & tMode )
+{
+	CSphString sMode;
+	ToString ( sMode, tMode );
+	sMode.ToLower();
+
+	if ( sMode=="strict" )
+		m_pQuery->m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+	else if ( sMode=="auto" )
+		m_pQuery->m_tFacetFilter.m_tMode = FacetFilterMode_e::Auto;
+	else if ( sMode=="max" )
+		m_pQuery->m_tFacetFilter.m_tMode = FacetFilterMode_e::Max;
+	else
+	{
+		m_pParseError->SetSprintf ( "unknown FACET mode '%s' (supported: strict, auto, max)", sMode.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -2606,22 +2643,18 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
 			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
 				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
-			if ( !tStmt.m_tQuery.m_bFacetFilterModeExplicit )
-				tStmt.m_tQuery.m_eFacetFilterMode = tHeadQuery.m_eFacetFilterMode;
-
-			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, tStmt.m_tQuery.m_eFacetFilterMode!=FacetFilterMode_e::FACET_FILTER_MAX ) )
+			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, true ) )
 				return false;
 
 			SqlStmt_t tStrict;
-			bool bNeedStrict = ( tStmt.m_tQuery.m_eFacetFilterMode==FacetFilterMode_e::FACET_FILTER_MAX );
+			bool bNeedStrict = ( facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )==FacetFilterMode_e::Max );
 			if ( bNeedStrict )
 			{
 				tStrict.m_eStmt = STMT_SELECT;
 				tStrict.m_tQuery = tStmt.m_tQuery;
-				tStrict.m_tQuery.m_bFacetAvailability = true;
-				tStrict.m_tQuery.m_bFacetFilterModeExplicit = true;
-				tStrict.m_tQuery.m_eFacetFilterMode = FacetFilterMode_e::FACET_FILTER_STRICT;
-				tStrict.m_tQuery.m_eFacetFilterClause = FacetFilterClause_e::ALL;
+				tStrict.m_tQuery.m_bFacetMaxRef = true;
+				tStrict.m_tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+				tStrict.m_tQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
 				tStrict.m_tQuery.m_dFilters.Reset();
 				tStrict.m_tQuery.m_dFilterTree.Reset();
 				if ( !facet::CopyFilters ( tHeadQuery, tStrict.m_tQuery, sError, true ) )
@@ -2640,14 +2673,14 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 	return bGotFacet;
 }
 
-static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+static bool SetupFacetDistinctGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphString & sError )
 {
 	CSphString sDistinct;
 
 	// need to keep order of query items same as at select list however do not duplicate items
 	// that is why raw Vector.Uniq does not work here
 	CSphVector<QueryItemProxy_t> dSelectItems;
-	ARRAY_FOREACH ( i, dStmt )
+	for ( int i = iStart; i<iEnd; ++i )
 	{
 		CSphQuery & tQuery = dStmt[i].m_tQuery;
 		ARRAY_FOREACH ( k, tQuery.m_dItems )
@@ -2680,8 +2713,9 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 		dItems[i] = *dSelectItems[i].m_pItem;
 	}
 
-	for ( SqlStmt_t& tStmt : dStmt )
+	for ( int i = iStart; i<iEnd; ++i )
 	{
+		SqlStmt_t & tStmt = dStmt[i];
 		// keep original items
 		tStmt.m_tQuery.m_dItems.SwapData ( tStmt.m_tQuery.m_dRefItems );
 		tStmt.m_tQuery.m_dItems = dItems;
@@ -2701,6 +2735,26 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 		}
 
 		tStmt.m_tQuery.m_sGroupDistinct = sDistinct;
+	}
+
+	return true;
+}
+
+static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	for ( int i = 0; i<dStmt.GetLength(); ++i )
+	{
+		if ( dStmt[i].m_eStmt!=STMT_SELECT || !dStmt[i].m_tQuery.m_bFacetHead )
+			continue;
+
+		int iEnd = i + 1;
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && dStmt[iEnd].m_tQuery.m_bFacet )
+			++iEnd;
+
+		if ( !SetupFacetDistinctGroup ( dStmt, i, iEnd, sError ) )
+			return false;
+
+		i = iEnd - 1;
 	}
 
 	return true;

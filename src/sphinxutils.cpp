@@ -2408,24 +2408,24 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				double fValue = va_arg ( ap, double );
 
-				// ensure 32 is enough to take any float value.
-				Grow ( pOutput, Max ( (int) iWidth, 32 ));
-
 				// extract current format from source format line
 				auto *pF = sFmt;
 				while ( *--pF!='%' );
 
 				if ( memcmp ( pF, "%f", 2 )!=0 )
 				{
-
 					// invoke standard sprintf
 					char sFormat[32] = { 0 };
 					memcpy ( sFormat, pF, sFmt - pF );
-					pOutput += snprintf ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, sFormat, fValue );
+					int iPrinted = snprintf ( nullptr, 0, sFormat, fValue );
+					assert ( iPrinted >= 0 );
+					Grow ( pOutput, Max ( iPrinted + 1, (int)iWidth ) );
+					pOutput += snprintf ( Tail ( pOutput ), iPrinted + 1, sFormat, fValue );
 				} else
 				{
 					// plain %f - output arbitrary 6 or 8 digits
-					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, 32 ) - 1, (float)fValue );
+					Grow ( pOutput, Max ( (int) iWidth, SPH_MAX_NUMERIC_STR ) );
+					pOutput += PrintVarFloat ( Tail ( pOutput ), Max ( (int)iWidth, SPH_MAX_NUMERIC_STR ) - 1, (float)fValue );
 					assert (( sFmt - pF )==2 );
 				}
 

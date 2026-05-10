@@ -16,6 +16,8 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
+#include "replication/wsrep_cxx.h"
+#include "replication/cluster_binlog.h"
 
 
 // QueryStatElement_t uses default ctr with inline initializer;
@@ -115,6 +117,25 @@ protected:
 void SetStderrLogger()
 {
 	tstlogger::SetStderrLogger ();
+}
+
+
+TEST ( replication, cluster_binlog_long_datadir_uses_short_hash_name )
+{
+#if _WIN32
+	GTEST_SKIP() << "SharedMemory_c is unsupported on Windows";
+#else
+	const CSphString sDataDir { "/tmp/123456789012345678901234567" };
+	ReplicationBinlogStart ( sDataDir, false );
+	AT_SCOPE_EXIT ( [] { ReplicationBinlogStop(); } );
+
+	ClusterBinlogData_c tCluster;
+	tCluster.m_sName = "long_path_cluster";
+	tCluster.m_tGtid.m_iSeqNo = 1;
+	memset ( tCluster.m_tGtid.m_tUuid.data(), 0x11, tCluster.m_tGtid.m_tUuid.size() );
+
+	EXPECT_NO_FATAL_FAILURE ( RplBinlog()->OnClusterSynced ( tCluster ) );
+#endif
 }
 
 // check how ParseAddressPort holds different cases

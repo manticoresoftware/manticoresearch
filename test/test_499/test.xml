@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>hybrid json knn_dist sentinel serialization</name>
+
+<skip_indexer/>
+<requires>
+<http/>
+<knn/>
+<knn_float_tolerance/>
+<embeddings/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<httpqueries>
+
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE synth_json_499 (title text, vec float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title')</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":1,"doc":{"title":"salon chair 001"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":2,"doc":{"title":"salon chair 002"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":3,"doc":{"title":"salon chair 003"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":4,"doc":{"title":"salon chair 004"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":5,"doc":{"title":"salon chair 005"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":6,"doc":{"title":"salon chair 006"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":7,"doc":{"title":"salon chair 007"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":8,"doc":{"title":"salon chair 008"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":9,"doc":{"title":"salon chair 009"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":10,"doc":{"title":"salon chair 010"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":11,"doc":{"title":"salon chair 011"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":12,"doc":{"title":"salon chair 012"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":13,"doc":{"title":"salon chair 013"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":14,"doc":{"title":"salon chair 014"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":15,"doc":{"title":"salon chair 015"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":16,"doc":{"title":"salon chair 016"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":17,"doc":{"title":"salon chair 017"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":18,"doc":{"title":"salon chair 018"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":19,"doc":{"title":"salon chair 019"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":20,"doc":{"title":"salon chair 020"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":21,"doc":{"title":"salon chair 021"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":22,"doc":{"title":"salon chair 022"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":23,"doc":{"title":"salon chair 023"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":24,"doc":{"title":"salon chair 024"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":25,"doc":{"title":"salon chair 025"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":26,"doc":{"title":"salon chair 026"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":27,"doc":{"title":"salon chair 027"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":28,"doc":{"title":"salon chair 028"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":29,"doc":{"title":"salon chair 029"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":30,"doc":{"title":"salon chair 030"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":31,"doc":{"title":"salon chair 031"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":32,"doc":{"title":"salon chair 032"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":33,"doc":{"title":"salon chair 033"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":34,"doc":{"title":"salon chair 034"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":35,"doc":{"title":"salon chair 035"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":36,"doc":{"title":"salon chair 036"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":37,"doc":{"title":"salon chair 037"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":38,"doc":{"title":"salon chair 038"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":39,"doc":{"title":"salon chair 039"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":40,"doc":{"title":"salon chair 040"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":41,"doc":{"title":"salon chair 041"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":42,"doc":{"title":"salon chair 042"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":43,"doc":{"title":"salon chair 043"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":44,"doc":{"title":"salon chair 044"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":45,"doc":{"title":"salon chair 045"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":46,"doc":{"title":"salon chair 046"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":47,"doc":{"title":"salon chair 047"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":48,"doc":{"title":"salon chair 048"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":49,"doc":{"title":"salon chair 049"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":50,"doc":{"title":"salon chair 050"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":51,"doc":{"title":"salon chair 051"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":52,"doc":{"title":"salon chair 052"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":53,"doc":{"title":"salon chair 053"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":54,"doc":{"title":"salon chair 054"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":55,"doc":{"title":"salon chair 055"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":56,"doc":{"title":"salon chair 056"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":57,"doc":{"title":"salon chair 057"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":58,"doc":{"title":"salon chair 058"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":59,"doc":{"title":"salon chair 059"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":60,"doc":{"title":"salon chair 060"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":61,"doc":{"title":"salon chair 061"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":62,"doc":{"title":"salon chair 062"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":63,"doc":{"title":"salon chair 063"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":64,"doc":{"title":"salon chair 064"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":65,"doc":{"title":"salon chair 065"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":66,"doc":{"title":"salon chair 066"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":67,"doc":{"title":"salon chair 067"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":68,"doc":{"title":"salon chair 068"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":69,"doc":{"title":"salon chair 069"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":70,"doc":{"title":"salon chair 070"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":71,"doc":{"title":"salon chair 071"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":72,"doc":{"title":"salon chair 072"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":73,"doc":{"title":"salon chair 073"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":74,"doc":{"title":"salon chair 074"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":75,"doc":{"title":"salon chair 075"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":76,"doc":{"title":"salon chair 076"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":77,"doc":{"title":"salon chair 077"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":78,"doc":{"title":"salon chair 078"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":79,"doc":{"title":"salon chair 079"}}</query>
+<query endpoint="json/insert">{"index":"synth_json_499","id":80,"doc":{"title":"salon chair 080"}}</query>
+<query endpoint="json/search">
+{
+	"index": "synth_json_499",
+	"_source": ["title"],
+	"limit": 30,
+	"knn": {
+		"field": "vec",
+		"query": "chair",
+		"k": 1,
+		"oversampling": 1.0,
+		"rescore": false
+	},
+	"query": { "match": { "title": "salon" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+<query endpoint="sql?mode=raw" method="post">DROP TABLE synth_json_499</query>
+
+</httpqueries>
+
+</test>

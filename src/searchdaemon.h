@@ -1736,6 +1736,15 @@ public:
 		m_sError = "";
 	}
 
+	virtual void StoreCurrentPositionState() noexcept
+	{
+	};
+
+	virtual void RestoreLastPositionState () noexcept
+	{
+		Reset();
+	}
+
 protected:
 	bool m_bError = false;
 	CSphString m_sError;

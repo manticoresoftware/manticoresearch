@@ -24,6 +24,7 @@
 //
 
 #include "sphinxstd.h"
+#include "sphinxint.h"
 
 /// characters used in affix and word form patterns
 /// FIXME! not right on big-endian
@@ -460,8 +461,25 @@ static void ar_word_6 ( BYTE * word )
 }
 
 
+static bool ar_is_stemmable_utf8 ( const BYTE * word )
+{
+	const BYTE * p = word;
+	while ( *p )
+	{
+		int iCode = sphUTF8Decode ( p );
+		if ( iCode<=0 || iCode<0x80 )
+			return false;
+	}
+
+	return true;
+}
+
+
 void stem_ar_utf8 ( BYTE * word )
 {
+	if ( !ar_is_stemmable_utf8 ( word ) )
+		return;
+
 	AR_STRIP ( AR_DIACRITIC );
 	AR_STRIP ( AR_KASHIDA ); // extension
 

@@ -40,15 +40,19 @@ jobs:
       - name: Check if branch exists in manticoresoftware/manticoresearch
         id: check_branch
         if: github.ref_name != 'master'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           # Extract the actual branch name for pull requests
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            BRANCH_NAME="$PR_HEAD_REF"
           else
-            BRANCH_NAME="${{ github.ref_name }}"
+            BRANCH_NAME="$REF_NAME"
           fi
           
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME")
           if [ "$HTTP_STATUS" -eq "200" ]; then
             echo "branch_exists=true" >> $GITHUB_OUTPUT
             echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
@@ -58,9 +62,13 @@ jobs:
           fi
       - name: Set Columnar Locator
         id: set_locator
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          BRANCH_EXISTS: ${{ steps.check_branch.outputs.branch_exists }}
+          BRANCH_NAME: ${{ steps.check_branch.outputs.branch_name }}
         run: |
-          if [[ "${{ github.ref_name }}" != "master" && "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
-            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${{ steps.check_branch.outputs.branch_name }}" >> $GITHUB_OUTPUT
+          if [[ "$REF_NAME" != "master" && "$BRANCH_EXISTS" == "true" ]]; then
+            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $BRANCH_NAME" >> $GITHUB_OUTPUT
           else
             echo "columnar_locator=" >> $GITHUB_OUTPUT
           fi

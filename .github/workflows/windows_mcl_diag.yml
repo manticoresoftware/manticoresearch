@@ -210,34 +210,56 @@ jobs:
           New-Item -ItemType Directory -Force $diagDir | Out-Null
 
           $indexer = (Resolve-Path "build\src\Debug\indexer.exe").Path
-          $stdout = Join-Path $diagDir "preflight_indexer_stdout.txt"
-          $stderr = Join-Path $diagDir "preflight_indexer_stderr.txt"
           $workdir = (Resolve-Path "test").Path
+          $originalEmbeddings = $env:LIB_MANTICORE_KNN_EMBEDDINGS
+          $originalKnn = $env:LIB_MANTICORE_KNN
+          $results = @()
 
-          $proc = Start-Process -FilePath $indexer -ArgumentList @("--quiet", "--config", "test_re.conf", "--all") -WorkingDirectory $workdir -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-          if (-not $proc.WaitForExit(30000)) {
+          function Invoke-IndexerProbe($name, $knn, $embeddings, $dumpOnTimeout) {
+            $env:LIB_MANTICORE_KNN = $knn
+            $env:LIB_MANTICORE_KNN_EMBEDDINGS = $embeddings
+
+            $stdout = Join-Path $diagDir "preflight_${name}_stdout.txt"
+            $stderr = Join-Path $diagDir "preflight_${name}_stderr.txt"
+            $proc = Start-Process -FilePath $indexer -ArgumentList @("--quiet", "--config", "test_re.conf", "--all") -WorkingDirectory $workdir -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+            if ($proc.WaitForExit(30000)) {
+              return "$name exit_code=$($proc.ExitCode)"
+            }
+
             Get-CimInstance Win32_Process |
               Where-Object { $_.ProcessId -eq $proc.Id -or $_.ParentProcessId -eq $proc.Id -or $_.Name -match '^(indexer|php|searchd)\.exe$' } |
               Select-Object ProcessId,ParentProcessId,Name,CommandLine |
-              Format-List | Out-File "$diagDir\preflight_indexer_processes.txt" -Encoding utf8
+              Format-List | Out-File "$diagDir\preflight_${name}_processes.txt" -Encoding utf8
 
-            try {
-              $zip = Join-Path $diagDir "preflight_procdump.zip"
-              $procDir = Join-Path $diagDir "preflight_procdump"
-              Invoke-WebRequest "https://download.sysinternals.com/files/Procdump.zip" -OutFile $zip
-              Expand-Archive -LiteralPath $zip -DestinationPath $procDir -Force
-              & "$procDir\procdump64.exe" -accepteula -ma $proc.Id "$diagDir\indexer_preflight_$($proc.Id).dmp" | Out-File "$diagDir\preflight_procdump_$($proc.Id).txt" -Encoding utf8
-            } catch {
-              $_ | Out-File "$diagDir\preflight_procdump_error.txt" -Encoding utf8
+            if ($dumpOnTimeout) {
+              try {
+                $zip = Join-Path $diagDir "preflight_procdump.zip"
+                $procDir = Join-Path $diagDir "preflight_procdump"
+                if (-not (Test-Path "$procDir\procdump64.exe")) {
+                  Invoke-WebRequest "https://download.sysinternals.com/files/Procdump.zip" -OutFile $zip
+                  Expand-Archive -LiteralPath $zip -DestinationPath $procDir -Force
+                }
+                & "$procDir\procdump64.exe" -accepteula -ma $proc.Id "$diagDir\indexer_preflight_${name}_$($proc.Id).dmp" | Out-File "$diagDir\preflight_${name}_procdump_$($proc.Id).txt" -Encoding utf8
+              } catch {
+                $_ | Out-File "$diagDir\preflight_${name}_procdump_error.txt" -Encoding utf8
+              }
             }
 
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            throw "Preflight indexer feature guess timed out"
+            return "$name timeout"
           }
 
-          "exit_code=$($proc.ExitCode)" | Out-File "$diagDir\preflight_indexer_status.txt" -Encoding utf8
-          if ($proc.ExitCode -ne 0) {
-            throw "Preflight indexer feature guess failed with exit code $($proc.ExitCode)"
+          $missing = Join-Path $diagDir "missing.dll"
+          $results += Invoke-IndexerProbe "all_mcl" $originalKnn $originalEmbeddings $true
+          $results += Invoke-IndexerProbe "no_embeddings" $originalKnn $missing $false
+          $results += Invoke-IndexerProbe "no_knn" $missing $missing $false
+
+          $env:LIB_MANTICORE_KNN = $originalKnn
+          $env:LIB_MANTICORE_KNN_EMBEDDINGS = $originalEmbeddings
+          $results | Tee-Object "$diagDir\preflight_indexer_status.txt"
+
+          if (($results | Where-Object { $_ -match '^all_mcl timeout' }).Count -gt 0) {
+            throw "Preflight indexer feature guess timed out"
           }
 
       - name: Run selected CTest ubertests without retries

@@ -221,9 +221,9 @@ jobs:
           (Get-Content "misc\ctest\gltest.cmake" -Raw) `
             -replace "set \(RETRIES 5\)", "set (RETRIES 1)" `
             | Set-Content "misc\ctest\gltest.cmake" -Encoding UTF8
-          (Get-Content "test\helpers.inc" -Raw) `
-            -replace "\$extra_params = '';", "`$extra_params = ' --logdebug';" `
-            | Set-Content "test\helpers.inc" -Encoding UTF8
+          $helpers = Get-Content "test\helpers.inc" -Raw
+          $helpers = $helpers.Replace('$extra_params = '''';', '$extra_params = '' --logdebug'';')
+          Set-Content "test\helpers.inc" $helpers -Encoding UTF8
 
           $failFast = if ([string]::IsNullOrWhiteSpace($env:FAIL_FAST)) { "true" } else { $env:FAIL_FAST }
           if ($failFast -eq "true") {

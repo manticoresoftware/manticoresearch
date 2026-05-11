@@ -202,6 +202,44 @@ jobs:
 
           Get-ChildItem $moduleDir | Format-Table Name, Length
 
+      - name: Preflight indexer feature guess
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $diagDir = Join-Path (Get-Location) "diag"
+          New-Item -ItemType Directory -Force $diagDir | Out-Null
+
+          $indexer = (Resolve-Path "build\src\Debug\indexer.exe").Path
+          $stdout = Join-Path $diagDir "preflight_indexer_stdout.txt"
+          $stderr = Join-Path $diagDir "preflight_indexer_stderr.txt"
+          $workdir = (Resolve-Path "test").Path
+
+          $proc = Start-Process -FilePath $indexer -ArgumentList @("--quiet", "--config", "test_re.conf", "--all") -WorkingDirectory $workdir -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          if (-not $proc.WaitForExit(30000)) {
+            Get-CimInstance Win32_Process |
+              Where-Object { $_.ProcessId -eq $proc.Id -or $_.ParentProcessId -eq $proc.Id -or $_.Name -match '^(indexer|php|searchd)\.exe$' } |
+              Select-Object ProcessId,ParentProcessId,Name,CommandLine |
+              Format-List | Out-File "$diagDir\preflight_indexer_processes.txt" -Encoding utf8
+
+            try {
+              $zip = Join-Path $diagDir "preflight_procdump.zip"
+              $procDir = Join-Path $diagDir "preflight_procdump"
+              Invoke-WebRequest "https://download.sysinternals.com/files/Procdump.zip" -OutFile $zip
+              Expand-Archive -LiteralPath $zip -DestinationPath $procDir -Force
+              & "$procDir\procdump64.exe" -accepteula -ma $proc.Id "$diagDir\indexer_preflight_$($proc.Id).dmp" | Out-File "$diagDir\preflight_procdump_$($proc.Id).txt" -Encoding utf8
+            } catch {
+              $_ | Out-File "$diagDir\preflight_procdump_error.txt" -Encoding utf8
+            }
+
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "Preflight indexer feature guess timed out"
+          }
+
+          "exit_code=$($proc.ExitCode)" | Out-File "$diagDir\preflight_indexer_status.txt" -Encoding utf8
+          if ($proc.ExitCode -ne 0) {
+            throw "Preflight indexer feature guess failed with exit code $($proc.ExitCode)"
+          }
+
       - name: Run selected CTest ubertests without retries
         shell: powershell
         env:
@@ -260,7 +298,7 @@ jobs:
               $procDir = Join-Path $diagDir "procdump"
               Invoke-WebRequest "https://download.sysinternals.com/files/Procdump.zip" -OutFile $zip
               Expand-Archive -LiteralPath $zip -DestinationPath $procDir -Force
-              foreach ($proc in Get-Process php,searchd -ErrorAction SilentlyContinue) {
+              foreach ($proc in Get-Process php,searchd,indexer -ErrorAction SilentlyContinue) {
                 & "$procDir\procdump64.exe" -accepteula -ma $proc.Id "$diagDir\$($proc.ProcessName)_$($proc.Id).dmp" | Out-File "$diagDir\procdump_$($proc.Id).txt" -Encoding utf8
               }
             } catch {

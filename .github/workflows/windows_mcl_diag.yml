@@ -97,7 +97,6 @@ jobs:
       CTEST_CONFIGURATION_TYPE: Debug
       CTEST_START: 1
       CTEST_END: 999999
-      CTEST_RESOURCE: ${{ github.workspace }}\\misc\\ctest\\ubertests\\ubertests_docker_image\\resource.json
       NO_BUILD: 1
       DISTR: windows
       arch: x64

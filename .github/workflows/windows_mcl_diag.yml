@@ -11,10 +11,6 @@ on:
         description: "Whitespace or comma separated ubertest IDs"
         required: true
         default: "481 484 486 489 490 491 501"
-      test_options:
-        description: "Extra ubertest options"
-        required: true
-        default: "--rt --ignore-weights --columnar"
       fail_fast:
         description: "Stop after the first failed test"
         required: true
@@ -94,6 +90,15 @@ jobs:
     timeout-minutes: 60
     env:
       BUNDLE_REPO_TYPE: ${{ inputs.mcl_repo_type || 'dev' }}
+      CACHEB: "../cache"
+      LIBS_BUNDLE: "../bundle"
+      BOOST_ROOT: "../boost_1_75_0"
+      CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
+      CTEST_CONFIGURATION_TYPE: Debug
+      CTEST_START: 1
+      CTEST_END: 999999
+      CTEST_RESOURCE: ${{ github.workspace }}\\misc\\ctest\\ubertests\\ubertests_docker_image\\resource.json
+      NO_BUILD: 1
       DISTR: windows
       arch: x64
     steps:
@@ -105,6 +110,37 @@ jobs:
         with:
           name: windows_mcl_diag_build
           path: .
+
+      - name: Check out Windows bundle cache
+        id: bundle_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            bundle
+            boost_1_75_0
+          enableCrossOsArchive: true
+          key: win_bundle
+
+      - name: Download Windows bundle if cache missed
+        if: steps.bundle_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sL -o sysroot_windows_x64.tar.xz https://repo.manticoresearch.com/repository/sysroots/roots_apr15/sysroot_windows_x64.tar.xz
+          tar -xf sysroot_windows_x64.tar.xz
+          mv diskc/winbundle bundle
+          curl -sL -o boost_1_75_0.tgz https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
+          tar -xf boost_1_75_0.tgz
+
+      - name: Remove ZSTD
+        run: rm C:\tools\zstd\zstd.exe
+
+      - name: Check out cache
+        uses: actions/cache@v4
+        with:
+          path: cache
+          enableCrossOsArchive: true
+          key: build_windows_x64
 
       - name: Setup PHP and mysqli
         uses: shivammathur/setup-php@v2
@@ -163,59 +199,33 @@ jobs:
 
           Get-ChildItem $moduleDir | Format-Table Name, Length
 
-      - name: Run selected ubertests without retries
+      - name: Run selected CTest ubertests without retries
         shell: powershell
         env:
           UBERTESTS: ${{ inputs.tests || '481 484 486 489 490 491 501' }}
-          UBERTEST_OPTIONS: ${{ inputs.test_options || '--rt --ignore-weights --columnar' }}
-          FAIL_FAST: ${{ inputs.fail_fast || 'true' }}
+          FAIL_FAST: ${{ inputs.fail_fast }}
         run: |
-          $ErrorActionPreference = "Continue"
-          New-Item -ItemType Directory -Force "build\test" | Out-Null
+          $ErrorActionPreference = "Stop"
 
           $tests = $env:UBERTESTS -split "[,\s]+" | Where-Object { $_ }
           if (-not $tests) { throw "No tests were provided" }
 
-          $extra = $env:UBERTEST_OPTIONS -split "\s+" | Where-Object { $_ }
-          $failFast = $env:FAIL_FAST -eq "true"
-          $failed = @()
-          $binDir = (Resolve-Path "build\src").Path + "\"
-          $debugBinDir = (Resolve-Path "build\src\Debug").Path
-          $indexerPath = Join-Path $debugBinDir "indexer.exe"
-          $searchdPath = Join-Path $debugBinDir "searchd.exe"
-          $testDir = (Resolve-Path "build\test").Path + "\"
+          $regex = ($tests | ForEach-Object { "rt_$_" }) -join "|"
+          $env:CTEST_REGEX = $regex
+          Write-Host "CTEST_REGEX=$env:CTEST_REGEX"
 
-          Push-Location test
-          foreach ($test in $tests) {
-            Write-Host "=== Running ubertest $test ==="
-            $args = @(
-              "ubertest.php",
-              "-b", $binDir,
-              "-i", $indexerPath,
-              "-s", $searchdPath,
-              "-t", $testDir,
-              "-tt", $testDir,
-              "--ctest",
-              "-u", "test",
-              "--strict-verbose",
-              "--no-demo"
-            ) + $extra + @("t", $test)
+          (Get-Content "misc\ctest\gltest.cmake" -Raw) `
+            -replace "set \(RETRIES 5\)", "set (RETRIES 1)" `
+            | Set-Content "misc\ctest\gltest.cmake" -Encoding UTF8
 
-            & php @args
-            if ($LASTEXITCODE -ne 0) {
-              $failed += $test
-              Write-Host "ubertest $test failed with exit code $LASTEXITCODE"
-              if ($failFast) {
-                Pop-Location
-                throw "Stopping after first failed test: $test"
-              }
-            }
+          $failFast = if ([string]::IsNullOrWhiteSpace($env:FAIL_FAST)) { "true" } else { $env:FAIL_FAST }
+          if ($failFast -eq "true") {
+            (Get-Content "misc\ctest\gltest.cmake" -Raw) `
+              -replace "RETURN_VALUE retcode REPEAT UNTIL_PASS:\$\{RETRIES\}", "RETURN_VALUE retcode REPEAT UNTIL_PASS:`${RETRIES} STOP_ON_FAILURE" `
+              | Set-Content "misc\ctest\gltest.cmake" -Encoding UTF8
           }
-          Pop-Location
 
-          if ($failed.Count -gt 0) {
-            throw "Failed tests: $($failed -join ', ')"
-          }
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
 
       - name: Upload diagnostics
         if: always()
@@ -224,6 +234,10 @@ jobs:
         with:
           name: windows_mcl_diag_results
           path: |
+            build/Testing/**
             build/test/**
+            build/junit*.xml
+            build/status*
+            build/CTest*.log
             test/report.txt
             mcl/share/modules/**

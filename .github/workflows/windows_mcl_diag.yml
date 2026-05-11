@@ -179,15 +179,17 @@ jobs:
           $extra = $env:UBERTEST_OPTIONS -split "\s+" | Where-Object { $_ }
           $failFast = $env:FAIL_FAST -eq "true"
           $failed = @()
+          $binDir = (Resolve-Path "build\src\Debug").Path + "\"
+          $testDir = (Resolve-Path "build\test").Path + "\"
 
           Push-Location test
           foreach ($test in $tests) {
             Write-Host "=== Running ubertest $test ==="
             $args = @(
               "ubertest.php",
-              "-b", "../build/src/Debug/",
-              "-t", "../build/test/",
-              "-tt", "../build/test/",
+              "-b", $binDir,
+              "-t", $testDir,
+              "-tt", $testDir,
               "--ctest",
               "-u", "test",
               "--strict-verbose",

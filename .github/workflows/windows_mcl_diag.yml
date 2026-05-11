@@ -179,7 +179,10 @@ jobs:
           $extra = $env:UBERTEST_OPTIONS -split "\s+" | Where-Object { $_ }
           $failFast = $env:FAIL_FAST -eq "true"
           $failed = @()
-          $binDir = (Resolve-Path "build\src\Debug").Path + "\"
+          $binDir = (Resolve-Path "build\src").Path + "\"
+          $debugBinDir = (Resolve-Path "build\src\Debug").Path
+          $indexerPath = Join-Path $debugBinDir "indexer.exe"
+          $searchdPath = Join-Path $debugBinDir "searchd.exe"
           $testDir = (Resolve-Path "build\test").Path + "\"
 
           Push-Location test
@@ -188,6 +191,8 @@ jobs:
             $args = @(
               "ubertest.php",
               "-b", $binDir,
+              "-i", $indexerPath,
+              "-s", $searchdPath,
               "-t", $testDir,
               "-tt", $testDir,
               "--ctest",

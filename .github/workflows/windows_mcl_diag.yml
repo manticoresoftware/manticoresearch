@@ -1,5 +1,5 @@
 name: Windows MCL diagnostics
-run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests || '481 484 486 489 490 491 501' }}
+run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests || '481' }}
 
 on:
   push:
@@ -10,7 +10,11 @@ on:
       tests:
         description: "Whitespace or comma separated ubertest IDs"
         required: true
-        default: "481 484 486 489 490 491 501"
+        default: "481"
+      timeout_seconds:
+        description: "Per-test CTest timeout in seconds"
+        required: true
+        default: "120"
       fail_fast:
         description: "Stop after the first failed test"
         required: true
@@ -201,8 +205,9 @@ jobs:
       - name: Run selected CTest ubertests without retries
         shell: powershell
         env:
-          UBERTESTS: ${{ inputs.tests || '481 484 486 489 490 491 501' }}
+          UBERTESTS: ${{ inputs.tests || '481' }}
           FAIL_FAST: ${{ inputs.fail_fast }}
+          TEST_TIMEOUT: ${{ inputs.timeout_seconds || '120' }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -224,19 +229,82 @@ jobs:
               | Set-Content "misc\ctest\gltest.cmake" -Encoding UTF8
           }
 
-          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+          $diagDir = Join-Path (Get-Location) "diag"
+          New-Item -ItemType Directory -Force $diagDir | Out-Null
+          $timeout = [int]$env:TEST_TIMEOUT
+          $watchdogDelay = [Math]::Max(15, [Math]::Min(60, $timeout - 10))
+
+          $watchdog = Start-Job -ArgumentList (Get-Location).Path,$watchdogDelay -ScriptBlock {
+            param($workspace, $delay)
+
+            Start-Sleep -Seconds $delay
+            Set-Location $workspace
+            $diagDir = Join-Path $workspace "diag"
+            New-Item -ItemType Directory -Force $diagDir | Out-Null
+
+            "Watchdog fired after $delay seconds" | Out-File "$diagDir\watchdog.txt" -Encoding utf8
+            Get-CimInstance Win32_Process |
+              Where-Object { $_.Name -match '^(php|searchd|indexer|ctest|cmake)\.exe$' } |
+              Select-Object ProcessId,ParentProcessId,Name,CommandLine |
+              Format-List | Out-File "$diagDir\processes_watchdog.txt" -Encoding utf8
+            netstat -ano | Out-File "$diagDir\netstat_watchdog.txt" -Encoding utf8
+            Get-ChildItem -Recurse build\test,test -Include *.log,*.txt,*.pid,*.conf -ErrorAction SilentlyContinue |
+              Select-Object FullName,Length,LastWriteTime |
+              Format-Table -AutoSize | Out-File "$diagDir\files_watchdog.txt" -Encoding utf8
+
+            try {
+              $zip = Join-Path $diagDir "procdump.zip"
+              $procDir = Join-Path $diagDir "procdump"
+              Invoke-WebRequest "https://download.sysinternals.com/files/Procdump.zip" -OutFile $zip
+              Expand-Archive -LiteralPath $zip -DestinationPath $procDir -Force
+              foreach ($proc in Get-Process php,searchd -ErrorAction SilentlyContinue) {
+                & "$procDir\procdump64.exe" -accepteula -ma $proc.Id "$diagDir\$($proc.ProcessName)_$($proc.Id).dmp" | Out-File "$diagDir\procdump_$($proc.Id).txt" -Encoding utf8
+              }
+            } catch {
+              $_ | Out-File "$diagDir\procdump_error.txt" -Encoding utf8
+            }
+          }
+
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout $timeout
+          $ret = $LASTEXITCODE
+
+          if ($watchdog.State -eq "Running") {
+            Stop-Job $watchdog
+          }
+          Receive-Job $watchdog -ErrorAction SilentlyContinue | Out-File "$diagDir\watchdog_job_output.txt" -Encoding utf8
+          Remove-Job $watchdog -Force
+
+          exit $ret
+
+      - name: Prepare diagnostics
+        if: always()
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          $diagDir = Join-Path (Get-Location) "diag"
+          New-Item -ItemType Directory -Force $diagDir | Out-Null
+
+          Get-CimInstance Win32_Process |
+            Where-Object { $_.Name -match '^(php|searchd|indexer|ctest|cmake)\.exe$' } |
+            Select-Object ProcessId,ParentProcessId,Name,CommandLine |
+            Format-List | Out-File "$diagDir\processes_final.txt" -Encoding utf8
+          netstat -ano | Out-File "$diagDir\netstat_final.txt" -Encoding utf8
+
+          foreach ($path in @("build\Testing", "build\test", "test\error_all.txt")) {
+            if (Test-Path $path) {
+              Copy-Item $path $diagDir -Recurse -Force
+            }
+          }
+
+          Get-ChildItem -Recurse $diagDir |
+            Select-Object FullName,Length,LastWriteTime |
+            Format-Table -AutoSize | Out-File "$diagDir\manifest.txt" -Encoding utf8
 
       - name: Upload diagnostics
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
+        uses: actions/upload-artifact@v4
         with:
           name: windows_mcl_diag_results
           path: |
-            build/Testing/**
-            build/test/**
-            build/junit*.xml
-            build/status*
-            build/CTest*.log
-            test/report.txt
-            mcl/share/modules/**
+            diag/**

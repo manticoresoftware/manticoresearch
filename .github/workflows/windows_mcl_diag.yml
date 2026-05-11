@@ -1,7 +1,10 @@
 name: Windows MCL diagnostics
-run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests }}
+run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests || '481 484 486 489 490 491 501' }}
 
 on:
+  push:
+    branches:
+      - mcl_win_error
   workflow_dispatch:
     inputs:
       tests:
@@ -45,7 +48,7 @@ jobs:
       - name: Resolve columnar locator
         id: set_locator
         env:
-          INPUT_COLUMNAR_REF: ${{ inputs.columnar_ref }}
+          INPUT_COLUMNAR_REF: ${{ inputs.columnar_ref || '' }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -90,7 +93,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     env:
-      BUNDLE_REPO_TYPE: ${{ inputs.mcl_repo_type }}
+      BUNDLE_REPO_TYPE: ${{ inputs.mcl_repo_type || 'dev' }}
       DISTR: windows
       arch: x64
     steps:
@@ -163,9 +166,9 @@ jobs:
       - name: Run selected ubertests without retries
         shell: powershell
         env:
-          UBERTESTS: ${{ inputs.tests }}
-          UBERTEST_OPTIONS: ${{ inputs.test_options }}
-          FAIL_FAST: ${{ inputs.fail_fast }}
+          UBERTESTS: ${{ inputs.tests || '481 484 486 489 490 491 501' }}
+          UBERTEST_OPTIONS: ${{ inputs.test_options || '--rt --ignore-weights --columnar' }}
+          FAIL_FAST: ${{ inputs.fail_fast || 'true' }}
         run: |
           $ErrorActionPreference = "Continue"
           New-Item -ItemType Directory -Force "build\test" | Out-Null

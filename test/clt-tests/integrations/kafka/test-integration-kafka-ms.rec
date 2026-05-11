@@ -276,7 +276,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags 
 |   41 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
 |   42 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 |   46 | Money Doesn't Grow On "Trees                | ISO 97531:86420 | %{DATETIME} | 20,25,30 | ["test","data","item1"] |
-|   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
+|   47 | No Pain, No \Gain                           | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
 CONSUMER_GROUP="manticore_alter"
@@ -370,7 +370,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts OR
 |   44 | Ignorance Is Bliss                            | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   45 | The Best Things In Life Are Free              | ISO 24680:1357  | %{DATETIME} | 20,25,30 |      1690761600 |
 |   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
-|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
+|   47 | No Pain, No \Gain                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   48 | When In Rome, Do As The Romans Do             | ISO 56789:12345 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   49 | Better Late Than Never                        | ISO 86420:97531 | %{DATETIME} | 20,25,30 |      1690761600 |
 |   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
@@ -408,7 +408,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combi
 |   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | %{DATETIME} | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
 |   37 | Bite The Bullet                               | ISO 13579:86420 | %{DATETIME} | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
 |   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
-|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
+|   47 | No Pain, No \Gain                             | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
 |   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––

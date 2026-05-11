@@ -1,0 +1,219 @@
+name: Windows MCL diagnostics
+run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: "Whitespace or comma separated ubertest IDs"
+        required: true
+        default: "481 484 486 489 490 491 501"
+      test_options:
+        description: "Extra ubertest options"
+        required: true
+        default: "--rt --ignore-weights --columnar"
+      fail_fast:
+        description: "Stop after the first failed test"
+        required: true
+        type: boolean
+        default: true
+      mcl_repo_type:
+        description: "Repository bucket for manticore-columnar-lib from deps.txt"
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - release_candidate
+          - release
+      columnar_ref:
+        description: "Optional columnar branch/tag for API headers"
+        required: false
+        default: ""
+
+concurrency:
+  group: windows_mcl_diag_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    name: Resolve columnar locator
+    runs-on: ubuntu-22.04
+    outputs:
+      columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
+    steps:
+      - name: Resolve columnar locator
+        id: set_locator
+        env:
+          INPUT_COLUMNAR_REF: ${{ inputs.columnar_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$INPUT_COLUMNAR_REF" ]]; then
+            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $INPUT_COLUMNAR_REF" >> "$GITHUB_OUTPUT"
+            echo "Using explicit columnar ref: $INPUT_COLUMNAR_REF" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ "$REF_NAME" != "master" ]]; then
+            status=$(curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/manticoresoftware/columnar/branches/$REF_NAME")
+            if [[ "$status" == "200" ]]; then
+              echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG $REF_NAME" >> "$GITHUB_OUTPUT"
+              echo "Using matching columnar branch: $REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
+          echo "columnar_locator=" >> "$GITHUB_OUTPUT"
+          echo "Using columnar locator from the repository defaults" >> "$GITHUB_STEP_SUMMARY"
+
+  build_windows:
+    name: Windows x64 build
+    needs: meta
+    uses: ./.github/workflows/build_template.yml
+    with:
+      DISTR: windows
+      arch: x64
+      sysroot_url_key: roots_mysql83_jan17
+      boost_url_key: boost_80
+      CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
+      CTEST_CONFIGURATION_TYPE: Debug
+      cache_key: build_windows_x64
+      artifact_name: windows_mcl_diag_build
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/indexer.pdb build/src/Debug/searchd.exe build/src/Debug/searchd.pdb build/src/gtests/Debug/gmanticoretest.exe build/src/gtests/Debug/gmanticoretest.pdb build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
+      COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
+
+  test_windows_mcl:
+    name: Windows ubertests (MCL)
+    needs: build_windows
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      BUNDLE_REPO_TYPE: ${{ inputs.mcl_repo_type }}
+      DISTR: windows
+      arch: x64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows build
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        with:
+          name: windows_mcl_diag_build
+          path: .
+
+      - name: Setup PHP and mysqli
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mysqli
+
+      - name: Run mysql
+        shell: powershell
+        run: |
+          C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
+          C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --install mysql
+          net start mysql
+          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; create database test1; create database test2; create database test3; create database test4; create database test5; create database test6; create database test7; create database test8; create database test9; grant all on test.* to 'test'@'localhost'; grant all on test1.* to 'test'@'localhost'; grant all on test2.* to 'test'@'localhost'; grant all on test3.* to 'test'@'localhost'; grant all on test4.* to 'test'@'localhost'; grant all on test5.* to 'test'@'localhost'; grant all on test6.* to 'test'@'localhost'; grant all on test7.* to 'test'@'localhost'; grant all on test8.* to 'test'@'localhost'; grant all on test9.* to 'test'@'localhost'; flush privileges;" -uroot
+
+      - name: Download MCL from deps.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf mcl deps-mcl-only
+          mkdir -p deps-mcl-only
+          awk '$1=="mcl"{print; found=1; exit} END{if(!found) exit 1}' deps.txt > deps-mcl-only/deps.txt
+          REPO_ROOT="$PWD/deps-mcl-only" bash dist/download_bundle_deps.sh mcl
+          find mcl -maxdepth 4 -type f | sort
+
+      - name: Prepare MCL runtime
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $moduleDir = (Resolve-Path "mcl\share\modules").Path
+          if (-not (Test-Path "$moduleDir\lib_manticore_columnar.dll")) { throw "Columnar DLL was not found in $moduleDir" }
+          if (-not (Test-Path "$moduleDir\lib_manticore_secondary.dll")) { throw "Secondary DLL was not found in $moduleDir" }
+          if (-not (Test-Path "$moduleDir\lib_manticore_knn.dll")) { throw "KNN DLL was not found in $moduleDir" }
+          if (-not (Test-Path "$moduleDir\lib_manticore_knn_embeddings.dll")) { throw "Embeddings DLL was not found in $moduleDir" }
+
+          if (-not (Test-Path "$moduleDir\libiomp5md.dll")) {
+            $version = "2025.3.3.31"
+            $redist = ".openmp-redist"
+            New-Item -ItemType Directory -Force "$redist\pkg" | Out-Null
+            Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/intelopenmp.redist.win/$version/intelopenmp.redist.win.$version.nupkg" -OutFile "$redist\intelopenmp.redist.win.zip"
+            Expand-Archive -LiteralPath "$redist\intelopenmp.redist.win.zip" -DestinationPath "$redist\pkg" -Force
+            $dll = Get-ChildItem "$redist\pkg" -Recurse -Filter "libiomp5md.dll" | Select-Object -First 1
+            if (-not $dll) { throw "libiomp5md.dll was not found in Intel OpenMP redist $version" }
+            Copy-Item $dll.FullName "$moduleDir\libiomp5md.dll" -Force
+          }
+
+          $binDir = (Resolve-Path "build\src\Debug").Path
+          "MANTICORE_MODULES=$moduleDir" >> $env:GITHUB_ENV
+          "LIB_MANTICORE_COLUMNAR=$moduleDir\lib_manticore_columnar.dll" >> $env:GITHUB_ENV
+          "LIB_MANTICORE_SECONDARY=$moduleDir\lib_manticore_secondary.dll" >> $env:GITHUB_ENV
+          "LIB_MANTICORE_KNN=$moduleDir\lib_manticore_knn.dll" >> $env:GITHUB_ENV
+          "LIB_MANTICORE_KNN_EMBEDDINGS=$moduleDir\lib_manticore_knn_embeddings.dll" >> $env:GITHUB_ENV
+          "$moduleDir" >> $env:GITHUB_PATH
+          "$binDir" >> $env:GITHUB_PATH
+
+          Get-ChildItem $moduleDir | Format-Table Name, Length
+
+      - name: Run selected ubertests without retries
+        shell: powershell
+        env:
+          UBERTESTS: ${{ inputs.tests }}
+          UBERTEST_OPTIONS: ${{ inputs.test_options }}
+          FAIL_FAST: ${{ inputs.fail_fast }}
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force "build\test" | Out-Null
+
+          $tests = $env:UBERTESTS -split "[,\s]+" | Where-Object { $_ }
+          if (-not $tests) { throw "No tests were provided" }
+
+          $extra = $env:UBERTEST_OPTIONS -split "\s+" | Where-Object { $_ }
+          $failFast = $env:FAIL_FAST -eq "true"
+          $failed = @()
+
+          Push-Location test
+          foreach ($test in $tests) {
+            Write-Host "=== Running ubertest $test ==="
+            $args = @(
+              "ubertest.php",
+              "-b", "../build/src/Debug/",
+              "-t", "../build/test/",
+              "-tt", "../build/test/",
+              "--ctest",
+              "-u", "test",
+              "--strict-verbose",
+              "--no-demo"
+            ) + $extra + @("t", $test)
+
+            & php @args
+            if ($LASTEXITCODE -ne 0) {
+              $failed += $test
+              Write-Host "ubertest $test failed with exit code $LASTEXITCODE"
+              if ($failFast) {
+                Pop-Location
+                throw "Stopping after first failed test: $test"
+              }
+            }
+          }
+          Pop-Location
+
+          if ($failed.Count -gt 0) {
+            throw "Failed tests: $($failed -join ', ')"
+          }
+
+      - name: Upload diagnostics
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: windows_mcl_diag_results
+          path: |
+            build/test/**
+            test/report.txt
+            mcl/share/modules/**

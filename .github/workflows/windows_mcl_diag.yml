@@ -191,6 +191,9 @@ jobs:
             Copy-Item $dll.FullName "$moduleDir\libiomp5md.dll" -Force
           }
 
+          Remove-Item "$moduleDir\*_avx512.dll" -Force -ErrorAction SilentlyContinue
+          Remove-Item "$moduleDir\*_avx512.pdb" -Force -ErrorAction SilentlyContinue
+
           $binDir = (Resolve-Path "build\src\Debug").Path
           "MANTICORE_MODULES=$moduleDir" >> $env:GITHUB_ENV
           "LIB_MANTICORE_COLUMNAR=$moduleDir\lib_manticore_columnar.dll" >> $env:GITHUB_ENV

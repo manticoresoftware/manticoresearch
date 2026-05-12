@@ -344,7 +344,7 @@ jobs:
 
           exit $ret
 
-      - name: Run selected ubertests with columnar CLI
+      - name: Run selected CTest ubertests with columnar args
         shell: powershell
         env:
           UBERTESTS: ${{ inputs.tests || '481 484 486 489 490 491 501' }}
@@ -356,72 +356,79 @@ jobs:
           $tests = $env:UBERTESTS -split "[,\s]+" | Where-Object { $_ }
           if (-not $tests) { throw "No tests were provided" }
 
+          $regex = ($tests | ForEach-Object { "rt_$_" }) -join "|"
+          $env:CTEST_REGEX = $regex
+          Write-Host "CTEST_REGEX=$env:CTEST_REGEX"
+
+          $cmakeLists = Get-Content "test\CMakeLists.txt" -Raw
+          $needle = 'add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rt" "RT" "--rt --ignore-weights")'
+          $replacement = 'add_ubertest ("${testN}" "${tst_name}" "${LABELS}" "rt" "RT" "--rt --ignore-weights --columnar")'
+          if ($cmakeLists.Contains($needle)) {
+            $cmakeLists = $cmakeLists.Replace($needle, $replacement)
+            Set-Content "test\CMakeLists.txt" $cmakeLists -Encoding UTF8
+          } elseif (-not $cmakeLists.Contains($replacement)) {
+            throw "Could not patch RT ubertest flags in test\CMakeLists.txt"
+          }
+
+          (Get-Content "misc\ctest\gltest.cmake" -Raw) `
+            -replace "set \(RETRIES 5\)", "set (RETRIES 1)" `
+            | Set-Content "misc\ctest\gltest.cmake" -Encoding UTF8
+
+          $failFast = if ([string]::IsNullOrWhiteSpace($env:FAIL_FAST)) { "true" } else { $env:FAIL_FAST }
+          if ($failFast -eq "true") {
+            (Get-Content "misc\ctest\gltest.cmake" -Raw) `
+              -replace "RETURN_VALUE retcode REPEAT UNTIL_PASS:\$\{RETRIES\}", "RETURN_VALUE retcode REPEAT UNTIL_PASS:`${RETRIES} STOP_ON_FAILURE" `
+              | Set-Content "misc\ctest\gltest.cmake" -Encoding UTF8
+          }
+
           $diagDir = Join-Path (Get-Location) "diag"
           New-Item -ItemType Directory -Force $diagDir | Out-Null
-          $workdir = (Resolve-Path "build\test").Path
-          $env:INDEXER = (Resolve-Path "build\src\RelWithDebInfo\indexer.exe").Path
-          $env:SEARCHD = (Resolve-Path "build\src\RelWithDebInfo\searchd.exe").Path
           $timeout = [int]$env:TEST_TIMEOUT
-          $failFast = if ([string]::IsNullOrWhiteSpace($env:FAIL_FAST)) { "true" } else { $env:FAIL_FAST }
-          $failed = @()
+          $watchdogDelay = [Math]::Max(15, [Math]::Min(60, $timeout - 10))
 
-          foreach ($test in $tests) {
-            Write-Host "=== Running columnar CLI ubertest $test ==="
-            $stdout = Join-Path $diagDir "columnar_cli_${test}_stdout.txt"
-            $stderr = Join-Path $diagDir "columnar_cli_${test}_stderr.txt"
+          $watchdog = Start-Job -ArgumentList (Get-Location).Path,$watchdogDelay -ScriptBlock {
+            param($workspace, $delay)
 
-            $args = @(
-              "ubertest.php",
-              "--ctest",
-              "-u", "test",
-              "--strict-verbose",
-              "--no-demo",
-              "--rt",
-              "--ignore-weights",
-              "--columnar",
-              "t",
-              $test
-            )
+            Start-Sleep -Seconds $delay
+            Set-Location $workspace
+            $diagDir = Join-Path $workspace "diag"
+            New-Item -ItemType Directory -Force $diagDir | Out-Null
 
-            $job = Start-Job -ArgumentList $workdir,$stdout,$stderr,$args -ScriptBlock {
-              param($workdir, $stdout, $stderr, $args)
+            "Columnar CTest watchdog fired after $delay seconds" | Out-File "$diagDir\columnar_ctest_watchdog.txt" -Encoding utf8
+            Get-CimInstance Win32_Process |
+              Where-Object { $_.Name -match '^(php|searchd|indexer|ctest|cmake)\.exe$' } |
+              Select-Object ProcessId,ParentProcessId,Name,CommandLine |
+              Format-List | Out-File "$diagDir\columnar_ctest_processes_watchdog.txt" -Encoding utf8
+            netstat -ano | Out-File "$diagDir\columnar_ctest_netstat_watchdog.txt" -Encoding utf8
+            Get-ChildItem -Recurse build\test,test -Include *.log,*.txt,*.pid,*.conf -ErrorAction SilentlyContinue |
+              Select-Object FullName,Length,LastWriteTime |
+              Format-Table -AutoSize | Out-File "$diagDir\columnar_ctest_files_watchdog.txt" -Encoding utf8
 
-              Set-Location $workdir
-              & php @args > $stdout 2> $stderr
-              [pscustomobject]@{ ExitCode = $LASTEXITCODE }
-            }
-
-            $completed = Wait-Job $job -Timeout $timeout
-            if (-not $completed) {
-              Get-CimInstance Win32_Process |
-                Where-Object { $_.Name -match '^(php|searchd|indexer)\.exe$' } |
-                Select-Object ProcessId,ParentProcessId,Name,CommandLine |
-                Format-List | Out-File "$diagDir\columnar_cli_${test}_processes.txt" -Encoding utf8
-              Stop-Job $job -ErrorAction SilentlyContinue
-              Stop-Process -Name php,searchd,indexer -Force -ErrorAction SilentlyContinue
-              "timeout" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
-              $failed += $test
-            } else {
-              $result = Receive-Job $job
-              $exitCode = [int]$result.ExitCode
-              "exit_code=$exitCode" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
-              if ($exitCode -ne 0) {
-                $failed += $test
+            try {
+              $zip = Join-Path $diagDir "procdump.zip"
+              $procDir = Join-Path $diagDir "procdump"
+              if (-not (Test-Path "$procDir\procdump64.exe")) {
+                Invoke-WebRequest "https://download.sysinternals.com/files/Procdump.zip" -OutFile $zip
+                Expand-Archive -LiteralPath $zip -DestinationPath $procDir -Force
               }
-            }
-            Remove-Job $job -Force -ErrorAction SilentlyContinue
-
-            Get-Content $stdout -ErrorAction SilentlyContinue
-            Get-Content $stderr -ErrorAction SilentlyContinue
-
-            if ($failed -contains $test -and $failFast -eq "true") {
-              break
+              foreach ($proc in Get-Process php,searchd,indexer -ErrorAction SilentlyContinue) {
+                & "$procDir\procdump64.exe" -accepteula -ma $proc.Id "$diagDir\columnar_ctest_$($proc.ProcessName)_$($proc.Id).dmp" | Out-File "$diagDir\columnar_ctest_procdump_$($proc.Id).txt" -Encoding utf8
+              }
+            } catch {
+              $_ | Out-File "$diagDir\columnar_ctest_procdump_error.txt" -Encoding utf8
             }
           }
 
-          if ($failed.Count -gt 0) {
-            throw "Columnar CLI ubertests failed: $($failed -join ', ')"
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout $timeout
+          $ret = $LASTEXITCODE
+
+          if ($watchdog.State -eq "Running") {
+            Stop-Job $watchdog
           }
+          Receive-Job $watchdog -ErrorAction SilentlyContinue | Out-File "$diagDir\columnar_ctest_watchdog_job_output.txt" -Encoding utf8
+          Remove-Job $watchdog -Force
+
+          exit $ret
 
       - name: Prepare diagnostics
         if: always()

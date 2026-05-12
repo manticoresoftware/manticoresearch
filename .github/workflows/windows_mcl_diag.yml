@@ -84,7 +84,8 @@ jobs:
       CTEST_CONFIGURATION_TYPE: RelWithDebInfo
       cache_key: build_windows_x64_relwithdebinfo
       artifact_name: windows_mcl_diag_build
-      artifact_list: "build/xml build/src/RelWithDebInfo/indexer.exe build/src/RelWithDebInfo/indexer.pdb build/src/RelWithDebInfo/searchd.exe build/src/RelWithDebInfo/searchd.pdb build/src/gtests/RelWithDebInfo/gmanticoretest.exe build/src/gtests/RelWithDebInfo/gmanticoretest.pdb build/src/RelWithDebInfo/*.dll build/src/gtests/RelWithDebInfo/*.dll build/config/*.c build/config/*.h"
+      artifact_list: "build/xml build/src/RelWithDebInfo/indexer.exe build/src/RelWithDebInfo/indexer.pdb build/src/RelWithDebInfo/searchd.exe build/src/RelWithDebInfo/searchd.pdb build/src/RelWithDebInfo/*.dll build/config/*.c build/config/*.h"
+      cmake_command: "DISABLE_GTESTS=1 ctest -VV -S misc/ctest/gltest.cmake --no-compress-output"
       COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
 
   test_windows_mcl:
@@ -99,6 +100,7 @@ jobs:
       BOOST_ROOT: "../boost_1_75_0"
       CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
       CTEST_CONFIGURATION_TYPE: RelWithDebInfo
+      DISABLE_GTESTS: 1
       CTEST_START: 1
       CTEST_END: 999999
       NO_BUILD: 1

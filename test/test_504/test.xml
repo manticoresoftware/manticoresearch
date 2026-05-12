@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>HTTP Content-Length header includes required space</name>
+
+<skip_indexer/>
+<requires>
+    <http/>
+    <force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<httpqueries>
+<query endpoint="sql?mode=raw" method="post">DROP TABLE IF EXISTS rt_header_504</query>
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE rt_header_504(title text)</query>
+<query endpoint="_bulk" content="application/x-ndjson" response_headers="Content-Length">{ "create" : { "_index" : "rt_header_504", "_id" : "1" } }
+{ "title" : "abc" }
+
+</query>
+<query endpoint="sql?mode=raw" method="post">DROP TABLE IF EXISTS rt_header_504</query>
+</httpqueries>
+
+</test>

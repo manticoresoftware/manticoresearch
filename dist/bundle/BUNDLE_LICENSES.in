@@ -79,6 +79,18 @@ manticore-language-packs package.
   https://github.com/sokirko74/aot
   Distributed from https://repo.manticoresearch.com/repository/morphology/
 
+- Ukrainian morphology dictionary (uk): generated using pymorphy2 and
+  pymorphy2-dicts-uk tooling (MIT), via LT2OpenCorpora converter code (MIT).
+  The dictionary payload is derived from LanguageTool Ukrainian data created
+  by Andriy Rysin and based on spell-uk. The spell-uk dictionary is available
+  under GPL-2.0-or-later / LGPL-2.1-or-later / MPL-1.1. For distribution with
+  Manticore Search, rely on the GPL/LGPL branch of that tri-license rather
+  than MPL-1.1.
+  https://github.com/pymorphy2/pymorphy2
+  https://github.com/pymorphy2/pymorphy2-dicts
+  https://github.com/dchaplinsky/LT2OpenCorpora
+  https://sourceforge.net/projects/ispell-uk/
+
 - Jieba dictionary files: from cppjieba (MIT) and manticoresoftware/jieba
   https://github.com/manticoresoftware/cppjieba
   https://github.com/manticoresoftware/jieba

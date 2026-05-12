@@ -15,7 +15,7 @@ In Manticore Search, there's an optimization that maintains the result set of th
 The facet values can originate from an attribute, a JSON property within a JSON attribute, or an expression. Facet values can also be aliased, but the **alias must be unique** across all result sets (main query result set and other facets result sets). The facet value is derived from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
 ```sql
-FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [MODE {strict | auto | max}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
 Multiple facet declarations must be separated by a whitespace.
@@ -44,6 +44,11 @@ where:
 * `field` value must contain the name of the attribute or expression being faceted
 * optional `size` specifies the maximum number of buckets to include in the result. When not specified, it inherits the main query's limit. More details can be found in the [Size of facet result](../Searching/Faceted_search.md#Size-of-facet-result) section.
 * optional `sort` specifies an array of attributes and/or additional properties using the same syntax as the ["sort" parameter in the main query](../Searching/Sorting_and_ranking.md#Sorting-via-JSON).
+* optional top-level `facet_filter_mode` controls how all aggregations inherit filters from the main query. Supported values are `strict`, `auto`, and `max`.
+* optional per-aggregation `mode` overrides the inherited mode for that aggregation. Supported values are `strict`, `auto`, and `max`. `filter_mode` is kept as a backward-compatible alias.
+* optional per-aggregation `filters` explicitly lists which main-query attribute filters should be applied to that aggregation.
+* optional per-aggregation `exclude_filters` explicitly lists which main-query attribute filters should not be applied to that aggregation.
+* facet result sets can include a `status` bucket marker. Values are `selected`, `available`, and `unavailable`.
 
 The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 
@@ -2384,6 +2389,202 @@ POST /search -d '
 <!-- end -->
 
 
+<!-- example Facet filter modes -->
+### Facet filter modes
+
+Before counting buckets for a facet, Manticore first decides which filters from the main query should be applied to that facet.
+
+Built-in modes:
+- `strict`
+  - apply all filters from the main query
+- `auto`
+  - apply all filters from the main query except filters on this same facet
+- `max`
+  - same as `auto`, but also return unavailable buckets with `status`
+
+Manual overrides:
+- `filters`
+  - apply only the listed main-query filters to this facet
+- `exclude_filters`
+  - apply all main-query filters except the listed ones to this facet
+
+Short version:
+- `strict` = apply everything
+- `auto` = apply everything except this facet's own filters
+- `max` = `auto` + unavailable buckets
+- `filters` = apply only these filters
+- `exclude_filters` = apply everything except these filters
+
+Performance note:
+- `max` is the most expensive facet mode because it has to discover and label unavailable buckets in addition to the normal facet counts
+- on large datasets or queries with many facets, `max` can be much slower than `strict` or `auto`
+- prefer `strict` or `auto` by default, and enable `max` only when the UI really needs unavailable buckets
+
+Example
+
+If the main query has:
+- `brand='nike'`
+- `color='red'`
+- `size='small'`
+
+and we calculate `FACET color`, then:
+
+- `strict`
+  - apply `brand + color + size`
+- `auto`
+  - apply `brand + size`
+- `max`
+  - apply `brand + size`
+  - and also return unavailable color buckets with `status`
+- `filters=["brand"]`
+  - apply only `brand`
+- `exclude_filters=["size"]`
+  - apply `brand + color`
+
+<!-- intro -->
+##### SQL:
+
+Set the global default for the whole query:
+
+<!-- request SQL -->
+
+```sql
+SELECT id
+FROM products
+WHERE MATCH('sneakers') AND color_id=1 AND size_id=42
+OPTION facet_filter_mode='max'
+FACET color_id
+FACET size_id;
+```
+
+In this example:
+- `FACET color_id` uses the `size_id=42` filter, but not `color_id=1`
+- `FACET size_id` uses the `color_id=1` filter, but not `size_id=42`
+- in `max` mode the returned buckets also include `status` values
+
+You can also override the default rule for each facet:
+
+<!-- request SQL -->
+
+```sql
+SELECT id
+FROM products
+WHERE MATCH('sneakers') AND color_id=1 AND size_id=42 AND brand_id=7
+OPTION facet_filter_mode='max'
+FACET color_id ALL FILTERS
+FACET size_id
+FACET sku FILTERS color_id, size_id
+FACET brand_id EXCLUDE FILTERS color_id;
+```
+
+The per-facet clauses mean:
+- `ALL FILTERS` — apply all main-query filters to this facet
+- `FILTERS color_id, size_id` — apply only `color_id` and `size_id` filters to this facet
+- `EXCLUDE FILTERS color_id` — apply all main-query filters except `color_id` to this facet
+
+In `max` mode SQL facet results add a `status` column. This mode is also the most expensive one, so on large datasets or facet-heavy queries you should enable it only when you need unavailable buckets in the response. For example, with `size='small'` and `facet_filter_mode='max'`, a `FACET size` result can look like this:
+
+<!-- response SQL -->
+
+```sql
++-------+----------+-------------+
+| size  | count(*) | status      |
++-------+----------+-------------+
+| small |        1 | selected    |
+| large |        1 | unavailable |
++-------+----------+-------------+
+```
+
+<!-- intro -->
+##### JSON:
+
+The same idea is available in the JSON API. Set the global default at the top level:
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "table": "products",
+  "query": {
+    "bool": {
+      "must": [
+        { "equals": { "color_id": 1 } },
+        { "equals": { "size_id": 42 } }
+      ]
+    }
+  },
+  "facet_filter_mode": "max",
+  "aggs": {
+    "colors": {
+      "terms": { "field": "color_id" }
+    },
+    "sizes": {
+      "terms": { "field": "size_id" }
+    }
+  }
+}'
+```
+
+In `max` mode JSON facet buckets include a `status` field. As with SQL, this is the most expensive facet mode, so use it with care on large datasets or when many facets are requested:
+
+<!-- response JSON -->
+
+```json
+"aggregations": {
+  "sizes": {
+    "buckets": [
+      { "key": "small", "doc_count": 1, "status": "selected" },
+      { "key": "large", "doc_count": 1, "status": "unavailable" }
+    ]
+  }
+}
+```
+
+And override it per aggregation when needed:
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "table": "products",
+  "query": {
+    "bool": {
+      "must": [
+        { "equals": { "color_id": 1 } },
+        { "equals": { "size_id": 42 } },
+        { "equals": { "brand_id": 7 } }
+      ]
+    }
+  },
+  "facet_filter_mode": "auto",
+  "aggs": {
+    "colors": {
+      "terms": { "field": "color_id" },
+      "mode": "strict"
+    },
+    "sku": {
+      "terms": { "field": "sku" },
+      "filters": ["color_id", "size_id"]
+    },
+    "brands": {
+      "terms": { "field": "brand_id" },
+      "exclude_filters": ["color_id"]
+    }
+  }
+}'
+```
+
+Notes:
+- in SQL, `MODE` overrides the query-level `facet_filter_mode` for one facet
+- in JSON, `mode` or `filter_mode` overrides the top-level `facet_filter_mode` for one aggregation
+- `status=selected` is currently derived from explicit value filters such as `=` and `IN` on the facet field.
+- unsupported same-field filters such as ranges do not currently mark buckets as `selected`.
+- facet-local filter scope supports conjunction-only attribute filters. Complex boolean filter trees are not rewritten per facet.
+
+<!-- end -->
+
 <!-- example Size -->
 ### Size of facet result
 
@@ -2988,7 +3189,7 @@ When using SQL, a search with facets returns multiple result sets. The MySQL cli
 <!-- example Performance -->
 ### Performance
 
-Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick in for a faceted search, meaning the search query is executed only once, and the facets operate on the search query result, with each facet adding only a fraction of time to the total query time.
+Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick in for a faceted search, meaning the search query is executed only once, and the facets operate on the search query result, with each facet adding only a fraction of time to the total query time. When all facets use the same filter scope, this optimization can still reuse the common result set. If you assign different filter scopes to different facets, Manticore may need to calculate those facet result sets separately.
 
 
 To check if the faceted search ran in an optimized mode, you can look in the [query log](../Logging/Query_logging.md), where all logged queries will contain an `xN` string, where `N` is the number of queries that ran in the optimized group. Alternatively, you can check the output of the [SHOW META](../Node_info_and_management/SHOW_META.md) statement, which will display a `multiplier` metric:

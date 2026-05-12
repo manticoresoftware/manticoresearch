@@ -12,6 +12,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cfloat>
+
 #include "std/ints.h"
 #include "std/num_conv.h"
 #include "sphinxutils.h"
@@ -241,6 +243,29 @@ TEST ( functions, sph_Sprintf_to_builder )
 
 	sBuf.Sprintf ( " %.3F", 999005 );
 	ASSERT_STREQ ( sBuf.cstr(), "{1 -1 100,2 -2 200} 999.500, -1.400932 999.005" );
+}
+
+TEST ( functions, sph_Sprintf_float_max )
+{
+	using namespace sph;
+
+	constexpr int iMaxFloatStr = 64;
+	char sExpected[iMaxFloatStr];
+	snprintf ( sExpected, sizeof(sExpected), "%f", FLT_MAX );
+
+	char sBuf[iMaxFloatStr];
+	memset ( sBuf, 0, sizeof(sBuf) );
+	sph::Sprintf ( sBuf, "%f", FLT_MAX );
+	EXPECT_STREQ ( sBuf, sExpected );
+
+	StringBuilder_c tBuilder;
+	Sprintf ( tBuilder, "%f", FLT_MAX );
+	EXPECT_STREQ ( tBuilder.cstr(), sExpected );
+
+	tBuilder.Clear();
+	tBuilder << FLT_MAX;
+	EXPECT_STREQ ( tBuilder.cstr(), sExpected );
+
 }
 
 TEST ( functions, builder_sprintf_formatters )

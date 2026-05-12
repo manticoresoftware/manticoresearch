@@ -24,6 +24,19 @@ index rt
 	dict = keywords
 	min_prefix_len = 2
 }
+
+index rt_ar
+{
+	type = rt
+	path			= <data_path/>/rt_ar
+	rt_mem_limit = 128k
+
+	rt_field		= title
+	rt_attr_uint	= gid
+
+	morphology		= stem_en, stem_ar
+	min_infix_len	= 3
+}
 </config>
 
 <queries><sphinxql>
@@ -48,6 +61,11 @@ INSERT INTO rt (id, gid, title) VALUES ( 24, 1, 'testa2 far6' );
 INSERT INTO rt (id, gid, title) VALUES ( 25, 1, 'testa3 far7' );
 INSERT INTO rt (id, gid, title) VALUES ( 26, 1, 'testa3 far8' );
 CALL KEYWORDS ( 'test* far*', 'rt', 1 AS stats, 0 AS fold_wildcards, 3 as expansion_limit, 'hits' as sort_mode );
+
+<!-- regression malformed UTF-8/normalization for mixed Arabic+ASCII tokens with stem_ar -->
+INSERT INTO rt_ar (id, gid, title) VALUES ( 1, 1, 'Crossbody Bag with Tassel' );
+CALL KEYWORDS ( 'ال200د ', 'rt_ar' );
+CALL KEYWORDS ( 'ال200ددد ', 'rt_ar' );
 </sphinxql></queries>
 
 </test>

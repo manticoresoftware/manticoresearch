@@ -65,9 +65,12 @@
 %token	TOK_DIV
 %token	TOK_DOUBLE
 %token	TOK_EXPLAIN
+%token	TOK_EXCLUDE
 %token	TOK_FACET
 %token	TOK_FALSE
+%token	TOK_FILTERS
 %token	TOK_FLOAT
+%token	TOK_MODE
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
@@ -263,7 +266,11 @@ multi_stmt:
 /// *** ALL_IDENT_LIST ***
 
 reserved_tokens_without_option:
-	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC
+	TOK_ALL | reserved_tokens_without_option_without_all
+	;
+
+reserved_tokens_without_option_without_all:
+	TOK_AGENT | TOK_ANY | TOK_ASC
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
@@ -291,7 +298,7 @@ names_transaction_collate:
     ;
 
 ident_without_option:
-	TOK_IDENT | reserved_tokens_without_option
+	TOK_IDENT | reserved_tokens_without_option | TOK_EXCLUDE | TOK_FILTERS | TOK_MODE
 	;
 
 ident_for_set_stmt:
@@ -316,6 +323,15 @@ ident:
 
 option_name:
 	ident_without_option | all_set_tail | TOK_FORCE 
+	;
+
+facet_alias_ident:
+	TOK_IDENT | reserved_tokens_without_option_without_all | names_transaction_collate | non_reserved_tokens | TOK_BACKIDENT
+	;
+
+facet_alias:
+	facet_alias_ident
+	| facet_alias ':' ident {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
 
@@ -2067,7 +2083,13 @@ facet_by:
 	;
 
 facet_item:
-	facet_expr opt_alias
+	facet_expr facet_opt_alias
+	;
+
+facet_opt_alias:
+	// empty
+	| TOK_AS identcol						{ pParser->AliasLastItem ( &$2 ); }
+	| facet_alias							{ pParser->AliasLastItem ( &$1 ); }
 	;
 
 facet_expr:
@@ -2083,8 +2105,51 @@ facet_items_list:
 	| facet_items_list ',' facet_item
 	;
 
+facet_filter_attr:
+	identcol
+	| json_expr
+	;
+
+facet_filter_attr_list:
+	facet_filter_attr
+		{
+			pParser->AddFacetFilterAttr ( $1 );
+		}
+	| facet_filter_attr_list ',' facet_filter_attr
+		{
+			pParser->AddFacetFilterAttr ( $3 );
+		}
+	;
+
+opt_facet_filters:
+	// empty
+	| TOK_ALL TOK_FILTERS
+		{
+			pParser->SetFacetFilterClause ( FacetFilterClause_e::All );
+		}
+	| TOK_FILTERS
+		{
+			pParser->SetFacetFilterClause ( FacetFilterClause_e::Include );
+		}
+		facet_filter_attr_list
+	| TOK_EXCLUDE TOK_FILTERS
+		{
+			pParser->SetFacetFilterClause ( FacetFilterClause_e::Exclude );
+		}
+		facet_filter_attr_list
+	;
+
+opt_facet_mode:
+	// empty
+	| TOK_MODE ident
+		{
+			if ( !pParser->SetFacetFilterMode ( $2 ) )
+				YYERROR;
+		}
+	;
+
 facet_stmt:
-	TOK_FACET facet_items_list opt_facet_by_items_list opt_distinct_item opt_order_clause opt_limit_clause
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_facet_filters opt_facet_mode opt_distinct_item opt_order_clause opt_limit_clause
 		{
 			if ( !pParser->SetupFacetStmt() )
 				YYERROR;

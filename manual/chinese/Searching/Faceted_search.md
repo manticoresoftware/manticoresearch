@@ -15,7 +15,7 @@
 分面值可以来自属性、JSON 属性内的 JSON 属性或表达式。分面值也可以使用别名，但**别名在所有结果集（主查询结果集和其他分面结果集）中必须是唯一的**。分面值源自聚合的属性/表达式，但也可以来自另一个属性/表达式。
 
 ```sql
-FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
+FACET {expr_list} [BY {expr_list}] [ALL FILTERS | FILTERS {expr_list} | EXCLUDE FILTERS {expr_list}] [MODE {strict | auto | max}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 ```
 
 多个分面声明必须用空格分隔。
@@ -44,6 +44,11 @@ FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FA
 * `field` 值必须包含要进行分面的属性或表达式的名称
 * 可选的 `size` 指定结果中包含的最大桶数。未指定时，继承主查询的限制。更多详细信息可以在[分面结果大小](../Searching/Faceted_search.md#Size-of-facet-result)部分找到。
 * 可选的 `sort` 指定一个属性数组和/或附加属性，使用与[主查询中的"sort"参数](../Searching/Sorting_and_ranking.md#Sorting-via-JSON)相同的语法。
+* 可选的顶级`facet_filter_mode`控制所有聚合如何继承主查询的过滤器。支持的值为`strict`、`auto`和`max`。
+* 可选的每个聚合`mode`覆盖该聚合继承的模式。支持的值为`strict`、`auto`和`max`。`filter_mode`保留为向后兼容的别名。
+* 可选的每个聚合`filters`明确列出应应用于该聚合的主查询属性过滤器。
+* 可选的每个聚合`exclude_filters`明确列出不应应用于该聚合的主查询属性过滤器。
+* 属性结果集可以包含一个`status`桶标记。值为`selected`、`available`和`unavailable`。
 
 结果集将包含一个 `aggregations` 节点，其中包含返回的分面，`key` 是聚合值，`doc_count` 是聚合计数。
 
@@ -2384,6 +2389,202 @@ POST /search -d '
 <!-- end -->
 
 
+<!-- example Facet filter modes -->
+### 分面过滤模式
+
+在计算分面的桶之前，Manticore 首先决定主查询中的哪些过滤器应应用于该分面。
+
+内置模式：
+- `strict`
+  - 应用主查询的所有过滤器
+- `auto`
+  - 应用主查询的所有过滤器，但排除该分面本身的过滤器
+- `max`
+  - 与 `auto` 相同，但还会返回带有 `status` 的不可用桶
+
+手动覆盖：
+- `filters`
+  - 仅应用列出的主查询过滤器到该分面
+- `exclude_filters`
+  - 应用主查询的所有过滤器，但排除列出的过滤器
+
+简要说明：
+- `strict` = 应用所有内容
+- `auto` = 应用所有内容，但排除该分面的过滤器
+- `max` = `auto` + 不可用桶
+- `filters` = 仅应用这些过滤器
+- `exclude_filters` = 应用所有内容，但排除这些过滤器
+
+性能说明：
+- `max` 是最昂贵的分面模式，因为它需要发现并标记不可用桶，而不仅仅是正常的分面计数
+- 在大型数据集或包含许多分面的查询中，`max` 可能比 `strict` 或 `auto` 慢得多
+- 默认情况下优先使用 `strict` 或 `auto`，仅在 UI 确实需要不可用桶时启用 `max`
+
+示例
+
+如果主查询包含：
+- `brand='nike'`
+- `color='red'`
+- `size='small'`
+
+并且我们计算 `FACET color`，则：
+
+- `strict`
+  - 应用 `brand + color + size`
+- `auto`
+  - 应用 `brand + size`
+- `max`
+  - 应用 `brand + size`
+  - 还会返回带有 `status` 的不可用颜色桶
+- `filters=["brand"]`
+  - 仅应用 `brand`
+- `exclude_filters=["size"]`
+  - 应用 `brand + color`
+
+<!-- intro -->
+##### SQL:
+
+设置整个查询的全局默认值：
+
+<!-- request SQL -->
+
+```sql
+SELECT id
+FROM products
+WHERE MATCH('sneakers') AND color_id=1 AND size_id=42
+OPTION facet_filter_mode='max'
+FACET color_id
+FACET size_id;
+```
+
+在此示例中：
+- `FACET color_id` 使用 `size_id=42` 过滤器，但不使用 `color_id=1`
+- `FACET size_id` 使用 `color_id=1` 过滤器，但不使用 `size_id=42`
+- 在 `max` 模式下，返回的桶还包括 `status` 值
+
+您也可以为每个分面覆盖默认规则：
+
+<!-- request SQL -->
+
+```sql
+SELECT id
+FROM products
+WHERE MATCH('sneakers') AND color_id=1 AND size_id=42 AND brand_id=7
+OPTION facet_filter_mode='max'
+FACET color_id ALL FILTERS
+FACET size_id
+FACET sku FILTERS color_id, size_id
+FACET brand_id EXCLUDE FILTERS color_id;
+```
+
+每个分面的子句含义：
+- `ALL FILTERS` — 将主查询的所有过滤器应用于该分面
+- `FILTERS color_id, size_id` — 仅将 `color_id` 和 `size_id` 过滤器应用于该分面
+- `EXCLUDE FILTERS color_id` — 将主查询的所有过滤器（除了 `color_id`）应用于该分面
+
+在 `max` 模式下，SQL 分面结果会添加一个 `status` 列。此模式也是最昂贵的，因此在大型数据集或分面密集的查询中，应仅在需要响应中包含不可用桶时启用它。例如，使用 `size='small'` 和 `facet_filter_mode='max'`，`FACET size` 的结果可能如下所示：
+
+<!-- response SQL -->
+
+```sql
++-------+----------+-------------+
+| size  | count(*) | status      |
++-------+----------+-------------+
+| small |        1 | selected    |
+| large |        1 | unavailable |
++-------+----------+-------------+
+```
+
+<!-- intro -->
+##### JSON:
+
+JSON API 中也提供了相同的功能。在顶层设置全局默认值：
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "table": "products",
+  "query": {
+    "bool": {
+      "must": [
+        { "equals": { "color_id": 1 } },
+        { "equals": { "size_id": 42 } }
+      ]
+    }
+  },
+  "facet_filter_mode": "max",
+  "aggs": {
+    "colors": {
+      "terms": { "field": "color_id" }
+    },
+    "sizes": {
+      "terms": { "field": "size_id" }
+    }
+  }
+}'
+```
+
+在 `max` 模式下，JSON 分面桶包含一个 `status` 字段。与 SQL 一样，这是最昂贵的分面模式，因此在大型数据集或请求许多分面时应谨慎使用：
+
+<!-- response JSON -->
+
+```json
+"aggregations": {
+  "sizes": {
+    "buckets": [
+      { "key": "small", "doc_count": 1, "status": "selected" },
+      { "key": "large", "doc_count": 1, "status": "unavailable" }
+    ]
+  }
+}
+```
+
+在需要时可以为每个聚合覆盖它：
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "table": "products",
+  "query": {
+    "bool": {
+      "must": [
+        { "equals": { "color_id": 1 } },
+        { "equals": { "size_id": 42 } },
+        { "equals": { "brand_id": 7 } }
+      ]
+    }
+  },
+  "facet_filter_mode": "auto",
+  "aggs": {
+    "colors": {
+      "terms": { "field": "color_id" },
+      "mode": "strict"
+    },
+    "sku": {
+      "terms": { "field": "sku" },
+      "filters": ["color_id", "size_id"]
+    },
+    "brands": {
+      "terms": { "field": "brand_id" },
+      "exclude_filters": ["color_id"]
+    }
+  }
+}'
+```
+
+注：
+- 在 SQL 中，`MODE` 会覆盖查询级别的 `facet_filter_mode`，适用于一个分面
+- 在 JSON 中，`mode` 或 `filter_mode` 会覆盖顶层的 `facet_filter_mode`，适用于一个聚合
+- `status=selected` 目前是根据显式的值过滤器（如 `=` 和 `IN`）推导出来的，这些过滤器作用于分面字段
+- 当前不支持的同字段过滤器（如范围）不会将桶标记为 `selected`
+- 分面本地的过滤器作用域支持仅连接的属性过滤器。复杂的布尔过滤树不会按分面重写。
+
+<!-- end -->
+
 <!-- example Size -->
 ### Facet结果的大小
 
@@ -2988,7 +3189,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example Performance -->
 ### 性能
 
-内部，`FACET` 是执行多查询的一个快捷方式，其中第一个查询包含主要搜索查询，批次中的其余查询各自包含聚类。正如多查询的情况一样，对于带有 facets 的搜索，常见的查询优化可以启动，这意味着搜索查询只执行一次，而 facets 则在搜索查询结果上操作，每个 facet 只增加总查询时间的一小部分。
+内部而言，`FACET` 是执行多查询的简写方式，其中第一个查询包含主搜索查询，而批次中的其余查询各自包含一个聚类。与多查询的情况类似，分面搜索可以触发通用查询优化，这意味着搜索查询只需执行一次，分面操作在搜索查询结果上进行，每个分面仅增加总查询时间的一小部分。当所有分面使用相同的过滤作用域时，这种优化仍可以重用通用结果集。如果你为不同分面分配了不同的过滤作用域，Manticore 可能需要分别计算这些分面结果集。
 
 
 要检查 facets 搜索是否以优化模式运行，可以在 [查询日志](../Logging/Query_logging.md) 中查找，其中所有记录的查询将包含一个 `xN` 字符串，`N` 是优化组中运行的查询数量。或者，可以检查 [SHOW META](../Node_info_and_management/SHOW_META.md) 语句的输出，该语句将显示一个 `multiplier` 指标：

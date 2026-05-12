@@ -135,7 +135,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 29
+	VER_COMMAND_SEARCH_MASTER = 30
 };
 
 
@@ -1740,6 +1740,15 @@ public:
 	{
 		m_bError = false;
 		m_sError = "";
+	}
+
+	virtual void StoreCurrentPositionState() noexcept
+	{
+	};
+
+	virtual void RestoreLastPositionState () noexcept
+	{
+		Reset();
 	}
 
 protected:

@@ -20,6 +20,7 @@
 #include "logger.h"
 #include "schematransform.h"
 #include "minimize_aggr_result.h"
+#include "facetutils.h"
 
 #include "std/string.h"
 
@@ -1972,7 +1973,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// check for facets
 	m_bFacetQueue = iQueries>1;
 	for ( int iCheck = 1; iCheck<m_dNQueries.GetLength () && m_bFacetQueue; ++iCheck )
-		if ( !m_dNQueries[iCheck].m_bFacet )
+		if ( !m_dNQueries[iCheck].m_bFacet || facet::ShouldRewriteFilters ( m_dNQueries[0], m_dNQueries[iCheck] ) )
 			m_bFacetQueue = false;
 
 	m_bMultiQueue = m_bFacetQueue || CheckMultiQuery();
@@ -2324,6 +2325,36 @@ static ESphAggrFunc GetAggr ( Aggr_e eAggrFunc )
 	}
 }
 
+static bool NeedJsonQuery ( const JsonQuery_c & tQuery, const JsonAggr_t & tAggr )
+{
+	return facet::GetFilterMode ( tQuery, tAggr.m_tFacetFilter )==FacetFilterMode_e::Max && facet::IsJsonFacetStatusBucket ( tAggr.m_eAggrFunc );
+}
+
+static int SetupJsonFacetResultSets ( JsonQuery_c & tQuery )
+{
+	int iQueries = 1;
+	for ( auto & tAggr : tQuery.m_dAggs )
+	{
+		tAggr.m_iResult = iQueries++;
+		tAggr.m_iStrictResult = NeedJsonQuery ( tQuery, tAggr ) ? iQueries++ : -1;
+	}
+
+	return iQueries;
+}
+
+static bool CanUseSingleAgg ( const JsonQuery_c & tQuery, QueryType_e eQueryType )
+{
+	if ( eQueryType!=QueryType_e::QUERY_JSON || tQuery.m_dAggs.GetLength()!=1 )
+		return false;
+
+	const JsonAggr_t & tAggr = tQuery.m_dAggs[0];
+	return tQuery.m_iLimit==0
+		&& tAggr.m_eAggrFunc==Aggr_e::NONE
+		&& facet::GetDefaultFilterMode ( tQuery.m_tFacetFilter )==FacetFilterMode_e::Strict
+		&& !facet::HasLocalFilterMode ( tAggr.m_tFacetFilter )
+		&& tAggr.m_tFacetFilter.m_eClause==FacetFilterClause_e::None;
+}
+
 template<bool HAS_ATTRS>
 void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dItems, sph::StringSet * pAttrs )
 {
@@ -2348,19 +2379,23 @@ void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dI
 	}
 }
 
-SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed )
+SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed, CSphString & sError )
 {
 	JsonQuery_c & tQuery = tParsed.m_tQuery;
 	tQuery.m_pQueryParser = pQueryParser.get();
 
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
+	if ( eQueryType==QueryType_e::QUERY_JSON )
+		iQueries = SetupJsonFacetResultSets ( tQuery );
 
 	// make single grouper / sorter to match plain query with only group by (wo FACET) if single aggs set and main query limit=0
-	if ( eQueryType==QueryType_e::QUERY_JSON && tQuery.m_dAggs.GetLength()==1 && tQuery.m_iLimit==0 && tQuery.m_dAggs[0].m_eAggrFunc==Aggr_e::NONE )
+	if ( CanUseSingleAgg ( tQuery, eQueryType ) )
 	{
 		iQueries = 1;
 		tQuery.m_bGroupEmulation = true;
-		const JsonAggr_t & tAggs = tQuery.m_dAggs[0];
+		JsonAggr_t & tAggs = tQuery.m_dAggs[0];
+		tAggs.m_iResult = 0;
+		tAggs.m_iStrictResult = -1;
 		tQuery.m_iLimit = tAggs.m_iSize;
 		tQuery.m_sGroupBy = tAggs.m_sCol;
 		if ( tAggs.m_sSort.IsEmpty() )
@@ -2439,12 +2474,14 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 	tQuery.m_bFacetHead = true;
 	tHandler.SetQuery ( 0, tQuery, nullptr );
 	tHandler.SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
+	const JsonQuery_c tHeadFacetQuery = tQuery;
 	int iRefLimit = tQuery.m_iLimit;
 	int iRefOffset = tQuery.m_iOffset;
 
-	ARRAY_FOREACH ( i, tQuery.m_dAggs )
+	ARRAY_FOREACH ( i, tHeadFacetQuery.m_dAggs )
 	{
-		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
+		const JsonAggr_t & tBucket = tHeadFacetQuery.m_dAggs[i];
+		tQuery = tHeadFacetQuery;
 
 		// common to main query but flags, select list and ref items should uniq
 		tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR;
@@ -2452,6 +2489,17 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 		// facet flags
 		tQuery.m_bFacetHead = false;
 		tQuery.m_bFacet = true;
+		tQuery.m_dFilters.Reset();
+		tQuery.m_dFilterTree.Reset();
+		tQuery.m_dFacetOwnFilterAttrs.Reset();
+		tQuery.m_dFacetOwnFilterAttrs.Add ( tBucket.m_sCol );
+		tQuery.m_tFacetFilter = tBucket.m_tFacetFilter;
+
+		if ( !facet::CopyFilters ( tHeadFacetQuery, tQuery, sError, true ) )
+		{
+			tQuery = tHeadFacetQuery;
+			return tHandler;
+		}
 
 		// select list to facet query
 		if ( tBucket.m_eAggrFunc==Aggr_e::PERCENTILES || tBucket.m_eAggrFunc==Aggr_e::PERCENTILE_RANKS || tBucket.m_eAggrFunc==Aggr_e::MAD )
@@ -2582,8 +2630,26 @@ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryPars
 			tQuery.m_iOffset = iRefOffset;
 		}
 
-		tHandler.SetQuery ( i+1, tQuery, nullptr );
+		tHandler.SetQuery ( tBucket.m_iResult, tQuery, nullptr );
+
+		if ( tBucket.m_iStrictResult>=0 )
+		{
+			JsonQuery_c tStrictQuery = tQuery;
+			tStrictQuery.m_bFacetMaxRef = true;
+			tStrictQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+			tStrictQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
+			tStrictQuery.m_dFilters.Reset();
+			tStrictQuery.m_dFilterTree.Reset();
+			if ( !facet::CopyFilters ( tHeadFacetQuery, tStrictQuery, sError, true ) )
+			{
+				tQuery = tHeadFacetQuery;
+				return tHandler;
+			}
+
+			tHandler.SetQuery ( tBucket.m_iStrictResult, tStrictQuery, nullptr );
+		}
 	}
 
+	tQuery = tHeadFacetQuery;
 	return tHandler;
 }

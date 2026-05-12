@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>facet filter mode JSON agg review coverage</name>
+
+<requires>
+<force-rt/>
+<http/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>create table facet_json_review ( title text, brand_id integer, color_id integer, color_name string, size_id integer, size_name string, sku string )</sphinxql>
+<sphinxql>insert into facet_json_review ( id, title, brand_id, color_id, color_name, size_id, size_name, sku ) values
+(1,'p1',7,1,'red',10,'small','sku1'),
+(2,'p2',7,1,'red',20,'large','sku2'),
+(3,'p3',7,2,'blue',10,'small','sku3'),
+(4,'p4',7,3,'green',30,'xlarge','sku4'),
+(5,'p5',8,1,'red',10,'small','sku5'),
+(6,'p6',8,4,'black',20,'large','sku6'),
+(7,'p7',9,5,'white',10,'small','sku7')</sphinxql>
+</queries>
+
+<httpqueries>
+<!-- Legacy/default and top-level strict JSON aggs must remain strict. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_default": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_default": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_strict": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- Auto removes only the aggregation's own filters, and keeps the other flat filters. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "auto",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
+  "aggs": {
+    "color_auto": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_auto": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- Top-level max must be inherited by aggs and emit status. color_id 4/5 are outside brand_id=7 and should not appear. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_top_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } },
+    "size_top_max": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } } }
+  }
+}</query>
+
+<!-- Explicit per-agg max should produce unavailable status for broad auto buckets. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_mode_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "mode": "max" },
+    "size_mode_strict": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "mode": "strict" }
+  }
+}</query>
+
+<!-- Empty strict availability should still label broad auto buckets as unavailable. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 99 } } ] } },
+  "aggs": {
+    "color_empty_availability": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<!-- Status labeling for string buckets and selected string filters. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_name": "red" } } ] } },
+  "aggs": {
+    "color_name_top_max": { "terms": { "field": "color_name", "size": 10, "order": { "color_name": "asc" } } }
+  }
+}</query>
+
+<!-- Manual scopes and filter_mode alias. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "strict",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } }, { "equals": { "size_id": 10 } } ] } },
+  "aggs": {
+    "color_filters_brand_max": { "terms": { "field": "color_id", "size": 10, "order": { "color_id": "asc" } }, "filters": [ "brand_id" ], "mode": "max" },
+    "size_exclude_color_auto": { "terms": { "field": "size_id", "size": 10, "order": { "size_id": "asc" } }, "exclude_filters": [ "color_id" ], "filter_mode": "auto" }
+  }
+}</query>
+
+<!-- filters and exclude_filters in one aggregation should be rejected, regardless of JSON key order. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "query": { "match_all": {} },
+  "aggs": {
+    "conflict_filters_first": { "terms": { "field": "color_id" }, "filters": [ "brand_id" ], "exclude_filters": [ "color_id" ] }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "query": { "match_all": {} },
+  "aggs": {
+    "conflict_exclude_first": { "terms": { "field": "color_id" }, "exclude_filters": [ "color_id" ], "filters": [ "brand_id" ] }
+  }
+}</query>
+
+<!-- Complex boolean filter trees should fail clearly for facet-local rewrite modes in V1. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "auto",
+  "query": { "bool": { "should": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_auto_should": { "terms": { "field": "color_id" } }
+  }
+}</query>
+
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } } ], "must_not": [ { "equals": { "color_id": 4 } } ] } },
+  "aggs": {
+    "color_max_must_not": { "terms": { "field": "color_id" } }
+  }
+}</query>
+
+<!-- Main hit pagination must not affect explicitly sized aggregation buckets under auto. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 1,
+  "offset": 1,
+  "facet_filter_mode": "auto",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_auto_paged_hits": { "terms": { "field": "color_id", "size": 3, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<!-- Explicit size should page max/status data independently from main hit pagination. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 1,
+  "offset": 1,
+  "facet_filter_mode": "max",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } }, { "equals": { "color_id": 1 } } ] } },
+  "aggs": {
+    "color_max_paged_hits": { "terms": { "field": "color_id", "size": 3, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<!-- A low max_matches should still bound the number of aggregation buckets under auto. -->
+<query endpoint="search">{
+  "table": "facet_json_review",
+  "limit": 0,
+  "max_matches": 2,
+  "facet_filter_mode": "auto",
+  "query": { "bool": { "must": [ { "equals": { "brand_id": 7 } } ] } },
+  "aggs": {
+    "color_auto_low_max_matches": { "terms": { "field": "color_id", "size": 5, "order": { "color_id": "asc" } } }
+  }
+}</query>
+
+<query endpoint="sql" method="post">mode=raw&amp;query=drop table facet_json_review</query>
+</httpqueries>
+
+</test>

@@ -56,6 +56,7 @@
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
 #include "daemon/notifier.h"
+#include "facetutils.h"
 
 // services
 #include "taskping.h"
@@ -159,9 +160,8 @@ CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
 CSphString				g_sSecondaryError;
-static CSphString		g_sBuddyPath;
+static std::optional<CSphString>		g_sBuddyPath;
 static bool				g_bTelemetry = env_bool ( "MANTICORE_TELEMETRY" ).value_or ( true );
-static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = env_exists ( "MANTICORE_NO_CHANGE_CWD" );
 static bool				g_bCwdChanged = false;
@@ -8126,7 +8126,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 }
 
 // returns N of matches in resultset
-uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
+static uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile, facet::FacetStatusSources_t tStatus = {} )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -8169,6 +8169,9 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 	if ( bAddQueryColumn )
 		dRows.HeadColumn ( "query" );
 
+	if ( tStatus.HasStatus() )
+		dRows.HeadColumn ( "status" );
+
 	// EOF packet is sent explicitly due to non-default params.
 	auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
 	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
@@ -8189,6 +8192,9 @@ uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes,
 			assert ( pQueryColumn );
 			dRows.PutString ( *pQueryColumn );
 		}
+
+		if ( tStatus.HasStatus() )
+			dRows.PutString ( facet::GetBucketStatus ( tMatch, tRes.m_tSchema, tStatus ) );
 
 		if ( !dRows.Commit() )
 			return uMatches;
@@ -8600,28 +8606,123 @@ Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 	return NONE;
 }
 
-void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
-		const CSphString & sWarning )
+static bool TryRemapSelectedFilterToGroupBy ( const CSphFilterSettings & tFilter, const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, CSphFilterSettings & tRemapped )
+{
+	if ( tFacetQuery.m_sGroupBy.IsEmpty() )
+		return false;
+
+	if ( tFilter.m_eType!=SPH_FILTER_VALUES || tFilter.m_sAttrName!=tFacetQuery.m_sGroupBy )
+		return false;
+
+	const CSphColumnInfo * pGroupby = facet::GetGroupbyOnlyMagicAttr ( tBucketSchema );
+	if ( !pGroupby )
+		return false;
+
+	tRemapped = tFilter;
+	tRemapped.m_sAttrName = pGroupby->m_sName;
+	return true;
+}
+
+static facet::FacetStatusSources_t CollectFacetSelectedStatus ( const CSphQuery & tHeadQuery, const CSphQuery & tFacetQuery, const ISphSchema & tBucketSchema, const AggrResult_t * pStrictRes, CSphVector<CSphFilterSettings> & dSelected, facet::FacetBucketSet_t & tSelectedBuckets )
+{
+	facet::FacetStatusSources_t tStatus;
+	if ( !tFacetQuery.m_bFacet || tFacetQuery.m_dFacetOwnFilterAttrs.IsEmpty() )
+		return tStatus;
+
+	bool bNeedStrictSelected = false;
+	for ( const auto & tFilter : tHeadQuery.m_dFilters )
+		if ( facet::IsSelectedFilterType ( tFilter ) && facet::AttrNameInList ( tFacetQuery.m_dFacetOwnFilterAttrs, tFilter.m_sAttrName ) )
+		{
+			CSphFilterSettings tRemapped;
+			if ( TryRemapSelectedFilterToGroupBy ( tFilter, tFacetQuery, tBucketSchema, tRemapped ) )
+				dSelected.Add ( tRemapped );
+			else if ( tBucketSchema.GetAttr ( tFilter.m_sAttrName.cstr() ) )
+				dSelected.Add ( tFilter );
+			else
+				bNeedStrictSelected = true;
+		}
+
+	if ( bNeedStrictSelected && pStrictRes )
+	{
+		dSelected.Reset();
+		tStatus.m_pSelectedBuckets = facet::CollectFacetStatusValuesFilter ( tFacetQuery, tBucketSchema, *pStrictRes, tSelectedBuckets );
+		return tStatus;
+	}
+
+	tStatus.m_pSelectedFilters = dSelected.IsEmpty() ? nullptr : &dSelected;
+	return tStatus;
+}
+
+static bool MysqlStmtHasVisibleResultAfter ( const CSphVector<SqlStmt_t> & dStmt, int iStmt )
+{
+	for ( int iNext=iStmt+1; iNext<dStmt.GetLength(); ++iNext )
+	{
+		if ( dStmt[iNext].m_eStmt!=STMT_SELECT )
+			return true;
+		if ( !dStmt[iNext].m_tQuery.m_bFacetMaxRef )
+			return true;
+	}
+
+	return false;
+}
+
+static int GetMysqlSelectGroupEnd ( const CSphVector<SqlStmt_t> & dStmt, int iStart )
+{
+	assert ( dStmt[iStart].m_eStmt==STMT_SELECT );
+
+	int iEnd = iStart + 1;
+	const CSphQuery & tFirstQuery = dStmt[iStart].m_tQuery;
+
+	if ( tFirstQuery.m_bFacetHead )
+	{
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && ( dStmt[iEnd].m_tQuery.m_bFacet || dStmt[iEnd].m_tQuery.m_bFacetMaxRef ) )
+			++iEnd;
+
+		return iEnd;
+	}
+
+	if ( tFirstQuery.m_bFacet || tFirstQuery.m_bFacetMaxRef )
+	{
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && dStmt[iEnd].m_tQuery.m_bFacetMaxRef )
+			++iEnd;
+
+		return iEnd;
+	}
+
+	while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && !dStmt[iEnd].m_tQuery.m_bFacetHead && !dStmt[iEnd].m_tQuery.m_bFacet && !dStmt[iEnd].m_tQuery.m_bFacetMaxRef )
+		++iEnd;
+
+	return iEnd;
+}
+
+static void ApplyMysqlMultiStmtSet ( const SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_eSet!=SET_LOCAL )
+		return;
+
+	CSphString sSetName ( tStmt.m_sSetName );
+	sSetName.ToLower();
+	if ( sSetName=="profiling" )
+		session::Info().SetProfile ( ParseProfileFormat ( tStmt ) );
+}
+
+static bool HandleMysqlSelectStmtGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
+	const CSphString & sWarning, QueryProfile_c & tProfile )
 {
 	auto& tSess = session::Info();
 
-	// select count
-	int iSelect = dStmt.count_of ( [] ( const auto& tStmt ) { return tStmt.m_eStmt == STMT_SELECT; } );
-
-	CSphQueryResultMeta tPrevMeta = tLastMeta;
-
-	myinfo::SetCommand ( SqlStmt2Str(STMT_SELECT) );
-	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
-	for ( int i=0; i<iSelect; i++ )
-		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
+	int iSelect = 0;
+	for ( int i=iStart; i<iEnd; ++i )
+		if ( dStmt[i].m_eStmt==STMT_SELECT )
+			++iSelect;
 
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
-	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	for ( auto & tStmt : dStmt )
+	for ( int i=iStart; i<iEnd; ++i )
 	{
+		SqlStmt_t & tStmt = dStmt[i];
 		switch ( tStmt.m_eStmt )
 		{
 		case STMT_SELECT:
@@ -8659,6 +8760,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	bool bSearchOK = true;
 	if ( iSelect )
 	{
+		myinfo::SetCommand ( SqlStmt2Str(STMT_SELECT) );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 		bSearchOK = HandleMysqlSelect ( dRows, tHandler );
 
 		// save meta for SHOW *
@@ -8677,18 +8780,20 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	}
 
 	if ( !bSearchOK )
-		return;
+		return false;
 
 	// send multi-result set
 	iSelect = 0;
-	ARRAY_FOREACH ( i, dStmt )
+	CSphVector<CSphFilterSettings> dSelectedFilters;
+	facet::FacetBucketSet_t dSelectedBuckets;
+	facet::FacetBucketSet_t dAvailableBuckets;
+	for ( int i=iStart; i<iEnd; ++i )
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 		myinfo::SetCommand ( SqlStmt2Str(eStmt) );
 		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
-		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
-		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
+		bool bMoreResultsFollow = MysqlStmtHasVisibleResultAfter ( dStmt, i );
 		bool bBreak = false;
 
 		switch ( eStmt )
@@ -8704,23 +8809,87 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			if ( bBreak )
 				bMoreResultsFollow = false;
 
-			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
+			const int iQueryIdx = iSelect-1;
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacetMaxRef )
+				break;
+
+			dSelectedFilters.Resize ( 0 );
+			dSelectedBuckets.Reset();
+			dAvailableBuckets.Reset();
+			facet::FacetStatusSources_t tStatus;
+
+			if ( iQueryIdx>=0 && tHandler.m_dQueries[iQueryIdx].m_bFacet && facet::GetFilterMode ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx] )==FacetFilterMode_e::Max )
+			{
+				const AggrResult_t * pRes = &tRes;
+				if ( iQueryIdx+1<tHandler.m_dQueries.GetLength() && tHandler.m_dQueries[iQueryIdx+1].m_bFacetMaxRef )
+					pRes = &tHandler.m_dAggrResults[iQueryIdx+1];
+				tStatus = CollectFacetSelectedStatus ( tHandler.m_dQueries[0], tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, pRes, dSelectedFilters, dSelectedBuckets );
+				tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tHandler.m_dQueries[iQueryIdx], tRes.m_tSchema, *pRes, dAvailableBuckets );
+			}
+
+			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ), tStatus );
 			
 			if ( !session::GetBuddy() )
 				gStats().AddDeltaDetailed ( SearchdStats_t::eSearch, uMatches, tRes.GetQueryTimeUs() );
 			break;
 		}
+		}
+
+		if ( bBreak )
+			return false;
+
+		if ( sphInterrupted() )
+		{
+			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
+			dRows.Error ( "Server shutdown in progress", EMYSQL_ERR::SERVER_SHUTDOWN );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void HandleMysqlMultiStmt ( CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
+		const CSphString & sWarning )
+{
+	// select count
+	int iSelect = dStmt.count_of ( [] ( const auto& tStmt ) { return tStmt.m_eStmt == STMT_SELECT; } );
+
+	for ( int i=0; i<iSelect; i++ )
+		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
+
+	QueryProfile_c tProfile;
+	for ( int i=0; i<dStmt.GetLength(); )
+	{
+		if ( dStmt[i].m_eStmt==STMT_SELECT )
+		{
+			int iEnd = GetMysqlSelectGroupEnd ( dStmt, i );
+			if ( !HandleMysqlSelectStmtGroup ( dStmt, i, iEnd, tLastMeta, dRows, sWarning, tProfile ) )
+				return;
+
+			i = iEnd;
+			continue;
+		}
+
+		SqlStmt_e eStmt = dStmt[i].m_eStmt;
+		myinfo::SetCommand ( SqlStmt2Str(eStmt) );
+		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
+
+		bool bMoreResultsFollow = MysqlStmtHasVisibleResultAfter ( dStmt, i );
+		switch ( eStmt )
+		{
 		case STMT_SHOW_WARNINGS:
-			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
+			HandleMysqlWarning ( tLastMeta, dRows, bMoreResultsFollow );
 			break;
 		case STMT_SHOW_STATUS:
 		case STMT_SHOW_AGENT_STATUS:
 			HandleMysqlStatus ( dRows, dStmt[i], bMoreResultsFollow ); // FIXME!!! add prediction counters
 			break;
 		case STMT_SHOW_META:
-			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add prediction counters
+			HandleMysqlMeta ( dRows, dStmt[i], tLastMeta, bMoreResultsFollow ); // FIXME!!! add prediction counters
 			break;
 		case STMT_SET: // TODO implement all set statements and make them handle bMoreResultsFollow flag
+			ApplyMysqlMultiStmtSet ( dStmt[i] );
 			dRows.Ok ( 0, 0, NULL, bMoreResultsFollow );
 			break;
 		case STMT_SHOW_PROFILE:
@@ -8728,12 +8897,10 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			break;
 		case STMT_SHOW_PLAN:
 			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::IsDot ( dStmt[i] ) );
+			break;
 		default:
 			break;
 		}
-
-		if ( bBreak )
-			break;
 
 		if ( sphInterrupted() )
 		{
@@ -8741,6 +8908,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			dRows.Error ( "Server shutdown in progress", EMYSQL_ERR::SERVER_SHUTDOWN );
 			return;
 		}
+
+		++i;
 	}
 }
 
@@ -14566,8 +14735,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	else
 		sphWarning ( "%s", sWarning.cstr() );
 
-	g_bHasBuddyPath = hSearchd.Exists ( "buddy_path" );
-	g_sBuddyPath = hSearchd.GetStr ( "buddy_path" );
+	g_sBuddyPath = hSearchd.OptStr ( "buddy_path" );
 	g_bTelemetry = ( hSearchd.GetInt ( "telemetry", g_bTelemetry ? 1 : 0 )!=0 );
 	g_bAutoSchema = ( hSearchd.GetInt ( "auto_schema", g_bAutoSchema ? 1 : 0 )!=0 );
 
@@ -15149,6 +15317,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CSphString		sOptListen;
 	bool			bOptListen = false;
 	bool			bTestMode = false;
+	std::optional<bool>			bWithBuddy;
 	bool			bOptDebugQlog = true;
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
@@ -15215,6 +15384,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--new-cluster" )	bNewCluster = true;
 		OPT1 ( "--new-cluster-force" )	bNewClusterForce = true;
 		OPT1 ( "--no_change_cwd" )	g_bNoChangeCwd = true;
+		OPT1 ( "--with-buddy" )	bWithBuddy = true;
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= Binlog::REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -15804,8 +15974,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
-	if ( !bTestMode )
-		BuddyStart ( g_sBuddyPath, PluginGetDir(), g_bHasBuddyPath, dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
+	if ( bWithBuddy.value_or (!bTestMode) )
+		BuddyStart ( g_sBuddyPath, PluginGetDir(), dListenerDescs, g_bTelemetry, MaxChildrenThreads(), g_sConfigFile, RealPath ( GetDataDirInt() ) );
 
 	g_bJsonConfigLoadedOk = true;
 

@@ -23,6 +23,7 @@
 #include "sorterscroll.h"
 #include "joinsorter.h"
 #include "std/base64.h"
+#include "facetutils.h"
 
 // uncomment to see everything came to parser.
 //#define DUMP_INCOMING_QUERIES
@@ -417,6 +418,9 @@ public:
 	bool			AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc );
 	bool			MaybeAddFacetDistinct();
 	bool			SetupFacetStmt();
+	void			AddFacetFilterAttr ( const SqlNode_t & tAttr );
+	void			SetFacetFilterClause ( FacetFilterClause_e eClause );
+	bool			SetFacetFilterMode ( const SqlNode_t & tMode );
 
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
@@ -647,6 +651,7 @@ enum class Option_e : BYTE
 	WINDOW_SIZE,
 	FUSION_WEIGHTS,
 	TOPOLOGY,
+	FACET_FILTER_MODE,
 
 	INVALID_OPTION
 };
@@ -662,7 +667,7 @@ void InitParserOption()
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
-		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology" };
+		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -697,7 +702,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
 			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE, Option_e::EXPAND_BLENDED,
-			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS };
+			Option_e::FUSION_METHOD, Option_e::RANK_CONSTANT, Option_e::WINDOW_SIZE, Option_e::FUSION_WEIGHTS,
+			Option_e::FACET_FILTER_MODE };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -1004,6 +1010,17 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		tQuery.m_bHybridSearch = true;
 		break;
 	}
+
+	case Option_e::FACET_FILTER_MODE:
+		if ( sVal=="strict" )
+			tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+		else if ( sVal=="auto" )
+			tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Auto;
+		else if ( sVal=="max" )
+			tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Max;
+		else
+			return FAILED ( "unknown facet_filter_mode '%s' (supported: strict, auto, max)", sVal.cstr() );
+		break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -1629,6 +1646,40 @@ bool SqlParser_c::SetupFacetStmt()
 	}
 
 	return MaybeAddFacetDistinct();
+}
+
+
+void SqlParser_c::AddFacetFilterAttr ( const SqlNode_t & tAttr )
+{
+	ToString ( m_pQuery->m_tFacetFilter.m_dAttrs.Add(), tAttr );
+}
+
+
+void SqlParser_c::SetFacetFilterClause ( FacetFilterClause_e eClause )
+{
+	m_pQuery->m_tFacetFilter.m_eClause = eClause;
+}
+
+
+bool SqlParser_c::SetFacetFilterMode ( const SqlNode_t & tMode )
+{
+	CSphString sMode;
+	ToString ( sMode, tMode );
+	sMode.ToLower();
+
+	if ( sMode=="strict" )
+		m_pQuery->m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+	else if ( sMode=="auto" )
+		m_pQuery->m_tFacetFilter.m_tMode = FacetFilterMode_e::Auto;
+	else if ( sMode=="max" )
+		m_pQuery->m_tFacetFilter.m_tMode = FacetFilterMode_e::Max;
+	else
+	{
+		m_pParseError->SetSprintf ( "unknown FACET mode '%s' (supported: strict, auto, max)", sMode.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -2556,26 +2607,31 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 }
 
 
-static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
+static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
 {
 	bool bGotFacet = false;
-	ARRAY_FOREACH ( i, dStmt )
+	CSphVector<SqlStmt_t> dOut;
+	for ( int i = 0; i < dStmt.GetLength(); ++i )
 	{
-		const SqlStmt_t & tHeadStmt = dStmt[i];
-		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
-		if ( dStmt[i].m_eStmt!=STMT_SELECT )
-			continue;
-
-		++i;
-		if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
+		SqlStmt_t tHeadStmt = std::move ( dStmt[i] );
+		if ( tHeadStmt.m_eStmt!=STMT_SELECT )
 		{
-			bGotFacet = true;
-			const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
+			dOut.Add ( std::move ( tHeadStmt ) );
+			continue;
 		}
 
-		for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; ++i )
+		const CSphQuery tHeadQuery = tHeadStmt.m_tQuery;
+		int iFacetStart = i + 1;
+		if ( iFacetStart<dStmt.GetLength() && dStmt[iFacetStart].m_eStmt==STMT_FACET )
 		{
-			SqlStmt_t & tStmt = dStmt[i];
+			bGotFacet = true;
+			tHeadStmt.m_tQuery.m_bFacetHead = true;
+		}
+		dOut.Add ( std::move ( tHeadStmt ) );
+
+		for ( ; iFacetStart<dStmt.GetLength() && dStmt[iFacetStart].m_eStmt==STMT_FACET; ++iFacetStart )
+		{
+			SqlStmt_t tStmt = std::move ( dStmt[iFacetStart] );
 			tStmt.m_tQuery.m_bFacet = true;
 
 			tStmt.m_eStmt = STMT_SELECT;
@@ -2587,27 +2643,49 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
 			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
 			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
 			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;
+			tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Reset();
+			if ( !tStmt.m_tQuery.m_sGroupBy.IsEmpty() )
+				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sGroupBy );
+			if ( !tStmt.m_tQuery.m_sFacetBy.IsEmpty() && !facet::AttrNameInList ( tStmt.m_tQuery.m_dFacetOwnFilterAttrs, tStmt.m_tQuery.m_sFacetBy ) )
+				tStmt.m_tQuery.m_dFacetOwnFilterAttrs.Add ( tStmt.m_tQuery.m_sFacetBy );
+			if ( !facet::CopyFilters ( tHeadQuery, tStmt.m_tQuery, sError, true ) )
+				return false;
 
-			// append filters
-			ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
-				tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
-			ARRAY_FOREACH ( k, tHeadQuery.m_dFilterTree )
-				tStmt.m_tQuery.m_dFilterTree.Add ( tHeadQuery.m_dFilterTree[k] );
+			SqlStmt_t tStrict;
+			bool bNeedStrict = ( facet::GetFilterMode ( tHeadQuery, tStmt.m_tQuery )==FacetFilterMode_e::Max );
+			if ( bNeedStrict )
+			{
+				tStrict.m_eStmt = STMT_SELECT;
+				tStrict.m_tQuery = tStmt.m_tQuery;
+				tStrict.m_tQuery.m_bFacetMaxRef = true;
+				tStrict.m_tQuery.m_tFacetFilter.m_tMode = FacetFilterMode_e::Strict;
+				tStrict.m_tQuery.m_tFacetFilter.m_eClause = FacetFilterClause_e::All;
+				tStrict.m_tQuery.m_dFilters.Reset();
+				tStrict.m_tQuery.m_dFilterTree.Reset();
+				if ( !facet::CopyFilters ( tHeadQuery, tStrict.m_tQuery, sError, true ) )
+					return false;
+			}
+
+			dOut.Add ( std::move ( tStmt ) );
+			if ( bNeedStrict )
+				dOut.Add ( std::move ( tStrict ) );
 		}
+
+		i = iFacetStart - 1;
 	}
 
+	dStmt.SwapData ( dOut );
 	return bGotFacet;
 }
 
-
-static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+static bool SetupFacetDistinctGroup ( CSphVector<SqlStmt_t> & dStmt, int iStart, int iEnd, CSphString & sError )
 {
 	CSphString sDistinct;
 
 	// need to keep order of query items same as at select list however do not duplicate items
 	// that is why raw Vector.Uniq does not work here
 	CSphVector<QueryItemProxy_t> dSelectItems;
-	ARRAY_FOREACH ( i, dStmt )
+	for ( int i = iStart; i<iEnd; ++i )
 	{
 		CSphQuery & tQuery = dStmt[i].m_tQuery;
 		ARRAY_FOREACH ( k, tQuery.m_dItems )
@@ -2640,8 +2718,9 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 		dItems[i] = *dSelectItems[i].m_pItem;
 	}
 
-	for ( SqlStmt_t& tStmt : dStmt )
+	for ( int i = iStart; i<iEnd; ++i )
 	{
+		SqlStmt_t & tStmt = dStmt[i];
 		// keep original items
 		tStmt.m_tQuery.m_dItems.SwapData ( tStmt.m_tQuery.m_dRefItems );
 		tStmt.m_tQuery.m_dItems = dItems;
@@ -2661,6 +2740,26 @@ static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sEr
 		}
 
 		tStmt.m_tQuery.m_sGroupDistinct = sDistinct;
+	}
+
+	return true;
+}
+
+static bool SetupFacetDistinct ( CSphVector<SqlStmt_t> & dStmt, CSphString & sError )
+{
+	for ( int i = 0; i<dStmt.GetLength(); ++i )
+	{
+		if ( dStmt[i].m_eStmt!=STMT_SELECT || !dStmt[i].m_tQuery.m_bFacetHead )
+			continue;
+
+		int iEnd = i + 1;
+		while ( iEnd<dStmt.GetLength() && dStmt[iEnd].m_eStmt==STMT_SELECT && dStmt[iEnd].m_tQuery.m_bFacet )
+			++iEnd;
+
+		if ( !SetupFacetDistinctGroup ( dStmt, i, iEnd, sError ) )
+			return false;
+
+		i = iEnd - 1;
 	}
 
 	return true;
@@ -2796,7 +2895,11 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	if ( !tParser.SetupScroll(sError) )
 		return false;
 
-	if ( SetupFacets(dStmt) )
+	bool bGotFacet = SetupFacets ( dStmt, sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( bGotFacet )
 	{
 		if ( !SetupFacetDistinct ( dStmt, sError ) )
 			return false;

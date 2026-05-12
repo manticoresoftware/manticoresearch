@@ -14,6 +14,8 @@
  
 * `--force-pseudo-sharding` - always use pseudo-sharing, despite the size of the index. Used for testing purposes
 
+* `--with-buddy` - always start buddy, despite test mode (activated by `--test`, or `--console`, or whatever). Used for testing purposes.
+
 ## Undocumented env variables
 
 * `MANTICORE_LOG_RTSPLIT_QUERY` - verbose logging split query events, ruled by this env variable

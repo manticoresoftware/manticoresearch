@@ -55,34 +55,4 @@ dnf install mariadb-connector-c
 ```
 
 if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` trying to build a plain table from MySQL.
-
-#### Ukrainian lemmatizer
-The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**
-
-Here's how to install Python 3.9 and the Ukrainian lemmatizer in Centos 8:
-
-```bash
-# install Manticore Search and UK lemmatizer from YUM repository
-yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
-yum -y install manticore manticore-lemmatizer-uk
-
-# install packages needed for building Python
-yum groupinstall "Development Tools" -y
-yum install openssl-devel libffi-devel bzip2-devel wget -y
-
-# download, build and install Python 3.9
-cd ~
-wget https://www.python.org/ftp/python/3.9.2/Python-3.9.2.tgz
-tar xvf Python-3.9.2.tgz
-cd Python-3.9*/
-./configure --enable-optimizations --enable-shared
-make -j8 altinstall
-
-# update linker cache
-ldconfig
-
-# install pymorphy2 and UK dictionary
-pip3.9 install pymorphy2[fast]
-pip3.9 install pymorphy2-dicts-uk
-```
 <!-- proofread -->

@@ -26,13 +26,14 @@
 #include "datetime.h"
 #include "std/tdigest.h"
 #include "std/tdigest_runtime.h"
-
+#include "facetutils.h"
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
 static const char * g_szOrder = "_@order_";
 
 class QueryTreeBuilder_c;
+static bool ParseFacetFilterMode ( const JsonObj_c & tValue, FacetFilterMode_e & eMode, CSphString & sError, const char * sName );
 struct ErrorPathGuard_t
 {
 	ErrorPathGuard_t ( QueryTreeBuilder_c & tBuilder, bool bEnabled, const JsonObj_c & tPath );
@@ -1686,6 +1687,14 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		return false;
 
 	// aggs
+	JsonObj_c tFacetFilterMode = tRoot.GetItem ( "facet_filter_mode" );
+	if ( tFacetFilterMode )
+	{
+		FacetFilterMode_e eMode = FacetFilterMode_e::Strict;
+		if ( !ParseFacetFilterMode ( tFacetFilterMode, eMode, sError, "facet_filter_mode" ) )
+			return false;
+		tQuery.m_tFacetFilter.m_tMode = eMode;
+	}
 	JsonObj_c tAggs = tRoot.GetItem ( "aggs" );
 	if ( tAggs && !ParseAggregates ( tAggs, tQuery, sError ) )
 		return false;
@@ -2691,7 +2700,25 @@ static void EncodePercentileRanksValues ( const JsonAggr_t & tAggr, const CSphMa
 	tOut.FinishBlock ( false );
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
+static const CSphColumnInfo * GetJsonFacetStatusAttr ( const JsonAggr_t & tAggr, int iAggrItem, int iNow, const AggrResult_t & tBucketRes, const AggrResult_t & tRes )
+{
+	if ( tBucketRes.m_dResults.IsEmpty() )
+		return nullptr;
+
+	AggrKeyTrait_t tKey;
+	if ( !GetAggrKey ( tAggr, tBucketRes.m_tSchema, tBucketRes.m_dResults.First().m_tSchema, iAggrItem, iNow, tKey ) )
+		return nullptr;
+
+	if ( tKey.m_dCompositeKeys.GetLength() || !tKey.m_pKey )
+		return nullptr;
+
+	if ( !tRes.m_dResults.IsEmpty() && !tRes.m_tSchema.GetAttr ( tKey.m_pKey->m_sName.cstr() ) )
+		return nullptr;
+
+	return tKey.m_pKey;
+}
+
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, facet::FacetStatusSources_t tStatus, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2762,6 +2789,8 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, eFormat, hDatetime, tBufMatch, tOut );
 
 				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
+				if ( tStatus.HasStatus() )
+					tOut.Sprintf ( R"("status":"%s")", facet::GetBucketStatus ( tMatch, tRes.m_tSchema, tStatus ) );
 				// FIXME!!! add support
 				if ( tAggr.m_eAggrFunc==Aggr_e::SIGNIFICANT )
 				{
@@ -3214,22 +3243,57 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 		if ( tQuery.m_bGroupEmulation )
 		{
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
-			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			CSphVector<CSphFilterSettings> dSelectedFilters;
+			const bool bNeedStatus = facet::GetFilterMode ( tQuery, tQuery.m_dAggs[0].m_tFacetFilter )==FacetFilterMode_e::Max && facet::IsJsonFacetStatusBucket ( tQuery.m_dAggs[0].m_eAggrFunc );
+			facet::FacetStatusSources_t tStatus;
+			if ( bNeedStatus )
+				tStatus.m_pSelectedFilters = facet::CollectSelectedFiltersForAttr ( tQuery.m_dFilters, tQuery.m_dAggs[0].m_sCol, dSelectedFilters );
+			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 
 		} else
 		{
-
-			assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
+			CSphVector<CSphFilterSettings> dSelectedFilters;
+			facet::FacetBucketSet_t dAvailableBuckets;
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 			ARRAY_FOREACH ( i, tQuery.m_dAggs )
-				EncodeAggr ( tQuery.m_dAggs[i], i, dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			{
+				const JsonAggr_t & tAggr = tQuery.m_dAggs[i];
+				int iResultSet = tAggr.m_iResult>=0 ? tAggr.m_iResult : i+1;
+				if ( iResultSet<0 || iResultSet>=dRes.GetLength() )
+					continue;
+
+				dSelectedFilters.Resize ( 0 );
+				dAvailableBuckets.Reset();
+
+				const bool bNeedStatus = facet::GetFilterMode ( tQuery, tAggr.m_tFacetFilter )==FacetFilterMode_e::Max && facet::IsJsonFacetStatusBucket ( tAggr.m_eAggrFunc );
+				facet::FacetStatusSources_t tStatus;
+				if ( bNeedStatus )
+					tStatus.m_pSelectedFilters = facet::CollectSelectedFiltersForAttr ( tQuery.m_dFilters, tAggr.m_sCol, dSelectedFilters );
+
+				if ( bNeedStatus && tAggr.m_iStrictResult>=0 && tAggr.m_iStrictResult<dRes.GetLength() )
+				{
+					const auto & tRes = dRes[tAggr.m_iStrictResult];
+					const CSphColumnInfo * pKey = nullptr;
+					if ( tRes.m_iSuccesses )
+						pKey = GetJsonFacetStatusAttr ( tAggr, i, tQuery.m_iNow, dRes[iResultSet], tRes );
+					if ( pKey )
+					{
+						VecTraits_T<CSphMatch> dMatches;
+						if ( !tRes.m_dResults.IsEmpty() )
+							dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
+						tStatus.m_pAvailableBuckets = facet::CollectFacetAvailableFilters ( tRes, pKey->m_sName, dMatches, dAvailableBuckets );
+					}
+				}
+
+				EncodeAggr ( tAggr, i, dRes[iResultSet], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tStatus, tOut );
+			}
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
 	}
 
 	CSphString sScroll;
-	if ( dRes.GetLength() && FormatScrollSettings ( dRes.Last(), tQuery, sScroll ) )
+	if ( dRes.GetLength() && FormatScrollSettings ( tRes, tQuery, sScroll ) )
 		tOut.Sprintf ( R"("scroll":"%s")", sScroll.cstr() );
 
 	if ( eFormat==ResultSetFormat_e::ES )
@@ -4740,6 +4804,52 @@ static bool ParseAggsNode ( const JsonObj_c & tBucket, const JsonObj_c & tJsonIt
 	return true;
 }
 
+static bool ParseFacetFilterMode ( const JsonObj_c & tValue, FacetFilterMode_e & eMode, CSphString & sError, const char * sName )
+{
+	if ( !tValue.IsStr() )
+	{
+		sError.SetSprintf ( R"("%s" property should be a string)", sName );
+		return false;
+	}
+
+	CSphString sMode = tValue.StrVal();
+	sMode.ToLower();
+	if ( sMode=="strict" )
+		eMode = FacetFilterMode_e::Strict;
+	else if ( sMode=="auto" )
+		eMode = FacetFilterMode_e::Auto;
+	else if ( sMode=="max" )
+		eMode = FacetFilterMode_e::Max;
+	else
+	{
+		sError.SetSprintf ( R"("%s" property should be "strict", "auto", or "max")", sName );
+		return false;
+	}
+
+	return true;
+}
+
+static bool ParseFacetFilterAttrs ( const JsonObj_c & tValue, StrVec_t & dAttrs, CSphString & sError, const char * sName )
+{
+	if ( !tValue.IsArray() )
+	{
+		sError.SetSprintf ( R"("%s" property should be an array)", sName );
+		return false;
+	}
+
+	for ( const auto & tAttr : tValue )
+	{
+		if ( !tAttr.IsStr() )
+		{
+			sError.SetSprintf ( R"("%s" items should be strings)", sName );
+			return false;
+		}
+		dAttrs.Add ( tAttr.StrVal() );
+	}
+
+	return true;
+}
+
 static bool ParseAggsNodeSort ( const JsonObj_c & tJsonItem, bool bOrder, JsonAggr_t & tItem, CSphString & sError )
 {
 	if ( !( tJsonItem.IsArray() || tJsonItem.IsObj() ) )
@@ -4783,36 +4893,72 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 
 		JsonAggr_t tItem;
 		tItem.m_sBucketName = tJsonItem.Name();
+		bool bGotFilters = false;
+		bool bGotExcludeFilters = false;
 
 		for ( const auto & tAggsItem : tJsonItem )
 		{
-			// could be a sort object at the aggs item or order object at the bucket
-			if ( strcmp (  tAggsItem.Name(), "sort" )==0 )
+			if ( strcmp ( tAggsItem.Name(), "sort" )==0 )
 			{
 				if ( !ParseAggsNodeSort ( tAggsItem, false, tItem, sError ) )
 					return false;
+				continue;
+			}
 
-			} else
+			if ( strcmp ( tAggsItem.Name(), "filter_mode" )==0 || strcmp ( tAggsItem.Name(), "mode" )==0 )
 			{
-				if ( StrEq ( tAggsItem.Name(), "aggs" ) ||  tAggsItem.HasItem ( "aggs" ) )
-				{
-					sError = R"(nested "aggs" is not supported)";
+				FacetFilterMode_e eMode = FacetFilterMode_e::Strict;
+				if ( !ParseFacetFilterMode ( tAggsItem, eMode, sError, tAggsItem.Name() ) )
 					return false;
-				}
-				if ( tAggsItem==tAggsItem.end() )
-				{
-					sError.SetSprintf ( R"("aggs" bucket '%s' with only nested items)", tAggsItem.Name() );
-					return false;
-				}
-				if ( !ParseAggsNode ( tAggsItem, tJsonItem, bRoot, tItem, sError ) )
-					return false;
+				tItem.m_tFacetFilter.m_tMode = eMode;
+				continue;
+			}
 
-				// bucket could have its own order item
-				if ( tAggsItem.HasItem ( "order" ) )
+			if ( strcmp ( tAggsItem.Name(), "filters" )==0 )
+			{
+				if ( bGotExcludeFilters )
 				{
-					if ( !ParseAggsNodeSort ( tAggsItem.GetItem("order"), true, tItem, sError ) )
-						return false;
+					sError.SetSprintf ( R"(aggregation '%s' cannot contain both "filters" and "exclude_filters")", tItem.m_sBucketName.cstr() );
+					return false;
 				}
+				if ( !ParseFacetFilterAttrs ( tAggsItem, tItem.m_tFacetFilter.m_dAttrs, sError, "filters" ) )
+					return false;
+				bGotFilters = true;
+				tItem.m_tFacetFilter.m_eClause = FacetFilterClause_e::Include;
+				continue;
+			}
+
+			if ( strcmp ( tAggsItem.Name(), "exclude_filters" )==0 )
+			{
+				if ( bGotFilters )
+				{
+					sError.SetSprintf ( R"(aggregation '%s' cannot contain both "filters" and "exclude_filters")", tItem.m_sBucketName.cstr() );
+					return false;
+				}
+				if ( !ParseFacetFilterAttrs ( tAggsItem, tItem.m_tFacetFilter.m_dAttrs, sError, "exclude_filters" ) )
+					return false;
+				bGotExcludeFilters = true;
+				tItem.m_tFacetFilter.m_eClause = FacetFilterClause_e::Exclude;
+				continue;
+			}
+
+			if ( StrEq ( tAggsItem.Name(), "aggs" ) ||  tAggsItem.HasItem ( "aggs" ) )
+			{
+				sError = R"(nested "aggs" is not supported)";
+				return false;
+			}
+			if ( tAggsItem==tAggsItem.end() )
+			{
+				sError.SetSprintf ( R"("aggs" bucket '%s' with only nested items)", tAggsItem.Name() );
+				return false;
+			}
+			if ( !ParseAggsNode ( tAggsItem, tJsonItem, bRoot, tItem, sError ) )
+				return false;
+
+			if ( tAggsItem.HasItem ( "order" ) )
+			{
+				if ( !ParseAggsNodeSort ( tAggsItem.GetItem("order"), true, tItem, sError ) )
+					return false;
 			}
 		}
 

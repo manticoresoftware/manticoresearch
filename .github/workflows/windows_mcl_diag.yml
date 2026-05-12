@@ -383,22 +383,33 @@ jobs:
               $test
             )
 
-            $proc = Start-Process -FilePath "php" -ArgumentList $args -WorkingDirectory $workdir -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-            if (-not $proc.WaitForExit($timeout * 1000)) {
+            $job = Start-Job -ArgumentList $workdir,$stdout,$stderr,$args -ScriptBlock {
+              param($workdir, $stdout, $stderr, $args)
+
+              Set-Location $workdir
+              & php @args > $stdout 2> $stderr
+              [pscustomobject]@{ ExitCode = $LASTEXITCODE }
+            }
+
+            $completed = Wait-Job $job -Timeout $timeout
+            if (-not $completed) {
               Get-CimInstance Win32_Process |
-                Where-Object { $_.ProcessId -eq $proc.Id -or $_.ParentProcessId -eq $proc.Id -or $_.Name -match '^(php|searchd|indexer)\.exe$' } |
+                Where-Object { $_.Name -match '^(php|searchd|indexer)\.exe$' } |
                 Select-Object ProcessId,ParentProcessId,Name,CommandLine |
                 Format-List | Out-File "$diagDir\columnar_cli_${test}_processes.txt" -Encoding utf8
-              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+              Stop-Job $job -ErrorAction SilentlyContinue
+              Stop-Process -Name php,searchd,indexer -Force -ErrorAction SilentlyContinue
               "timeout" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
               $failed += $test
             } else {
-              $proc.Refresh()
-              "exit_code=$($proc.ExitCode)" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
-              if ($proc.ExitCode -ne 0) {
+              $result = Receive-Job $job
+              $exitCode = [int]$result.ExitCode
+              "exit_code=$exitCode" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
+              if ($exitCode -ne 0) {
                 $failed += $test
               }
             }
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
 
             Get-Content $stdout -ErrorAction SilentlyContinue
             Get-Content $stderr -ErrorAction SilentlyContinue

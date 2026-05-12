@@ -270,7 +270,7 @@ jobs:
       - name: Run selected CTest ubertests without retries
         shell: powershell
         env:
-          UBERTESTS: ${{ inputs.tests || '481' }}
+          UBERTESTS: ${{ inputs.tests || '481 484 486 489 490 491 501' }}
           FAIL_FAST: ${{ inputs.fail_fast }}
           TEST_TIMEOUT: ${{ inputs.timeout_seconds || '120' }}
         run: |

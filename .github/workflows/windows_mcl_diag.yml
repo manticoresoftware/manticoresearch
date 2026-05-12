@@ -81,10 +81,10 @@ jobs:
       sysroot_url_key: roots_mysql83_jan17
       boost_url_key: boost_80
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
-      CTEST_CONFIGURATION_TYPE: Debug
-      cache_key: build_windows_x64
+      CTEST_CONFIGURATION_TYPE: RelWithDebInfo
+      cache_key: build_windows_x64_relwithdebinfo
       artifact_name: windows_mcl_diag_build
-      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/indexer.pdb build/src/Debug/searchd.exe build/src/Debug/searchd.pdb build/src/gtests/Debug/gmanticoretest.exe build/src/gtests/Debug/gmanticoretest.pdb build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
+      artifact_list: "build/xml build/src/RelWithDebInfo/indexer.exe build/src/RelWithDebInfo/indexer.pdb build/src/RelWithDebInfo/searchd.exe build/src/RelWithDebInfo/searchd.pdb build/src/gtests/RelWithDebInfo/gmanticoretest.exe build/src/gtests/RelWithDebInfo/gmanticoretest.pdb build/src/RelWithDebInfo/*.dll build/src/gtests/RelWithDebInfo/*.dll build/config/*.c build/config/*.h"
       COLUMNAR_LOCATOR: ${{ needs.meta.outputs.columnar_locator }}
 
   test_windows_mcl:
@@ -98,7 +98,7 @@ jobs:
       LIBS_BUNDLE: "../bundle"
       BOOST_ROOT: "../boost_1_75_0"
       CTEST_CMAKE_GENERATOR: "Visual Studio 17 2022"
-      CTEST_CONFIGURATION_TYPE: Debug
+      CTEST_CONFIGURATION_TYPE: RelWithDebInfo
       CTEST_START: 1
       CTEST_END: 999999
       NO_BUILD: 1
@@ -143,7 +143,7 @@ jobs:
         with:
           path: cache
           enableCrossOsArchive: true
-          key: build_windows_x64
+          key: build_windows_x64_relwithdebinfo
 
       - name: Setup PHP and mysqli
         uses: shivammathur/setup-php@v2
@@ -194,7 +194,7 @@ jobs:
           Remove-Item "$moduleDir\*_avx512.dll" -Force -ErrorAction SilentlyContinue
           Remove-Item "$moduleDir\*_avx512.pdb" -Force -ErrorAction SilentlyContinue
 
-          $binDir = (Resolve-Path "build\src\Debug").Path
+          $binDir = (Resolve-Path "build\src\RelWithDebInfo").Path
           "MANTICORE_MODULES=$moduleDir" >> $env:GITHUB_ENV
           "LIB_MANTICORE_COLUMNAR=$moduleDir\lib_manticore_columnar.dll" >> $env:GITHUB_ENV
           "LIB_MANTICORE_SECONDARY=$moduleDir\lib_manticore_secondary.dll" >> $env:GITHUB_ENV
@@ -212,7 +212,7 @@ jobs:
           $diagDir = Join-Path (Get-Location) "diag"
           New-Item -ItemType Directory -Force $diagDir | Out-Null
 
-          $indexer = (Resolve-Path "build\src\Debug\indexer.exe").Path
+          $indexer = (Resolve-Path "build\src\RelWithDebInfo\indexer.exe").Path
           $workdir = (Resolve-Path "test").Path
           $originalEmbeddings = $env:LIB_MANTICORE_KNN_EMBEDDINGS
           $originalKnn = $env:LIB_MANTICORE_KNN

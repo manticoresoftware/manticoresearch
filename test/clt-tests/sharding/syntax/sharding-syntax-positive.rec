@@ -11,6 +11,16 @@ mysql -h0 -P1306 -e "create table tbl2 shards='5' rf='1'"; echo $?
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P1306 -e "show create table tbl2"
+––– output –––
++-------+---------------------------------------------------+
+| Table | Create Table                                      |
++-------+---------------------------------------------------+
+| tbl2  | CREATE TABLE tbl2 (
+id bigint
+) shards='5' rf='1' |
++-------+---------------------------------------------------+
+––– input –––
 mysql -h0 -P1306 -e "create table tbl3(id bigint) shards='3' rf='1'"; echo $?
 ––– output –––
 0

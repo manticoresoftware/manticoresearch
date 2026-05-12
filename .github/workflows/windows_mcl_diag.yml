@@ -1,5 +1,5 @@
 name: Windows MCL diagnostics
-run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests || '481' }}
+run-name: Windows MCL diagnostics ${{ github.ref_name }} ${{ inputs.tests || '481 484 486 489 490 491 501' }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       tests:
         description: "Whitespace or comma separated ubertest IDs"
         required: true
-        default: "481"
+        default: "481 484 486 489 490 491 501"
       timeout_seconds:
         description: "Per-test CTest timeout in seconds"
         required: true

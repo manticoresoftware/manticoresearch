@@ -344,6 +344,74 @@ jobs:
 
           exit $ret
 
+      - name: Run selected ubertests with columnar CLI
+        shell: powershell
+        env:
+          UBERTESTS: ${{ inputs.tests || '481 484 486 489 490 491 501' }}
+          FAIL_FAST: ${{ inputs.fail_fast }}
+          TEST_TIMEOUT: ${{ inputs.timeout_seconds || '120' }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tests = $env:UBERTESTS -split "[,\s]+" | Where-Object { $_ }
+          if (-not $tests) { throw "No tests were provided" }
+
+          $diagDir = Join-Path (Get-Location) "diag"
+          New-Item -ItemType Directory -Force $diagDir | Out-Null
+          $workdir = (Resolve-Path "build\test").Path
+          $env:INDEXER = (Resolve-Path "build\src\RelWithDebInfo\indexer.exe").Path
+          $env:SEARCHD = (Resolve-Path "build\src\RelWithDebInfo\searchd.exe").Path
+          $timeout = [int]$env:TEST_TIMEOUT
+          $failFast = if ([string]::IsNullOrWhiteSpace($env:FAIL_FAST)) { "true" } else { $env:FAIL_FAST }
+          $failed = @()
+
+          foreach ($test in $tests) {
+            Write-Host "=== Running columnar CLI ubertest $test ==="
+            $stdout = Join-Path $diagDir "columnar_cli_${test}_stdout.txt"
+            $stderr = Join-Path $diagDir "columnar_cli_${test}_stderr.txt"
+
+            $args = @(
+              "ubertest.php",
+              "--ctest",
+              "-u", "test",
+              "--strict-verbose",
+              "--no-demo",
+              "--rt",
+              "--ignore-weights",
+              "--columnar",
+              "t",
+              $test
+            )
+
+            $proc = Start-Process -FilePath "php" -ArgumentList $args -WorkingDirectory $workdir -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+            if (-not $proc.WaitForExit($timeout * 1000)) {
+              Get-CimInstance Win32_Process |
+                Where-Object { $_.ProcessId -eq $proc.Id -or $_.ParentProcessId -eq $proc.Id -or $_.Name -match '^(php|searchd|indexer)\.exe$' } |
+                Select-Object ProcessId,ParentProcessId,Name,CommandLine |
+                Format-List | Out-File "$diagDir\columnar_cli_${test}_processes.txt" -Encoding utf8
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+              "timeout" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
+              $failed += $test
+            } else {
+              $proc.Refresh()
+              "exit_code=$($proc.ExitCode)" | Out-File "$diagDir\columnar_cli_${test}_status.txt" -Encoding utf8
+              if ($proc.ExitCode -ne 0) {
+                $failed += $test
+              }
+            }
+
+            Get-Content $stdout -ErrorAction SilentlyContinue
+            Get-Content $stderr -ErrorAction SilentlyContinue
+
+            if ($failed -contains $test -and $failFast -eq "true") {
+              break
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            throw "Columnar CLI ubertests failed: $($failed -join ', ')"
+          }
+
       - name: Prepare diagnostics
         if: always()
         shell: powershell

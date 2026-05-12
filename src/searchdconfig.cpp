@@ -1290,6 +1290,8 @@ static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTabl
 }
 
 
+static const char * g_sTableNameSystem = "system.";
+
 static void AppendCreateTableTopology ( StringBuilder_c & sRes, const DistributedIndex_t & tDistr )
 {
 	for ( const auto & i : tDistr.m_dLocal )
@@ -1342,15 +1344,62 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 	return sRes.cstr();
 }
 
-CSphString BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt )
+// Returns true when every shard target name carries the internal "system." prefix,
+// meaning the table was created via the buddy-managed "shards=/rf=" path.
+// In that case SHOW CREATE TABLE should round-trip back to the original "shards=/rf="
+// form (re-runnable on a fresh node), instead of leaking internal topology.
+static bool IsShardBuddyManaged ( const ShardIndex_c & tShard )
+{
+	if ( tShard.m_dLocal.IsEmpty() && tShard.m_dAgents.IsEmpty() )
+		return false;
+
+	for ( const auto & sLocal : tShard.m_dLocal )
+		if ( !sLocal.Begins ( g_sTableNameSystem ) )
+			return false;
+
+	for ( const auto & pAgent : tShard.m_dAgents )
+	{
+		if ( !pAgent || !pAgent->GetLength() )
+			return false;
+		for ( const AgentDesc_t & tDesc : *pAgent )
+			if ( strstr ( tDesc.m_sIndexes.cstr(), g_sTableNameSystem )==nullptr )
+				return false;
+	}
+
+	return true;
+}
+
+static void AppendCreateTableShardSummary ( StringBuilder_c & sRes, const ShardIndex_c & tShard )
+{
+	int iShards = tShard.m_dLocal.GetLength() + tShard.m_dAgents.GetLength();
+
+	int iRf = 0;
+	for ( const auto & pAgent : tShard.m_dAgents )
+		if ( pAgent && pAgent->GetLength() > iRf )
+			iRf = pAgent->GetLength();
+	if ( !iRf )
+		iRf = 1;
+
+	CSphString sOpt;
+	sRes << sOpt.SetSprintf ( "shards='%d'", iShards );
+	sRes << sOpt.SetSprintf ( "rf='%d'", iRf );
+}
+
+CSphString BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt, bool bShowTopology )
 {
 	StringBuilder_c sRes ( " " );
 	const MutableIndexSettings_c & tMutableDefaults = MutableIndexSettings_c::GetDefaults();
 
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sName.cstr() );
 	sRes << BuildCreateTable ( sName, tShard.m_tSchema, tShard.m_tSettings, tShard.m_tFieldFilterSettings, tShard.m_tTokenizerSettings, tShard.m_tDictSettings, tMutableDefaults, eExt, pFilenameBuilder.get() ).cstr();
-	sRes << "type='shard'";
 
+	if ( !bShowTopology && IsShardBuddyManaged ( tShard ) )
+	{
+		AppendCreateTableShardSummary ( sRes, tShard );
+		return sRes.cstr();
+	}
+
+	sRes << "type='shard'";
 	AppendCreateTableTopology ( sRes, tShard );
 	return sRes.cstr();
 }
@@ -1817,8 +1866,6 @@ IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
 
 	return tIndex;
 }
-
-static const char * g_sTableNameSystem = "system.";
 
 bool IsDistrTableHasSystem ( const DistributedIndex_t & tDistr, bool bForce )
 {

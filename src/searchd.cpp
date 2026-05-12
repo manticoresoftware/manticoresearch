@@ -6707,7 +6707,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	{
 		auto pDist = GetDistr ( sLike );
 		sCreateTable = AsShard ( pDist.Ptr() )
-			? BuildCreateTableShard ( tStmt.m_sIndex, *AsShard ( pDist.Ptr() ), ExtFilesFormat_e::LIST )
+			? BuildCreateTableShard ( tStmt.m_sIndex, *AsShard ( pDist.Ptr() ), ExtFilesFormat_e::LIST, true )
 			: BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 	}
 	default: break;
@@ -6799,7 +6799,10 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	if ( pDist && IsDistrTableHasSystem ( *pDist, tStmt.m_bForce ) )
+	// system check rejects regular distributed tables that wrap "system.*" sub-tables;
+	// shard tables intentionally use that prefix internally, so they're exempt and
+	// produce the original "shards=/rf=" form below instead of leaking topology.
+	if ( pDist && !AsShard ( pDist.Ptr() ) && IsDistrTableHasSystem ( *pDist, tStmt.m_bForce ) )
 	{
 		tOut.ErrorAbsent ( "can not show table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 		return;
@@ -6815,7 +6818,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	} else if ( auto pShard = AsShard ( pDist.Ptr() ) )
 	{
-		sCreateTable = BuildCreateTableShard ( tStmt.m_sIndex, *pShard, tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST );
+		sCreateTable = BuildCreateTableShard ( tStmt.m_sIndex, *pShard, tStmt.m_bFormatOutWordsFile ? ExtFilesFormat_e::FILE : ExtFilesFormat_e::LIST, tStmt.m_bForce );
 
 	} else
 	{

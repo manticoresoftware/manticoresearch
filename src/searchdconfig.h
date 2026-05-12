@@ -112,7 +112,7 @@ const CSphVector<ClusterDesc_t> & GetClustersInt();
 struct DistributedIndex_t;
 struct ShardIndex_c;
 CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr );
-CSphString	BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt );
+CSphString	BuildCreateTableShard ( const CSphString & sName, const ShardIndex_c & tShard, ExtFilesFormat_e eExt, bool bShowTopology = false );
 bool		SaveShardMeta ( const char * szIndexName, const ShardIndex_c & tShard, CSphString & sError );
 bool		LoadShardMeta ( const char * szIndexName, const CSphString & sIndexPath, ShardIndex_c & tShard, StrVec_t & dWarnings, CSphString & sError );
 

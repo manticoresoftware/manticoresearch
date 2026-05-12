@@ -295,7 +295,18 @@ INSERT INTO name_table VALUES
 	SELECT IN(aa-(aa-15), 15) FROM test WHERE id=10;
 
 	<!-- various function and operators for test coverage -->
+	SELECT 1-2 FROM test WHERE id=10;
+	SELECT 1-id FROM test WHERE id=10;
 	SELECT SINT(1-2) FROM test WHERE id=10;
+
+	<!-- exact repro shape and more signed subtraction edge cases -->
+	SELECT *, 1-2 AS diff FROM test WHERE id=10;
+	SELECT *, aa-4 AS diff FROM test ORDER BY id ASC;
+	SELECT *, 1-aa AS diff FROM test ORDER BY id ASC;
+	SELECT *, aa-(aa+1) AS diff FROM test ORDER BY id ASC;
+	SELECT *, (1-2)+aa AS diff FROM test ORDER BY id ASC;
+	SELECT *, (1-2)-(3-4) AS diff FROM test WHERE id=10;
+	SELECT *, BIGINT(1)-BIGINT(2) AS diff FROM test WHERE id=10;
 	SELECT FIBONACCI(5) FROM test WHERE id=10;
 	SELECT INTERVAL(1, -1,3,5.0) FROM test WHERE id=10;
 	SELECT INTERVAL(id, id-1, id+2) FROM test WHERE id=10;

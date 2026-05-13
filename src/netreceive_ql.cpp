@@ -820,31 +820,37 @@ public:
 
 	void PutFloat ( float fVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_FLOAT );
 		PutFloatAsString ( fVal, nullptr );
 	}
 
 	void PutDouble ( double fVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_DOUBLE );
 		PutDoubleAsString ( fVal, nullptr );
 	}
 
 	void PutInt ( int iVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
 		PutNumAsStringT ( iVal );
 	}
 
 	void PutInt64 ( int64_t iVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONGLONG );
 		PutNumAsStringT ( iVal );
 	}
 
 	void PutDWORD ( DWORD uVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_LONG );
 		PutNumAsStringT ( uVal );
 	}
 
 	void PutUint64 ( uint64_t uVal ) override
 	{
+		assert ( m_dHead[m_iCurrentColumn].second == MYSQL_COL_UINT64 );
 		PutNumAsStringT ( uVal );
 	}
 
